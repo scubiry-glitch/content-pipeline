@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内容生产流水线</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        header p {
+            opacity: 0.9;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #444;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #555;
+        }
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #5a6fd6;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .task-list {
+            display: grid;
+            gap: 16px;
+        }
+        .task-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            border-left: 4px solid #667eea;
+        }
+        .task-item.pending { border-left-color: #ffc107; }
+        .task-item.researching { border-left-color: #17a2b8; }
+        .task-item.writing { border-left-color: #6c757d; }
+        .task-item.reviewing { border-left-color: #fd7e14; }
+        .task-item.awaiting_approval { border-left-color: #dc3545; }
+        .task-item.completed { border-left-color: #28a745; }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .task-title {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .task-status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: #e9ecef;
+            color: #495057;
+        }
+        .task-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .progress-bar {
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s;
+        }
+        .actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+        }
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #f0f0f0;
+            border: none;
+            color: #666;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .asset-upload {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .asset-upload:hover {
+            border-color: #667eea;
+        }
+        #fileInput {
+            display: none;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 36px;
+            height: 36px;
+        }
+        .review-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .review-expert {
+            font-weight: 600;
+            color: #667eea;
+        }
+        .review-severity {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .review-severity.high {
+            background: #fee;
+            color: #c33;
+        }
+        .review-severity.medium {
+            background: #ffeaa7;
+            color: #856404;
+        }
+        .review-severity.low {
+            background: #d4edda;
+            color: #155724;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>内容生产流水线</h1>
+            <p>MVP版本 - 选题 → 研究 → 写作 → BlueTeam评审 → 发布</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('tasks')">任务管理</button>
+            <button class="tab" onclick="showTab('assets')">素材库</button>
+        </div>
+
+        <!-- 任务管理 -->
+        <div id="tasksTab" class="tab-content">
+            <div class="card">
+                <h2>创建新任务</h2>
+                <div class="form-group">
+                    <label>研究主题</label>
+                    <input type="text" id="topicInput" placeholder="例如：保租房REITs市场分析">
+                </div>
+                <div class="form-group">
+                    <label>目标格式</label>
+                    <select id="formatSelect">
+                        <option value="markdown">Markdown</option>
+                        <option value="html">HTML</option>
+                    </select>
+                </div>
+                <button onclick="createTask()">创建任务</button>
+            </div>
+
+            <div class="card">
+                <h2>任务列表</h2>
+                <div id="taskList" class="task-list">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 素材库 -->
+        <div id="assetsTab" class="tab-content" style="display:none">
+            <div class="card">
+                <h2>上传素材</h2>
+                <div class="asset-upload" onclick="document.getElementById('fileInput').click()">
+                    <p>点击或拖拽文件到此处上传</p>
+                    <p style="font-size: 12px; color: #999; margin-top: 8px;">支持 PDF、TXT、Markdown 格式</p>
+                    <input type="file" id="fileInput" accept=".pdf,.txt,.md" onchange="uploadFile(this)">
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label>标题</label>
+                    <input type="text" id="assetTitle" placeholder="素材标题">
+                </div>
+                <div class="form-group">
+                    <label>来源</label>
+                    <input type="text" id="assetSource" placeholder="例如：住建部、中金研报">
+                </div>
+                <div class="form-group">
+                    <label>标签（逗号分隔）</label>
+                    <input type="text" id="assetTags" placeholder="例如：保租房, REITs, 政策">
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>素材列表</h2>
+                <div id="assetList" class="task-list">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详情模态框 -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>任务详情</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'dev-api-key-change-in-production';
+        const BASE_URL = 'http://localhost:3000/api/v1';
+
+        // 切换标签页
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').style.display = 'block';
+
+            if (tab === 'tasks') loadTasks();
+            if (tab === 'assets') loadAssets();
+        }
+
+        // 创建任务
+        async function createTask() {
+            const topic = document.getElementById('topicInput').value;
+            const format = document.getElementById('formatSelect').value;
+
+            if (!topic) {
+                alert('请输入研究主题');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/production`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({
+                        topic,
+                        target_formats: [format]
+                    })
+                });
+
+                const data = await res.json();
+                alert('任务创建成功！');
+                document.getElementById('topicInput').value = '';
+                loadTasks();
+            } catch (err) {
+                alert('创建失败: ' + err.message);
+            }
+        }
+
+        // 加载任务列表
+        async function loadTasks() {
+            try {
+                const res = await fetch(`${BASE_URL}/production?limit=20`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await res.json();
+
+                const list = document.getElementById('taskList');
+                if (data.items.length === 0) {
+                    list.innerHTML = '<div class="empty-state">暂无任务</div>';
+                    return;
+                }
+
+                list.innerHTML = data.items.map(task => `
+                    <div class="task-item ${task.status}">
+                        <div class="task-header">
+                            <span class="task-title">${task.topic}</span>
+                            <span class="task-status">${getStatusText(task.status)}</span>
+                        </div>
+                        <div class="task-meta">
+                            进度: ${task.progress}% | 阶段: ${task.current_stage || '待开始'} |
+                            创建: ${new Date(task.created_at).toLocaleString()}
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${task.progress}%"></div>
+                        </div>
+                        <div class="actions">
+                            <button class="btn-sm" onclick="viewTask('${task.id}')">查看详情</button>
+                            ${task.status === 'awaiting_approval' ? `
+                                <button class="btn-sm btn-success" onclick="approveTask('${task.id}', true)">通过</button>
+                                <button class="btn-sm btn-danger" onclick="approveTask('${task.id}', false)">拒绝</button>
+                            ` : ''}
+                            ${task.status === 'completed' && task.output_ids && task.output_ids.length > 0 ? `
+                                <button class="btn-sm" onclick="previewOutput('${task.output_ids[0]}')">预览</button>
+                                <button class="btn-sm btn-success" onclick="downloadOutput('${task.output_ids[0]}')">下载</button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                document.getElementById('taskList').innerHTML =
+                    '<div class="empty-state">加载失败</div>';
+            }
+        }
+
+        // 查看任务详情
+        async function viewTask(taskId) {
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const task = await res.json();
+
+                let reviewsHtml = '';
+                if (task.blue_team_reviews && task.blue_team_reviews.length > 0) {
+                    const reviews = task.blue_team_reviews;
+                    const byRound = {};
+                    reviews.forEach(r => {
+                        if (!byRound[r.round]) byRound[r.round] = [];
+                        byRound[r.round].push(r);
+                    });
+
+                    reviewsHtml = Object.entries(byRound).map(([round, items]) => `
+                        <h3 style="margin: 20px 0 12px; color: #667eea;">第${round}轮评审</h3>
+                        ${items.map(r => {
+                            const q = typeof r.questions === 'string' ? JSON.parse(r.questions) : r.questions;
+                            return `
+                            <div class="review-item">
+                                <div class="review-header">
+                                    <span class="review-expert">${getExpertName(r.expert_role)}</span>
+                                    <span class="review-severity ${q.severity}">${q.severity}</span>
+                                </div>
+                                <p><strong>问题：</strong>${q.question}</p>
+                                <p style="margin-top: 8px; color: #666;"><strong>建议：</strong>${q.suggestion}</p>
+                            </div>
+                            `;
+                        }).join('')}
+                    `).join('');
+                }
+
+                let draftsHtml = '';
+                if (task.draft_versions && task.draft_versions.length > 0) {
+                    draftsHtml = `
+                        <h3 style="margin: 20px 0 12px; color: #667eea;">稿件版本</h3>
+                        ${task.draft_versions.map((d, i) => `
+                            <div class="review-item">
+                                <strong>版本 ${d.version}</strong> -
+                                ${new Date(d.created_at).toLocaleString()}
+                                <br>
+                                <small style="color: #666;">字数: ${d.content?.length || 0}</small>
+                            </div>
+                        `).join('')}
+                    `;
+                }
+
+                const outputHtml = task.output_ids && task.output_ids.length > 0 ? `
+                    <div style="margin: 20px 0; padding: 16px; background: #e8f5e9; border-radius: 8px;">
+                        <h3 style="color: #2e7d32; margin-bottom: 12px;">✓ 已完成</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-sm" onclick="previewOutput('${task.output_ids[0]}')">预览内容</button>
+                            <button class="btn-sm btn-success" onclick="downloadOutput('${task.output_ids[0]}')">下载文件</button>
+                        </div>
+                    </div>
+                ` : '';
+
+                document.getElementById('modalBody').innerHTML = `
+                    <h3>${task.topic}</h3>
+                    <p style="color: #666; margin: 8px 0;">
+                        状态: ${getStatusText(task.status)} |
+                        进度: ${task.progress}% |
+                        创建: ${new Date(task.created_at).toLocaleString()}
+                    </p>
+
+                    ${outputHtml}
+
+                    ${task.outline ? `
+                        <h3 style="margin: 20px 0 12px; color: #667eea;">大纲</h3>
+                        <pre style="background: #f8f9fa; padding: 16px; border-radius: 8px; overflow-x: auto;">
+${JSON.stringify(task.outline, null, 2)}</pre>
+                    ` : ''}
+
+                    ${reviewsHtml}
+                    ${draftsHtml}
+                `;
+
+                document.getElementById('detailModal').classList.add('active');
+            } catch (err) {
+                alert('加载详情失败: ' + err.message);
+            }
+        }
+
+        // 审批任务
+        async function approveTask(taskId, approved) {
+            try {
+                await fetch(`${BASE_URL}/production/${taskId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ approved })
+                });
+                loadTasks();
+            } catch (err) {
+                alert('操作失败: ' + err.message);
+            }
+        }
+
+        // 下载产出物
+        async function downloadOutput(outputId) {
+            try {
+                const res = await fetch(`${BASE_URL}/outputs/${outputId}/download`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+
+                if (!res.ok) {
+                    throw new Error('下载失败');
+                }
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+
+                // 从Content-Disposition获取文件名
+                const disposition = res.headers.get('Content-Disposition');
+                let filename = 'output.md';
+                if (disposition) {
+                    const match = disposition.match(/filename="(.+)"/);
+                    if (match) filename = match[1];
+                }
+
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('下载失败: ' + err.message);
+            }
+        }
+
+        // 预览产出物
+        async function previewOutput(outputId) {
+            try {
+                const res = await fetch(`${BASE_URL}/outputs/${outputId}`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+
+                const output = await res.json();
+
+                document.getElementById('modalBody').innerHTML = `
+                    <h3>${output.task_id} - 最终产出</h3>
+                    <p style="color: #666; margin: 8px 0;">
+                        格式: ${output.format} |
+                        创建: ${new Date(output.created_at).toLocaleString()}
+                    </p>
+                    <div style="margin-top: 16px;">
+                        <button class="btn-sm btn-success" onclick="downloadOutput('${outputId}')">
+                            下载文件
+                        </button>
+                    </div>
+                    <pre style="background: #f8f9fa; padding: 16px; border-radius: 8px; overflow-x: auto; margin-top: 16px; white-space: pre-wrap; line-height: 1.6;">
+${escapeHtml(output.content)}</pre>
+                `;
+
+                document.getElementById('detailModal').classList.add('active');
+            } catch (err) {
+                alert('预览失败: ' + err.message);
+            }
+        }
+
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+
+        // 上传文件
+        async function uploadFile(input) {
+            if (!input.files || input.files.length === 0) return;
+
+            const file = input.files[0];
+
+            // 检查文件大小 (PDF大文件需要提示)
+            if (file.size > 10 * 1024 * 1024) {
+                if (!confirm(`文件较大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，上传可能需要一些时间，是否继续？`)) {
+                    input.value = '';
+                    return;
+                }
+            }
+
+            const title = document.getElementById('assetTitle').value || file.name;
+            const source = document.getElementById('assetSource').value;
+            const tags = document.getElementById('assetTags').value;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('title', title);
+            if (source) formData.append('source', source);
+            if (tags) formData.append('tags', tags);
+
+            // 显示上传中状态
+            const uploadBtn = document.querySelector('.asset-upload');
+            const originalText = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = '<p>上传中<span class="loading"></span></p><p style="font-size: 12px; color: #999;">正在解析内容...</p>';
+
+            try {
+                const res = await fetch(`${BASE_URL}/assets`, {
+                    method: 'POST',
+                    headers: { 'X-API-Key': API_KEY },
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.message || '上传失败');
+                }
+
+                const data = await res.json();
+                alert(`上传成功！\n文件类型: ${data.content_type}\n质量评分: ${data.quality_score}`);
+
+                // 清空表单
+                document.getElementById('assetTitle').value = '';
+                document.getElementById('assetSource').value = '';
+                document.getElementById('assetTags').value = '';
+                document.getElementById('fileInput').value = '';
+
+                loadAssets();
+            } catch (err) {
+                alert('上传失败: ' + err.message);
+            } finally {
+                uploadBtn.innerHTML = originalText;
+            }
+        }
+
+        // 加载素材列表
+        async function loadAssets() {
+            try {
+                const res = await fetch(`${BASE_URL}/assets?limit=20`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await res.json();
+
+                const list = document.getElementById('assetList');
+                if (data.items.length === 0) {
+                    list.innerHTML = '<div class="empty-state">暂无素材</div>';
+                    return;
+                }
+
+                list.innerHTML = data.items.map(asset => `
+                    <div class="task-item">
+                        <div class="task-header">
+                            <span class="task-title">${asset.title}</span>
+                            <span class="task-status">${asset.content_type}</span>
+                        </div>
+                        <div class="task-meta">
+                            ${asset.source ? `来源: ${asset.source} | ` : ''}
+                            质量分: ${asset.quality_score} |
+                            创建: ${new Date(asset.created_at).toLocaleString()}
+                        </div>
+                        ${asset.tags && asset.tags.length > 0 ? `
+                            <div style="margin-top: 8px;">
+                                ${asset.tags.map(t => `<span style="background: #e9ecef; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px;">${t}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        ${asset.content_preview ? `
+                            <p style="margin-top: 12px; font-size: 13px; color: #666; line-height: 1.5;">
+                                ${asset.content_preview.substring(0, 200)}...
+                            </p>
+                        ` : ''}
+                    </div>
+                `).join('');
+            } catch (err) {
+                document.getElementById('assetList').innerHTML =
+                    '<div class="empty-state">加载失败</div>';
+            }
+        }
+
+        // 辅助函数
+        function getStatusText(status) {
+            const map = {
+                'pending': '待处理',
+                'researching': '研究中',
+                'writing': '写作中',
+                'reviewing': '评审中',
+                'awaiting_approval': '待确认',
+                'completed': '已完成',
+                'failed': '失败'
+            };
+            return map[status] || status;
+        }
+
+        function getExpertName(role) {
+            const map = {
+                'challenger': '批判者（挑战）',
+                'expander': '拓展者（扩展）',
+                'synthesizer': '提炼者（归纳）'
+            };
+            return map[role] || role;
+        }
+
+        // 初始化
+        loadTasks();
+
+        // 定时刷新
+        setInterval(() => {
+            if (document.getElementById('tasksTab').style.display !== 'none') {
+                loadTasks();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

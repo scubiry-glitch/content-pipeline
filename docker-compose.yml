@@ -1,0 +1,84 @@
+# Content Pipeline - Docker Compose 配置
+# 一键部署完整环境：API + PostgreSQL + pgvector
+
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: content-pipeline-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-author}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-author123}
+      POSTGRES_DB: ${DB_NAME:-author}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-author} -d ${DB_NAME:-author}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - content-pipeline-network
+
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: content-pipeline-api
+    environment:
+      # 数据库配置
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-author}
+      DB_USER: ${DB_USER:-author}
+      DB_PASSWORD: ${DB_PASSWORD:-author123}
+      DATABASE_URL: postgresql://${DB_USER:-author}:${DB_PASSWORD:-author123}@postgres:5432/${DB_NAME:-author}
+
+      # LLM API Keys
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-https://api.kimi.com/coding}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+      # 认证
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-api-key-change-in-production}
+
+      # 服务器配置
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # 可选：挂载 .env 文件
+      - ./.env:/app/.env:ro
+    networks:
+      - content-pipeline-network
+    restart: unless-stopped
+
+  # 可选：前端静态文件服务
+  webapp:
+    image: nginx:alpine
+    container_name: content-pipeline-webapp
+    volumes:
+      - ./webapp:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${WEBAPP_PORT:-8080}:80"
+    networks:
+      - content-pipeline-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  content-pipeline-network:
+    driver: bridge
