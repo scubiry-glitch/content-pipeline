@@ -1,0 +1,364 @@
+openapi: 3.0.0
+info:
+  title: 内容生产流水线 API
+  version: 2.0.0
+  description: |
+    内容生产流水线后端 API 规格
+
+    技术栈: TypeScript + Node.js + Fastify
+
+    代码位置: `/Users/行业研究/demo-project/content-pipeline/`
+
+servers:
+  - url: http://localhost:3000/api/v2
+    description: 本地开发环境
+
+paths:
+  /health:
+    get:
+      summary: 健康检查
+      description: 检查服务及各依赖组件健康状态
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: 服务异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /topics:
+    get:
+      summary: 获取选题列表
+      description: 获取推荐的选题列表，基于热点、用户反馈和历史复用
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [hot, feedback, history, all]
+            default: all
+      responses:
+        '200':
+          description: 选题列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  topics:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Topic'
+
+    post:
+      summary: 创建新选题
+      description: 手动创建一个新的内容选题
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicInput'
+      responses:
+        '201':
+          description: 选题创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+
+  /topics/{topicId}/research:
+    post:
+      summary: 执行研究
+      description: 对指定选题执行自动化研究，检索相关研报和数据
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 研究结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchResult'
+
+  /topics/{topicId}/outline:
+    post:
+      summary: 生成大纲
+      description: 基于研究结果自动生成内容大纲
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 大纲生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Outline'
+
+  /topics/{topicId}/content:
+    post:
+      summary: 生成内容
+      description: 基于大纲自动生成内容初稿
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  enum: [claude-sonnet-4-6, claude-opus-4-6]
+                  default: claude-sonnet-4-6
+      responses:
+        '200':
+          description: 内容生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Content'
+
+  /content/{contentId}/review:
+    post:
+      summary: 提交蓝军评审
+      description: 提交内容进行蓝军（专家+AI）评审
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 评审结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+
+  /content/{contentId}/publish:
+    post:
+      summary: 发布内容
+      description: 将评审通过的内容发布到各平台
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                    enum: [wechat, zhihu, xueqiu]
+      responses:
+        '200':
+          description: 发布成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResult'
+
+  /reports:
+    get:
+      summary: 研报检索
+      description: RAG检索242份历史研报
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: top_k
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: 检索结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Report'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+            claude_api:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+
+    Topic:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+          enum: [hot, feedback, history, manual]
+        confidence:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+
+    TopicInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+      required:
+        - title
+
+    ResearchResult:
+      type: object
+      properties:
+        topic_id:
+          type: string
+        summary:
+          type: string
+        related_reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        external_data:
+          type: object
+
+    Outline:
+      type: object
+      properties:
+        topic_id:
+          type: string
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              key_points:
+                type: array
+                items:
+                  type: string
+
+    Content:
+      type: object
+      properties:
+        id:
+          type: string
+        topic_id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+          enum: [draft, reviewing, approved, published]
+        created_at:
+          type: string
+          format: date-time
+
+    ReviewResult:
+      type: object
+      properties:
+        content_id:
+          type: string
+        passed:
+          type: boolean
+        score:
+          type: number
+        feedback:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [suggestion, issue, praise]
+              message:
+                type: string
+
+    PublishResult:
+      type: object
+      properties:
+        content_id:
+          type: string
+        published_urls:
+          type: object
+          additionalProperties:
+            type: string
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        date:
+          type: string
+          format: date
+        relevance_score:
+          type: number
+        excerpt:
+          type: string

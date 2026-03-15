@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人能力与商业闭环 | 可视化仪表盘</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 20px; }
+        .card { transition: all 0.3s ease; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.15); }
+        .flow-line { stroke-dasharray: 8; animation: dash 2s linear infinite; }
+        @keyframes dash { to { stroke-dashoffset: -16; } }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .tab-active { border-bottom: 3px solid #667eea; color: #667eea; }
+        .progress-ring { transform: rotate(-90deg); }
+        .node-circle { cursor: pointer; transition: all 0.3s; }
+        .node-circle:hover { filter: drop-shadow(0 0 10px rgba(102,126,234,0.5)); }
+        .tooltip-custom { position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s; max-width: 280px; z-index: 1000; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="glass p-6 mb-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">🎯 个人能力与商业闭环</h1>
+                <p class="text-gray-600 mt-2">基于242份研报积累的可视化战略仪表盘</p>
+            </div>
+            <div class="flex gap-4">
+                <button onclick="showTab('overview')" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">总览</button>
+                <button onclick="showTab('assets')" class="px-4 py-2 rounded-lg bg-white text-gray-700 hover:bg-gray-100 transition">资产盘点</button>
+                <button onclick="showTab('model')" class="px-4 py-2 rounded-lg bg-white text-gray-700 hover:bg-gray-100 transition">商业模式</button>
+                <button onclick="showTab('roadmap')" class="px-4 py-2 rounded-lg bg-white text-gray-700 hover:bg-gray-100 transition">执行路线</button>
+            </div>
+        </header>
+
+        <!-- Tab Content -->
+        <div id="tab-overview" class="tab-content">
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="glass card p-6">
+                    <div class="text-4xl font-bold text-indigo-600">242</div>
+                    <div class="text-gray-600 mt-1">研报积累</div>
+                    <div class="text-xs text-gray-400 mt-2">覆盖18个行业</div>
+                </div>
+                <div class="glass card p-6">
+                    <div class="text-4xl font-bold text-emerald-600">2</div>
+                    <div class="text-gray-600 mt-1">交叉领域</div>
+                    <div class="text-xs text-gray-400 mt-2">金融科技×居住服务</div>
+                </div>
+                <div class="glass card p-6">
+                    <div class="text-4xl font-bold text-amber-600">3</div>
+                    <div class="text-gray-600 mt-1">MVP产品</div>
+                    <div class="text-xs text-gray-400 mt-2">可立即启动</div>
+                </div>
+                <div class="glass card p-6">
+                    <div class="text-4xl font-bold text-rose-600">12</div>
+                    <div class="text-gray-600 mt-1">月执行周期</div>
+                    <div class="text-xs text-gray-400 mt-2">目标月收入2万+</div>
+                </div>
+            </div>
+
+            <!-- Core Loop Visualization -->
+            <div class="glass p-8 mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">商业闭环飞轮</h2>
+                <div id="cycle-viz" class="flex justify-center">
+                    <svg width="600" height="400" viewBox="0 0 600 400">
+                        <!-- Background Circle -->
+                        <circle cx="300" cy="200" r="150" fill="none" stroke="#e5e7eb" stroke-width="2"/>
+
+                        <!-- Flow Arrows -->
+                        <path d="M 300 50 A 150 150 0 0 1 450 200" fill="none" stroke="#667eea" stroke-width="3" class="flow-line" marker-end="url(#arrowhead)"/>
+                        <path d="M 450 200 A 150 150 0 0 1 300 350" fill="none" stroke="#764ba2" stroke-width="3" class="flow-line" marker-end="url(#arrowhead)"/>
+                        <path d="M 300 350 A 150 150 0 0 1 150 200" fill="none" stroke="#f093fb" stroke-width="3" class="flow-line" marker-end="url(#arrowhead)"/>
+                        <path d="M 150 200 A 150 150 0 0 1 300 50" fill="none" stroke="#f5576c" stroke-width="3" class="flow-line" marker-end="url(#arrowhead)"/>
+
+                        <!-- Nodes -->
+                        <g class="node-circle" onclick="showNodeDetail('content')">
+                            <circle cx="300" cy="50" r="40" fill="#667eea"/>
+                            <text x="300" y="55" text-anchor="middle" fill="white" font-size="12" font-weight="600">内容输出</text>
+                            <text x="300" y="20" text-anchor="middle" fill="#667eea" font-size="11">流量层</text>
+                        </g>
+
+                        <g class="node-circle" onclick="showNodeDetail('community')">
+                            <circle cx="450" cy="200" r="40" fill="#764ba2"/>
+                            <text x="450" y="205" text-anchor="middle" fill="white" font-size="12" font-weight="600">社群运营</text>
+                            <text x="450" y="170" text-anchor="middle" fill="#764ba2" font-size="11">信任层</text>
+                        </g>
+
+                        <g class="node-circle" onclick="showNodeDetail('service')">
+                            <circle cx="300" cy="350" r="40" fill="#f093fb"/>
+                            <text x="300" y="355" text-anchor="middle" fill="white" font-size="12" font-weight="600">服务变现</text>
+                            <text x="300" y="320" text-anchor="middle" fill="#f093fb" font-size="11">变现层</text>
+                        </g>
+
+                        <g class="node-circle" onclick="showNodeDetail('asset')">
+                            <circle cx="150" cy="200" r="40" fill="#f5576c"/>
+                            <text x="150" y="205" text-anchor="middle" fill="white" font-size="12" font-weight="600">资产沉淀</text>
+                            <text x="150" y="170" text-anchor="middle" fill="#f5576c" font-size="11">长期价值</text>
+                        </g>
+
+                        <!-- Center -->
+                        <circle cx="300" cy="200" r="25" fill="white" stroke="#667eea" stroke-width="3"/>
+                        <text x="300" y="205" text-anchor="middle" fill="#667eea" font-size="10" font-weight="600">你</text>
+
+                        <!-- Arrow Marker -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#999"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="grid grid-cols-4 gap-4 mt-4 text-center text-sm text-gray-600">
+                    <div>研报解读<br>行业观点</div>
+                    <div>付费社群<br>私域沉淀</div>
+                    <div>咨询服务<br>企业内训</div>
+                    <div>方法论SOP<br>工具产品</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-assets" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Asset Inventory -->
+                <div class="glass p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">💎 能力资产清单</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                            <div>
+                                <div class="font-semibold text-gray-800">原始资料库</div>
+                                <div class="text-sm text-gray-500">242份高质量研报</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-indigo-600">￥1.2-4.8万</div>
+                                <div class="text-xs text-gray-400">市场估值</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                            <div>
+                                <div class="font-semibold text-gray-800">跨领域视角</div>
+                                <div class="text-sm text-gray-500">金融×居住交叉研究</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-emerald-600">稀缺</div>
+                                <div class="text-xs text-gray-400">竞争壁垒</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                            <div>
+                                <div class="font-semibold text-gray-800">方法论体系</div>
+                                <div class="text-sm text-gray-500">McK+券商+数据机构</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-amber-600">系统化</div>
+                                <div class="text-xs text-gray-400">可传授</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                            <div>
+                                <div class="font-semibold text-gray-800">结构化能力</div>
+                                <div class="text-sm text-gray-500">知识图谱化思维</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-rose-600">工程化</div>
+                                <div class="text-xs text-gray-400">产品基础</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Positioning Matrix -->
+                <div class="glass p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">🎯 战略定位矩阵</h3>
+                    <div class="relative h-80 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="grid grid-cols-2 gap-1 w-full h-full p-4">
+                                <div class="bg-blue-100 rounded-tl-lg flex items-center justify-center text-sm text-blue-800">
+                                    高壁垒<br>小市场
+                                </div>
+                                <div class="bg-green-100 rounded-tr-lg flex items-center justify-center text-sm text-green-800">
+                                    高壁垒<br>大市场 ✓
+                                </div>
+                                <div class="bg-yellow-100 rounded-bl-lg flex items-center justify-center text-sm text-yellow-800">
+                                    低壁垒<br>小市场
+                                </div>
+                                <div class="bg-orange-100 rounded-br-lg flex items-center justify-center text-sm text-orange-800">
+                                    低壁垒<br>大市场
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Position markers -->
+                        <div class="absolute top-1/4 right-1/4 transform translate-x-1/2 -translate-y-1/2">
+                            <div class="w-4 h-4 bg-indigo-600 rounded-full pulse"></div>
+                            <div class="absolute top-5 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-indigo-600 whitespace-nowrap">居住金融科技专家</div>
+                        </div>
+                        <div class="absolute bottom-1/4 right-1/4 transform translate-x-1/2 translate-y-1/2">
+                            <div class="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                            <div class="absolute top-5 left-1/2 transform -translate-x-1/2 text-xs text-emerald-600 whitespace-nowrap">研报解构师</div>
+                        </div>
+                        <div class="absolute bottom-1/4 left-1/4 transform -translate-x-1/2 translate-y-1/2">
+                            <div class="w-3 h-3 bg-amber-500 rounded-full"></div>
+                            <div class="absolute top-5 left-1/2 transform -translate-x-1/2 text-xs text-amber-600 whitespace-nowrap">研究教练</div>
+                        </div>
+                        <!-- Axis labels -->
+                        <div class="absolute left-2 top-1/2 transform -translate-y-1/2 -rotate-90 text-xs text-gray-400">市场壁垒</div>
+                        <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-gray-400">市场规模</div>
+                    </div>
+                    <div class="mt-4 p-4 bg-indigo-50 rounded-lg">
+                        <div class="font-semibold text-indigo-800">✓ 推荐定位：居住金融科技专家</div>
+                        <div class="text-sm text-indigo-600 mt-1">结合高壁垒（交叉领域）+ 流量入口（研报解读）的组合策略</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-model" class="tab-content hidden">
+            <!-- Business Model Canvas -->
+            <div class="glass p-6 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">💰 商业模式画布</h3>
+                <div class="grid grid-cols-3 gap-4">
+                    <!-- Traffic Layer -->
+                    <div class="col-span-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4 rounded-lg">
+                        <div class="font-semibold mb-2">流量层：内容输出</div>
+                        <div class="grid grid-cols-4 gap-2 text-sm">
+                            <div class="bg-white/20 rounded p-2 text-center">公众号</div>
+                            <div class="bg-white/20 rounded p-2 text-center">知乎</div>
+                            <div class="bg-white/20 rounded p-2 text-center">即刻</div>
+                            <div class="bg-white/20 rounded p-2 text-center">播客/视频</div>
+                        </div>
+                    </div>
+
+                    <!-- Trust Layer -->
+                    <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg">
+                        <div class="font-semibold mb-2">信任层</div>
+                        <div class="space-y-2 text-sm">
+                            <div class="bg-white/20 rounded p-2">免费Newsletter</div>
+                            <div class="bg-white/20 rounded p-2">付费社群 ￥299-999/年</div>
+                            <div class="bg-white/20 rounded p-2">轻咨询 ￥500/30min</div>
+                        </div>
+                    </div>
+
+                    <!-- Monetization Layer -->
+                    <div class="bg-gradient-to-r from-pink-500 to-rose-500 text-white p-4 rounded-lg">
+                        <div class="font-semibold mb-2">变现层</div>
+                        <div class="space-y-2 text-sm">
+                            <div class="bg-white/20 rounded p-2">企业内训 ￥5000-2万</div>
+                            <div class="bg-white/20 rounded p-2">战略咨询 ￥2-10万</div>
+                            <div class="bg-white/20 rounded p-2">研究服务 按需定价</div>
+                        </div>
+                    </div>
+
+                    <!-- Asset Layer -->
+                    <div class="bg-gradient-to-r from-rose-500 to-orange-500 text-white p-4 rounded-lg">
+                        <div class="font-semibold mb-2">资产层</div>
+                        <div class="space-y-2 text-sm">
+                            <div class="bg-white/20 rounded p-2">行业数据库</div>
+                            <div class="bg-white/20 rounded p-2">方法论SOP</div>
+                            <div class="bg-white/20 rounded p-2">工具模板库</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MVP Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="glass card p-6">
+                    <div class="text-3xl mb-2">📧</div>
+                    <h4 class="font-bold text-gray-800 mb-2">MVP 1: Newsletter</h4>
+                    <p class="text-sm text-gray-600 mb-4">每周深度解读1份经典研报，交叉视角+历史对比</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-600 font-semibold">￥199/年</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded">启动难度：低</span>
+                    </div>
+                </div>
+                <div class="glass card p-6">
+                    <div class="text-3xl mb-2">📚</div>
+                    <h4 class="font-bold text-gray-800 mb-2">MVP 2: 知识库</h4>
+                    <p class="text-sm text-gray-600 mb-4">Notion/飞书知识库，研报+批注+图谱+工具包</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-600 font-semibold">￥299-499/年</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded">启动难度：中</span>
+                    </div>
+                </div>
+                <div class="glass card p-6">
+                    <div class="text-3xl mb-2">💬</div>
+                    <h4 class="font-bold text-gray-800 mb-2">MVP 3: 轻咨询</h4>
+                    <p class="text-sm text-gray-600 mb-4">30分钟语音咨询，聚焦特定问题，交付纪要</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-600 font-semibold">￥500/30min</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded">启动难度：低</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-roadmap" class="tab-content hidden">
+            <!-- Roadmap Timeline -->
+            <div class="glass p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-6">🗺️ 12个月执行路线图</h3>
+
+                <div class="relative">
+                    <!-- Timeline line -->
+                    <div class="absolute left-1/2 transform -translate-x-1/2 h-full w-1 bg-indigo-200"></div>
+
+                    <!-- Phase 1 -->
+                    <div class="flex items-center mb-8">
+                        <div class="w-1/2 pr-8 text-right">
+                            <div class="glass p-4 border-r-4 border-indigo-500">
+                                <div class="font-bold text-indigo-600">第1个月：内容启动</div>
+                                <ul class="text-sm text-gray-600 mt-2 space-y-1">
+                                    <li>• 确定定位</li>
+                                    <li>• 搭建渠道</li>
+                                    <li>• 产出首批内容</li>
+                                    <li>• 种子用户测试</li>
+                                </ul>
+                                <div class="mt-2 text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded inline-block">目标：100订阅</div>
+                            </div>
+                        </div>
+                        <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold z-10">1</div>
+                        <div class="w-1/2 pl-8"></div>
+                    </div>
+
+                    <!-- Phase 2 -->
+                    <div class="flex items-center mb-8">
+                        <div class="w-1/2 pr-8"></div>
+                        <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold z-10">2</div>
+                        <div class="w-1/2 pl-8">
+                            <div class="glass p-4 border-l-4 border-purple-500">
+                                <div class="font-bold text-purple-600">第2-3个月：社群沉淀</div>
+                                <ul class="text-sm text-gray-600 mt-2 space-y-1">
+                                    <li>• 启动免费社群</li>
+                                    <li>• 用户深度访谈</li>
+                                    <li>• 设计付费产品</li>
+                                    <li>• 首批付费转化</li>
+                                </ul>
+                                <div class="mt-2 text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded inline-block">目标：首笔付费</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phase 3 -->
+                    <div class="flex items-center mb-8">
+                        <div class="w-1/2 pr-8 text-right">
+                            <div class="glass p-4 border-r-4 border-pink-500">
+                                <div class="font-bold text-pink-600">第4-6个月：产品化</div>
+                                <ul class="text-sm text-gray-600 mt-2 space-y-1">
+                                    <li>• 标准化服务流程</li>
+                                    <li>• 首批企业客户</li>
+                                    <li>• 案例沉淀</li>
+                                    <li>• 收入模型验证</li>
+                                </ul>
+                                <div class="mt-2 text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded inline-block">目标：月入5000+</div>
+                            </div>
+                        </div>
+                        <div class="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold z-10">3</div>
+                        <div class="w-1/2 pl-8"></div>
+                    </div>
+
+                    <!-- Phase 4 -->
+                    <div class="flex items-center">
+                        <div class="w-1/2 pr-8"></div>
+                        <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold z-10">4</div>
+                        <div class="w-1/2 pl-8">
+                            <div class="glass p-4 border-l-4 border-emerald-500">
+                                <div class="font-bold text-emerald-600">第7-12个月：规模化</div>
+                                <ul class="text-sm text-gray-600 mt-2 space-y-1">
+                                    <li>• 多渠道分发矩阵</li>
+                                    <li>• 建立合作网络</li>
+                                    <li>• 被动收入产品</li>
+                                    <li>• 品牌IP化</li>
+                                </ul>
+                                <div class="mt-2 text-xs bg-emerald-50 text-emerald-600 px-2 py-1 rounded inline-block">目标：月入2万+</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="glass p-6 mt-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">⚡ 本周立即执行</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-lg p-4 border-2 border-indigo-200 hover:border-indigo-500 transition cursor-pointer">
+                        <div class="font-semibold text-gray-800">1. 确定定位</div>
+                        <div class="text-sm text-gray-500 mt-1">3选1战略定位</div>
+                        <div class="text-xs text-indigo-600 mt-2">⏱️ 2小时</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 border-2 border-purple-200 hover:border-purple-500 transition cursor-pointer">
+                        <div class="font-semibold text-gray-800">2. 注册账号</div>
+                        <div class="text-sm text-gray-500 mt-1">公众号/即刻/知乎</div>
+                        <div class="text-xs text-purple-600 mt-2">⏱️ 1小时</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 border-2 border-pink-200 hover:border-pink-500 transition cursor-pointer">
+                        <div class="font-semibold text-gray-800">3. 整理Top 10</div>
+                        <div class="text-sm text-gray-500 mt-1">必读研报清单</div>
+                        <div class="text-xs text-pink-600 mt-2">⏱️ 3小时</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 border-2 border-emerald-200 hover:border-emerald-500 transition cursor-pointer">
+                        <div class="font-semibold text-gray-800">4. 写第一篇</div>
+                        <div class="text-sm text-gray-500 mt-1">内容大纲</div>
+                        <div class="text-xs text-emerald-600 mt-2">⏱️ 4小时</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center text-white/80 mt-8 text-sm">
+            基于242份行业研究分析生成 | 建议每季度回顾更新
+        </footer>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip-custom"></div>
+
+    <script>
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-' + tabName).classList.remove('hidden');
+        }
+
+        // Node detail tooltip
+        function showNodeDetail(nodeType) {
+            const details = {
+                content: {
+                    title: '内容输出层',
+                    desc: '通过研报解读、行业观点输出建立专业形象，吸引目标受众。核心平台：公众号、知乎、即刻、播客。'
+                },
+                community: {
+                    title: '社群运营层',
+                    desc: '建立信任关系，沉淀私域流量。产品：免费Newsletter、付费社群、轻咨询服务。'
+                },
+                service: {
+                    title: '服务变现层',
+                    desc: '高价值服务交付。产品：企业内训(￥5000-2万)、战略咨询(￥2-10万)、研究服务。'
+                },
+                asset: {
+                    title: '资产沉淀层',
+                    desc: '长期价值积累。包括：行业数据库、方法论SOP、工具模板库、个人IP品牌。'
+                }
+            };
+
+            const detail = details[nodeType];
+            alert(detail.title + '\n\n' + detail.desc);
+        }
+
+        // Initialize with overview tab
+        showTab('overview');
+    </script>
+</body>
+</html>
