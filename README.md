@@ -1,198 +1,88 @@
 # 内容生产流水线 (Content Pipeline)
 
-基于Multi-Agent的自动化研究报告生产系统，支持Blue Team多轮审核机制。
+AI 驱动的产业研究报告生产系统。从选题到成稿，全流程自动化，支持专家级 BlueTeam 评审。
 
-## 核心特性
-
-- **三层穿透架构**: 宏观视野 → 中观解剖 → 微观行动
-- **Blue Team审核**: 3专家×5问题×3轮批判性审核
-- **智能资产库**: 自动标签、质量评分、向量检索
-- **多模型底座**: Claude + OpenAI 智能路由
-
-## 项目结构
+## 核心流程
 
 ```
-content-pipeline/
-├── api/                     # Fastify API服务
-│   └── src/
-│       ├── providers/       # LLM Provider抽象层
-│       │   ├── base.ts      # 抽象基类
-│       │   ├── claude.ts    # Claude API实现
-│       │   ├── claudeCode.ts # Claude Code环境支持
-│       │   ├── openai.ts    # OpenAI实现
-│       │   └── index.ts     # LLM Router
-│       ├── agents/          # Agent系统
-│       │   ├── base.ts      # Agent基类
-│       │   ├── planner.ts   # 选题规划Agent
-│       │   ├── researcher.ts # 数据研究Agent
-│       │   └── writer.ts    # 写作Agent (含Blue Team)
-│       ├── services/        # 业务服务
-│       │   └── assetLibrary.ts # 智能资产库
-│       ├── pipeline/        # Pipeline编排
-│       │   └── orchestrator.ts
-│       ├── db/              # 数据库层
-│       │   └── connection.ts
-│       ├── server.ts        # API入口
-│       └── demo.ts          # Demo脚本
-├── shared/                  # 共享类型
-│   └── src/types/
-│       └── index.ts         # 核心类型定义
-└── web/                     # Next.js前端 (待实现)
+选题 → 大纲生成 → 素材研究 → 初稿写作 → BlueTeam 评审 → 人工确认 → 终稿输出
 ```
+
+## 特性
+
+- **BlueTeam 评审**: 3 位领域专家（挑战/扩展/归纳）× 2 轮深度评审
+- **专家库**: 根据主题自动匹配领域专家（房地产金融、FinTech 等）
+- **素材库**: PDF 解析 + 语义搜索（pgvector）
+- **多 LLM 支持**: Kimi / Claude / OpenAI 自动降级
+- **Web 管理界面**: 任务管理、素材上传、进度追踪
 
 ## 快速开始
 
-### 1. 安装依赖
+### Docker 部署（推荐）
 
 ```bash
-cd content-pipeline/api
+# 1. 克隆仓库
+git clone https://github.com/YOUR_USERNAME/content-pipeline.git
+cd content-pipeline
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入 KIMI_API_KEY
+
+# 3. 启动服务
+docker-compose up -d
+
+# 4. 访问
+# API: http://localhost:3000
+# Web: http://localhost:8080
+```
+
+### 手动部署
+
+```bash
+cd api
 npm install
+npm run dev
 ```
 
-### 2. 配置方式（三选一）
+## 环境变量
 
-#### 方式A: 使用Claude Code环境（推荐）
-在Claude Code中运行时，系统会自动检测并使用配置的模型：
-```bash
-# 无需额外配置，自动检测以下环境变量
-# - ANTHROPIC_MODEL (Claude Code使用的模型)
-# - CLAUDE_CODE_ENV
-```
+| 变量 | 必需 | 说明 |
+|-----|------|------|
+| `KIMI_API_KEY` | 是 | Kimi API 密钥 |
+| `DATABASE_URL` | 是 | PostgreSQL 连接字符串 |
+| `ADMIN_API_KEY` | 是 | API 认证密钥 |
 
-#### 方式B: 使用API Key
-```bash
-export ANTHROPIC_API_KEY="your-claude-api-key"
-export OPENAI_API_KEY="your-openai-api-key"  # 可选，用于Embedding
+详见 [DEPLOY.md](DEPLOY.md)
 
-# 可选: PostgreSQL配置
-export DB_HOST="localhost"
-export DB_PORT="5432"
-export DB_NAME="content_pipeline"
-export DB_USER="postgres"
-export DB_PASSWORD="password"
-```
-
-#### 方式C: API初始化时配置
-```bash
-POST /init
-{
-  "useClaudeCode": true,  // 强制使用Claude Code环境
-  "openaiApiKey": "..."   // 可选，用于Embedding
-}
-```
-
-### 3. 运行Demo
+## API 示例
 
 ```bash
-npx ts-node src/demo.ts
+# 创建研究任务
+curl -X POST http://localhost:3000/api/v1/production \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{"topic":"保租房REITs市场分析"}'
+
+# 上传素材
+curl -X POST http://localhost:3000/api/v1/assets \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@report.pdf" \
+  -F "title=行业研报"
 ```
-
-### 4. 启动API服务
-
-```bash
-npx ts-node src/server.ts
-```
-
-API服务将在 http://localhost:3000 启动
-
-## API端点
-
-### 系统初始化
-```bash
-POST /init
-{
-  "claudeApiKey": "...",
-  "openaiApiKey": "...",
-  "dbConfig": { ... }
-}
-```
-
-### 运行Pipeline
-```bash
-POST /pipeline/run
-{
-  "topic": "保租房REITs市场分析",
-  "context": "研究背景...",
-  "desiredDepth": "comprehensive"
-}
-```
-
-### 导入历史文档
-```bash
-POST /assets/import
-{
-  "documents": [
-    {"content": "...", "source": "file.md"}
-  ]
-}
-```
-
-### 查询结果
-```bash
-GET /topics/:id              # 获取选题详情
-GET /reports/:id             # 获取研究报告
-GET /documents/:id           # 获取最终文档
-GET /topics/:id/blue-team    # 获取Blue Team审核记录
-```
-
-## Blue Team专家配置
-
-系统内置4位专家视角:
-
-| 专家 | 视角 | 关注重点 |
-|------|------|----------|
-| 张其光 | 政策实操派 | 政策依据、数据支撑 |
-| 陆铭 | 市场机制派 | 理论依据、国际比较 |
-| 刘元春 | 风险平衡派 | 风险点、宏观传导 |
-| 看空派 | 市场skeptic | 最坏情况、反例 |
-
-## 7天开发里程碑
-
-- [x] Day 1-2: 项目架构 + LLM底座
-- [x] Day 3: PlannerAgent + ResearchAgent + Asset Library
-- [x] Day 4-5: WriterAgent + Blue Team审核机制
-- [x] Day 6: Pipeline编排 + API接口
-- [x] Day 7: Demo演示 + 系统集成测试
 
 ## 技术栈
 
-- **Runtime**: Node.js 20+, TypeScript 5+
-- **API框架**: Fastify 4
-- **Database**: PostgreSQL 15+ (pgvector扩展)
-- **LLM**: Claude 3/4 (Opus/Sonnet/Haiku), GPT-4, GPT-3.5, Claude Code环境
-- **Deployment**: Docker (可选)
+- **后端**: TypeScript + Node.js + Fastify
+- **数据库**: PostgreSQL + pgvector
+- **AI**: Kimi / Claude / OpenAI
+- **部署**: Docker + Docker Compose
 
-## Claude Code环境支持
+## 文档
 
-系统支持在Claude Code环境中直接运行，无需额外配置API Key：
-
-```typescript
-import { isClaudeCodeEnvironment, getClaudeCodeModel, initLLMRouter } from './providers';
-
-// 检测是否在Claude Code中
-if (isClaudeCodeEnvironment()) {
-  console.log('当前模型:', getClaudeCodeModel()); // e.g., claude-sonnet-4-5-20250929
-}
-
-// 自动检测并使用Claude Code配置的模型
-const router = initLLMRouter(); // 无需参数，自动检测环境
-```
-
-### Provider优先级
-
-1. `claude-code` - Claude Code环境配置的模型（如果在Claude Code中运行）
-2. `claude` - 使用ANTHROPIC_API_KEY的标准API调用
-3. `openai` - 使用OPENAI_API_KEY（主要用于Embedding）
-
-### 模型路由规则
-
-| 任务类型 | 首选Provider | 备选Provider | 说明 |
-|----------|--------------|--------------|------|
-| planning | claude-code | claude | 选题规划 |
-| analysis | claude-code | claude | 数据分析 |
-| blue_team_review | claude-code | claude | Blue Team审核 |
-| writing | claude-code | claude | 报告写作 |
-| embedding | openai | - | 文本向量化 |
+- [部署指南](DEPLOY.md)
+- [API 文档](api/openapi.yaml)
+- [架构设计](Agents.md)
 
 ## License
 
