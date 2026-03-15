@@ -11,7 +11,7 @@ import { outputRoutes } from './routes/outputs.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
-import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
+import { initLLMRouter, isClaudeCodeEnvironment, MockProvider } from './providers/index.js';
 import { initDatabase } from './db/connection.js';
 
 dotenv.config();
@@ -22,15 +22,21 @@ async function main() {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const inClaudeCode = isClaudeCodeEnvironment();
 
-  if (claudeApiKey || openaiApiKey || inClaudeCode) {
+  const kimiApiKey = process.env.KIMI_API_KEY;
+
+  if (kimiApiKey || claudeApiKey || openaiApiKey || inClaudeCode) {
     initLLMRouter({
+      kimiApiKey,
       claudeApiKey,
       openaiApiKey,
       useClaudeCode: inClaudeCode && !claudeApiKey,
     });
     console.log('✓ LLM Router initialized');
   } else {
-    console.warn('⚠️ No LLM API keys found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY');
+    console.warn('⚠️ No LLM API keys found. Using MockProvider for development.');
+    const router = initLLMRouter({});
+    router.registerProvider(new MockProvider());
+    console.log('✓ LLM Router initialized with MockProvider');
   }
 
   // Initialize Database

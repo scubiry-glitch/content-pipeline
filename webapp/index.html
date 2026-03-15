@@ -2177,6 +2177,22 @@
         </div>
     </div>
 
+    <!-- Prompt Modal -->
+    <div class="confirm-modal" id="promptModal">
+        <div class="confirm-content">
+            <div class="confirm-icon" id="promptIcon">💬</div>
+            <div class="confirm-title" id="promptTitle">输入信息</div>
+            <div class="confirm-message" id="promptMessage">请输入：</div>
+            <div style="margin: 16px 0;">
+                <textarea id="promptInput" style="width: 100%; padding: 12px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; resize: vertical; min-height: 100px;" placeholder="请输入内容..."></textarea>
+            </div>
+            <div class="confirm-buttons">
+                <button class="btn-secondary" onclick="closePromptModal()">取消</button>
+                <button class="btn-primary" id="promptBtn" style="background: var(--primary);">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Detail Panel -->
     <div class="overlay" id="overlay" onclick="closeDetailPanel()"></div>
     <div class="detail-panel" id="detailPanel">
@@ -2911,6 +2927,37 @@
             confirmCallback = null;
         }
 
+        // Prompt modal for text input
+        let promptCallback = null;
+
+        function showPrompt(options) {
+            const { title, message, icon = '💬', confirmText = '确定', cancelText = '取消', onConfirm } = options;
+
+            document.getElementById('promptIcon').textContent = icon;
+            document.getElementById('promptTitle').textContent = title;
+            document.getElementById('promptMessage').textContent = message;
+
+            const confirmBtn = document.getElementById('promptBtn');
+            confirmBtn.textContent = confirmText;
+
+            const input = document.getElementById('promptInput');
+            input.value = '';
+
+            confirmBtn.onclick = () => {
+                const value = input.value.trim();
+                closePromptModal();
+                if (onConfirm) onConfirm(value);
+            };
+
+            document.getElementById('promptModal').classList.add('active');
+            input.focus();
+        }
+
+        function closePromptModal() {
+            document.getElementById('promptModal').classList.remove('active');
+            promptCallback = null;
+        }
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             // ESC to close modals and panels
@@ -2925,6 +2972,7 @@
                 closeExpertModal();
                 closeEditExpertModal();
                 closeConfirmModal();
+                closePromptModal();
                 closeStageConfig();
             }
 
@@ -4166,6 +4214,26 @@
 
                 ${generateKnowledgeInsightsSection(task)}
 
+                ${task.status === 'awaiting_approval' ? `
+                    <div class="detail-section" style="border: 2px solid var(--warning); background: rgba(245, 158, 11, 0.05);">
+                        <div class="detail-section-title">✋ 人工确认</div>
+                        <p style="margin-bottom: 16px; color: var(--gray-600);">
+                            蓝军评审已完成，请审核稿件并决定下一步操作。
+                        </p>
+                        <div style="display: flex; gap: 12px;">
+                            <button class="btn-sm" onclick="approveTask('${task.id}', true)" style="background: var(--success); color: white; padding: 10px 24px; font-size: 14px;">
+                                ✓ 确认发布
+                            </button>
+                            <button class="btn-sm" onclick="approveTask('${task.id}', false)" style="background: var(--danger); color: white; padding: 10px 24px; font-size: 14px;">
+                                ✕ 打回修改
+                            </button>
+                            <button class="btn-sm" onclick="editFinalDraft('${task.id}')" style="background: var(--primary); color: white; padding: 10px 24px; font-size: 14px;">
+                                ✏️ 编辑终稿
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
+
                 ${task.output_ids?.length > 0 ? `
                     <div class="detail-section">
                         <div class="detail-section-title">产出物</div>
@@ -4328,10 +4396,23 @@
                 <div class="detail-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <div class="detail-section-title" style="margin: 0;">📋 生成的大纲</div>
-                        <button class="btn-sm" onclick="openRedoPlanningModal()" style="background: var(--warning); color: white;">
-                            🔄 重做选题策划
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            ${task.status === 'outline_pending' ? `
+                                <button class="btn-sm" onclick="confirmOutline('${task.id}')" style="background: var(--success); color: white;">
+                                    ✓ 确认大纲并继续
+                                </button>
+                            ` : ''}
+                            <button class="btn-sm" onclick="openRedoPlanningModal()" style="background: var(--warning); color: white;">
+                                🔄 重做选题策划
+                            </button>
+                        </div>
                     </div>
+                    ${task.status === 'outline_pending' ? `
+                        <div style="background: var(--info); color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                            <span>⏳</span>
+                            <span>大纲已生成，正在等待确认。确认后将自动进入研究阶段。</span>
+                        </div>
+                    ` : ''}
                     ${sections.length > 0 ? `
                         <div style="background: var(--gray-50); border-radius: 8px; padding: 16px;">
                             ${sections.map((section, i) => `
@@ -4475,82 +4556,187 @@
             `;
         }
 
-        function generateReviewTab(task) {
-            const reviews = task.blue_team_reviews || [];
-            const experts = task.research_data?.blue_team_experts || [];
+        async function loadAndRenderReviews(taskId) {
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/reviews`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    selectedTask.blueTeamReviews = data;
+                    // Re-render review tab
+                    if (currentDetailTab === 'review') {
+                        document.getElementById('tab-content').innerHTML = generateReviewTab(selectedTask, data);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load reviews:', err);
+            }
+        }
 
-            // Group reviews by round
-            const byRound = {};
+        function generateReviewTab(task, reviewsData) {
+            const reviews = reviewsData || task.blueTeam_reviews || [];
+            const experts = task.research_data?.blue_team_experts || [];
+            const summary = reviewsData?.summary || { total: 0, critical: 0, warning: 0, praise: 0 };
+
+            // Group by severity for display
+            const bySeverity = { critical: [], warning: [], praise: [] };
             reviews.forEach(r => {
-                if (!byRound[r.round]) byRound[r.round] = [];
-                byRound[r.round].push(r);
+                const q = typeof r.questions === 'string' ? JSON.parse(r.questions) : r.questions;
+                const sev = q.severity === 'high' ? 'critical' : q.severity === 'medium' ? 'warning' : 'praise';
+                bySeverity[sev].push({ ...r, parsedQuestion: q });
             });
+
+            // Load reviews if not loaded
+            if (!reviewsData && task.id) {
+                setTimeout(() => loadAndRenderReviews(task.id), 100);
+            }
 
             return `
                 <div class="detail-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <div class="detail-section-title" style="margin: 0;">🔥 蓝军评审</div>
-                        <button class="btn-sm" onclick="confirmRedoReview()" style="background: var(--warning); color: white;">
-                            🔄 重做蓝军评审
-                        </button>
+                        ${task.status === 'awaiting_approval' ? `
+                            <button class="btn-sm" onclick="confirmRedoReview()" style="background: var(--warning); color: white;">
+                                🔄 重做蓝军评审
+                            </button>
+                        ` : ''}
                     </div>
 
-                    <div class="detail-section-title">评审专家</div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
-                        ${experts.map(expert => {
-                            const info = EXPERT_INFO[expert.id] || { name: expert.name, title: expert.title, company: '' };
-                            return `
-                                <div class="expert-card" style="margin-bottom: 0;">
-                                    <div class="expert-header">
-                                        <div class="expert-avatar">${info.name.charAt(0)}</div>
-                                        <div class="expert-info">
-                                            <div class="expert-name">${info.name}</div>
-                                            <div class="expert-title">${info.title}</div>
-                                        </div>
-                                    </div>
-                                    <span class="expert-angle ${expert.angle}">
-                                        ${expert.angle === 'challenger' ? '🔥 批判者' : expert.angle === 'expander' ? '🔍 拓展者' : '📊 提炼者'}
-                                    </span>
-                                </div>
-                            `;
-                        }).join('')}
+                    <!-- 评审概览 -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                        <div style="background: var(--danger); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${summary.critical}</div>
+                            <div style="font-size: 12px;">🔴 严重问题</div>
+                        </div>
+                        <div style="background: var(--warning); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${summary.warning}</div>
+                            <div style="font-size: 12px;">🟡 改进建议</div>
+                        </div>
+                        <div style="background: var(--success); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${summary.praise}</div>
+                            <div style="font-size: 12px;">🟢 亮点</div>
+                        </div>
+                        <div style="background: var(--primary); color: white; padding: 16px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${summary.total}</div>
+                            <div style="font-size: 12px;">总评审数</div>
+                        </div>
+                    </div>
+
+                    <div class="detail-section-title">评审专家分工</div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+                        <div class="expert-card" style="border-left: 4px solid var(--danger);">
+                            <div style="font-size: 20px; margin-bottom: 4px;">🔍</div>
+                            <div style="font-weight: 600; font-size: 13px;">事实核查员</div>
+                            <div style="font-size: 11px; color: var(--gray-500);">数据准确性</div>
+                        </div>
+                        <div class="expert-card" style="border-left: 4px solid var(--warning);">
+                            <div style="font-size: 20px; margin-bottom: 4px;">⚖️</div>
+                            <div style="font-weight: 600; font-size: 13px;">逻辑检察官</div>
+                            <div style="font-size: 11px; color: var(--gray-500);">论证严密性</div>
+                        </div>
+                        <div class="expert-card" style="border-left: 4px solid var(--info);">
+                            <div style="font-size: 20px; margin-bottom: 4px;">👔</div>
+                            <div style="font-weight: 600; font-size: 13px;">行业专家</div>
+                            <div style="font-size: 11px; color: var(--gray-500);">专业深度</div>
+                        </div>
+                        <div class="expert-card" style="border-left: 4px solid var(--success);">
+                            <div style="font-size: 20px; margin-bottom: 4px;">👁️</div>
+                            <div style="font-weight: 600; font-size: 13px;">读者代表</div>
+                            <div style="font-size: 11px; color: var(--gray-500);">可读性</div>
+                        </div>
                     </div>
                 </div>
 
-                ${Object.entries(byRound).map(([round, items]) => `
-                    <div class="detail-section">
-                        <div class="detail-section-title">第${round}轮评审</div>
-                        ${items.map(r => {
-                            const q = typeof r.questions === 'string' ? JSON.parse(r.questions) : r.questions;
-                            const expert = experts.find(e => e.id === q.expertId) || {};
-                            const info = EXPERT_INFO[q.expertId] || { name: q.expertName || '专家' };
-                            return `
-                                <div class="review-question">
-                                    <div class="review-header">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <div class="expert-avatar" style="width: 28px; height: 28px; font-size: 12px;">
-                                                ${info.name.charAt(0)}
-                                            </div>
-                                            <strong>${info.name}</strong>
-                                            <span style="font-size: 11px; color: var(--gray-500);">
-                                                ${expert.angle === 'challenger' ? '批判者' : expert.angle === 'expander' ? '拓展者' : '提炼者'}
-                                            </span>
-                                        </div>
-                                        <span class="review-severity ${q.severity}">${q.severity}</span>
-                                    </div>
-                                    <p><strong>问题：</strong>${q.question}</p>
-                                    <p style="margin-top: 8px; color: var(--gray-600);"><strong>建议：</strong>${q.suggestion}</p>
-                                    <div class="review-dimension">
-                                        <span class="dimension-tag">逻辑性</span>
-                                        <span class="dimension-tag">数据支撑</span>
-                                        <span class="dimension-tag">可读性</span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                <!-- 严重问题 -->
+                ${bySeverity.critical.length > 0 ? `
+                    <div class="detail-section" style="border: 2px solid var(--danger);">
+                        <div class="detail-section-title" style="color: var(--danger);">🔴 严重问题（必须修改）</div>
+                        ${bySeverity.critical.map(r => generateReviewItem(r, task.status)).join('')}
                     </div>
-                `).join('')}
+                ` : ''}
+
+                <!-- 改进建议 -->
+                ${bySeverity.warning.length > 0 ? `
+                    <div class="detail-section">
+                        <div class="detail-section-title" style="color: var(--warning);">🟡 改进建议</div>
+                        ${bySeverity.warning.map(r => generateReviewItem(r, task.status)).join('')}
+                    </div>
+                ` : ''}
+
+                <!-- 亮点 -->
+                ${bySeverity.praise.length > 0 ? `
+                    <div class="detail-section">
+                        <div class="detail-section-title" style="color: var(--success);">🟢 亮点</div>
+                        ${bySeverity.praise.map(r => generateReviewItem(r, task.status)).join('')}
+                    </div>
+                ` : ''}
+
+                ${reviews.length === 0 ? `
+                    <div class="detail-section">
+                        <p style="color: var(--gray-500); text-align: center; padding: 40px;">
+                            ${reviewsData ? '暂无评审数据' : '正在加载评审数据...'}
+                        </p>
+                    </div>
+                ` : ''}
             `;
+        }
+
+        function generateReviewItem(r, taskStatus) {
+            const q = r.parsedQuestion || (typeof r.questions === 'string' ? JSON.parse(r.questions) : r.questions);
+            const severity = q.severity === 'high' ? 'critical' : q.severity === 'medium' ? 'warning' : 'praise';
+            const severityColors = {
+                critical: 'var(--danger)',
+                warning: 'var(--warning)',
+                praise: 'var(--success)'
+            };
+
+            return `
+                <div class="review-question" style="border-left: 4px solid ${severityColors[severity]}; margin-bottom: 12px;">
+                    <div class="review-header">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 16px;">${q.expertRole === 'challenger' ? '🔍' : q.expertRole === 'expander' ? '⚖️' : q.expertRole === 'synthesizer' ? '👔' : '👁️'}</span>
+                            <strong>${q.expertName || '专家'}</strong>
+                            <span style="font-size: 11px; color: var(--gray-500);">${q.location || '全文'}</span>
+                        </div>
+                        <span class="review-severity ${q.severity}">${q.severity}</span>
+                    </div>
+                    <p><strong>问题：</strong>${escapeHtml(q.question)}</p>
+                    <p style="margin-top: 8px; color: var(--gray-600);"><strong>建议：</strong>${escapeHtml(q.suggestion)}</p>
+                    ${q.rationale ? `<p style="margin-top: 8px; font-size: 12px; color: var(--gray-500);">依据：${escapeHtml(q.rationale)}</p>` : ''}
+
+                    ${taskStatus === 'awaiting_approval' && severity !== 'praise' ? `
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button class="btn-sm" onclick="acceptReviewSuggestion('${r.id}')" style="background: var(--success); color: white;">
+                                ✓ 接受修改
+                            </button>
+                            <button class="btn-sm" onclick="ignoreReviewSuggestion('${r.id}')" style="background: var(--gray-200); color: var(--gray-700);">
+                                忽略
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        async function acceptReviewSuggestion(reviewId) {
+            if (!selectedTask) return;
+            try {
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/reviews/${reviewId}/accept`, {
+                    method: 'POST',
+                    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' }
+                });
+                if (res.ok) {
+                    showToast('已接受修改建议', 'success');
+                    loadAndRenderReviews(selectedTask.id);
+                }
+            } catch (err) {
+                showToast('操作失败', 'error');
+            }
+        }
+
+        async function ignoreReviewSuggestion(reviewId) {
+            showToast('已忽略该建议', 'info');
         }
 
         function generateVersionsTab(task) {
@@ -5757,6 +5943,83 @@
                     }
                 }
             });
+        }
+
+        // 人工确认：通过或打回
+        async function approveTask(taskId, approved) {
+            if (approved) {
+                showConfirm({
+                    title: '确认发布',
+                    message: '确认通过并发布该报告吗？发布后将成为最终版本。',
+                    icon: '✓',
+                    confirmText: '确认发布',
+                    onConfirm: async () => {
+                        await submitApproval(taskId, true);
+                    }
+                });
+            } else {
+                showPrompt({
+                    title: '打回修改',
+                    message: '请输入打回原因和修改建议：',
+                    icon: '✕',
+                    confirmText: '确认打回',
+                    onConfirm: async (feedback) => {
+                        await submitApproval(taskId, false, feedback);
+                    }
+                });
+            }
+        }
+
+        async function submitApproval(taskId, approved, feedback = '') {
+            showLoading(approved ? '正在确认发布...' : '正在打回修改...');
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ approved, feedback })
+                });
+
+                if (!res.ok) throw new Error('操作失败');
+
+                showToast(approved ? '报告已确认发布！' : '已打回修改，请查看反馈。', 'success');
+                setTimeout(() => showTaskDetail(taskId), 1000);
+            } catch (err) {
+                showToast('操作失败: ' + err.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 编辑终稿
+        function editFinalDraft(taskId) {
+            showToast('终稿编辑功能开发中，敬请期待', 'info');
+        }
+
+        // 确认大纲并进入研究阶段
+        async function confirmOutline(taskId) {
+            showLoading('正在确认大纲...');
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/outline/confirm`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ confirmed: true })
+                });
+
+                if (!res.ok) throw new Error('确认失败');
+
+                showToast('大纲已确认，开始研究阶段', 'success');
+                setTimeout(() => showTaskDetail(taskId), 1000);
+            } catch (err) {
+                showToast('确认失败: ' + err.message, 'error');
+            } finally {
+                hideLoading();
+            }
         }
 
         // 文稿生成重做

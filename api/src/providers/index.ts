@@ -4,9 +4,10 @@ import { LLMProvider } from './base';
 import { ClaudeProvider } from './claude';
 import { OpenAIProvider } from './openai';
 import { ClaudeCodeProvider, isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider } from './claudeCode';
+import { KimiProvider } from './kimi';
 import { GenerationParams, GenerationResult } from '../../shared/src/types';
 
-export { LLMProvider, ClaudeProvider, OpenAIProvider, ClaudeCodeProvider };
+export { LLMProvider, ClaudeProvider, OpenAIProvider, ClaudeCodeProvider, KimiProvider };
 export { isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider };
 
 // Mock provider for demo/testing
@@ -23,21 +24,26 @@ interface ModelRoutingRule {
 export class LLMRouter {
   private providers: Map<string, LLMProvider> = new Map();
   private routingRules: ModelRoutingRule[] = [
-    // Deep reasoning tasks - use Claude Opus or Claude Code
-    { taskType: 'planning', priority: 'quality', preferredProvider: 'claude-code', fallbackProvider: 'claude' },
-    { taskType: 'analysis', priority: 'quality', preferredProvider: 'claude-code', fallbackProvider: 'claude' },
-    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'claude-code', fallbackProvider: 'claude' },
+    // Deep reasoning tasks - prefer Kimi, fallback to Claude
+    { taskType: 'planning', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
+    { taskType: 'analysis', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
+    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
     // Writing tasks
-    { taskType: 'writing', priority: 'quality', preferredProvider: 'claude-code', fallbackProvider: 'claude' },
-    { taskType: 'summarization', priority: 'speed', preferredProvider: 'claude-code', fallbackProvider: 'openai' },
+    { taskType: 'writing', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
+    { taskType: 'summarization', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
     // Fast tasks
-    { taskType: 'tagging', priority: 'speed', preferredProvider: 'claude-code', fallbackProvider: 'openai' },
+    { taskType: 'tagging', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'openai' },
-    { taskType: 'health_check', priority: 'speed', preferredProvider: 'claude-code', fallbackProvider: 'openai' },
+    { taskType: 'health_check', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
   ];
 
   // Model configs for different priorities
   private modelConfigs: Record<string, Record<string, string>> = {
+    kimi: {
+      quality: 'k2p5',
+      speed: 'k2p5',
+      cost: 'k2p5',
+    },
     claude: {
       quality: 'claude-3-opus-20240229',
       speed: 'claude-3-sonnet-20240229',
@@ -137,6 +143,7 @@ export function getLLMRouter(): LLMRouter {
 export interface LLMRouterConfig {
   claudeApiKey?: string;
   openaiApiKey?: string;
+  kimiApiKey?: string;
   useClaudeCode?: boolean; // 强制使用Claude Code环境
   embeddingProvider?: 'openai' | 'claude';
 }
@@ -145,6 +152,12 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
   const router = new LLMRouter();
   const cfg = config || {};
 
+  // 0. 优先检查Kimi (如果配置了)
+  if (cfg.kimiApiKey || process.env.KIMI_API_KEY) {
+    console.log('[LLM Router] 注册Kimi Provider');
+    router.registerProvider(new KimiProvider(cfg.kimiApiKey));
+  }
+
   // 1. 优先检查是否强制使用Claude Code
   if (cfg.useClaudeCode || (!cfg.claudeApiKey && isClaudeCodeEnvironment())) {
     console.log('[LLM Router] 使用Claude Code环境提供的模型');
@@ -152,11 +165,23 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
   }
   // 2. 使用显式API Key
   else if (cfg.claudeApiKey) {
-    router.registerProvider(new ClaudeProvider(cfg.claudeApiKey));
+    // 检查是否是Kimi的key (以 sk-kimi 开头)
+    if (cfg.claudeApiKey.startsWith('sk-kimi')) {
+      console.log('[LLM Router] 检测到Kimi API Key，注册Kimi Provider');
+      router.registerProvider(new KimiProvider(cfg.claudeApiKey));
+    } else {
+      router.registerProvider(new ClaudeProvider(cfg.claudeApiKey));
+    }
   }
   // 3. 使用环境变量API Key
   else if (process.env.ANTHROPIC_API_KEY) {
-    router.registerProvider(new ClaudeProvider(process.env.ANTHROPIC_API_KEY));
+    // 检查是否是Kimi的key (以 sk-kimi 开头)
+    if (process.env.ANTHROPIC_API_KEY.startsWith('sk-kimi')) {
+      console.log('[LLM Router] 检测到Kimi API Key，注册Kimi Provider');
+      router.registerProvider(new KimiProvider(process.env.ANTHROPIC_API_KEY));
+    } else {
+      router.registerProvider(new ClaudeProvider(process.env.ANTHROPIC_API_KEY));
+    }
   }
 
   // 注册OpenAI Provider (用于Embedding等)

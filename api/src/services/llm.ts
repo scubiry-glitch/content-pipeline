@@ -30,11 +30,15 @@ function getOpenAIClient(): OpenAI | null {
 // Kimi (Moonshot) 客户端 - 使用 Anthropic 消息格式
 function getKimiClient(): Anthropic | null {
   if (!kimi) {
-    const apiKey = process.env.KIMI_API_KEY;
+    // 优先使用 KIMI_API_KEY，否则检查 ANTHROPIC_API_KEY 是否是 Kimi 的 key
+    let apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey && process.env.ANTHROPIC_API_KEY?.startsWith('sk-kimi')) {
+      apiKey = process.env.ANTHROPIC_API_KEY;
+    }
     if (!apiKey || apiKey.includes('your_')) return null;
 
     // 确保 baseURL 以 / 结尾
-    let baseURL = process.env.KIMI_BASE_URL || 'https://api.kimi.com/coding/';
+    let baseURL = process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1/';
     if (!baseURL.endsWith('/')) {
       baseURL += '/';
     }
