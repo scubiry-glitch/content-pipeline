@@ -601,6 +601,33 @@
             margin-bottom: 16px;
         }
         .task-title-group { flex: 1; }
+        .task-actions-menu {
+            position: relative;
+            cursor: pointer;
+        }
+        .task-menu-dropdown {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 100;
+            min-width: 140px;
+            overflow: hidden;
+        }
+        .task-menu-item {
+            padding: 10px 14px;
+            font-size: 13px;
+            color: var(--gray-700);
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .task-menu-item:hover {
+            background: var(--gray-50);
+        }
         .task-title {
             font-size: 15px;
             font-weight: 600;
@@ -1920,6 +1947,7 @@
                                 <button class="filter-btn" data-filter="pending" onclick="filterTasks('pending')">待处理</button>
                                 <button class="filter-btn" data-filter="processing" onclick="filterTasks('processing')">进行中</button>
                                 <button class="filter-btn" data-filter="completed" onclick="filterTasks('completed')">已完成</button>
+                                <button class="filter-btn" data-filter="hidden" onclick="filterTasks('hidden')">🙈 已隐藏</button>
                             </div>
                         </div>
                     </div>
@@ -3010,9 +3038,17 @@
             const container = document.getElementById('taskListFull');
             if (!container) return;
 
-            let filteredTasks = filter === 'all'
-                ? tasks
-                : tasks.filter(t => t.status === filter);
+            let filteredTasks;
+            if (filter === 'all') {
+                // 默认显示非隐藏任务
+                filteredTasks = tasks.filter(t => !t.is_hidden);
+            } else if (filter === 'hidden') {
+                // 显示已隐藏任务
+                filteredTasks = tasks.filter(t => t.is_hidden);
+            } else {
+                // 按状态过滤，同时排除隐藏任务
+                filteredTasks = tasks.filter(t => t.status === filter && !t.is_hidden);
+            }
 
             // Apply search filter
             if (currentSearchQuery) {
@@ -3040,8 +3076,21 @@
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <span class="task-priority priority-${task.priority || 'medium'}">${getPriorityLabel(task.priority)}</span>
                             <span class="task-status status-${task.status}">${getStatusLabel(task.status)}</span>
+                            ${task.is_hidden ? '<span style="font-size: 11px; background: var(--gray-200); color: var(--gray-600); padding: 2px 6px; border-radius: 4px;">🙈 已隐藏</span>' : ''}
                         </div>
-                        <span style="font-size: 12px; color: var(--gray-500);">${formatDate(task.created_at)}</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 12px; color: var(--gray-500);">${formatDate(task.created_at)}</span>
+                            <div class="task-actions-menu" onclick="event.stopPropagation(); toggleTaskMenu('${task.id}')">
+                                <span style="cursor: pointer; padding: 4px;">⋮</span>
+                                <div id="task-menu-${task.id}" class="task-menu-dropdown" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--gray-200); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100; min-width: 120px;">
+                                    ${task.is_hidden
+                                        ? `<div class="task-menu-item" onclick="unhideTask('${task.id}')">👁️ 取消隐藏</div>`
+                                        : `<div class="task-menu-item" onclick="hideTask('${task.id}')">🙈 隐藏任务</div>`
+                                    }
+                                    <div class="task-menu-item" onclick="deleteTask('${task.id}')" style="color: var(--danger);">🗑️ 删除任务</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <h4 class="task-title">${task.topic}</h4>
                     <div class="task-meta">
@@ -3060,7 +3109,7 @@
         }
 
         function getFilterLabel(filter) {
-            const labels = { all: '全部', pending: '待处理', processing: '进行中', completed: '已完成', failed: '失败' };
+            const labels = { all: '全部', pending: '待处理', processing: '进行中', completed: '已完成', failed: '失败', hidden: '已隐藏' };
             return labels[filter] || filter;
         }
 
@@ -3077,6 +3126,85 @@
         function searchTasks(query) {
             currentSearchQuery = query.toLowerCase().trim();
             renderFullTaskList('all');
+        }
+
+        // ===== 任务菜单操作 =====
+
+        function toggleTaskMenu(taskId) {
+            // 关闭所有其他菜单
+            document.querySelectorAll('.task-menu-dropdown').forEach(menu => {
+                if (menu.id !== `task-menu-${taskId}`) {
+                    menu.style.display = 'none';
+                }
+            });
+
+            const menu = document.getElementById(`task-menu-${taskId}`);
+            if (menu) {
+                menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // 点击页面其他地方关闭菜单
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.task-actions-menu')) {
+                document.querySelectorAll('.task-menu-dropdown').forEach(menu => {
+                    menu.style.display = 'none';
+                });
+            }
+        });
+
+        async function hideTask(taskId) {
+            if (!confirm('确定要隐藏此任务吗？隐藏后可在「已隐藏」标签页查看。')) return;
+
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/hide`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!res.ok) throw new Error('隐藏任务失败');
+
+                showNotification('任务已隐藏', 'success');
+                loadTasks();
+            } catch (error) {
+                console.error('Hide task error:', error);
+                showNotification('隐藏任务失败', 'error');
+            }
+        }
+
+        async function unhideTask(taskId) {
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/unhide`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!res.ok) throw new Error('取消隐藏失败');
+
+                showNotification('任务已取消隐藏', 'success');
+                loadTasks();
+            } catch (error) {
+                console.error('Unhide task error:', error);
+                showNotification('取消隐藏失败', 'error');
+            }
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm('⚠️ 确定要删除此任务吗？此操作不可恢复！')) return;
+
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) throw new Error('删除任务失败');
+
+                showNotification('任务已删除', 'success');
+                loadTasks();
+            } catch (error) {
+                console.error('Delete task error:', error);
+                showNotification('删除任务失败', 'error');
+            }
         }
 
         // Helper functions for task display

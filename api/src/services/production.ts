@@ -78,27 +78,38 @@ export class ProductionService {
     }
   }
 
-  async listTasks(options: { status?: string; limit: number; offset: number }) {
-    const { status, limit, offset } = options;
+  async listTasks(options: { status?: string; limit: number; offset: number; includeHidden?: boolean }) {
+    const { status, limit, offset, includeHidden = false } = options;
 
     let sql = 'SELECT * FROM tasks';
     const params: any[] = [];
+    const conditions: string[] = [];
+
+    // 默认不显示隐藏任务
+    if (!includeHidden) {
+      conditions.push('(is_hidden = false OR is_hidden IS NULL)');
+    }
 
     if (status) {
-      sql += ' WHERE status = $1';
+      conditions.push(`status = $${params.length + 1}`);
       params.push(status);
     }
 
-    sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
     const result = await query(sql, params);
 
     // Get total count
-    const countResult = await query(
-      status ? 'SELECT COUNT(*) FROM tasks WHERE status = $1' : 'SELECT COUNT(*) FROM tasks',
-      status ? [status] : []
-    );
+    let countSql = 'SELECT COUNT(*) FROM tasks';
+    if (conditions.length > 0) {
+      countSql += ' WHERE ' + conditions.join(' AND ');
+    }
+    const countResult = await query(countSql, params.slice(0, -2));
 
     return {
       total: parseInt(countResult.rows[0].count),
@@ -574,5 +585,83 @@ ${JSON.stringify(outline, null, 2)}
       default:
         throw Object.assign(new Error('Invalid stage'), { name: 'APIError', statusCode: 400 });
     }
+  }
+
+  // ===== 任务删除和隐藏功能 =====
+
+  async deleteTask(taskId: string) {
+    // 检查任务是否存在
+    const task = await this.getTask(taskId);
+    if (!task) {
+      throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
+    }
+
+    // 删除关联数据
+    await query('DELETE FROM blue_team_reviews WHERE task_id = $1', [taskId]);
+    await query('DELETE FROM draft_versions WHERE task_id = $1', [taskId]);
+    await query('DELETE FROM research_annotations WHERE task_id = $1', [taskId]);
+
+    // 删除任务
+    await query('DELETE FROM tasks WHERE id = $1', [taskId]);
+
+    return {
+      id: taskId,
+      message: '任务已删除',
+      deletedAt: new Date().toISOString()
+    };
+  }
+
+  async hideTask(taskId: string) {
+    const task = await this.getTask(taskId);
+    if (!task) {
+      throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
+    }
+
+    await query(
+      `UPDATE tasks SET is_hidden = true, updated_at = NOW() WHERE id = $1`,
+      [taskId]
+    );
+
+    return {
+      id: taskId,
+      isHidden: true,
+      message: '任务已隐藏'
+    };
+  }
+
+  async unhideTask(taskId: string) {
+    const task = await this.getTask(taskId);
+    if (!task) {
+      throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
+    }
+
+    await query(
+      `UPDATE tasks SET is_hidden = false, updated_at = NOW() WHERE id = $1`,
+      [taskId]
+    );
+
+    return {
+      id: taskId,
+      isHidden: false,
+      message: '任务已取消隐藏'
+    };
+  }
+
+  async listHiddenTasks(options: { limit: number; offset: number }) {
+    const { limit, offset } = options;
+
+    const result = await query(
+      `SELECT * FROM tasks WHERE is_hidden = true ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM tasks WHERE is_hidden = true`
+    );
+
+    return {
+      total: parseInt(countResult.rows[0].count),
+      items: result.rows
+    };
   }
 }

@@ -94,6 +94,8 @@ async function setupMVPSchema(): Promise<void> {
       research_data JSONB,
       approval_feedback TEXT,
       output_ids JSONB DEFAULT '[]',
+      is_hidden BOOLEAN DEFAULT false,
+      hidden_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       completed_at TIMESTAMP WITH TIME ZONE

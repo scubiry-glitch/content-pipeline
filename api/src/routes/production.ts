@@ -237,4 +237,36 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const result = await productionService.restartFromStage(taskId, stage);
     return result;
   });
+
+  // ===== 任务删除和隐藏 API =====
+
+  // 删除任务
+  fastify.delete('/:taskId', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await productionService.deleteTask(taskId);
+    return result;
+  });
+
+  // 隐藏任务
+  fastify.post('/:taskId/hide', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await productionService.hideTask(taskId);
+    return result;
+  });
+
+  // 取消隐藏任务
+  fastify.post('/:taskId/unhide', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await productionService.unhideTask(taskId);
+    return result;
+  });
+
+  // 获取隐藏任务列表
+  fastify.get('/hidden', { preHandler: authenticate }, async (request) => {
+    const { limit = '10', offset = '0' } = request.query as any;
+    return await productionService.listHiddenTasks({
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  });
 }

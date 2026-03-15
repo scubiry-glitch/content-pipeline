@@ -1,0 +1,89 @@
+# v3.0-alpha Docker Compose 配置
+# 多租户 + API Gateway + Bull 队列
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cp-v3-db
+    environment:
+      POSTGRES_USER: content_pipeline
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: content_pipeline_v3
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_v3_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U content_pipeline"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: cp-v3-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_v3_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.v3
+    container_name: cp-v3-api
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgres://content_pipeline:dev_password@postgres:5432/content_pipeline_v3
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_in_production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run dev
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.v3
+    container_name: cp-v3-worker
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://content_pipeline:dev_password@postgres:5432/content_pipeline_v3
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+    command: npm run worker
+
+  bull-dashboard:
+    image: deadly0/bull-board:latest
+    container_name: cp-v3-queues
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+    ports:
+      - "3002:3000"
+    depends_on:
+      - redis
+
+volumes:
+  postgres_v3_data:
+  redis_v3_data:
