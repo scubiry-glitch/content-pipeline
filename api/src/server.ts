@@ -10,10 +10,35 @@ import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { getDirectoryWatcherService } from './services/directoryWatcher.js';
+import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
+import { initDatabase } from './db/connection.js';
 
 dotenv.config();
 
 async function main() {
+  // Initialize LLM Router
+  const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const inClaudeCode = isClaudeCodeEnvironment();
+
+  if (claudeApiKey || openaiApiKey || inClaudeCode) {
+    initLLMRouter({
+      claudeApiKey,
+      openaiApiKey,
+      useClaudeCode: inClaudeCode && !claudeApiKey,
+    });
+    console.log('✓ LLM Router initialized');
+  } else {
+    console.warn('⚠️ No LLM API keys found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY');
+  }
+
+  // Initialize Database
+  if (process.env.DATABASE_URL || process.env.DB_HOST) {
+    await initDatabase();
+    console.log('✓ Database connected');
+  }
+
   const fastify = Fastify({
     logger: {
       level: 'info'
@@ -71,6 +96,10 @@ async function main() {
     await fastify.listen({ port: PORT, host: HOST });
     console.log(`🚀 Content Pipeline API running at http://${HOST}:${PORT}`);
     console.log(`📚 Health Check: http://${HOST}:${PORT}/health`);
+
+    // Initialize directory watcher service
+    const watcherService = getDirectoryWatcherService();
+    await watcherService.initialize();
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

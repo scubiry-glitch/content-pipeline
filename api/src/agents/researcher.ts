@@ -1,10 +1,11 @@
 // Research Agent - 数据研究专家
-// 负责: 资产库检索 → 数据收集 → 分析洞察
+// 负责: 资产库检索 → 网页搜索 → 数据收集 → 分析洞察
 
 import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { ResearchReport, CleanData, Insight, AnalysisResult } from '../../shared/src/types';
+import { getWebSearchService, SearchResult } from '../services/webSearch.js';
 
 export interface ResearcherInput {
   topicId: string;
@@ -13,6 +14,11 @@ export interface ResearcherInput {
   dataRequirements: any[];
   useAssetLibrary?: boolean;
   maxSources?: number;
+  searchConfig?: {
+    maxSearchUrls?: number;  // 最大搜索URL数量，默认20
+    enableWebSearch?: boolean;  // 是否启用网页搜索，默认true
+    searchQueries?: string[];  // 自定义搜索查询
+  };
 }
 
 export interface ResearcherOutput {
@@ -34,29 +40,43 @@ export class ResearchAgent extends BaseAgent {
     const taskId = await this.saveTask('research', 'running', input);
 
     try {
+      const searchConfig = input.searchConfig || {};
+      const maxSearchUrls = searchConfig.maxSearchUrls || 20;
+      const enableWebSearch = searchConfig.enableWebSearch !== false;
+
       // Step 1: Search asset library for relevant materials
       this.log('info', 'Searching asset library');
       const assetResults = input.useAssetLibrary !== false
         ? await this.searchAssetLibrary(input.topic, input.outline)
         : [];
 
-      // Step 2: Generate simulated data sources based on requirements
-      this.log('info', 'Collecting data from sources');
-      const dataPackage = await this.collectData(input, assetResults);
+      // Step 2: Web search for external sources
+      let webSearchResults: SearchResult[] = [];
+      if (enableWebSearch) {
+        this.log('info', 'Performing web search', { maxUrls: maxSearchUrls });
+        webSearchResults = await this.performWebSearch(input, maxSearchUrls);
+      }
 
-      // Step 3: Analyze data and extract insights
+      // Step 3: Collect data from all sources
+      this.log('info', 'Collecting data from sources', {
+        assetCount: assetResults.length,
+        webCount: webSearchResults.length
+      });
+      const dataPackage = await this.collectData(input, assetResults, webSearchResults);
+
+      // Step 4: Analyze data and extract insights
       this.log('info', 'Analyzing data');
       const analysis = await this.analyzeData(input.topic, dataPackage);
 
-      // Step 4: Generate insights
+      // Step 5: Generate insights
       this.log('info', 'Generating insights');
       const insights = await this.generateInsights(input.topic, analysis, dataPackage);
 
-      // Step 5: Save report
+      // Step 6: Save report
       this.log('info', 'Saving research report');
       const reportId = await this.saveReport(input.topicId, dataPackage, analysis, insights);
 
-      // Step 6: Update asset reference weights
+      // Step 7: Update asset reference weights
       if (assetResults.length > 0) {
         await this.updateAssetWeights(assetResults.map(a => a.id));
       }
@@ -70,7 +90,11 @@ export class ResearchAgent extends BaseAgent {
         insights,
       };
 
-      this.log('info', 'Research completed successfully', { reportId, dataPoints: dataPackage.length });
+      this.log('info', 'Research completed successfully', {
+        reportId,
+        dataPoints: dataPackage.length,
+        webSources: webSearchResults.length
+      });
       return this.createSuccessResult(output);
 
     } catch (error) {
@@ -79,6 +103,61 @@ export class ResearchAgent extends BaseAgent {
       await this.updateTask(taskId, { status: 'failed', error: errorMsg });
       return this.createErrorResult(errorMsg);
     }
+  }
+
+  /**
+   * Perform web search based on topic and outline
+   */
+  private async performWebSearch(input: ResearcherInput, maxUrls: number): Promise<SearchResult[]> {
+    const webSearchService = getWebSearchService();
+
+    // Generate search queries from topic and outline
+    const searchQueries = input.searchConfig?.searchQueries || this.generateSearchQueries(input);
+
+    this.log('info', 'Generated search queries', { queries: searchQueries });
+
+    // Perform batch search
+    const resultsPerQuery = Math.ceil(maxUrls / searchQueries.length);
+    let allResults = await webSearchService.batchSearch(searchQueries, resultsPerQuery);
+
+    // Rank by relevance and limit to maxUrls
+    allResults = await webSearchService.rankByRelevance(allResults, input.topic);
+
+    return allResults.slice(0, maxUrls);
+  }
+
+  /**
+   * Generate search queries from topic and outline
+   */
+  private generateSearchQueries(input: ResearcherInput): string[] {
+    const queries: string[] = [];
+
+    // Main topic query
+    queries.push(input.topic);
+
+    // Add queries from outline sections
+    if (input.outline && Array.isArray(input.outline)) {
+      for (const section of input.outline.slice(0, 5)) {
+        if (section.title) {
+          queries.push(`${input.topic} ${section.title}`);
+        }
+        if (section.content) {
+          queries.push(`${input.topic} ${section.content.slice(0, 30)}`);
+        }
+      }
+    }
+
+    // Add queries from data requirements
+    if (input.dataRequirements && Array.isArray(input.dataRequirements)) {
+      for (const req of input.dataRequirements.slice(0, 3)) {
+        if (req.description) {
+          queries.push(`${input.topic} ${req.description}`);
+        }
+      }
+    }
+
+    // Remove duplicates and limit
+    return [...new Set(queries)].slice(0, 10);
   }
 
   private async searchAssetLibrary(topic: string, outline: any[]): Promise<any[]> {
@@ -105,8 +184,24 @@ export class ResearchAgent extends BaseAgent {
     }
   }
 
-  private async collectData(input: ResearcherInput, assets: any[]): Promise<CleanData[]> {
+  private async collectData(input: ResearcherInput, assets: any[], webResults: SearchResult[] = []): Promise<CleanData[]> {
     const dataPackage: CleanData[] = [];
+
+    // Add data from web search results
+    for (const result of webResults) {
+      dataPackage.push({
+        source: result.source || new URL(result.url).hostname,
+        url: result.url,
+        content: result.snippet,
+        metadata: {
+          type: 'web',
+          title: result.title,
+          relevance: result.relevance,
+          isWebSource: true,
+        },
+        quality: result.relevance || 0.7,
+      });
+    }
 
     // Add data from asset library
     for (const asset of assets) {
@@ -131,7 +226,7 @@ export class ResearchAgent extends BaseAgent {
       }
     }
 
-    return dataPackage.slice(0, input.maxSources || 15);
+    return dataPackage.slice(0, input.maxSources || 20);
   }
 
   private async generateSimulatedData(topic: string, requirement: any): Promise<CleanData | null> {

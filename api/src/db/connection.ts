@@ -119,6 +119,20 @@ async function setupMVPSchema(): Promise<void> {
       task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
       version INTEGER NOT NULL,
       content TEXT NOT NULL,
+      change_summary TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Research annotations - for deep research citations
+  await query(`
+    CREATE TABLE IF NOT EXISTS research_annotations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
+      type VARCHAR(20) NOT NULL CHECK (type IN ('url', 'asset')),
+      url TEXT,
+      asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE SET NULL,
+      title VARCHAR(500) NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
@@ -137,7 +151,59 @@ async function setupMVPSchema(): Promise<void> {
       quality_score DECIMAL(4,3) DEFAULT 0.5,
       embedding VECTOR(1536),
       citation_count INTEGER DEFAULT 0,
+      is_pinned BOOLEAN DEFAULT FALSE,
+      pinned_at TIMESTAMP WITH TIME ZONE,
+      theme_id VARCHAR(50),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Asset themes table - for categorizing assets by theme
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_themes (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      description TEXT,
+      color VARCHAR(20) DEFAULT '#6366f1',
+      icon VARCHAR(50) DEFAULT '📁',
+      sort_order INTEGER DEFAULT 0,
+      is_pinned BOOLEAN DEFAULT FALSE,
+      pinned_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Asset directory bindings - for monitoring local directories
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_directory_bindings (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      path TEXT NOT NULL,
+      theme_id VARCHAR(50) REFERENCES asset_themes(id) ON DELETE SET NULL,
+      auto_import BOOLEAN DEFAULT TRUE,
+      include_subdirs BOOLEAN DEFAULT TRUE,
+      file_patterns JSONB DEFAULT '["*.pdf", "*.txt", "*.md", "*.docx", "*.doc"]',
+      last_scan_at TIMESTAMP WITH TIME ZONE,
+      total_imported INTEGER DEFAULT 0,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Tracked files - to avoid re-importing unchanged files
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_tracked_files (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      binding_id VARCHAR(50) REFERENCES asset_directory_bindings(id) ON DELETE CASCADE,
+      file_path TEXT NOT NULL,
+      file_hash VARCHAR(64),
+      asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE SET NULL,
+      file_size BIGINT,
+      modified_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(binding_id, file_path)
     )
   `);
 
@@ -155,7 +221,13 @@ async function setupMVPSchema(): Promise<void> {
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_tags ON assets USING GIN(tags)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_theme ON assets(theme_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_pinned ON assets(is_pinned, pinned_at)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_blue_team_task ON blue_team_reviews(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_research_annotations_task ON research_annotations(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_task ON draft_versions(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_asset_bindings_active ON asset_directory_bindings(is_active)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tracked_files_binding ON asset_tracked_files(binding_id)`);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {

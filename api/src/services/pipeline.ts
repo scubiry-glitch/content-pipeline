@@ -5,19 +5,29 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
 import { generate, generateEmbedding } from './llm.js';
 import { BlueTeamAgent } from '../agents/blueTeam.js';
+import { ResearchAgent } from '../agents/researcher.js';
+import { getLLMRouter } from '../providers/index.js';
+import { getWebSearchService } from './webSearch.js';
 
 export interface CreateTaskInput {
   topic: string;
   sourceMaterials?: string[];
   targetFormats?: string[];
   context?: string;
+  searchConfig?: {
+    maxSearchUrls?: number;
+    enableWebSearch?: boolean;
+    searchQueries?: string[];
+  };
 }
 
 export class PipelineService {
   private blueTeamAgent: BlueTeamAgent;
+  private researchAgent: ResearchAgent;
 
   constructor() {
     this.blueTeamAgent = new BlueTeamAgent();
+    this.researchAgent = new ResearchAgent(getLLMRouter());
   }
 
   // Step 1: 创建任务并生成大纲
@@ -27,28 +37,102 @@ export class PipelineService {
     // 生成大纲
     const outline = await this.generateOutline(input.topic, input.context);
 
-    // 创建任务
+    // 创建任务 - 状态为 outline_pending，等待用户确认
     await query(
-      `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+      `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
       [
         taskId,
         input.topic,
         JSON.stringify(input.sourceMaterials || []),
         JSON.stringify(input.targetFormats || ['markdown']),
-        'pending',
-        5,
-        JSON.stringify(outline)
+        'outline_pending', // 等待大纲确认
+        10,
+        JSON.stringify(outline),
+        JSON.stringify(input.searchConfig || { maxSearchUrls: 20, enableWebSearch: true })
       ]
     );
 
     return {
       id: taskId,
-      status: 'pending',
+      status: 'outline_pending',
       topic: input.topic,
       outline,
-      progress: 5
+      progress: 10,
+      message: '大纲已生成，请确认后继续'
     };
+  }
+
+  // 确认大纲并进入研究阶段
+  async confirmOutline(taskId: string, updates?: { outline?: any; confirmed?: boolean }) {
+    const task = await this.getTask(taskId);
+    if (!task) throw new Error('Task not found');
+    if (task.status !== 'outline_pending') {
+      throw new Error('Task is not waiting for outline confirmation');
+    }
+
+    // 如果用户修改了大纲，更新它
+    if (updates?.outline) {
+      await query(
+        `UPDATE tasks SET outline = $1, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(updates.outline), taskId]
+      );
+    }
+
+    // 更新状态为 pending，准备进入研究阶段
+    await query(
+      `UPDATE tasks SET status = 'pending', progress = 15, current_stage = 'outline_confirmed', updated_at = NOW() WHERE id = $1`,
+      [taskId]
+    );
+
+    // 异步启动研究阶段
+    setImmediate(async () => {
+      try {
+        await this.research(taskId);
+      } catch (error) {
+        console.error(`[Pipeline] Auto research failed for ${taskId}:`, error);
+      }
+    });
+
+    return {
+      id: taskId,
+      status: 'researching',
+      message: '大纲已确认，开始研究阶段'
+    };
+  }
+
+  // 重新生成大纲（用于重做选题策划）
+  async regenerateOutline(taskId: string, topic: string, context?: string) {
+    // 获取任务当前的搜索配置
+    const taskResult = await query('SELECT search_config FROM tasks WHERE id = $1', [taskId]);
+    const searchConfig = taskResult.rows[0]?.search_config || {};
+
+    // 使用 PlannerAgent 重新生成完整大纲
+    const { PlannerAgent } = await import('../agents/planner.js');
+    const planner = new PlannerAgent(getLLMRouter());
+
+    const result = await planner.execute({
+      topic,
+      context,
+      targetAudience: '产业研究人员和投资者',
+      desiredDepth: 'comprehensive'
+    });
+
+    if (!result.success) {
+      throw new Error(`Planning failed: ${result.error}`);
+    }
+
+    // 构建大纲对象
+    const outline = {
+      title: result.data?.plan?.title || topic,
+      sections: result.data?.outline || [],
+      knowledgeInsights: result.data?.knowledgeInsights || [],
+      novelAngles: result.data?.novelAngles || [],
+      dataRequirements: result.data?.dataRequirements || [],
+      regeneratedAt: new Date().toISOString()
+    };
+
+    return outline;
   }
 
   // Step 2: 研究阶段
@@ -58,11 +142,43 @@ export class PipelineService {
     const task = await this.getTask(taskId);
     if (!task) throw new Error('Task not found');
 
-    // 搜索相关素材
-    const relevantAssets = await this.searchRelevantAssets(task.topic);
+    // 解析大纲
+    const outline = typeof task.outline === 'string' ? JSON.parse(task.outline) : task.outline;
 
-    // 生成研究数据
-    const researchData = await this.generateResearchData(task.topic, task.outline, relevantAssets);
+    // 获取搜索配置
+    const searchConfig = task.search_config ?
+      (typeof task.search_config === 'string' ? JSON.parse(task.search_config) : task.search_config) :
+      { maxSearchUrls: 20, enableWebSearch: true };
+
+    // 使用 ResearchAgent 进行研究（包含网页搜索）
+    const researchResult = await this.researchAgent.execute({
+      topicId: taskId,
+      topic: task.topic,
+      outline: outline?.sections || [],
+      dataRequirements: outline?.dataRequirements || [],
+      searchConfig: {
+        maxSearchUrls: searchConfig.maxSearchUrls || 20,
+        enableWebSearch: searchConfig.enableWebSearch !== false,
+        searchQueries: searchConfig.searchQueries
+      }
+    });
+
+    if (!researchResult.success) {
+      throw new Error(`Research failed: ${researchResult.error}`);
+    }
+
+    // 构建研究数据格式
+    const researchData = {
+      insights: researchResult.data?.insights || [],
+      dataPoints: researchResult.data?.dataPackage || [],
+      analysis: researchResult.data?.analysis || {},
+      annotations: [],
+      blue_team_experts: [],
+      searchStats: {
+        webSources: researchResult.data?.dataPackage?.filter((d: any) => d.metadata?.isWebSource).length || 0,
+        assetSources: researchResult.data?.dataPackage?.filter((d: any) => d.metadata?.type && !d.metadata?.isWebSource).length || 0,
+      }
+    };
 
     await query(
       `UPDATE tasks SET research_data = $1, progress = 35, current_stage = 'research_completed', updated_at = NOW() WHERE id = $2`,

@@ -1,21 +1,16 @@
-# Content Pipeline API - Docker 镜像
+# Content Pipeline API - Docker 镜像 (轻量版)
 FROM node:20-alpine
 
 WORKDIR /app
 
-# 安装系统依赖
-RUN apk add --no-cache \
-    curl \
-    postgresql-client \
-    python3 \
-    make \
-    g++
+# 只安装运行时依赖
+RUN apk add --no-cache curl
 
 # 复制依赖文件
 COPY api/package*.json ./
 
-# 安装 Node 依赖
-RUN npm ci --only=production
+# 安装 Node 依赖 (使用精简安装)
+RUN npm ci --only=production --no-audit --no-fund
 
 # 复制应用代码
 COPY api/src ./src

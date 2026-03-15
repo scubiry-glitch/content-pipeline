@@ -4,13 +4,14 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ProductionService } from '../services/production.js';
+import { evaluateTopic } from '../services/topicEvaluation.js';
 import { authenticate } from '../middleware/auth.js';
 
 // Validation schemas
 const createTaskSchema = z.object({
   topic: z.string().min(1).max(500),
   source_materials: z.array(z.string()).optional(),
-  target_formats: z.array(z.enum(['markdown', 'html'])).default(['markdown'])
+  target_formats: z.array(z.enum(['markdown', 'html', 'summary', 'infographic', 'ppt'])).default(['markdown'])
 });
 
 const approveTaskSchema = z.object({
@@ -18,8 +19,26 @@ const approveTaskSchema = z.object({
   feedback: z.string().optional()
 });
 
+const annotationSchema = z.object({
+  type: z.enum(['url', 'asset']),
+  url: z.string().optional(),
+  asset_id: z.string().optional(),
+  title: z.string().min(1)
+});
+
+const outlineChatSchema = z.object({
+  message: z.string().min(1)
+});
+
 export async function productionRoutes(fastify: FastifyInstance) {
   const productionService = new ProductionService();
+
+  // Evaluate topic quality (FR-001 ~ FR-003)
+  fastify.post('/evaluate-topic', { preHandler: authenticate }, async (request) => {
+    const { topic, context } = request.body as any;
+    const evaluation = await evaluateTopic({ topic, context });
+    return evaluation;
+  });
 
   // Create production task
   fastify.post('/', { preHandler: authenticate }, async (request, reply) => {
@@ -69,6 +88,153 @@ export async function productionRoutes(fastify: FastifyInstance) {
       feedback: body.feedback
     });
 
+    return result;
+  });
+
+  // Add research annotation
+  fastify.post('/:taskId/annotations', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = annotationSchema.parse(request.body);
+
+    const result = await productionService.addAnnotation(taskId, body);
+    return result;
+  });
+
+  // Get annotations
+  fastify.get('/:taskId/annotations', { preHandler: authenticate }, async (request) => {
+    const { taskId } = request.params as any;
+    return await productionService.getAnnotations(taskId);
+  });
+
+  // Outline chat - multi-round conversation
+  fastify.post('/:taskId/outline-chat', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = outlineChatSchema.parse(request.body);
+
+    const result = await productionService.chatAboutOutline(taskId, body.message);
+    return result;
+  });
+
+  // Confirm outline and proceed to research (FR-004 ~ FR-006)
+  fastify.post('/:taskId/outline/confirm', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = request.body as any;
+
+    const result = await productionService.confirmOutline(taskId, {
+      outline: body?.outline,
+      confirmed: body?.confirmed !== false // default true
+    });
+    return result;
+  });
+
+  // Get draft versions with diff
+  fastify.get('/:taskId/versions', { preHandler: authenticate }, async (request) => {
+    const { taskId } = request.params as any;
+    return await productionService.getVersions(taskId);
+  });
+
+  // Get BlueTeam reviews (FR-017 ~ FR-023)
+  fastify.get('/:taskId/reviews', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const reviews = await productionService.getBlueTeamReviews(taskId);
+    return reviews;
+  });
+
+  // Accept a review suggestion
+  fastify.post('/:taskId/reviews/:reviewId/accept', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, reviewId } = request.params as any;
+    const result = await productionService.acceptReviewSuggestion(taskId, reviewId);
+    return result;
+  });
+
+  // ===== 环节重做 API =====
+
+  // 1. 选题策划重做
+  fastify.post('/:taskId/redo/planning', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = (request.body || {}) as any;
+
+    const result = await productionService.redoPlanning(taskId, {
+      topic: body?.topic,
+      context: body?.context
+    });
+
+    return result;
+  });
+
+  // 2. 深度研究重做
+  fastify.post('/:taskId/redo/research', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = request.body as any;
+
+    // 异步执行研究（不阻塞响应）
+    setImmediate(async () => {
+      try {
+        await productionService.redoResearch(taskId, body?.searchConfig);
+      } catch (error) {
+        console.error(`[Redo] Research failed for task ${taskId}:`, error);
+      }
+    });
+
+    return {
+      message: '深度研究重做已启动',
+      taskId,
+      status: 'researching'
+    };
+  });
+
+  // 3. 文稿生成重做
+  fastify.post('/:taskId/redo/writing', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    // 异步执行写作（不阻塞响应）
+    setImmediate(async () => {
+      try {
+        await productionService.redoWriting(taskId);
+      } catch (error) {
+        console.error(`[Redo] Writing failed for task ${taskId}:`, error);
+      }
+    });
+
+    return {
+      message: '文稿生成重做已启动',
+      taskId,
+      status: 'writing'
+    };
+  });
+
+  // 4. 蓝军评审重做
+  fastify.post('/:taskId/redo/review', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    // 异步执行评审（不阻塞响应）
+    setImmediate(async () => {
+      try {
+        await productionService.redoReview(taskId);
+      } catch (error) {
+        console.error(`[Redo] Review failed for task ${taskId}:`, error);
+      }
+    });
+
+    return {
+      message: '蓝军评审重做已启动',
+      taskId,
+      status: 'reviewing'
+    };
+  });
+
+  // 通用：从指定环节重新开始
+  fastify.post('/:taskId/redo', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = request.body as any;
+    const stage = body?.stage;
+
+    if (!stage || !['planning', 'research', 'writing', 'review'].includes(stage)) {
+      reply.status(400);
+      return { error: 'Invalid stage. Must be one of: planning, research, writing, review' };
+    }
+
+    const result = await productionService.restartFromStage(taskId, stage);
     return result;
   });
 }

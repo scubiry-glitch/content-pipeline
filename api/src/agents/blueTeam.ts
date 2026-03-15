@@ -26,10 +26,13 @@ export interface BlueTeamQuestion {
   id: string;
   expertId: string;
   expertName: string;
+  expertTitle?: string;
   angle: string;
   question: string;
   severity: 'high' | 'medium' | 'low';
   suggestion: string;
+  dimensions?: string[];
+  rationale?: string;
 }
 
 export interface BlueTeamRound {
@@ -194,19 +197,30 @@ ${expert.bio || expert.title}
 ## 待评审文稿
 ${draft.substring(0, 8000)}
 
+## 评审维度（每个问题必须标注）
+1. 逻辑性 - 论证是否严密，推理是否有漏洞
+2. 数据支撑 - 数据是否充分，来源是否可靠
+3. 可读性 - 表达是否清晰，结构是否合理
+4. 深度 - 分析是否深入，是否触及本质
+5. 实用性 - 建议是否可操作，是否有价值
+
 ## 输出要求
 请输出JSON数组，每个问题包含：
 {
-  "question": "具体的批判性问题",
+  "question": "具体的批判性问题，要求详细、专业",
   "severity": "high/medium/low",
-  "suggestion": "具体的修改建议"
+  "suggestion": "具体的、可执行的修改建议，不少于50字",
+  "dimensions": ["逻辑性", "数据支撑"],
+  "rationale": "为什么这个问题重要，不少于30字"
 }
 
 注意：
-1. 第1轮关注结构性问题，第2轮关注细节完善
-2. 提出3个不同层面的问题
-3. 问题要具体，能直接指导修改
-4. 使用你所在领域的专业术语和视角`;
+1. 第1轮关注结构性问题（大纲、论证框架），第2轮关注细节完善（数据、表达）
+2. 提出3个不同层面的问题，每个角度至少覆盖2个评审维度
+3. 问题要具体、专业，能直接指导修改，避免泛泛而谈
+4. 使用你所在领域的专业术语和视角
+5. high severity 必须是严重问题，不修改会影响报告质量
+6. 必须有具体的修改建议，不能只说"需要改进"`;
 
     try {
       const result = await generate(prompt, 'blue_team', {
@@ -224,10 +238,13 @@ ${draft.substring(0, 8000)}
             id: `q_${round}_${expert.id}_${idx}`,
             expertId: expert.id,
             expertName: expert.name,
+            expertTitle: expert.title,
             angle: expert.angle,
             question: q.question,
             severity: q.severity || 'medium',
-            suggestion: q.suggestion || ''
+            suggestion: q.suggestion || '',
+            dimensions: q.dimensions || [],
+            rationale: q.rationale || ''
           }));
         }
       }
@@ -240,10 +257,13 @@ ${draft.substring(0, 8000)}
       id: `q_${round}_${expert.id}_0`,
       expertId: expert.id,
       expertName: expert.name,
+      expertTitle: expert.title,
       angle: expert.angle,
-      question: `${expert.name}建议从${angleNames[expert.angle]}角度进一步完善`,
+      question: `${expert.name}（${expert.title}）建议从${angleNames[expert.angle]}角度进一步完善：报告的${expert.domains[0] || '相关'}部分需要更深入的分析`,
       severity: 'medium',
-      suggestion: '请参考专家意见进行修改'
+      suggestion: '建议补充更多行业数据和案例，强化论证逻辑，参考专家所在领域的最新研究成果',
+      dimensions: ['逻辑性', '深度'],
+      rationale: '从专业角度看，当前分析还停留在表面，需要深入挖掘本质原因'
     }];
   }
 
