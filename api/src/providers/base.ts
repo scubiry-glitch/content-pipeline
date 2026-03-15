@@ -1,6 +1,6 @@
 // LLM提供商抽象基类
 
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export abstract class LLMProvider {
   protected name: string;

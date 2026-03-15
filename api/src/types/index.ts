@@ -30,6 +30,7 @@ export interface CleanData {
   content: string;
   metadata: any;
   quality: number;
+  url?: string;
 }
 
 export interface AnalysisResult {
@@ -95,4 +96,53 @@ export interface LLMResponse {
     completionTokens: number;
     totalTokens: number;
   };
+}
+
+// Generation types for LLM providers
+export interface GenerationParams {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+}
+
+export interface GenerationResult {
+  content: string;
+  model: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    promptTokens?: number;
+    completionTokens?: number;
+  };
+}
+
+// Asset Library types
+export interface AssetLibraryItem {
+  id: string;
+  content: string;
+  contentType: string;
+  source: string;
+  sourceUrl?: string;
+  tags: AutoTag[];
+  qualityScore: number;
+  embedding?: number[];
+  metadata?: any;
+  createdAt?: Date;
+}
+
+export interface AutoTag {
+  tag: string;
+  confidence: number;
+  method: string;
+}
+
+export interface QualityFactors {
+  completeness: number;
+  credibility: number;
+  relevance: number;
+  timeliness: number;
 }

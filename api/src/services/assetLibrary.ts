@@ -3,7 +3,7 @@
 
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
-import { AssetLibraryItem, AutoTag, QualityFactors } from '../../shared/src/types';
+import { AssetLibraryItem, AutoTag, QualityFactors } from '../types/index.js';
 
 export interface ImportAssetInput {
   content: string;

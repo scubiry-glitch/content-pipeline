@@ -2,7 +2,7 @@
 // 在Claude Code环境中运行时，直接使用其配置的模型能力
 
 import { LLMProvider } from './base';
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 /**
  * 检测是否在Claude Code环境中运行
@@ -120,21 +120,15 @@ export class ClaudeCodeProvider extends LLMProvider {
       throw new Error(`API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const latency = Date.now() - Date.now();
-
-    const inputTokens = data.usage?.input_tokens || this.estimateTokens(prompt);
-    const outputTokens = data.usage?.output_tokens || this.estimateTokens(data.content?.[0]?.text || '');
-    const cost = this.calculateCost(inputTokens, outputTokens, getModelCost(model));
+    const data: any = await response.json();
 
     return {
       content: data.content?.[0]?.text || '',
-      inputTokens,
-      outputTokens,
       model,
-      provider: this.name,
-      latency,
-      cost,
+      usage: {
+        inputTokens: data.usage?.input_tokens || this.estimateTokens(prompt),
+        outputTokens: data.usage?.output_tokens || this.estimateTokens(data.content?.[0]?.text || ''),
+      },
     };
   }
 
@@ -159,19 +153,13 @@ export class ClaudeCodeProvider extends LLMProvider {
       usage: { input_tokens: this.estimateTokens(prompt), output_tokens: 100 },
     };
 
-    const latency = Date.now() - startTime;
-    const inputTokens = mockResponse.usage.input_tokens;
-    const outputTokens = mockResponse.usage.output_tokens;
-    const cost = 0; // Claude Code环境不计算成本
-
     return {
       content: mockResponse.content,
-      inputTokens,
-      outputTokens,
       model,
-      provider: this.name,
-      latency,
-      cost,
+      usage: {
+        inputTokens: mockResponse.usage.input_tokens,
+        outputTokens: mockResponse.usage.output_tokens,
+      },
     };
   }
 

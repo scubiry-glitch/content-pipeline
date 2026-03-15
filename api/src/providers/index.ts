@@ -5,7 +5,7 @@ import { ClaudeProvider } from './claude';
 import { OpenAIProvider } from './openai';
 import { ClaudeCodeProvider, isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider } from './claudeCode';
 import { KimiProvider } from './kimi';
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export { LLMProvider, ClaudeProvider, OpenAIProvider, ClaudeCodeProvider, KimiProvider };
 export { isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider };
@@ -40,9 +40,9 @@ export class LLMRouter {
   // Model configs for different priorities
   private modelConfigs: Record<string, Record<string, string>> = {
     kimi: {
-      quality: 'k2p5',
-      speed: 'k2p5',
-      cost: 'k2p5',
+      quality: 'kimi-for-coding',
+      speed: 'kimi-for-coding',
+      cost: 'kimi-for-coding',
     },
     claude: {
       quality: 'claude-3-opus-20240229',
@@ -79,7 +79,7 @@ export class LLMRouter {
 
     // Try preferred provider first
     let provider = this.providers.get(rule.preferredProvider);
-    let model = this.modelConfigs[rule.preferredProvider as keyof typeof this.modelConfigs]?.[rule.priority];
+    let model: string | undefined = this.modelConfigs[rule.preferredProvider as keyof typeof this.modelConfigs]?.[rule.priority];
 
     // If preferred not available, try fallback
     if (!provider && rule.fallbackProvider) {

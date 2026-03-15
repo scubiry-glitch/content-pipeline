@@ -22,12 +22,12 @@ async function main() {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const inClaudeCode = isClaudeCodeEnvironment();
 
-  const kimiApiKey = process.env.KIMI_API_KEY;
+  const kimiApiKey = process.env.KIMI_API_KEY || (claudeApiKey?.startsWith('sk-kimi') ? claudeApiKey : undefined);
 
-  if (kimiApiKey || claudeApiKey || openaiApiKey || inClaudeCode) {
+  if (kimiApiKey || (claudeApiKey && !claudeApiKey.startsWith('sk-kimi')) || openaiApiKey || inClaudeCode) {
     initLLMRouter({
       kimiApiKey,
-      claudeApiKey,
+      claudeApiKey: claudeApiKey?.startsWith('sk-kimi') ? undefined : claudeApiKey,
       openaiApiKey,
       useClaudeCode: inClaudeCode && !claudeApiKey,
     });

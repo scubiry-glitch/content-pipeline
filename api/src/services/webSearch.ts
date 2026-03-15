@@ -77,7 +77,7 @@ export class WebSearchService {
         throw new Error(`Tavily API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
 
       return (data.results || []).map((result: any) => ({
         url: result.url,
@@ -116,7 +116,7 @@ export class WebSearchService {
         throw new Error(`Serper API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
 
       const results: SearchResult[] = [];
 

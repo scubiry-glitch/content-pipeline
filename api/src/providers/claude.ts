@@ -1,7 +1,7 @@
 // Claude Provider实现
 
 import { LLMProvider } from './base';
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export class ClaudeProvider extends LLMProvider {
   private modelCosts: Record<string, number> = {
@@ -42,25 +42,15 @@ export class ClaudeProvider extends LLMProvider {
         throw new Error(`Claude API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const latency = Date.now() - startTime;
-
-      const inputTokens = data.usage?.input_tokens || 0;
-      const outputTokens = data.usage?.output_tokens || 0;
-      const cost = this.calculateCost(
-        inputTokens,
-        outputTokens,
-        this.modelCosts[model] || 0.003
-      );
+      const data: any = await response.json();
 
       return {
-        content: data.content[0]?.text || '',
-        inputTokens,
-        outputTokens,
+        content: data.content?.[0]?.text || '',
         model,
-        provider: this.name,
-        latency,
-        cost,
+        usage: {
+          inputTokens: data.usage?.input_tokens || 0,
+          outputTokens: data.usage?.output_tokens || 0,
+        },
       };
     } catch (error) {
       throw new Error(`Claude generation failed: ${error}`);

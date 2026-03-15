@@ -2,7 +2,7 @@
 // 无需实际API调用，返回模拟响应
 
 import { LLMProvider } from './base';
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export class MockProvider extends LLMProvider {
   private callCount = 0;
@@ -27,12 +27,11 @@ export class MockProvider extends LLMProvider {
 
     return {
       content,
-      inputTokens,
-      outputTokens,
       model: params?.model || 'mock-model',
-      provider: this.name,
-      latency,
-      cost: 0,
+      usage: {
+        inputTokens,
+        outputTokens,
+      },
     };
   }
 

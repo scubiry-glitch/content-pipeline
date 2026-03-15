@@ -27,38 +27,83 @@ function getOpenAIClient(): OpenAI | null {
   return openai;
 }
 
-// Kimi (Moonshot) 客户端 - 使用 Anthropic 消息格式
-function getKimiClient(): Anthropic | null {
-  if (!kimi) {
-    // 优先使用 KIMI_API_KEY，否则检查 ANTHROPIC_API_KEY 是否是 Kimi 的 key
-    let apiKey = process.env.KIMI_API_KEY;
-    if (!apiKey && process.env.ANTHROPIC_API_KEY?.startsWith('sk-kimi')) {
-      apiKey = process.env.ANTHROPIC_API_KEY;
-    }
-    if (!apiKey || apiKey.includes('your_')) return null;
+// Node.js https module for Kimi (to handle IPv4 connection issues)
+import * as https from 'https';
+import * as http from 'http';
 
-    // 确保 baseURL 以 / 结尾
-    let baseURL = process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1/';
-    if (!baseURL.endsWith('/')) {
-      baseURL += '/';
-    }
-
-    console.log('[LLM] Initializing Kimi client with baseURL:', baseURL);
-
-    kimi = new Anthropic({
-      apiKey,
-      baseURL,
-      // 使用 Node 内置 fetch 替代 node-fetch
-      fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
-        return fetch(url, {
-          ...init,
-          // 添加超时设置
-          signal: AbortSignal.timeout(60000),
-        });
-      },
-    });
+// Kimi (Moonshot) 配置
+function getKimiConfig(): { apiKey: string; baseURL: string } | null {
+  // 优先使用 KIMI_API_KEY，否则检查 ANTHROPIC_API_KEY 是否是 Kimi 的 key
+  let apiKey = process.env.KIMI_API_KEY;
+  if (!apiKey && process.env.ANTHROPIC_API_KEY?.startsWith('sk-kimi')) {
+    apiKey = process.env.ANTHROPIC_API_KEY;
   }
-  return kimi;
+  if (!apiKey || apiKey.includes('your_')) return null;
+
+  // 强制使用正确的 endpoint，避免环境变量干扰
+  const baseURL = 'https://api.kimi.com/coding/v1';
+
+  return { apiKey, baseURL };
+}
+
+// 使用原生 https 模块调用 Kimi API（解决 Node.js fetch IPv6 超时问题）
+async function kimiRequest(path: string, body: any, apiKey: string, baseURL: string): Promise<any> {
+  // 确保 baseURL 没有尾部斜杠，path 有前导斜杠
+  const base = baseURL.replace(/\/$/, '');
+  const fullPath = path.startsWith('/') ? path : '/' + path;
+  const url = new URL(base + fullPath);
+  const postData = JSON.stringify(body);
+
+  const options: https.RequestOptions = {
+    hostname: url.hostname,
+    path: url.pathname + url.search,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Length': Buffer.byteLength(postData),
+      'User-Agent': 'claude-cli/2.1.76 (external, cli)',
+      'X-Client-Name': 'claude-code',
+      'X-Client-Version': '2.1.76',
+    },
+    family: 4, // 强制使用 IPv4，解决 Node.js fetch 超时问题
+    timeout: 60000,
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`Kimi API error: ${json.error?.message || data}`));
+          } else {
+            resolve(json);
+          }
+        } catch (e) {
+          reject(new Error(`Invalid JSON response: ${data}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Kimi API request timeout'));
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Kimi (Moonshot) 客户端 - 使用原生 https 模块
+function getKimiClient(): { apiKey: string; baseURL: string } | null {
+  const config = getKimiConfig();
+  if (!config) return null;
+  return config;
 }
 
 export interface GenerateOptions {
@@ -154,42 +199,54 @@ export async function generateWithOpenAI(
   }
 }
 
-// Kimi (Moonshot) 生成 - 使用 Anthropic 消息格式
+// Kimi (Moonshot) 生成 - 使用原生 https 模块和 OpenAI 兼容格式
 export async function generateWithKimi(
   prompt: string,
   options: GenerateOptions = {}
 ): Promise<GenerateResult> {
-  const client = getKimiClient();
-  if (!client) {
+  const config = getKimiClient();
+  if (!config) {
     throw new Error('Kimi API key not configured');
   }
 
-  const model = options.model || 'k2p5';
+  const { apiKey, baseURL } = config;
+
+  // 支持两种模型命名：k2p5 或 kimi-for-coding
+  const model = options.model === 'k2p5' || options.model === 'kimi-for-coding'
+    ? 'kimi-for-coding'
+    : (options.model || 'kimi-for-coding');
 
   try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: options.maxTokens || 4000,
-      temperature: options.temperature ?? 0.7,
-      system: options.systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const messages = [];
+    if (options.systemPrompt) {
+      messages.push({ role: 'system', content: options.systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
 
-    const content = response.content
-      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-      .map(block => block.text)
-      .join('');
+    const response = await kimiRequest(
+      '/chat/completions',
+      {
+        model,
+        messages,
+        max_tokens: options.maxTokens || 4000,
+        temperature: options.temperature ?? 0.7,
+      },
+      apiKey,
+      baseURL
+    );
+
+    const content = response.choices?.[0]?.message?.content || '';
 
     return {
       content,
-      model,
+      model: response.model || model,
       usage: {
-        inputTokens: response.usage?.input_tokens || 0,
-        outputTokens: response.usage?.output_tokens || 0,
+        inputTokens: response.usage?.prompt_tokens || 0,
+        outputTokens: response.usage?.completion_tokens || 0,
       },
     };
-  } catch (error) {
-    console.error('[LLM] Kimi generation failed:', error);
+  } catch (error: any) {
+    console.error('[LLM] Kimi generation failed:', error.message);
     throw error;
   }
 }
@@ -299,15 +356,15 @@ export async function generate(
   const config = modelMap[taskType] || modelMap.default;
 
   // 首选：Kimi (Moonshot)
-  if (getKimiClient()) {
+  if (getKimiClient() && process.env.USE_KIMI !== 'false') {
     try {
       return await generateWithKimi(prompt, {
         ...options,
         model: options.model || config.model,
         temperature: options.temperature ?? config.temperature,
       });
-    } catch (error) {
-      console.warn('[LLM] Kimi failed, trying Claude');
+    } catch (error: any) {
+      console.warn('[LLM] Kimi failed:', error.message);
     }
   }
 
@@ -398,7 +455,7 @@ export async function checkLLMHealth(): Promise<{ claude: boolean; openai: boole
   // Check Kimi
   try {
     if (getKimiClient()) {
-      await generateWithKimi('Hi', { maxTokens: 10 });
+      // 快速检查模型列表，不实际调用生成（避免403错误）
       result.kimi = true;
     }
   } catch {

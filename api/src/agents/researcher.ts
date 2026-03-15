@@ -4,7 +4,7 @@
 import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
-import { ResearchReport, CleanData, Insight, AnalysisResult } from '../../shared/src/types';
+import { ResearchReport, CleanData, Insight, AnalysisResult } from '../types/index.js';
 import { getWebSearchService, SearchResult } from '../services/webSearch.js';
 
 export interface ResearcherInput {

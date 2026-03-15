@@ -4,7 +4,7 @@
 import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
-import { Document, BlueTeamQuestion, ExpertProfile } from '../../shared/src/types';
+import { Document, BlueTeamQuestion, ExpertProfile } from '../types/index.js';
 
 export interface WriterInput {
   topicId: string;

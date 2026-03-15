@@ -1,7 +1,7 @@
 // OpenAI Provider实现
 
 import { LLMProvider } from './base';
-import { GenerationParams, GenerationResult } from '../../shared/src/types';
+import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export class OpenAIProvider extends LLMProvider {
   private modelCosts: Record<string, { input: number; output: number }> = {
@@ -46,22 +46,15 @@ export class OpenAIProvider extends LLMProvider {
         throw new Error(`OpenAI API error: ${response.status} - ${error}`);
       }
 
-      const data = await response.json();
-      const latency = Date.now() - startTime;
-
-      const inputTokens = data.usage?.prompt_tokens || 0;
-      const outputTokens = data.usage?.completion_tokens || 0;
-      const costs = this.modelCosts[model] || { input: 0.01, output: 0.03 };
-      const cost = (inputTokens / 1000) * costs.input + (outputTokens / 1000) * costs.output;
+      const data: any = await response.json();
 
       return {
-        content: data.choices[0]?.message?.content || '',
-        inputTokens,
-        outputTokens,
+        content: data.choices?.[0]?.message?.content || '',
         model,
-        provider: this.name,
-        latency,
-        cost,
+        usage: {
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+        },
       };
     } catch (error) {
       throw new Error(`OpenAI generation failed: ${error}`);
@@ -86,8 +79,8 @@ export class OpenAIProvider extends LLMProvider {
         throw new Error(`OpenAI embedding error: ${response.status}`);
       }
 
-      const data = await response.json();
-      return data.data[0]?.embedding || [];
+      const data: any = await response.json();
+      return data.data?.[0]?.embedding || [];
     } catch (error) {
       throw new Error(`OpenAI embedding failed: ${error}`);
     }

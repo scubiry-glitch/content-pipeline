@@ -4,6 +4,7 @@
 import { query } from '../db/connection.js';
 import { getQueue } from '../utils/queue-manager.js';
 import { PipelineService } from './pipeline.js';
+import { generate } from './llm.js';
 
 export interface CreateTaskInput {
   topic: string;

@@ -4,7 +4,7 @@
 import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
-import { TopicPlan, OutlineSection, DataRequirement } from '../../shared/src/types';
+import { TopicPlan, OutlineSection, DataRequirement } from '../types/index.js';
 
 export interface PlannerInput {
   topic: string;
