@@ -10,8 +10,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Tests | 22 |
-| Passing | 0 |
-| Failing | 22 |
+| Passing | 4 |
+| Failing | 18 |
 | Pending | 0 |
 | Coverage | 0% |
 

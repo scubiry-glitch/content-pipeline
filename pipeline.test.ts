@@ -451,5 +451,16 @@ class ContentPipeline {
 }
 
 function extractTableName(sql: string): string {
-  throw new Error('Not implemented');
+  if (!sql.trim().toUpperCase().startsWith('INSERT')) {
+    throw new Error('Not an INSERT statement');
+  }
+
+  // Match INSERT INTO [schema.]table_name or INSERT INTO `table_name`
+  const match = sql.match(/INSERT\s+INTO\s+[`']?(?:\w+\.)?(\w+)[`']?/i);
+
+  if (!match) {
+    throw new Error('Could not extract table name');
+  }
+
+  return match[1];
 }
