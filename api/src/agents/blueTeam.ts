@@ -1,16 +1,15 @@
-// BlueTeam Agent - 蓝军评审专家
-// 负责: 3专家 × 3角度(挑战/扩展/归纳) × 2轮 深度评审
+// BlueTeam Agent - 蓝军评审专家 v2.0
+// 负责: 4位专家评审(事实核查员/逻辑检察官/行业专家/读者代表) × 2轮 深度评审
 // 支持: 专家库动态匹配
 
 import { BaseAgent, AgentContext, AgentResult } from './base.js';
 import { query } from '../db/connection.js';
 import { generate } from '../services/llm.js';
-import { expertLibrary, Expert } from '../services/expertLibrary.js';
+import { expertLibrary, Expert, ExpertRole, ROLE_NAMES, ROLE_DESCRIPTIONS } from '../services/expertLibrary.js';
 
 export interface BlueTeamConfig {
-  expertCount: number;        // 3
-  anglesPerExpert: number;    // 3 (挑战/扩展/归纳)
-  questionsPerAngle: number;  // 1
+  expertCount: number;        // 4 (固定四位专家)
+  questionsPerExpert: number; // 2-3
   rounds: number;             // 2
 }
 
@@ -18,7 +17,7 @@ export interface BlueTeamExpert {
   id: string;
   name: string;
   title: string;
-  angle: 'challenger' | 'expander' | 'synthesizer';
+  role: ExpertRole;
   systemPrompt: string;
 }
 
@@ -27,11 +26,17 @@ export interface BlueTeamQuestion {
   expertId: string;
   expertName: string;
   expertTitle?: string;
-  angle: string;
+  role: ExpertRole;
+  roleName: string;
+  location?: string;
   question: string;
-  severity: 'high' | 'medium' | 'low';
+  issue?: string;
+  severity: 'high' | 'medium' | 'low' | 'praise';
   suggestion: string;
-  dimensions?: string[];
+  checkItems?: string[];
+  logicGap?: string;
+  expertiseArea?: string;
+  readabilityIssue?: string;
   rationale?: string;
 }
 
@@ -58,9 +63,8 @@ export interface BlueTeamOutput {
 export class BlueTeamAgent extends BaseAgent {
   private experts: Expert[] = [];
   private config: BlueTeamConfig = {
-    expertCount: 3,
-    anglesPerExpert: 3,
-    questionsPerAngle: 1,
+    expertCount: 4,
+    questionsPerExpert: 2,
     rounds: 2
   };
 
@@ -70,15 +74,20 @@ export class BlueTeamAgent extends BaseAgent {
 
   async execute(input: BlueTeamInput, context?: AgentContext): Promise<AgentResult<BlueTeamOutput>> {
     this.clearLogs();
-    this.log('info', 'Starting BlueTeam review', { taskId: input.taskId, config: this.config });
+    this.log('info', 'Starting BlueTeam review v2.0', { taskId: input.taskId, config: this.config });
 
     try {
-      // 根据主题匹配专家
-      this.experts = await expertLibrary.matchExperts(input.topic, this.config.expertCount);
-      this.log('info', 'Experts matched for topic', {
+      // 根据主题匹配四位专家
+      this.experts = await expertLibrary.matchFourExperts(input.topic);
+      this.log('info', '4 Experts matched for topic', {
         topic: input.topic,
-        experts: this.experts.map(e => ({ name: e.name, angle: e.angle, domains: e.domains }))
+        experts: this.experts.map(e => ({ name: e.name, role: e.role, roleName: ROLE_NAMES[e.role], domains: e.domains }))
       });
+
+      // 确保四位专家都匹配到
+      if (this.experts.length < 4) {
+        throw new Error(`专家匹配不完整，只匹配到 ${this.experts.length} 位专家`);
+      }
 
       // 更新任务状态为 reviewing，并记录专家信息
       await query(
@@ -89,7 +98,7 @@ export class BlueTeamAgent extends BaseAgent {
       // 保存专家信息到任务
       await query(
         `UPDATE tasks SET research_data = COALESCE(research_data, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
-        [JSON.stringify({ blue_team_experts: this.experts.map(e => ({ id: e.id, name: e.name, title: e.title, angle: e.angle })) }), input.taskId]
+        [JSON.stringify({ blue_team_experts: this.experts.map(e => ({ id: e.id, name: e.name, title: e.title, role: e.role, roleName: ROLE_NAMES[e.role] })) }), input.taskId]
       );
 
       let currentDraft = input.draftContent;
@@ -99,11 +108,11 @@ export class BlueTeamAgent extends BaseAgent {
       for (let round = 1; round <= this.config.rounds; round++) {
         this.log('info', `BlueTeam Round ${round} started`);
 
-        // 3专家并行评审
+        // 4位专家并行评审
         const roundQuestions: BlueTeamQuestion[] = [];
 
         for (const expert of this.experts) {
-          this.log('info', `Expert ${expert.name} (${expert.angle}) reviewing`);
+          this.log('info', `Expert ${expert.name} (${ROLE_NAMES[expert.role]}) reviewing`);
 
           const questions = await this.generateExpertQuestions(
             expert,
@@ -177,50 +186,44 @@ export class BlueTeamAgent extends BaseAgent {
     topic: string,
     round: number
   ): Promise<BlueTeamQuestion[]> {
-    const angleNames: Record<string, string> = {
-      challenger: '挑战',
-      expander: '扩展',
-      synthesizer: '归纳'
-    };
+    const roleName = ROLE_NAMES[expert.role];
+    const roleDesc = ROLE_DESCRIPTIONS[expert.role];
 
     const prompt = `${expert.system_prompt}
 
-## 专家简介
-${expert.bio || expert.title}
-擅长领域：${expert.domains.join('、')}
-
-## 当前评审
+## 当前评审任务
 - 评审轮次：第${round}轮
-- 你的角度：${angleNames[expert.angle]}
+- 你的角色：${roleName}
+- 角色职责：${roleDesc}
 - 研究主题：${topic}
 
 ## 待评审文稿
 ${draft.substring(0, 8000)}
 
-## 评审维度（每个问题必须标注）
-1. 逻辑性 - 论证是否严密，推理是否有漏洞
-2. 数据支撑 - 数据是否充分，来源是否可靠
-3. 可读性 - 表达是否清晰，结构是否合理
-4. 深度 - 分析是否深入，是否触及本质
-5. 实用性 - 建议是否可操作，是否有价值
+## 评审要求
+1. 第1轮关注结构性问题（框架、逻辑、关键遗漏）
+2. 第2轮关注细节完善（数据准确性、表达优化）
+3. 问题要具体、专业，能直接指导修改
+4. 必须按角色的专业视角进行评审
+5. 识别问题时同时指出亮点（praise）
 
-## 输出要求
+## 严重等级定义
+- 🔴 high - 严重问题（事实错误、逻辑断裂、专业错误），必须修改
+- 🟡 medium - 建议问题（可优化、可补充），推荐修改
+- 🟢 praise - 表扬亮点（好的洞察、精彩表达、数据扎实），保持发扬
+
+## 输出格式
 请输出JSON数组，每个问题包含：
 {
-  "question": "具体的批判性问题，要求详细、专业",
-  "severity": "high/medium/low",
-  "suggestion": "具体的、可执行的修改建议，不少于50字",
-  "dimensions": ["逻辑性", "数据支撑"],
-  "rationale": "为什么这个问题重要，不少于30字"
+  "location": "问题所在位置（如：P3第二段）",
+  "issue": "具体问题描述，要求详细、专业",
+  "severity": "high/medium/praise",
+  "suggestion": "具体的、可执行的修改建议",
+  "check_items": ["数据来源", "统计时间"],
+  "rationale": "为什么这个问题重要/这个亮点值得表扬"
 }
 
-注意：
-1. 第1轮关注结构性问题（大纲、论证框架），第2轮关注细节完善（数据、表达）
-2. 提出3个不同层面的问题，每个角度至少覆盖2个评审维度
-3. 问题要具体、专业，能直接指导修改，避免泛泛而谈
-4. 使用你所在领域的专业术语和视角
-5. high severity 必须是严重问题，不修改会影响报告质量
-6. 必须有具体的修改建议，不能只说"需要改进"`;
+请输出2-3个问题（包含 praise），每个问题必须符合你的角色定位。`;
 
     try {
       const result = await generate(prompt, 'blue_team', {
@@ -239,11 +242,15 @@ ${draft.substring(0, 8000)}
             expertId: expert.id,
             expertName: expert.name,
             expertTitle: expert.title,
-            angle: expert.angle,
-            question: q.question,
+            role: expert.role,
+            roleName: ROLE_NAMES[expert.role],
+            question: q.issue || q.question,
             severity: q.severity || 'medium',
             suggestion: q.suggestion || '',
-            dimensions: q.dimensions || [],
+            checkItems: q.check_items || q.checkItems || [],
+            logicGap: q.logic_gap || q.logicGap,
+            expertiseArea: q.expertise_area || q.expertiseArea,
+            readabilityIssue: q.readability_issue || q.readabilityIssue,
             rationale: q.rationale || ''
           }));
         }
@@ -252,18 +259,39 @@ ${draft.substring(0, 8000)}
       this.log('warn', `Failed to generate questions for ${expert.name}`, { error });
     }
 
-    // Fallback
+    // Fallback - 基于角色的默认反馈
+    const roleFallbacks: Record<ExpertRole, { question: string; suggestion: string }> = {
+      fact_checker: {
+        question: '请核查关键数据的来源和时效性',
+        suggestion: '补充数据来源标注，确认统计口径一致，更新过期数据'
+      },
+      logic_checker: {
+        question: '请检查论证逻辑的严密性',
+        suggestion: '梳理论证链条，补充隐含假设说明，强化因果推理依据'
+      },
+      domain_expert: {
+        question: '请评估专业分析的深度',
+        suggestion: '补充行业洞察，引用专业理论，深化趋势判断'
+      },
+      reader_rep: {
+        question: '请评估报告的可读性',
+        suggestion: '优化段落结构，简化专业术语，提升行文流畅度'
+      }
+    };
+
+    const fallback = roleFallbacks[expert.role];
     return [{
       id: `q_${round}_${expert.id}_0`,
       expertId: expert.id,
       expertName: expert.name,
       expertTitle: expert.title,
-      angle: expert.angle,
-      question: `${expert.name}（${expert.title}）建议从${angleNames[expert.angle]}角度进一步完善：报告的${expert.domains[0] || '相关'}部分需要更深入的分析`,
+      role: expert.role,
+      roleName: ROLE_NAMES[expert.role],
+      question: `${expert.name}（${ROLE_NAMES[expert.role]}）：${fallback.question}`,
       severity: 'medium',
-      suggestion: '建议补充更多行业数据和案例，强化论证逻辑，参考专家所在领域的最新研究成果',
-      dimensions: ['逻辑性', '深度'],
-      rationale: '从专业角度看，当前分析还停留在表面，需要深入挖掘本质原因'
+      suggestion: fallback.suggestion,
+      checkItems: [],
+      rationale: `从${ROLE_NAMES[expert.role]}角度进行评审`
     }];
   }
 
@@ -273,54 +301,69 @@ ${draft.substring(0, 8000)}
     round: number,
     topic: string
   ): Promise<{ content: string; summary: string }> {
-    // 按角度分组问题
-    const byAngle: Record<string, BlueTeamQuestion[]> = {
-      challenger: [],
-      expander: [],
-      synthesizer: []
+    // 按角色分组问题
+    const byRole: Record<ExpertRole, BlueTeamQuestion[]> = {
+      fact_checker: [],
+      logic_checker: [],
+      domain_expert: [],
+      reader_rep: []
     };
 
     questions.forEach(q => {
-      if (byAngle[q.angle]) {
-        byAngle[q.angle].push(q);
+      if (byRole[q.role]) {
+        byRole[q.role].push(q);
       }
     });
 
-    const prompt = `你是一位资深研究报告修订专家。请基于Blue Team的反馈修改报告。
+    // 统计各类型问题数量
+    const highCount = questions.filter(q => q.severity === 'high').length;
+    const mediumCount = questions.filter(q => q.severity === 'medium').length;
+    const praiseCount = questions.filter(q => q.severity === 'praise').length;
+
+    const prompt = `你是一位资深研究报告修订专家。请基于Blue Team四位专家评审的反馈修改报告。
 
 ## 研究主题
 ${topic}
 
 ## 当前版本：第${round}轮修订
+## 问题统计：严重${highCount}个 / 建议${mediumCount}个 / 亮点${praiseCount}个
 
-## 挑战类问题（必须解决逻辑和证据问题）
-${byAngle.challenger.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}
+## 事实核查员意见（准确性问题 - 必须解决）
+${byRole.fact_checker.map((q, i) => `
+${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
 建议：${q.suggestion}
-`).join('\n')}
+`).join('\n') || '无'}
 
-## 扩展类问题（补充视角和信息）
-${byAngle.expander.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}
+## 逻辑检察官意见（严密性问题 - 必须解决）
+${byRole.logic_checker.map((q, i) => `
+${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
 建议：${q.suggestion}
-`).join('\n')}
+`).join('\n') || '无'}
 
-## 归纳类问题（优化结构和表达）
-${byAngle.synthesizer.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}
+## 行业专家意见（专业度问题 - 推荐解决）
+${byRole.domain_expert.map((q, i) => `
+${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
 建议：${q.suggestion}
-`).join('\n')}
+`).join('\n') || '无'}
+
+## 读者代表意见（可读性问题 - 推荐解决）
+${byRole.reader_rep.map((q, i) => `
+${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
+建议：${q.suggestion}
+`).join('\n') || '无'}
 
 ## 当前报告
 ${draft.substring(0, 6000)}...
 
 ## 修订要求
-1. 优先解决high severity问题
-2. 逐条回应，不要遗漏
-3. 保持报告整体风格一致
-4. 补充必要的数据支撑
+1. 🔴 优先解决 high severity 问题（事实错误、逻辑断裂）
+2. 🟡 其次处理 medium severity 建议
+3. 🟢 保持并强化 praise 亮点
+4. 逐条回应，不要遗漏
+5. 保持报告整体风格一致
+6. 补充必要的数据支撑
 
-请输出修订后的完整报告，并在开头附上修订说明（简要说明解决了哪些问题）。`;
+请输出修订后的完整报告，并在开头附上修订说明（分类说明解决了哪些问题）。`;
 
     try {
       const result = await generate(prompt, 'writing', {
@@ -350,7 +393,7 @@ ${draft.substring(0, 6000)}...
       await query(
         `INSERT INTO blue_team_reviews (task_id, round, expert_role, questions)
          VALUES ($1, $2, $3, $4)`,
-        [taskId, round, q.angle, JSON.stringify(q)]
+        [taskId, round, q.role, JSON.stringify(q)]
       );
     }
   }
