@@ -9,9 +9,11 @@ import {
   hotTopicsApi,
   sentimentApi,
   assetsApi,
+  researchApi,
   type BlueTeamReview,
   type HotTopic,
-  type Asset
+  type Asset,
+  type ResearchConfig
 } from '../api/client';
 import type { Task } from '../types';
 import './TaskDetail.css';
@@ -108,10 +110,25 @@ export function TaskDetail() {
   // 操作加载状态
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // 深度研究配置状态
+  const [researchConfig, setResearchConfig] = useState<ResearchConfig>({
+    autoCollect: true,
+    sources: ['web', 'rss'],
+    maxResults: 20,
+    minCredibility: 0.5,
+    keywords: [],
+    excludeKeywords: [],
+    timeRange: '30d',
+  });
+  const [showResearchConfig, setShowResearchConfig] = useState(false);
+  const [collectedItems, setCollectedItems] = useState<any[]>([]);
+
   useEffect(() => {
     if (id) {
       loadTask();
       loadAssets();
+      loadResearchConfig();
+      loadCollectedResearch();
     }
   }, [id]);
 
@@ -185,6 +202,49 @@ export function TaskDetail() {
       setAvailableAssets(data.items || []);
     } catch (error) {
       console.error('加载素材失败:', error);
+    }
+  };
+
+  const loadResearchConfig = async () => {
+    try {
+      const config = await researchApi.getConfig(id!);
+      setResearchConfig(config);
+    } catch (error) {
+      console.error('加载研究配置失败:', error);
+    }
+  };
+
+  const loadCollectedResearch = async () => {
+    try {
+      const data = await researchApi.getCollected(id!, { limit: 20 });
+      setCollectedItems(data.items || []);
+    } catch (error) {
+      console.error('加载采集结果失败:', error);
+    }
+  };
+
+  const handleSaveResearchConfig = async () => {
+    try {
+      setActionLoading('save-research-config');
+      await researchApi.saveConfig(id!, researchConfig);
+      alert('研究配置已保存');
+      setShowResearchConfig(false);
+    } catch (error) {
+      alert('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCollectResearch = async () => {
+    try {
+      setActionLoading('collect-research');
+      await researchApi.collect(id!);
+      alert('研究采集已启动，请稍后刷新查看结果');
+    } catch (error) {
+      alert('采集失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -1292,10 +1352,10 @@ export function TaskDetail() {
               <div className="research-actions">
                 <button
                   className="btn btn-primary"
-                  onClick={handleTriggerResearch}
-                  disabled={actionLoading === 'trigger-research'}
+                  onClick={handleCollectResearch}
+                  disabled={actionLoading === 'collect-research'}
                 >
-                  {actionLoading === 'trigger-research' ? '采集中...' : '🔄 启动研究采集'}
+                  {actionLoading === 'collect-research' ? '采集中...' : '🔄 启动研究采集'}
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -1309,6 +1369,12 @@ export function TaskDetail() {
                 >
                   ➕ 添加外部链接
                 </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowResearchConfig(!showResearchConfig)}
+                >
+                  ⚙️ 配置采集参数
+                </button>
               </div>
               {task.research_data?.searchStats && (
                 <div className="search-stats">
@@ -1317,6 +1383,110 @@ export function TaskDetail() {
                 </div>
               )}
             </div>
+
+            {/* 研究配置面板 */}
+            {showResearchConfig && (
+              <div className="info-card config-card">
+                <h3 className="card-title">⚙️ 深度研究配置</h3>
+                <div className="research-config-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={researchConfig.autoCollect}
+                          onChange={(e) => setResearchConfig({ ...researchConfig, autoCollect: e.target.checked })}
+                        />
+                        自动采集
+                      </label>
+                    </div>
+                    <div className="form-group">
+                      <label>最大结果数</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={50}
+                        value={researchConfig.maxResults}
+                        onChange={(e) => setResearchConfig({ ...researchConfig, maxResults: parseInt(e.target.value) || 20 })}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>最低可信度 (0-1)</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={0}
+                        max={1}
+                        value={researchConfig.minCredibility}
+                        onChange={(e) => setResearchConfig({ ...researchConfig, minCredibility: parseFloat(e.target.value) || 0.5 })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>时间范围</label>
+                      <select
+                        value={researchConfig.timeRange}
+                        onChange={(e) => setResearchConfig({ ...researchConfig, timeRange: e.target.value })}
+                      >
+                        <option value="7d">最近7天</option>
+                        <option value="30d">最近30天</option>
+                        <option value="90d">最近3个月</option>
+                        <option value="1y">最近1年</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>数据源</label>
+                    <div className="checkbox-group">
+                      {['web', 'rss', 'asset'].map((source) => (
+                        <label key={source} className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={researchConfig.sources.includes(source)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setResearchConfig({ ...researchConfig, sources: [...researchConfig.sources, source] });
+                              } else {
+                                setResearchConfig({ ...researchConfig, sources: researchConfig.sources.filter((s) => s !== source) });
+                              }
+                            }}
+                          />
+                          {source === 'web' ? '网页搜索' : source === 'rss' ? 'RSS源' : '素材库'}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>关键词 (用逗号分隔)</label>
+                    <input
+                      type="text"
+                      value={researchConfig.keywords.join(', ')}
+                      onChange={(e) => setResearchConfig({ ...researchConfig, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
+                      placeholder="输入关键词以精确搜索..."
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>排除关键词 (用逗号分隔)</label>
+                    <input
+                      type="text"
+                      value={researchConfig.excludeKeywords.join(', ')}
+                      onChange={(e) => setResearchConfig({ ...researchConfig, excludeKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
+                      placeholder="输入要排除的关键词..."
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleSaveResearchConfig}
+                      disabled={actionLoading === 'save-research-config'}
+                    >
+                      {actionLoading === 'save-research-config' ? '保存中...' : '保存配置'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {task.research_data ? (
               <div className="research-content">

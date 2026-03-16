@@ -152,6 +152,46 @@ export const bindingsApi = {
     client.post(`/assets/bindings/${id}/scan`) as Promise<{ scanned: number; added: number }>,
 };
 
+// 深度研究相关类型
+export interface ResearchConfig {
+  autoCollect: boolean;
+  sources: string[];
+  maxResults: number;
+  minCredibility: number;
+  keywords: string[];
+  excludeKeywords: string[];
+  timeRange: string;
+}
+
+export interface CollectedResearch {
+  id: string;
+  type: string;
+  url: string;
+  title: string;
+  credibility: {
+    overall: number;
+    source_reliability: number;
+    data_freshness: number;
+    citation_quality: number;
+  };
+  created_at: string;
+}
+
+// 深度研究 API
+export const researchApi = {
+  getConfig: (taskId: string) =>
+    client.get(`/research/${taskId}/config`) as Promise<ResearchConfig>,
+
+  saveConfig: (taskId: string, config: ResearchConfig) =>
+    client.post(`/research/${taskId}/config`, config) as Promise<{ success: boolean }>,
+
+  collect: (taskId: string) =>
+    client.post(`/research/${taskId}/collect`) as Promise<{ message: string; taskId: string; config: ResearchConfig }>,
+
+  getCollected: (taskId: string, params?: { limit?: number; offset?: number }) =>
+    client.get(`/research/${taskId}/collected`, { params }) as Promise<{ items: CollectedResearch[]; total: number }>,
+};
+
 // 专家相关 API
 export const expertsApi = {
   getAll: (params?: { angle?: string }) =>
