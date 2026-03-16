@@ -1,35 +1,58 @@
 :root {
-  /* Primary colors */
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --secondary: #8b5cf6;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #06b6d4;
+  /* Terracotta Theme - 陶土主题 */
 
-  /* Gray scale */
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
+  /* Primary Colors - 陶土暖色调 */
+  --terracotta: #E07A5F;
+  --terracotta-dark: #C85A3E;
+  --terracotta-light: #F0947A;
+  --clay: #D46648;
+  --ochre: #C67B5C;
+  --sand: #E8D4C4;
 
-  /* Stage colors */
-  --stage-1: #6366f1;
-  --stage-2: #8b5cf6;
-  --stage-3: #ec4899;
-  --stage-4: #f59e0b;
+  /* Secondary Colors - 辅助色 */
+  --sage: #8A9A5B;
+  --sage-light: #A8B87D;
+  --sage-dark: #6B7B47;
 
-  /* Shadows */
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  /* Warm Neutrals - 温暖中性色 */
+  --cream: #FDF8F3;
+  --cream-dark: #F2E8DF;
+  --linen: #E8DDD4;
+  --stone: #D4C4B8;
+  --pebble: #B8A89A;
+  --earth: #8B7355;
+  --soil: #5E4B35;
+  --charcoal: #3D3229;
+
+  /* Status Colors - 状态色（陶土化） */
+  --success: #7A9E6B;
+  --warning: #D4A574;
+  --danger: #C75B5B;
+  --info: #6B9FB8;
+
+  /* Stage Colors - 阶段色 */
+  --stage-1: #D46648;
+  --stage-2: #8A9A5B;
+  --stage-3: #C67B5C;
+  --stage-4: #B88A6B;
+
+  /* Shadows - 柔和阴影（陶土质感） */
+  --shadow-sm: 0 2px 4px rgba(94, 75, 53, 0.08);
+  --shadow: 0 4px 8px rgba(94, 75, 53, 0.12), 0 2px 4px rgba(94, 75, 53, 0.08);
+  --shadow-md: 0 8px 16px rgba(94, 75, 53, 0.14), 0 4px 8px rgba(94, 75, 53, 0.1);
+  --shadow-lg: 0 16px 32px rgba(94, 75, 53, 0.16), 0 8px 16px rgba(94, 75, 53, 0.12);
+
+  /* Radius - 圆润边角 */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition: 0.25s ease;
+  --transition-slow: 0.35s ease;
 }
 
 * {
@@ -39,33 +62,43 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: var(--gray-50);
-  color: var(--gray-800);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(135deg, var(--cream) 0%, var(--sand) 100%);
+  background-attachment: fixed;
+  color: var(--soil);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
 #root {
   min-height: 100vh;
 }
 
-/* Scrollbar styling */
+/* Scrollbar - 陶土风格滚动条 */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--gray-100);
+  background: var(--cream-dark);
+  border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 4px;
+  background: linear-gradient(180deg, var(--stone) 0%, var(--pebble) 100%);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--cream-dark);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  background: linear-gradient(180deg, var(--ochre) 0%, var(--terracotta) 100%);
+}
+
+/* Selection */
+::selection {
+  background: rgba(224, 122, 95, 0.3);
+  color: var(--charcoal);
 }

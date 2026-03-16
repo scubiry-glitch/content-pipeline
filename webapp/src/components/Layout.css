@@ -1,44 +1,4 @@
-/* 全局样式变量 */
-:root {
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --secondary: #8b5cf6;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #06b6d4;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
-  --stage-1: #6366f1;
-  --stage-2: #8b5cf6;
-  --stage-3: #ec4899;
-  --stage-4: #f59e0b;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--gray-50);
-  color: var(--gray-800);
-  line-height: 1.6;
-}
+/* Terracotta Theme Layout - 陶土主题布局 */
 
 .app-container {
   min-height: 100vh;
@@ -46,15 +6,16 @@ body {
   flex-direction: column;
 }
 
-/* Header */
+/* Header - 陶土质感的头部 */
 .app-header {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--ochre) 50%, var(--clay) 100%);
   color: white;
   padding: 16px 24px;
   box-shadow: var(--shadow-md);
   position: sticky;
   top: 0;
   z-index: 100;
+  border-bottom: 3px solid rgba(255, 255, 255, 0.15);
 }
 
 .header-content {
@@ -65,36 +26,76 @@ body {
   justify-content: space-between;
 }
 
+/* Logo/Title - 陶土风格的标题 */
 .header-title {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
+.header-title::before {
+  content: '🏺';
+  font-size: 26px;
+  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+/* Navigation - 陶土按钮风格的导航 */
 .header-nav {
   display: flex;
   gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(8px);
 }
 
 .nav-link {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
   font-size: 14px;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-link::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0);
+  transition: background var(--transition-fast);
+  border-radius: var(--radius);
 }
 
 .nav-link:hover {
   color: white;
-  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link:hover::before {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .nav-link.active {
-  color: white;
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--terracotta);
+  background: white;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Main Content */
+.nav-link.active::before {
+  display: none;
+}
+
+/* Main Content - 陶土质感的背景 */
 .app-main {
   flex: 1;
   max-width: 1400px;
@@ -103,102 +104,167 @@ body {
   padding: 24px;
 }
 
-/* Common Components */
+/* Common Components - 陶土卡片 */
 .card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px;
   box-shadow: var(--shadow);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  border: 1px solid var(--linen);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--terracotta) 0%, var(--ochre) 50%, var(--sage) 100%);
+  opacity: 0.6;
 }
 
 .card-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--gray-800);
-  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--soil);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--sand);
 }
 
+/* Buttons - 陶土按钮 */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
   border: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+  pointer-events: none;
 }
 
 .btn-primary {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--clay) 100%);
   color: white;
+  box-shadow: 0 4px 0 var(--terracotta-dark), var(--shadow-sm);
+  transform: translateY(0);
 }
 
 .btn-primary:hover {
-  background: var(--primary-dark);
+  background: linear-gradient(135deg, var(--terracotta-light) 0%, var(--terracotta) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 var(--terracotta-dark), var(--shadow);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--terracotta-dark), var(--shadow-sm);
 }
 
 .btn-secondary {
-  background: var(--gray-100);
-  color: var(--gray-700);
+  background: linear-gradient(135deg, var(--cream-dark) 0%, var(--linen) 100%);
+  color: var(--earth);
+  box-shadow: 0 4px 0 var(--stone), var(--shadow-sm);
+  transform: translateY(0);
 }
 
 .btn-secondary:hover {
-  background: var(--gray-200);
+  background: linear-gradient(135deg, var(--sand) 0%, var(--cream-dark) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 var(--stone), var(--shadow);
+}
+
+.btn-secondary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--stone), var(--shadow-sm);
 }
 
 .btn-danger {
-  background: var(--danger);
+  background: linear-gradient(135deg, var(--danger) 0%, #B84A4A 100%);
   color: white;
+  box-shadow: 0 4px 0 #A04040, var(--shadow-sm);
+  transform: translateY(0);
+}
+
+.btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #A04040, var(--shadow);
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 8px 16px;
   font-size: 13px;
 }
 
-/* Badges */
+/* Badges - 陶土徽章 */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  border: 1px solid transparent;
 }
 
 .badge-pending {
-  background: var(--gray-100);
-  color: var(--gray-600);
+  background: var(--cream-dark);
+  color: var(--pebble);
+  border-color: var(--stone);
 }
 
 .badge-planning {
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(212, 102, 72, 0.12);
   color: var(--stage-1);
+  border-color: rgba(212, 102, 72, 0.3);
 }
 
 .badge-researching {
-  background: rgba(139, 92, 246, 0.1);
-  color: var(--stage-2);
+  background: rgba(138, 154, 91, 0.12);
+  color: var(--sage-dark);
+  border-color: rgba(138, 154, 91, 0.3);
 }
 
 .badge-writing {
-  background: rgba(236, 72, 153, 0.1);
-  color: var(--stage-3);
+  background: rgba(198, 123, 92, 0.12);
+  color: var(--ochre);
+  border-color: rgba(198, 123, 92, 0.3);
 }
 
 .badge-reviewing {
-  background: rgba(245, 158, 11, 0.1);
+  background: rgba(184, 138, 107, 0.12);
   color: var(--stage-4);
+  border-color: rgba(184, 138, 107, 0.3);
 }
 
 .badge-completed {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
+  background: rgba(122, 158, 107, 0.12);
+  color: var(--sage-dark);
+  border-color: rgba(122, 158, 107, 0.3);
 }
 
 /* Loading */
@@ -207,63 +273,75 @@ body {
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: var(--gray-500);
+  color: var(--pebble);
 }
 
-/* Empty State */
+/* Empty State - 陶土空状态 */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: var(--gray-500);
+  color: var(--pebble);
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  font-size: 56px;
+  margin-bottom: 20px;
+  opacity: 0.7;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .empty-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--gray-700);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--earth);
   margin-bottom: 8px;
 }
 
-/* Form Elements */
+/* Form Elements - 陶土表单 */
 .form-input {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--gray-200);
-  border-radius: 8px;
+  padding: 12px 16px;
+  border: 2px solid var(--linen);
+  border-radius: var(--radius);
   font-size: 14px;
-  transition: border-color 0.2s;
+  background: white;
+  color: var(--soil);
+  transition: all var(--transition-fast);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
+}
+
+.form-input::placeholder {
+  color: var(--pebble);
 }
 
 .form-textarea {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--gray-200);
-  border-radius: 8px;
+  padding: 12px 16px;
+  border: 2px solid var(--linen);
+  border-radius: var(--radius);
   font-size: 14px;
-  min-height: 100px;
+  min-height: 120px;
   resize: vertical;
-  transition: border-color 0.2s;
+  background: white;
+  color: var(--soil);
+  transition: all var(--transition-fast);
 }
 
 .form-textarea:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
 }
 
 /* Grid */
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
 
 .grid-cols-2 {
@@ -278,6 +356,7 @@ body {
   grid-template-columns: repeat(4, 1fr);
 }
 
+/* Responsive */
 @media (max-width: 1024px) {
   .grid-cols-4 {
     grid-template-columns: repeat(2, 1fr);
@@ -292,11 +371,20 @@ body {
 
   .header-content {
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
   }
 
   .header-nav {
     flex-wrap: wrap;
     justify-content: center;
+    width: 100%;
+  }
+
+  .app-main {
+    padding: 16px;
+  }
+
+  .card {
+    padding: 18px;
   }
 }
