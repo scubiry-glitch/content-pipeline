@@ -322,4 +322,53 @@ export const reportsApi = {
     client.delete(`/reports/${id}`) as Promise<void>,
 };
 
+// 合规检测相关类型 (v4.0)
+export interface ComplianceRule {
+  id: string;
+  category: 'sensitive' | 'ad_law' | 'privacy' | 'custom';
+  level: 'strict' | 'warning' | 'info';
+  pattern: string;
+  suggestion: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ComplianceIssue {
+  type: string;
+  level: 'strict' | 'warning' | 'info';
+  content: string;
+  suggestion: string;
+  position?: { start: number; end: number };
+}
+
+export interface ComplianceCheckResult {
+  id: string;
+  content: string;
+  overallScore: number;
+  passed: boolean;
+  issues: ComplianceIssue[];
+  checkedAt: string;
+}
+
+// 合规检测 API (v4.0)
+export const complianceApi = {
+  checkContent: (content: string) =>
+    client.post('/compliance/check', { content }) as Promise<ComplianceCheckResult>,
+
+  getRules: (params?: { category?: string; level?: string }) =>
+    client.get('/compliance/rules', { params }) as Promise<{ items: ComplianceRule[]; total: number }>,
+
+  getHistory: (params?: { limit?: number }) =>
+    client.get('/compliance/history', { params }) as Promise<{ items: ComplianceCheckResult[]; total: number }>,
+
+  createRule: (data: Partial<ComplianceRule>) =>
+    client.post('/compliance/rules', data) as Promise<ComplianceRule>,
+
+  updateRule: (id: string, data: Partial<ComplianceRule>) =>
+    client.put(`/compliance/rules/${id}`, data) as Promise<ComplianceRule>,
+
+  deleteRule: (id: string) =>
+    client.delete(`/compliance/rules/${id}`) as Promise<void>,
+};
+
 export default client;

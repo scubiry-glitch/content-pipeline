@@ -29,6 +29,9 @@ export function Layout() {
             <NavLink to="/sentiment" className="nav-link">
               情感 (v3.2)
             </NavLink>
+            <NavLink to="/compliance" className="nav-link">
+              合规 (v4.0)
+            </NavLink>
           </nav>
         </div>
       </header>
