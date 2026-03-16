@@ -318,6 +318,22 @@ async function setupMVPSchema(): Promise<void> {
     });
   });
 
+  // Recommendation logs table (FR-028 ~ FR-030)
+  await query(`
+    CREATE TABLE IF NOT EXISTS recommendation_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      recommendation_id VARCHAR(100) NOT NULL,
+      user_id VARCHAR(100),
+      action VARCHAR(20) NOT NULL,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes
+  await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_user ON recommendation_logs(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_action ON recommendation_logs(action)`);
+
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {
     console.log('[DB] HNSW index creation failed, trying ivfflat...');
