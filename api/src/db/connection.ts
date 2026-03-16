@@ -112,6 +112,10 @@ async function setupMVPSchema(): Promise<void> {
       round INTEGER NOT NULL,
       expert_role VARCHAR(50) NOT NULL,
       questions JSONB NOT NULL DEFAULT '[]',
+      status VARCHAR(20) DEFAULT 'pending',
+      user_decision VARCHAR(20),
+      decision_note TEXT,
+      decided_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
@@ -212,6 +216,17 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Task logs - for operation audit trail
+  await query(`
+    CREATE TABLE IF NOT EXISTS task_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
+      action VARCHAR(100) NOT NULL,
+      details JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Outputs table - final generated content
   await query(`
     CREATE TABLE IF NOT EXISTS outputs (
@@ -233,6 +248,7 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_task ON draft_versions(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_asset_bindings_active ON asset_directory_bindings(is_active)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_tracked_files_binding ON asset_tracked_files(binding_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_task_logs_task ON task_logs(task_id)`);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {

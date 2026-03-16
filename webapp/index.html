@@ -4883,7 +4883,7 @@
         function generateReviewTab(task, reviewsData) {
             const reviews = reviewsData || task.blueTeam_reviews || [];
             const experts = task.research_data?.blue_team_experts || [];
-            const summary = reviewsData?.summary || { total: 0, critical: 0, warning: 0, praise: 0 };
+            const summary = reviewsData?.summary || { total: 0, critical: 0, warning: 0, praise: 0, accepted: 0, pending: 0, ignored: 0 };
 
             // Group by severity for display
             const bySeverity = { critical: [], warning: [], praise: [] };
@@ -4898,15 +4898,21 @@
                 setTimeout(() => loadAndRenderReviews(task.id), 100);
             }
 
+            // Check if can proceed to confirmation
+            const criticalPending = bySeverity.critical.filter(r => !r.status || r.status === 'pending').length;
+            const canProceed = criticalPending === 0 && task.status === 'awaiting_approval';
+
             return `
                 <div class="detail-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <div class="detail-section-title" style="margin: 0;">🔥 蓝军评审</div>
-                        ${task.status === 'awaiting_approval' ? `
-                            <button class="btn-sm" onclick="confirmRedoReview()" style="background: var(--warning); color: white;">
-                                🔄 重做蓝军评审
-                            </button>
-                        ` : ''}
+                        <div style="display: flex; gap: 8px;">
+                            ${task.status === 'awaiting_approval' ? `
+                                <button class="btn-sm" onclick="confirmRedoReview()" style="background: var(--warning); color: white;">
+                                    🔄 重做蓝军评审
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
 
                     <!-- 评审概览 -->
@@ -4928,6 +4934,38 @@
                             <div style="font-size: 12px;">总评审数</div>
                         </div>
                     </div>
+
+                    <!-- 处理进度 -->
+                    ${task.status === 'awaiting_approval' ? `
+                        <div style="background: var(--gray-50); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="font-weight: 600;">处理进度</span>
+                                <span style="font-size: 12px; color: var(--gray-500);">
+                                    已处理: ${summary.accepted + summary.ignored || 0} / ${summary.total}
+                                </span>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <span style="font-size: 12px; padding: 4px 8px; background: var(--success); color: white; border-radius: 4px;">
+                                    ✓ 已接受 ${summary.accepted || 0}
+                                </span>
+                                <span style="font-size: 12px; padding: 4px 8px; background: var(--gray-400); color: white; border-radius: 4px;">
+                                    ⊘ 已忽略 ${summary.ignored || 0}
+                                </span>
+                                <span style="font-size: 12px; padding: 4px 8px; background: var(--warning); color: white; border-radius: 4px;">
+                                    ⏳ 待处理 ${summary.pending || 0}
+                                </span>
+                            </div>
+                            ${!canProceed ? `
+                                <div style="margin-top: 12px; padding: 8px 12px; background: var(--danger); color: white; border-radius: 4px; font-size: 13px;">
+                                    ⚠️ 有 ${criticalPending} 个严重问题未处理，处理后才能进入确认环节
+                                </div>
+                            ` : `
+                                <div style="margin-top: 12px; padding: 8px 12px; background: var(--success); color: white; border-radius: 4px; font-size: 13px;">
+                                    ✓ 所有严重问题已处理，可以进入确认环节
+                                </div>
+                            `}
+                        </div>
+                    ` : ''}
 
                     <div class="detail-section-title">评审专家分工</div>
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
@@ -4997,27 +5035,49 @@
                 praise: 'var(--success)'
             };
 
+            // Decision status display
+            const status = r.status || 'pending';
+            const statusLabels = {
+                pending: { text: '⏳ 待处理', bg: 'var(--warning)', color: 'white' },
+                accepted: { text: '✓ 已接受', bg: 'var(--success)', color: 'white' },
+                ignored: { text: '⊘ 已忽略', bg: 'var(--gray-400)', color: 'white' },
+                manual_resolved: { text: '✓ 已手动处理', bg: 'var(--info)', color: 'white' }
+            };
+            const statusDisplay = statusLabels[status] || statusLabels.pending;
+
+            const showActions = taskStatus === 'awaiting_approval' && severity !== 'praise' && status === 'pending';
+
             return `
-                <div class="review-question" style="border-left: 4px solid ${severityColors[severity]}; margin-bottom: 12px;">
+                <div class="review-question" style="border-left: 4px solid ${severityColors[severity]}; margin-bottom: 12px; opacity: ${status !== 'pending' ? '0.7' : '1'};">
                     <div class="review-header">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 16px;">${q.expertRole === 'challenger' ? '🔍' : q.expertRole === 'expander' ? '⚖️' : q.expertRole === 'synthesizer' ? '👔' : '👁️'}</span>
                             <strong>${q.expertName || '专家'}</strong>
                             <span style="font-size: 11px; color: var(--gray-500);">${q.location || '全文'}</span>
                         </div>
-                        <span class="review-severity ${q.severity}">${q.severity}</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; padding: 2px 8px; background: ${statusDisplay.bg}; color: ${statusDisplay.color}; border-radius: 4px;">
+                                ${statusDisplay.text}
+                            </span>
+                            <span class="review-severity ${q.severity}">${q.severity}</span>
+                        </div>
                     </div>
                     <p><strong>问题：</strong>${escapeHtml(q.question)}</p>
                     <p style="margin-top: 8px; color: var(--gray-600);"><strong>建议：</strong>${escapeHtml(q.suggestion)}</p>
                     ${q.rationale ? `<p style="margin-top: 8px; font-size: 12px; color: var(--gray-500);">依据：${escapeHtml(q.rationale)}</p>` : ''}
 
-                    ${taskStatus === 'awaiting_approval' && severity !== 'praise' ? `
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button class="btn-sm" onclick="acceptReviewSuggestion('${r.id}')" style="background: var(--success); color: white;">
+                    ${r.decisionNote ? `<p style="margin-top: 8px; font-size: 12px; color: var(--gray-500);">备注：${escapeHtml(r.decisionNote)}</p>` : ''}
+
+                    ${showActions ? `
+                        <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn-sm" onclick="decideReviewItem('${r.id}', 'accept')" style="background: var(--success); color: white;">
                                 ✓ 接受修改
                             </button>
-                            <button class="btn-sm" onclick="ignoreReviewSuggestion('${r.id}')" style="background: var(--gray-200); color: var(--gray-700);">
-                                忽略
+                            <button class="btn-sm" onclick="decideReviewItem('${r.id}', 'manual_resolved')" style="background: var(--info); color: white;">
+                                ✓ 已手动处理
+                            </button>
+                            <button class="btn-sm" onclick="decideReviewItem('${r.id}', 'ignore')" style="background: var(--gray-200); color: var(--gray-700);">
+                                ⊘ 忽略
                             </button>
                         </div>
                     ` : ''}
@@ -5026,23 +5086,109 @@
         }
 
         async function acceptReviewSuggestion(reviewId) {
-            if (!selectedTask) return;
-            try {
-                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/reviews/${reviewId}/accept`, {
-                    method: 'POST',
-                    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' }
-                });
-                if (res.ok) {
-                    showToast('已接受修改建议', 'success');
-                    loadAndRenderReviews(selectedTask.id);
-                }
-            } catch (err) {
-                showToast('操作失败', 'error');
-            }
+            await decideReviewItem(reviewId, 'accept');
         }
 
         async function ignoreReviewSuggestion(reviewId) {
-            showToast('已忽略该建议', 'info');
+            await decideReviewItem(reviewId, 'ignore');
+        }
+
+        // 统一评审决策处理函数 (FR-021)
+        async function decideReviewItem(reviewId, decision, note = '') {
+            if (!selectedTask) return;
+
+            const decisionLabels = {
+                accept: '接受修改',
+                ignore: '忽略',
+                manual_resolved: '标记为已手动处理'
+            };
+
+            try {
+                showLoading('处理中...');
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/review-items/${reviewId}/decide`, {
+                    method: 'POST',
+                    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision, note })
+                });
+
+                hideLoading();
+
+                if (res.ok) {
+                    showToast(`已${decisionLabels[decision]}`, 'success');
+                    loadAndRenderReviews(selectedTask.id);
+
+                    // Refresh decision summary
+                    checkCanProceedToConfirmation();
+                } else {
+                    const error = await res.json();
+                    showToast(error.message || '操作失败', 'error');
+                }
+            } catch (err) {
+                hideLoading();
+                showToast('操作失败', 'error');
+                console.error('Failed to submit decision:', err);
+            }
+        }
+
+        // 检查是否可以进入确认环节 (FR-022)
+        async function checkCanProceedToConfirmation() {
+            if (!selectedTask) return;
+
+            try {
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/can-proceed`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    window.canProceedToConfirmation = result.canProceed;
+                    return result.canProceed;
+                }
+            } catch (err) {
+                console.error('Failed to check can proceed:', err);
+            }
+            return false;
+        }
+
+        // 申请重新评审 (FR-023)
+        async function requestExpertReReview(expertRole) {
+            if (!selectedTask) return;
+
+            const expertNames = {
+                'fact_checker': '事实核查员',
+                'logic_checker': '逻辑检察官',
+                'domain_expert': '行业专家',
+                'reader_rep': '读者代表'
+            };
+
+            const confirmed = confirm(`确定要申请${expertNames[expertRole] || expertRole}重新评审吗？\n\n系统将重新执行该专家的评审流程。`);
+            if (!confirmed) return;
+
+            const reason = prompt('请输入重新评审的原因（可选）：');
+
+            try {
+                showLoading('申请中...');
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/review-items/re-review`, {
+                    method: 'POST',
+                    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expertRole, reason })
+                });
+
+                hideLoading();
+
+                if (res.ok) {
+                    const result = await res.json();
+                    showToast(result.message || '重新评审已启动', 'success');
+                    loadAndRenderReviews(selectedTask.id);
+                } else {
+                    const error = await res.json();
+                    showToast(error.message || '申请失败', 'error');
+                }
+            } catch (err) {
+                hideLoading();
+                showToast('申请失败', 'error');
+                console.error('Failed to request re-review:', err);
+            }
         }
 
         function generateVersionsTab(task) {
@@ -6318,6 +6464,15 @@
         // 人工确认：通过或打回
         async function approveTask(taskId, approved) {
             if (approved) {
+                // FR-022: 严重问题未处理时，不允许进入确认环节
+                const canProceed = await checkCanProceedToConfirmation();
+                if (!canProceed) {
+                    showToast('有严重问题未处理，请先处理所有严重问题', 'error');
+                    // 自动切换到评审tab
+                    switchTab('review');
+                    return;
+                }
+
                 showConfirm({
                     title: '确认发布',
                     message: '确认通过并发布该报告吗？发布后将成为最终版本。',

@@ -147,6 +147,85 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return result;
   });
 
+  // ===== 用户决策交互 API (FR-021 ~ FR-023) =====
+
+  // 获取评审项列表（带用户决策状态）
+  fastify.get('/:taskId/review-items', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getReviewItems } = await import('../services/reviewDecision.js');
+    const items = await getReviewItems(taskId);
+    return { items };
+  });
+
+  // 提交单个评审项决策
+  fastify.post('/:taskId/review-items/:reviewId/decide', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, reviewId } = request.params as any;
+    const { decision, note } = request.body as any;
+
+    if (!decision || !['accept', 'ignore', 'manual_resolved'].includes(decision)) {
+      reply.status(400);
+      return { error: 'Invalid decision. Must be one of: accept, ignore, manual_resolved' };
+    }
+
+    const { submitDecision } = await import('../services/reviewDecision.js');
+    const result = await submitDecision(taskId, reviewId, decision, note);
+    return result;
+  });
+
+  // 批量提交评审决策
+  fastify.post('/:taskId/review-items/batch-decide', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { decisions } = request.body as any;
+
+    if (!decisions || !Array.isArray(decisions)) {
+      reply.status(400);
+      return { error: 'decisions array is required' };
+    }
+
+    const { batchSubmitDecisions } = await import('../services/reviewDecision.js');
+    const result = await batchSubmitDecisions(taskId, decisions);
+    return result;
+  });
+
+  // 获取决策汇总统计
+  fastify.get('/:taskId/review-summary', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getDecisionSummary } = await import('../services/reviewDecision.js');
+    const summary = await getDecisionSummary(taskId);
+    return summary;
+  });
+
+  // 检查是否可以进入确认环节 (FR-022)
+  fastify.get('/:taskId/can-proceed', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { canProceedToConfirmation } = await import('../services/reviewDecision.js');
+    const result = await canProceedToConfirmation(taskId);
+    return result;
+  });
+
+  // 申请重新评审 (FR-023)
+  fastify.post('/:taskId/review-items/re-review', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { expertRole, reason } = request.body as any;
+
+    if (!expertRole) {
+      reply.status(400);
+      return { error: 'expertRole is required' };
+    }
+
+    const { requestReReview } = await import('../services/reviewDecision.js');
+    const result = await requestReReview(taskId, expertRole, reason);
+    return result;
+  });
+
+  // 获取专家评审统计
+  fastify.get('/:taskId/expert-stats', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getExpertReviewStats } = await import('../services/reviewDecision.js');
+    const stats = await getExpertReviewStats(taskId);
+    return { stats };
+  });
+
   // ===== 环节重做 API =====
 
   // 1. 选题策划重做

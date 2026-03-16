@@ -360,7 +360,8 @@ ${JSON.stringify(outline, null, 2)}
       warning: 0,
       praise: 0,
       accepted: 0,
-      pending: 0
+      pending: 0,
+      ignored: 0
     };
 
     for (const row of reviewsResult.rows) {
@@ -375,6 +376,8 @@ ${JSON.stringify(outline, null, 2)}
       summary.total++;
       summary[severity]++;
 
+      const status = row.status || 'pending';
+
       const issue = {
         id: row.id,
         round: row.round,
@@ -384,8 +387,20 @@ ${JSON.stringify(outline, null, 2)}
         question: question.question,
         suggestion: question.suggestion,
         rationale: question.rationale,
-        status: row.status || 'pending' // pending, accepted, ignored, resolved
+        status, // pending, accepted, ignored, manual_resolved
+        userDecision: row.user_decision,
+        decisionNote: row.decision_note,
+        decidedAt: row.decided_at
       };
+
+      // Count by decision status
+      if (status === 'accepted' || status === 'manual_resolved') {
+        summary.accepted++;
+      } else if (status === 'pending') {
+        summary.pending++;
+      } else if (status === 'ignored') {
+        summary.ignored++;
+      }
 
       // Categorize by expert role
       if (row.expert_role === 'challenger') {

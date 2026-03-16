@@ -1,7 +1,7 @@
 // 竞品分析服务 - Competitor Analysis
 // FR-007 ~ FR-008: 同类主题研报搜索与分析
 
-import { getWebSearchService } from './webSearch.js';
+import { getWebSearchService, SearchResult } from './webSearch.js';
 import { getLLMRouter } from '../providers/index.js';
 
 export interface CompetitorReport {
@@ -55,7 +55,7 @@ export async function analyzeCompetitors(
 
   // 合并去重
   const seenUrls = new Set<string>();
-  const uniqueResults: typeof allResults[0] = [];
+  const uniqueResults: SearchResult[] = [];
 
   for (const results of allResults) {
     for (const r of results) {
