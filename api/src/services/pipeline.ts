@@ -36,16 +36,17 @@ export class PipelineService {
   async createTask(input: CreateTaskInput) {
     const taskId = `task_${uuidv4().slice(0, 8)}`;
 
-    // 并行执行：生成大纲 + 选题评估
-    const [outline, evaluation] = await Promise.all([
+    // 并行执行：生成大纲 + 选题评估 + 竞品分析
+    const [outline, evaluation, competitorAnalysis] = await Promise.all([
       this.generateOutline(input.topic, input.context),
-      evaluateTopic({ topic: input.topic, context: input.context })
+      evaluateTopic({ topic: input.topic, context: input.context }),
+      analyzeCompetitors(input.topic, input.context)
     ]);
 
     // 创建任务 - 状态为 outline_pending，等待用户确认
     await query(
-      `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, evaluation, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
+      `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, evaluation, competitor_analysis, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
       [
         taskId,
         input.topic,
@@ -55,7 +56,8 @@ export class PipelineService {
         10,
         JSON.stringify(outline),
         JSON.stringify(input.searchConfig || { maxSearchUrls: 20, enableWebSearch: true }),
-        JSON.stringify(evaluation)
+        JSON.stringify(evaluation),
+        JSON.stringify(competitorAnalysis)
       ]
     );
 
@@ -65,6 +67,7 @@ export class PipelineService {
       topic: input.topic,
       outline,
       evaluation,
+      competitorAnalysis,
       progress: 10,
       message: evaluation.passed
         ? '大纲已生成，请确认后继续'

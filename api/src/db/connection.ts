@@ -97,6 +97,7 @@ async function setupMVPSchema(): Promise<void> {
       is_hidden BOOLEAN DEFAULT false,
       hidden_at TIMESTAMP WITH TIME ZONE,
       evaluation JSONB,
+      competitor_analysis JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       completed_at TIMESTAMP WITH TIME ZONE
