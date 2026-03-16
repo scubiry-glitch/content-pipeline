@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { QualityDashboard } from './pages/QualityDashboard';
@@ -59,6 +60,7 @@ function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        <ApiErrorContainer />
       </TasksProvider>
     </ErrorBoundary>
   );

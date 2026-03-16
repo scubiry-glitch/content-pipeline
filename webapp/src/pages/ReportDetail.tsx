@@ -3,6 +3,18 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { reportsApi, tasksApi, type Report, type ReportMatch, type Task } from '../api/client';
 import './ReportDetail.css';
 
+// Helper function to download blob as file
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -82,6 +94,18 @@ export function ReportDetail() {
     }
   };
 
+  const handleExport = async (format: 'pdf' | 'docx' = 'pdf') => {
+    if (!report) return;
+    try {
+      const blob = await reportsApi.export(report.id, format);
+      const filename = `${report.title || '研报'}_${new Date().toISOString().split('T')[0]}.${format}`;
+      downloadBlob(blob, filename);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('导出失败，请重试');
+    }
+  };
+
   const getQualityColor = (score: number) => {
     if (score >= 80) return '#52c41a';
     if (score >= 60) return '#faad14';
@@ -121,6 +145,16 @@ export function ReportDetail() {
           <button className="btn btn-primary parse-btn" onClick={handleParse}>
             🔍 开始解析
           </button>
+        )}
+        {report.status !== 'pending' && (
+          <div className="export-actions">
+            <button className="btn btn-secondary" onClick={() => handleExport('pdf')}>
+              📄 导出PDF
+            </button>
+            <button className="btn btn-secondary" onClick={() => handleExport('docx')}>
+              📝 导出Word
+            </button>
+          </div>
         )}
       </div>
 

@@ -109,6 +109,12 @@ export function HotTopics() {
           热点列表
         </button>
         <button
+          className={`tab ${activeTab === 'stats' ? 'active' : ''}`}
+          onClick={() => setActiveTab('stats')}
+        >
+          📊 趋势统计
+        </button>
+        <button
           className={`tab ${activeTab === 'sources' ? 'active' : ''}`}
           onClick={() => setActiveTab('sources')}
         >
@@ -242,6 +248,125 @@ export function HotTopics() {
             </div>
           )}
         </>
+      )}
+
+      {activeTab === 'stats' && (
+        <div className="stats-section">
+          <div className="stats-grid">
+            {/* 情感分布饼图 */}
+            <div className="stat-card">
+              <h3>😊 情感分布</h3>
+              <div className="sentiment-chart">
+                {(() => {
+                  const sentimentCounts = topics.reduce((acc, t) => {
+                    acc[t.sentiment] = (acc[t.sentiment] || 0) + 1;
+                    return acc;
+                  }, {} as Record<string, number>);
+                  const total = topics.length || 1;
+                  const positive = sentimentCounts['positive'] || 0;
+                  const negative = sentimentCounts['negative'] || 0;
+                  const neutral = sentimentCounts['neutral'] || 0;
+                  return (
+                    <div className="pie-chart">
+                      <svg viewBox="0 0 100 100" className="pie-svg">
+                        <circle cx="50" cy="50" r="40" fill="transparent" stroke="#e5e7eb" strokeWidth="20" />
+                        <circle
+                          cx="50" cy="50" r="40" fill="transparent"
+                          stroke="#52c41a" strokeWidth="20"
+                          strokeDasharray={`${(positive / total) * 251.2} 251.2`}
+                          strokeDashoffset="0"
+                          transform="rotate(-90 50 50)"
+                        />
+                        <circle
+                          cx="50" cy="50" r="40" fill="transparent"
+                          stroke="#ff4d4f" strokeWidth="20"
+                          strokeDasharray={`${(negative / total) * 251.2} 251.2`}
+                          strokeDashoffset={`-${(positive / total) * 251.2}`}
+                          transform="rotate(-90 50 50)"
+                        />
+                        <circle
+                          cx="50" cy="50" r="40" fill="transparent"
+                          stroke="#faad14" strokeWidth="20"
+                          strokeDasharray={`${(neutral / total) * 251.2} 251.2`}
+                          strokeDashoffset={`-${((positive + negative) / total) * 251.2}`}
+                          transform="rotate(-90 50 50)"
+                        />
+                      </svg>
+                      <div className="pie-legend">
+                        <span style={{ color: '#52c41a' }}>🟢 正面 {positive}</span>
+                        <span style={{ color: '#ff4d4f' }}>🔴 负面 {negative}</span>
+                        <span style={{ color: '#faad14' }}>🟡 中性 {neutral}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* 趋势分布 */}
+            <div className="stat-card">
+              <h3>📈 趋势分布</h3>
+              <div className="trend-chart">
+                {(() => {
+                  const trendCounts = topics.reduce((acc, t) => {
+                    acc[t.trend] = (acc[t.trend] || 0) + 1;
+                    return acc;
+                  }, {} as Record<string, number>);
+                  const max = Math.max(...Object.values(trendCounts), 1);
+                  return (
+                    <div className="bar-chart">
+                      {[
+                        { key: 'up', label: '📈 上升', color: '#52c41a' },
+                        { key: 'stable', label: '➡️ 稳定', color: '#faad14' },
+                        { key: 'down', label: '📉 下降', color: '#ff4d4f' }
+                      ].map(({ key, label, color }) => (
+                        <div key={key} className="bar-item">
+                          <span className="bar-label">{label}</span>
+                          <div className="bar-wrapper">
+                            <div
+                              className="bar-fill"
+                              style={{
+                                width: `${((trendCounts[key] || 0) / max) * 100}%`,
+                                background: color
+                              }}
+                            />
+                          </div>
+                          <span className="bar-value">{trendCounts[key] || 0}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* 热度排行 */}
+            <div className="stat-card full-width">
+              <h3>🔥 热度排行 TOP5</h3>
+              <div className="hot-ranking">
+                {topics
+                  .sort((a, b) => b.hotScore - a.hotScore)
+                  .slice(0, 5)
+                  .map((topic, idx) => (
+                    <div key={topic.id} className="rank-item" onClick={() => navigate(`/hot-topics/${topic.id}`)}>
+                      <span className="rank-number">{idx + 1}</span>
+                      <span className="rank-title">{topic.title}</span>
+                      <div className="rank-bar">
+                        <div
+                          className="rank-fill"
+                          style={{
+                            width: `${(topic.hotScore / 100) * 100}%`,
+                            background: topic.hotScore >= 80 ? '#ff4d4f' : topic.hotScore >= 60 ? '#faad14' : '#52c41a'
+                          }}
+                        />
+                      </div>
+                      <span className="rank-score">{topic.hotScore}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeTab === 'sources' && (

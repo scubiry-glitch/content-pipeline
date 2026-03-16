@@ -425,6 +425,9 @@ export const reportsApi = {
 
   delete: (id: string) =>
     client.delete(`/reports/${id}`) as Promise<void>,
+
+  export: (id: string, format: 'pdf' | 'docx' = 'pdf') =>
+    client.get(`/reports/${id}/export`, { params: { format }, responseType: 'blob' }) as Promise<Blob>,
 };
 
 // 合规检测相关类型 (v4.0)
