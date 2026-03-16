@@ -26,6 +26,9 @@ export function Layout() {
             <NavLink to="/hot-topics" className="nav-link">
               热点 (v3.4)
             </NavLink>
+            <NavLink to="/rss-sources" className="nav-link">
+              RSS (v3.4)
+            </NavLink>
             <NavLink to="/sentiment" className="nav-link">
               情感 (v3.2)
             </NavLink>
