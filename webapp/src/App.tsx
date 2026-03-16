@@ -13,6 +13,7 @@ import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
 import { Stage3Editor } from './pages/Stage3Editor';
 import { CopilotChat } from './pages/CopilotChat';
+import { Prediction } from './pages/Prediction';
 import './App.css';
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
             <Route path="compliance" element={<Compliance />} />
             <Route path="orchestrator" element={<Orchestrator />} />
             <Route path="copilot" element={<CopilotChat />} />
+            <Route path="prediction" element={<Prediction />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

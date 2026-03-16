@@ -537,4 +537,102 @@ export const stage3Api = {
   }) => client.post('/stage3/change-logs', data) as Promise<ChangeLog>,
 };
 
+// 内容预测相关类型 (v4.3)
+export interface PerformancePrediction {
+  id: string;
+  draftId: string;
+  overallScore: number;
+  confidence: number;
+  predictedViews: number;
+  predictedLikes: number;
+  predictedComments: number;
+  predictedShares: number;
+  predictedReadRate: number;
+  predictedEngagement: number;
+  predictedShareRate: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  riskWarnings: string[];
+  recommendedTimes: string[];
+  platformBreakdown: Record<string, number>;
+  createdAt: string;
+  title: string;
+  contentType: string;
+}
+
+export interface ScheduledPublish {
+  id: string;
+  draftId: string;
+  platform: string;
+  scheduledTime: string;
+  status: 'pending' | 'published' | 'cancelled';
+  predictionId?: string;
+  createdAt: string;
+}
+
+// 内容预测 API (v4.3)
+export const predictionApi = {
+  predictPerformance: (data: {
+    draftId: string;
+    title: string;
+    content: string;
+    contentType: string;
+    features?: Record<string, any>;
+  }) => client.post('/prediction/performance', data) as Promise<PerformancePrediction>,
+
+  getPredictions: (draftId: string) =>
+    client.get('/prediction/performance', { params: { draftId } }) as Promise<{ items: PerformancePrediction[] }>,
+
+  getPrediction: (id: string) =>
+    client.get(`/prediction/performance/${id}`) as Promise<PerformancePrediction>,
+
+  getScheduleRecommendation: (data: {
+    draftId: string;
+    title: string;
+    content: string;
+    contentType: string;
+    features?: Record<string, any>;
+  }) => client.post('/prediction/schedule', data) as Promise<{
+    draftId: string;
+    recommendedTimes: string[];
+    overallScore: number;
+    confidence: number;
+  }>,
+
+  analyzePlatforms: (data: { draftId: string; content: string; features?: Record<string, any> }) =>
+    client.post('/prediction/platforms', data) as Promise<{ items: Array<{ platform: string; score: number }> }>,
+
+  detectRisks: (data: {
+    draftId: string;
+    title: string;
+    content: string;
+    contentType: string;
+    features?: Record<string, any>;
+  }) => client.post('/prediction/risks', data) as Promise<{
+    draftId: string;
+    riskLevel: 'low' | 'medium' | 'high';
+    warnings: string[];
+    overallScore: number;
+  }>,
+
+  schedulePublish: (data: {
+    draftId: string;
+    platform: string;
+    scheduledTime: string;
+    predictionId?: string;
+  }) => client.post('/prediction/schedule/book', data) as Promise<ScheduledPublish>,
+
+  getSchedules: (draftId: string) =>
+    client.get('/prediction/schedule', { params: { draftId } }) as Promise<{ items: ScheduledPublish[] }>,
+
+  cancelSchedule: (id: string) =>
+    client.delete(`/prediction/schedule/${id}`) as Promise<void>,
+
+  getSimilarContentAnalysis: (contentType: string, topicCategory?: string) =>
+    client.get('/prediction/history/similar', { params: { contentType, topicCategory } }) as Promise<{
+      averageViews: number;
+      averageEngagement: number;
+      topPerformers: Array<{ title: string; views: number }>;
+    }>,
+};
+
 export default client;
