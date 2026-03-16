@@ -1723,10 +1723,10 @@
             <div id="dashboardView">
                 <!-- Tab Navigation -->
                 <div style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--gray-200); padding-bottom: 12px;">
-                    <button class="tab-btn active" data-tab="pipeline" onclick="switchDashboardTab('pipeline')">
+                    <button class="tab-btn active" data-tab="pipeline" id="tab-pipeline-btn">
                         <span class="icon">🔄</span> 流水线总览
                     </button>
-                    <button class="tab-btn" data-tab="tasks" onclick="switchDashboardTab('tasks')">
+                    <button class="tab-btn" data-tab="tasks" id="tab-tasks-btn">
                         <span class="icon">📋</span> 任务列表
                     </button>
                 </div>
@@ -1755,7 +1755,7 @@
 
                 <div class="pipeline-stages">
                     <!-- Stage 1: 选题策划 -->
-                    <div class="stage-card stage-1" data-stage="1" onclick="showStageDetail(1)">
+                    <div class="stage-card stage-1" data-stage="1" id="stage-card-1">
                         <div class="stage-header">
                             <div class="stage-icon">💡</div>
                             <div class="stage-info">
@@ -1791,7 +1791,7 @@
                     </div>
 
                     <!-- Stage 2: 深度研究 -->
-                    <div class="stage-card stage-2" data-stage="2" onclick="showStageDetail(2)">
+                    <div class="stage-card stage-2" data-stage="2" id="stage-card-2">
                         <div class="stage-header">
                             <div class="stage-icon">🔍</div>
                             <div class="stage-info">
@@ -1827,7 +1827,7 @@
                     </div>
 
                     <!-- Stage 3: 文稿生成 -->
-                    <div class="stage-card stage-3" data-stage="3" onclick="showStageDetail(3)">
+                    <div class="stage-card stage-3" data-stage="3" id="stage-card-3">
                         <div class="stage-header">
                             <div class="stage-icon">✍️</div>
                             <div class="stage-info">
@@ -1863,7 +1863,7 @@
                     </div>
 
                     <!-- Stage 4: 多态转换 -->
-                    <div class="stage-card stage-4" data-stage="4" onclick="showStageDetail(4)">
+                    <div class="stage-card stage-4" data-stage="4" id="stage-card-4">
                         <div class="stage-header">
                             <div class="stage-icon">🎯</div>
                             <div class="stage-info">
@@ -2590,6 +2590,12 @@
         });
 
         function setupEventListeners() {
+            // Dashboard tab buttons
+            var pipelineBtn = document.getElementById('tab-pipeline-btn');
+            if (pipelineBtn) pipelineBtn.addEventListener('click', function() { switchDashboardTab('pipeline'); });
+            var tasksBtn = document.getElementById('tab-tasks-btn');
+            if (tasksBtn) tasksBtn.addEventListener('click', function() { switchDashboardTab('tasks'); });
+
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -6735,7 +6741,7 @@
                             🔗
                         </button>
                         <button class="editor-toolbar-btn" onclick="insertMarkdown('```\n', '\n```')" title="代码块">
-                            {'{ }'}
+                            { }
                         </button>
                     </div>
 
