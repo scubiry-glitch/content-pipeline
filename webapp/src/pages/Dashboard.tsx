@@ -15,6 +15,7 @@ const QUICK_ACTIONS = [
 
 export function Dashboard() {
   const { tasks } = useTasks();
+  const navigate = useNavigate();
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
 
   const stats = {
@@ -70,6 +71,24 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="stat-value stat-completed">{stats.completed}</div>
           <div className="stat-label">已完成</div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="card">
+        <h2 className="card-title">⚡ 快捷操作</h2>
+        <div className="quick-actions-grid">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.label}
+              className="quick-action-btn"
+              style={{ '--action-color': action.color } as React.CSSProperties}
+              onClick={() => navigate(action.path)}
+            >
+              <span className="quick-action-icon">{action.icon}</span>
+              <span className="quick-action-label">{action.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 

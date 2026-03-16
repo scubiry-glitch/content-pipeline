@@ -85,6 +85,67 @@
   letter-spacing: 0.5px;
 }
 
+/* Quick Actions Grid - 快捷操作网格 */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border: 2px solid var(--linen);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--action-color, var(--terracotta));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.quick-action-btn:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--action-color, var(--terracotta));
+}
+
+.quick-action-btn:hover::before {
+  opacity: 1;
+}
+
+.quick-action-icon {
+  font-size: 32px;
+  line-height: 1;
+  transition: transform var(--transition);
+}
+
+.quick-action-btn:hover .quick-action-icon {
+  transform: scale(1.1);
+}
+
+.quick-action-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--soil);
+}
+
 /* Pipeline Grid - 陶土管道卡片 */
 .pipeline-grid {
   display: grid;
@@ -265,7 +326,8 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .pipeline-grid {
+  .pipeline-grid,
+  .quick-actions-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -276,7 +338,8 @@
 
 @media (max-width: 768px) {
   .stats-grid,
-  .pipeline-grid {
+  .pipeline-grid,
+  .quick-actions-grid {
     grid-template-columns: 1fr;
   }
 
