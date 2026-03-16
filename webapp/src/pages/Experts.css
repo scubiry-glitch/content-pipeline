@@ -521,6 +521,26 @@
   color: #22c55e;
 }
 
+.detail-stat .value.highlight {
+  color: #6366f1;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.detail-stat .value.success {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.detail-stat .value.warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.detail-stat.loading {
+  opacity: 0.6;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .experts-grid {

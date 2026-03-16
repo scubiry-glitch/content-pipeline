@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { expertsApi } from '../api/client';
-import type { Expert } from '../types';
+import { expertsApi, blueTeamApi, tasksApi } from '../api/client';
+import type { Expert, BlueTeamReview } from '../types';
 import './Experts.css';
 
 type ExpertAngle = 'challenger' | 'expander' | 'synthesizer';
@@ -34,6 +34,15 @@ export function Experts() {
     bio: '',
     status: 'active',
   });
+
+  // 专家活跃度统计
+  const [expertStats, setExpertStats] = useState<{
+    reviewCount: number;
+    acceptedCount: number;
+    rejectedCount: number;
+    participationRate: number;
+  } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
     loadExperts();
@@ -149,9 +158,57 @@ export function Experts() {
   };
 
   // 打开详情弹窗
-  const openDetailModal = (expert: Expert) => {
+  const openDetailModal = async (expert: Expert) => {
     setSelectedExpert(expert);
     setShowDetailModal(true);
+    await loadExpertStats(expert.id);
+  };
+
+  const loadExpertStats = async (expertId: string) => {
+    setStatsLoading(true);
+    try {
+      // 获取所有任务的评审数据
+      const tasksRes = await tasksApi.getAll({ limit: 100 });
+      let reviewCount = 0;
+      let acceptedCount = 0;
+      let rejectedCount = 0;
+
+      // 遍历任务获取评审
+      for (const task of tasksRes.items) {
+        if (task.status === 'reviewing' || task.status === 'completed') {
+          try {
+            const reviewsRes = await blueTeamApi.getReviews(task.id);
+            const expertReviews = reviewsRes.items.filter(
+              (r: BlueTeamReview) => r.expertId === expertId
+            );
+            reviewCount += expertReviews.length;
+            acceptedCount += expertReviews.filter((r: BlueTeamReview) =>
+              r.questions?.some((q: any) => q.status === 'accepted')
+            ).length;
+            rejectedCount += expertReviews.filter((r: BlueTeamReview) =>
+              r.questions?.some((q: any) => q.status === 'ignored')
+            ).length;
+          } catch (e) {
+            // 忽略错误
+          }
+        }
+      }
+
+      const participationRate = reviewCount > 0
+        ? Math.round((acceptedCount / reviewCount) * 100)
+        : 0;
+
+      setExpertStats({
+        reviewCount,
+        acceptedCount,
+        rejectedCount,
+        participationRate,
+      });
+    } catch (error) {
+      console.error('加载专家统计失败:', error);
+    } finally {
+      setStatsLoading(false);
+    }
   };
 
   // 重置表单
@@ -616,7 +673,31 @@ export function Experts() {
                     {selectedExpert.status === 'active' ? '🟢 活跃' : '⚪ 停用'}
                   </span>
                 </div>
-                {/* 这里可以添加更多统计，如参与评审次数等 */}
+
+                {statsLoading ? (
+                  <div className="detail-stat loading">
+                    <span className="label">加载统计中...</span>
+                  </div>
+                ) : expertStats ? (
+                  <>
+                    <div className="detail-stat">
+                      <span className="label">参与评审</span>
+                      <span className="value highlight">{expertStats.reviewCount} 次</span>
+                    </div>
+                    <div className="detail-stat">
+                      <span className="label">意见被采纳</span>
+                      <span className="value success">{expertStats.acceptedCount} 次</span>
+                    </div>
+                    <div className="detail-stat">
+                      <span className="label">意见被忽略</span>
+                      <span className="value warning">{expertStats.rejectedCount} 次</span>
+                    </div>
+                    <div className="detail-stat">
+                      <span className="label">采纳率</span>
+                      <span className="value highlight">{expertStats.participationRate}%</span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
             <div className="modal-footer">
