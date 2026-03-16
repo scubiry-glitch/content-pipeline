@@ -9,6 +9,9 @@ interface TasksContextType {
   fetchTasks: () => Promise<void>;
   createTask: (topic: string, formats: string[]) => Promise<Task>;
   refreshTask: (id: string) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  hideTask: (id: string) => Promise<void>;
+  unhideTask: (id: string) => Promise<void>;
 }
 
 const TasksContext = createContext<TasksContextType | undefined>(undefined);
@@ -51,6 +54,40 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const deleteTask = useCallback(async (id: string) => {
+    try {
+      await tasksApi.delete(id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      throw err;
+    }
+  }, []);
+
+  const hideTask = useCallback(async (id: string) => {
+    try {
+      await tasksApi.hide(id);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, is_hidden: true } : t))
+      );
+    } catch (err) {
+      console.error('Failed to hide task:', err);
+      throw err;
+    }
+  }, []);
+
+  const unhideTask = useCallback(async (id: string) => {
+    try {
+      await tasksApi.hide(id); // API toggle hide status
+      setTasks((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, is_hidden: false } : t))
+      );
+    } catch (err) {
+      console.error('Failed to unhide task:', err);
+      throw err;
+    }
+  }, []);
+
   // 自动刷新
   useEffect(() => {
     fetchTasks();
@@ -59,7 +96,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   }, [fetchTasks]);
 
   return (
-    <TasksContext.Provider value={{ tasks, loading, error, fetchTasks, createTask, refreshTask }}>
+    <TasksContext.Provider value={{ tasks, loading, error, fetchTasks, createTask, refreshTask, deleteTask, hideTask, unhideTask }}>
       {children}
     </TasksContext.Provider>
   );

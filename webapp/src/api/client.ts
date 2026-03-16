@@ -108,6 +108,40 @@ export const themesApi = {
 
   delete: (id: string) =>
     client.delete(`/assets/themes/${id}`) as Promise<void>,
+
+  togglePin: (id: string, isPinned: boolean) =>
+    client.post(`/assets/themes/${id}/pin`, { is_pinned: isPinned }) as Promise<AssetTheme>,
+};
+
+// 目录绑定相关类型
+export interface DirectoryBinding {
+  id: string;
+  name: string;
+  path: string;
+  theme_id?: string;
+  autoSync: boolean;
+  lastScannedAt?: string;
+  fileCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 目录绑定 API
+export const bindingsApi = {
+  getAll: () =>
+    client.get('/assets/bindings') as Promise<DirectoryBinding[]>,
+
+  create: (data: Partial<DirectoryBinding>) =>
+    client.post('/assets/bindings', data) as Promise<DirectoryBinding>,
+
+  update: (id: string, data: Partial<DirectoryBinding>) =>
+    client.put(`/assets/bindings/${id}`, data) as Promise<DirectoryBinding>,
+
+  delete: (id: string) =>
+    client.delete(`/assets/bindings/${id}`) as Promise<void>,
+
+  scan: (id: string) =>
+    client.post(`/assets/bindings/${id}/scan`) as Promise<{ scanned: number; added: number }>,
 };
 
 // 专家相关 API

@@ -72,3 +72,49 @@
   display: flex;
   gap: 8px;
 }
+
+.task-actions .btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.task-actions .btn-secondary {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  border-color: var(--gray-200);
+}
+
+.task-actions .btn-secondary:hover {
+  background: var(--gray-200);
+}
+
+.task-actions .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.task-actions .btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.task-actions .btn-warning {
+  background: #faad14;
+  color: white;
+}
+
+.task-actions .btn-warning:hover {
+  background: #ffc53d;
+}
+
+.task-actions .btn-danger {
+  background: #ff4d4f;
+  color: white;
+}
+
+.task-actions .btn-danger:hover {
+  background: #ff7875;
+}

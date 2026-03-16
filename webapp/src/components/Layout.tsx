@@ -47,6 +47,12 @@ export function Layout() {
             <NavLink to="/i18n" className="nav-link">
               国际化 (v4.5)
             </NavLink>
+            <NavLink to="/archive/hidden" className="nav-link">
+              隐藏任务
+            </NavLink>
+            <NavLink to="/archive/recycle-bin" className="nav-link">
+              回收站
+            </NavLink>
           </nav>
         </div>
       </header>

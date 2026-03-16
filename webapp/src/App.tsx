@@ -18,6 +18,8 @@ import { CopilotChat } from './pages/CopilotChat';
 import { Prediction } from './pages/Prediction';
 import { I18nManager } from './pages/I18nManager';
 import { RSSSources } from './pages/RSSSources';
+import { HiddenTasks } from './pages/HiddenTasks';
+import { RecycleBin } from './pages/RecycleBin';
 import './App.css';
 
 function App() {
@@ -43,6 +45,8 @@ function App() {
             <Route path="prediction" element={<Prediction />} />
             <Route path="i18n" element={<I18nManager />} />
             <Route path="rss-sources" element={<RSSSources />} />
+            <Route path="archive/hidden" element={<HiddenTasks />} />
+            <Route path="archive/recycle-bin" element={<RecycleBin />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

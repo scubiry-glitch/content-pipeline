@@ -284,3 +284,85 @@ export const STATUS_MAP: Record<TaskStatus, { text: string; className: string; s
   completed: { text: '已完成', className: 'badge-completed', stage: 4 },
   failed: { text: '失败', className: 'badge-failed', stage: -1 },
 };
+
+// ==================== Dashboard 类型 ====================
+
+export interface DashboardScores {
+  overallScore: number;
+  trend: string;
+  freshness: number;
+  credibility: number;
+  differentiation: number;
+  audienceMatch: number;
+}
+
+export interface HotTopicItem {
+  title: string;
+  score: number;
+  source: string;
+}
+
+export interface AlertItem {
+  type: 'freshness' | 'credibility' | 'differentiation' | 'audience';
+  severity: 'warning' | 'info' | 'error';
+  message: string;
+  suggestion: string;
+}
+
+export interface RSSSourceStatus {
+  name: string;
+  status: 'active' | 'error';
+  lastFetch: string;
+}
+
+export interface SuggestionItem {
+  area: string;
+  suggestion: string;
+  priority: 'high' | 'medium' | 'low';
+  impact: string;
+}
+
+export interface UserInterests {
+  interests: Record<string, number>;
+  topInterests: string[];
+}
+
+export interface SentimentData {
+  msi: number;
+  level: 'extreme_fear' | 'fear' | 'neutral' | 'greed' | 'extreme_greed';
+  change24h: number;
+  distribution: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  alerts: string[];
+}
+
+export interface RecommendationItem {
+  id: string;
+  title: string;
+  category: string;
+  score: number;
+  reason: string;
+  hotScore: number;
+}
+
+export interface DashboardData {
+  scores: DashboardScores;
+  hotTopics: HotTopicItem[];
+  alerts: AlertItem[];
+  rssSources: RSSSourceStatus[];
+  suggestions: SuggestionItem[];
+  userProfile: UserInterests;
+  sentiment: SentimentData;
+  recommendations: RecommendationItem[];
+}
+
+export interface ContentAnalysisResult {
+  score: number;
+  wordCount: number;
+  readingTime: number;
+  issues: string[];
+  suggestions: string[];
+}
