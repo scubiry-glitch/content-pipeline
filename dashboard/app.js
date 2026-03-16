@@ -39,6 +39,14 @@ const mockData = {
     userProfile: {
         interests: { Tech: 0.85, Finance: 0.6, AI: 0.9 },
         topInterests: ['AI', 'Tech', 'Finance']
+    },
+    // v3.2 新增：情感分析数据
+    sentiment: {
+        msi: 65,
+        level: 'greed',
+        change24h: +8,
+        distribution: { positive: 0.45, neutral: 0.35, negative: 0.20 },
+        alerts: []
     }
 };
 
@@ -49,6 +57,7 @@ function initDashboard() {
     renderHotTopics(mockData.hotTopics);
     renderRecommendations(mockData.recommendations);
     renderUserProfile(mockData.userProfile);
+    renderSentiment(mockData.sentiment);
     renderAlerts(mockData.alerts);
     renderRSSStatus(mockData.rssSources);
     renderSuggestions(mockData.suggestions);
@@ -308,6 +317,64 @@ function recordFeedback(topicId, action) {
             item.classList.add('liked');
         }
     }
+}
+
+// 渲染情感分析 (v3.2)
+function renderSentiment(sentiment) {
+    const container = document.getElementById('sentiment');
+    if (!container) return;
+
+    const levelNames = {
+        'extreme_fear': '极度恐慌',
+        'fear': '恐慌',
+        'neutral': '中性',
+        'greed': '贪婪',
+        'extreme_greed': '极度贪婪'
+    };
+
+    const levelColors = {
+        'extreme_fear': '#ff4d4f',
+        'fear': '#faad14',
+        'neutral': '#52c41a',
+        'greed': '#faad14',
+        'extreme_greed': '#ff4d4f'
+    };
+
+    container.innerHTML = `
+        <div class="sentiment-card">
+            <div class="msi-header">
+                <h4>市场情绪指数 (MSI)</h4>
+                <span class="msi-value" style="color: ${levelColors[sentiment.level]}">${sentiment.msi}</span>
+            </div>
+            <div class="msi-level">${levelNames[sentiment.level]}</div>
+            <div class="msi-change ${sentiment.change24h >= 0 ? 'up' : 'down'}">
+                ${sentiment.change24h >= 0 ? '↑' : '↓'} ${Math.abs(sentiment.change24h)}%
+            </div>
+            <div class="sentiment-distribution">
+                <div class="dist-bar">
+                    <span class="dist-label">正面</span>
+                    <div class="dist-progress">
+                        <div class="dist-fill positive" style="width: ${sentiment.distribution.positive * 100}%"></div>
+                    </div>
+                    <span class="dist-value">${(sentiment.distribution.positive * 100).toFixed(0)}%</span>
+                </div>
+                <div class="dist-bar">
+                    <span class="dist-label">中性</span>
+                    <div class="dist-progress">
+                        <div class="dist-fill neutral" style="width: ${sentiment.distribution.neutral * 100}%"></div>
+                    </div>
+                    <span class="dist-value">${(sentiment.distribution.neutral * 100).toFixed(0)}%</span>
+                </div>
+                <div class="dist-bar">
+                    <span class="dist-label">负面</span>
+                    <div class="dist-progress">
+                        <div class="dist-fill negative" style="width: ${sentiment.distribution.negative * 100}%"></div>
+                    </div>
+                    <span class="dist-value">${(sentiment.distribution.negative * 100).toFixed(0)}%</span>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // WebSocket连接（预留）

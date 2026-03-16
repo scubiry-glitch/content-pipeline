@@ -1663,6 +1663,10 @@
                     <span class="icon">👥</span>
                     专家库
                 </div>
+                <div class="nav-item" onclick="window.open('http://localhost:8080', '_blank')">
+                    <span class="icon">📊</span>
+                    质量仪表盘
+                </div>
                 <div class="nav-item" data-view="settings">
                     <span class="icon">⚙️</span>
                     设置
@@ -1712,6 +1716,35 @@
                     <div class="info-item">
                         <span class="info-label">平均完成时间</span>
                         <span class="info-value">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>📊 内容质量输入 (v3.0)</span>
+                    <a href="http://localhost:8080" target="_blank" style="font-size: 11px; color: #667eea; text-decoration: none;">打开 →</a>
+                </div>
+                <div class="quick-info">
+                    <div class="info-item" style="cursor: pointer;" onclick="showQualityInputStatus()">
+                        <span class="info-label">🕐 RSS源状态</span>
+                        <span class="info-value" id="rss-status-count" style="font-size: 11px;">24源正常</span>
+                    </div>
+                    <div class="info-item" style="cursor: pointer;" onclick="showQualityInputStatus()">
+                        <span class="info-label">🔥 热点话题</span>
+                        <span class="info-value" id="hot-topics-count">-</span>
+                    </div>
+                    <div class="info-item" style="cursor: pointer;" onclick="showQualityInputStatus()">
+                        <span class="info-label">📊 综合质量分</span>
+                        <span class="info-value" id="quality-score">-</span>
+                    </div>
+                    <div class="info-item" style="cursor: pointer;" onclick="showQualityInputStatus()">
+                        <span class="info-label">💡 智能推荐</span>
+                        <span class="info-value" id="recommend-count">v3.1已启用</span>
+                    </div>
+                    <div class="info-item" style="cursor: pointer;" onclick="showQualityInputStatus()">
+                        <span class="info-label">😊 情感分析</span>
+                        <span class="info-value" id="sentiment-status">v3.2已启用</span>
                     </div>
                 </div>
             </div>
@@ -1769,12 +1802,12 @@
                         <div class="stage-flow">
                             <div class="flow-item">
                                 <span class="flow-label">输入:</span>
-                                <span class="flow-value" id="stage1-input">用户选题/热点追踪</span>
+                                <span class="flow-value" id="stage1-input">RSS聚合/用户选题/热点追踪</span>
                             </div>
                             <div class="flow-arrow">↓</div>
                             <div class="flow-item">
                                 <span class="flow-label">加工:</span>
-                                <span class="flow-value" id="stage1-process">热点分析 → 竞品分析 → 评分排序</span>
+                                <span class="flow-value" id="stage1-process">RSS聚合 → 质量评估 → 热点分析 → 竞品分析 → 评分排序</span>
                             </div>
                             <div class="flow-arrow">↓</div>
                             <div class="flow-item">
@@ -2920,6 +2953,12 @@
                 toast.style.animation = 'slideOut 0.3s ease';
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
+        }
+
+        // v3.0 内容质量输入状态展示
+        function showQualityInputStatus() {
+            // 打开内容质量仪表盘
+            window.open('http://localhost:8080', '_blank');
         }
 
         // Loading overlay
@@ -5404,22 +5443,25 @@
                 name: '选题策划',
                 icon: '💡',
                 status: task.outline ? 'completed' : (task.status === 'planning' ? 'processing' : 'pending'),
-                input: '用户选题/热点追踪',
+                input: 'RSS聚合/用户选题/热点追踪',
                 output: task.outline
                     ? `大纲已生成${hasInsights ? ` | 洞见: ${outline.knowledgeInsights.length}` : ''}${hasAngles ? ` | 新角度: ${outline.novelAngles.length}` : ''}`
                     : '选题计划书 + 大纲',
                 process: hasInsights || hasAngles
-                    ? '知识库分析 → 洞见生成 → 新角度发现 → 大纲生成'
-                    : '热点分析 → 竞品分析 → 评分排序 → 大纲生成'
+                    ? 'RSS聚合 → 质量评估 → 知识库分析 → 洞见生成 → 新角度发现 → 大纲生成'
+                    : 'RSS聚合 → 质量评估 → 热点分析 → 竞品分析 → 评分排序 → 大纲生成'
             });
 
+            const hasDataReview = task.research_data?.annotations?.length > 0;
             stages.push({
                 name: '深度研究',
                 icon: '🔍',
                 status: task.research_data ? 'completed' : (task.status === 'researching' ? 'processing' : (task.outline ? 'pending' : 'waiting')),
                 input: '大纲 + 数据需求清单',
-                output: task.research_data ? `洞察: ${task.research_data.insights?.length || 0} 条` : '数据包 + 洞察报告',
-                process: '数据采集 → 清洗 → 分析 → 洞察提炼 → 可视化'
+                output: task.research_data
+                    ? `洞察: ${task.research_data.insights?.length || 0} 条${hasDataReview ? ' | 已审核' : ''}`
+                    : '数据包 + 洞察报告',
+                process: '数据采集 → 信源分级 → 交叉验证 → 数据审核 → 洞察提炼'
             });
 
             const hasDraft = task.draft_versions?.length > 0;
@@ -5755,7 +5797,18 @@
                 competitorAnalysis: 5,        // 竞品分析数量
                 hotTopicDays: 7,              // 热点追踪天数
                 aiContinuation: true,         // 启用AI续写建议
-                knowledgeBaseMatch: 0.7       // 知识库匹配阈值 (0-1)
+                knowledgeBaseMatch: 0.7,      // 知识库匹配阈值 (0-1)
+                // v3.0 内容质量输入体系
+                enableQualityInput: true,     // 启用质量输入体系
+                qualityDimensions: {          // 质量评估维度
+                    freshness: true,
+                    credibility: true,
+                    differentiation: true,
+                    audienceMatch: true
+                },
+                rssCategories: ['tech', 'finance', 'research'],  // RSS源类别
+                enableSentimentAnalysis: true, // 启用情感分析
+                enableSmartRecommend: true     // 启用智能推荐
             },
             2: {
                 title: '深度研究配置',
@@ -5860,7 +5913,13 @@
                     scoringWeights: { timeliness: 30, depth: 25, interest: 25, differentiation: 20 },
                     targetAudience: 'researchers', desiredDepth: 'comprehensive', outlineDepth: 3,
                     hotTopicDays: 7, competitorAnalysis: 5, knowledgeBaseMatch: 0.7,
-                    enableKnowledgeBase: true, generateNovelAngles: true, aiContinuation: true
+                    enableKnowledgeBase: true, generateNovelAngles: true, aiContinuation: true,
+                    // v3.0 内容质量输入体系
+                    enableQualityInput: true,
+                    qualityDimensions: { freshness: true, credibility: true, differentiation: true, audienceMatch: true },
+                    rssCategories: ['tech', 'finance', 'research'],
+                    enableSentimentAnalysis: true,
+                    enableSmartRecommend: true
                 },
                 2: {
                     maxSearchUrls: 20, enableWebSearch: true, analysisDepth: 'comprehensive',
@@ -5964,6 +6023,66 @@
                                     <label class="form-label">竞品分析数量</label>
                                     <input type="number" class="form-input" id="cfg-competitor" value="${safeConfig.competitorAnalysis}" min="0" max="10">
                                     <span style="font-size: 11px; opacity: 0.7;">分析同类主题的报告数量</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stage-config-section">
+                            <div class="stage-config-title" style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>📊 内容质量输入 (v3.0)</span>
+                                <a href="http://localhost:8080" target="_blank" style="font-size: 11px; color: #667eea; text-decoration: none;">打开仪表盘 →</a>
+                            </div>
+                            <div class="config-form">
+                                <div class="form-group">
+                                    <label class="form-checkbox">
+                                        <input type="checkbox" id="cfg-quality-input" ${safeConfig.enableQualityInput !== false ? 'checked' : ''}>
+                                        <span>启用质量输入体系</span>
+                                    </label>
+                                    <span style="font-size: 11px; opacity: 0.7; display: block; margin-top: 4px;">RSS聚合 + 质量评估 + 情感分析</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">质量评估维度</label>
+                                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                        <label class="form-checkbox" style="font-size: 12px;">
+                                            <input type="checkbox" id="cfg-quality-freshness" ${(safeConfig.qualityDimensions?.freshness !== false) ? 'checked' : ''}>
+                                            <span>🕐 时效性 - 发布时间、更新频率</span>
+                                        </label>
+                                        <label class="form-checkbox" style="font-size: 12px;">
+                                            <input type="checkbox" id="cfg-quality-credibility" ${(safeConfig.qualityDimensions?.credibility !== false) ? 'checked' : ''}>
+                                            <span>✅ 可信度 - 来源权威性、交叉验证</span>
+                                        </label>
+                                        <label class="form-checkbox" style="font-size: 12px;">
+                                            <input type="checkbox" id="cfg-quality-differentiation" ${(safeConfig.qualityDimensions?.differentiation !== false) ? 'checked' : ''}>
+                                            <span>🎯 差异化 - 竞品对比、原创性</span>
+                                        </label>
+                                        <label class="form-checkbox" style="font-size: 12px;">
+                                            <input type="checkbox" id="cfg-quality-audience" ${(safeConfig.qualityDimensions?.audienceMatch !== false) ? 'checked' : ''}>
+                                            <span>👥 受众匹配 - 难度适配、平台适配</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">RSS源类别</label>
+                                    <select class="form-select" id="cfg-rss-categories" multiple style="height: 80px;">
+                                        <option value="tech" ${(safeConfig.rssCategories || []).includes('tech') ? 'selected' : ''}>科技 (36氪、机器之心等)</option>
+                                        <option value="finance" ${(safeConfig.rssCategories || []).includes('finance') ? 'selected' : ''}>财经 (财新、第一财经等)</option>
+                                        <option value="research" ${(safeConfig.rssCategories || []).includes('research') ? 'selected' : ''}>研究 (艾瑞、易观等)</option>
+                                        <option value="industry" ${(safeConfig.rssCategories || []).includes('industry') ? 'selected' : ''}>行业 (虎嗅、雷锋网等)</option>
+                                    </select>
+                                    <span style="font-size: 11px; opacity: 0.7;">按住Ctrl多选，24个RSS源</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-checkbox">
+                                        <input type="checkbox" id="cfg-sentiment-analysis" ${safeConfig.enableSentimentAnalysis !== false ? 'checked' : ''}>
+                                        <span>启用情感分析 (v3.2)</span>
+                                    </label>
+                                    <span style="font-size: 11px; opacity: 0.7; display: block; margin-top: 4px;">MSI市场情绪指数、情感分布</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-checkbox">
+                                        <input type="checkbox" id="cfg-smart-recommend" ${safeConfig.enableSmartRecommend !== false ? 'checked' : ''}>
+                                        <span>启用智能推荐 (v3.1)</span>
+                                    </label>
+                                    <span style="font-size: 11px; opacity: 0.7; display: block; margin-top: 4px;">基于用户画像的个性化推荐</span>
                                 </div>
                             </div>
                         </div>
