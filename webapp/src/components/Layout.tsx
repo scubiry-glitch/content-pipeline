@@ -41,6 +41,9 @@ export function Layout() {
             <NavLink to="/copilot" className="nav-link">
               Copilot (v4.4)
             </NavLink>
+            <NavLink to="/i18n" className="nav-link">
+              国际化 (v4.5)
+            </NavLink>
           </nav>
         </div>
       </header>

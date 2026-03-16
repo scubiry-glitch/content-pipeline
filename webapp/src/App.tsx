@@ -14,6 +14,7 @@ import { Orchestrator } from './pages/Orchestrator';
 import { Stage3Editor } from './pages/Stage3Editor';
 import { CopilotChat } from './pages/CopilotChat';
 import { Prediction } from './pages/Prediction';
+import { I18nManager } from './pages/I18nManager';
 import './App.css';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
             <Route path="orchestrator" element={<Orchestrator />} />
             <Route path="copilot" element={<CopilotChat />} />
             <Route path="prediction" element={<Prediction />} />
+            <Route path="i18n" element={<I18nManager />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

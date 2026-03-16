@@ -635,4 +635,157 @@ export const predictionApi = {
     }>,
 };
 
+// 国际化相关类型 (v4.5)
+export interface Translation {
+  id: string;
+  sourceId: string;
+  sourceType: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  sourceContent: string;
+  translatedContent: string;
+  status: 'pending' | 'completed' | 'reviewing' | 'rejected';
+  createdBy: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface Terminology {
+  id: string;
+  term: string;
+  language: string;
+  definition?: string;
+  context?: string;
+  translations: Record<string, string>;
+  category?: string;
+  tags?: string[];
+  sourceUrl?: string;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface TranslationMemory {
+  id: string;
+  sourceText: string;
+  targetText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  sourceType?: string;
+  similarity?: number;
+  usageCount: number;
+  createdAt: string;
+}
+
+// 国际化 API (v4.5)
+export const i18nApi = {
+  // 翻译管理
+  machineTranslate: (data: {
+    content: string;
+    sourceLanguage?: string;
+    targetLanguage: string;
+    useMemory?: boolean;
+  }) => client.post('/i18n/translations/machine', data) as Promise<{
+    sourceContent: string;
+    translatedContent: string;
+    sourceLanguage: string;
+    targetLanguage: string;
+    fromMemory: boolean;
+    terminologyReplacements?: Array<{ source: string; target: string }>;
+  }>,
+
+  getTranslations: (sourceId: string, sourceType: string) =>
+    client.get('/i18n/translations', { params: { sourceId, sourceType } }) as Promise<{ items: Translation[] }>,
+
+  getTranslation: (id: string) =>
+    client.get(`/i18n/translations/${id}`) as Promise<Translation>,
+
+  createTranslation: (data: {
+    sourceId: string;
+    sourceType: string;
+    sourceLanguage?: string;
+    targetLanguage: string;
+    sourceContent: string;
+    createdBy?: string;
+  }) => client.post('/i18n/translations', data) as Promise<Translation>,
+
+  batchCreateTranslations: (data: {
+    sourceId: string;
+    sourceType: string;
+    sourceContent: string;
+    targetLanguages: string[];
+    createdBy?: string;
+  }) => client.post('/i18n/translations/batch', data) as Promise<{ items: Translation[] }>,
+
+  updateTranslation: (id: string, data: Partial<Translation>) =>
+    client.patch(`/i18n/translations/${id}`, data) as Promise<Translation>,
+
+  getTranslationStats: () =>
+    client.get('/i18n/translations/stats') as Promise<{
+      totalTranslations: number;
+      totalTerminology: number;
+      totalMemoryEntries: number;
+      supportedLanguages: number;
+      byLanguage: Record<string, number>;
+      byType: Record<string, number>;
+    }>,
+
+  // 术语库
+  searchTerminology: (q: string, language?: string, category?: string) =>
+    client.get('/i18n/terminology/search', { params: { q, language, category } }) as Promise<{ items: Terminology[] }>,
+
+  getTerminology: (term: string, language: string, category?: string) =>
+    client.get(`/i18n/terminology/${encodeURIComponent(term)}`, { params: { language, category } }) as Promise<Terminology>,
+
+  getTermsByCategory: (category: string, language?: string) =>
+    client.get(`/i18n/terminology/category/${category}`, { params: { language } }) as Promise<{ items: Terminology[] }>,
+
+  getTermTranslation: (term: string, sourceLanguage: string, targetLanguage: string, category?: string) =>
+    client.get(`/i18n/terminology/${encodeURIComponent(term)}/translate`, {
+      params: { sourceLanguage, targetLanguage, category }
+    }) as Promise<{ term: string; translation: string }>,
+
+  createTerminology: (data: {
+    term: string;
+    language: string;
+    definition?: string;
+    context?: string;
+    translations: Record<string, string>;
+    category?: string;
+    tags?: string[];
+    sourceUrl?: string;
+    notes?: string;
+    createdBy?: string;
+  }) => client.post('/i18n/terminology', data) as Promise<Terminology>,
+
+  // 语言设置
+  getLanguages: () =>
+    client.get('/i18n/languages') as Promise<{ items: Array<{ code: string; name: string; nativeName: string; isEnabled: boolean }> }>,
+
+  getDefaultLanguage: () =>
+    client.get('/i18n/languages/default') as Promise<{ code: string; name: string; nativeName: string }>,
+
+  getLanguage: (code: string) =>
+    client.get(`/i18n/languages/${code}`) as Promise<{ code: string; name: string; nativeName: string; isEnabled: boolean }>,
+
+  updateLanguage: (code: string, data: { isEnabled?: boolean; isDefault?: boolean }) =>
+    client.patch(`/i18n/languages/${code}`, data) as Promise<{ code: string; name: string; nativeName: string; isEnabled: boolean }>,
+
+  // 翻译记忆库
+  searchTranslationMemory: (params: {
+    text: string;
+    sourceLanguage: string;
+    targetLanguage: string;
+    minSimilarity?: number;
+  }) => client.get('/i18n/memory/search', { params }) as Promise<{ items: TranslationMemory[] }>,
+
+  addTranslationMemory: (data: {
+    sourceText: string;
+    targetText: string;
+    sourceLanguage: string;
+    targetLanguage: string;
+    sourceType?: string;
+  }) => client.post('/i18n/memory', data) as Promise<TranslationMemory>,
+};
+
 export default client;
