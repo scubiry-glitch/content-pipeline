@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { reportsApi, type Report, type ReportMatch } from '../api/client';
+import { reportsApi, tasksApi, type Report, type ReportMatch, type Task } from '../api/client';
 import './ReportDetail.css';
 
 export function ReportDetail() {
@@ -10,7 +10,9 @@ export function ReportDetail() {
   const [matches, setMatches] = useState<ReportMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'quality' | 'matches'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'quality' | 'matches' | 'citations'>('overview');
+  const [citations, setCitations] = useState<Task[]>([]);
+  const [citationsLoading, setCitationsLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -21,6 +23,9 @@ export function ReportDetail() {
   useEffect(() => {
     if (id && activeTab === 'matches' && matches.length === 0) {
       loadMatches();
+    }
+    if (id && activeTab === 'citations' && citations.length === 0) {
+      loadCitations();
     }
   }, [id, activeTab]);
 
@@ -46,6 +51,24 @@ export function ReportDetail() {
       console.error('Failed to load matches:', error);
     } finally {
       setMatchesLoading(false);
+    }
+  };
+
+  const loadCitations = async () => {
+    if (!id) return;
+    setCitationsLoading(true);
+    try {
+      // 获取所有任务并筛选引用了该研报的任务
+      const response = await tasksApi.getAll({ limit: 100 });
+      const tasksWithReport = response.items.filter((task: Task) =>
+        task.report_ids?.includes(id) ||
+        task.references?.some((ref: any) => ref.reportId === id)
+      );
+      setCitations(tasksWithReport);
+    } catch (error) {
+      console.error('Failed to load citations:', error);
+    } finally {
+      setCitationsLoading(false);
     }
   };
 
@@ -110,6 +133,9 @@ export function ReportDetail() {
         </button>
         <button className={`tab ${activeTab === 'matches' ? 'active' : ''}`} onClick={() => setActiveTab('matches')}>
           🔗 智能匹配
+        </button>
+        <button className={`tab ${activeTab === 'citations' ? 'active' : ''}`} onClick={() => setActiveTab('citations')}>
+          📚 引用统计 ({citations.length})
         </button>
       </div>
 
@@ -220,6 +246,65 @@ export function ReportDetail() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'citations' && (
+          <div className="citations-panel">
+            {citationsLoading ? (
+              <div className="loading-state">加载引用数据中...</div>
+            ) : (
+              <>
+                <div className="citations-summary">
+                  <div className="summary-card">
+                    <div className="summary-value">{citations.length}</div>
+                    <div className="summary-label">引用次数</div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-value">
+                      {citations.filter(t => t.status === 'completed').length}
+                    </div>
+                    <div className="summary-label">已完成任务</div>
+                  </div>
+                  <div className="summary-card">
+                    <div className="summary-value">
+                      {citations.filter(t => ['planning', 'researching', 'writing'].includes(t.status)).length}
+                    </div>
+                    <div className="summary-label">进行中任务</div>
+                  </div>
+                </div>
+
+                {citations.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">📚</div>
+                    <div className="empty-title">暂无引用记录</div>
+                    <p>该研报尚未被任何任务引用</p>
+                  </div>
+                ) : (
+                  <div className="citations-list">
+                    <h3>引用该研报的任务</h3>
+                    {citations.map((task) => (
+                      <div key={task.id} className="citation-card">
+                        <div className="citation-header">
+                          <h4 className="citation-title">{task.topic}</h4>
+                          <span className={`status-badge ${task.status}`}>{task.status}</span>
+                        </div>
+                        <div className="citation-meta">
+                          <span>阶段: {task.current_stage || '-'}</span>
+                          <span>进度: {task.progress}%</span>
+                          <span>创建: {new Date(task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div className="citation-actions">
+                          <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-link">
+                            查看任务 →
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
