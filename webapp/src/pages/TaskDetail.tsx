@@ -100,6 +100,14 @@ export function TaskDetail() {
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState('');
 
+  // 外部链接添加状态
+  const [showAddLinkModal, setShowAddLinkModal] = useState(false);
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+
+  // 操作加载状态
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   useEffect(() => {
     if (id) {
       loadTask();
@@ -342,6 +350,76 @@ export function TaskDetail() {
     }
   };
 
+  // 确认大纲并继续
+  const handleConfirmOutline = async () => {
+    setActionLoading('confirm-outline');
+    try {
+      await tasksApi.confirmOutline(id!);
+      alert('大纲已确认，开始研究阶段');
+      loadTask();
+    } catch (error) {
+      console.error('确认大纲失败:', error);
+      alert('确认大纲失败，请重试');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // 重做文稿生成
+  const handleRedoWriting = async () => {
+    if (!confirm('确定要重做文稿生成吗？这将重新生成初稿，之前的版本将被删除。')) return;
+    setActionLoading('redo-writing');
+    try {
+      await tasksApi.redoStage(id!, 'writing');
+      alert('文稿生成重做已启动，请稍后刷新查看结果');
+      loadTask();
+    } catch (error) {
+      console.error('重做文稿生成失败:', error);
+      alert('操作失败');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // 触发研究采集
+  const handleTriggerResearch = async () => {
+    if (!confirm('确定要启动深度研究采集吗？这将执行网页搜索和素材检索。')) return;
+    setActionLoading('trigger-research');
+    try {
+      await tasksApi.redoStage(id!, 'research');
+      alert('深度研究采集已启动，请稍后刷新查看结果');
+      loadTask();
+    } catch (error) {
+      console.error('启动研究采集失败:', error);
+      alert('操作失败');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // 添加外部链接
+  const handleAddExternalLink = async () => {
+    if (!newLinkUrl.trim() || !newLinkTitle.trim()) {
+      alert('请填写链接标题和URL');
+      return;
+    }
+    setActionLoading('add-link');
+    try {
+      await tasksApi.update(id!, {
+        external_links: [...(task?.external_links || []), { title: newLinkTitle, url: newLinkUrl }]
+      });
+      setShowAddLinkModal(false);
+      setNewLinkUrl('');
+      setNewLinkTitle('');
+      loadTask();
+    } catch (error) {
+      console.error('添加外部链接失败:', error);
+      alert('添加失败');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // 辅助函数
   const getStageProgress = (status: string) => {
     const stageMap: Record<string, number> = {
@@ -574,8 +652,12 @@ export function TaskDetail() {
             <h3 className="card-title">📝 文章大纲</h3>
             <div className="card-actions">
               {task.status === 'outline_pending' && (
-                <button className="btn btn-success" onClick={() => tasksApi.confirmOutline(id!)}>
-                  ✓ 确认大纲
+                <button
+                  className="btn btn-success"
+                  onClick={handleConfirmOutline}
+                  disabled={actionLoading === 'confirm-outline'}
+                >
+                  {actionLoading === 'confirm-outline' ? '确认中...' : '✓ 确认大纲并继续'}
                 </button>
               )}
               <button className="btn btn-primary" onClick={handleEditOutline}>
@@ -1154,6 +1236,38 @@ export function TaskDetail() {
 
         {activeTab === 'research' && (
           <div className="tab-panel research-panel">
+            {/* 操作按钮区 */}
+            <div className="info-card actions-card">
+              <h3 className="card-title">⚡ 研究操作</h3>
+              <div className="research-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={handleTriggerResearch}
+                  disabled={actionLoading === 'trigger-research'}
+                >
+                  {actionLoading === 'trigger-research' ? '采集中...' : '🔄 启动研究采集'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => tasksApi.redoStage(id!, 'research')}
+                >
+                  🔄 重做深度研究
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowAddLinkModal(true)}
+                >
+                  ➕ 添加外部链接
+                </button>
+              </div>
+              {task.research_data?.searchStats && (
+                <div className="search-stats">
+                  <span>📊 网页来源: {task.research_data.searchStats.webSources || 0}</span>
+                  <span>📁 素材来源: {task.research_data.searchStats.assetSources || 0}</span>
+                </div>
+              )}
+            </div>
+
             {task.research_data ? (
               <div className="research-content">
                 {/* 研究洞察 */}
