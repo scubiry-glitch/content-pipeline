@@ -13,7 +13,7 @@
    ✓         ✓         ✓         ⬜         ⬜         ⬜
 ```
 
-**当前阶段**: v3.0 第四轮迭代完成 (DashboardUI 可视化界面)
+**当前阶段**: v3.0 第五轮迭代完成 (ContentGenerationIntegration 内容生成联动)
 
 ---
 
@@ -22,7 +22,7 @@
 | 维度 | 指标 | 现状 | 目标 |
 |------|------|------|------|
 | **产品** | 功能规格完成度 | 80% | 100% |
-| **技术** | 核心测试通过率 | ✅ 79/79 | 100% |
+| **技术** | 核心测试通过率 | ✅ 97/97 | 100% |
 | **运营** | SOP文档化 | ✅ 完成 | 100% |
 | **进度** | Demo里程碑 | ⬜ 3/19 | 准时 |
 
@@ -69,6 +69,7 @@
 | AudienceMatcher | `content-pipeline/audience-matcher.test.ts` | 21/21 ✅ | ✅ 新增 |
 | QualityDashboard | `content-pipeline/quality-dashboard.test.ts` | 22/22 ✅ | ✅ 新增 |
 | **DashboardUI** | `content-pipeline/dashboard/` | **14/14 ✅** | 🆕 **新增UI** |
+| **ContentGenerationIntegration** | `content-pipeline/content-generation-integration.test.ts` | **18/18 ✅** | 🆕 **新增** |
 | extractTableName | `content-pipeline/pipeline.test.ts` | 5/5 ✅ | ✅ 稳定 |
 | 连接池 | `content-pipeline/pool.ts` | 集成 | ✅ 可用 |
 
@@ -96,6 +97,7 @@
 - [第二轮](https://github.com/scubiry-glitch/content-pipeline/commit/341592c): AudienceMatcher + 改进 (21 tests)
 - [第三轮](https://github.com/scubiry-glitch/content-pipeline/commit/182195d): QualityDashboard + RSS集成 + 流水线联动 (22 tests)
 - [第四轮](https://github.com/scubiry-glitch/content-pipeline/commit/1407f72): DashboardUI 可视化界面 (14 tests)
+- [第五轮](https://github.com/scubiry-glitch/content-pipeline/commit/05882eb): ContentGenerationIntegration 内容生成联动 (18 tests)
 
 ### 阻塞项
 | 问题 | 状态 | 负责人 |
