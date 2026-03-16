@@ -1,0 +1,449 @@
+.stage3-editor {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.editor-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.save-status {
+  font-size: 13px;
+  color: #52c41a;
+}
+
+.save-status.saving {
+  color: #faad14;
+}
+
+.editor-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e8e8e8;
+  padding-bottom: 8px;
+}
+
+.tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: #f5f5f5;
+}
+
+.tab.active {
+  background: #1890ff;
+  color: white;
+}
+
+.editor-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  min-height: 500px;
+}
+
+/* Edit Panel */
+.edit-panel {
+  padding: 20px;
+}
+
+.content-editor {
+  width: 100%;
+  min-height: 400px;
+  padding: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.8;
+  resize: vertical;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.content-editor:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+.editor-help {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}
+
+/* Annotations Panel */
+.annotations-panel {
+  padding: 20px;
+}
+
+.annotations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.annotation-card {
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  background: #fafafa;
+}
+
+.annotation-type-comment {
+  border-left-color: #1890ff;
+}
+
+.annotation-type-suggestion {
+  border-left-color: #faad14;
+}
+
+.annotation-type-issue {
+  border-left-color: #ff4d4f;
+}
+
+.annotation-type-praise {
+  border-left-color: #52c41a;
+}
+
+.annotation-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.annotation-type {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: white;
+}
+
+.annotation-type-comment {
+  background: #1890ff;
+}
+
+.annotation-type-suggestion {
+  background: #faad14;
+}
+
+.annotation-type-issue {
+  background: #ff4d4f;
+}
+
+.annotation-type-praise {
+  background: #52c41a;
+}
+
+.annotation-author {
+  font-size: 13px;
+  color: #666;
+}
+
+.annotation-time {
+  font-size: 12px;
+  color: #999;
+  margin-left: auto;
+}
+
+.annotation-text {
+  font-style: italic;
+  color: #666;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+}
+
+.annotation-comment {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.annotation-suggestion {
+  font-size: 13px;
+  color: #1890ff;
+  padding: 8px;
+  background: #e6f7ff;
+  border-radius: 4px;
+}
+
+.annotation-suggestion .label {
+  font-weight: 500;
+}
+
+.annotation-actions {
+  margin-top: 12px;
+}
+
+/* Versions Panel */
+.versions-panel {
+  padding: 20px;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.version-card {
+  padding: 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: white;
+}
+
+.version-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.version-name {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.version-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.version-badge.latest {
+  background: #52c41a;
+  color: white;
+}
+
+.version-badge.auto {
+  background: #d9d9d9;
+  color: #666;
+}
+
+.version-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 12px;
+}
+
+.version-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* History Panel */
+.history-panel {
+  padding: 20px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.history-icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-content {
+  flex: 1;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.change-type {
+  font-weight: 500;
+  font-size: 13px;
+  color: #1890ff;
+}
+
+.change-author {
+  font-size: 13px;
+  color: #666;
+}
+
+.change-time {
+  font-size: 12px;
+  color: #999;
+  margin-left: auto;
+}
+
+.history-summary {
+  font-size: 14px;
+  color: #333;
+}
+
+/* Annotation Modal */
+.annotation-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.annotation-modal {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.annotation-modal h3 {
+  margin: 0 0 16px 0;
+}
+
+.selected-text-preview {
+  font-style: italic;
+  color: #666;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #d9d9d9;
+  background: white;
+}
+
+.btn:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-primary {
+  background: #1890ff;
+  color: white;
+  border-color: #1890ff;
+}
+
+.btn-primary:hover {
+  background: #40a9ff;
+  color: white;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+  border-color: #d9d9d9;
+}
+
+.btn-secondary:hover {
+  background: #e8e8e8;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}

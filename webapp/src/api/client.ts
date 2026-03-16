@@ -426,4 +426,115 @@ export const orchestratorApi = {
     client.post('/orchestrator/queue', data) as Promise<TaskSchedule>,
 };
 
+// Stage3 文稿增强相关类型 (v4.2)
+export interface Annotation {
+  id: string;
+  draftId: string;
+  versionId?: string;
+  type: 'comment' | 'suggestion' | 'issue' | 'praise';
+  startOffset: number;
+  endOffset: number;
+  selectedText: string;
+  comment?: string;
+  suggestion?: string;
+  status: 'open' | 'resolved' | 'rejected';
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface Version {
+  id: string;
+  draftId: string;
+  name: string;
+  content: string;
+  createdBy: string;
+  createdAt: string;
+  autoSave: boolean;
+}
+
+export interface ChangeLog {
+  id: string;
+  draftId: string;
+  versionFrom?: string;
+  versionTo?: string;
+  changeType: 'edit' | 'rewrite' | 'merge' | 'split' | 'annotate';
+  changeSummary: string;
+  changesDetail?: any;
+  changedBy: string;
+  changedAt: string;
+}
+
+// Stage3 文稿增强 API (v4.2)
+export const stage3Api = {
+  // 标注相关
+  getAnnotations: (draftId: string, versionId?: string) =>
+    client.get('/stage3/annotations', { params: { draftId, versionId } }) as Promise<{ items: Annotation[] }>,
+
+  createAnnotation: (data: {
+    draftId: string;
+    versionId?: string;
+    type: string;
+    startOffset: number;
+    endOffset: number;
+    selectedText: string;
+    comment?: string;
+    suggestion?: string;
+    createdBy?: string;
+  }) => client.post('/stage3/annotations', data) as Promise<Annotation>,
+
+  updateAnnotation: (id: string, data: { status?: string; comment?: string; suggestion?: string }) =>
+    client.patch(`/stage3/annotations/${id}`, data) as Promise<Annotation>,
+
+  deleteAnnotation: (id: string) =>
+    client.delete(`/stage3/annotations/${id}`) as Promise<void>,
+
+  getAnnotationStats: (draftId: string) =>
+    client.get('/stage3/annotations/stats', { params: { draftId } }) as Promise<{
+      total: number;
+      open: number;
+      resolved: number;
+      byType: Record<string, number>;
+    }>,
+
+  // 版本相关
+  getVersions: (draftId: string) =>
+    client.get('/stage3/versions', { params: { draftId } }) as Promise<{ items: Version[] }>,
+
+  createVersion: (data: { draftId: string; name: string; content: string; createdBy?: string }) =>
+    client.post('/stage3/versions', data) as Promise<Version>,
+
+  autoSave: (draftId: string, content: string, createdBy?: string) =>
+    client.post('/stage3/versions/auto-save', { draftId, content, createdBy }) as Promise<Version>,
+
+  getVersion: (id: string) =>
+    client.get(`/stage3/versions/${id}`) as Promise<Version>,
+
+  deleteVersion: (id: string) =>
+    client.delete(`/stage3/versions/${id}`) as Promise<void>,
+
+  compareVersions: (id1: string, id2: string) =>
+    client.get(`/stage3/versions/${id1}/compare/${id2}`) as Promise<{
+      version1: Version;
+      version2: Version;
+      differences: Array<{ type: string; position: number; text1: string; text2: string }>;
+    }>,
+
+  // 修改历史
+  getChangeLogs: (draftId: string, limit?: number) =>
+    client.get('/stage3/change-logs', { params: { draftId, limit } }) as Promise<{ items: ChangeLog[] }>,
+
+  getChangeLog: (id: string) =>
+    client.get(`/stage3/change-logs/${id}`) as Promise<ChangeLog>,
+
+  logChange: (data: {
+    draftId: string;
+    versionFrom?: string;
+    versionTo?: string;
+    changeType: string;
+    changeSummary: string;
+    changesDetail?: any;
+    changedBy: string;
+  }) => client.post('/stage3/change-logs', data) as Promise<ChangeLog>,
+};
+
 export default client;

@@ -11,6 +11,7 @@ import { HotTopics } from './pages/HotTopics';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
+import { Stage3Editor } from './pages/Stage3Editor';
 import './App.css';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="tasks/:id" element={<TaskDetail />} />
+            <Route path="tasks/:id/edit" element={<Stage3Editor />} />
             <Route path="assets" element={<Assets />} />
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />

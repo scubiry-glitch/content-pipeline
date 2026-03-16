@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { TaskList } from '../components/TaskList';
+import { CreateTaskModal, type CreateTaskData } from '../components/CreateTaskModal';
 import { useTasks } from '../contexts/TasksContext';
 import './Tasks.css';
 
@@ -18,17 +19,20 @@ export function Tasks() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { createTask } = useTasks();
 
-  const [newTask, setNewTask] = useState({
-    topic: '',
-    formats: ['markdown'],
-  });
-
-  const handleCreateTask = async () => {
-    if (!newTask.topic.trim()) return;
+  const handleCreateTask = async (data: CreateTaskData) => {
     try {
-      await createTask(newTask.topic, newTask.formats);
+      // Convert output formats object to array
+      const formats = Object.entries(data.outputFormats)
+        .filter(([, checked]) => checked)
+        .map(([key]) => key);
+
+      // Pass additional data via context or description
+      const enrichedTopic = data.context
+        ? `${data.topic}\n\n[背景资料]\n${data.context}`
+        : data.topic;
+
+      await createTask(enrichedTopic, formats);
       setShowCreateModal(false);
-      setNewTask({ topic: '', formats: ['markdown'] });
     } catch (err) {
       console.error('Failed to create task:', err);
     }
@@ -64,77 +68,11 @@ export function Tasks() {
       <TaskList filter={activeFilter} />
 
       {/* Create Modal */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">新建任务</h3>
-              <button
-                className="modal-close"
-                onClick={() => setShowCreateModal(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">研究主题 *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newTask.topic}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, topic: e.target.value })
-                  }
-                  placeholder="输入研究主题"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">输出格式</label>
-                <div className="format-options">
-                  {['markdown', 'pdf', 'docx'].map((format) => (
-                    <label key={format} className="format-option">
-                      <input
-                        type="checkbox"
-                        checked={newTask.formats.includes(format)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewTask({
-                              ...newTask,
-                              formats: [...newTask.formats, format],
-                            });
-                          } else {
-                            setNewTask({
-                              ...newTask,
-                              formats: newTask.formats.filter((f) => f !== format),
-                            });
-                          }
-                        }}
-                      />
-                      <span>{format.toUpperCase()}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowCreateModal(false)}
-              >
-                取消
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleCreateTask}
-                disabled={!newTask.topic.trim()}
-              >
-                创建
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CreateTaskModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreate={handleCreateTask}
+      />
     </div>
   );
 }
