@@ -6,6 +6,8 @@ import { Tasks } from './pages/Tasks';
 import { Assets } from './pages/Assets';
 import { Experts } from './pages/Experts';
 import { Reports } from './pages/Reports';
+import { HotTopics } from './pages/HotTopics';
+import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import './App.css';
 
 function App() {
@@ -19,6 +21,8 @@ function App() {
             <Route path="assets" element={<Assets />} />
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="hot-topics" element={<HotTopics />} />
+            <Route path="sentiment" element={<SentimentAnalysisPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

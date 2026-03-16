@@ -163,6 +163,133 @@ export const healthApi = {
     client.get('/health') as Promise<{ status: string; version: string }>,
 };
 
+// 热点追踪相关类型
+export interface HotTopic {
+  id: string;
+  title: string;
+  source: string;
+  sourceUrl?: string;
+  hotScore: number;
+  trend: 'up' | 'stable' | 'down';
+  sentiment: 'positive' | 'neutral' | 'negative';
+  publishedAt?: string;
+  createdAt: string;
+}
+
+export interface RSSSource {
+  id: string;
+  name: string;
+  url: string;
+  category?: string;
+  isActive: boolean;
+  lastCrawledAt?: string;
+}
+
+// 热点追踪 API (v3.4)
+export const hotTopicsApi = {
+  getAll: (params?: { limit?: number; trend?: string }) =>
+    client.get('/quality/hot-topics', { params }) as Promise<{ items: HotTopic[]; total: number }>,
+
+  getById: (id: string) =>
+    client.get(`/quality/hot-topics/${id}`) as Promise<HotTopic>,
+
+  getTrends: () =>
+    client.get('/quality/hot-topics/trends') as Promise<{ topics: string[]; scores: number[] }>,
+
+  follow: (id: string) =>
+    client.post(`/quality/hot-topics/${id}/follow`) as Promise<void>,
+
+  unfollow: (id: string) =>
+    client.delete(`/quality/hot-topics/${id}/follow`) as Promise<void>,
+};
+
+// RSS源管理 API
+export const rssSourcesApi = {
+  getAll: () =>
+    client.get('/quality/rss-sources') as Promise<{ items: RSSSource[] }>,
+
+  create: (data: Partial<RSSSource>) =>
+    client.post('/quality/rss-sources', data) as Promise<RSSSource>,
+
+  update: (id: string, data: Partial<RSSSource>) =>
+    client.put(`/quality/rss-sources/${id}`, data) as Promise<RSSSource>,
+
+  delete: (id: string) =>
+    client.delete(`/quality/rss-sources/${id}`) as Promise<void>,
+
+  triggerCrawl: (id?: string) =>
+    client.post('/quality/rss-sources/crawl', { id }) as Promise<{ crawled: number }>,
+};
+
+// 情感分析相关类型 (v3.2)
+export interface SentimentAnalysis {
+  id: string;
+  contentId: string;
+  topicId?: string;
+  sourceType: string;
+  polarity: 'positive' | 'negative' | 'neutral';
+  intensity: number;
+  confidence: number;
+  keywords: string[];
+  analyzedAt: string;
+}
+
+export interface SentimentStats {
+  total: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+  msiIndex: number; // Market Sentiment Index
+  trendDirection: 'up' | 'stable' | 'down';
+}
+
+// 情感分析 API (v3.2)
+export const sentimentApi = {
+  getAll: (params?: { limit?: number; polarity?: string }) =>
+    client.get('/quality/sentiment', { params }) as Promise<{ items: SentimentAnalysis[]; total: number }>,
+
+  getStats: () =>
+    client.get('/quality/sentiment/stats') as Promise<SentimentStats>,
+
+  getById: (id: string) =>
+    client.get(`/quality/sentiment/${id}`) as Promise<SentimentAnalysis>,
+
+  analyze: (contentId: string, content: string) =>
+    client.post('/quality/sentiment/analyze', { contentId, content }) as Promise<SentimentAnalysis>,
+
+  getTrends: (days: number = 7) =>
+    client.get('/quality/sentiment/trends', { params: { days } }) as Promise<{ dates: string[]; scores: number[] }>,
+};
+
+// 智能推荐相关类型 (v3.1)
+export interface Recommendation {
+  id: string;
+  type: 'topic' | 'report' | 'asset';
+  title: string;
+  reason: string;
+  score: number;
+  metadata: Record<string, any>;
+  createdAt: string;
+}
+
+// 智能推荐 API (v3.1)
+export const recommendationsApi = {
+  getAll: (params?: { limit?: number }) =>
+    client.get('/quality/recommendations', { params }) as Promise<{ items: Recommendation[]; total: number }>,
+
+  getById: (id: string) =>
+    client.get(`/quality/recommendations/${id}`) as Promise<Recommendation>,
+
+  accept: (id: string) =>
+    client.post(`/quality/recommendations/${id}/accept`) as Promise<void>,
+
+  reject: (id: string) =>
+    client.post(`/quality/recommendations/${id}/reject`) as Promise<void>,
+
+  refresh: () =>
+    client.post('/quality/recommendations/refresh') as Promise<{ generated: number }>,
+};
+
 // 研报相关 API (v3.3)
 export const reportsApi = {
   getAll: (params?: { limit?: number; status?: string }) =>

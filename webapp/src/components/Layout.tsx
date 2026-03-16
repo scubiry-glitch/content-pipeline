@@ -23,6 +23,12 @@ export function Layout() {
             <NavLink to="/reports" className="nav-link">
               研报 (v3.3)
             </NavLink>
+            <NavLink to="/hot-topics" className="nav-link">
+              热点 (v3.4)
+            </NavLink>
+            <NavLink to="/sentiment" className="nav-link">
+              情感 (v3.2)
+            </NavLink>
           </nav>
         </div>
       </header>

@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, STAGES } from '../types';
+import { StageConfig } from '../components/StageConfig';
+import { SidebarStats } from '../components/SidebarStats';
 import './Dashboard.css';
 
 export function Dashboard() {
   const { tasks } = useTasks();
+  const [selectedStage, setSelectedStage] = useState<number | null>(null);
 
   const stats = {
     total: tasks.length,
@@ -38,7 +42,9 @@ export function Dashboard() {
   ];
 
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard-with-sidebar">
+      {/* Main Content */}
+      <div className="dashboard-main">
       {/* Stats Overview */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -67,7 +73,8 @@ export function Dashboard() {
             <div
               key={stage.id}
               className="pipeline-card"
-              style={{ borderTopColor: stage.color }}
+              style={{ borderTopColor: stage.color, cursor: 'pointer' }}
+              onClick={() => setSelectedStage(stage.id)}
             >
               <div className="pipeline-icon" style={{ background: stage.color }}>
                 {stage.icon}
@@ -106,6 +113,17 @@ export function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Stage Config Panel */}
+      <StageConfig
+        stage={selectedStage}
+        isOpen={selectedStage !== null}
+        onClose={() => setSelectedStage(null)}
+      />
+      </div>
+
+      {/* Sidebar */}
+      <SidebarStats />
     </div>
   );
 }

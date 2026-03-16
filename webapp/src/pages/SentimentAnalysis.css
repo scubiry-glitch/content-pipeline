@@ -1,0 +1,383 @@
+/* 情感分析页面样式 */
+
+.sentiment-analysis {
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* MSI 市场情绪指数仪表盘 */
+.msi-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.msi-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.msi-title {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+
+.msi-value {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.msi-trend {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.msi-trend .trend-up {
+  color: #22c55e;
+}
+
+.msi-trend .trend-down {
+  color: #ef4444;
+}
+
+.msi-trend .trend-stable {
+  color: #f59e0b;
+}
+
+/* 情感分布 */
+.sentiment-distribution {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.dist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.dist-icon {
+  font-size: 24px;
+}
+
+.dist-label {
+  flex: 1;
+  font-size: 14px;
+  color: #374151;
+}
+
+.dist-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 筛选栏 */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-bar span {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: #f9fafb;
+}
+
+.filter-btn.active {
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
+}
+
+/* 情感列表 */
+.sentiment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sentiment-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sentiment-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sentiment-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.sentiment-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sentiment-polarity {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sentiment-source {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.sentiment-confidence {
+  text-align: right;
+}
+
+.confidence-label {
+  font-size: 12px;
+  color: #9ca3af;
+  display: block;
+}
+
+.confidence-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #6366f1;
+}
+
+/* 情感强度 */
+.sentiment-intensity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.intensity-label {
+  font-size: 13px;
+  color: #64748b;
+  min-width: 60px;
+}
+
+.intensity-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.intensity-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.intensity-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* 关键词 */
+.sentiment-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.keyword-tag {
+  padding: 4px 12px;
+  background: #f3f4f6;
+  border-radius: 16px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+/* 时间 */
+.sentiment-time {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* 按钮 */
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  color: #9ca3af;
+}
+
+/* 加载状态 */
+.loading {
+  text-align: center;
+  padding: 60px;
+  color: #9ca3af;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .msi-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .msi-value {
+    font-size: 48px;
+  }
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+  .page-header h1 {
+    color: #f1f5f9;
+  }
+
+  .msi-card,
+  .sentiment-distribution,
+  .sentiment-card {
+    background: #1e293b;
+  }
+
+  .msi-title {
+    color: #94a3b8;
+  }
+
+  .dist-item {
+    background: #0f172a;
+  }
+
+  .dist-label {
+    color: #cbd5e1;
+  }
+
+  .sentiment-polarity {
+    color: #f1f5f9;
+  }
+
+  .sentiment-source {
+    color: #94a3b8;
+  }
+
+  .intensity-label {
+    color: #94a3b8;
+  }
+
+  .intensity-value {
+    color: #e2e8f0;
+  }
+
+  .keyword-tag {
+    background: #334155;
+    color: #cbd5e1;
+  }
+
+  .filter-btn {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .filter-btn:hover {
+    background: #334155;
+  }
+}

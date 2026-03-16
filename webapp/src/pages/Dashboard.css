@@ -6,6 +6,21 @@
   gap: 24px;
 }
 
+/* Dashboard with Sidebar Layout */
+.dashboard-with-sidebar {
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0; /* Prevent flex item overflow */
+}
+
 /* Stats Grid - 陶土统计卡片 */
 .stats-grid {
   display: grid;
