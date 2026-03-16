@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
+import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
