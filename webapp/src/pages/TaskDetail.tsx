@@ -1036,6 +1036,56 @@ export function TaskDetail() {
     );
   };
 
+  // 添加外部链接弹窗
+  const renderAddLinkModal = () => {
+    if (!showAddLinkModal) return null;
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowAddLinkModal(false)}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>添加外部链接</h3>
+            <button className="btn-close" onClick={() => setShowAddLinkModal(false)}>✕</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label className="form-label">链接标题 *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newLinkTitle}
+                onChange={(e) => setNewLinkTitle(e.target.value)}
+                placeholder="例如：住建部保租房政策文件"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">链接URL *</label>
+              <input
+                type="url"
+                className="form-input"
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setShowAddLinkModal(false)}>
+              取消
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleAddExternalLink}
+              disabled={actionLoading === 'add-link' || !newLinkUrl.trim() || !newLinkTitle.trim()}
+            >
+              {actionLoading === 'add-link' ? '添加中...' : '添加链接'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="task-detail">
@@ -1343,11 +1393,37 @@ export function TaskDetail() {
 
         {activeTab === 'writing' && (
           <div className="tab-panel writing-panel">
-            <div className="empty-state">
-              <div className="empty-icon">✍️</div>
-              <div className="empty-title">文稿生成</div>
-              <p>任务进入文稿生成阶段后可查看生成的内容</p>
+            {/* 操作按钮区 */}
+            <div className="info-card actions-card">
+              <h3 className="card-title">⚡ 文稿操作</h3>
+              <div className="writing-actions">
+                <button
+                  className="btn btn-warning"
+                  onClick={handleRedoWriting}
+                  disabled={actionLoading === 'redo-writing'}
+                >
+                  {actionLoading === 'redo-writing' ? '启动中...' : '🔄 重做文稿生成'}
+                </button>
+              </div>
+              <p className="action-hint">重做将删除当前版本并重新生成初稿</p>
             </div>
+
+            {task.writing_data ? (
+              <div className="writing-content">
+                <div className="info-card">
+                  <h3 className="card-title">📝 生成内容</h3>
+                  <div className="writing-draft">
+                    {task.writing_data.draft || '文稿正在生成中...'}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">✍️</div>
+                <div className="empty-title">文稿生成</div>
+                <p>任务进入文稿生成阶段后可查看生成的内容</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1484,6 +1560,7 @@ export function TaskDetail() {
 
       {/* 素材选择弹窗 */}
       {renderAssetModal()}
+      {renderAddLinkModal()}
     </div>
   );
 }

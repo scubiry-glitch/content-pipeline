@@ -915,4 +915,41 @@ export const dashboardApi = {
     client.post(`/dashboard/feedback`, { topicId, action }) as Promise<void>,
 };
 
+// 归档管理相关类型
+export interface ArchivedTask {
+  id: string;
+  topic: string;
+  status: string;
+  deletedAt: string;
+  originalCreatedAt: string;
+  willBePermanentlyDeletedAt?: string;
+}
+
+// 归档管理 API
+export const archiveApi = {
+  getRecycleBin: () =>
+    client.get('/archive/recycle-bin') as Promise<{ items: ArchivedTask[] }>,
+
+  getHidden: () =>
+    client.get('/archive/hidden') as Promise<{ items: ArchivedTask[] }>,
+
+  deleteTask: (taskId: string) =>
+    client.post(`/archive/${taskId}/delete`) as Promise<void>,
+
+  batchDelete: (taskIds: string[]) =>
+    client.post('/archive/batch-delete', { taskIds }) as Promise<void>,
+
+  hideTask: (taskId: string) =>
+    client.post(`/archive/${taskId}/hide`) as Promise<void>,
+
+  batchHide: (taskIds: string[]) =>
+    client.post('/archive/batch-hide', { taskIds }) as Promise<void>,
+
+  restoreTask: (taskId: string) =>
+    client.post(`/archive/${taskId}/restore`) as Promise<void>,
+
+  permanentDelete: (taskId: string) =>
+    client.delete(`/archive/${taskId}/permanent`) as Promise<void>,
+};
+
 export default client;

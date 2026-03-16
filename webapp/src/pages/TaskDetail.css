@@ -2346,3 +2346,118 @@
     flex-wrap: wrap;
   }
 }
+
+/* ============================================
+   新增功能样式 - 操作按钮和表单
+   ============================================ */
+
+/* 操作卡片 */
+.actions-card {
+  margin-bottom: 24px;
+}
+
+.research-actions,
+.writing-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search-stats {
+  display: flex;
+  gap: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linen);
+  font-size: 13px;
+  color: var(--earth);
+}
+
+.action-hint {
+  font-size: 12px;
+  color: var(--pebble);
+  margin-top: 8px;
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--soil);
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--linen);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+/* 文稿内容展示 */
+.writing-content {
+  margin-top: 24px;
+}
+
+.writing-draft {
+  padding: 20px;
+  background: white;
+  border-radius: var(--radius);
+  border: 1px solid var(--linen);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  min-height: 200px;
+}
+
+/* 按钮禁用状态 */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 外部链接列表 */
+.external-links-list {
+  margin-top: 16px;
+}
+
+.external-link-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.external-link-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.external-link-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--soil);
+}
+
+.external-link-url {
+  font-size: 12px;
+  color: var(--pebble);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
