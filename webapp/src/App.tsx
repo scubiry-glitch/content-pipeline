@@ -7,6 +7,7 @@ import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
 import { Experts } from './pages/Experts';
 import { Reports } from './pages/Reports';
+import { ReportDetail } from './pages/ReportDetail';
 import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
@@ -31,6 +32,7 @@ function App() {
             <Route path="assets" element={<Assets />} />
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="reports/:id" element={<ReportDetail />} />
             <Route path="hot-topics" element={<HotTopics />} />
             <Route path="hot-topics/:id" element={<HotTopicDetail />} />
             <Route path="sentiment" element={<SentimentAnalysisPage />} />

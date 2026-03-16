@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { reportsApi } from '../api/client';
 import type { Report, ReportMatch } from '../types';
 import './Reports.css';
 
 export function Reports() {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -180,7 +182,7 @@ export function Reports() {
               <div
                 key={report.id}
                 className={`report-card ${selectedReport?.id === report.id ? 'selected' : ''}`}
-                onClick={() => handleGetMatches(report)}
+                onClick={() => navigate(`/reports/${report.id}`)}
               >
                 <div className="report-header">
                   <h3 className="report-title">{report.title || '未命名研报'}</h3>
