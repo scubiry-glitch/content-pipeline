@@ -10,6 +10,7 @@ import { AssetDetail } from './pages/AssetDetail';
 import { Experts } from './pages/Experts';
 import { Reports } from './pages/Reports';
 import { ReportDetail } from './pages/ReportDetail';
+import { ReportCompare } from './pages/ReportCompare';
 import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
@@ -38,6 +39,7 @@ function App() {
             <Route path="assets/:id" element={<AssetDetail />} />
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="reports/compare" element={<ReportCompare />} />
             <Route path="reports/:id" element={<ReportDetail />} />
             <Route path="hot-topics" element={<HotTopics />} />
             <Route path="hot-topics/:id" element={<HotTopicDetail />} />

@@ -211,6 +211,7 @@
   box-shadow: var(--shadow);
   transition: all 0.2s;
   position: relative;
+  cursor: pointer;
 }
 
 .asset-card:hover {

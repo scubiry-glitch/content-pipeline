@@ -125,9 +125,15 @@ export interface TopicEvaluation {
 }
 
 export interface CompetitorAnalysis {
-  similarReports: SimilarReport[];
-  differentiationSuggestions: string[];
-  gapOpportunities: string[];
+  similarReports?: SimilarReport[];
+  reports?: CompetitorReport[];
+  differentiationSuggestions?: DifferentiationSuggestion[];
+  summary?: {
+    totalFound?: number;
+    marketPosition?: string;
+    gaps?: string[];
+  };
+  gapOpportunities?: string[];
 }
 
 export interface SimilarReport {
@@ -135,6 +141,22 @@ export interface SimilarReport {
   source: string;
   similarity_score: number;
   published_date: string;
+}
+
+export interface CompetitorReport {
+  title: string;
+  source: string;
+  publishDate: string;
+  url?: string;
+  coreView?: string;
+  keyPoints?: string[];
+  relevance: number;
+}
+
+export interface DifferentiationSuggestion {
+  angle: string;
+  rationale: string;
+  potentialValue: 'high' | 'medium' | 'low';
 }
 
 export interface Asset {

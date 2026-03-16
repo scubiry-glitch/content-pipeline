@@ -13,6 +13,8 @@ export function Reports() {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [matches, setMatches] = useState<ReportMatch[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -103,6 +105,33 @@ export function Reports() {
     return '#ff4d4f';
   };
 
+  // 对比功能
+  const toggleCompareMode = () => {
+    setCompareMode(!compareMode);
+    setSelectedForCompare([]);
+  };
+
+  const toggleSelectForCompare = (reportId: string) => {
+    setSelectedForCompare(prev => {
+      if (prev.includes(reportId)) {
+        return prev.filter(id => id !== reportId);
+      }
+      if (prev.length >= 3) {
+        alert('最多只能选择3篇研报进行对比');
+        return prev;
+      }
+      return [...prev, reportId];
+    });
+  };
+
+  const handleCompare = () => {
+    if (selectedForCompare.length < 2) {
+      alert('请至少选择2篇研报进行对比');
+      return;
+    }
+    navigate(`/reports/compare?ids=${selectedForCompare.join(',')}`);
+  };
+
   return (
     <div className="reports-page">
       <div className="page-header">
@@ -124,6 +153,23 @@ export function Reports() {
             </button>
           </div>
 
+          <button
+            className={`btn ${compareMode ? 'btn-warning' : 'btn-secondary'}`}
+            onClick={toggleCompareMode}
+          >
+            {compareMode ? '❌ 取消对比' : '📊 对比模式'}
+          </button>
+
+          {compareMode && (
+            <button
+              className="btn btn-primary"
+              onClick={handleCompare}
+              disabled={selectedForCompare.length < 2}
+            >
+              🔍 对比 ({selectedForCompare.length})
+            </button>
+          )}
+
           <label className="btn btn-primary upload-btn">
             <span>{uploading ? '⏳ 上传中...' : '+ 上传研报'}</span>
             <input
@@ -136,6 +182,13 @@ export function Reports() {
           </label>
         </div>
       </div>
+
+      {compareMode && (
+        <div className="compare-banner">
+          <span>📊 对比模式：请选择2-3篇研报进行对比</span>
+          <span className="selected-count">已选择: {selectedForCompare.length}/3</span>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-error">
@@ -181,9 +234,30 @@ export function Reports() {
             {reports.map((report) => (
               <div
                 key={report.id}
-                className={`report-card ${selectedReport?.id === report.id ? 'selected' : ''}`}
-                onClick={() => navigate(`/reports/${report.id}`)}
+                className={`report-card ${selectedReport?.id === report.id ? 'selected' : ''} ${selectedForCompare.includes(report.id) ? 'compare-selected' : ''}`}
+                onClick={() => {
+                  if (compareMode) {
+                    toggleSelectForCompare(report.id);
+                  } else {
+                    navigate(`/reports/${report.id}`);
+                  }
+                }}
               >
+                {compareMode && (
+                  <div
+                    className="compare-checkbox"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSelectForCompare(report.id);
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedForCompare.includes(report.id)}
+                      onChange={() => {}}
+                    />
+                  </div>
+                )}
                 <div className="report-header">
                   <h3 className="report-title">{report.title || '未命名研报'}</h3>
                   <span className={`report-status ${getStatusClass(report.status)}`}>

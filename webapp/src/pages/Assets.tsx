@@ -446,13 +446,13 @@ export function Assets() {
                         {asset.content?.length > 100 ? '...' : ''}
                       </div>
                       <div className="asset-actions">
-                        <button className="btn-sm" onClick={() => openEditModal(asset)}>
+                        <button className="btn-sm" onClick={(e) => { e.stopPropagation(); openEditModal(asset); }}>
                           编辑
                         </button>
-                        <button className="btn-sm" onClick={() => handleTogglePin(asset)}>
+                        <button className="btn-sm" onClick={(e) => { e.stopPropagation(); handleTogglePin(asset); }}>
                           {asset.is_pinned ? '取消置顶' : '置顶'}
                         </button>
-                        <button className="btn-sm btn-danger" onClick={() => handleDelete(asset.id)}>
+                        <button className="btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}>
                           删除
                         </button>
                       </div>
