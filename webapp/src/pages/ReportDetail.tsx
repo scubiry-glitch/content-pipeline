@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { reportsApi, type Report } from '../api/client';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { reportsApi, type Report, type ReportMatch } from '../api/client';
 import './ReportDetail.css';
 
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [report, setReport] = useState<Report | null>(null);
+  const [matches, setMatches] = useState<ReportMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'quality' | 'matches'>('overview');
 
@@ -15,6 +17,12 @@ export function ReportDetail() {
       loadReport();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id && activeTab === 'matches' && matches.length === 0) {
+      loadMatches();
+    }
+  }, [id, activeTab]);
 
   const loadReport = async () => {
     setLoading(true);
@@ -25,6 +33,19 @@ export function ReportDetail() {
       console.error('Failed to load report:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMatches = async () => {
+    if (!id) return;
+    setMatchesLoading(true);
+    try {
+      const response = await reportsApi.getMatches(id);
+      setMatches(response.items);
+    } catch (error) {
+      console.error('Failed to load matches:', error);
+    } finally {
+      setMatchesLoading(false);
     }
   };
 
@@ -139,7 +160,67 @@ export function ReportDetail() {
 
         {activeTab === 'matches' && (
           <div className="matches-panel">
-            <div className="empty-state">暂无匹配数据</div>
+            {matchesLoading ? (
+              <div className="loading-state">加载匹配数据中...</div>
+            ) : matches.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">🔗</div>
+                <div className="empty-title">暂无匹配数据</div>
+                <p>该研报尚未与RSS热点、素材或话题进行关联</p>
+              </div>
+            ) : (
+              <div className="matches-list">
+                <div className="matches-summary">
+                  <span className="matches-count">共找到 {matches.length} 个关联</span>
+                  <button className="btn btn-sm btn-secondary" onClick={loadMatches}>
+                    🔄 刷新
+                  </button>
+                </div>
+                {matches.map((match) => (
+                  <div key={match.id} className="match-card">
+                    <div className="match-header">
+                      <span className={`match-type-badge ${match.matchType}`}>
+                        {match.matchType === 'rss' && '📰 RSS'}
+                        {match.matchType === 'asset' && '📚 素材'}
+                        {match.matchType === 'topic' && '🔥 热点'}
+                        {match.matchType === 'report' && '📊 研报'}
+                      </span>
+                      <span className="match-score-badge" style={{ color: getQualityColor(match.matchScore) }}>
+                        {Math.round(match.matchScore)}分
+                      </span>
+                    </div>
+
+                    <div className="match-content">
+                      <h4 className="match-title">
+                        {match.matchedItem?.title || '未知内容'}
+                      </h4>
+                      <p className="match-reason">{match.matchReason}</p>
+                      {match.matchedItem?.source && (
+                        <span className="match-source">来源: {match.matchedItem.source}</span>
+                      )}
+                    </div>
+
+                    <div className="match-actions">
+                      {match.matchType === 'rss' && match.matchedItem?.id && (
+                        <Link to={`/hot-topics/${match.matchedItem.id}`} className="btn btn-sm btn-link">
+                          查看热点 →
+                        </Link>
+                      )}
+                      {match.matchType === 'topic' && match.matchedItem?.id && (
+                        <Link to={`/hot-topics/${match.matchedItem.id}`} className="btn btn-sm btn-link">
+                          查看话题 →
+                        </Link>
+                      )}
+                      {match.matchType === 'asset' && (
+                        <button className="btn btn-sm btn-link" onClick={() => alert('素材详情页开发中')}>
+                          查看素材 →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
