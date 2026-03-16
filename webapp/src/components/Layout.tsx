@@ -32,6 +32,9 @@ export function Layout() {
             <NavLink to="/compliance" className="nav-link">
               合规 (v4.0)
             </NavLink>
+            <NavLink to="/orchestrator" className="nav-link">
+              编排 (v4.1)
+            </NavLink>
           </nav>
         </div>
       </header>
