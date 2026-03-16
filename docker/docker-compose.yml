@@ -1,5 +1,10 @@
 # Content Pipeline - Docker Compose 配置
 # 一键部署完整环境：API + PostgreSQL + pgvector
+#
+# 使用方法:
+#   cd docker && docker-compose up -d
+# 或从项目根目录:
+#   docker-compose -f docker/docker-compose.yml up -d
 
 version: '3.8'
 
@@ -27,8 +32,8 @@ services:
   # API Server
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: content-pipeline-api
     environment:
       # 数据库配置
@@ -58,7 +63,7 @@ services:
         condition: service_healthy
     volumes:
       # 可选：挂载 .env 文件
-      - ./.env:/app/.env:ro
+      - ../.env:/app/.env:ro
     networks:
       - content-pipeline-network
     restart: unless-stopped
@@ -68,8 +73,8 @@ services:
     image: nginx:alpine
     container_name: content-pipeline-webapp
     volumes:
-      - ./webapp:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../webapp/dist:/usr/share/nginx/html:ro
+      - ../nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "${WEBAPP_PORT:-8080}:80"
     networks:

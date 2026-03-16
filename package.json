@@ -10,8 +10,10 @@
   ],
   "scripts": {
     "dev": "npm run dev:api & npm run dev:webapp",
+    "dev:open": "npm run dev & sleep 6 && open http://localhost:5173",
     "dev:api": "cd api && npm run dev",
     "dev:webapp": "cd webapp && npm run dev",
+    "open": "open http://localhost:5173",
     "build": "npm run build:api && npm run build:webapp",
     "build:api": "cd api && npm run build",
     "build:webapp": "cd webapp && npm run build",

@@ -1,5 +1,10 @@
 # v3.0-alpha Docker Compose 配置
 # 多租户 + API Gateway + Bull 队列
+#
+# 使用方法:
+#   cd docker && docker-compose -f docker-compose.v3.yml up -d
+# 或从项目根目录:
+#   docker-compose -f docker/docker-compose.v3.yml up -d
 
 version: '3.8'
 
@@ -15,7 +20,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_v3_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
+      - ../database/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U content_pipeline"]
       interval: 5s
@@ -38,8 +43,8 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile.v3
+      context: ..
+      dockerfile: docker/Dockerfile.v3
     container_name: cp-v3-api
     environment:
       NODE_ENV: development
@@ -59,8 +64,8 @@ services:
 
   worker:
     build:
-      context: .
-      dockerfile: Dockerfile.v3
+      context: ..
+      dockerfile: docker/Dockerfile.v3
     container_name: cp-v3-worker
     environment:
       NODE_ENV: development

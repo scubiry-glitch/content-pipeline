@@ -16,6 +16,7 @@ import { reportRoutes } from './routes/reports.js';
 import { v34ReportRoutes } from './routes/v34-reports.js';
 import { v34HotTopicRoutes } from './routes/v34-hot-topics.js';
 import { v34AssetRoutes } from './routes/v34-assets.js';
+import { v40ComplianceRoutes } from './routes/v40-compliance.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
 import { startRSSCron } from './services/rssCrawler.js';
@@ -100,6 +101,9 @@ async function main() {
   await fastify.register(v34ReportRoutes, { prefix: '/api/v1/quality/reports' });
   await fastify.register(v34HotTopicRoutes, { prefix: '/api/v1/quality/hot-topics' });
   await fastify.register(v34AssetRoutes, { prefix: '/api/v1/quality/assets' });
+
+  // v4.0 智能审核与合规路由
+  await fastify.register(v40ComplianceRoutes, { prefix: '/api/v1/compliance' });
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
