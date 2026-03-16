@@ -824,4 +824,70 @@ export const i18nApi = {
   }) => client.post('/i18n/memory', data) as Promise<TranslationMemory>,
 };
 
+// Dashboard 相关类型
+export interface DashboardScores {
+  overallScore: number;
+  trend: string;
+  freshness: number;
+  credibility: number;
+  differentiation: number;
+  audienceMatch: number;
+}
+
+export interface DashboardData {
+  scores: DashboardScores;
+  hotTopics: Array<{ title: string; score: number; source: string }>;
+  alerts: Array<{
+    type: 'freshness' | 'credibility' | 'differentiation' | 'audience';
+    severity: 'warning' | 'info' | 'error';
+    message: string;
+    suggestion: string;
+  }>;
+  rssSources: Array<{ name: string; status: 'active' | 'error'; lastFetch: string }>;
+  suggestions: Array<{
+    area: string;
+    suggestion: string;
+    priority: 'high' | 'medium' | 'low';
+    impact: string;
+  }>;
+  userProfile: {
+    interests: Record<string, number>;
+    topInterests: string[];
+  };
+  sentiment: {
+    msi: number;
+    level: 'extreme_fear' | 'fear' | 'neutral' | 'greed' | 'extreme_greed';
+    change24h: number;
+    distribution: { positive: number; neutral: number; negative: number };
+    alerts: string[];
+  };
+  recommendations: Array<{
+    id: string;
+    title: string;
+    category: string;
+    score: number;
+    reason: string;
+    hotScore: number;
+  }>;
+}
+
+// Dashboard API
+export const dashboardApi = {
+  getDashboard: () => client.get('/dashboard') as Promise<DashboardData>,
+
+  refreshData: () => client.post('/dashboard/refresh') as Promise<DashboardData>,
+
+  analyzeContent: (content: string) =>
+    client.post('/dashboard/analyze', { content }) as Promise<{
+      score: number;
+      wordCount: number;
+      readingTime: number;
+      issues: string[];
+      suggestions: string[];
+    }>,
+
+  recordFeedback: (topicId: string, action: 'like' | 'ignore') =>
+    client.post(`/dashboard/feedback`, { topicId, action }) as Promise<void>,
+};
+
 export default client;
