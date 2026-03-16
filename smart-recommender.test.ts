@@ -82,7 +82,7 @@ describe('SmartRecommender', () => {
       });
 
       const profile = await recommender.loadUserProfile('user1');
-      expect(profile.interests['AI']).toBe(0.8);
+      expect(profile.getInterest('AI')).toBe(0.8);
     });
   });
 

@@ -100,7 +100,14 @@ async function setupMVPSchema(): Promise<void> {
       competitor_analysis JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      completed_at TIMESTAMP WITH TIME ZONE
+      completed_at TIMESTAMP WITH TIME ZONE,
+      created_by VARCHAR(100) DEFAULT 'user',
+      is_deleted BOOLEAN DEFAULT false,
+      deleted_at TIMESTAMP WITH TIME ZONE,
+      deleted_by VARCHAR(100),
+      delete_reason TEXT,
+      will_be_purged_at TIMESTAMP WITH TIME ZONE,
+      hidden_by VARCHAR(100)
     )
   `);
 
@@ -271,6 +278,81 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_tracked_files_binding ON asset_tracked_files(binding_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_task_logs_task ON task_logs(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_edits_task ON draft_edits(task_id)`);
+
+  // RSS items table (FR-031 ~ FR-033)
+  await query(`
+    CREATE TABLE IF NOT EXISTS rss_items (
+      id VARCHAR(32) PRIMARY KEY,
+      source_id VARCHAR(50) NOT NULL,
+      source_name VARCHAR(100) NOT NULL,
+      title VARCHAR(500) NOT NULL,
+      link TEXT NOT NULL,
+      content TEXT,
+      summary TEXT,
+      published_at TIMESTAMP WITH TIME ZONE,
+      author VARCHAR(200),
+      categories JSONB DEFAULT '[]',
+      tags JSONB DEFAULT '[]',
+      relevance_score DECIMAL(3,2) DEFAULT 0,
+      embedding VECTOR(1536),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(link)
+    )
+  `);
+
+  // RSS fetch logs
+  await query(`
+    CREATE TABLE IF NOT EXISTS rss_fetch_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_id VARCHAR(50) NOT NULL,
+      fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      status VARCHAR(20) NOT NULL,
+      items_count INTEGER DEFAULT 0,
+      error_message TEXT,
+      UNIQUE(source_id, DATE(fetched_at))
+    )
+  `);
+
+  // Create indexes
+  await query(`CREATE INDEX IF NOT EXISTS idx_rss_items_source ON rss_items(source_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rss_items_created ON rss_items(created_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rss_items_tags ON rss_items USING GIN(tags)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rss_items_relevance ON rss_items(relevance_score)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rss_embedding ON rss_items USING hnsw (embedding vector_cosine_ops)`).catch(() => {
+    console.log('[DB] HNSW index creation failed for rss_items, trying ivfflat...');
+    return query(`CREATE INDEX IF NOT EXISTS idx_rss_embedding ON rss_items USING ivfflat (embedding vector_cosine_ops)`).catch(() => {
+      console.log('[DB] Vector index creation skipped for rss_items');
+    });
+  });
+
+  // Recommendation logs table (FR-028 ~ FR-030)
+  await query(`
+    CREATE TABLE IF NOT EXISTS recommendation_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      recommendation_id VARCHAR(100) NOT NULL,
+      user_id VARCHAR(100),
+      action VARCHAR(20) NOT NULL,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes
+  await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_user ON recommendation_logs(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_action ON recommendation_logs(action)`);
+
+  // Task archive table (FR-034 ~ FR-035)
+  await query(`
+    CREATE TABLE IF NOT EXISTS task_archives (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL UNIQUE,
+      task_data JSONB NOT NULL,
+      archived_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes
+  await query(`CREATE INDEX IF NOT EXISTS idx_task_archives_task ON task_archives(task_id)`);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {

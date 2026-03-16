@@ -1,0 +1,235 @@
+// RSS 路由 - RSS Routes
+// FR-031 ~ FR-033: RSS 自动采集管理
+
+import { FastifyInstance } from 'fastify';
+import {
+  collectAllFeeds,
+  collectSingleFeed,
+  loadRSSConfig,
+  getRSSStats,
+} from '../services/rssCollector.js';
+import { query } from '../db/connection.js';
+import { authenticate } from '../middleware/auth.js';
+
+export async function rssRoutes(fastify: FastifyInstance) {
+  // 手动触发全量采集（管理员权限）
+  fastify.post('/collect', { preHandler: authenticate }, async (request, reply) => {
+    const { sourceId } = request.body as any;
+
+    if (sourceId) {
+      // 采集单个源
+      const config = await loadRSSConfig();
+      const sources = Object.values(config.categories)
+        .flatMap(c => c.sources)
+        .filter(s => s.id === sourceId);
+
+      if (sources.length === 0) {
+        reply.status(404);
+        return { error: 'Source not found' };
+      }
+
+      const result = await collectSingleFeed(sources[0], config.filters);
+      return {
+        sourceId,
+        sourceName: sources[0].name,
+        ...result,
+      };
+    }
+
+    // 采集所有源（异步执行）
+    setImmediate(async () => {
+      try {
+        const result = await collectAllFeeds();
+        console.log('[RSS] Collection completed:', result);
+      } catch (error) {
+        console.error('[RSS] Collection failed:', error);
+      }
+    });
+
+    return {
+      message: 'RSS collection started in background',
+      status: 'running',
+    };
+  });
+
+  // 获取 RSS 源列表
+  fastify.get('/sources', { preHandler: authenticate }, async (request) => {
+    const config = await loadRSSConfig();
+    const sources = Object.entries(config.categories).flatMap(([category, catConfig]) =>
+      catConfig.sources.map(s => ({
+        ...s,
+        category,
+        categoryName: catConfig.name,
+      }))
+    );
+
+    return { sources };
+  });
+
+  // 获取 RSS 采集统计
+  fastify.get('/stats', { preHandler: authenticate }, async () => {
+    const stats = await getRSSStats();
+    return stats;
+  });
+
+  // 获取 RSS 条目列表
+  fastify.get('/items', { preHandler: authenticate }, async (request) => {
+    const {
+      sourceId,
+      tag,
+      minRelevance = '0',
+      limit = '20',
+      offset = '0',
+    } = request.query as any;
+
+    let sql = `
+      SELECT
+        id, source_name, title, link, summary,
+        published_at, author, tags, relevance_score, created_at
+      FROM rss_items
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (sourceId) {
+      sql += ` AND source_id = $${params.length + 1}`;
+      params.push(sourceId);
+    }
+
+    if (tag) {
+      sql += ` AND tags @> $${params.length + 1}::jsonb`;
+      params.push(JSON.stringify([tag]));
+    }
+
+    if (parseFloat(minRelevance) > 0) {
+      sql += ` AND relevance_score >= $${params.length + 1}`;
+      params.push(parseFloat(minRelevance));
+    }
+
+    sql += ` ORDER BY published_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(parseInt(limit), parseInt(offset));
+
+    const result = await query(sql, params);
+
+    return {
+      items: result.rows.map(row => ({
+        ...row,
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
+      })),
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: result.rowCount,
+      },
+    };
+  });
+
+  // 获取 RSS 条目详情
+  fastify.get('/items/:itemId', { preHandler: authenticate }, async (request, reply) => {
+    const { itemId } = request.params as any;
+
+    const result = await query(
+      `SELECT * FROM rss_items WHERE id = $1`,
+      [itemId]
+    );
+
+    if (result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Item not found' };
+    }
+
+    const item = result.rows[0];
+    return {
+      ...item,
+      tags: typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags,
+      categories: typeof item.categories === 'string' ? JSON.parse(item.categories) : item.categories,
+    };
+  });
+
+  // 导入 RSS 条目到素材库
+  fastify.post('/items/:itemId/import', { preHandler: authenticate }, async (request, reply) => {
+    const { itemId } = request.params as any;
+
+    const result = await query(
+      `SELECT * FROM rss_items WHERE id = $1`,
+      [itemId]
+    );
+
+    if (result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Item not found' };
+    }
+
+    const item = result.rows[0];
+    const { v4: uuidv4 } = await import('uuid');
+
+    // 检查是否已导入
+    const existingResult = await query(
+      `SELECT id FROM assets WHERE id = $1`,
+      [`rss-${itemId}`]
+    );
+
+    if (existingResult.rows.length > 0) {
+      return {
+        success: true,
+        message: 'Already imported',
+        assetId: `rss-${itemId}`,
+      };
+    }
+
+    // 导入到素材库
+    await query(
+      `INSERT INTO assets (
+        id, title, content, content_type, source, source_url,
+        tags, auto_tags, quality_score, embedding, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+      [
+        `rss-${itemId}`,
+        item.title,
+        item.content,
+        'text/rss',
+        item.source_name,
+        item.link,
+        item.tags,
+        item.tags,
+        item.relevance_score,
+        item.embedding,
+      ]
+    );
+
+    return {
+      success: true,
+      assetId: `rss-${itemId}`,
+    };
+  });
+
+  // 搜索 RSS 条目
+  fastify.get('/search', { preHandler: authenticate }, async (request) => {
+    const { q, limit = '10' } = request.query as any;
+
+    if (!q) {
+      return { items: [] };
+    }
+
+    const result = await query(
+      `SELECT
+        id, source_name, title, link, summary,
+        published_at, tags, relevance_score,
+        similarity(title, $1) as title_sim,
+        similarity(summary, $1) as content_sim
+      FROM rss_items
+      WHERE title % $1 OR summary % $1
+      ORDER BY GREATEST(similarity(title, $1), similarity(summary, $1)) DESC
+      LIMIT $2`,
+      [q, parseInt(limit)]
+    );
+
+    return {
+      items: result.rows.map(row => ({
+        ...row,
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
+        similarity: Math.max(row.title_sim, row.content_sim),
+      })),
+    };
+  });
+}

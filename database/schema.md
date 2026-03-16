@@ -62,6 +62,36 @@ CREATE INDEX idx_topics_score ON hot_topics(score DESC);
 CREATE INDEX idx_topics_discovered ON hot_topics(discovered_at DESC);
 ```
 
+## v3.1 新增表
+
+### user_behaviors
+用户行为追踪
+
+```sql
+CREATE TABLE user_behaviors (
+  id SERIAL PRIMARY KEY,
+  user_id VARCHAR(50) NOT NULL,
+  topic_id VARCHAR(50) NOT NULL,
+  action VARCHAR(20) NOT NULL, -- view/like/share/ignore
+  timestamp TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_behaviors_user ON user_behaviors(user_id);
+CREATE INDEX idx_behaviors_topic ON user_behaviors(topic_id);
+CREATE INDEX idx_behaviors_timestamp ON user_behaviors(timestamp);
+```
+
+### user_profiles
+用户兴趣画像
+
+```sql
+CREATE TABLE user_profiles (
+  user_id VARCHAR(50) PRIMARY KEY,
+  interests JSONB, -- {topic: weight}
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
 ## 组件关系
 
 ```
@@ -75,8 +105,13 @@ RSSFeedManager
     │       ├── parseRSS()
     │       ├── parseAtom()
     │       └── fetchBatch()
-    └── RSSPipeline (调度与聚合)
-            ├── runFetchCycle()
-            ├── discoverHotTopics()
-            └── createSchedule()
+    ├── RSSPipeline (调度与聚合)
+    │       ├── runFetchCycle()
+    │       ├── discoverHotTopics()
+    │       └── createSchedule()
+    └── SmartRecommender (v3.1新增)
+            ├── recordBehavior()
+            ├── buildInterestProfile()
+            ├── collaborativeFiltering()
+            └── getRecommendations()
 ```

@@ -16,24 +16,25 @@
     "docker:run": "docker run -p 3000:3000 --env-file ../.env content-pipeline-api"
   },
   "dependencies": {
-    "fastify": "^4.26.0",
+    "@anthropic-ai/sdk": "^0.17.0",
     "@fastify/cors": "^9.0.1",
     "@fastify/multipart": "^8.0.0",
-    "pg": "^8.11.3",
-    "dotenv": "^16.4.1",
     "bullmq": "^5.1.0",
+    "dotenv": "^16.4.1",
+    "fastify": "^4.26.0",
     "ioredis": "^5.3.2",
-    "@anthropic-ai/sdk": "^0.17.0",
     "openai": "^4.26.0",
     "pdf-parse": "^1.1.1",
-    "zod": "^3.22.4",
+    "pg": "^8.11.3",
+    "rss-parser": "^3.13.0",
+    "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "uuid": "^9.0.1"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/pg": "^8.11.0",
     "@types/pdf-parse": "^1.1.4",
+    "@types/pg": "^8.11.0",
     "@types/uuid": "^9.0.8",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
