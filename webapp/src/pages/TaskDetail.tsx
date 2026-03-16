@@ -24,6 +24,7 @@ import './TaskDetail.css';
 import { DataReviewTable } from '../components/DataReviewTable';
 import { ExternalLinksList } from '../components/ExternalLinksList';
 import { AssetLinksList } from '../components/AssetLinksList';
+import { DataCleaningPanel } from '../components/DataCleaningPanel';
 
 // 流程步骤定义
 const STAGE_PIPELINES = {
@@ -1621,6 +1622,17 @@ export function TaskDetail() {
                 {/* 素材库引用 */}
                 {task.research_data.annotations && (
                   <AssetLinksList annotations={task.research_data.annotations} />
+                )}
+
+                {/* 数据清洗面板 */}
+                {task.research_data.annotations && task.research_data.annotations.length > 0 && (
+                  <div className="info-card">
+                    <h3 className="card-title">🧹 数据清洗</h3>
+                    <DataCleaningPanel
+                      annotations={task.research_data.annotations}
+                      onClean={(cleaned) => console.log('Cleaned annotations:', cleaned)}
+                    />
+                  </div>
                 )}
 
                 {/* 研究洞察 */}
