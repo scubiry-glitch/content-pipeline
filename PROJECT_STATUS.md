@@ -13,7 +13,7 @@
    ✓         ✓         ✓         ⬜         ⬜         ⬜
 ```
 
-**当前阶段**: 研讨完成，等待冻结
+**当前阶段**: 内容质量输入框架设计（回归内容本质）
 
 ---
 
@@ -36,6 +36,8 @@
 | WHY | `WHY.md` | ✅ 已冻结引用 |
 | 产品规格 | `01-product/Product-Spec.md` | ✅ v2.0 |
 | API规格 | `03-architecture/API-Spec.yaml` | ✅ OpenAPI 3.0 |
+| 内容质量输入框架 | `01-product/content-quality-input-framework.md` | 🆕 新建 |
+| v3.0技术方案 | `03-architecture/v3.0-alpha-technical-design.md` | 🔄 待评审 |
 | 协作指南 | `CLAUDE.md` | ✅ 已创建 |
 | 文档约定 | `DOCUMENT_CONVENTIONS.md` | ✅ 已创建 |
 
@@ -49,9 +51,10 @@
 ### 待补充 ⬜
 | 文档 | 优先级 | 说明 |
 |------|--------|------|
-| 系统架构图 | P1 | 03-architecture/system-design.md |
+| v3.0技术方案冻结 | P0 | 架构评审后冻结 |
+| 系统架构图 | P1 | ✅ 已包含在技术方案中 |
 | ADR记录 | P2 | 03-architecture/ADR/ |
-| 开发环境搭建 | P1 | 04-development/setup.md |
+| 开发环境搭建 | P1 | ✅ docker-compose.yml 已创建 |
 | 测试指南 | P2 | 04-development/testing.md |
 
 ---
@@ -76,11 +79,13 @@
 
 ## 🚦 近期任务
 
-### 本周 (3/17-3/23)
-- [ ] Day 1-2: 架构搭建 + 选题模块
-- [ ] Day 3: **Demo冻结** (跑通链路)
-- [ ] Day 4-5: 研究模块 + 蓝军评审
-- [ ] Day 6-7: 发布模块 + 监控看板
+### 本周 (3/17-3/23) - 内容质量优先 Sprint
+- [x] Day 0: 内容质量输入框架设计
+- [ ] Day 1-2: 新闻抓取模块 MVP (RSS聚合 + 热点发现)
+- [ ] Day 3: 事实核查基础 (数据点验证 + 来源检查)
+- [ ] Day 4: 竞品监控 + 差异化分析
+- [ ] Day 5: 读者匹配度 + 平台适配建议
+- [ ] Day 6-7: 整合输入质量仪表盘
 
 ### 阻塞项
 | 问题 | 状态 | 负责人 |
