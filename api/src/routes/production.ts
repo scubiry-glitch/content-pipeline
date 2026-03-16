@@ -409,4 +409,49 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const result = quickValidate(value, metric, context);
     return result;
   });
+
+  // ===== 终稿编辑 API (FR-024 ~ FR-025) =====
+
+  // 获取最终稿件内容
+  fastify.get('/:taskId/final-draft', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getFinalDraft } = await import('../services/finalDraftEditor.js');
+    const draft = await getFinalDraft(taskId);
+    if (!draft) {
+      reply.status(404);
+      return { error: 'Draft not found' };
+    }
+    return draft;
+  });
+
+  // 保存编辑后的终稿
+  fastify.post('/:taskId/final-draft/edit', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { content, editedBy } = request.body as any;
+
+    if (!content) {
+      reply.status(400);
+      return { error: 'content is required' };
+    }
+
+    const { saveEditedDraft } = await import('../services/finalDraftEditor.js');
+    const result = await saveEditedDraft(taskId, content, editedBy);
+    return result;
+  });
+
+  // 获取修改痕迹对比
+  fastify.get('/:taskId/final-draft/diff', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getEditDiff } = await import('../services/finalDraftEditor.js');
+    const diff = await getEditDiff(taskId);
+    return { diff };
+  });
+
+  // 获取编辑历史
+  fastify.get('/:taskId/final-draft/history', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getEditHistory } = await import('../services/finalDraftEditor.js');
+    const history = await getEditHistory(taskId);
+    return { history };
+  });
 }

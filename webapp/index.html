@@ -4964,6 +4964,15 @@
                                     ✓ 所有严重问题已处理，可以进入确认环节
                                 </div>
                             `}
+                            <!-- 批量操作 -->
+                            <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--gray-200); display: flex; gap: 8px;">
+                                <button class="btn-sm" onclick="batchDecideAll('accept')" style="background: var(--success); color: white; font-size: 12px;">
+                                    ✓ 全部接受
+                                </button>
+                                <button class="btn-sm" onclick="batchDecideAll('ignore')" style="background: var(--gray-400); color: white; font-size: 12px;">
+                                    ⊘ 全部忽略
+                                </button>
+                            </div>
                         </div>
                     ` : ''}
 
@@ -5179,6 +5188,8 @@
                 if (res.ok) {
                     const result = await res.json();
                     showToast(result.message || '重新评审已启动', 'success');
+                    // 显示重新评审进度提示
+                    showReReviewProgress(expertRole);
                     loadAndRenderReviews(selectedTask.id);
                 } else {
                     const error = await res.json();
@@ -5188,6 +5199,106 @@
                 hideLoading();
                 showToast('申请失败', 'error');
                 console.error('Failed to request re-review:', err);
+            }
+        }
+
+        // 显示重新评审进度
+        function showReReviewProgress(expertRole) {
+            const expertNames = {
+                'fact_checker': '事实核查员',
+                'logic_checker': '逻辑检察官',
+                'domain_expert': '行业专家',
+                'reader_rep': '读者代表'
+            };
+
+            // 创建一个临时进度提示
+            const progressDiv = document.createElement('div');
+            progressDiv.id = `re-review-progress-${expertRole}`;
+            progressDiv.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: var(--info);
+                color: white;
+                padding: 12px 16px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 9999;
+                font-size: 13px;
+            `;
+            progressDiv.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
+                    <span>${expertNames[expertRole] || expertRole}重新评审进行中...</span>
+                </div>
+            `;
+            document.body.appendChild(progressDiv);
+
+            // 5秒后自动移除提示
+            setTimeout(() => {
+                progressDiv.remove();
+                showToast(`${expertNames[expertRole] || expertRole}重新评审已完成`, 'success');
+                loadAndRenderReviews(selectedTask.id);
+            }, 5000);
+        }
+
+        // 批量处理所有待处理评审项
+        async function batchDecideAll(decision) {
+            if (!selectedTask) return;
+
+            const decisionLabels = {
+                accept: '接受修改',
+                ignore: '忽略'
+            };
+
+            const confirmed = confirm(`确定要${decisionLabels[decision]}所有待处理的评审建议吗？`);
+            if (!confirmed) return;
+
+            try {
+                showLoading('批量处理中...');
+
+                // 获取所有待处理评审项
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/review-items`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+
+                if (!res.ok) throw new Error('获取评审项失败');
+
+                const data = await res.json();
+                const pendingItems = data.items.filter(item => item.status === 'pending' && item.severity !== 'praise');
+
+                if (pendingItems.length === 0) {
+                    hideLoading();
+                    showToast('没有待处理的评审项', 'info');
+                    return;
+                }
+
+                // 批量提交决策
+                const { batchSubmitDecisions } = await import('../services/reviewDecision.js');
+                const decisions = pendingItems.map(item => ({
+                    reviewId: item.id,
+                    decision: decision
+                }));
+
+                const batchRes = await fetch(`${BASE_URL}/production/${selectedTask.id}/review-items/batch-decide`, {
+                    method: 'POST',
+                    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decisions })
+                });
+
+                hideLoading();
+
+                if (batchRes.ok) {
+                    showToast(`已${decisionLabels[decision]} ${pendingItems.length} 个评审项`, 'success');
+                    loadAndRenderReviews(selectedTask.id);
+                    checkCanProceedToConfirmation();
+                } else {
+                    throw new Error('批量处理失败');
+                }
+            } catch (err) {
+                hideLoading();
+                showToast('批量处理失败: ' + err.message, 'error');
+                console.error('Batch decide failed:', err);
             }
         }
 
@@ -6518,9 +6629,420 @@
             }
         }
 
-        // 编辑终稿
-        function editFinalDraft(taskId) {
-            showToast('终稿编辑功能开发中，敬请期待', 'info');
+        // 编辑终稿 - 轻量级 Markdown 编辑器 (FR-024 ~ FR-025)
+        async function editFinalDraft(taskId) {
+            showLoading('加载终稿编辑器...');
+
+            try {
+                // 获取最终稿件内容
+                const res = await fetch(`${BASE_URL}/production/${taskId}/final-draft`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+
+                if (!res.ok) throw new Error('获取稿件失败');
+
+                const draft = await res.json();
+                hideLoading();
+
+                // 显示编辑器弹窗
+                showEditorModal(taskId, draft.content);
+            } catch (err) {
+                hideLoading();
+                showToast('加载失败: ' + err.message, 'error');
+            }
+        }
+
+        // 显示编辑器弹窗
+        function showEditorModal(taskId, content) {
+            const modal = document.createElement('div');
+            modal.id = 'editor-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 10000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+            `;
+
+            modal.innerHTML = `
+                <div style="
+                    background: white;
+                    border-radius: 12px;
+                    width: 100%;
+                    max-width: 1000px;
+                    height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                ">
+                    <!-- 工具栏 -->
+                    <div style="
+                        padding: 12px 16px;
+                        border-bottom: 1px solid var(--gray-200);
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        background: var(--gray-50);
+                    ">
+                        <div style="font-weight: 600; font-size: 16px;">✏️ 编辑终稿</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-sm" onclick="togglePreviewMode()" id="preview-btn" style="font-size: 12px;">
+                                👁️ 预览对比
+                            </button>
+                            <button class="btn-sm" onclick="closeEditorModal()" style="font-size: 12px; background: var(--gray-200); color: var(--gray-700);">
+                                取消
+                            </button>
+                            <button class="btn-sm" onclick="saveEditedDraft('${taskId}')" style="font-size: 12px; background: var(--success); color: white;">
+                                ✓ 保存修改
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 格式工具栏 -->
+                    <div style="
+                        padding: 8px 16px;
+                        border-bottom: 1px solid var(--gray-200);
+                        display: flex;
+                        gap: 4px;
+                        background: white;
+                    ">
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('**', '**')" title="加粗">
+                            <strong>B</strong>
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('*', '*')" title="斜体">
+                            <em>I</em>
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('# ' , '')" title="标题">
+                            H1
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('## ', '')" title="二级标题">
+                            H2
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('- ', '')" title="列表">
+                            • List
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('> ', '')" title="引用">
+                            " Quote
+                        </button>
+                        <div style="width: 1px; background: var(--gray-200); margin: 0 8px;"></div>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('[', '](url)')" title="链接">
+                            🔗
+                        </button>
+                        <button class="editor-toolbar-btn" onclick="insertMarkdown('```\n', '\n```')" title="代码块">
+                            {'{ }'}
+                        </button>
+                    </div>
+
+                    <!-- 编辑区域 -->
+                    <div style="flex: 1; display: flex; overflow: hidden;">
+                        <!-- 编辑器 -->
+                        <div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--gray-200);">
+                            <div style="padding: 8px 16px; background: var(--gray-50); font-size: 12px; color: var(--gray-500);">
+                                Markdown 编辑器
+                            </div>
+                            <textarea
+                                id="editor-textarea"
+                                style="
+                                    flex: 1;
+                                    padding: 16px;
+                                    border: none;
+                                    outline: none;
+                                    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                                    font-size: 14px;
+                                    line-height: 1.8;
+                                    resize: none;
+                                    white-space: pre-wrap;
+                                    overflow-y: auto;
+                                "
+                                placeholder="在此编辑终稿内容..."
+                            >${escapeHtml(content)}</textarea>
+                        </div>
+
+                        <!-- 预览/对比区域 -->
+                        <div style="flex: 1; display: flex; flex-direction: column;" id="preview-panel">
+                            <div style="padding: 8px 16px; background: var(--gray-50); font-size: 12px; color: var(--gray-500);">
+                                预览
+                            </div>
+                            <div
+                                id="editor-preview"
+                                style="
+                                    flex: 1;
+                                    padding: 16px;
+                                    overflow-y: auto;
+                                    font-size: 14px;
+                                    line-height: 1.8;
+                                "
+                            ></div>
+                        </div>
+                    </div>
+
+                    <!-- 底部状态栏 -->
+                    <div style="
+                        padding: 8px 16px;
+                        border-top: 1px solid var(--gray-200);
+                        background: var(--gray-50);
+                        font-size: 12px;
+                        color: var(--gray-500);
+                        display: flex;
+                        justify-content: space-between;
+                    ">
+                        <span id="editor-stats">字符数: ${content.length} | 段落数: ${content.split('\n\n').length}</span>
+                        <span>Ctrl+S 保存 | Ctrl+P 预览对比</span>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            document.body.style.overflow = 'hidden';
+
+            // 添加工具栏样式
+            if (!document.getElementById('editor-toolbar-styles')) {
+                const style = document.createElement('style');
+                style.id = 'editor-toolbar-styles';
+                style.textContent = `
+                    .editor-toolbar-btn {
+                        padding: 4px 10px;
+                        border: 1px solid var(--gray-200);
+                        background: white;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        transition: all 0.2s;
+                    }
+                    .editor-toolbar-btn:hover {
+                        background: var(--gray-100);
+                        border-color: var(--gray-300);
+                    }
+                    .diff-added {
+                        background: #dcfce7;
+                        color: #166534;
+                        padding: 2px 4px;
+                        border-radius: 3px;
+                    }
+                    .diff-removed {
+                        background: #fee2e2;
+                        color: #991b1b;
+                        text-decoration: line-through;
+                        padding: 2px 4px;
+                        border-radius: 3px;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // 绑定输入事件更新预览
+            const textarea = document.getElementById('editor-textarea');
+            const preview = document.getElementById('editor-preview');
+
+            textarea.addEventListener('input', () => {
+                updateEditorPreview(textarea.value);
+                updateEditorStats(textarea.value);
+            });
+
+            // 初始预览
+            updateEditorPreview(content);
+
+            // 键盘快捷键
+            textarea.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    saveEditedDraft(taskId);
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                    e.preventDefault();
+                    togglePreviewMode();
+                }
+            });
+        }
+
+        // 关闭编辑器
+        function closeEditorModal() {
+            const modal = document.getElementById('editor-modal');
+            if (modal) {
+                modal.remove();
+                document.body.style.overflow = '';
+            }
+        }
+
+        // 更新预览
+        function updateEditorPreview(content) {
+            const preview = document.getElementById('editor-preview');
+            if (preview) {
+                preview.innerHTML = simpleMarkdownToHtml(content);
+            }
+        }
+
+        // 更新统计
+        function updateEditorStats(content) {
+            const stats = document.getElementById('editor-stats');
+            if (stats) {
+                const charCount = content.length;
+                const paraCount = content.split('\n\n').filter(p => p.trim()).length;
+                stats.textContent = `字符数: ${charCount} | 段落数: ${paraCount}`;
+            }
+        }
+
+        // 插入 Markdown 标记
+        function insertMarkdown(before, after) {
+            const textarea = document.getElementById('editor-textarea');
+            if (!textarea) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const value = textarea.value;
+            const selected = value.substring(start, end);
+
+            const newValue = value.substring(0, start) + before + selected + after + value.substring(end);
+            textarea.value = newValue;
+
+            // 恢复光标位置
+            const newCursor = start + before.length + selected.length;
+            textarea.setSelectionRange(newCursor, newCursor);
+            textarea.focus();
+
+            // 触发输入事件更新预览
+            textarea.dispatchEvent(new Event('input'));
+        }
+
+        // 简单 Markdown 转 HTML
+        function simpleMarkdownToHtml(markdown) {
+            return markdown
+                .replace(/^### (.*$)/gim, '<h3 style="margin: 16px 0 8px; color: var(--gray-800);">$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2 style="margin: 20px 0 12px; color: var(--gray-800); border-bottom: 2px solid var(--gray-200); padding-bottom: 8px;">$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1 style="margin: 24px 0 16px; color: var(--gray-900); border-bottom: 3px solid var(--primary); padding-bottom: 12px;">$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code style="background: var(--gray-100); padding: 2px 6px; border-radius: 4px; font-family: monospace;">$1</code>')
+                .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid var(--primary); margin: 12px 0; padding: 8px 16px; background: var(--gray-50); color: var(--gray-700);">$1</blockquote>')
+                .replace(/^- (.*$)/gim, '<li style="margin: 4px 0; margin-left: 20px;">$1</li>')
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color: var(--primary); text-decoration: none;">$1</a>')
+                .replace(/\n\n/g, '</p><p style="margin: 12px 0;">')
+                .replace(/^(.+)$/gm, '<p style="margin: 12px 0;">$1</p>');
+        }
+
+        // 切换预览模式（对比模式）
+        async function togglePreviewMode() {
+            const preview = document.getElementById('editor-preview');
+            const textarea = document.getElementById('editor-textarea');
+            const previewLabel = document.querySelector('#preview-panel div');
+
+            if (!preview || !textarea) return;
+
+            const btn = document.getElementById('preview-btn');
+
+            if (btn.dataset.mode === 'diff') {
+                // 切换回普通预览
+                btn.dataset.mode = 'preview';
+                btn.textContent = '👁️ 预览对比';
+                previewLabel.textContent = '预览';
+                updateEditorPreview(textarea.value);
+            } else {
+                // 切换到对比模式
+                btn.dataset.mode = 'diff';
+                btn.textContent = '👁️ 普通预览';
+                previewLabel.textContent = '修改对比（红色=删除，绿色=新增）';
+
+                // 加载对比
+                try {
+                    preview.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--gray-400);">加载对比中...</div>';
+
+                    const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/final-draft/diff`, {
+                        headers: { 'X-API-Key': API_KEY }
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        renderDiffView(preview, data.diff);
+                    } else {
+                        preview.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--danger);">加载对比失败</div>';
+                    }
+                } catch (err) {
+                    preview.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--danger);">加载对比失败</div>';
+                }
+            }
+        }
+
+        // 渲染对比视图
+        function renderDiffView(container, diff) {
+            if (!diff || diff.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--gray-400);">暂无修改记录</div>';
+                return;
+            }
+
+            container.innerHTML = diff.map((item, idx) => {
+                const hasChanges = item.changes.some(c => c.type !== 'unchanged');
+
+                return `
+                    <div style="
+                        margin-bottom: 16px;
+                        padding: 12px;
+                        background: ${hasChanges ? 'var(--gray-50)' : 'white'};
+                        border-radius: 8px;
+                        border: 1px solid ${hasChanges ? 'var(--warning)' : 'var(--gray-200)'};
+                    ">
+                        <div style="font-size: 11px; color: var(--gray-400); margin-bottom: 8px;">
+                            段落 ${item.paragraphIndex + 1} ${hasChanges ? '(有修改)' : '(未修改)'}
+                        </div>
+                        <div style="line-height: 1.8;">
+                            ${item.changes.map(change => {
+                                if (change.type === 'unchanged') {
+                                    return `<span>${escapeHtml(change.text)}</span>`;
+                                } else if (change.type === 'removed') {
+                                    return `<span class="diff-removed">${escapeHtml(change.text)}</span>`;
+                                } else if (change.type === 'added') {
+                                    return `<span class="diff-added">${escapeHtml(change.text)}</span>`;
+                                }
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 保存编辑后的终稿
+        async function saveEditedDraft(taskId) {
+            const textarea = document.getElementById('editor-textarea');
+            if (!textarea) return;
+
+            const content = textarea.value.trim();
+            if (!content) {
+                showToast('内容不能为空', 'error');
+                return;
+            }
+
+            showLoading('保存中...');
+
+            try {
+                const res = await fetch(`${BASE_URL}/production/${taskId}/final-draft/edit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ content, editedBy: 'user' })
+                });
+
+                hideLoading();
+
+                if (res.ok) {
+                    const result = await res.json();
+                    showToast('终稿已保存', 'success');
+                    closeEditorModal();
+                    showTaskDetail(taskId);
+                } else {
+                    const error = await res.json();
+                    showToast(error.message || '保存失败', 'error');
+                }
+            } catch (err) {
+                hideLoading();
+                showToast('保存失败: ' + err.message, 'error');
+            }
         }
 
         // 确认大纲并进入研究阶段

@@ -227,6 +227,27 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Draft edits - for final draft editing history (FR-024 ~ FR-025)
+  await query(`
+    CREATE TABLE IF NOT EXISTS draft_edits (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
+      original_content TEXT NOT NULL,
+      edited_content TEXT NOT NULL,
+      changes JSONB NOT NULL DEFAULT '[]',
+      edited_by VARCHAR(100) DEFAULT 'user',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Add final draft columns to tasks table
+  await query(`
+    ALTER TABLE tasks
+    ADD COLUMN IF NOT EXISTS final_draft TEXT,
+    ADD COLUMN IF NOT EXISTS final_draft_edited BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS final_draft_edit_id UUID
+  `);
+
   // Outputs table - final generated content
   await query(`
     CREATE TABLE IF NOT EXISTS outputs (
@@ -249,6 +270,7 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_asset_bindings_active ON asset_directory_bindings(is_active)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_tracked_files_binding ON asset_tracked_files(binding_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_task_logs_task ON task_logs(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_edits_task ON draft_edits(task_id)`);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {
