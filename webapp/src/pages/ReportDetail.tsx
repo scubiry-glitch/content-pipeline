@@ -211,10 +211,10 @@ export function ReportDetail() {
                           查看话题 →
                         </Link>
                       )}
-                      {match.matchType === 'asset' && (
-                        <button className="btn btn-sm btn-link" onClick={() => alert('素材详情页开发中')}>
+                      {match.matchType === 'asset' && match.matchedItem?.id && (
+                        <Link to={`/assets/${match.matchedItem.id}`} className="btn btn-sm btn-link">
                           查看素材 →
-                        </button>
+                        </Link>
                       )}
                     </div>
                   </div>

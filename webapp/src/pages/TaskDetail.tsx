@@ -21,6 +21,9 @@ import {
 } from '../api/client';
 import type { Task, NovelAngle } from '../types';
 import './TaskDetail.css';
+import { DataReviewTable } from '../components/DataReviewTable';
+import { ExternalLinksList } from '../components/ExternalLinksList';
+import { AssetLinksList } from '../components/AssetLinksList';
 
 // 流程步骤定义
 const STAGE_PIPELINES = {

@@ -101,6 +101,9 @@ export const assetsApi = {
 
   search: (query: string) =>
     client.get('/assets/search', { params: { q: query } }) as Promise<Asset[]>,
+
+  quote: (id: string) =>
+    client.post(`/assets/${id}/quote`) as Promise<any>,
 };
 
 // 主题相关 API

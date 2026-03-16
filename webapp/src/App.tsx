@@ -6,6 +6,7 @@ import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
+import { AssetDetail } from './pages/AssetDetail';
 import { Experts } from './pages/Experts';
 import { Reports } from './pages/Reports';
 import { ReportDetail } from './pages/ReportDetail';
@@ -34,6 +35,7 @@ function App() {
             <Route path="tasks/:id" element={<TaskDetail />} />
             <Route path="tasks/:id/edit" element={<Stage3Editor />} />
             <Route path="assets" element={<Assets />} />
+            <Route path="assets/:id" element={<AssetDetail />} />
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/:id" element={<ReportDetail />} />
