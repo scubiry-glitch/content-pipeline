@@ -1,5 +1,13 @@
 // 内容生产流水线 - 类型定义
 
+export interface WritingData {
+  draft?: string;
+  version?: number;
+  status?: string;
+  word_count?: number;
+  generated_at?: string;
+}
+
 export interface Task {
   id: string;
   topic: string;
@@ -10,12 +18,14 @@ export interface Task {
   current_stage: string;
   outline?: Outline;
   research_data?: ResearchData;
+  writing_data?: WritingData;
   approval_feedback?: string;
   output_ids?: string[];
   is_hidden?: boolean;
   hidden_at?: string;
   evaluation?: TopicEvaluation;
   competitor_analysis?: CompetitorAnalysis;
+  asset_ids?: string[];
   created_at: string;
   updated_at: string;
   completed_at?: string;
@@ -68,6 +78,9 @@ export interface NovelAngle {
   angle: string;
   description: string;
   differentiation_score: number;
+  potentialImpact?: 'high' | 'medium' | 'low';
+  rationale?: string;
+  differentiation?: string;
 }
 
 export interface ResearchData {

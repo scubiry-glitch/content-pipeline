@@ -711,7 +711,7 @@ export function TaskDetail() {
           <div className="card-header-with-actions">
             <h3 className="card-title">📝 文章大纲</h3>
             <div className="card-actions">
-              {task.status === 'outline_pending' && (
+              {(task.status === 'planning' || task.status === 'outline_pending') && (
                 <button
                   className="btn btn-success"
                   onClick={handleConfirmOutline}
@@ -1650,8 +1650,8 @@ export function TaskDetail() {
                   <div className="hot-topics-list">
                     {hotTopics.slice(0, 5).map((topic) => (
                       <div key={topic.id} className="hot-topic-item">
-                        <span className="topic-name">{topic.name}</span>
-                        <span className="topic-heat">{topic.heat}°</span>
+                        <span className="topic-name">{topic.title}</span>
+                        <span className="topic-heat">{topic.hotScore || 0}°</span>
                       </div>
                     ))}
                   </div>
