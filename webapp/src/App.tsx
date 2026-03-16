@@ -48,6 +48,7 @@ function App() {
             <Route path="rss-sources" element={<RSSSources />} />
             <Route path="archive/hidden" element={<HiddenTasks />} />
             <Route path="archive/recycle-bin" element={<RecycleBin />} />
+            <Route path="quality-dashboard" element={<QualityDashboard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

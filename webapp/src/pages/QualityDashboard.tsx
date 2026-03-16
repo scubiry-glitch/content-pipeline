@@ -109,7 +109,7 @@ const mockDashboardData: DashboardData = {
   ],
 };
 
-export function DashboardPage() {
+export function QualityDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

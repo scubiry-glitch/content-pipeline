@@ -245,7 +245,7 @@ function OverviewTab({
       </div>
 
       {/* 知识库洞见 */}
-      {task.outline?.knowledgeInsights && task.outline.knowledgeInsights.length > 0 && (
+      {task.outline?.knowledgeInsights?.length > 0 && (
         <div className="detail-section">
           <div className="detail-section-title">💡 知识库洞见</div>
           <div className="insight-list">
@@ -348,7 +348,7 @@ function PlanningTab({ task }: { task: Task }) {
             </div>
           </div>
 
-          {evaluation.suggestions.length > 0 && (
+          {evaluation.suggestions?.length > 0 && (
             <div className="suggestions-list">
               <div className="suggestions-title">💬 优化建议</div>
               {evaluation.suggestions.map((s, i) => (
@@ -362,7 +362,7 @@ function PlanningTab({ task }: { task: Task }) {
       )}
 
       {/* 竞品分析 */}
-      {competitorAnalysis && competitorAnalysis.similarReports.length > 0 && (
+      {competitorAnalysis?.similarReports?.length > 0 && (
         <div className="competitor-section">
           <div className="detail-section-title">📊 竞品分析</div>
           <div className="competitor-list">

@@ -29,6 +29,9 @@ export function Layout() {
             <NavLink to="/rss-sources" className="nav-link">
               RSS (v3.4)
             </NavLink>
+            <NavLink to="/quality-dashboard" className="nav-link">
+              质量仪表盘
+            </NavLink>
             <NavLink to="/sentiment" className="nav-link">
               情感 (v3.2)
             </NavLink>
