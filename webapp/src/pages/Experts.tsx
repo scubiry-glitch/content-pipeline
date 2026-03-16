@@ -15,8 +15,8 @@ export function Experts() {
   const loadExperts = async () => {
     setLoading(true);
     try {
-      const data = await expertsApi.getAll();
-      setExperts(data);
+      const response = await expertsApi.getAll();
+      setExperts(response.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -24,11 +24,11 @@ export function Experts() {
     }
   };
 
-  const getExpertTypeLabel = (type: Expert['expertType']) => {
+  const getExpertTypeLabel = (type: Expert['angle']) => {
     const labels: Record<string, string> = {
-      academic: '学术专家',
-      industry: '产业专家',
-      think_tank: '智库研究员',
+      challenger: '挑战者',
+      expander: '拓展者',
+      synthesizer: '整合者',
     };
     return labels[type] || type;
   };
@@ -64,14 +64,14 @@ export function Experts() {
               <div className="expert-info">
                 <div className="expert-header">
                   <span className="expert-name">{expert.name}</span>
-                  <span className={`expert-type expert-type-${expert.expertType}`}>
-                    {getExpertTypeLabel(expert.expertType)}
+                  <span className={`expert-type expert-type-${expert.angle}`}>
+                    {getExpertTypeLabel(expert.angle)}
                   </span>
                 </div>
-                <div className="expert-org">{expert.organization}</div>
+                <div className="expert-org">{expert.company} · {expert.title}</div>
                 <div className="expert-domain">{expert.domain}</div>
-                {expert.email && (
-                  <div className="expert-contact">{expert.email}</div>
+                {expert.bio && (
+                  <div className="expert-contact">{expert.bio}</div>
                 )}
               </div>
             </div>

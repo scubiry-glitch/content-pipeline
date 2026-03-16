@@ -81,19 +81,19 @@
   font-weight: 500;
 }
 
-.expert-type-academic {
-  background: rgba(99, 102, 241, 0.1);
-  color: var(--primary);
+.expert-type-challenger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
 }
 
-.expert-type-industry {
+.expert-type-expander {
   background: rgba(16, 185, 129, 0.1);
   color: var(--success);
 }
 
-.expert-type-think_tank {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--warning);
+.expert-type-synthesizer {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
 }
 
 .expert-org {
