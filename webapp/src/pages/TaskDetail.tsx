@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, NavLink } from 'react-router-dom';
-import { tasksApi, blueTeamApi, type BlueTeamReview } from '../api/client';
+import { tasksApi, blueTeamApi, hotTopicsApi, sentimentApi, type BlueTeamReview, type HotTopic } from '../api/client';
 import type { Task } from '../types';
 import './TaskDetail.css';
 
@@ -12,8 +12,14 @@ export function TaskDetail() {
   const navigate = useNavigate();
   const [task, setTask] = useState<Task | null>(null);
   const [reviews, setReviews] = useState<BlueTeamReview[]>([]);
+  const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
+  const [alerts, setAlerts] = useState<Array<{type: string; severity: string; message: string; suggestion?: string}>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{area: string; suggestion: string; priority: string; impact: string}>>([]);
+  const [sentiment, setSentiment] = useState<{msi: number; level: string; change24h: number; distribution: any} | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'research' | 'reviews'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'research' | 'reviews' | 'quality'>('overview');
+  const [analyzeText, setAnalyzeText] = useState('');
+  const [analyzeResult, setAnalyzeResult] = useState<any>(null);
 
   useEffect(() => {
     if (id) {
@@ -32,10 +38,102 @@ export function TaskDetail() {
         const reviewsData = await blueTeamApi.getReviews(id!);
         setReviews(reviewsData.items || []);
       }
+
+      // 加载热点话题
+      try {
+        const topicsData = await hotTopicsApi.getAll({ limit: 5 });
+        setHotTopics(topicsData.items || []);
+      } catch (e) { /* 忽略错误 */ }
+
+      // 加载情感分析
+      try {
+        const sentimentData = await sentimentApi.getStats();
+        setSentiment(sentimentData);
+      } catch (e) { /* 忽略错误 */ }
+
+      // 生成优化建议
+      generateSuggestions(data);
+
+      // 生成预警
+      generateAlerts(data);
     } catch (error) {
       console.error('加载任务失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateSuggestions = (taskData: Task) => {
+    const newSuggestions: Array<{area: string; suggestion: string; priority: string; impact: string}> = [];
+
+    if (!taskData.outline) {
+      newSuggestions.push({
+        area: '大纲',
+        suggestion: '任务尚未生成大纲，建议进入选题策划阶段',
+        priority: 'high',
+        impact: '明确写作方向'
+      });
+    }
+
+    if (!taskData.research_data?.sources?.length) {
+      newSuggestions.push({
+        area: '研究',
+        suggestion: '缺少引用来源，建议进行深度研究收集资料',
+        priority: 'medium',
+        impact: '提升内容可信度'
+      });
+    }
+
+    if (taskData.evaluation && taskData.evaluation.score < 70) {
+      newSuggestions.push({
+        area: '质量',
+        suggestion: '选题评分较低，建议优化选题或寻找差异化角度',
+        priority: 'high',
+        impact: '提高内容竞争力'
+      });
+    }
+
+    setSuggestions(newSuggestions);
+  };
+
+  const generateAlerts = (taskData: Task) => {
+    const newAlerts: Array<{type: string; severity: string; message: string; suggestion?: string}> = [];
+
+    // 检查任务是否长时间未更新
+    const lastUpdate = new Date(taskData.updated_at);
+    const now = new Date();
+    const daysDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > 7) {
+      newAlerts.push({
+        type: 'freshness',
+        severity: 'warning',
+        message: `任务已${daysDiff}天未更新`,
+        suggestion: '建议检查任务状态或更新进度'
+      });
+    }
+
+    // 检查是否有评审意见未处理
+    const pendingReviews = reviews.filter(r => r.status === 'pending');
+    if (pendingReviews.length > 0) {
+      newAlerts.push({
+        type: 'review',
+        severity: 'info',
+        message: `有${pendingReviews.length}条评审意见待处理`,
+        suggestion: '请及时处理蓝军评审意见'
+      });
+    }
+
+    setAlerts(newAlerts);
+  };
+
+  const handleAnalyzeContent = async () => {
+    if (!analyzeText.trim()) return;
+    try {
+      const result = await sentimentApi.analyze('temp', analyzeText);
+      setAnalyzeResult(result);
+    } catch (error) {
+      console.error('分析失败:', error);
     }
   };
 
@@ -208,6 +306,12 @@ export function TaskDetail() {
           onClick={() => setActiveTab('reviews')}
         >
           👥 蓝军评审 {reviews.length > 0 && `(${reviews.length})`}
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'quality' ? 'active' : ''}`}
+          onClick={() => setActiveTab('quality')}
+        >
+          📊 质量分析 {alerts.length > 0 && `(${alerts.length})`}
         </button>
       </div>
 
@@ -459,6 +563,154 @@ export function TaskDetail() {
                 <p>任务进入评审阶段后将显示蓝军评审意见</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 质量分析标签页 */}
+        {activeTab === 'quality' && (
+          <div className="tab-panel quality-panel">
+            <div className="quality-grid">
+              {/* 情感分析 (MSI) */}
+              {sentiment && (
+                <div className="info-card sentiment-card">
+                  <h3 className="card-title">📊 市场情绪指数 (MSI)</h3>
+                  <div className="sentiment-display">
+                    <div className="msi-gauge-small">
+                      <span className="msi-value-small">{sentiment.msi}</span>
+                      <span className="msi-level-small">{sentiment.level}</span>
+                    </div>
+                    <div className="msi-change">
+                      <span className={`change-badge ${sentiment.change24h >= 0 ? 'up' : 'down'}`}>
+                        24h {sentiment.change24h >= 0 ? '+' : ''}{sentiment.change24h}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="sentiment-distribution">
+                    <div className="dist-bar">
+                      <span className="dist-label">😊 正面</span>
+                      <div className="dist-progress">
+                        <div className="dist-fill positive" style={{ width: `${sentiment.distribution?.positive * 100}%` }}></div>
+                      </div>
+                      <span className="dist-percent">{((sentiment.distribution?.positive || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="dist-bar">
+                      <span className="dist-label">😐 中性</span>
+                      <div className="dist-progress">
+                        <div className="dist-fill neutral" style={{ width: `${sentiment.distribution?.neutral * 100}%` }}></div>
+                      </div>
+                      <span className="dist-percent">{((sentiment.distribution?.neutral || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="dist-bar">
+                      <span className="dist-label">😔 负面</span>
+                      <div className="dist-progress">
+                        <div className="dist-fill negative" style={{ width: `${sentiment.distribution?.negative * 100}%` }}></div>
+                      </div>
+                      <span className="dist-percent">{((sentiment.distribution?.negative || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 热点话题 */}
+              <div className="info-card hot-topics-card">
+                <h3 className="card-title">🔥 相关热点话题</h3>
+                {hotTopics.length > 0 ? (
+                  <ul className="hot-topics-list">
+                    {hotTopics.map((topic) => (
+                      <li key={topic.id} className="hot-topic-item">
+                        <span className="topic-title">{topic.title}</span>
+                        <span className="topic-score">{topic.hotScore}</span>
+                        <span className={`topic-trend trend-${topic.trend}`}>
+                          {topic.trend === 'up' ? '📈' : topic.trend === 'down' ? '📉' : '➡️'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="empty-mini">暂无相关热点</div>
+                )}
+              </div>
+
+              {/* 实时预警 */}
+              <div className="info-card alerts-card">
+                <h3 className="card-title">⚠️ 实时预警</h3>
+                {alerts.length > 0 ? (
+                  <div className="alerts-list">
+                    {alerts.map((alert, idx) => (
+                      <div key={idx} className={`alert-item severity-${alert.severity}`}>
+                        <span className="alert-type">{alert.type === 'freshness' ? '⏰' : alert.type === 'review' ? '👥' : '⚠️'}</span>
+                        <div className="alert-content">
+                          <p className="alert-message">{alert.message}</p>
+                          {alert.suggestion && <p className="alert-suggestion">💡 {alert.suggestion}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-mini">✅ 暂无预警</div>
+                )}
+              </div>
+
+              {/* 优化建议 */}
+              <div className="info-card suggestions-card">
+                <h3 className="card-title">💡 优化建议</h3>
+                {suggestions.length > 0 ? (
+                  <div className="suggestions-list">
+                    {suggestions.map((s, idx) => (
+                      <div key={idx} className={`suggestion-item priority-${s.priority}`}>
+                        <span className="suggestion-area">{s.area}</span>
+                        <p className="suggestion-text">{s.suggestion}</p>
+                        <span className="suggestion-impact">📈 {s.impact}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-mini">暂无优化建议</div>
+                )}
+              </div>
+
+              {/* 内容分析器 */}
+              <div className="info-card full-width analyzer-card">
+                <h3 className="card-title">📝 内容分析器</h3>
+                <div className="analyzer-input-section">
+                  <textarea
+                    className="analyzer-textarea"
+                    placeholder="粘贴文章内容进行实时分析..."
+                    value={analyzeText}
+                    onChange={(e) => setAnalyzeText(e.target.value)}
+                    rows={4}
+                  />
+                  <button className="btn btn-primary analyze-btn" onClick={handleAnalyzeContent}>
+                    🔍 分析内容
+                  </button>
+                </div>
+                {analyzeResult && (
+                  <div className="analyzer-result">
+                    <h4>分析结果</h4>
+                    <div className="result-metrics">
+                      <div className="result-metric">
+                        <span className="metric-label">情感倾向</span>
+                        <span className={`metric-value polarity-${analyzeResult.polarity}`}>
+                          {analyzeResult.polarity === 'positive' ? '😊 正面' : analyzeResult.polarity === 'negative' ? '😔 负面' : '😐 中性'}
+                        </span>
+                      </div>
+                      <div className="result-metric">
+                        <span className="metric-label">置信度</span>
+                        <span className="metric-value">{((analyzeResult.confidence || 0) * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                    {analyzeResult.keywords && analyzeResult.keywords.length > 0 && (
+                      <div className="result-keywords">
+                        <span className="keywords-label">关键词：</span>
+                        {analyzeResult.keywords.map((kw: string, i: number) => (
+                          <span key={i} className="keyword-tag">{kw}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
