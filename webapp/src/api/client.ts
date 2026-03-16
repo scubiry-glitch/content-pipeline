@@ -193,14 +193,16 @@ export const hotTopicsApi = {
   getById: (id: string) =>
     client.get(`/quality/hot-topics/${id}`) as Promise<HotTopic>,
 
-  getTrends: () =>
-    client.get('/quality/hot-topics/trends') as Promise<{ topics: string[]; scores: number[] }>,
+  getTrends: (id?: string, days?: number) =>
+    id
+      ? client.get(`/quality/hot-topics/${id}/trend`, { params: { days } }) as Promise<{ items: any[] }>
+      : client.get('/quality/hot-topics/trends') as Promise<{ topics: string[]; scores: number[] }>,
 
   follow: (id: string) =>
     client.post(`/quality/hot-topics/${id}/follow`) as Promise<void>,
 
   unfollow: (id: string) =>
-    client.delete(`/quality/hot-topics/${id}/follow`) as Promise<void>,
+    client.post(`/quality/hot-topics/${id}/unfollow`) as Promise<void>,
 };
 
 // RSS源管理 API
