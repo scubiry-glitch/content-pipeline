@@ -269,4 +269,40 @@ export async function productionRoutes(fastify: FastifyInstance) {
       offset: parseInt(offset)
     });
   });
+
+  // ===== 数据审核 API (FR-011 ~ FR-014) =====
+
+  // 获取数据审核列表
+  fastify.get('/:taskId/data-review', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getDataReviewList } = await import('../services/dataReview.js');
+    const result = await getDataReviewList(taskId);
+    return result;
+  });
+
+  // 更新数据项选择状态
+  fastify.patch('/:taskId/data-review/:itemId', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, itemId } = request.params as any;
+    const { isSelected } = request.body as any;
+    const { updateDataSelection } = await import('../services/dataReview.js');
+    await updateDataSelection(taskId, itemId, isSelected);
+    return { success: true };
+  });
+
+  // 批量更新数据选择
+  fastify.post('/:taskId/data-review/batch', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { selections } = request.body as any;
+    const { batchUpdateSelection } = await import('../services/dataReview.js');
+    await batchUpdateSelection(taskId, selections);
+    return { success: true };
+  });
+
+  // 获取数据审核统计
+  fastify.get('/:taskId/data-review/stats', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getDataReviewStats } = await import('../services/dataReview.js');
+    const stats = await getDataReviewStats(taskId);
+    return stats;
+  });
 }

@@ -4753,6 +4753,58 @@
                 </div>
 
                 <div class="detail-section">
+                    <div class="detail-section-title">📊 数据审核</div>
+                    <div id="dataReviewSection">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="display: flex; gap: 16px; font-size: 12px;">
+                                <span>总数据: <strong id="totalCount">${annotations.length}</strong></span>
+                                <span>已选: <strong id="selectedCount" style="color: var(--success);">-</strong></span>
+                                <span>A级信源: <strong id="aLevelCount" style="color: #10b981;">-</strong></span>
+                            </div>
+                            <button class="btn-sm" onclick="refreshDataReview()">🔄 刷新</button>
+                        </div>
+
+                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--gray-200); border-radius: 8px;">
+                            ${annotations.length > 0 ? `
+                                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                    <thead style="background: var(--gray-50); position: sticky; top: 0;">
+                                        <tr>
+                                            <th style="padding: 10px; text-align: left; width: 40px;"><input type="checkbox" id="selectAll" checked onchange="toggleSelectAll()"></th>
+                                            <th style="padding: 10px; text-align: left;">来源</th>
+                                            <th style="padding: 10px; text-align: center; width: 60px;">等级</th>
+                                            <th style="padding: 10px; text-align: center; width: 80px;">可信度</th>
+                                            <th style="padding: 10px; text-align: left;">标题</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${annotations.map((a, idx) => {
+                                            const cred = a.credibility || { level: 'C', score: 0.6 };
+                                            const levelColors = { 'A': '#10b981', 'B': '#3b82f6', 'C': '#f59e0b', 'D': '#6b7280' };
+                                            return `
+                                                <tr class="data-review-row" data-id="${a.id}" style="border-top: 1px solid var(--gray-100);">
+                                                    <td style="padding: 10px;"><input type="checkbox" class="data-checkbox" data-id="${a.id}" checked onchange="updateDataSelection('${a.id}', this.checked)"></td>
+                                                    <td style="padding: 10px; color: var(--gray-600); font-size: 12px;">${a.type === 'url' ? new URL(a.url || 'http://e.com').hostname : '素材库'}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${levelColors[cred.level]}20; color: ${levelColors[cred.level]}; font-weight: 600; font-size: 11px;">${cred.level}</span></td>
+                                                    <td style="padding: 10px; text-align: center;">${Math.round(cred.score * 100)}%</td>
+                                                    <td style="padding: 10px;"><a href="${a.url || '#' }" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHtml(a.title)}</a></td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            ` : '<p style="padding: 20px; text-align: center; color: var(--gray-500);">暂无数据，请先进行研究</p>'}
+                        </div>
+
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button class="btn-sm" onclick="filterByCredibility('all')">全部</button>
+                            <button class="btn-sm" onclick="filterByCredibility('A')" style="color: #10b981;">A级</button>
+                            <button class="btn-sm" onclick="filterByCredibility('B')" style="color: #3b82f6;">B级</button>
+                            <button class="btn-sm" onclick="filterByCredibility('C')" style="color: #f59e0b;">C级</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
                     <div class="detail-section-title">研究洞察</div>
                     ${researchData.insights?.map((insight, i) => `
                         <div class="review-question">
@@ -5228,6 +5280,70 @@
                 showTaskDetail(selectedTask.id);
             }).catch(err => {
                 showToast('添加失败: ' + err.message, 'error');
+            });
+        }
+
+        // ===== 数据审核功能 (FR-011 ~ FR-014) =====
+
+        async function refreshDataReview() {
+            if (!selectedTask) return;
+            try {
+                const res = await fetch(`${BASE_URL}/production/${selectedTask.id}/data-review`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                const data = await res.json();
+
+                // 更新统计
+                document.getElementById('totalCount').textContent = data.stats?.total || 0;
+                document.getElementById('selectedCount').textContent = data.stats?.selected || 0;
+                document.getElementById('aLevelCount').textContent = data.stats?.byLevel?.A || 0;
+
+                showNotification('数据审核列表已刷新', 'success');
+            } catch (error) {
+                console.error('Failed to refresh data review:', error);
+            }
+        }
+
+        async function updateDataSelection(itemId, isSelected) {
+            if (!selectedTask) return;
+            try {
+                await fetch(`${BASE_URL}/production/${selectedTask.id}/data-review/${itemId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ isSelected })
+                });
+
+                // 更新选中计数
+                const checkboxes = document.querySelectorAll('.data-checkbox:checked');
+                document.getElementById('selectedCount').textContent = checkboxes.length;
+            } catch (error) {
+                console.error('Failed to update selection:', error);
+            }
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.data-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+                updateDataSelection(cb.dataset.id, selectAll.checked);
+            });
+            document.getElementById('selectedCount').textContent = selectAll.checked ? checkboxes.length : 0;
+        }
+
+        function filterByCredibility(level) {
+            const rows = document.querySelectorAll('.data-review-row');
+            rows.forEach(row => {
+                const levelCell = row.querySelector('td:nth-child(3) span');
+                const rowLevel = levelCell?.textContent;
+                if (level === 'all' || rowLevel === level) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
             });
         }
 
