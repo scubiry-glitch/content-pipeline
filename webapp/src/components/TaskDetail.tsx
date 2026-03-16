@@ -1,6 +1,6 @@
 // 任务详情面板 - 恢复原版 HTML 的详细功能
 import { useState, useEffect } from 'react';
-import { tasksApi, type BlueTeamReview } from '../api/client';
+import { tasksApi } from '../api/client';
 import type { Task, BlueTeamReview } from '../types';
 import './TaskDetail.css';
 

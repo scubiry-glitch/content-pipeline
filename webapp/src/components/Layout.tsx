@@ -35,6 +35,9 @@ export function Layout() {
             <NavLink to="/orchestrator" className="nav-link">
               编排 (v4.1)
             </NavLink>
+            <NavLink to="/copilot" className="nav-link">
+              Copilot (v4.4)
+            </NavLink>
           </nav>
         </div>
       </header>

@@ -12,6 +12,7 @@ import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
 import { Stage3Editor } from './pages/Stage3Editor';
+import { CopilotChat } from './pages/CopilotChat';
 import './App.css';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
             <Route path="sentiment" element={<SentimentAnalysisPage />} />
             <Route path="compliance" element={<Compliance />} />
             <Route path="orchestrator" element={<Orchestrator />} />
+            <Route path="copilot" element={<CopilotChat />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
