@@ -13,9 +13,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { reportService } from '../src/services/reportService';
-import { hotTopicService } from '../src/services/hotTopicService';
-import { assetService } from '../src/services/assetService';
+import { reportService } from '../../api/src/services/reportService';
+import { hotTopicService } from '../../api/src/services/hotTopicService';
+import { assetService } from '../../api/src/services/assetService';
 
 describe('v3.4 内容质量输入体系测试', () => {
   beforeEach(() => {

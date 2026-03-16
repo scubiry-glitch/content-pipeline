@@ -27,7 +27,7 @@ import {
   getChangeLogs,
   annotateAndModify,
   chatAndSaveVersion,
-} from '../src/services/stage3-enhancement';
+} from '../../api/src/services/stage3-enhancement';
 
 // ============================================================================
 // 一、标注系统测试 (12个)

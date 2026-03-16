@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { orchestratorEngine, taskScheduler } from '../src/services/orchestratorService';
+import { orchestratorEngine, taskScheduler } from '../../api/src/services/orchestratorService';
 
 describe('v4.1 智能流水线编排测试', () => {
   beforeEach(() => {

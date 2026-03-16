@@ -44,10 +44,18 @@ export class OrchestratorEngine {
       let evalExpr = expression;
 
       for (const [key, value] of Object.entries(context)) {
+        // 支持驼峰命名和下划线命名
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+
         if (typeof value === 'number') {
-          evalExpr = evalExpr.replace(new RegExp(key, 'g'), value.toString());
+          evalExpr = evalExpr.replace(new RegExp(`\\b${key}\\b`, 'g'), value.toString());
+          evalExpr = evalExpr.replace(new RegExp(`\\b${snakeKey}\\b`, 'g'), value.toString());
+          evalExpr = evalExpr.replace(new RegExp(`\\b${camelKey}\\b`, 'g'), value.toString());
         } else if (typeof value === 'string') {
-          evalExpr = evalExpr.replace(new RegExp(key, 'g'), `'${value}'`);
+          evalExpr = evalExpr.replace(new RegExp(`\\b${key}\\b`, 'g'), `'${value}'`);
+          evalExpr = evalExpr.replace(new RegExp(`\\b${snakeKey}\\b`, 'g'), `'${value}'`);
+          evalExpr = evalExpr.replace(new RegExp(`\\b${camelKey}\\b`, 'g'), `'${value}'`);
         }
       }
 

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { complianceService } from '../src/services/complianceService';
+import { complianceService } from '../../api/src/services/complianceService';
 
 describe('v4.0 智能审核与合规测试', () => {
   beforeEach(() => {
