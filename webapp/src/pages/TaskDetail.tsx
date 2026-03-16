@@ -10,10 +10,12 @@ import {
   sentimentApi,
   assetsApi,
   researchApi,
+  complianceApi,
   type BlueTeamReview,
   type HotTopic,
   type Asset,
-  type ResearchConfig
+  type ResearchConfig,
+  type ComplianceCheckResult
 } from '../api/client';
 import type { Task, NovelAngle } from '../types';
 import './TaskDetail.css';
@@ -109,6 +111,10 @@ export function TaskDetail() {
 
   // 操作加载状态
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // 合规检查状态
+  const [complianceResult, setComplianceResult] = useState<ComplianceCheckResult | null>(null);
+  const [checkingCompliance, setCheckingCompliance] = useState(false);
 
   // 深度研究配置状态
   const [researchConfig, setResearchConfig] = useState<ResearchConfig>({
@@ -460,6 +466,32 @@ export function TaskDetail() {
       alert('操作失败');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // 合规检查
+  const handleComplianceCheck = async () => {
+    const content = task?.writing_data?.draft;
+    if (!content) {
+      alert('暂无文稿内容可检查');
+      return;
+    }
+    setCheckingCompliance(true);
+    try {
+      const result = await complianceApi.checkContent(content);
+      setComplianceResult(result);
+      if (result.overallScore >= 80) {
+        alert(`✅ 合规检查通过！得分: ${result.overallScore}`);
+      } else if (result.overallScore >= 60) {
+        alert(`⚠️ 合规检查需关注，发现 ${result.issues.length} 个问题。得分: ${result.overallScore}`);
+      } else {
+        alert(`❌ 合规检查高风险，发现 ${result.issues.length} 个问题。得分: ${result.overallScore}`);
+      }
+    } catch (error) {
+      console.error('合规检查失败:', error);
+      alert('合规检查失败');
+    } finally {
+      setCheckingCompliance(false);
     }
   };
 
@@ -1611,9 +1643,57 @@ export function TaskDetail() {
                 >
                   {actionLoading === 'redo-writing' ? '启动中...' : '🔄 重做文稿生成'}
                 </button>
+                {task.writing_data?.draft && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleComplianceCheck}
+                    disabled={checkingCompliance}
+                  >
+                    {checkingCompliance ? '检查中...' : '🛡️ 合规检查'}
+                  </button>
+                )}
               </div>
               <p className="action-hint">重做将删除当前版本并重新生成初稿</p>
             </div>
+
+            {/* 合规检查结果 */}
+            {complianceResult && (
+              <div className="info-card compliance-result-card">
+                <h3 className="card-title">🛡️ 合规检查结果</h3>
+                <div className="compliance-summary">
+                  <div
+                    className={`compliance-score ${complianceResult.overallScore >= 80 ? 'pass' : complianceResult.overallScore >= 60 ? 'warning' : 'fail'}`}
+                  >
+                    <span className="score-value">{complianceResult.overallScore}</span>
+                    <span className="score-label">
+                      {complianceResult.overallScore >= 80 ? '合规' : complianceResult.overallScore >= 60 ? '需关注' : '高风险'}
+                    </span>
+                  </div>
+                  <div className="compliance-stats">
+                    <span>问题数: {complianceResult.issues.length}</span>
+                    <span>状态: {complianceResult.passed ? '✅ 通过' : '❌ 未通过'}</span>
+                  </div>
+                </div>
+                {complianceResult.issues.length > 0 && (
+                  <div className="compliance-issues">
+                    <h4>发现问题</h4>
+                    {complianceResult.issues.map((issue, idx) => (
+                      <div key={idx} className={`issue-item ${issue.level}`}>
+                        <div className="issue-header">
+                          <span className="issue-type">{issue.type}</span>
+                          <span className={`issue-level ${issue.level}`}>{issue.level}</span>
+                        </div>
+                        <div className="issue-content">{issue.content}</div>
+                        <div className="issue-suggestion">💡 {issue.suggestion}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button className="btn btn-secondary" onClick={() => setComplianceResult(null)}>
+                  清除结果
+                </button>
+              </div>
+            )}
 
             {task.writing_data ? (
               <div className="writing-content">
