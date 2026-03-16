@@ -305,4 +305,29 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const stats = await getDataReviewStats(taskId);
     return stats;
   });
+
+  // ===== 交叉验证 API (FR-015 ~ FR-016) =====
+
+  // 执行交叉验证
+  fastify.post('/:taskId/cross-validate', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { dataPoints } = request.body as any;
+
+    if (!dataPoints || !Array.isArray(dataPoints)) {
+      reply.status(400);
+      return { error: 'dataPoints is required and must be an array' };
+    }
+
+    const { validateDataPoints } = await import('../services/crossValidation.js');
+    const result = await validateDataPoints(dataPoints);
+    return result;
+  });
+
+  // 快速验证单个数值
+  fastify.post('/quick-validate', { preHandler: authenticate }, async (request, reply) => {
+    const { value, metric, context } = request.body as any;
+    const { quickValidate } = await import('../services/crossValidation.js');
+    const result = quickValidate(value, metric, context);
+    return result;
+  });
 }
