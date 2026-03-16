@@ -19,6 +19,7 @@ import { v34AssetRoutes } from './routes/v34-assets.js';
 import { v40ComplianceRoutes } from './routes/v40-compliance.js';
 import { v41OrchestratorRoutes } from './routes/v41-orchestrator.js';
 import { v42Stage3Routes } from './routes/v42-stage3.js';
+import { v43PredictionRoutes } from './routes/v43-prediction.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
 import { startRSSCron } from './services/rssCrawler.js';
@@ -112,6 +113,9 @@ async function main() {
 
   // v4.2 Stage 3 文稿生成增强路由
   await fastify.register(v42Stage3Routes, { prefix: '/api/v1/stage3' });
+
+  // v4.3 内容表现预测路由
+  await fastify.register(v43PredictionRoutes, { prefix: '/api/v1/prediction' });
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
