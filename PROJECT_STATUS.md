@@ -13,7 +13,7 @@
    ✓         ✓         ✓         ⬜         ⬜         ⬜
 ```
 
-**当前阶段**: 内容质量输入框架设计（回归内容本质）
+**当前阶段**: v3.0 第二轮迭代完成 (AudienceMatcher + 改进)
 
 ---
 
@@ -22,7 +22,7 @@
 | 维度 | 指标 | 现状 | 目标 |
 |------|------|------|------|
 | **产品** | 功能规格完成度 | 80% | 100% |
-| **技术** | 核心测试通过率 | ✅ 22/22 | 100% |
+| **技术** | 核心测试通过率 | ✅ 43/43 | 100% |
 | **运营** | SOP文档化 | ✅ 完成 | 100% |
 | **进度** | Demo里程碑 | ⬜ 3/19 | 准时 |
 
@@ -65,6 +65,8 @@
 | 组件 | 路径 | 测试 | 状态 |
 |------|------|------|------|
 | ContentPipeline | `content-pipeline/pipeline.test.ts` | 22/22 ✅ | ✅ 稳定 |
+| NewsAggregator | `content-pipeline/news-aggregator.test.ts` | 21/21 ✅ | ✅ 新增 |
+| AudienceMatcher | `content-pipeline/audience-matcher.test.ts` | 21/21 ✅ | ✅ 新增 |
 | extractTableName | `content-pipeline/pipeline.test.ts` | 5/5 ✅ | ✅ 稳定 |
 | 连接池 | `content-pipeline/pool.ts` | 集成 | ✅ 可用 |
 
@@ -81,11 +83,15 @@
 
 ### 本周 (3/17-3/23) - 内容质量优先 Sprint
 - [x] Day 0: 内容质量输入框架设计
-- [ ] Day 1-2: 新闻抓取模块 MVP (RSS聚合 + 热点发现)
-- [ ] Day 3: 事实核查基础 (数据点验证 + 来源检查)
-- [ ] Day 4: 竞品监控 + 差异化分析
-- [ ] Day 5: 读者匹配度 + 平台适配建议
+- [x] Day 1-2: 新闻抓取模块 MVP (RSS聚合 + 热点发现) ✅
+- [x] Day 3: 事实核查基础 (数据点验证 + 来源检查) ✅
+- [x] Day 4: 竞品监控 + 差异化分析 ✅
+- [x] Day 5: 读者匹配度 + 平台适配建议 ✅
 - [ ] Day 6-7: 整合输入质量仪表盘
+
+### GitHub提交
+- [第一轮](https://github.com/scubiry-glitch/content-pipeline/commit/66b0421): NewsAggregator + FactChecker + DifferentiationAnalyzer (21 tests)
+- [第二轮](https://github.com/scubiry-glitch/content-pipeline/commit/341592c): AudienceMatcher + 改进 (21 tests)
 
 ### 阻塞项
 | 问题 | 状态 | 负责人 |
