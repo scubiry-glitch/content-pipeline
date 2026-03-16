@@ -13,8 +13,12 @@ import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
 import { researchRoutes } from './routes/research.js';
 import { reportRoutes } from './routes/reports.js';
+import { v34ReportRoutes } from './routes/v34-reports.js';
+import { v34HotTopicRoutes } from './routes/v34-hot-topics.js';
+import { v34AssetRoutes } from './routes/v34-assets.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
+import { startRSSCron } from './services/rssCrawler.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment, MockProvider } from './providers/index.js';
@@ -92,6 +96,11 @@ async function main() {
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
   await fastify.register(reportRoutes, { prefix: '/api/v1/reports' });
 
+  // v3.4 内容质量输入体系路由
+  await fastify.register(v34ReportRoutes, { prefix: '/api/v1/quality/reports' });
+  await fastify.register(v34HotTopicRoutes, { prefix: '/api/v1/quality/hot-topics' });
+  await fastify.register(v34AssetRoutes, { prefix: '/api/v1/quality/assets' });
+
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
 
@@ -120,6 +129,9 @@ async function main() {
     // Initialize directory watcher service
     const watcherService = getDirectoryWatcherService();
     await watcherService.initialize();
+
+    // Start v3.4 RSS crawler
+    startRSSCron(30); // 每30分钟抓取一次
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
