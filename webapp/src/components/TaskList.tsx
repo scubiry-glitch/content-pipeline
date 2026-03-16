@@ -1,9 +1,112 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, type Task } from '../types';
 import { TaskDetail } from './TaskDetail';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
+
+interface EditTaskModalProps {
+  task: Task | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (id: string, data: Partial<Task>) => Promise<void>;
+}
+
+function EditTaskModal({ task, isOpen, onClose, onSave }: EditTaskModalProps) {
+  const [topic, setTopic] = useState('');
+  const [formats, setFormats] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  // Reset form when task changes
+  useEffect(() => {
+    if (task) {
+      setTopic(task.topic);
+      setFormats(task.target_formats || ['markdown']);
+    }
+  }, [task]);
+
+  if (!isOpen || !task) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!topic.trim()) return;
+
+    setSaving(true);
+    try {
+      await onSave(task.id, { topic, target_formats: formats });
+      onClose();
+    } catch (err) {
+      console.error('Failed to update task:', err);
+      alert('更新失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatOptions = [
+    { value: 'markdown', label: 'Markdown' },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'docx', label: 'Word' },
+    { value: 'html', label: 'HTML' },
+    { value: 'txt', label: '纯文本' },
+  ];
+
+  const toggleFormat = (format: string) => {
+    setFormats((prev) =>
+      prev.includes(format)
+        ? prev.filter((f) => f !== format)
+        : [...prev, format]
+    );
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>编辑任务</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>主题 *</label>
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="输入任务主题"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>目标格式</label>
+              <div className="format-options">
+                {formatOptions.map((option) => (
+                  <label key={option.value} className="checkbox-label format-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={formats.includes(option.value)}
+                      onChange={() => toggleFormat(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              取消
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !topic.trim()}>
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 interface TaskListProps {
   filter?: string;
@@ -11,11 +114,12 @@ interface TaskListProps {
 }
 
 export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) {
-  const { tasks, loading, deleteTask, hideTask, unhideTask } = useTasks();
+  const { tasks, loading, deleteTask, hideTask, unhideTask, updateTask } = useTasks();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmHide, setConfirmHide] = useState<string | null>(null);
   const [confirmUnhide, setConfirmUnhide] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const filteredTasks = tasks.filter((task) => {
     if (showHidden) return task.is_hidden;
@@ -54,6 +158,10 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     }
   };
 
+  const handleEdit = async (id: string, data: Partial<Task>) => {
+    await updateTask(id, data);
+  };
+
   if (loading && tasks.length === 0) {
     return <div className="loading">加载中...</div>;
   }
@@ -83,10 +191,18 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
             onDelete={() => setConfirmDelete(task.id)}
             onHide={() => setConfirmHide(task.id)}
             onUnhide={() => setConfirmUnhide(task.id)}
+            onEdit={() => setEditingTask(task)}
           />
         ))}
       </div>
       <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+
+      <EditTaskModal
+        task={editingTask}
+        isOpen={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        onSave={handleEdit}
+      />
 
       <ConfirmModal
         isOpen={!!confirmDelete}
@@ -131,6 +247,7 @@ function TaskCard({
   onDelete,
   onHide,
   onUnhide,
+  onEdit,
 }: {
   task: Task;
   showHidden?: boolean;
@@ -138,6 +255,7 @@ function TaskCard({
   onDelete?: () => void;
   onHide?: () => void;
   onUnhide?: () => void;
+  onEdit?: () => void;
 }) {
   const status = STATUS_MAP[task.status] ?? { className: 'badge-pending', text: task.status };
 
@@ -167,6 +285,9 @@ function TaskCard({
 
       <div className="task-actions" onClick={(e) => e.stopPropagation()}>
         <button className="btn btn-sm btn-secondary" onClick={onClick}>查看详情</button>
+        {!showHidden && (
+          <button className="btn btn-sm btn-info" onClick={onEdit}>编辑</button>
+        )}
         {task.status === 'reviewing' && (
           <button className="btn btn-sm btn-primary">处理评审</button>
         )}

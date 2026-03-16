@@ -25,6 +25,7 @@ import { DataReviewTable } from '../components/DataReviewTable';
 import { ExternalLinksList } from '../components/ExternalLinksList';
 import { AssetLinksList } from '../components/AssetLinksList';
 import { DataCleaningPanel } from '../components/DataCleaningPanel';
+import { CrossValidationPanel } from '../components/CrossValidationPanel';
 
 // 流程步骤定义
 const STAGE_PIPELINES = {
@@ -1634,6 +1635,15 @@ export function TaskDetail() {
                     />
                   </div>
                 )}
+
+                {/* 交叉验证面板 */}
+                <div className="info-card">
+                  <h3 className="card-title">🔍 交叉验证</h3>
+                  <CrossValidationPanel
+                    results={task.research_data.validation_results || []}
+                    onResolve={(id, source) => console.log('Resolved:', id, source)}
+                  />
+                </div>
 
                 {/* 研究洞察 */}
                 {task.research_data.insights?.length > 0 && (

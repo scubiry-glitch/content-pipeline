@@ -8,6 +8,7 @@ interface TasksContextType {
   error: string | null;
   fetchTasks: () => Promise<void>;
   createTask: (topic: string, formats: string[]) => Promise<Task>;
+  updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
   refreshTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   hideTask: (id: string) => Promise<void>;
@@ -44,6 +45,12 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     await fetchTasks();
     return response;
   }, [fetchTasks]);
+
+  const updateTask = useCallback(async (id: string, data: Partial<Task>): Promise<Task> => {
+    const response = await tasksApi.update(id, data);
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...response } : t)));
+    return response;
+  }, []);
 
   const refreshTask = useCallback(async (id: string) => {
     try {
@@ -96,7 +103,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   }, [fetchTasks]);
 
   return (
-    <TasksContext.Provider value={{ tasks, loading, error, fetchTasks, createTask, refreshTask, deleteTask, hideTask, unhideTask }}>
+    <TasksContext.Provider value={{ tasks, loading, error, fetchTasks, createTask, updateTask, refreshTask, deleteTask, hideTask, unhideTask }}>
       {children}
     </TasksContext.Provider>
   );
