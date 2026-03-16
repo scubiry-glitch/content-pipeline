@@ -21,6 +21,7 @@ import { v41OrchestratorRoutes } from './routes/v41-orchestrator.js';
 import { v42Stage3Routes } from './routes/v42-stage3.js';
 import { v43PredictionRoutes } from './routes/v43-prediction.js';
 import { v44CopilotRoutes } from './routes/v44-copilot.js';
+import { v45I18nRoutes } from './routes/v45-i18n.js';
 import { expertRoutes } from './routes/experts.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
@@ -121,6 +122,9 @@ async function main() {
 
   // v4.4 Copilot AI助手路由
   await fastify.register(v44CopilotRoutes, { prefix: '/api/v1/copilot' });
+
+  // v4.5 国际化 (i18n) 路由
+  await fastify.register(v45I18nRoutes, { prefix: '/api/v1/i18n' });
 
   // 专家库路由 (v2.0)
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
