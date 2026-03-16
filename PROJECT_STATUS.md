@@ -69,7 +69,8 @@
 | AudienceMatcher | `content-pipeline/audience-matcher.test.ts` | 21/21 ✅ | ✅ 新增 |
 | QualityDashboard | `content-pipeline/quality-dashboard.test.ts` | 22/22 ✅ | ✅ 新增 |
 | **DashboardUI** | `content-pipeline/dashboard/` | **14/14 ✅** | 🆕 **新增UI** |
-| **ContentGenerationIntegration** | `content-pipeline/content-generation-integration.test.ts` | **18/18 ✅** | 🆕 **新增** |
+| **ContentGenerationIntegration** | `content-pipeline/content-generation-integration.test.ts` | **18/18 ✅** | ✅ 新增 |
+| **RSSDatabaseIntegration** | `content-pipeline/rss-database-integration.test.ts` | **31/31 ✅** | 🆕 **新增DB层** |
 | extractTableName | `content-pipeline/pipeline.test.ts` | 5/5 ✅ | ✅ 稳定 |
 | 连接池 | `content-pipeline/pool.ts` | 集成 | ✅ 可用 |
 
