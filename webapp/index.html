@@ -2629,6 +2629,16 @@
             var tasksBtn = document.getElementById('tab-tasks-btn');
             if (tasksBtn) tasksBtn.addEventListener('click', function() { switchDashboardTab('tasks'); });
 
+            // Stage cards
+            for (var i = 1; i <= 4; i++) {
+                var stageCard = document.getElementById('stage-card-' + i);
+                if (stageCard) {
+                    (function(stage) {
+                        stageCard.addEventListener('click', function() { showStageDetail(stage); });
+                    })(i);
+                }
+            }
+
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
