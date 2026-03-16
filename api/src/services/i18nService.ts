@@ -1,7 +1,7 @@
 // v4.5 国际化 (i18n) 服务
 import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
-import { getRouter } from '../providers/index.js';
+import { getLLMRouter } from '../providers/index.js';
 
 // ============ 类型定义 ============
 export interface Translation {
@@ -260,7 +260,7 @@ export class TranslationService {
 
     // 2. 调用AI进行翻译
     let translatedContent = '';
-    const router = getRouter();
+    const router = getLLMRouter();
 
     if (router) {
       try {
