@@ -252,7 +252,8 @@ async function setupMVPSchema(): Promise<void> {
     ALTER TABLE tasks
     ADD COLUMN IF NOT EXISTS final_draft TEXT,
     ADD COLUMN IF NOT EXISTS final_draft_edited BOOLEAN DEFAULT false,
-    ADD COLUMN IF NOT EXISTS final_draft_edit_id UUID
+    ADD COLUMN IF NOT EXISTS final_draft_edit_id UUID,
+    ADD COLUMN IF NOT EXISTS research_config JSONB
   `);
 
   // Outputs table - final generated content
@@ -306,10 +307,11 @@ async function setupMVPSchema(): Promise<void> {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       source_id VARCHAR(50) NOT NULL,
       fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      fetched_date DATE DEFAULT CURRENT_DATE,
       status VARCHAR(20) NOT NULL,
       items_count INTEGER DEFAULT 0,
       error_message TEXT,
-      UNIQUE(source_id, DATE(fetched_at))
+      UNIQUE(source_id, fetched_date)
     )
   `);
 
@@ -353,6 +355,31 @@ async function setupMVPSchema(): Promise<void> {
 
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_task_archives_task ON task_archives(task_id)`);
+
+  // Translation cache table (ML-002 ~ ML-004)
+  await query(`
+    CREATE TABLE IF NOT EXISTS translation_cache (
+      hash VARCHAR(64) PRIMARY KEY,
+      original TEXT NOT NULL,
+      translated TEXT NOT NULL,
+      source_language VARCHAR(10) NOT NULL DEFAULT 'en',
+      target_language VARCHAR(10) NOT NULL DEFAULT 'zh',
+      quality_score DECIMAL(3,2) DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create index
+  await query(`CREATE INDEX IF NOT EXISTS idx_translation_cache_created ON translation_cache(created_at)`);
+
+  // Add translation columns to rss_items
+  await query(`
+    ALTER TABLE rss_items
+    ADD COLUMN IF NOT EXISTS translated_title VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS translated_summary TEXT,
+    ADD COLUMN IF NOT EXISTS translation_quality DECIMAL(3,2),
+    ADD COLUMN IF NOT EXISTS translated_at TIMESTAMP WITH TIME ZONE
+  `);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {

@@ -11,6 +11,7 @@ import { outputRoutes } from './routes/outputs.js';
 import { rssRoutes } from './routes/rss.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
+import { researchRoutes } from './routes/research.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
@@ -86,6 +87,7 @@ async function main() {
   await fastify.register(rssRoutes, { prefix: '/api/v1/rss' });
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
+  await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
