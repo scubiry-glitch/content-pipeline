@@ -12,6 +12,7 @@ import { rssRoutes } from './routes/rss.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
 import { researchRoutes } from './routes/research.js';
+import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
@@ -75,7 +76,7 @@ async function main() {
     return {
       status: 'ok',
       service: 'content-pipeline-api',
-      version: '1.0.0-mvp',
+      version: '3.0.0',
       timestamp: new Date().toISOString()
     };
   });
@@ -88,6 +89,9 @@ async function main() {
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
+
+  // Public API routes (v3.0)
+  await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
