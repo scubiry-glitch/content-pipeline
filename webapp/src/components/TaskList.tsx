@@ -39,7 +39,7 @@ export function TaskList({ filter = 'all' }: TaskListProps) {
 }
 
 function TaskCard({ task }: { task: Task }) {
-  const status = STATUS_MAP[task.status];
+  const status = STATUS_MAP[task.status] ?? { className: 'badge-pending', text: task.status };
 
   return (
     <div className="task-card">

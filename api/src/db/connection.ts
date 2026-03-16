@@ -389,5 +389,54 @@ async function setupMVPSchema(): Promise<void> {
     });
   });
 
+  // Reports table - research reports library (v3.3)
+  await query(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title VARCHAR(500) NOT NULL,
+      authors JSONB DEFAULT '[]',
+      institution VARCHAR(200),
+      publish_date DATE,
+      page_count INTEGER,
+      file_url TEXT,
+      content TEXT,
+      key_points JSONB DEFAULT '[]',
+      tags JSONB DEFAULT '[]',
+      quality_score DECIMAL(4,3) DEFAULT 0.5,
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Add missing columns to existing reports table
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS quality_score DECIMAL(4,3) DEFAULT 0.5`);
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS key_points JSONB DEFAULT '[]'`);
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'`);
+
+  // Create indexes for reports
+  await query(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)`);
+
+  // Experts table - expert library (v2.0)
+  await query(`
+    CREATE TABLE IF NOT EXISTS experts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      title VARCHAR(200),
+      company VARCHAR(200),
+      angle VARCHAR(50) DEFAULT 'challenger',
+      domain VARCHAR(200),
+      bio TEXT,
+      status VARCHAR(20) DEFAULT 'active',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes for experts
+  await query(`CREATE INDEX IF NOT EXISTS idx_experts_status ON experts(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_experts_domain ON experts(domain)`);
+
   console.log('[DB] MVP Schema initialized successfully');
 }

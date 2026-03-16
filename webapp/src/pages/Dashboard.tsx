@@ -17,22 +17,22 @@ export function Dashboard() {
   const stageTasks = [
     {
       stage: STAGES[1],
-      count: tasks.filter((t) => STATUS_MAP[t.status].stage === 1).length,
+      count: tasks.filter((t) => STATUS_MAP[t.status]?.stage === 1).length,
       description: '选题策划与评估',
     },
     {
       stage: STAGES[2],
-      count: tasks.filter((t) => STATUS_MAP[t.status].stage === 2).length,
+      count: tasks.filter((t) => STATUS_MAP[t.status]?.stage === 2).length,
       description: '深度研究与资料收集',
     },
     {
       stage: STAGES[3],
-      count: tasks.filter((t) => STATUS_MAP[t.status].stage === 3).length,
+      count: tasks.filter((t) => STATUS_MAP[t.status]?.stage === 3).length,
       description: '文稿生成与评审',
     },
     {
       stage: STAGES[4],
-      count: tasks.filter((t) => STATUS_MAP[t.status].stage === 4).length,
+      count: tasks.filter((t) => STATUS_MAP[t.status]?.stage === 4).length,
       description: '多态转换与发布',
     },
   ];
@@ -98,8 +98,8 @@ export function Dashboard() {
             {tasks.slice(0, 5).map((task) => (
               <div key={task.id} className="recent-task-item">
                 <span className="recent-task-topic">{task.topic}</span>
-                <span className={`badge ${STATUS_MAP[task.status].className}`}>
-                  {STATUS_MAP[task.status].text}
+                <span className={`badge ${STATUS_MAP[task.status]?.className ?? 'badge-pending'}`}>
+                  {STATUS_MAP[task.status]?.text ?? task.status}
                 </span>
               </div>
             ))}

@@ -1,7 +1,7 @@
 // v4.4 Copilot AI助手服务
 import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
-import { getRouter } from '../providers/index.js';
+import { getLLMRouter } from '../providers/index.js';
 
 // ============ 类型定义 ============
 export interface CopilotSession {
@@ -223,7 +223,7 @@ export class CopilotMessageService {
     let metadata: Record<string, any> = {};
 
     try {
-      const router = getRouter();
+      const router = getLLMRouter();
       if (router) {
         const response = await router.complete({
           messages,
