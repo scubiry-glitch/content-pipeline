@@ -276,6 +276,7 @@ export interface HotTopic {
   sentiment: 'positive' | 'neutral' | 'negative';
   publishedAt?: string;
   createdAt: string;
+  isFollowed?: boolean;
 }
 
 export interface RSSSource {

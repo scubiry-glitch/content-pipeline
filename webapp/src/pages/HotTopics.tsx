@@ -41,6 +41,22 @@ export function HotTopics() {
     }
   };
 
+  const handleFollow = async (topicId: string, isFollowed: boolean) => {
+    try {
+      if (isFollowed) {
+        await hotTopicsApi.unfollow(topicId);
+      } else {
+        await hotTopicsApi.follow(topicId);
+      }
+      // Update local state
+      setTopics(prev => prev.map(t =>
+        t.id === topicId ? { ...t, isFollowed: !isFollowed } : t
+      ));
+    } catch (error) {
+      console.error('Failed to follow/unfollow:', error);
+    }
+  };
+
   const filteredTopics = topics.filter((t) =>
     filter === 'all' ? true : t.trend === filter
   );
@@ -211,7 +227,15 @@ export function HotTopics() {
                         查看原文 ↗
                       </a>
                     )}
-                    <button className="btn btn-primary">关联研报</button>
+                    <button
+                      className={`btn ${topic.isFollowed ? 'btn-secondary' : 'btn-primary'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFollow(topic.id, topic.isFollowed);
+                      }}
+                    >
+                      {topic.isFollowed ? '⭐ 已关注' : '☆ 关注'}
+                    </button>
                   </div>
                 </div>
               ))}

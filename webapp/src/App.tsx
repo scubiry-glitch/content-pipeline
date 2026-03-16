@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { QualityDashboard } from './pages/QualityDashboard';
@@ -27,37 +28,39 @@ import './App.css';
 
 function App() {
   return (
-    <TasksProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="tasks/:id" element={<TaskDetail />} />
-            <Route path="tasks/:id/edit" element={<Stage3Editor />} />
-            <Route path="assets" element={<Assets />} />
-            <Route path="assets/:id" element={<AssetDetail />} />
-            <Route path="experts" element={<Experts />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="reports/compare" element={<ReportCompare />} />
-            <Route path="reports/:id" element={<ReportDetail />} />
-            <Route path="hot-topics" element={<HotTopics />} />
-            <Route path="hot-topics/:id" element={<HotTopicDetail />} />
-            <Route path="sentiment" element={<SentimentAnalysisPage />} />
-            <Route path="compliance" element={<Compliance />} />
-            <Route path="orchestrator" element={<Orchestrator />} />
-            <Route path="copilot" element={<CopilotChat />} />
-            <Route path="prediction" element={<Prediction />} />
-            <Route path="i18n" element={<I18nManager />} />
-            <Route path="rss-sources" element={<RSSSources />} />
-            <Route path="archive/hidden" element={<HiddenTasks />} />
-            <Route path="archive/recycle-bin" element={<RecycleBin />} />
-            <Route path="quality-dashboard" element={<QualityDashboard />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </TasksProvider>
+    <ErrorBoundary>
+      <TasksProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="tasks" element={<Tasks />} />
+              <Route path="tasks/:id" element={<TaskDetail />} />
+              <Route path="tasks/:id/edit" element={<Stage3Editor />} />
+              <Route path="assets" element={<Assets />} />
+              <Route path="assets/:id" element={<AssetDetail />} />
+              <Route path="experts" element={<Experts />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="reports/compare" element={<ReportCompare />} />
+              <Route path="reports/:id" element={<ReportDetail />} />
+              <Route path="hot-topics" element={<HotTopics />} />
+              <Route path="hot-topics/:id" element={<HotTopicDetail />} />
+              <Route path="sentiment" element={<SentimentAnalysisPage />} />
+              <Route path="compliance" element={<Compliance />} />
+              <Route path="orchestrator" element={<Orchestrator />} />
+              <Route path="copilot" element={<CopilotChat />} />
+              <Route path="prediction" element={<Prediction />} />
+              <Route path="i18n" element={<I18nManager />} />
+              <Route path="rss-sources" element={<RSSSources />} />
+              <Route path="archive/hidden" element={<HiddenTasks />} />
+              <Route path="archive/recycle-bin" element={<RecycleBin />} />
+              <Route path="quality-dashboard" element={<QualityDashboard />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </TasksProvider>
+    </ErrorBoundary>
   );
 }
 
