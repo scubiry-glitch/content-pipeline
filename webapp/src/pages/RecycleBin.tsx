@@ -1,44 +1,74 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { archiveApi, type ArchivedTask } from '../api/client';
 import { ConfirmModal } from '../components/ConfirmModal';
 import './Tasks.css';
 
-interface DeletedTask {
-  id: string;
-  topic: string;
-  status: string;
-  deletedAt: string;
-  originalCreatedAt: string;
-}
-
 export function RecycleBin() {
   const navigate = useNavigate();
-  const [deletedTasks, setDeletedTasks] = useState<DeletedTask[]>([]);
+  const [deletedTasks, setDeletedTasks] = useState<ArchivedTask[]>([]);
+  const [loading, setLoading] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
   const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<string | null>(null);
 
-  // Note: 实际项目中应该从 API 获取已删除的任务
-  // 这里使用本地状态作为演示
+  useEffect(() => {
+    loadDeletedTasks();
+  }, []);
 
-  const handleRestore = (id: string) => {
-    // TODO: 调用恢复 API
-    console.log('Restore task:', id);
-    setDeletedTasks((prev) => prev.filter((t) => t.id !== id));
-    setConfirmRestore(null);
-  };
-
-  const handlePermanentDelete = (id: string) => {
-    // TODO: 调用永久删除 API
-    console.log('Permanently delete task:', id);
-    setDeletedTasks((prev) => prev.filter((t) => t.id !== id));
-    setConfirmPermanentDelete(null);
-  };
-
-  const handleEmptyRecycleBin = () => {
-    // TODO: 调用清空回收站 API
-    if (confirm('确定要清空回收站吗？所有任务将被永久删除，无法恢复。')) {
-      setDeletedTasks([]);
+  const loadDeletedTasks = async () => {
+    setLoading(true);
+    try {
+      const response = await archiveApi.getRecycleBin();
+      setDeletedTasks(response.items || []);
+    } catch (error) {
+      console.error('加载回收站失败:', error);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      await archiveApi.restoreTask(id);
+      setDeletedTasks((prev) => prev.filter((t) => t.id !== id));
+      setConfirmRestore(null);
+    } catch (error) {
+      console.error('恢复任务失败:', error);
+      alert('恢复任务失败');
+    }
+  };
+
+  const handlePermanentDelete = async (id: string) => {
+    try {
+      await archiveApi.permanentDelete(id);
+      setDeletedTasks((prev) => prev.filter((t) => t.id !== id));
+      setConfirmPermanentDelete(null);
+    } catch (error) {
+      console.error('永久删除任务失败:', error);
+      alert('删除任务失败');
+    }
+  };
+
+  const handleEmptyRecycleBin = async () => {
+    if (!confirm('确定要清空回收站吗？所有任务将被永久删除，无法恢复。')) {
+      return;
+    }
+    try {
+      const taskIds = deletedTasks.map((t) => t.id);
+      await archiveApi.batchDelete(taskIds);
+      setDeletedTasks([]);
+    } catch (error) {
+      console.error('清空回收站失败:', error);
+      alert('清空回收站失败');
+    }
+  };
+
+  const formatRemainingDays = (willBeDeletedAt?: string) => {
+    if (!willBeDeletedAt) return '';
+    const days = Math.ceil(
+      (new Date(willBeDeletedAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    return days > 0 ? `${days}天后自动删除` : '即将删除';
   };
 
   return (
@@ -65,7 +95,12 @@ export function RecycleBin() {
         <span>回收站中的任务将在 30 天后自动永久删除</span>
       </div>
 
-      {deletedTasks.length === 0 ? (
+      {loading ? (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <span>加载回收站...⏳</span>
+        </div>
+      ) : deletedTasks.length === 0 ? (
         <div className="card empty-card">
           <div className="empty-state">
             <div className="empty-icon">🗑️</div>
@@ -82,6 +117,11 @@ export function RecycleBin() {
                 <div className="item-meta">
                   <span>状态: {task.status}</span>
                   <span>删除时间: {new Date(task.deletedAt).toLocaleString()}</span>
+                  {task.willBePermanentlyDeletedAt && (
+                    <span className="auto-delete-warning">
+                      ⏰ {formatRemainingDays(task.willBePermanentlyDeletedAt)}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="item-actions">
