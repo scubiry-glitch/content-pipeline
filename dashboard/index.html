@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内容质量仪表盘</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <h1>📊 内容质量仪表盘</h1>
+            <span class="last-updated">最后更新: <span id="update-time">--</span></span>
+            <button class="refresh-btn" onclick="refreshData()">🔄 刷新</button>
+        </header>
+
+        <div class="score-cards">
+            <div class="score-card main">
+                <h3>综合质量分数</h3>
+                <div class="score-value" id="overall-score">--</div>
+                <div class="score-trend" id="score-trend">--</div>
+            </div>
+            <div class="score-card">
+                <h3>时效性</h3>
+                <div class="progress-bar" id="freshness-bar">
+                    <div class="progress-fill"></div>
+                    <span class="progress-label">--</span>
+                </div>
+            </div>
+            <div class="score-card">
+                <h3>可信度</h3>
+                <div class="progress-bar" id="credibility-bar">
+                    <div class="progress-fill"></div>
+                    <span class="progress-label">--</span>
+                </div>
+            </div>
+            <div class="score-card">
+                <h3>差异化</h3>
+                <div class="progress-bar" id="differentiation-bar">
+                    <div class="progress-fill"></div>
+                    <span class="progress-label">--</span>
+                </div>
+            </div>
+            <div class="score-card">
+                <h3>受众匹配</h3>
+                <div class="progress-bar" id="audience-bar">
+                    <div class="progress-fill"></div>
+                    <span class="progress-label">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-section">
+                <h2>🔥 热点话题</h2>
+                <div id="hot-topics">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <h2>⚠️ 实时预警</h2>
+                <div id="alerts">
+                    <div class="alert-placeholder">暂无预警</div>
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <h2>📰 RSS源状态</h2>
+                <div id="rss-status">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <h2>💡 优化建议</h2>
+                <div id="suggestions">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-analyzer">
+            <h2>📝 内容分析器</h2>
+            <textarea id="content-input" placeholder="粘贴文章内容进行分析..."></textarea>
+            <button onclick="analyzeContent()">分析内容</button>
+            <div id="analysis-result"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

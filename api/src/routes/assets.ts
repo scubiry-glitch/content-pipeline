@@ -1,0 +1,372 @@
+// 素材库路由
+// 支持: 上传素材、语义搜索、标签过滤、编辑、置顶、主题分类、目录绑定
+
+import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { AssetService } from '../services/asset.js';
+import { authenticate } from '../middleware/auth.js';
+import { query } from '../db/connection.js';
+import { getDirectoryWatcherService } from '../services/directoryWatcher.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const updateAssetSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  source: z.string().max(255).optional(),
+  tags: z.array(z.string()).optional(),
+  content: z.string().optional(),
+  theme_id: z.string().nullable().optional()
+});
+
+const createThemeSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().optional(),
+  color: z.string().optional(),
+  icon: z.string().optional()
+});
+
+export async function assetRoutes(fastify: FastifyInstance) {
+  const assetService = new AssetService();
+
+  // Upload asset
+  fastify.post('/', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const data = await request.file();
+
+      if (!data) {
+        reply.status(400);
+        return { error: 'No file uploaded', code: 'NO_FILE' };
+      }
+
+      const buffer = await data.toBuffer();
+
+      // Get form fields from multipart
+      const fields: Record<string, string> = {};
+      // @ts-ignore - fastify-multipart types
+      if (data.fields) {
+        // @ts-ignore
+        for (const [key, field] of Object.entries(data.fields)) {
+          // @ts-ignore
+          if (field && typeof field === 'object' && 'value' in field) {
+            // @ts-ignore
+            fields[key] = field.value;
+          }
+        }
+      }
+
+      console.log('[Assets] Uploading file:', data.filename, 'Fields:', fields);
+
+      const asset = await assetService.upload({
+        buffer,
+        filename: data.filename,
+        mimetype: data.mimetype,
+        title: fields.title || data.filename.replace(/\.[^/.]+$/, ''),
+        source: fields.source,
+        tags: fields.tags ? fields.tags.split(',').map((t: string) => t.trim()) : []
+      });
+
+      reply.status(201);
+      return asset;
+    } catch (error: any) {
+      console.error('[Assets] Upload failed:', error);
+      reply.status(500);
+      return { error: 'Upload failed', message: error?.message || 'Unknown error' };
+    }
+  });
+
+  // Search assets
+  fastify.get('/', { preHandler: authenticate }, async (request) => {
+    const { q, tags, limit = '10' } = request.query as any;
+
+    return await assetService.search({
+      query: q,
+      tags: tags ? tags.split(',') : undefined,
+      limit: parseInt(limit)
+    });
+  });
+
+  // Get asset detail
+  fastify.get('/:assetId', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+    const asset = await assetService.getById(assetId);
+
+    if (!asset) {
+      reply.status(404);
+      return { error: 'Asset not found', code: 'ASSET_NOT_FOUND' };
+    }
+
+    return asset;
+  });
+
+  // Delete asset
+  fastify.delete('/:assetId', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+    await assetService.delete(assetId);
+    reply.status(204);
+  });
+
+  // Update asset
+  fastify.patch('/:assetId', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+    const body = updateAssetSchema.parse(request.body);
+
+    const asset = await assetService.update(assetId, body);
+    if (!asset) {
+      reply.status(404);
+      return { error: 'Asset not found', code: 'ASSET_NOT_FOUND' };
+    }
+    return asset;
+  });
+
+  // Toggle pin asset
+  fastify.post('/:assetId/pin', { preHandler: authenticate }, async (request) => {
+    const { assetId } = request.params as any;
+    const { pinned } = request.body as { pinned: boolean };
+
+    return await assetService.togglePin(assetId, pinned);
+  });
+
+  // Theme Routes
+
+  // Create theme
+  fastify.post('/themes', { preHandler: authenticate }, async (request) => {
+    const body = createThemeSchema.parse(request.body);
+    return await assetService.createTheme(body);
+  });
+
+  // Get all themes
+  fastify.get('/themes', { preHandler: authenticate }, async () => {
+    return await assetService.getThemes();
+  });
+
+  // Get assets by theme
+  fastify.get('/themes/:themeId/assets', { preHandler: authenticate }, async (request) => {
+    const { themeId } = request.params as any;
+    const { limit = '20', offset = '0' } = request.query as any;
+
+    return await assetService.getAssetsByTheme(themeId, {
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  });
+
+  // Get uncategorized assets
+  fastify.get('/uncategorized', { preHandler: authenticate }, async (request) => {
+    const { limit = '20', offset = '0' } = request.query as any;
+
+    return await assetService.getAssetsByTheme(null, {
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  });
+
+  // Update theme
+  fastify.patch('/themes/:themeId', { preHandler: authenticate }, async (request, reply) => {
+    const { themeId } = request.params as any;
+    const body = createThemeSchema.partial().parse(request.body);
+
+    const theme = await assetService.updateTheme(themeId, body);
+    if (!theme) {
+      reply.status(404);
+      return { error: 'Theme not found', code: 'THEME_NOT_FOUND' };
+    }
+    return theme;
+  });
+
+  // Toggle pin theme
+  fastify.post('/themes/:themeId/pin', { preHandler: authenticate }, async (request) => {
+    const { themeId } = request.params as any;
+    const { pinned } = request.body as { pinned: boolean };
+
+    return await assetService.toggleThemePin(themeId, pinned);
+  });
+
+  // Delete theme
+  fastify.delete('/themes/:themeId', { preHandler: authenticate }, async (request, reply) => {
+    const { themeId } = request.params as any;
+    await assetService.deleteTheme(themeId);
+    reply.status(204);
+  });
+
+  // Directory Binding Routes
+
+  // Get all directory bindings
+  fastify.get('/bindings', { preHandler: authenticate }, async () => {
+    const result = await query(
+      `SELECT b.*, t.name as theme_name, t.icon as theme_icon, t.color as theme_color
+       FROM asset_directory_bindings b
+       LEFT JOIN asset_themes t ON b.theme_id = t.id
+       ORDER BY b.created_at DESC`
+    );
+    return result.rows;
+  });
+
+  // Create directory binding
+  fastify.post('/bindings', { preHandler: authenticate }, async (request, reply) => {
+    const body = request.body as any;
+    const bindingId = `binding_${uuidv4().slice(0, 8)}`;
+
+    await query(
+      `INSERT INTO asset_directory_bindings (
+        id, name, path, theme_id, auto_import, include_subdirs, file_patterns, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+      [
+        bindingId,
+        body.name,
+        body.path,
+        body.theme_id || null,
+        body.auto_import !== false,
+        body.include_subdirs !== false,
+        JSON.stringify(body.file_patterns || ['*.pdf', '*.txt', '*.md', '*.docx', '*.doc']),
+        body.is_active !== false
+      ]
+    );
+
+    // Trigger initial scan
+    const watcherService = getDirectoryWatcherService();
+    await watcherService.triggerScan(bindingId);
+
+    reply.status(201);
+    return { id: bindingId, message: '目录绑定创建成功' };
+  });
+
+  // Get binding details
+  fastify.get('/bindings/:bindingId', { preHandler: authenticate }, async (request, reply) => {
+    const { bindingId } = request.params as any;
+
+    const result = await query(
+      `SELECT b.*, t.name as theme_name, t.icon as theme_icon, t.color as theme_color
+       FROM asset_directory_bindings b
+       LEFT JOIN asset_themes t ON b.theme_id = t.id
+       WHERE b.id = $1`,
+      [bindingId]
+    );
+
+    if (result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Binding not found', code: 'BINDING_NOT_FOUND' };
+    }
+
+    // Get tracked files count
+    const countResult = await query(
+      `SELECT COUNT(*) as file_count FROM asset_tracked_files WHERE binding_id = $1`,
+      [bindingId]
+    );
+
+    return {
+      ...result.rows[0],
+      file_count: parseInt(countResult.rows[0].file_count)
+    };
+  });
+
+  // Update directory binding
+  fastify.patch('/bindings/:bindingId', { preHandler: authenticate }, async (request, reply) => {
+    const { bindingId } = request.params as any;
+    const body = request.body as any;
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (body.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(body.name);
+    }
+    if (body.path !== undefined) {
+      updates.push(`path = $${paramIndex++}`);
+      params.push(body.path);
+    }
+    if (body.theme_id !== undefined) {
+      updates.push(`theme_id = $${paramIndex++}`);
+      params.push(body.theme_id);
+    }
+    if (body.auto_import !== undefined) {
+      updates.push(`auto_import = $${paramIndex++}`);
+      params.push(body.auto_import);
+    }
+    if (body.include_subdirs !== undefined) {
+      updates.push(`include_subdirs = $${paramIndex++}`);
+      params.push(body.include_subdirs);
+    }
+    if (body.file_patterns !== undefined) {
+      updates.push(`file_patterns = $${paramIndex++}`);
+      params.push(JSON.stringify(body.file_patterns));
+    }
+    if (body.is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(body.is_active);
+    }
+
+    if (updates.length === 0) {
+      reply.status(400);
+      return { error: 'No fields to update' };
+    }
+
+    updates.push(`updated_at = NOW()`);
+    params.push(bindingId);
+
+    await query(
+      `UPDATE asset_directory_bindings SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      params
+    );
+
+    return { message: '绑定更新成功' };
+  });
+
+  // Delete directory binding
+  fastify.delete('/bindings/:bindingId', { preHandler: authenticate }, async (request, reply) => {
+    const { bindingId } = request.params as any;
+
+    // Delete tracked files first
+    await query(`DELETE FROM asset_tracked_files WHERE binding_id = $1`, [bindingId]);
+
+    // Delete binding
+    await query(`DELETE FROM asset_directory_bindings WHERE id = $1`, [bindingId]);
+
+    reply.status(204);
+  });
+
+  // Trigger manual scan
+  fastify.post('/bindings/:bindingId/scan', { preHandler: authenticate }, async (request, reply) => {
+    const { bindingId } = request.params as any;
+
+    try {
+      const watcherService = getDirectoryWatcherService();
+      const result = await watcherService.triggerScan(bindingId);
+
+      return {
+        message: '扫描完成',
+        imported: result.imported,
+        errors: result.errors
+      };
+    } catch (error: any) {
+      reply.status(500);
+      return { error: '扫描失败', message: error.message };
+    }
+  });
+
+  // Get tracked files for a binding
+  fastify.get('/bindings/:bindingId/files', { preHandler: authenticate }, async (request) => {
+    const { bindingId } = request.params as any;
+    const { limit = '50', offset = '0' } = request.query as any;
+
+    const result = await query(
+      `SELECT tf.*, a.title as asset_title, a.content_type
+       FROM asset_tracked_files tf
+       LEFT JOIN assets a ON tf.asset_id = a.id
+       WHERE tf.binding_id = $1
+       ORDER BY tf.modified_at DESC
+       LIMIT $2 OFFSET $3`,
+      [bindingId, parseInt(limit), parseInt(offset)]
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM asset_tracked_files WHERE binding_id = $1`,
+      [bindingId]
+    );
+
+    return {
+      total: parseInt(countResult.rows[0].count),
+      items: result.rows
+    };
+  });
+}
