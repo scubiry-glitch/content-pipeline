@@ -100,7 +100,14 @@ async function setupMVPSchema(): Promise<void> {
       competitor_analysis JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      completed_at TIMESTAMP WITH TIME ZONE
+      completed_at TIMESTAMP WITH TIME ZONE,
+      created_by VARCHAR(100) DEFAULT 'user',
+      is_deleted BOOLEAN DEFAULT false,
+      deleted_at TIMESTAMP WITH TIME ZONE,
+      deleted_by VARCHAR(100),
+      delete_reason TEXT,
+      will_be_purged_at TIMESTAMP WITH TIME ZONE,
+      hidden_by VARCHAR(100)
     )
   `);
 
@@ -333,6 +340,19 @@ async function setupMVPSchema(): Promise<void> {
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_user ON recommendation_logs(user_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_recommendation_logs_action ON recommendation_logs(action)`);
+
+  // Task archive table (FR-034 ~ FR-035)
+  await query(`
+    CREATE TABLE IF NOT EXISTS task_archives (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL UNIQUE,
+      task_data JSONB NOT NULL,
+      archived_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes
+  await query(`CREATE INDEX IF NOT EXISTS idx_task_archives_task ON task_archives(task_id)`);
 
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {
