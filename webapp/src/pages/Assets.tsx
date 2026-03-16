@@ -62,6 +62,25 @@ export function Assets() {
                   <span>{asset.content_type}</span>
                   <span>{new Date(asset.created_at).toLocaleDateString()}</span>
                 </div>
+                <div className="asset-stats">
+                  <div className="stat-item quality">
+                    <span className="stat-label">质量分</span>
+                    <span className="stat-value" style={{ color: asset.quality_score >= 80 ? '#52c41a' : asset.quality_score >= 60 ? '#faad14' : '#ff4d4f' }}>
+                      {asset.quality_score || '--'}
+                    </span>
+                  </div>
+                  <div className="stat-item citations">
+                    <span className="stat-label">引用</span>
+                    <span className="stat-value">{asset.citation_count || 0}</span>
+                  </div>
+                </div>
+                {asset.auto_tags?.length > 0 && (
+                  <div className="asset-tags">
+                    {asset.auto_tags.slice(0, 3).map((tag, idx) => (
+                      <span key={idx} className="tag">{tag.tag}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}

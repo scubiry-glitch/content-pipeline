@@ -83,4 +83,40 @@
   gap: 12px;
   font-size: 12px;
   color: var(--gray-500);
+  margin-bottom: 12px;
+}
+
+.asset-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.stat-item .stat-label {
+  color: var(--gray-500);
+}
+
+.stat-item .stat-value {
+  font-weight: 600;
+}
+
+.asset-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  padding: 2px 8px;
+  background: #e6f7ff;
+  color: #1890ff;
+  border-radius: 4px;
+  font-size: 11px;
 }

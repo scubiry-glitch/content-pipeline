@@ -17,6 +17,7 @@ import { Stage3Editor } from './pages/Stage3Editor';
 import { CopilotChat } from './pages/CopilotChat';
 import { Prediction } from './pages/Prediction';
 import { I18nManager } from './pages/I18nManager';
+import { RSSSources } from './pages/RSSSources';
 import './App.css';
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
             <Route path="copilot" element={<CopilotChat />} />
             <Route path="prediction" element={<Prediction />} />
             <Route path="i18n" element={<I18nManager />} />
+            <Route path="rss-sources" element={<RSSSources />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
