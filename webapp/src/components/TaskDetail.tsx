@@ -285,7 +285,7 @@ function OverviewTab({
       )}
 
       {/* 产出物 */}
-      {task.output_ids && task.output_ids.length > 0 && (
+      {task.output_ids?.length > 0 && (
         <div className="detail-section">
           <div className="detail-section-title">产出物</div>
           <div className="output-chips">
@@ -397,7 +397,7 @@ function ResearchTab({ task }: { task: Task }) {
       ) : (
         <>
           {/* 研究洞察 */}
-          {researchData.insights.length > 0 && (
+          {researchData.insights?.length > 0 && (
             <div className="research-section">
               <div className="research-section-title">💡 核心洞察 ({researchData.insights.length})</div>
               <div className="insight-cards">
@@ -418,7 +418,7 @@ function ResearchTab({ task }: { task: Task }) {
           )}
 
           {/* 研究来源 */}
-          {researchData.sources.length > 0 && (
+          {researchData.sources?.length > 0 && (
             <div className="research-section">
               <div className="research-section-title">📚 参考来源 ({researchData.sources.length})</div>
               <div className="source-list">
