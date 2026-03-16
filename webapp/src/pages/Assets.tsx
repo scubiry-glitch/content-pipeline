@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { assetsApi, themesApi, bindingsApi, type Asset, type AssetTheme, type DirectoryBinding } from '../api/client';
 import './Assets.css';
 
@@ -6,6 +7,8 @@ type FilterType = 'all' | 'pinned' | 'pdf' | 'txt' | 'image';
 type AssetTab = 'assets' | 'bindings';
 
 export function Assets() {
+  const navigate = useNavigate();
+
   // 数据状态
   const [assets, setAssets] = useState<Asset[]>([]);
   const [themes, setThemes] = useState<AssetTheme[]>([]);
@@ -387,7 +390,7 @@ export function Assets() {
             ) : (
               <div className="assets-grid">
                 {filteredAssets.map((asset) => (
-                  <div key={asset.id} className="asset-card">
+                  <div key={asset.id} className="asset-card" onClick={() => navigate(`/assets/${asset.id}`)}>
                     {asset.is_pinned && <span className="pin-badge">📌</span>}
                     <div className="asset-preview">
                       {asset.content_type?.startsWith('image/') && asset.filename ? (

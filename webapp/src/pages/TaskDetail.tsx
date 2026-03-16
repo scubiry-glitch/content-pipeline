@@ -1604,6 +1604,25 @@ export function TaskDetail() {
 
             {task.research_data ? (
               <div className="research-content">
+                {/* 数据审核表格 */}
+                {task.research_data.annotations && task.research_data.annotations.length > 0 && (
+                  <DataReviewTable
+                    annotations={task.research_data.annotations}
+                    onSelectionChange={(ids) => console.log('Selected:', ids)}
+                    onConfirm={(ids) => alert(`确认选择 ${ids.length} 条数据`)}
+                  />
+                )}
+
+                {/* 外部链接引用 */}
+                {task.research_data.annotations && (
+                  <ExternalLinksList annotations={task.research_data.annotations} />
+                )}
+
+                {/* 素材库引用 */}
+                {task.research_data.annotations && (
+                  <AssetLinksList annotations={task.research_data.annotations} />
+                )}
+
                 {/* 研究洞察 */}
                 {task.research_data.insights?.length > 0 && (
                   <div className="info-card">
