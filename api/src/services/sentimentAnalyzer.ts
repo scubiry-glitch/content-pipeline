@@ -137,7 +137,7 @@ export function analyzeSentiment(text: string): SentimentResult {
     polarity,
     intensity,
     confidence,
-    keywords: [...new Set(keywords)],
+    keywords: Array.from(new Set(keywords)),
     aspects: {} // 简化版暂不分析细粒度aspect
   };
 }

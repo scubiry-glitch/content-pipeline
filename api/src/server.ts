@@ -23,6 +23,7 @@ import { v43PredictionRoutes } from './routes/v43-prediction.js';
 import { v44CopilotRoutes } from './routes/v44-copilot.js';
 import { v45I18nRoutes } from './routes/v45-i18n.js';
 import { expertRoutes } from './routes/experts.js';
+import { sentimentRoutes } from './routes/sentiment.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
 import { startRSSCron } from './services/rssCrawler.js';
@@ -128,6 +129,9 @@ async function main() {
 
   // 专家库路由 (v2.0)
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
+
+  // 情感分析路由 (v2.2)
+  await fastify.register(sentimentRoutes, { prefix: '/api/v1/sentiment' });
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });

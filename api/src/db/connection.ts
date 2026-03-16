@@ -438,5 +438,41 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_experts_status ON experts(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_experts_domain ON experts(domain)`);
 
+  // Sentiment analysis table (v2.2 - SA-001 ~ SA-005)
+  await query(`
+    CREATE TABLE IF NOT EXISTS sentiment_analysis (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_id VARCHAR(100) NOT NULL,
+      topic_id VARCHAR(50),
+      source_type VARCHAR(50) NOT NULL,
+      polarity VARCHAR(20) NOT NULL CHECK (polarity IN ('positive', 'negative', 'neutral')),
+      intensity INTEGER DEFAULT 0 CHECK (intensity >= 0 AND intensity <= 100),
+      confidence DECIMAL(3,2) DEFAULT 0,
+      keywords JSONB DEFAULT '[]',
+      analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(content_id)
+    )
+  `);
+
+  // Hot topics table for sentiment tracking
+  await query(`
+    CREATE TABLE IF NOT EXISTS hot_topics (
+      id VARCHAR(50) PRIMARY KEY,
+      title VARCHAR(500) NOT NULL,
+      category VARCHAR(100),
+      sentiment_score DECIMAL(5,2) DEFAULT 0,
+      mention_count INTEGER DEFAULT 0,
+      trend_direction VARCHAR(20) DEFAULT 'stable',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes for sentiment analysis
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_topic ON sentiment_analysis(topic_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_polarity ON sentiment_analysis(polarity)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_analyzed_at ON sentiment_analysis(analyzed_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_source ON sentiment_analysis(source_type, analyzed_at)`);
+
   console.log('[DB] MVP Schema initialized successfully');
 }

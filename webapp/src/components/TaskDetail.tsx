@@ -1,6 +1,6 @@
 // 任务详情面板 - 恢复原版 HTML 的详细功能
 import { useState, useEffect } from 'react';
-import { tasksApi } from '../api/client';
+import { tasksApi, type BlueTeamReview } from '../api/client';
 import type { Task, BlueTeamReview } from '../types';
 import './TaskDetail.css';
 
@@ -42,9 +42,10 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
   const loadReviews = async (id: string) => {
     try {
       const data = await tasksApi.getReviews(id);
-      setReviews(data);
+      setReviews(data || []);
     } catch (err) {
       console.error('Failed to load reviews:', err);
+      setReviews([]);
     }
   };
 

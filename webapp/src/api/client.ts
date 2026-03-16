@@ -61,6 +61,12 @@ export const tasksApi = {
 
   submitFeedback: (id: string, feedback: { decision: 'accept' | 'revise' | 'reject'; note?: string }) =>
     client.post(`/production/${id}/feedback`, feedback) as Promise<void>,
+
+  approve: (id: string, approved: boolean) =>
+    client.post(`/production/${id}/approve`, { approved }) as Promise<void>,
+
+  getReviews: (id: string) =>
+    client.get(`/production/${id}/reviews`) as Promise<BlueTeamReview[]>,
 };
 
 // 素材相关 API
@@ -122,10 +128,30 @@ export const expertsApi = {
     client.delete(`/experts/${id}`) as Promise<void>,
 };
 
+// BlueTeam 评审相关类型
+export interface BlueTeamReview {
+  id: string;
+  task_id: string;
+  round: number;
+  expert_role: string;
+  expert_name?: string;
+  questions: Array<{
+    id: string;
+    question: string;
+    severity: 'high' | 'medium' | 'low' | 'praise';
+    suggestion: string;
+    location?: string;
+  }>;
+  status: 'pending' | 'completed';
+  user_decision?: 'accept' | 'revise' | 'reject';
+  decision_note?: string;
+  decided_at?: string;
+}
+
 // BlueTeam 评审 API
 export const blueTeamApi = {
   getReviews: (taskId: string) =>
-    client.get(`/production/${taskId}/reviews`) as Promise<{ items: any[] }>,
+    client.get(`/production/${taskId}/reviews`) as Promise<{ items: BlueTeamReview[] }>,
 
   submitDecision: (reviewId: string, decision: { decision: 'accept' | 'revise' | 'reject'; note?: string }) =>
     client.post(`/production/reviews/${reviewId}/decision`, decision) as Promise<void>,

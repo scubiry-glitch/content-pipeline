@@ -15,6 +15,8 @@
 |-----|------|--------|---------|
 | 1.0 | 2026-03-10 | 产品团队 | 初始版本，基础流程 MVP |
 | 2.0 | 2026-03-16 | 产品团队 | 质量增强版，蓝军分工、人工介入点、输入把控 |
+| 2.1 | 2026-03-16 | 产品团队 | 深度研究自动采集 - [Product-Spec-v2.1-DeepResearch.md](./Product-Spec-v2.1-DeepResearch.md) |
+| 2.2 | 2026-03-17 | 产品团队 | 情感分析增强 - [Product-Spec-v2.2-Sentiment-Analysis.md](./Product-Spec-v2.2-Sentiment-Analysis.md) |
 
 ### 1.2 相关文档
 

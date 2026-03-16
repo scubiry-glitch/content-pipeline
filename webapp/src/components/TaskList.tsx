@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, type Task } from '../types';
+import { TaskDetail } from './TaskDetail';
 import './TaskList.css';
 
 interface TaskListProps {
@@ -8,6 +10,7 @@ interface TaskListProps {
 
 export function TaskList({ filter = 'all' }: TaskListProps) {
   const { tasks, loading } = useTasks();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const filteredTasks = tasks.filter((task) => {
     if (filter === 'all') return !task.is_hidden;
@@ -21,28 +24,34 @@ export function TaskList({ filter = 'all' }: TaskListProps) {
 
   if (filteredTasks.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon">📭</div>
-        <div className="empty-title">暂无任务</div>
-        <p>点击上方按钮创建新任务</p>
-      </div>
+      <>
+        <div className="empty-state">
+          <div className="empty-icon">📭</div>
+          <div className="empty-title">暂无任务</div>
+          <p>点击上方按钮创建新任务</p>
+        </div>
+        <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      </>
     );
   }
 
   return (
-    <div className="task-list">
-      {filteredTasks.map((task) => (
-        <TaskCard key={task.id} task={task} />
-      ))}
-    </div>
+    <>
+      <div className="task-list">
+        {filteredTasks.map((task) => (
+          <TaskCard key={task.id} task={task} onClick={() => setSelectedTaskId(task.id)} />
+        ))}
+      </div>
+      <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+    </>
   );
 }
 
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const status = STATUS_MAP[task.status] ?? { className: 'badge-pending', text: task.status };
 
   return (
-    <div className="task-card">
+    <div className="task-card" onClick={onClick} style={{ cursor: 'pointer' }}>
       <div className="task-header">
         <h3 className="task-title">{task.topic}</h3>
         <span className={`badge ${status.className}`}>{status.text}</span>
@@ -65,8 +74,8 @@ function TaskCard({ task }: { task: Task }) {
         </div>
       )}
 
-      <div className="task-actions">
-        <button className="btn btn-sm btn-secondary">查看详情</button>
+      <div className="task-actions" onClick={(e) => e.stopPropagation()}>
+        <button className="btn btn-sm btn-secondary" onClick={onClick}>查看详情</button>
         {task.status === 'reviewing' && (
           <button className="btn btn-sm btn-primary">处理评审</button>
         )}
