@@ -22,7 +22,16 @@ export function RSSSources() {
     try {
       setLoading(true);
       const data = await rssSourcesApi.getAll();
-      setSources(data.items || []);
+      // 后端返回格式: { sources: [] }, 需要适配字段
+      const sources = (data.sources || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        url: s.url,
+        category: s.category,
+        isActive: s.enabled !== false,
+        lastCrawledAt: s.lastFetched,
+      }));
+      setSources(sources);
     } catch (error) {
       console.error('加载RSS源失败:', error);
     } finally {

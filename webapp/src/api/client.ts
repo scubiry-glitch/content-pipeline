@@ -307,19 +307,19 @@ export const hotTopicsApi = {
 // RSS源管理 API
 export const rssSourcesApi = {
   getAll: () =>
-    client.get('/quality/rss-sources') as Promise<{ items: RSSSource[] }>,
+    client.get('/rss/sources') as Promise<{ sources: RSSSource[] }>,
 
   create: (data: Partial<RSSSource>) =>
-    client.post('/quality/rss-sources', data) as Promise<RSSSource>,
+    client.post('/rss/sources', data) as Promise<RSSSource>,
 
   update: (id: string, data: Partial<RSSSource>) =>
-    client.put(`/quality/rss-sources/${id}`, data) as Promise<RSSSource>,
+    client.put(`/rss/sources/${id}`, data) as Promise<RSSSource>,
 
   delete: (id: string) =>
-    client.delete(`/quality/rss-sources/${id}`) as Promise<void>,
+    client.delete(`/rss/sources/${id}`) as Promise<void>,
 
   triggerCrawl: (id?: string) =>
-    client.post('/quality/rss-sources/crawl', { id }) as Promise<{ crawled: number }>,
+    client.post('/rss/collect', { sourceId: id }) as Promise<{ crawled: number }>,
 };
 
 // 情感分析相关类型 (v3.2)

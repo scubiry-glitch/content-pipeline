@@ -15,7 +15,7 @@ import {
   type Asset,
   type ResearchConfig
 } from '../api/client';
-import type { Task } from '../types';
+import type { Task, NovelAngle } from '../types';
 import './TaskDetail.css';
 
 // 流程步骤定义
@@ -441,6 +441,28 @@ export function TaskDetail() {
     }
   };
 
+  // 重做指定阶段
+  const handleRedoStage = async (stage: 'planning' | 'research' | 'writing' | 'review') => {
+    const stageNames: Record<string, string> = {
+      planning: '选题策划',
+      research: '深度研究',
+      writing: '文稿生成',
+      review: '蓝军评审'
+    };
+    if (!confirm(`确定要重做${stageNames[stage]}吗？`)) return;
+    setActionLoading(`redo-${stage}`);
+    try {
+      await tasksApi.redoStage(id!, stage);
+      alert(`${stageNames[stage]}重做已启动`);
+      loadTask();
+    } catch (error) {
+      console.error(`重做${stageNames[stage]}失败:`, error);
+      alert('操作失败');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // 触发研究采集
   const handleTriggerResearch = async () => {
     if (!confirm('确定要启动深度研究采集吗？这将执行网页搜索和素材检索。')) return;
@@ -804,18 +826,21 @@ export function TaskDetail() {
             {outline.novelAngles?.length > 0 && (
               <div className="novel-angles-section">
                 <h4>✨ 建议的新研究角度</h4>
-                {outline.novelAngles.map((angle: any, i: number) => (
-                  <div key={i} className="angle-card">
-                    <div className="angle-header">
-                      <strong>{angle.angle}</strong>
-                      <span className={`impact-badge ${angle.potentialImpact}`}>
-                        {angle.potentialImpact === 'high' ? '高影响力' : angle.potentialImpact === 'medium' ? '中影响力' : '低影响力'}
-                      </span>
+                {outline.novelAngles.map((angle: NovelAngle, i: number) => {
+                  const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : angle.differentiation_score >= 5 ? 'medium' : 'low');
+                  return (
+                    <div key={i} className="angle-card">
+                      <div className="angle-header">
+                        <strong>{angle.angle}</strong>
+                        <span className={`impact-badge ${impact}`}>
+                          {impact === 'high' ? '高影响力' : impact === 'medium' ? '中影响力' : '低影响力'}
+                        </span>
+                      </div>
+                      <p><strong>理由:</strong> {angle.description}</p>
+                      <p><strong>差异化评分:</strong> {angle.differentiation_score}/10</p>
                     </div>
-                    <p><strong>理由:</strong> {angle.rationale}</p>
-                    <p><strong>差异化:</strong> {angle.differentiation}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1306,16 +1331,28 @@ export function TaskDetail() {
               <div className="info-card quick-actions-card">
                 <h3 className="card-title">⚡ 快捷操作</h3>
                 <div className="quick-actions">
-                  {task.status === 'outline_pending' && (
-                    <button className="btn btn-primary" onClick={() => tasksApi.confirmOutline(id!)}>
-                      ✓ 确认大纲并继续
+                  {(task.status === 'planning' || task.status === 'outline_pending') && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleConfirmOutline}
+                      disabled={actionLoading === 'confirm-outline'}
+                    >
+                      {actionLoading === 'confirm-outline' ? '处理中...' : '✓ 确认大纲并继续'}
                     </button>
                   )}
-                  <button className="btn btn-secondary" onClick={() => tasksApi.redoStage(id!, 'planning')}>
-                    🔄 重做选题策划
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleRedoStage('planning')}
+                    disabled={actionLoading === 'redo-planning'}
+                  >
+                    {actionLoading === 'redo-planning' ? '重算中...' : '🔄 重做选题策划'}
                   </button>
-                  <button className="btn btn-secondary" onClick={() => tasksApi.redoStage(id!, 'research')}>
-                    🔄 重做深度研究
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleRedoStage('research')}
+                    disabled={actionLoading === 'redo-research'}
+                  >
+                    {actionLoading === 'redo-research' ? '重启中...' : '🔄 重做深度研究'}
                   </button>
                 </div>
               </div>
@@ -1618,27 +1655,35 @@ export function TaskDetail() {
                     </div>
                   </div>
                   <div className="sentiment-distribution">
-                    <div className="dist-bar">
-                      <span className="dist-label">😊 正面</span>
-                      <div className="dist-progress">
-                        <div className="dist-fill positive" style={{ width: `${(sentiment.positive / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
-                      </div>
-                      <span className="dist-percent">{sentiment.positive}</span>
-                    </div>
-                    <div className="dist-bar">
-                      <span className="dist-label">😐 中性</span>
-                      <div className="dist-progress">
-                        <div className="dist-fill neutral" style={{ width: `${(sentiment.neutral / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
-                      </div>
-                      <span className="dist-percent">{sentiment.neutral}</span>
-                    </div>
-                    <div className="dist-bar">
-                      <span className="dist-label">😞 负面</span>
-                      <div className="dist-progress">
-                        <div className="dist-fill negative" style={{ width: `${(sentiment.negative / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
-                      </div>
-                      <span className="dist-percent">{sentiment.negative}</span>
-                    </div>
+                    {(() => {
+                      const total = sentiment.positive + sentiment.neutral + sentiment.negative;
+                      const safeTotal = total > 0 ? total : 1;
+                      return (
+                        <>
+                          <div className="dist-bar">
+                            <span className="dist-label">😊 正面</span>
+                            <div className="dist-progress">
+                              <div className="dist-fill positive" style={{ width: `${(sentiment.positive / safeTotal) * 100}%` }}></div>
+                            </div>
+                            <span className="dist-percent">{sentiment.positive}</span>
+                          </div>
+                          <div className="dist-bar">
+                            <span className="dist-label">😐 中性</span>
+                            <div className="dist-progress">
+                              <div className="dist-fill neutral" style={{ width: `${(sentiment.neutral / safeTotal) * 100}%` }}></div>
+                            </div>
+                            <span className="dist-percent">{sentiment.neutral}</span>
+                          </div>
+                          <div className="dist-bar">
+                            <span className="dist-label">😞 负面</span>
+                            <div className="dist-progress">
+                              <div className="dist-fill negative" style={{ width: `${(sentiment.negative / safeTotal) * 100}%` }}></div>
+                            </div>
+                            <span className="dist-percent">{sentiment.negative}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

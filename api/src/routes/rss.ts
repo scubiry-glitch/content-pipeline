@@ -7,12 +7,108 @@ import {
   collectSingleFeed,
   loadRSSConfig,
   getRSSStats,
+  saveRSSConfig,
 } from '../services/rssCollector.js';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
 
+// 内存存储RSS源（实际项目应使用数据库）
+let rssSources: any[] = [];
+
 export async function rssRoutes(fastify: FastifyInstance) {
-  // 手动触发全量采集（管理员权限）
+  // 获取 RSS 源列表（与/sources保持一致，返回适配前端格式）
+  fastify.get('/rss-sources', { preHandler: authenticate }, async (request) => {
+    const config = await loadRSSConfig();
+    const sources = Object.entries(config.categories).flatMap(([category, catConfig]: [string, any]) =>
+      catConfig.sources.map((s: any) => ({
+        ...s,
+        category,
+        categoryName: catConfig.name,
+        isActive: s.enabled !== false,
+        lastCrawledAt: s.lastFetched,
+      }))
+    );
+    return { items: sources };
+  });
+
+  // 创建 RSS 源
+  fastify.post('/rss-sources', { preHandler: authenticate }, async (request) => {
+    const data = request.body as any;
+    const newSource = {
+      id: `rss-${Date.now()}`,
+      ...data,
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    };
+    rssSources.push(newSource);
+    return newSource;
+  });
+
+  // 更新 RSS 源
+  fastify.put('/rss-sources/:id', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as any;
+    const data = request.body as any;
+    const index = rssSources.findIndex((s) => s.id === id);
+    if (index === -1) {
+      reply.status(404);
+      return { error: 'Source not found' };
+    }
+    rssSources[index] = { ...rssSources[index], ...data, updatedAt: new Date().toISOString() };
+    return rssSources[index];
+  });
+
+  // 删除 RSS 源
+  fastify.delete('/rss-sources/:id', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as any;
+    const index = rssSources.findIndex((s) => s.id === id);
+    if (index === -1) {
+      reply.status(404);
+      return { error: 'Source not found' };
+    }
+    rssSources.splice(index, 1);
+    return { success: true };
+  });
+
+  // 手动触发采集（兼容前端调用）
+  fastify.post('/rss-sources/crawl', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.body as any;
+
+    if (id) {
+      // 采集单个源
+      const config = await loadRSSConfig();
+      const sources = Object.values(config.categories)
+        .flatMap((c: any) => c.sources)
+        .filter((s: any) => s.id === id);
+
+      if (sources.length === 0) {
+        reply.status(404);
+        return { error: 'Source not found' };
+      }
+
+      const result = await collectSingleFeed(sources[0], config.filters);
+      return {
+        crawled: 1,
+        message: 'RSS collection triggered',
+      };
+    }
+
+    // 采集所有源（异步执行）
+    setImmediate(async () => {
+      try {
+        const result = await collectAllFeeds();
+        console.log('[RSS] Collection completed:', result);
+      } catch (error) {
+        console.error('[RSS] Collection failed:', error);
+      }
+    });
+
+    return {
+      crawled: 0,
+      message: 'RSS collection started in background',
+    };
+  });
+
+  // 手动触发全量采集（管理员权限）- 保持兼容
   fastify.post('/collect', { preHandler: authenticate }, async (request, reply) => {
     const { sourceId } = request.body as any;
 
