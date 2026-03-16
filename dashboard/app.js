@@ -27,7 +27,19 @@ const mockData = {
         { area: '可信度', suggestion: '为"市场增长30%"添加数据来源链接', priority: 'high', impact: '增强读者信任' },
         { area: '差异化', suggestion: '补充独家观点，与竞品文章区分', priority: 'medium', impact: '提高内容竞争力' },
         { area: '时效性', suggestion: '更新2024年Q1最新数据', priority: 'medium', impact: '提升内容价值' }
-    ]
+    ],
+    // v3.1 新增：智能推荐数据
+    recommendations: [
+        { id: 'r1', title: 'AI医疗诊断突破', category: 'Tech', score: 92, reason: '基于您的科技偏好推荐', hotScore: 88 },
+        { id: 'r2', title: '新能源汽车电池技术革新', category: 'Tech', score: 85, reason: '与您关注的新能源话题相关', hotScore: 82 },
+        { id: 'r3', title: '央行数字货币试点进展', category: 'Finance', score: 78, reason: '当前热门话题', hotScore: 90 },
+        { id: 'r4', title: 'SpaceX星舰最新发射', category: 'Tech', score: 75, reason: '科技爱好者关注', hotScore: 85 },
+        { id: 'r5', title: 'A股科技股投资策略', category: 'Finance', score: 72, reason: '与您历史阅读兴趣匹配', hotScore: 80 }
+    ],
+    userProfile: {
+        interests: { Tech: 0.85, Finance: 0.6, AI: 0.9 },
+        topInterests: ['AI', 'Tech', 'Finance']
+    }
 };
 
 // 初始化仪表盘
@@ -35,6 +47,8 @@ function initDashboard() {
     updateTime();
     renderScores(mockData);
     renderHotTopics(mockData.hotTopics);
+    renderRecommendations(mockData.recommendations);
+    renderUserProfile(mockData.userProfile);
     renderAlerts(mockData.alerts);
     renderRSSStatus(mockData.rssSources);
     renderSuggestions(mockData.suggestions);
@@ -222,6 +236,78 @@ function analyzeContent() {
         ` : ''}
     `;
     result.classList.add('show');
+}
+
+// 渲染智能推荐
+function renderRecommendations(recommendations) {
+    const container = document.getElementById('recommendations');
+    if (!recommendations || recommendations.length === 0) {
+        container.innerHTML = '<div class="alert-placeholder">暂无推荐</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <ul class="recommendations-list">
+            ${recommendations.map(r => `
+                <li class="recommendation-item" data-id="${r.id}">
+                    <div class="recommendation-header">
+                        <span class="topic-title">${r.title}</span>
+                        <span class="recommendation-score">${r.score}</span>
+                    </div>
+                    <div class="recommendation-meta">
+                        <span class="topic-category">${r.category}</span>
+                        <span class="recommendation-reason">💡 ${r.reason}</span>
+                        <span class="hot-score">🔥 ${r.hotScore}</span>
+                    </div>
+                    <div class="recommendation-actions">
+                        <button onclick="recordFeedback('${r.id}', 'like')" class="btn-like">👍 感兴趣</button>
+                        <button onclick="recordFeedback('${r.id}', 'ignore')" class="btn-ignore">不感兴趣</button>
+                    </div>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+// 渲染用户画像
+function renderUserProfile(profile) {
+    const container = document.getElementById('user-profile');
+    if (!profile || !profile.interests) {
+        container.innerHTML = '<div class="alert-placeholder">暂无画像数据</div>';
+        return;
+    }
+
+    const interestBars = Object.entries(profile.interests)
+        .sort((a, b) => b[1] - a[1])
+        .map(([topic, weight]) => `
+            <div class="interest-bar">
+                <span class="interest-topic">${topic}</span>
+                <div class="interest-progress">
+                    <div class="interest-fill" style="width: ${weight * 100}%"></div>
+                </div>
+                <span class="interest-value">${(weight * 100).toFixed(0)}%</span>
+            </div>
+        `).join('');
+
+    container.innerHTML = `
+        <div class="user-profile">
+            <h4>兴趣画像</h4>
+            ${interestBars}
+        </div>
+    `;
+}
+
+// 记录反馈
+function recordFeedback(topicId, action) {
+    console.log(`记录反馈: ${topicId} - ${action}`);
+    // 实际应用中这里会调用API
+    const item = document.querySelector(`[data-id="${topicId}"]`);
+    if (item) {
+        item.style.opacity = action === 'ignore' ? '0.3' : '1';
+        if (action === 'like') {
+            item.classList.add('liked');
+        }
+    }
 }
 
 // WebSocket连接（预留）

@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
+import { rssRoutes } from './routes/rss.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
@@ -80,6 +81,7 @@ async function main() {
   await fastify.register(productionRoutes, { prefix: '/api/v1/production' });
   await fastify.register(assetRoutes, { prefix: '/api/v1/assets' });
   await fastify.register(outputRoutes, { prefix: '/api/v1/outputs' });
+  await fastify.register(rssRoutes, { prefix: '/api/v1/rss' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
