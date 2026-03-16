@@ -67,6 +67,14 @@ export const tasksApi = {
 
   getReviews: (id: string) =>
     client.get(`/production/${id}/reviews`) as Promise<BlueTeamReview[]>,
+
+  // 确认大纲并继续 (FR-005)
+  confirmOutline: (id: string) =>
+    client.post(`/production/${id}/confirm-outline`) as Promise<void>,
+
+  // 重做某个阶段
+  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review') =>
+    client.post(`/production/${id}/redo/${stage}`) as Promise<void>,
 };
 
 // 素材相关 API
@@ -187,8 +195,25 @@ export const blueTeamApi = {
   getReviews: (taskId: string) =>
     client.get(`/production/${taskId}/reviews`) as Promise<{ items: BlueTeamReview[] }>,
 
-  submitDecision: (reviewId: string, decision: { decision: 'accept' | 'revise' | 'reject'; note?: string }) =>
-    client.post(`/production/reviews/${reviewId}/decision`, decision) as Promise<void>,
+  // 提交单个评审意见决策 (FR-021)
+  submitDecision: (taskId: string, reviewId: string, data: {
+    questionId: string;
+    decision: 'accept' | 'ignore' | 'manual_resolved';
+    note?: string;
+  }) =>
+    client.post(`/production/${taskId}/review-items/${reviewId}/decide`, data) as Promise<void>,
+
+  // 批量决策 (FR-021)
+  batchDecide: (taskId: string, data: { decision: 'accept' | 'ignore' }) =>
+    client.post(`/production/${taskId}/reviews/batch-decide`, data) as Promise<void>,
+
+  // 申请重新评审 (FR-023)
+  requestReReview: (taskId: string, data: { expertRole: string; reason?: string }) =>
+    client.post(`/production/${taskId}/review-items/re-review`, data) as Promise<void>,
+
+  // 检查是否可以进入确认环节 (FR-022)
+  canProceed: (taskId: string) =>
+    client.get(`/production/${taskId}/can-proceed`) as Promise<{ canProceed: boolean; pendingCritical: number }>,
 };
 
 // 健康检查
