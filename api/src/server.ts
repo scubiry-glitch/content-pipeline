@@ -12,6 +12,7 @@ import { rssRoutes } from './routes/rss.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
 import { researchRoutes } from './routes/research.js';
+import { reportRoutes } from './routes/reports.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -89,6 +90,7 @@ async function main() {
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
+  await fastify.register(reportRoutes, { prefix: '/api/v1/reports' });
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });

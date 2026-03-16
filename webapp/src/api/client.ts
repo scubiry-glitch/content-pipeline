@@ -137,4 +137,36 @@ export const healthApi = {
     client.get('/health') as Promise<{ status: string; version: string }>,
 };
 
+// 研报相关 API (v3.3)
+export const reportsApi = {
+  getAll: (params?: { limit?: number; status?: string }) =>
+    client.get('/reports', { params }) as Promise<{ items: import('../types').Report[]; total: number }>,
+
+  getById: (id: string) =>
+    client.get(`/reports/${id}`) as Promise<import('../types').Report>,
+
+  upload: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return client.post('/reports/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }) as Promise<import('../types').ReportUploadResponse>;
+  },
+
+  parse: (id: string) =>
+    client.post(`/reports/${id}/parse`) as Promise<import('../types').ReportParseResult>,
+
+  getMatches: (id: string) =>
+    client.get(`/reports/${id}/matches`) as Promise<{ items: import('../types').ReportMatch[] }>,
+
+  getQuality: (id: string) =>
+    client.get(`/reports/${id}/quality`) as Promise<import('../types').Report['qualityDimensions']>,
+
+  search: (query: string, limit?: number) =>
+    client.get('/reports/search', { params: { q: query, limit } }) as Promise<{ items: import('../types').Report[] }>,
+
+  delete: (id: string) =>
+    client.delete(`/reports/${id}`) as Promise<void>,
+};
+
 export default client;

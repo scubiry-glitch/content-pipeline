@@ -200,6 +200,66 @@ export interface DraftVersion {
   created_at: string;
 }
 
+// ==================== 研报类型 (v3.3) ====================
+
+export interface Report {
+  id: string;
+  title: string;
+  authors: string[];
+  institution: string;
+  publishDate: string;
+  pageCount: number;
+  fileUrl?: string;
+  content?: string;
+  keyPoints: string[];
+  tags: string[];
+  qualityScore: number;
+  qualityDimensions?: {
+    authority: number;
+    completeness: number;
+    logic: number;
+    freshness: number;
+  };
+  status: 'pending' | 'parsed' | 'matched' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportMatch {
+  id: string;
+  reportId: string;
+  matchType: 'rss' | 'asset' | 'topic';
+  matchId: string;
+  matchScore: number;
+  matchReason: string;
+  matchedItem?: {
+    title: string;
+    source?: string;
+    publishedAt?: string;
+  };
+}
+
+export interface ReportUploadResponse {
+  id: string;
+  status: string;
+  message: string;
+}
+
+export interface ReportParseResult {
+  title: string;
+  authors: string[];
+  institution: string;
+  publishDate: string;
+  pageCount: number;
+  sections: Array<{
+    title: string;
+    level: number;
+    content: string;
+  }>;
+  keyPoints: string[];
+  tags: string[];
+}
+
 export interface StageInfo {
   id: number;
   name: string;

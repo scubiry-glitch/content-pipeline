@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Tasks } from './pages/Tasks';
 import { Assets } from './pages/Assets';
 import { Experts } from './pages/Experts';
+import { Reports } from './pages/Reports';
 import './App.css';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
             <Route path="tasks" element={<Tasks />} />
             <Route path="assets" element={<Assets />} />
             <Route path="experts" element={<Experts />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

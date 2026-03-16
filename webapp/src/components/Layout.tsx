@@ -20,6 +20,9 @@ export function Layout() {
             <NavLink to="/experts" className="nav-link">
               专家库
             </NavLink>
+            <NavLink to="/reports" className="nav-link">
+              研报 (v3.3)
+            </NavLink>
           </nav>
         </div>
       </header>
