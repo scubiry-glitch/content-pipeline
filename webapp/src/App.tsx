@@ -8,6 +8,7 @@ import { Assets } from './pages/Assets';
 import { Experts } from './pages/Experts';
 import { Reports } from './pages/Reports';
 import { HotTopics } from './pages/HotTopics';
+import { HotTopicDetail } from './pages/HotTopicDetail';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -31,6 +32,7 @@ function App() {
             <Route path="experts" element={<Experts />} />
             <Route path="reports" element={<Reports />} />
             <Route path="hot-topics" element={<HotTopics />} />
+            <Route path="hot-topics/:id" element={<HotTopicDetail />} />
             <Route path="sentiment" element={<SentimentAnalysisPage />} />
             <Route path="compliance" element={<Compliance />} />
             <Route path="orchestrator" element={<Orchestrator />} />

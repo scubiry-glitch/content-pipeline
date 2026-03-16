@@ -15,7 +15,7 @@ export function TaskDetail() {
   const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
   const [alerts, setAlerts] = useState<Array<{type: string; severity: string; message: string; suggestion?: string}>>([]);
   const [suggestions, setSuggestions] = useState<Array<{area: string; suggestion: string; priority: string; impact: string}>>([]);
-  const [sentiment, setSentiment] = useState<{msi: number; level: string; change24h: number; distribution: any} | null>(null);
+  const [sentiment, setSentiment] = useState<{msiIndex: number; trendDirection: string; positive: number; negative: number; neutral: number} | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'research' | 'reviews' | 'quality'>('overview');
   const [analyzeText, setAnalyzeText] = useState('');
@@ -576,12 +576,12 @@ export function TaskDetail() {
                   <h3 className="card-title">📊 市场情绪指数 (MSI)</h3>
                   <div className="sentiment-display">
                     <div className="msi-gauge-small">
-                      <span className="msi-value-small">{sentiment.msi}</span>
-                      <span className="msi-level-small">{sentiment.level}</span>
+                      <span className="msi-value-small">{sentiment.msiIndex}</span>
+                      <span className="msi-level-small">MSI</span>
                     </div>
                     <div className="msi-change">
-                      <span className={`change-badge ${sentiment.change24h >= 0 ? 'up' : 'down'}`}>
-                        24h {sentiment.change24h >= 0 ? '+' : ''}{sentiment.change24h}
+                      <span className={`change-badge ${sentiment.trendDirection === 'up' ? 'up' : sentiment.trendDirection === 'down' ? 'down' : ''}`}>
+                        趋势 {sentiment.trendDirection === 'up' ? '📈 上升' : sentiment.trendDirection === 'down' ? '📉 下降' : '➡️ 稳定'}
                       </span>
                     </div>
                   </div>
@@ -589,23 +589,23 @@ export function TaskDetail() {
                     <div className="dist-bar">
                       <span className="dist-label">😊 正面</span>
                       <div className="dist-progress">
-                        <div className="dist-fill positive" style={{ width: `${sentiment.distribution?.positive * 100}%` }}></div>
+                        <div className="dist-fill positive" style={{ width: `${(sentiment.positive / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
                       </div>
-                      <span className="dist-percent">{((sentiment.distribution?.positive || 0) * 100).toFixed(0)}%</span>
+                      <span className="dist-percent">{sentiment.positive}</span>
                     </div>
                     <div className="dist-bar">
                       <span className="dist-label">😐 中性</span>
                       <div className="dist-progress">
-                        <div className="dist-fill neutral" style={{ width: `${sentiment.distribution?.neutral * 100}%` }}></div>
+                        <div className="dist-fill neutral" style={{ width: `${(sentiment.neutral / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
                       </div>
-                      <span className="dist-percent">{((sentiment.distribution?.neutral || 0) * 100).toFixed(0)}%</span>
+                      <span className="dist-percent">{sentiment.neutral}</span>
                     </div>
                     <div className="dist-bar">
                       <span className="dist-label">😔 负面</span>
                       <div className="dist-progress">
-                        <div className="dist-fill negative" style={{ width: `${sentiment.distribution?.negative * 100}%` }}></div>
+                        <div className="dist-fill negative" style={{ width: `${(sentiment.negative / (sentiment.positive + sentiment.negative + sentiment.neutral)) * 100}%` }}></div>
                       </div>
-                      <span className="dist-percent">{((sentiment.distribution?.negative || 0) * 100).toFixed(0)}%</span>
+                      <span className="dist-percent">{sentiment.negative}</span>
                     </div>
                   </div>
                 </div>

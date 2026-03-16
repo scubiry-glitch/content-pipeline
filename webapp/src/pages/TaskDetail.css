@@ -731,6 +731,344 @@
   }
 }
 
+/* 质量分析面板 */
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+/* 情感分析卡片 */
+.sentiment-card {
+  grid-column: span 2;
+}
+
+.sentiment-display {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.msi-gauge-small {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--ochre) 100%);
+  border-radius: var(--radius-lg);
+  color: white;
+  min-width: 100px;
+}
+
+.msi-value-small {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.msi-level-small {
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.msi-change {
+  flex: 1;
+}
+
+.change-badge {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.change-badge.up {
+  background: rgba(122, 158, 107, 0.15);
+  color: var(--sage-dark);
+}
+
+.change-badge.down {
+  background: rgba(199, 91, 91, 0.15);
+  color: var(--danger);
+}
+
+.sentiment-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dist-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dist-label {
+  font-size: 14px;
+  color: var(--earth);
+  width: 60px;
+}
+
+.dist-progress {
+  flex: 1;
+  height: 8px;
+  background: var(--cream-dark);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.dist-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.dist-fill.positive {
+  background: var(--sage);
+}
+
+.dist-fill.neutral {
+  background: var(--warning);
+}
+
+.dist-fill.negative {
+  background: var(--danger);
+}
+
+.dist-percent {
+  font-size: 13px;
+  color: var(--soil);
+  width: 40px;
+  text-align: right;
+}
+
+/* 热点话题 */
+.hot-topics-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hot-topic-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: white;
+  border-radius: var(--radius);
+}
+
+.topic-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--soil);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topic-score {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--terracotta);
+}
+
+.topic-trend {
+  font-size: 12px;
+}
+
+/* 预警 */
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--stone);
+}
+
+.alert-item.severity-warning {
+  border-left-color: var(--warning);
+}
+
+.alert-item.severity-info {
+  border-left-color: var(--info);
+}
+
+.alert-item.severity-high {
+  border-left-color: var(--danger);
+}
+
+.alert-type {
+  font-size: 20px;
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-message {
+  font-size: 14px;
+  color: var(--soil);
+  margin-bottom: 4px;
+}
+
+.alert-suggestion {
+  font-size: 12px;
+  color: var(--sage);
+}
+
+/* 优化建议 */
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suggestion-item {
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--stone);
+}
+
+.suggestion-item.priority-high {
+  border-left-color: var(--danger);
+}
+
+.suggestion-item.priority-medium {
+  border-left-color: var(--warning);
+}
+
+.suggestion-area {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--cream-dark);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  color: var(--earth);
+  margin-bottom: 6px;
+}
+
+.suggestion-text {
+  font-size: 14px;
+  color: var(--soil);
+  margin-bottom: 6px;
+}
+
+.suggestion-impact {
+  font-size: 12px;
+  color: var(--sage);
+}
+
+/* 内容分析器 */
+.analyzer-card {
+  grid-column: span 2;
+}
+
+.analyzer-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.analyzer-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid var(--linen);
+  border-radius: var(--radius);
+  font-size: 14px;
+  background: white;
+  color: var(--soil);
+  resize: vertical;
+}
+
+.analyzer-textarea:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.analyze-btn {
+  align-self: flex-start;
+}
+
+.analyzer-result {
+  padding: 16px;
+  background: var(--cream);
+  border-radius: var(--radius);
+}
+
+.analyzer-result h4 {
+  font-size: 14px;
+  color: var(--soil);
+  margin-bottom: 12px;
+}
+
+.result-metrics {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+
+.result-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--pebble);
+}
+
+.metric-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--soil);
+}
+
+.metric-value.polarity-positive {
+  color: var(--sage);
+}
+
+.metric-value.polarity-negative {
+  color: var(--danger);
+}
+
+.metric-value.polarity-neutral {
+  color: var(--info);
+}
+
+.result-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.keywords-label {
+  font-size: 13px;
+  color: var(--pebble);
+}
+
+/* 空状态 */
+.empty-mini {
+  text-align: center;
+  padding: 20px;
+  color: var(--pebble);
+  font-size: 13px;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .panel-grid {
@@ -739,6 +1077,25 @@
 
   .info-card.full-width {
     grid-column: span 1;
+  }
+
+  .quality-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sentiment-card,
+  .analyzer-card {
+    grid-column: span 1;
+  }
+
+  .sentiment-display {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .result-metrics {
+    flex-direction: column;
+    gap: 12px;
   }
 
   .stage-steps {

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { hotTopicsApi, rssSourcesApi, type HotTopic, type RSSSource } from '../api/client';
 import './HotTopics.css';
 
 export function HotTopics() {
+  const navigate = useNavigate();
   const [topics, setTopics] = useState<HotTopic[]>([]);
   const [sources, setSources] = useState<RSSSource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,7 +148,7 @@ export function HotTopics() {
           ) : (
             <div className="topics-list">
               {filteredTopics.map((topic) => (
-                <div key={topic.id} className="topic-card">
+                <div key={topic.id} className="topic-card" onClick={() => navigate(`/hot-topics/${topic.id}`)} style={{ cursor: 'pointer' }}>
                   <div className="topic-header">
                     <h3 className="topic-title">{topic.title}</h3>
                     <span className={`trend-badge ${topic.trend}`}>
