@@ -9,6 +9,7 @@ import { ResearchAgent } from '../agents/researcher.js';
 import { getLLMRouter } from '../providers/index.js';
 import { getWebSearchService } from './webSearch.js';
 import { evaluateTopic } from './topicEvaluation.js';
+import { analyzeCompetitors } from './competitorAnalysis.js';
 
 export interface CreateTaskInput {
   topic: string;

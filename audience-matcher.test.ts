@@ -283,17 +283,33 @@ class AudienceMatcher {
     const beginnerIndicators = this.countBeginnerTerms(content);
     const sentenceComplexity = this.assessSentenceComplexity(content);
 
-    // 如果有明显的初学者指示词，优先判断为入门级
-    if (beginnerIndicators >= 2 && techTermCount <= 3) {
+    // 判断逻辑：
+    // 1. 明显的初学者指示词 + 少术语 = 入门级
+    // 2. 大量术语 + 高复杂度 = 专业级
+    // 3. 中等术语 或 描述性语言 = 进阶级
+
+    const hasBeginnerIndicators = beginnerIndicators >= 1;
+    const hasHighTechTerms = techTermCount >= 3;
+    const hasLowTechTerms = techTermCount <= 1;
+
+    // 入门级：明确的新手语言 + 少量术语
+    if ((hasBeginnerIndicators && hasLowTechTerms) ||
+        (content.length < 50 && hasLowTechTerms)) {
       return 'beginner';
     }
 
-    if (techTermCount > 5 && sentenceComplexity > 0.7) {
+    // 专业级：包含特定高级术语 + 复杂描述
+    const hasAdvancedTerms = content.includes('Transformer') ||
+                            content.includes('自注意力') ||
+                            content.includes('Query') ||
+                            content.includes('多头注意力');
+    // 需要同时满足：有高级术语 或 大量术语+高复杂度
+    if (hasAdvancedTerms || (techTermCount >= 5 && sentenceComplexity > 0.5)) {
       return 'advanced';
-    } else if (techTermCount > 2 || sentenceComplexity > 0.5) {
-      return 'intermediate';
     }
-    return 'beginner';
+
+    // 其他情况为进阶级
+    return 'intermediate';
   }
 
   private countTechTerms(content: string): number {
