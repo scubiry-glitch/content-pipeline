@@ -11,11 +11,13 @@ import {
   assetsApi,
   researchApi,
   complianceApi,
+  orchestratorApi,
   type BlueTeamReview,
   type HotTopic,
   type Asset,
   type ResearchConfig,
-  type ComplianceCheckResult
+  type ComplianceCheckResult,
+  type WorkflowRule
 } from '../api/client';
 import type { Task, NovelAngle } from '../types';
 import './TaskDetail.css';
@@ -116,6 +118,9 @@ export function TaskDetail() {
   const [complianceResult, setComplianceResult] = useState<ComplianceCheckResult | null>(null);
   const [checkingCompliance, setCheckingCompliance] = useState(false);
 
+  // 工作流规则状态 (v4.1)
+  const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>([]);
+
   // 深度研究配置状态
   const [researchConfig, setResearchConfig] = useState<ResearchConfig>({
     autoCollect: true,
@@ -135,6 +140,7 @@ export function TaskDetail() {
       loadAssets();
       loadResearchConfig();
       loadCollectedResearch();
+      loadWorkflowRules();
     }
   }, [id]);
 
@@ -226,6 +232,15 @@ export function TaskDetail() {
       setCollectedItems(data.items || []);
     } catch (error) {
       console.error('加载采集结果失败:', error);
+    }
+  };
+
+  const loadWorkflowRules = async () => {
+    try {
+      const data = await orchestratorApi.getRules();
+      setWorkflowRules(data.items || []);
+    } catch (error) {
+      console.error('加载工作流规则失败:', error);
     }
   };
 
@@ -1402,6 +1417,33 @@ export function TaskDetail() {
                             <li key={pidx}>{point}</li>
                           ))}
                         </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 工作流规则 (v4.1) */}
+              {workflowRules.length > 0 && (
+                <div className="info-card full-width">
+                  <h3 className="card-title">🔄 适用工作流规则 ({workflowRules.filter(r => r.isEnabled).length}个启用)</h3>
+                  <div className="workflow-rules-list">
+                    {workflowRules.filter(r => r.isEnabled).slice(0, 5).map((rule) => (
+                      <div key={rule.id} className="workflow-rule-item">
+                        <div className="rule-header">
+                          <span className="rule-name">{rule.name}</span>
+                          <span className={`rule-action ${rule.actionType}`}>
+                            {rule.actionType === 'back_to_stage' ? '退回' :
+                             rule.actionType === 'skip_step' ? '跳过' :
+                             rule.actionType === 'add_warning' ? '警告' :
+                             rule.actionType === 'notify' ? '通知' :
+                             rule.actionType === 'block_and_notify' ? '阻断' : rule.actionType}
+                          </span>
+                        </div>
+                        {rule.description && <div className="rule-desc">{rule.description}</div>}
+                        <div className="rule-condition">
+                          <code>{rule.conditionExpression}</code>
+                        </div>
                       </div>
                     ))}
                   </div>
