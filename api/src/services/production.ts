@@ -5,6 +5,7 @@ import { query } from '../db/connection.js';
 import { getQueue } from '../utils/queue-manager.js';
 import { PipelineService } from './pipeline.js';
 import { generate } from './llm.js';
+import { evaluateSource } from './sourceCredibility.js';
 
 export interface CreateTaskInput {
   topic: string;
@@ -187,14 +188,30 @@ export class ProductionService {
 
   // Add research annotation
   async addAnnotation(taskId: string, input: AnnotationInput) {
+    // 如果是URL类型，评估信源可信度
+    let credibility = null;
+    if (input.type === 'url' && input.url) {
+      const credibilityResult = evaluateSource(input.url);
+      credibility = {
+        level: credibilityResult.level,
+        score: credibilityResult.score,
+        reason: credibilityResult.reason
+      };
+    }
+
     const result = await query(
-      `INSERT INTO research_annotations (id, task_id, type, url, asset_id, title, created_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW())
+      `INSERT INTO research_annotations (id, task_id, type, url, asset_id, title, credibility, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
        RETURNING *`,
-      [taskId, input.type, input.url || null, input.asset_id || null, input.title]
+      [taskId, input.type, input.url || null, input.asset_id || null, input.title, credibility ? JSON.stringify(credibility) : null]
     );
 
     // Update task's research_data with annotations
+    const annotationWithCredibility = {
+      ...result.rows[0],
+      credibility
+    };
+
     await query(
       `UPDATE tasks SET
         research_data = COALESCE(research_data, '{}'::jsonb) ||
@@ -203,10 +220,10 @@ export class ProductionService {
           ),
         updated_at = NOW()
       WHERE id = $2`,
-      [JSON.stringify([result.rows[0]]), taskId]
+      [JSON.stringify([annotationWithCredibility]), taskId]
     );
 
-    return result.rows[0];
+    return annotationWithCredibility;
   }
 
   // Get annotations for a task

@@ -466,9 +466,13 @@ class QualityDashboard {
 
   generateSuggestions(content: any): Suggestion[] {
     const suggestions: Suggestion[] = [];
-    const score = this.calculateOverallQuality(content);
 
-    if (score.freshness < 60) {
+    // 使用传入的分数或计算
+    const freshness = content.freshness !== undefined ? content.freshness : this.calculateFreshness(content.publishedAt || new Date());
+    const credibility = content.credibility !== undefined ? content.credibility : this.calculateCredibility(content.sources || [], content.body || '');
+    const differentiation = content.differentiation !== undefined ? content.differentiation : 70;
+
+    if (freshness < 60) {
       suggestions.push({
         area: '时效性',
         suggestion: '更新数据到最新，或添加数据时间说明',
@@ -477,7 +481,7 @@ class QualityDashboard {
       });
     }
 
-    if (score.credibility < 60) {
+    if (credibility < 60) {
       suggestions.push({
         area: '可信度',
         suggestion: '引用官方数据或权威媒体报道',
@@ -486,7 +490,7 @@ class QualityDashboard {
       });
     }
 
-    if (score.differentiation < 60) {
+    if (differentiation < 60) {
       suggestions.push({
         area: '差异化',
         suggestion: '添加独家观点或深度分析',

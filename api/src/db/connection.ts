@@ -137,6 +137,7 @@ async function setupMVPSchema(): Promise<void> {
       url TEXT,
       asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE SET NULL,
       title VARCHAR(500) NOT NULL,
+      credibility JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);

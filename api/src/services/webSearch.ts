@@ -3,6 +3,8 @@
 
 import { generateEmbedding } from './llm.js';
 
+import { SourceLevel, evaluateSource } from './sourceCredibility.js';
+
 export interface SearchResult {
   url: string;
   title: string;
@@ -10,6 +12,12 @@ export interface SearchResult {
   content?: string;
   source: string;
   relevance: number;
+  credibility?: {
+    level: SourceLevel;
+    score: number;
+    reason: string;
+  };
+  publishedAt?: string;
 }
 
 export interface SearchOptions {
@@ -79,14 +87,23 @@ export class WebSearchService {
 
       const data: any = await response.json();
 
-      return (data.results || []).map((result: any) => ({
-        url: result.url,
-        title: result.title,
-        snippet: result.content || result.snippet,
-        content: result.raw_content,
-        source: new URL(result.url).hostname,
-        relevance: result.score || 0.8,
-      }));
+      return (data.results || []).map((result: any) => {
+        const credibility = evaluateSource(result.url);
+        return {
+          url: result.url,
+          title: result.title,
+          snippet: result.content || result.snippet,
+          content: result.raw_content,
+          source: new URL(result.url).hostname,
+          relevance: result.score || 0.8,
+          credibility: {
+            level: credibility.level,
+            score: credibility.score,
+            reason: credibility.reason,
+          },
+          publishedAt: result.published_date,
+        };
+      });
     } catch (error) {
       console.error('[WebSearch] Tavily search failed:', error);
       return this.generateMockResults(options, maxResults);
@@ -122,24 +139,42 @@ export class WebSearchService {
 
       // Organic results
       if (data.organic) {
-        results.push(...data.organic.map((r: any) => ({
-          url: r.link,
-          title: r.title,
-          snippet: r.snippet,
-          source: new URL(r.link).hostname,
-          relevance: 0.8,
-        })));
+        results.push(...data.organic.map((r: any) => {
+          const credibility = evaluateSource(r.link);
+          return {
+            url: r.link,
+            title: r.title,
+            snippet: r.snippet,
+            source: new URL(r.link).hostname,
+            relevance: 0.8,
+            credibility: {
+              level: credibility.level,
+              score: credibility.score,
+              reason: credibility.reason,
+            },
+            publishedAt: r.date,
+          };
+        }));
       }
 
       // News results
       if (data.news) {
-        results.push(...data.news.map((r: any) => ({
-          url: r.link,
-          title: r.title,
-          snippet: r.snippet,
-          source: new URL(r.link).hostname,
-          relevance: 0.9,
-        })));
+        results.push(...data.news.map((r: any) => {
+          const credibility = evaluateSource(r.link);
+          return {
+            url: r.link,
+            title: r.title,
+            snippet: r.snippet,
+            source: new URL(r.link).hostname,
+            relevance: 0.9,
+            credibility: {
+              level: credibility.level,
+              score: credibility.score,
+              reason: credibility.reason,
+            },
+            publishedAt: r.date,
+          };
+        }));
       }
 
       return results.slice(0, maxResults);
@@ -181,12 +216,20 @@ export class WebSearchService {
 
     for (let i = 0; i < Math.min(maxResults, sources.length); i++) {
       const source = sources[i];
+      const url = `https://www.${source.domain}/${query.slice(0, 10).replace(/\s+/g, '-')}-${i}`;
+      const credibility = evaluateSource(url);
       results.push({
-        url: `https://www.${source.domain}/${query.slice(0, 10).replace(/\s+/g, '-')}-${i}`,
+        url,
         title: `${query} - ${source.name}研究分析`,
         snippet: `关于${query}的深度分析报告，包含最新数据、政策解读、市场趋势等内容。来源：${source.name}，发布时间：2024年。`,
         source: source.name,
         relevance: source.relevance - (i * 0.02),
+        credibility: {
+          level: credibility.level,
+          score: credibility.score,
+          reason: credibility.reason,
+        },
+        publishedAt: new Date().toISOString().split('T')[0],
       });
     }
 
