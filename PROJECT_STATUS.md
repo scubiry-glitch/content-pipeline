@@ -99,6 +99,7 @@
 - [第三轮](https://github.com/scubiry-glitch/content-pipeline/commit/182195d): QualityDashboard + RSS集成 + 流水线联动 (22 tests)
 - [第四轮](https://github.com/scubiry-glitch/content-pipeline/commit/1407f72): DashboardUI 可视化界面 (14 tests)
 - [第五轮](https://github.com/scubiry-glitch/content-pipeline/commit/05882eb): ContentGenerationIntegration 内容生成联动 (18 tests)
+- [第六轮](https://github.com/scubiry-glitch/content-pipeline/commit/41820ed): RSSDatabaseIntegration 数据库集成与实时抓取 (31 tests)
 
 ### 阻塞项
 | 问题 | 状态 | 负责人 |
