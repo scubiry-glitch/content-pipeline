@@ -371,4 +371,59 @@ export const complianceApi = {
     client.delete(`/compliance/rules/${id}`) as Promise<void>,
 };
 
+// 流水线编排相关类型 (v4.1)
+export interface WorkflowRule {
+  id: string;
+  name: string;
+  description?: string;
+  conditionExpression: string;
+  actionType: 'back_to_stage' | 'skip_step' | 'add_warning' | 'notify' | 'split_output' | 'block_and_notify';
+  actionParams: Record<string, any>;
+  priority: number;
+  isEnabled: boolean;
+  triggerStage?: string;
+}
+
+export interface TaskSchedule {
+  id: string;
+  taskId: string;
+  taskType: string;
+  priority: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  assignedTo?: string;
+  stage: number;
+  dueTime?: string;
+}
+
+export interface WorkflowContext {
+  taskId: string;
+  currentStage: number;
+  qualityScore?: number;
+  hotScore?: number;
+  wordCount?: number;
+  sentiment?: string;
+  complianceScore?: number;
+  contentType?: string;
+}
+
+// 流水线编排 API (v4.1)
+export const orchestratorApi = {
+  getRules: () =>
+    client.get('/orchestrator/rules') as Promise<{ items: WorkflowRule[] }>,
+
+  getQueue: (limit?: number) =>
+    client.get('/orchestrator/queue', { params: { limit } }) as Promise<{ items: TaskSchedule[] }>,
+
+  processWorkflow: (context: WorkflowContext) =>
+    client.post('/orchestrator/process', context) as Promise<{
+      appliedRules: WorkflowRule[];
+      actions: any[];
+      shouldProceed: boolean;
+      messages: string[];
+    }>,
+
+  enqueueTask: (data: { taskId: string; taskType: string; stage: number; priority?: number; dueTime?: string }) =>
+    client.post('/orchestrator/queue', data) as Promise<TaskSchedule>,
+};
+
 export default client;
