@@ -96,6 +96,7 @@ async function setupMVPSchema(): Promise<void> {
       output_ids JSONB DEFAULT '[]',
       is_hidden BOOLEAN DEFAULT false,
       hidden_at TIMESTAMP WITH TIME ZONE,
+      evaluation JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       completed_at TIMESTAMP WITH TIME ZONE

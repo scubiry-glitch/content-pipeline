@@ -4455,8 +4455,67 @@
             const sections = outline.sections || [];
             const insights = outline.knowledgeInsights || [];
             const novelAngles = outline.novelAngles || [];
+            const evaluation = task.evaluation || {};
 
             return `
+                ${evaluation.score ? `
+                <div class="detail-section">
+                    <div class="detail-section-title">📊 选题质量评估</div>
+                    <div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
+                        <div style="text-align: center;">
+                            <div style="width: 100px; height: 100px; border-radius: 50%; background: conic-gradient(${evaluation.score >= 80 ? 'var(--success)' : evaluation.score >= 60 ? 'var(--warning)' : 'var(--danger)'} ${evaluation.score * 3.6}deg, var(--gray-200) 0deg); display: flex; align-items: center; justify-content: center; margin: 0 auto 8px;">
+                                <div style="width: 80px; height: 80px; border-radius: 50%; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                    <span style="font-size: 24px; font-weight: 700; color: ${evaluation.score >= 80 ? 'var(--success)' : evaluation.score >= 60 ? 'var(--warning)' : 'var(--danger)'};">${evaluation.score}</span>
+                                    <span style="font-size: 11px; color: var(--gray-500);">分</span>
+                                </div>
+                            </div>
+                            <div style="font-size: 13px; font-weight: 600; color: ${evaluation.score >= 80 ? 'var(--success)' : evaluation.score >= 60 ? 'var(--warning)' : 'var(--danger)'};">
+                                ${evaluation.score >= 80 ? '✅ 强烈推荐' : evaluation.score >= 60 ? '⚠️ 可以写' : evaluation.score >= 40 ? '❌ 有风险' : '❌ 不建议'}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
+                                <div style="background: var(--gray-50); padding: 10px; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 4px;">📊 数据可得性 (40%)</div>
+                                    <div style="font-size: 16px; font-weight: 600; color: var(--gray-800);">${evaluation.dimensions?.dataAvailability || 0}分</div>
+                                    <div style="height: 4px; background: var(--gray-200); border-radius: 2px; margin-top: 6px;">
+                                        <div style="width: ${evaluation.dimensions?.dataAvailability || 0}%; height: 100%; background: var(--primary); border-radius: 2px;"></div>
+                                    </div>
+                                </div>
+                                <div style="background: var(--gray-50); padding: 10px; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 4px;">🔥 话题热度 (25%)</div>
+                                    <div style="font-size: 16px; font-weight: 600; color: var(--gray-800);">${evaluation.dimensions?.topicHeat || 0}分</div>
+                                    <div style="height: 4px; background: var(--gray-200); border-radius: 2px; margin-top: 6px;">
+                                        <div style="width: ${evaluation.dimensions?.topicHeat || 0}%; height: 100%; background: var(--warning); border-radius: 2px;"></div>
+                                    </div>
+                                </div>
+                                <div style="background: var(--gray-50); padding: 10px; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 4px;">💡 差异化潜力 (20%)</div>
+                                    <div style="font-size: 16px; font-weight: 600; color: var(--gray-800);">${evaluation.dimensions?.differentiation || 0}分</div>
+                                    <div style="height: 4px; background: var(--gray-200); border-radius: 2px; margin-top: 6px;">
+                                        <div style="width: ${evaluation.dimensions?.differentiation || 0}%; height: 100%; background: var(--info); border-radius: 2px;"></div>
+                                    </div>
+                                </div>
+                                <div style="background: var(--gray-50); padding: 10px; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 4px;">⏰ 时效性 (15%)</div>
+                                    <div style="font-size: 16px; font-weight: 600; color: var(--gray-800);">${evaluation.dimensions?.timeliness || 0}分</div>
+                                    <div style="height: 4px; background: var(--gray-200); border-radius: 2px; margin-top: 6px;">
+                                        <div style="width: ${evaluation.dimensions?.timeliness || 0}%; height: 100%; background: var(--success); border-radius: 2px;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            ${evaluation.analysis ? `<p style="font-size: 13px; color: var(--gray-600); margin-bottom: 8px;">${escapeHtml(evaluation.analysis)}</p>` : ''}
+                            ${evaluation.suggestions?.length > 0 ? `
+                                <div style="background: ${evaluation.score >= 60 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; padding: 10px; border-radius: 6px; border-left: 3px solid ${evaluation.score >= 60 ? 'var(--success)' : 'var(--warning)'};">
+                                    <div style="font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 4px;">💡 建议</div>
+                                    ${evaluation.suggestions.map(s => `<div style="font-size: 12px; color: var(--gray-600);">• ${escapeHtml(s)}</div>`).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+
                 <div class="detail-section">
                     <div class="detail-section-title">🎯 选题分析</div>
                     <div class="io-section">
