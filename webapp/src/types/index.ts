@@ -208,10 +208,10 @@ export interface StageInfo {
 }
 
 export const STAGES: Record<number, StageInfo> = {
-  1: { name: '选题策划', color: '#6366f1', icon: '💡' },
-  2: { name: '深度研究', color: '#8b5cf6', icon: '🔍' },
-  3: { name: '文稿生成', color: '#ec4899', icon: '✍️' },
-  4: { name: '多态转换', color: '#f59e0b', icon: '🎯' },
+  1: { id: 1, name: '选题策划', color: '#6366f1', icon: '💡' },
+  2: { id: 2, name: '深度研究', color: '#8b5cf6', icon: '🔍' },
+  3: { id: 3, name: '文稿生成', color: '#ec4899', icon: '✍️' },
+  4: { id: 4, name: '多态转换', color: '#f59e0b', icon: '🎯' },
 };
 
 export const STATUS_MAP: Record<TaskStatus, { text: string; className: string; stage: number }> = {

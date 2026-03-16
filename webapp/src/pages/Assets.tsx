@@ -15,8 +15,8 @@ export function Assets() {
   const loadAssets = async () => {
     setLoading(true);
     try {
-      const data = await assetsApi.getAll();
-      setAssets(data);
+      const response = await assetsApi.getAll();
+      setAssets(response.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -50,8 +50,8 @@ export function Assets() {
           {assets.map((asset) => (
             <div key={asset.id} className="asset-card">
               <div className="asset-preview">
-                {asset.fileType?.startsWith('image/') ? (
-                  <img src={asset.filePath} alt={asset.title} />
+                {asset.content_type?.startsWith('image/') ? (
+                  <img src={asset.filename} alt={asset.title} />
                 ) : (
                   <div className="asset-icon">📄</div>
                 )}
@@ -59,8 +59,8 @@ export function Assets() {
               <div className="asset-info">
                 <div className="asset-title">{asset.title}</div>
                 <div className="asset-meta">
-                  <span>{asset.fileType}</span>
-                  <span>{new Date(asset.createdAt).toLocaleDateString()}</span>
+                  <span>{asset.content_type}</span>
+                  <span>{new Date(asset.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
