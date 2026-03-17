@@ -1,0 +1,71 @@
+/* 热点AI分析样式 */
+.hot-topic-ai-analysis {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  color: white;
+  margin-top: 16px;
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.analysis-header h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.analysis-header button {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.analysis-header button:disabled {
+  opacity: 0.5;
+}
+
+.analysis-content {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.analysis-content p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.analysis-metrics {
+  display: flex;
+  gap: 24px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.trend-up { color: #52c41a; }
+.trend-down { color: #ff4d4f; }
+.trend-stable { color: #faad14; }
