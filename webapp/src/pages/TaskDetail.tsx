@@ -1801,6 +1801,16 @@ export function TaskDetail() {
                     onRollback={(versionId) => console.log('Rollback to:', versionId)}
                   />
                 </div>
+
+                {/* 导出功能 */}
+                <div className="info-card">
+                  <h3 className="card-title">📤 导出文稿</h3>
+                  <ExportPanel
+                    content={task.writing_data.draft}
+                    title={task.topic}
+                    taskId={task.id}
+                  />
+                </div>
               </div>
             ) : (
               <div className="empty-state">

@@ -293,5 +293,3 @@ export function QualityDashboard() {
     </div>
   );
 }
-
-export default QualityDashboard;
