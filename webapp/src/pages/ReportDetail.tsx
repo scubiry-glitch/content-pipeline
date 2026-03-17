@@ -113,6 +113,72 @@ export function ReportDetail() {
     return '#ff4d4f';
   };
 
+  // 获取置信度级别
+  const getConfidenceLevel = (score: number): 'high' | 'medium' | 'low' => {
+    if (score >= 80) return 'high';
+    if (score >= 60) return 'medium';
+    return 'low';
+  };
+
+  // 获取置信度文本
+  const getConfidenceText = (score: number): string => {
+    if (score >= 90) return '极高';
+    if (score >= 80) return '高';
+    if (score >= 70) return '中高';
+    if (score >= 60) return '中';
+    if (score >= 50) return '中低';
+    return '低';
+  };
+
+  // 基于匹配创建任务
+  const handleCreateTaskFromMatch = (match: ReportMatch) => {
+    const topic = match.matchedItem?.title || report?.title || '新任务';
+    const formats = ['markdown'];
+    const sourceMaterials = report ? [{
+      type: 'asset' as const,
+      asset_id: report.id,
+      title: report.title
+    }] : [];
+
+    navigate('/tasks', {
+      state: {
+        createTask: true,
+        topic,
+        formats,
+        sourceMaterials,
+        relatedMatch: match
+      }
+    });
+  };
+
+  // 基于所有匹配创建任务
+  const handleCreateTaskFromMatches = () => {
+    if (!report) return;
+    const highConfidenceMatches = matches.filter(m => m.matchScore >= 70);
+    const topic = highConfidenceMatches[0]?.matchedItem?.title || report.title || '新任务';
+
+    navigate('/tasks', {
+      state: {
+        createTask: true,
+        topic,
+        formats: ['markdown'],
+        sourceMaterials: [{
+          type: 'asset' as const,
+          asset_id: report.id,
+          title: report.title
+        }],
+        relatedMatches: highConfidenceMatches
+      }
+    });
+  };
+
+  // 调整匹配
+  const handleAdjustMatch = (match: ReportMatch) => {
+    // 实际实现中这里会打开一个弹窗来调整匹配关系
+    console.log('调整匹配:', match);
+    alert('调整匹配功能：可以手动修改匹配分数或移除匹配关系');
+  };
+
   if (loading) {
     return <div className="report-detail loading">加载中...</div>;
   }
@@ -244,12 +310,34 @@ export function ReportDetail() {
               <div className="matches-list">
                 <div className="matches-summary">
                   <span className="matches-count">共找到 {matches.length} 个关联</span>
-                  <button className="btn btn-sm btn-secondary" onClick={loadMatches}>
-                    🔄 刷新
-                  </button>
+                  <div className="matches-actions">
+                    <button className="btn btn-sm btn-primary" onClick={handleCreateTaskFromMatches}>
+                      ➕ 基于匹配创建任务
+                    </button>
+                    <button className="btn btn-sm btn-secondary" onClick={loadMatches}>
+                      🔄 刷新
+                    </button>
+                  </div>
                 </div>
+
+                {/* 匹配统计 */}
+                <div className="matches-stats">
+                  <div className="match-stat-item">
+                    <span className="stat-dot high"></span>
+                    <span>高置信度 (80+): {matches.filter(m => m.matchScore >= 80).length}</span>
+                  </div>
+                  <div className="match-stat-item">
+                    <span className="stat-dot medium"></span>
+                    <span>中置信度 (60-80): {matches.filter(m => m.matchScore >= 60 && m.matchScore < 80).length}</span>
+                  </div>
+                  <div className="match-stat-item">
+                    <span className="stat-dot low"></span>
+                    <span>低置信度 (<60): {matches.filter(m => m.matchScore < 60).length}</span>
+                  </div>
+                </div>
+
                 {matches.map((match) => (
-                  <div key={match.id} className="match-card">
+                  <div key={match.id} className={`match-card ${getConfidenceLevel(match.matchScore)}`}>
                     <div className="match-header">
                       <span className={`match-type-badge ${match.matchType}`}>
                         {match.matchType === 'rss' && '📰 RSS'}
@@ -257,9 +345,20 @@ export function ReportDetail() {
                         {match.matchType === 'topic' && '🔥 热点'}
                         {match.matchType === 'report' && '📊 研报'}
                       </span>
-                      <span className="match-score-badge" style={{ color: getQualityColor(match.matchScore) }}>
-                        {Math.round(match.matchScore)}分
-                      </span>
+                      <div className="match-score-section">
+                        <div className="confidence-bar">
+                          <div
+                            className="confidence-fill"
+                            style={{ width: `${match.matchScore}%`, background: getQualityColor(match.matchScore) }}
+                          />
+                        </div>
+                        <span className="match-score-badge" style={{ color: getQualityColor(match.matchScore) }}>
+                          {Math.round(match.matchScore)}分
+                        </span>
+                        <span className={`confidence-badge ${getConfidenceLevel(match.matchScore)}`}>
+                          {getConfidenceText(match.matchScore)}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="match-content">
@@ -269,6 +368,11 @@ export function ReportDetail() {
                       <p className="match-reason">{match.matchReason}</p>
                       {match.matchedItem?.source && (
                         <span className="match-source">来源: {match.matchedItem.source}</span>
+                      )}
+                      {match.matchedAt && (
+                        <span className="match-time">
+                          匹配时间: {new Date(match.matchedAt).toLocaleString()}
+                        </span>
                       )}
                     </div>
 
@@ -288,6 +392,18 @@ export function ReportDetail() {
                           查看素材 →
                         </Link>
                       )}
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleAdjustMatch(match)}
+                      >
+                        ⚙️ 调整
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => handleCreateTaskFromMatch(match)}
+                      >
+                        ➕ 创建任务
+                      </button>
                     </div>
                   </div>
                 ))}
