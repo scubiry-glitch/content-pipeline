@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { useNavigate } from 'react-router-dom';
+import { List } from 'react-window';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, type Task } from '../types';
-import { TaskDetail } from './TaskDetail';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
+import { PriorityBadge, PriorityFilter, PrioritySortButton } from './PriorityBadge';
+import { sortTasksByPriority, calculatePriority } from '../utils/priority';
 
 interface EditTaskModalProps {
   task: Task | null;
@@ -116,8 +118,8 @@ interface TaskListProps {
 }
 
 export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) {
+  const navigate = useNavigate();
   const { tasks, loading, deleteTask, hideTask, unhideTask, updateTask } = useTasks();
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmHide, setConfirmHide] = useState<string | null>(null);
   const [confirmUnhide, setConfirmUnhide] = useState<string | null>(null);
@@ -129,12 +131,29 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
   const [batchActionModal, setBatchActionModal] = useState<'delete' | 'hide' | 'stage' | null>(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
 
-  const filteredTasks = tasks.filter((task) => {
+  // 优先级筛选和排序
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [sortByPriority, setSortByPriority] = useState(false);
+
+  let filteredTasks = tasks.filter((task) => {
     if (showHidden) return task.is_hidden;
     if (filter === 'all') return !task.is_hidden;
     if (filter === 'hidden') return task.is_hidden;
     return task.status === filter && !task.is_hidden;
   });
+
+  // 优先级筛选
+  if (priorityFilter !== 'all') {
+    filteredTasks = filteredTasks.filter((task) => {
+      const priority = calculatePriority(task);
+      return priority.level === priorityFilter;
+    });
+  }
+
+  // 智能优先级排序
+  if (sortByPriority) {
+    filteredTasks = sortTasksByPriority(filteredTasks);
+  }
 
   const handleDelete = async (id: string) => {
     try {
@@ -333,6 +352,15 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
 
   return (
     <>
+      {/* 优先级筛选和排序 */}
+      <div className="task-list-controls">
+        <PriorityFilter value={priorityFilter} onChange={setPriorityFilter} />
+        <PrioritySortButton
+          onSort={() => setSortByPriority(!sortByPriority)}
+          isActive={sortByPriority}
+        />
+      </div>
+
       {/* 批量模式切换 */}
       <div className="batch-mode-toggle">
         <label className="batch-mode-label">
@@ -581,7 +609,10 @@ function TaskCard({
           />
         )}
         <h3 className="task-title">{task.topic}</h3>
-        <span className={`badge ${status.className}`}>{status.text}</span>
+        <div className="task-badges">
+          <PriorityBadge task={task} />
+          <span className={`badge ${status.className}`}>{status.text}</span>
+        </div>
       </div>
 
       <div className="task-meta">

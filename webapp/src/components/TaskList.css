@@ -448,6 +448,24 @@
   cursor: pointer;
 }
 
+/* 任务列表控制栏 */
+.task-list-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--cream);
+  border-radius: 8px;
+  border: 1px solid var(--linen);
+}
+
+.task-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .radio-label span {
   font-size: 14px;
   color: var(--gray-700);
