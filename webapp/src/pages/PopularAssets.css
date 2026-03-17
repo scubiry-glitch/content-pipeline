@@ -1,0 +1,261 @@
+/* PopularAssets.css */
+/* v3.0.2: 热门素材Top10页面样式 */
+
+.popular-assets {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.page-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.page-header .subtitle {
+  color: #666;
+  font-size: 14px;
+}
+
+/* 加载状态 */
+.loading-spinner {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+/* 错误状态 */
+.error-message {
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  color: #cf1322;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  color: #666;
+  font-size: 14px;
+}
+
+/* 热门列表 */
+.popular-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.popular-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e8e8e8;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.popular-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+/* 前三名特殊样式 */
+.popular-item.rank-1 {
+  background: linear-gradient(135deg, #fff9e6 0%, #fff 100%);
+  border-color: #ffd666;
+}
+
+.popular-item.rank-2 {
+  background: linear-gradient(135deg, #f6ffed 0%, #fff 100%);
+  border-color: #b7eb8f;
+}
+
+.popular-item.rank-3 {
+  background: linear-gradient(135deg, #e6f7ff 0%, #fff 100%);
+  border-color: #91d5ff;
+}
+
+/* 排名徽章 */
+.rank-badge {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.medal {
+  font-size: 28px;
+}
+
+.rank-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  border-radius: 50%;
+  font-weight: 600;
+  color: #666;
+  font-size: 14px;
+}
+
+/* 素材图标 */
+.asset-icon {
+  font-size: 28px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* 素材信息 */
+.asset-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.asset-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asset-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #666;
+}
+
+.asset-meta .source {
+  color: #8c8c8c;
+}
+
+.asset-meta .tags {
+  display: flex;
+  gap: 6px;
+}
+
+.asset-meta .tag {
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #595959;
+}
+
+/* 使用统计 */
+.usage-stats {
+  display: flex;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-top: 2px;
+}
+
+.stat.quote-count .stat-value {
+  color: #1890ff;
+}
+
+/* 操作按钮 */
+.asset-actions {
+  flex-shrink: 0;
+}
+
+.asset-actions .btn {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .popular-assets {
+    padding: 16px;
+  }
+
+  .popular-item {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
+  .asset-info {
+    width: 100%;
+    order: 3;
+    margin-top: 8px;
+  }
+
+  .usage-stats {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .asset-actions {
+    order: 4;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .asset-actions .btn {
+    width: 100%;
+  }
+}

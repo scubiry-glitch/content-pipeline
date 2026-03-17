@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { assetsApi, type Asset } from '../api/client';
+import { assetsApi, type Asset, type AssetUsage } from '../api/client';
 import './AssetDetail.css';
 
 export function AssetDetail() {
@@ -12,6 +12,8 @@ export function AssetDetail() {
   const [activeTab, setActiveTab] = useState<'content' | 'meta' | 'citations'>('content');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteResult, setQuoteResult] = useState<any>(null);
+  const [usageStats, setUsageStats] = useState<AssetUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -31,6 +33,25 @@ export function AssetDetail() {
       setLoading(false);
     }
   };
+
+  const loadUsageStats = async () => {
+    if (!id) return;
+    setUsageLoading(true);
+    try {
+      const stats = await assetsApi.getUsageStats(id);
+      setUsageStats(stats);
+    } catch (err) {
+      console.error('Failed to load usage stats:', err);
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'citations' && id) {
+      loadUsageStats();
+    }
+  }, [activeTab, id]);
 
   const handleQuote = async () => {
     if (!id) return;
@@ -309,13 +330,16 @@ export function AssetDetail() {
             <div className="citation-tasks">
               <h3>📋 引用该素材的任务</h3>
               <div className="citation-tasks-list">
-                {/* 模拟数据 - 实际应从API获取 */}
-                {(asset.citation_count || 0) > 0 ? (
-                  <div className="citation-task-item">
-                    <span className="task-name">保租房REITs市场分析</span>
-                    <span className="task-status completed">已完成</span>
-                    <span className="citation-date">2026-03-15</span>
-                  </div>
+                {usageLoading ? (
+                  <div className="loading-citations">⏳ 加载中...</div>
+                ) : usageStats?.usageHistory && usageStats.usageHistory.length > 0 ? (
+                  usageStats.usageHistory.map((item, idx) => (
+                    <div key={idx} className="citation-task-item">
+                      <span className="task-name">{item.taskTitle || '未命名任务'}</span>
+                      <span className="task-status completed">已引用</span>
+                      <span className="citation-date">{new Date(item.usedAt).toLocaleDateString()}</span>
+                    </div>
+                  ))
                 ) : (
                   <div className="empty-citations">暂无任务引用该素材</div>
                 )}

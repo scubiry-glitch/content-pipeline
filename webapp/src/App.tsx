@@ -16,6 +16,7 @@ import { Tasks } from './pages/Tasks';
 import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
+import { PopularAssets } from './pages/PopularAssets';
 import { Experts } from './pages/Experts';
 import { ExpertLibrary } from './pages/ExpertLibrary';
 import { Reports } from './pages/Reports';
@@ -61,6 +62,7 @@ function App() {
               <Route path="tasks/:id" element={<TaskDetail />} />
               <Route path="tasks/:id/edit" element={<Stage3Editor />} />
               <Route path="assets" element={<Assets />} />
+              <Route path="assets/popular" element={<PopularAssets />} />
               <Route path="assets/:id" element={<AssetDetail />} />
               <Route path="experts" element={<Experts />} />
               <Route path="expert-library" element={<ExpertLibrary />} />
