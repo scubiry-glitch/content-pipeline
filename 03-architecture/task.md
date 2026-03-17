@@ -66,181 +66,94 @@
 
 # v5.1 专家库整合开发任务
 
-**版本**: v5.1
-**状态**: 开发中 (Phase 1)
-**最后更新**: 2026-03-17
+**版本**: v5.1.1
+**状态**: Phase 3 全部完成
+**最后提交**: 099b14d v5.1 Phase 3 完成
 
 ---
 
 ## 已完成任务 ✅
 
-### 1. 基础类型定义 (types/index.ts)
+### Phase 1.1: 基础功能
 - [x] Expert 类型定义（6大属性：Profile, Philosophy, Achievements, ReviewDimensions等）
 - [x] ExpertReview 评审结果类型
 - [x] ExpertAssignment 专家分配类型
 - [x] ExpertMatchRequest 匹配请求类型
-
-### 2. 专家服务层 (services/expertService.ts)
-- [x] 75位完整专家数据
-  - 10位特级专家：张一鸣、王兴、马斯克、任正非、贝索斯、巴菲特、孙正义、黄峥、雷军、纳德拉
-  - 65位领域专家覆盖12个领域
-- [x] matchExperts() 智能匹配算法（基于主题关键词）
+- [x] 75位完整专家数据（10特级+65领域）
+- [x] matchExperts() 智能匹配算法
 - [x] generateExpertOpinion() 专家观点生成
-- [x] getExpertWorkload() 工作量管理
-- [x] 10位特级专家个性化观点生成风格
+- [x] ExpertReviewPanel 组件
+- [x] ExpertLibrary 页面
+- [x] CreateTaskModal 专家推荐
 
-### 3. 专家评审面板组件 (components/ExpertReviewPanel.tsx)
-- [x] 特级专家区域（高优先级任务展示）
-- [x] 领域专家网格（2-3位动态匹配）
-- [x] 通用专家徽章（事实核查/逻辑检查/读者代表）
-- [x] 接受/忽略操作
-- [x] 重新生成功能
-- [x] ExpertReviewPanel.css 完整样式
+### Phase 1.2: 专家工作量调度优化 ✅
+- [x] ExpertWorkloadData 接口定义
+- [x] workloadStore 工作量数据存储
+- [x] getExpertWorkload() 获取专家工作量
+- [x] assignExpertWithLoadBalancing() 负载均衡分配
+- [x] releaseExpert() 任务完成释放
+- [x] CreateTaskModal 显示专家可用性状态
 
-### 4. TaskDetail 集成
-- [x] 导入 ExpertReviewPanel
-- [x] 在评审标签页集成专家库评审
+### Phase 1.3: 用户反馈持久化 ✅
+- [x] recordExpertFeedback() 记录用户反馈
+- [x] getExpertFeedbackStats() 专家反馈统计
+- [x] getUserFeedbackHistory() 用户反馈历史
+- [x] getExpertRecommendationWeight() 推荐权重
+- [x] ExpertReviewPanel 集成反馈持久化
+- [x] ExpertLibrary 显示反馈统计
+
+### Phase 2: 体验优化 ✅
+- [x] Dashboard 专家洞察组件 (ExpertInsights)
+- [x] 热点话题展示（热门/最新/深度）
+- [x] 专家详情页历史评审记录时间线
+- [x] 模拟历史评审数据生成
+
+### Phase 3: 高级功能 ✅
+
+#### Phase 3.1 热点话题专家解读 ✅
+- HotTopicInsights.tsx 完整解读页面
+- 5个热点话题（宏观经济/新能源/AI/消费/半导体）
+- 特级专家+领域专家联合分析
+- AI综合洞察（核心洞察/风险提示/机会识别/行动建议）
+- 支持保存/分享/导出PDF
+- 相关素材推荐
+
+#### Phase 3.2 素材库专家标注 ✅
+- AssetExpertReviewModal.tsx 专家评估弹窗
+- 质量分/可信度/相关性 三维评分
+- 综合评分圆环展示
+- 专家评审列表（可展开详情）
+- 使用建议提示
+- Assets页面集成专家评估按钮
+
+---
+
+## v5.1.1 验收修复与新功能 ✅
+
+**版本**: v5.1.1
+**最后提交**: c172e66 v5.1.1: 修复Phase 3验收问题并添加新功能
+
+### 验收修复
+- [x] HotTopicInsights - 报告缓存机制（切换话题保留已生成报告）
+- [x] AssetExpertReviewModal - 移动端响应式优化
+- [x] ExpertInsights - 导航修复（跳转到解读页而非专家库）
+
+### 新功能
+- [x] ExpertComparison - 专家对比功能（2-3位专家观点对比）
+- [x] 报告收藏功能 - ❤️我的收藏面板，支持查看/删除
+- [x] ExpertLibrary - 添加专家对比入口
 
 ---
 
 ## 待完成任务 📋
 
-### Phase 1: 核心功能完善 (P0)
+### Phase 4: 进阶优化 (P3)
+- [ ] 专家协作网络分析
+- [ ] 观点冲突检测与调和
+- [ ] 专家知识图谱可视化
 
-#### 1.1 CreateTaskModal 专家推荐 ✅
-**文件**: `components/CreateTaskModal.tsx`
-**状态**: 已完成
-**实现内容**:
-- ✅ 输入主题时实时推荐专家（延迟500ms）
-- ✅ 显示匹配的领域专家预览（头像、职称、采纳率）
-- ✅ 显示特级专家（高优先级任务自动启用）
-- ✅ 展示匹配原因
-- ✅ 特级专家特殊标识和提醒
-
-#### 1.2 专家工作量调度优化
-**文件**: `services/expertService.ts`
-**功能**:
-- 实时工作量追踪
-- 负载均衡分配
-- 专家可用性状态
-
-#### 1.3 用户反馈持久化
-**文件**: `services/expertService.ts`
-**功能**:
-- 保存用户对专家观点的接受/忽略决策
-- 统计专家采纳率
-- 个性化推荐优化
-
----
-
-### Phase 2: 体验优化 (P1)
-
-#### 2.1 Dashboard 专家洞察组件
-**文件**: `pages/Dashboard.tsx`
-**功能**:
-- 今日专家洞察卡片
-- 热点话题专家解读
-- 专家评审统计
-
-#### 2.2 专家详情页
-**文件**: `pages/ExpertDetail.tsx` (新建)
-**功能**:
-- 专家完整画像展示
-- 历史评审记录
-- 成功实践案例
-- 相关主题推荐
-
----
-
-### Phase 3: 高级功能 (P2)
-
-#### 3.1 热点话题专家解读
-**文件**: `pages/HotTopics.tsx`
-**功能**:
-- 自动匹配热点相关专家
-- 生成专家视角解读
-- 差异化观点对比
-
-#### 3.2 素材库专家标注
-**文件**: `pages/AssetDetail.tsx`
-**功能**:
-- 申请专家解读素材
-- 专家可信度评估
-- 素材质量评分
-
----
-
-## 测试用例（架构师）
-
-### 功能测试
-1. **专家匹配测试**
-   - 输入: "新能源汽车发展趋势"
-   - 期望: 匹配E03新能源领域专家
-   - 验证: domainExperts[0].domainCode === 'E03'
-
-2. **特级专家触发测试**
-   - 输入: importance=0.9
-   - 期望: 返回 seniorExpert 不为空
-   - 验证: seniorExpert.level === 'senior'
-
-3. **观点生成测试**
-   - 输入: 张一鸣专家，draft内容
-   - 期望: 观点包含"A/B测试"、"延迟满足感"
-   - 验证: opinion.includes('A/B测试')
-
-4. **工作量测试**
-   - 输入: expertId='S-01'
-   - 期望: 返回 availability, pendingReviews
-   - 验证: availability 属于 ['available', 'busy', 'unavailable']
-
-### 集成测试
-1. TaskDetail 评审标签页加载
-2. ExpertReviewPanel 渲染完整
-3. 接受/忽略操作触发
-4. 重新生成刷新观点
-
----
-
-## GitHub 提交计划
-
-### Commit 1: 基础类型和服务
-```
-v5.1 专家库基础实现
-
-- 添加 Expert/ExpertReview/ExpertAssignment 类型
-- 实现专家服务层：matchExperts, generateExpertOpinion
-- 75位完整专家数据（10特级+65领域）
-- 10位特级专家个性化观点生成
-```
-
-### Commit 2: UI组件
-```
-v5.1 专家评审面板组件
-
-- ExpertReviewPanel 组件
-- ExpertReviewCard 子组件
-- UniversalExpertBadge 组件
-- 完整CSS样式
-```
-
-### Commit 3: 集成
-```
-v5.1 TaskDetail 集成专家库
-
-- 评审标签页集成 ExpertReviewPanel
-- 动态专家匹配展示
-```
-
----
-
-**下一步行动**: 完成 Phase 1.2 专家工作量调度优化
-
----
-
-## GitHub 提交记录
-
-| Commit | 内容 | 时间 |
-|--------|------|------|
-| 3caf4ae | v5.1 专家库基础实现 | 2026-03-17 |
-| 64e0cab | v5.1 专家库页面和路由整合 | 2026-03-17 |
-| aac0be5 | v5.1 CreateTaskModal 专家推荐功能 | 2026-03-17 |
+## 当前状态
+- **版本**: v5.1.1 全部完成
+- **最后提交**: c172e66 v5.1.1: 修复Phase 3验收问题并添加新功能
+- **已完成**: Phase 1.1 + 1.2 + 1.3 + 2 + 3 + v5.1.1修复
+- **待开发**: Phase 4 (P3进阶功能)
