@@ -466,7 +466,9 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
 
               {suggestedExperts.length > 0 ? (
                 <div className="suggested-experts-list">
-                  {suggestedExperts.map((expert) => (
+                  {suggestedExperts
+                    .sort((a, b) => (a.level === 'senior' ? -1 : b.level === 'senior' ? 1 : 0))
+                    .map((expert) => (
                     <div key={expert.id} className={`suggested-expert-item ${expert.level}`}>
                       <div
                         className="expert-avatar"

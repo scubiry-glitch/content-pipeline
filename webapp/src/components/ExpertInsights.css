@@ -1,0 +1,204 @@
+/* 专家洞察组件样式 */
+.expert-insights-card {
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #fde047;
+  margin-bottom: 20px;
+}
+
+.expert-insights-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.expert-insights-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.expert-insights-title .icon {
+  font-size: 20px;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.hot-topic-item {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.hot-topic-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.hot-topic-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.hot-topic-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.hot-topic-badge {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hot-topic-badge.trending {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.hot-topic-badge.new {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.hot-topic-badge.analysis {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.matched-experts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.matched-experts-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.expert-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.expert-avatar-mini {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  margin-left: -8px;
+  border: 2px solid white;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.expert-avatar-mini:first-child {
+  margin-left: 0;
+}
+
+.expert-avatar-mini:hover {
+  transform: scale(1.1);
+  z-index: 10;
+}
+
+.expert-insight-preview {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid #f59e0b;
+}
+
+.expert-insight-preview .quote {
+  font-style: italic;
+  color: #64748b;
+}
+
+.expert-insight-preview .expert-name {
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 6px;
+  display: block;
+}
+
+.view-all-experts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px;
+  background: white;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #6366f1;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 12px;
+}
+
+.view-all-experts:hover {
+  background: #f8fafc;
+  border-color: #6366f1;
+}
+
+/* 加载状态 */
+.expert-insights-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #64748b;
+}
+
+/* 空状态 */
+.expert-insights-empty {
+  text-align: center;
+  padding: 32px;
+  color: #64748b;
+}
+
+.expert-insights-empty .icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}

@@ -2,7 +2,7 @@
 // 展示75位专家（10位特级+65位领域专家）
 
 import { useState, useEffect } from 'react';
-import { getAllExperts, getExpertsByDomain, getSeniorExperts, getExpertFeedbackStats, getExpertWorkload } from '../services/expertService';
+import { getAllExperts, getExpertsByDomain, getSeniorExperts, getExpertFeedbackStats, getExpertWorkload, getExpertReviewHistory, type ExpertReviewHistory } from '../services/expertService';
 import type { Expert } from '../types';
 import './ExpertLibrary.css';
 
@@ -38,10 +38,11 @@ export function ExpertLibrary() {
     pendingReviews: number;
     availability: 'available' | 'busy' | 'unavailable';
   } | null>(null);
+  const [selectedExpertHistory, setSelectedExpertHistory] = useState<ExpertReviewHistory[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 加载专家反馈统计
+  // 加载专家反馈统计和历史记录
   const loadExpertStats = (expert: Expert) => {
     const stats = getExpertFeedbackStats(expert.id);
     setSelectedExpertStats(stats);
@@ -50,6 +51,9 @@ export function ExpertLibrary() {
       pendingReviews: workload.pendingReviews,
       availability: workload.availability,
     });
+    // 加载历史评审记录
+    const history = getExpertReviewHistory(expert.id, { limit: 5 });
+    setSelectedExpertHistory(history);
   };
 
   useEffect(() => {
@@ -428,6 +432,33 @@ export function ExpertLibrary() {
                   </div>
                 )}
               </section>
+
+              {/* 历史评审记录 */}
+              {selectedExpertHistory.length > 0 && (
+                <section className="detail-section history-section">
+                  <h4>📜 历史评审记录</h4>
+                  <div className="review-timeline">
+                    {selectedExpertHistory.map((record, idx) => (
+                      <div key={record.id} className={`timeline-item ${record.action}`}>
+                        <div className="timeline-marker"></div>
+                        <div className="timeline-content">
+                          <div className="timeline-header">
+                            <span className="task-title">{record.taskTitle}</span>
+                            <span className={`action-badge ${record.action}`}>
+                              {record.action === 'accepted' ? '✓ 采纳' : record.action === 'rejected' ? '✗ 拒绝' : '○ 忽略'}
+                            </span>
+                          </div>
+                          <p className="review-content">{record.content}</p>
+                          {record.feedback && (
+                            <span className="feedback-text">反馈: {record.feedback}</span>
+                          )}
+                          <span className="review-time">{new Date(record.timestamp).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
 
             <div className="modal-footer">

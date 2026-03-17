@@ -131,7 +131,7 @@ export async function collectSingleFeed(
   let imported = 0;
   let duplicates = 0;
 
-  for (const item of items.slice(0, 20)) { // 每个源最多处理 20 条
+  for (const item of items.slice(0, 50)) { // 每个源最多处理 50 条
     const rssItem = await parseRSSItem(item, source);
 
     // 内容过滤

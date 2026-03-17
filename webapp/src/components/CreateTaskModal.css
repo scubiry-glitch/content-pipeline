@@ -586,16 +586,39 @@
   background: #f1f5f9;
 }
 
+/* 工作量状态颜色标识 */
+.workload-stat {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.workload-stat.available {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .workload-stat.available .stat-value {
-  color: #22c55e;
+  color: #166534;
+}
+
+.workload-stat.busy {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .workload-stat.busy .stat-value {
-  color: #f59e0b;
+  color: #92400e;
+}
+
+.workload-stat.unavailable {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .workload-stat.unavailable .stat-value {
-  color: #ef4444;
+  color: #991b1b;
 }
 
 .no-experts-hint {

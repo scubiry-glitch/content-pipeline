@@ -54,7 +54,9 @@ export function matchExperts(
   // v5.1.1: 优先使用语义向量匹配
   if (useSemanticMatch) {
     try {
-      return semanticMatchExperts(request, { topK: 3 });
+      const semanticResult = semanticMatchExperts(request, { topK: 3 }, expertsCache);
+      // 将语义匹配结果转换为完整ExpertAssignment
+      return enrichSemanticResult(semanticResult, request, options);
     } catch (error) {
       console.warn('语义匹配失败，回退到关键词匹配:', error);
     }
@@ -134,6 +136,87 @@ export function matchExperts(
     universalExperts,
     seniorExpert,
     matchReasons,
+  };
+}
+
+// v5.1.1: 将语义匹配结果转换为完整ExpertAssignment
+function enrichSemanticResult(
+  semanticResult: ExpertAssignment,
+  request: ExpertMatchRequest,
+  options?: { taskId?: string; useLoadBalancing?: boolean }
+): ExpertAssignment {
+  const { importance = 0.5 } = request;
+  const { taskId, useLoadBalancing = true } = options || {};
+
+  // 获取语义匹配的专家对象
+  const matchedDomainExperts: Expert[] = [];
+  semanticResult.experts?.forEach((assignment) => {
+    const expert = expertsCache.find((e) => e.id === assignment.expertId);
+    if (expert) {
+      matchedDomainExperts.push(expert);
+    }
+  });
+
+  // 获取通用专家
+  const universalExperts = {
+    factChecker: getUniversalExpert('fact_checker'),
+    logicChecker: getUniversalExpert('logic_checker'),
+    readerRep: getUniversalExpert('reader_rep'),
+  };
+
+  // 判断是否需要特级专家
+  let seniorExpert: Expert | undefined;
+  const matchReasons: string[] = [];
+
+  if (importance > 0.8) {
+    if (useLoadBalancing && taskId) {
+      const seniorPool = expertsCache.filter(
+        (e) => e.level === 'senior' && e.status === 'active'
+      );
+      const availableSeniors = seniorPool.filter((e) => {
+        const workload = getExpertWorkload(e.id);
+        return workload.availability !== 'unavailable';
+      });
+
+      if (availableSeniors.length > 0) {
+        seniorExpert = availableSeniors.sort((a, b) => {
+          const workloadA = getExpertWorkload(a.id).pendingReviews;
+          const workloadB = getExpertWorkload(b.id).pendingReviews;
+          return workloadA - workloadB;
+        })[0];
+
+        if (seniorExpert && taskId) {
+          workloadStore[seniorExpert.id].pendingReviews += 1;
+          workloadStore[seniorExpert.id].assignedTasks.push(taskId);
+        }
+      }
+    } else {
+      seniorExpert = findBestSeniorExpert(
+        matchedDomainExperts[0]?.domainCode || 'E01',
+        request.topic
+      );
+    }
+
+    if (seniorExpert) {
+      matchReasons.push(`任务重要性${(importance * 100).toFixed(0)}%，启用特级专家`);
+    }
+  }
+
+  // 添加语义匹配说明
+  if (semanticResult.confidence && semanticResult.confidence > 0) {
+    matchReasons.push(`语义匹配置信度 ${(semanticResult.confidence * 100).toFixed(1)}%`);
+  }
+  matchReasons.push(`基于384维向量语义分析匹配${matchedDomainExperts.length}位专家`);
+
+  return {
+    domainExperts: matchedDomainExperts,
+    universalExperts,
+    seniorExpert,
+    matchReasons,
+    // v5.1.1 新增字段
+    confidence: semanticResult.confidence,
+    matchingMethod: 'semantic',
+    domainScores: semanticResult.domainScores,
   };
 }
 
@@ -723,6 +806,133 @@ export function getTopExpertsByAcceptanceRate(limit: number = 10): Expert[] {
     .sort((a, b) => b.stats!.acceptanceRate - a.stats!.acceptanceRate)
     .slice(0, limit)
     .map(item => item.expert);
+}
+
+// ==================== 专家历史评审记录 (Phase 2) ====================
+
+// 历史评审记录接口
+export interface ExpertReviewHistory {
+  id: string;
+  expertId: string;
+  taskId: string;
+  taskTitle: string;
+  content: string;
+  action: 'accepted' | 'rejected' | 'ignored';
+  timestamp: string;
+  feedback?: string;
+}
+
+// 模拟历史评审记录存储
+const expertReviewHistoryStore: ExpertReviewHistory[] = [];
+
+// 模拟评审内容模板
+const reviewContentTemplates = [
+  '从{dimension}角度分析，该内容存在{issue}问题，建议{improvement}。',
+  '基于{expertise}经验，该主题需要重点关注{focus}，当前内容{assessment}。',
+  '{expert}认为该内容在{aspect}方面表现{evaluation}，但{weakness}需要加强。',
+];
+
+const dimensions = ['战略', '市场', '产品', '运营', '技术', '财务'];
+const issues = ['逻辑不够清晰', '数据支撑不足', '观点过于保守', '缺乏差异化'];
+const improvements = ['补充更多案例', '深入分析底层逻辑', '增加数据论证', '调整结构层次'];
+const expertiseAreas = ['行业研究', '投资分析', '企业管理', '产品规划'];
+const focuses = ['竞争格局', '用户需求', '商业模式', '技术趋势'];
+const assessments = ['较为全面', '略显薄弱', '有亮点但不够深入', '符合预期'];
+const aspects = ['专业性', '洞察力', '可读性', '实用性'];
+const evaluations = ['优秀', '良好', '一般', '有待提升'];
+const weaknesses = ['论据部分', '结论推导', '案例选择', '逻辑链条'];
+
+/**
+ * 生成专家历史评审记录（模拟数据）
+ */
+export function generateExpertReviewHistory(expertId: string, count: number = 5): ExpertReviewHistory[] {
+  const expert = expertsCache.find(e => e.id === expertId);
+  if (!expert) return [];
+
+  const history: ExpertReviewHistory[] = [];
+  const now = new Date();
+
+  for (let i = 0; i < count; i++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i * 3 - Math.floor(Math.random() * 3));
+
+    const template = reviewContentTemplates[Math.floor(Math.random() * reviewContentTemplates.length)];
+    const content = template
+      .replace('{dimension}', dimensions[Math.floor(Math.random() * dimensions.length)])
+      .replace('{issue}', issues[Math.floor(Math.random() * issues.length)])
+      .replace('{improvement}', improvements[Math.floor(Math.random() * improvements.length)])
+      .replace('{expertise}', expertiseAreas[Math.floor(Math.random() * expertiseAreas.length)])
+      .replace('{focus}', focuses[Math.floor(Math.random() * focuses.length)])
+      .replace('{assessment}', assessments[Math.floor(Math.random() * assessments.length)])
+      .replace('{expert}', expert.name)
+      .replace('{aspect}', aspects[Math.floor(Math.random() * aspects.length)])
+      .replace('{evaluation}', evaluations[Math.floor(Math.random() * evaluations.length)])
+      .replace('{weakness}', weaknesses[Math.floor(Math.random() * weaknesses.length)]);
+
+    const actions: Array<'accepted' | 'rejected' | 'ignored'> = ['accepted', 'accepted', 'accepted', 'rejected', 'ignored'];
+    const action = actions[Math.floor(Math.random() * actions.length)];
+
+    history.push({
+      id: `review-${expertId}-${Date.now()}-${i}`,
+      expertId,
+      taskId: `task-${Date.now()}-${i}`,
+      taskTitle: `${expert.domainName}研究报告 ${date.getMonth() + 1}月第${i + 1}期`,
+      content,
+      action,
+      timestamp: date.toISOString(),
+      feedback: action === 'accepted' ? '采纳了专家的建议' : action === 'rejected' ? '与内容方向不符' : '暂时保留意见',
+    });
+  }
+
+  return history;
+}
+
+/**
+ * 获取专家历史评审记录
+ */
+export function getExpertReviewHistory(
+  expertId: string,
+  options?: {
+    limit?: number;
+    action?: 'accepted' | 'rejected' | 'ignored';
+  }
+): ExpertReviewHistory[] {
+  // 首先尝试从存储中获取
+  let history = expertReviewHistoryStore.filter(r => r.expertId === expertId);
+
+  // 如果没有记录，生成模拟数据
+  if (history.length === 0) {
+    history = generateExpertReviewHistory(expertId, 5);
+    // 存储生成的记录
+    expertReviewHistoryStore.push(...history);
+  }
+
+  // 过滤
+  if (options?.action) {
+    history = history.filter(r => r.action === options.action);
+  }
+
+  // 排序（按时间倒序）
+  history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  // 限制数量
+  if (options?.limit) {
+    history = history.slice(0, options.limit);
+  }
+
+  return history;
+}
+
+/**
+ * 添加评审记录到历史
+ */
+export function addExpertReviewHistory(record: Omit<ExpertReviewHistory, 'id'>): ExpertReviewHistory {
+  const newRecord: ExpertReviewHistory = {
+    ...record,
+    id: `review-${record.expertId}-${Date.now()}`,
+  };
+  expertReviewHistoryStore.push(newRecord);
+  return newRecord;
 }
 
 // 加载专家数据 - 完整75位专家

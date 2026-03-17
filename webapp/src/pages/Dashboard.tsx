@@ -6,6 +6,7 @@ import { StageConfig } from '../components/StageConfig';
 import { SidebarStats } from '../components/SidebarStats';
 import { DashboardCharts } from '../components/DashboardCharts';
 import { AISummary } from '../components/AISummary';
+import { ExpertInsights } from '../components/ExpertInsights';
 import './Dashboard.css';
 
 const QUICK_ACTIONS = [
@@ -212,6 +213,9 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* 专家洞察 */}
+      <ExpertInsights />
 
       {/* 智能预警面板 */}
       {alerts.length > 0 && (

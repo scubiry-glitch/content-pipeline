@@ -469,6 +469,18 @@ export interface ExpertAssignment {
   };
   seniorExpert?: Expert;
   matchReasons: string[];
+  // v5.1.1 语义匹配新增字段
+  confidence?: number;
+  matchingMethod?: 'keyword' | 'semantic' | 'hybrid';
+  domainScores?: Array<{
+    domain: string;
+    score: number;
+  }>;
+  experts?: Array<{
+    expertId: string;
+    role: 'primary' | 'secondary' | 'observer';
+    reasoning: string;
+  }>;
 }
 
 export interface ExpertMatchRequest {
@@ -476,4 +488,7 @@ export interface ExpertMatchRequest {
   industry?: string;
   taskType?: string;
   importance?: number;
+  // v5.1.1 语义匹配新增字段
+  context?: string;
+  requiredDimensions?: string[];
 }
