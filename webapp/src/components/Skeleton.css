@@ -1,0 +1,206 @@
+/* Skeleton 骨架屏样式 */
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--gray-100) 25%,
+    var(--gray-200) 50%,
+    var(--gray-100) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+/* 卡片骨架屏 */
+.card-skeleton {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.card-skeleton-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 列表骨架屏 */
+.list-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 表格骨架屏 */
+.table-skeleton {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.table-header-skeleton,
+.table-row-skeleton {
+  display: flex;
+  padding: 0 16px;
+}
+
+.table-header-skeleton {
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.table-row-skeleton {
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.table-row-skeleton:last-child {
+  border-bottom: none;
+}
+
+/* 图表骨架屏 */
+.chart-skeleton {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.chart-skeleton-legend {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+/* 仪表盘骨架屏 */
+.dashboard-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stats-row-skeleton {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.charts-row-skeleton {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--gray-200);
+  border-top-color: var(--terracotta);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-spinner p {
+  color: var(--gray-500);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* 点状加载 */
+.loading-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+}
+
+.loading-dots span {
+  width: 10px;
+  height: 10px;
+  background: var(--terracotta);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.loading-dots p {
+  margin-left: 12px;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #374151 25%,
+      #4b5563 50%,
+      #374151 75%
+    );
+    background-size: 200% 100%;
+  }
+
+  .card-skeleton,
+  .chart-skeleton,
+  .table-skeleton {
+    background: #1f2937;
+  }
+
+  .table-header-skeleton {
+    background: #111827;
+    border-color: #374151;
+  }
+
+  .table-row-skeleton {
+    border-color: #374151;
+  }
+}
