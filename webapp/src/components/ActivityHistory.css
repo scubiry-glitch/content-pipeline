@@ -1,0 +1,135 @@
+/* 操作历史样式 */
+
+.activity-history {
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+}
+
+.activity-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--soil);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--sand);
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius);
+  border: 1px solid var(--linen);
+  transition: all 0.2s;
+}
+
+.activity-item:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateX(4px);
+}
+
+.activity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.activity-details {
+  font-size: 14px;
+  color: var(--earth);
+  font-weight: 500;
+}
+
+.activity-time {
+  font-size: 12px;
+  color: var(--pebble);
+  flex-shrink: 0;
+}
+
+.activity-entity {
+  font-size: 13px;
+  color: var(--soil);
+  margin-top: 4px;
+}
+
+.activity-user {
+  font-size: 12px;
+  color: var(--pebble);
+  margin-top: 4px;
+}
+
+.activity-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  color: var(--pebble);
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+}
+
+.activity-history-empty span {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+/* 深色模式 */
+.dark .activity-history {
+  background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
+  border-color: #374151;
+}
+
+.dark .activity-title {
+  color: #f3f4f6;
+  border-color: #374151;
+}
+
+.dark .activity-item {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .activity-details {
+  color: #f3f4f6;
+}
+
+.dark .activity-entity {
+  color: #d1d5db;
+}
+
+.dark .activity-history-empty {
+  background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
+  border-color: #374151;
+}

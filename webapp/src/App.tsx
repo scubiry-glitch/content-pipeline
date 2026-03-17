@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { ActivityProvider } from './contexts/ActivityContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
@@ -38,6 +39,7 @@ function App() {
     <ErrorBoundary>
       <SettingsProvider>
         <NotificationProvider>
+          <ActivityProvider>
           <TasksProvider>
           <BrowserRouter>
             <Routes>
@@ -71,6 +73,7 @@ function App() {
         </BrowserRouter>
         <ApiErrorContainer />
       </TasksProvider>
+      </ActivityProvider>
       </NotificationProvider>
       </SettingsProvider>
     </ErrorBoundary>
