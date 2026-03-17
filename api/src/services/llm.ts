@@ -235,7 +235,9 @@ export async function generateWithKimi(
       baseURL
     );
 
-    const content = response.choices?.[0]?.message?.content || '';
+    // Kimi for Coding 模型可能返回 reasoning_content 而非 content
+    const message = response.choices?.[0]?.message || {};
+    const content = message.content || message.reasoning_content || '';
 
     return {
       content,

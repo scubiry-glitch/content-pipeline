@@ -280,6 +280,19 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_task_logs_task ON task_logs(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_edits_task ON draft_edits(task_id)`);
 
+  // RSS sources table
+  await query(`
+    CREATE TABLE IF NOT EXISTS rss_sources (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      url VARCHAR(500) NOT NULL,
+      category VARCHAR(100),
+      is_active BOOLEAN DEFAULT true,
+      last_crawled_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // RSS items table (FR-031 ~ FR-033)
   await query(`
     CREATE TABLE IF NOT EXISTS rss_items (
