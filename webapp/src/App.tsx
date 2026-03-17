@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -6,6 +7,7 @@ import { ActivityProvider } from './contexts/ActivityContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
+import { initTheme } from './themes';
 
 // 直接导入所有页面组件（不使用懒加载）
 import { Dashboard } from './pages/Dashboard';
@@ -15,6 +17,7 @@ import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
 import { Experts } from './pages/Experts';
+import { ExpertLibrary } from './pages/ExpertLibrary';
 import { Reports } from './pages/Reports';
 import { ReportDetail } from './pages/ReportDetail';
 import { HotTopics } from './pages/HotTopics';
@@ -35,6 +38,10 @@ import { Notifications } from './pages/Notifications';
 import './App.css';
 
 function App() {
+  // 初始化主题系统
+  useEffect(() => {
+    initTheme();
+  }, []);
   return (
     <ErrorBoundary>
       <SettingsProvider>
@@ -51,6 +58,7 @@ function App() {
               <Route path="assets" element={<Assets />} />
               <Route path="assets/:id" element={<AssetDetail />} />
               <Route path="experts" element={<Experts />} />
+              <Route path="expert-library" element={<ExpertLibrary />} />
               <Route path="reports" element={<Reports />} />
               <Route path="reports/:id" element={<ReportDetail />} />
               <Route path="hot-topics" element={<HotTopics />} />

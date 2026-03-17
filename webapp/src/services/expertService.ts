@@ -362,6 +362,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 128,
       acceptanceRate: 0.92,
       avgResponseTime: 8,
+      angle: 'synthesizer',
     },
     {
       id: 'S-02',
@@ -389,6 +390,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 96,
       acceptanceRate: 0.89,
       avgResponseTime: 10,
+      angle: 'synthesizer',
     },
     {
       id: 'S-03',
@@ -416,6 +418,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 156,
       acceptanceRate: 0.88,
       avgResponseTime: 7,
+      angle: 'challenger',
     },
     {
       id: 'S-04',
@@ -443,6 +446,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 142,
       acceptanceRate: 0.91,
       avgResponseTime: 9,
+      angle: 'challenger',
     },
     {
       id: 'S-05',
@@ -470,6 +474,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 118,
       acceptanceRate: 0.90,
       avgResponseTime: 8,
+      angle: 'expander',
     },
     {
       id: 'S-06',
@@ -497,6 +502,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 186,
       acceptanceRate: 0.93,
       avgResponseTime: 11,
+      angle: 'challenger',
     },
     {
       id: 'S-07',
@@ -524,6 +530,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 98,
       acceptanceRate: 0.85,
       avgResponseTime: 9,
+      angle: 'expander',
     },
     {
       id: 'S-08',
@@ -551,6 +558,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 76,
       acceptanceRate: 0.88,
       avgResponseTime: 8,
+      angle: 'expander',
     },
     {
       id: 'S-09',
@@ -578,6 +586,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 134,
       acceptanceRate: 0.87,
       avgResponseTime: 7,
+      angle: 'synthesizer',
     },
     {
       id: 'S-10',
@@ -605,6 +614,7 @@ export function loadExpertsData(): Expert[] {
       totalReviews: 112,
       acceptanceRate: 0.90,
       avgResponseTime: 8,
+      angle: 'synthesizer',
     },
 
     // ==================== E01: 宏观经济 (6位) ====================

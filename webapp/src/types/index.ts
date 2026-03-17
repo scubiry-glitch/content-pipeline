@@ -441,6 +441,7 @@ export interface Expert {
   totalReviews: number;
   acceptanceRate: number;
   avgResponseTime: number;
+  angle?: 'challenger' | 'expander' | 'synthesizer'; // 评审风格角度
 }
 
 export interface ExpertReview {

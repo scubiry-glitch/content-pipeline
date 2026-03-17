@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
+import { ThemeSwitcher, ThemeSwitcherMini } from './ThemeSwitcher';
+import { useTheme } from '../themes';
 import './Layout.css';
 
 export function Layout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isThemeSwitcherOpen, setIsThemeSwitcherOpen] = useState(false);
+  const { currentTheme, setTheme } = useTheme();
 
   // 监听 Command/Ctrl + K 快捷键
   useEffect(() => {
@@ -13,6 +17,11 @@ export function Layout() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
+      }
+      // 主题切换快捷键 Cmd/Ctrl + Shift + T
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        setIsThemeSwitcherOpen((prev) => !prev);
       }
     };
 
@@ -23,6 +32,12 @@ export function Layout() {
   return (
     <div className="app-container">
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      <ThemeSwitcher
+        isOpen={isThemeSwitcherOpen}
+        onClose={() => setIsThemeSwitcherOpen(false)}
+        currentTheme={currentTheme}
+        onThemeChange={setTheme}
+      />
       <header className="app-header">
         <div className="header-content">
           <h1 className="header-title">内容生产流水线</h1>
@@ -34,6 +49,7 @@ export function Layout() {
             🔍 搜索
             <span className="shortcut">⌘K</span>
           </button>
+          <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
           <NotificationBell />
         </div>
         <div className="header-content">
@@ -48,8 +64,8 @@ export function Layout() {
             <NavLink to="/assets" className="nav-link">
               素材库
             </NavLink>
-            <NavLink to="/experts" className="nav-link">
-              专家库
+            <NavLink to="/expert-library" className="nav-link">
+              专家库 (v5.1)
             </NavLink>
             <NavLink to="/reports" className="nav-link">
               研报 (v3.3)
