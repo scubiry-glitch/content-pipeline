@@ -27,26 +27,71 @@ export function AssetRecommendPanel({
     return words.filter(w => w.length >= 4).slice(-10); // 取最近10个词
   }, []);
 
-  // 语义匹配计算
+  // 语义匹配计算 - v3.0.1-fix: 优化匹配算法提高准确率
   const calculateRelevance = useCallback((asset: Asset, keywords: string[]): number => {
     if (!asset.tags || keywords.length === 0) return 0;
 
     const assetTags = asset.tags.map(t => t.toLowerCase());
-    let matchCount = 0;
+    const assetTitle = asset.title?.toLowerCase() || '';
+    const assetContent = asset.content?.toLowerCase() || '';
+
+    // 同义词映射表
+    const synonymMap: Record<string, string[]> = {
+      '新能源': ['电动车', '光伏', '储能', '锂电池', '清洁能源'],
+      'ai': ['人工智能', '大模型', '机器学习', '深度学习'],
+      '芯片': ['半导体', '集成电路', '晶圆', '代工'],
+      '房地产': ['地产', '楼市', '房价', '商品房'],
+    };
+
+    let totalScore = 0;
+    let maxPossibleScore = 0;
 
     keywords.forEach(keyword => {
       const keywordLower = keyword.toLowerCase();
-      // 完全匹配
+      let keywordScore = 0;
+      maxPossibleScore += 1;
+
+      // 1. 标签完全匹配 (权重: 1.0)
       if (assetTags.some(tag => tag.includes(keywordLower))) {
-        matchCount += 1;
+        keywordScore = Math.max(keywordScore, 1.0);
       }
-      // 标题匹配加分
-      if (asset.title?.toLowerCase().includes(keywordLower)) {
-        matchCount += 0.5;
+
+      // 2. 标题匹配 (权重: 0.8)
+      if (assetTitle.includes(keywordLower)) {
+        keywordScore = Math.max(keywordScore, 0.8);
       }
+
+      // 3. 内容匹配 (权重: 0.5)
+      if (assetContent.includes(keywordLower)) {
+        keywordScore = Math.max(keywordScore, 0.5);
+      }
+
+      // 4. 同义词匹配 (权重: 0.7)
+      const synonyms = synonymMap[keyword] || synonymMap[keywordLower];
+      if (synonyms) {
+        for (const syn of synonyms) {
+          if (assetTags.some(tag => tag.includes(syn)) ||
+              assetTitle.includes(syn) ||
+              assetContent.includes(syn)) {
+            keywordScore = Math.max(keywordScore, 0.7);
+            break;
+          }
+        }
+      }
+
+      // 5. 反向查找：关键词是否是某个标签的同义词
+      assetTags.forEach(tag => {
+        const tagSynonyms = synonymMap[tag];
+        if (tagSynonyms?.some(syn => keywordLower.includes(syn) || syn.includes(keywordLower))) {
+          keywordScore = Math.max(keywordScore, 0.6);
+        }
+      });
+
+      totalScore += keywordScore;
     });
 
-    return matchCount / keywords.length;
+    // 归一化到0-1
+    return maxPossibleScore > 0 ? totalScore / maxPossibleScore : 0;
   }, []);
 
   // 获取推荐素材
