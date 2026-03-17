@@ -4,6 +4,7 @@ import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, STAGES } from '../types';
 import { StageConfig } from '../components/StageConfig';
 import { SidebarStats } from '../components/SidebarStats';
+import { DashboardCharts } from '../components/DashboardCharts';
 import './Dashboard.css';
 
 const QUICK_ACTIONS = [
@@ -186,6 +187,9 @@ export function Dashboard() {
           <div className="stat-label">已完成</div>
         </div>
       </div>
+
+      {/* 数据可视化图表 */}
+      <DashboardCharts />
 
       {/* Quick Actions */}
       <div className="card">
