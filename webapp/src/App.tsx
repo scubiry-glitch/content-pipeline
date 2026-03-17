@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate, Suspense } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
 import { TasksProvider } from './contexts/TasksContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
-import { lazy } from 'react';
 import './App.css';
 
 // 懒加载所有页面组件

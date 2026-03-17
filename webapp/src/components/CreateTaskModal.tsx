@@ -1,5 +1,6 @@
 // 创建任务弹窗 - 恢复原版 HTML 的详细功能
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { assetsApi, type Asset } from '../api/client';
 import './CreateTaskModal.css';
 
 interface CreateTaskModalProps {

@@ -268,8 +268,104 @@
 }
 
 .match-score-badge {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
+}
+
+/* 匹配统计 */
+.matches-stats {
+  display: flex;
+  gap: 20px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.match-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.stat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.stat-dot.high { background: #52c41a; }
+.stat-dot.medium { background: #faad14; }
+.stat-dot.low { background: #ff4d4f; }
+
+/* 置信度显示 */
+.match-score-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.confidence-bar {
+  width: 80px;
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.confidence-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.confidence-badge.high {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.confidence-badge.medium {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.confidence-badge.low {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+
+/* 匹配卡片样式 */
+.match-card.high {
+  border-left: 3px solid #52c41a;
+}
+
+.match-card.medium {
+  border-left: 3px solid #faad14;
+}
+
+.match-card.low {
+  border-left: 3px solid #ff4d4f;
+}
+
+.match-time {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.matches-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .match-content {
