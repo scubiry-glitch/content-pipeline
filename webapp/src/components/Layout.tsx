@@ -85,6 +85,9 @@ export function Layout() {
             <NavLink to="/archive/recycle-bin" className="nav-link">
               回收站
             </NavLink>
+            <NavLink to="/settings" className="nav-link">
+              ⚙️ 设置
+            </NavLink>
           </nav>
         </div>
       </header>

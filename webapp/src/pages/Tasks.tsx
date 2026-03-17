@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { TaskList } from '../components/TaskList';
 import { CreateTaskModal, type CreateTaskData } from '../components/CreateTaskModal';
+import { ExportButton } from '../components/ExportButton';
 import { useTasks } from '../contexts/TasksContext';
 import './Tasks.css';
 
@@ -60,17 +61,29 @@ export function Tasks() {
     }
   };
 
+  const filteredTasks = tasks.filter((task) => {
+    if (activeFilter === 'all') return true;
+    return task.status === activeFilter;
+  });
+
   return (
     <div className="tasks-page">
       {/* Header */}
       <div className="page-header">
         <h1 className="page-title">任务管理</h1>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowCreateModal(true)}
-        >
-          <span>+</span> 新建任务
-        </button>
+        <div className="page-actions">
+          <ExportButton
+            type="tasks"
+            data={filteredTasks}
+            filename="tasks_export"
+          />
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <span>+</span> 新建任务
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
