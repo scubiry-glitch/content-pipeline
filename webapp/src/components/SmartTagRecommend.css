@@ -1,0 +1,80 @@
+/* 智能标签推荐样式 */
+
+.smart-tag-recommend {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--cream);
+  border-radius: 8px;
+  border: 1px dashed var(--terracotta);
+}
+
+.recommend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--terracotta);
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.recommended-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linen);
+}
+
+.recommended-tag {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid var(--terracotta);
+  border-radius: 16px;
+  color: var(--terracotta);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recommended-tag:hover {
+  background: var(--terracotta);
+  color: white;
+}
+
+/* 标签云 */
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px;
+  justify-content: center;
+}
+
+.tag-cloud-item {
+  padding: 8px 16px;
+  background: var(--cream);
+  border: 1px solid var(--linen);
+  border-radius: 20px;
+  color: var(--soil);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-cloud-item:hover {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+  color: white;
+  transform: scale(1.05);
+}
+
+.tag-count {
+  margin-left: 4px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
