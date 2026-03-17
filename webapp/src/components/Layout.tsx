@@ -1,10 +1,39 @@
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { GlobalSearch } from './GlobalSearch';
 import './Layout.css';
 
 export function Layout() {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // 监听 Command/Ctrl + K 快捷键
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="app-container">
+      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <header className="app-header">
+        <div className="header-content">
+          <h1 className="header-title">内容生产流水线</h1>
+          <button
+            className="search-trigger"
+            onClick={() => setIsSearchOpen(true)}
+            title="搜索 (⌘K / Ctrl+K)"
+          >
+            🔍 搜索
+            <span className="shortcut">⌘K</span>
+          </button>
+        </div>
         <div className="header-content">
           <h1 className="header-title">内容生产流水线</h1>
           <nav className="header-nav">

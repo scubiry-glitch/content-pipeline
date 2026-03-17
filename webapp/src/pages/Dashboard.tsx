@@ -79,6 +79,69 @@ export function Dashboard() {
     },
   ];
 
+  // 生成智能预警
+  const generateAlerts = () => {
+    const alerts: Array<{
+      type: 'warning' | 'info' | 'danger';
+      message: string;
+      action?: string;
+      path?: string;
+    }> = [];
+
+    // 逾期任务预警
+    const overdueTasks = tasks.filter(
+      (t) =>
+        t.status !== 'completed' &&
+        t.due_date &&
+        new Date(t.due_date) < new Date()
+    );
+    if (overdueTasks.length > 0) {
+      alerts.push({
+        type: 'danger',
+        message: `有 ${overdueTasks.length} 个任务已逾期，请尽快处理`,
+        action: '查看任务',
+        path: '/tasks',
+      });
+    }
+
+    // 待处理任务过多预警
+    if (stats.pending > 5) {
+      alerts.push({
+        type: 'warning',
+        message: `待处理任务积压 (${stats.pending} 个)，建议及时分配`,
+        action: '去处理',
+        path: '/tasks',
+      });
+    }
+
+    // 热点爆发预警（模拟）
+    if (Math.random() > 0.7) {
+      alerts.push({
+        type: 'info',
+        message: '🔥 "保租房政策" 相关热点热度上升 150%，建议关注',
+        action: '查看热点',
+        path: '/hot-topics',
+      });
+    }
+
+    // 素材质量预警
+    const lowQualityAssets = tasks.filter(
+      (t) => t.status === 'reviewing' && t.quality_score && t.quality_score < 60
+    );
+    if (lowQualityAssets.length > 0) {
+      alerts.push({
+        type: 'warning',
+        message: `${lowQualityAssets.length} 个任务质量评分较低，需要改进`,
+        action: '查看详情',
+        path: '/tasks',
+      });
+    }
+
+    return alerts.slice(0, 3); // 最多显示3条
+  };
+
+  const alerts = generateAlerts();
+
   return (
     <div className="dashboard dashboard-with-sidebar">
       {/* Main Content */}
@@ -141,6 +204,30 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* 智能预警面板 */}
+      {alerts.length > 0 && (
+        <div className="card alerts-panel">
+          <h2 className="card-title">🚨 智能预警</h2>
+          <div className="alerts-list">
+            {alerts.map((alert, index) => (
+              <div key={index} className={`alert-item ${alert.type}`}>
+                <div className="alert-content">
+                  <span className="alert-icon">
+                    {alert.type === 'danger' ? '🔴' : alert.type === 'warning' ? '⚠️' : 'ℹ️'}
+                  </span>
+                  <span className="alert-message">{alert.message}</span>
+                </div>
+                {alert.action && alert.path && (
+                  <button className="alert-action" onClick={() => navigate(alert.path!)}>
+                    {alert.action} →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Pipeline Stages */}
       <div className="card">

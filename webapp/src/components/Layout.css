@@ -43,6 +43,33 @@
   filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2));
 }
 
+/* 搜索触发器 */
+.search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.search-trigger:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.search-trigger .shortcut {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 /* Navigation - 陶土按钮风格的导航 */
 .header-nav {
   display: flex;

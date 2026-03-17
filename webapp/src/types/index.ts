@@ -26,6 +26,7 @@ export interface Task {
   evaluation?: TopicEvaluation;
   competitor_analysis?: CompetitorAnalysis;
   asset_ids?: string[];
+  versions?: DraftVersion[];
   created_at: string;
   updated_at: string;
   completed_at?: string;

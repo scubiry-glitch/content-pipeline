@@ -20,6 +20,11 @@ export interface CreateTaskData {
     infographic: boolean;
     ppt: boolean;
   };
+  sourceMaterials?: Array<{
+    type: 'asset';
+    asset_id: string;
+    title: string;
+  }>;
 }
 
 const CONTENT_TYPES = [
@@ -70,13 +75,120 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
       infographic: false,
       ppt: false,
     },
+    sourceMaterials: [],
   });
 
   const [showCopilotHint, setShowCopilotHint] = useState(false);
+  const [recommendedAssets, setRecommendedAssets] = useState<Asset[]>([]);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [isSearchingAssets, setIsSearchingAssets] = useState(false);
+
+  const handleFormatChange = (key: keyof CreateTaskData['outputFormats'], checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      outputFormats: { ...prev.outputFormats, [key]: checked },
+    }));
+  };
+
+  const handleCopilotClick = () => {
+    setShowCopilotHint(true);
+    setTimeout(() => setShowCopilotHint(false), 3000);
+  };
+
+  // 根据主题搜索相关素材
+  const searchRelatedAssets = useCallback(async (topic: string) => {
+    if (!topic || topic.length < 2) {
+      setRecommendedAssets([]);
+      return;
+    }
+
+    setIsSearchingAssets(true);
+    try {
+      // 提取关键词进行搜索
+      const keywords = topic.split(/[\s,，。]+/).filter(k => k.length >= 2);
+      const allAssets: Asset[] = [];
+
+      for (const keyword of keywords.slice(0, 3)) {
+        try {
+          const results = await assetsApi.search(keyword);
+          allAssets.push(...results);
+        } catch (e) {
+          // 忽略单个搜索失败
+        }
+      }
+
+      // 去重并排序（按质量分）
+      const uniqueAssets = Array.from(new Map(allAssets.map(a => [a.id, a])).values());
+      const sortedAssets = uniqueAssets.sort((a, b) => (b.quality_score || 0) - (a.quality_score || 0));
+
+      setRecommendedAssets(sortedAssets.slice(0, 5));
+    } catch (error) {
+      console.error('搜索素材失败:', error);
+    } finally {
+      setIsSearchingAssets(false);
+    }
+  }, []);
+
+  // 监听主题变化，自动搜索素材
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.topic) {
+        searchRelatedAssets(formData.topic);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.topic, searchRelatedAssets]);
+
+  // 切换素材选择
+  const toggleAssetSelection = (assetId: string) => {
+    setSelectedAssets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(assetId)) {
+        newSet.delete(assetId);
+      } else {
+        newSet.add(assetId);
+      }
+      return newSet;
+    });
+  };
+
+  // 添加选中的素材到表单
+  const addSelectedAssets = () => {
+    const selectedAssetList = recommendedAssets.filter(a => selectedAssets.has(a.id));
+    const newMaterials = selectedAssetList.map(asset => ({
+      type: 'asset' as const,
+      asset_id: asset.id,
+      title: asset.title,
+    }));
+
+    setFormData(prev => ({
+      ...prev,
+      sourceMaterials: [...(prev.sourceMaterials || []), ...newMaterials],
+    }));
+
+    // 清空选择
+    setSelectedAssets(new Set());
+  };
 
   const handleSubmit = () => {
     if (!formData.topic.trim()) return;
-    onCreate(formData);
+
+    // 确保选中的素材已添加到 sourceMaterials
+    const selectedAssetList = recommendedAssets.filter(a => selectedAssets.has(a.id));
+    const newMaterials = selectedAssetList.map(asset => ({
+      type: 'asset' as const,
+      asset_id: asset.id,
+      title: asset.title,
+    }));
+
+    const finalData = {
+      ...formData,
+      sourceMaterials: [...(formData.sourceMaterials || []), ...newMaterials],
+    };
+
+    onCreate(finalData);
+
     // Reset form
     setFormData({
       topic: '',
@@ -89,19 +201,10 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
         infographic: false,
         ppt: false,
       },
+      sourceMaterials: [],
     });
-  };
-
-  const handleFormatChange = (key: keyof CreateTaskData['outputFormats'], checked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      outputFormats: { ...prev.outputFormats, [key]: checked },
-    }));
-  };
-
-  const handleCopilotClick = () => {
-    setShowCopilotHint(true);
-    setTimeout(() => setShowCopilotHint(false), 3000);
+    setSelectedAssets(new Set());
+    setRecommendedAssets([]);
   };
 
   if (!isOpen) return null;
@@ -221,6 +324,76 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
               ))}
             </div>
           </div>
+
+          {/* 相关素材推荐 */}
+          {formData.topic && (
+            <div className="form-group asset-recommendations">
+              <label className="form-label">
+                相关素材推荐
+                {isSearchingAssets && <span className="searching-indicator">🔍 搜索中...</span>}
+              </label>
+
+              {recommendedAssets.length > 0 ? (
+                <div className="recommended-assets-list">
+                  {recommendedAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className={`recommended-asset-item ${selectedAssets.has(asset.id) ? 'selected' : ''}`}
+                      onClick={() => toggleAssetSelection(asset.id)}
+                    >
+                      <div className="asset-select-indicator">
+                        {selectedAssets.has(asset.id) ? '☑️' : '⭕'}
+                      </div>
+                      <div className="asset-info">
+                        <div className="asset-title">{asset.title}</div>
+                        <div className="asset-meta">
+                          <span className="asset-type">{asset.content_type?.toUpperCase()}</span>
+                          {asset.quality_score && (
+                            <span className="asset-quality" style={{ color: asset.quality_score >= 80 ? '#52c41a' : '#faad14' }}>
+                              质量分: {asset.quality_score}
+                            </span>
+                          )}
+                          {asset.tags?.length > 0 && (
+                            <span className="asset-tags">{asset.tags.slice(0, 2).join(', ')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {selectedAssets.size > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary add-assets-btn"
+                      onClick={addSelectedAssets}
+                    >
+                      ➕ 添加选中的素材 ({selectedAssets.size})
+                    </button>
+                  )}
+                </div>
+              ) : (
+                !isSearchingAssets && (
+                  <div className="no-assets-hint">
+                    <span>💡</span> 输入主题后自动搜索相关素材
+                  </div>
+                )
+              )}
+
+              {/* 已添加的素材 */}
+              {formData.sourceMaterials && formData.sourceMaterials.length > 0 && (
+                <div className="selected-assets-section">
+                  <label className="subsection-label">已添加素材</label>
+                  <div className="selected-assets-list">
+                    {formData.sourceMaterials.map((material, index) => (
+                      <div key={index} className="selected-asset-tag">
+                        📎 {material.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
