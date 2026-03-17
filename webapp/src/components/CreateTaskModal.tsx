@@ -1,6 +1,8 @@
 // 创建任务弹窗 - 恢复原版 HTML 的详细功能
 import { useState, useEffect, useCallback } from 'react';
 import { assetsApi, type Asset } from '../api/client';
+import { matchExperts, getAllExperts } from '../services/expertService';
+import type { Expert, ExpertAssignment } from '../types';
 import './CreateTaskModal.css';
 
 interface CreateTaskModalProps {
@@ -83,6 +85,11 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [isSearchingAssets, setIsSearchingAssets] = useState(false);
 
+  // 专家推荐相关状态
+  const [suggestedExperts, setSuggestedExperts] = useState<Expert[]>([]);
+  const [expertMatchResult, setExpertMatchResult] = useState<ExpertAssignment | null>(null);
+  const [isMatchingExperts, setIsMatchingExperts] = useState(false);
+
   const handleFormatChange = (key: keyof CreateTaskData['outputFormats'], checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
@@ -129,11 +136,12 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
     }
   }, []);
 
-  // 监听主题变化，自动搜索素材
+  // 监听主题变化，自动搜索素材和匹配专家
   useEffect(() => {
     const timer = setTimeout(() => {
       if (formData.topic) {
         searchRelatedAssets(formData.topic);
+        matchExpertsForTopic(formData.topic);
       }
     }, 500);
 
@@ -152,6 +160,39 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
       return newSet;
     });
   };
+
+  // 根据主题匹配专家
+  const matchExpertsForTopic = useCallback(async (topic: string) => {
+    if (!topic || topic.length < 3) {
+      setSuggestedExperts([]);
+      setExpertMatchResult(null);
+      return;
+    }
+
+    setIsMatchingExperts(true);
+    try {
+      // 根据优先级判断重要性
+      const importance = formData.priority === 'high' ? 0.9 : formData.priority === 'medium' ? 0.7 : 0.5;
+
+      const result = matchExperts({
+        topic,
+        importance,
+      });
+
+      setExpertMatchResult(result);
+
+      // 合并所有专家用于展示
+      const allExperts: Expert[] = [...result.domainExperts];
+      if (result.seniorExpert) {
+        allExperts.unshift(result.seniorExpert);
+      }
+      setSuggestedExperts(allExperts);
+    } catch (error) {
+      console.error('匹配专家失败:', error);
+    } finally {
+      setIsMatchingExperts(false);
+    }
+  }, [formData.priority]);
 
   // 添加选中的素材到表单
   const addSelectedAssets = () => {

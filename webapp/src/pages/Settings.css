@@ -104,6 +104,69 @@
   color: var(--pebble);
 }
 
+/* 主题风格选项 */
+.theme-style-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .theme-style-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.theme-style-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-style-option:hover {
+  border-color: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+.theme-style-option.active {
+  border-color: var(--primary);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-style-option.active::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.theme-style-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.theme-style-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* 下拉选择 */
 .setting-select {
   padding: 10px 16px;

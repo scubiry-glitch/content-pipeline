@@ -98,7 +98,7 @@ async function main() {
   await fastify.register(productionRoutes, { prefix: '/api/v1/production' });
   await fastify.register(assetRoutes, { prefix: '/api/v1/assets' });
   await fastify.register(outputRoutes, { prefix: '/api/v1/outputs' });
-  await fastify.register(rssRoutes, { prefix: '/api/v1/rss' });
+  await fastify.register(rssRoutes, { prefix: '/api/v1/quality' });
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });

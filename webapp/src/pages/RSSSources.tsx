@@ -22,14 +22,14 @@ export function RSSSources() {
     try {
       setLoading(true);
       const data = await rssSourcesApi.getAll();
-      // 后端返回格式: { sources: [] }, 需要适配字段
-      const sources = (data.sources || []).map((s: any) => ({
+      // 后端返回格式: { items: [] }
+      const sources = (data.items || []).map((s: any) => ({
         id: s.id,
         name: s.name,
         url: s.url,
         category: s.category,
-        isActive: s.enabled !== false,
-        lastCrawledAt: s.lastFetched,
+        isActive: s.isActive !== false,
+        lastCrawledAt: s.lastCrawledAt,
       }));
       setSources(sources);
     } catch (error) {
@@ -64,10 +64,15 @@ export function RSSSources() {
   const handleTriggerCrawl = async (id?: string) => {
     try {
       setCrawling(true);
-      await rssSourcesApi.triggerCrawl(id);
-      alert(id ? '单个RSS源抓取已触发' : '全部RSS源抓取已触发');
+      const result = await rssSourcesApi.triggerCrawl(id);
+      alert(result.message || (id ? 'RSS源抓取已启动（后台执行）' : '全部RSS源抓取已启动（后台执行）'));
+      // 3秒后刷新列表，看是否有新数据
+      setTimeout(() => {
+        loadSources();
+      }, 3000);
     } catch (error) {
       console.error('触发抓取失败:', error);
+      alert('抓取启动失败，请检查网络或后端服务');
     } finally {
       setCrawling(false);
     }

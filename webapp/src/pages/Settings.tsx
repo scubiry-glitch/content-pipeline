@@ -1,14 +1,22 @@
 import { useSettings } from '../contexts/SettingsContext';
+import { useTheme, themes, type ThemeId } from '../themes';
 import './Settings.css';
 
 export function Settings() {
   const { settings, updateSetting, updateNestedSetting, resetSettings } = useSettings();
+  const { currentTheme, setTheme } = useTheme();
 
   const themeOptions = [
     { key: 'light', label: '☀️ 浅色', description: '明亮的界面风格' },
     { key: 'dark', label: '🌙 深色', description: '护眼的暗色主题' },
     { key: 'system', label: '💻 跟随系统', description: '自动匹配系统设置' },
   ];
+
+  const themeStyleOptions = themes.map(t => ({
+    key: t.id,
+    label: `${t.preview} ${t.name}`,
+    description: t.description,
+  }));
 
   const intervalOptions = [
     { key: 10, label: '10秒' },
@@ -30,10 +38,32 @@ export function Settings() {
         {/* 外观设置 */}
         <section className="settings-section">
           <h2 className="section-title">🎨 外观</h2>
+
+          {/* 主题风格选择 */}
           <div className="setting-item">
             <div className="setting-info">
-              <label className="setting-label">主题</label>
-              <p className="setting-desc">选择您喜欢的界面主题</p>
+              <label className="setting-label">主题风格</label>
+              <p className="setting-desc">选择界面整体风格</p>
+            </div>
+            <div className="theme-style-options">
+              {themeStyleOptions.map((option) => (
+                <label
+                  key={option.key}
+                  className={`theme-style-option ${currentTheme.id === option.key ? 'active' : ''}`}
+                  onClick={() => setTheme(option.key as ThemeId)}
+                >
+                  <span className="theme-style-label">{option.label}</span>
+                  <span className="theme-style-desc">{option.description}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 明暗模式选择 */}
+          <div className="setting-item">
+            <div className="setting-info">
+              <label className="setting-label">显示模式</label>
+              <p className="setting-desc">选择您喜欢的界面明暗模式</p>
             </div>
             <div className="theme-options">
               {themeOptions.map((option) => (

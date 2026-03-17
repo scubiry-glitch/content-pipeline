@@ -73,30 +73,25 @@ export async function rssRoutes(fastify: FastifyInstance) {
   fastify.post('/rss-sources/crawl', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.body as any;
 
-    if (id) {
-      // 采集单个源
-      const config = await loadRSSConfig();
-      const sources = Object.values(config.categories)
-        .flatMap((c: any) => c.sources)
-        .filter((s: any) => s.id === id);
-
-      if (sources.length === 0) {
-        reply.status(404);
-        return { error: 'Source not found' };
-      }
-
-      const result = await collectSingleFeed(sources[0], config.filters);
-      return {
-        crawled: 1,
-        message: 'RSS collection triggered',
-      };
-    }
-
-    // 采集所有源（异步执行）
+    // 不管是单个还是全部，都异步执行，立即返回
     setImmediate(async () => {
       try {
-        const result = await collectAllFeeds();
-        console.log('[RSS] Collection completed:', result);
+        if (id) {
+          // 采集单个源
+          const config = await loadRSSConfig();
+          const sources = Object.values(config.categories)
+            .flatMap((c: any) => c.sources)
+            .filter((s: any) => s.id === id);
+
+          if (sources.length > 0) {
+            const result = await collectSingleFeed(sources[0], config.filters);
+            console.log(`[RSS] Single source ${sources[0].name} collection completed:`, result);
+          }
+        } else {
+          // 采集所有源
+          const result = await collectAllFeeds();
+          console.log('[RSS] All feeds collection completed:', result);
+        }
       } catch (error) {
         console.error('[RSS] Collection failed:', error);
       }
@@ -104,7 +99,8 @@ export async function rssRoutes(fastify: FastifyInstance) {
 
     return {
       crawled: 0,
-      message: 'RSS collection started in background',
+      message: id ? `RSS source ${id} collection started in background` : 'RSS collection started in background',
+      status: 'running',
     };
   });
 
