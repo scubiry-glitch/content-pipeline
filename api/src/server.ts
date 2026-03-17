@@ -132,6 +132,7 @@ async function main() {
 
   // 情感分析路由 (v2.2)
   await fastify.register(sentimentRoutes, { prefix: '/api/v1/sentiment' });
+  await fastify.register(sentimentRoutes, { prefix: '/api/v1/quality/sentiment' });
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });

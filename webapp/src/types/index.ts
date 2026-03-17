@@ -402,3 +402,77 @@ export interface ContentAnalysisResult {
   issues: string[];
   suggestions: string[];
 }
+
+// ==================== 专家库类型 (v5.0) ====================
+
+export type ExpertLevel = 'senior' | 'domain';
+
+export interface ExpertProfile {
+  title: string;
+  background: string;
+  personality: string;
+  avatar?: string;
+}
+
+export interface ExpertPhilosophy {
+  core: string[];
+  quotes: string[];
+}
+
+export interface ExpertAchievement {
+  title: string;
+  description: string;
+  date: string;
+  impact: string;
+}
+
+export interface Expert {
+  id: string;
+  name: string;
+  code: string;
+  level: ExpertLevel;
+  domainCode: string;
+  domainName: string;
+  profile: ExpertProfile;
+  philosophy: ExpertPhilosophy;
+  achievements: ExpertAchievement[];
+  reviewDimensions: string[];
+  status: 'active' | 'inactive';
+  totalReviews: number;
+  acceptanceRate: number;
+  avgResponseTime: number;
+}
+
+export interface ExpertReview {
+  id: string;
+  expertId: string;
+  expertName: string;
+  taskId: string;
+  contentType: 'outline' | 'draft' | 'research';
+  opinion: string;
+  focusAreas: string[];
+  suggestions: string[];
+  confidence: number;
+  differentiationTags: string[];
+  userAction?: 'accept' | 'ignore' | 'partial';
+  userNote?: string;
+  createdAt: string;
+}
+
+export interface ExpertAssignment {
+  domainExperts: Expert[];
+  universalExperts: {
+    factChecker: Expert;
+    logicChecker: Expert;
+    readerRep: Expert;
+  };
+  seniorExpert?: Expert;
+  matchReasons: string[];
+}
+
+export interface ExpertMatchRequest {
+  topic: string;
+  industry?: string;
+  taskType?: string;
+  importance?: number;
+}

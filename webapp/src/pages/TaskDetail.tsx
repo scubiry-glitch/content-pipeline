@@ -162,17 +162,29 @@ export function TaskDetail() {
         await loadReviews();
       }
 
-      // 加载热点话题
+      // 加载热点话题 (API 可能不可用，静默处理)
       try {
         const topicsData = await hotTopicsApi.getAll({ limit: 5 });
         setHotTopics(topicsData.items || []);
-      } catch (e) { /* 忽略错误 */ }
+      } catch (e) {
+        // API 错误或数据库表不存在，使用空数组
+        setHotTopics([]);
+      }
 
-      // 加载情感分析
+      // 加载情感分析 (API 可能未实现，静默处理)
       try {
         const sentimentData = await sentimentApi.getStats();
         setSentiment(sentimentData);
-      } catch (e) { /* 忽略错误 */ }
+      } catch (e) {
+        // API 路由不存在，使用默认值
+        setSentiment({
+          msiIndex: 50,
+          trendDirection: 'stable',
+          positive: 0,
+          negative: 0,
+          neutral: 0
+        });
+      }
 
       // 生成优化建议和预警
       generateSuggestions(data);
@@ -517,6 +529,19 @@ export function TaskDetail() {
     }
   };
 
+  // 删除任务
+  const handleDelete = async () => {
+    if (!confirm('确定要删除此任务吗？删除后将进入回收站。')) return;
+    try {
+      await tasksApi.deleteTask(id!);
+      alert('任务已删除');
+      navigate('/tasks');
+    } catch (error) {
+      console.error('删除任务失败:', error);
+      alert('删除失败，请重试');
+    }
+  };
+
   // 触发研究采集
   const handleTriggerResearch = async () => {
     if (!confirm('确定要启动深度研究采集吗？这将执行网页搜索和素材检索。')) return;
@@ -798,6 +823,13 @@ export function TaskDetail() {
               )}
               <button className="btn btn-primary" onClick={handleEditOutline}>
                 ✏️ 编辑
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleRedoStage('planning')}
+                disabled={actionLoading === 'redo-planning'}
+              >
+                {actionLoading === 'redo-planning' ? '重算中...' : '🔄 重做选题策划'}
               </button>
             </div>
           </div>
@@ -1477,9 +1509,10 @@ export function TaskDetail() {
                 </button>
                 <button
                   className="btn btn-secondary"
-                  onClick={() => tasksApi.redoStage(id!, 'research')}
+                  onClick={() => handleRedoStage('research')}
+                  disabled={actionLoading === 'redo-research'}
                 >
-                  🔄 重做深度研究
+                  {actionLoading === 'redo-research' ? '重启中...' : '🔄 重做深度研究'}
                 </button>
                 <button
                   className="btn btn-secondary"

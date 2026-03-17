@@ -1,0 +1,473 @@
+/* ExpertReviewPanel 样式 */
+
+.expert-review-panel {
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.expert-review-panel.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.expert-review-panel.empty {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+}
+
+/* 匹配说明 */
+.match-explanation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: 10px;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.match-icon {
+  font-size: 24px;
+}
+
+.match-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.match-reason {
+  font-size: 13px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+}
+
+/* 分区标题 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.section-icon {
+  font-size: 20px;
+}
+
+.section-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+  flex: 1;
+}
+
+.senior-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  color: white;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.expert-count {
+  font-size: 13px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* 特级专家区域 */
+.senior-expert-section {
+  margin-bottom: 24px;
+}
+
+/* 领域专家网格 */
+.domain-experts-section {
+  margin-bottom: 24px;
+}
+
+.domain-experts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+}
+
+/* 通用专家区域 */
+.universal-experts-section {
+  background: white;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.universal-experts-list {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ExpertReviewCard 样式 */
+.expert-review-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.expert-review-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.expert-review-card.senior {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+}
+
+.expert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.expert-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.expert-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.expert-avatar.senior {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.expert-avatar.domain {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.expert-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.expert-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.expert-title {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.expert-domain {
+  font-size: 12px;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.expert-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.stat {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.stat.acceptance-rate {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.stat.availability {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.stat.availability.busy {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+/* 评审内容 */
+.review-content {
+  padding: 16px;
+}
+
+.opinion-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #334155;
+  white-space: pre-wrap;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid #6366f1;
+}
+
+.focus-areas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.focus-areas .label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.focus-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #ede9fe;
+  color: #7c3aed;
+  border-radius: 20px;
+}
+
+/* 建议 */
+.suggestions {
+  background: #fefce8;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.suggestions h5 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #854d0e;
+  margin: 0 0 10px 0;
+}
+
+.suggestions ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.suggestions li {
+  font-size: 13px;
+  color: #854d0e;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.suggestions li:last-child {
+  margin-bottom: 0;
+}
+
+/* 评审底部 */
+.review-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.confidence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence .label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.confidence-bar {
+  width: 80px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.confidence-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #16a34a;
+  min-width: 36px;
+}
+
+/* 操作按钮 */
+.review-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-refresh,
+.btn-action {
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-refresh {
+  background: white;
+  color: #64748b;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-action.accept {
+  background: white;
+  color: #16a34a;
+  border-color: #16a34a;
+}
+
+.btn-action.accept:hover:not(:disabled) {
+  background: #dcfce7;
+}
+
+.btn-action.accept.active {
+  background: #16a34a;
+  color: white;
+}
+
+.btn-action.ignore {
+  background: white;
+  color: #64748b;
+}
+
+.btn-action.ignore:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.btn-action.ignore.active {
+  background: #94a3b8;
+  color: white;
+}
+
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* UniversalExpertBadge */
+.universal-expert-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.universal-expert-badge .status-icon {
+  font-size: 16px;
+}
+
+.universal-expert-badge .expert-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.universal-expert-badge .expert-dimensions {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .domain-experts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .review-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

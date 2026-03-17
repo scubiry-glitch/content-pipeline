@@ -19,7 +19,7 @@ const FILTERS = [
 export function Tasks() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const { createTask } = useTasks();
+  const { tasks, createTask } = useTasks();
   const location = useLocation();
 
   // 处理从其他页面导航过来的创建任务请求

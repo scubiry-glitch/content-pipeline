@@ -468,6 +468,34 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Report hot topic relations table
+  await query(`
+    CREATE TABLE IF NOT EXISTS report_hot_topic_relations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      report_id UUID NOT NULL,
+      hot_topic_id VARCHAR(50) NOT NULL,
+      match_score DECIMAL(4,3) DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(report_id, hot_topic_id)
+    )
+  `);
+
+  // User hot topic follows table
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_hot_topic_follows (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR(100) NOT NULL,
+      hot_topic_id VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(user_id, hot_topic_id)
+    )
+  `);
+
+  // Create indexes for hot topic tables
+  await query(`CREATE INDEX IF NOT EXISTS idx_report_hot_topic_relations_report ON report_hot_topic_relations(report_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_report_hot_topic_relations_topic ON report_hot_topic_relations(hot_topic_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_user_hot_topic_follows_user ON user_hot_topic_follows(user_id)`);
+
   // Create indexes for sentiment analysis
   await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_topic ON sentiment_analysis(topic_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_polarity ON sentiment_analysis(polarity)`);

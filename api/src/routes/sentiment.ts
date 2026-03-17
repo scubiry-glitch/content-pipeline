@@ -52,6 +52,20 @@ export async function sentimentRoutes(fastify: FastifyInstance): Promise<void> {
     return { success: true, data: result };
   });
 
+  // 获取情感统计 (前端 /stats 端点)
+  fastify.get('/stats', async () => {
+    const msi = await sentimentAnalyzer.calculateMSI();
+    const alerts = await sentimentAnalyzer.checkAnomalies();
+    return {
+      msiIndex: msi.score || 50,
+      trendDirection: msi.trend || 'stable',
+      positive: msi.positiveCount || 0,
+      negative: msi.negativeCount || 0,
+      neutral: msi.neutralCount || 0,
+      alerts: alerts.length
+    };
+  });
+
   // 获取情绪异常预警 (SA-004)
   fastify.get('/alerts', async () => {
     const alerts = await sentimentAnalyzer.checkAnomalies();

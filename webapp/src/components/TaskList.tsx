@@ -266,23 +266,6 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     }
   };
 
-  if (loading && tasks.length === 0) {
-    return <div className="loading">加载中...</div>;
-  }
-
-  if (filteredTasks.length === 0) {
-    return (
-      <>
-        <div className="empty-state">
-          <div className="empty-icon">📭</div>
-          <div className="empty-title">暂无任务</div>
-          <p>点击上方按钮创建新任务</p>
-        </div>
-        <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
-      </>
-    );
-  }
-
   // 批量操作工具栏
   const BatchToolbar = () => (
     <div className="batch-toolbar">
@@ -323,7 +306,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     </div>
   );
 
-  // 虚拟滚动行渲染器
+  // 虚拟滚动行渲染器 - 必须在所有条件return之前定义
   const Row = useCallback(
     ({ index, style }: { index: number; style: React.CSSProperties }) => {
       const task = filteredTasks[index];
@@ -334,7 +317,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
             showHidden={showHidden}
             selected={selectedTasks.has(task.id)}
             batchMode={batchMode}
-            onClick={() => batchMode ? toggleTaskSelection(task.id) : setSelectedTaskId(task.id)}
+            onClick={() => batchMode ? toggleTaskSelection(task.id) : navigate('/tasks/' + task.id)}
             onSelect={() => toggleTaskSelection(task.id)}
             onDelete={() => setConfirmDelete(task.id)}
             onHide={() => setConfirmHide(task.id)}
@@ -349,6 +332,21 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
 
   // 当任务数较少时，使用普通渲染；超过50条时使用虚拟滚动
   const useVirtualScroll = filteredTasks.length > 50;
+
+  // 条件渲染必须在所有hooks之后
+  if (loading && tasks.length === 0) {
+    return <div className="loading">加载中...</div>;
+  }
+
+  if (filteredTasks.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">📭</div>
+        <div className="empty-title">暂无任务</div>
+        <p>点击上方按钮创建新任务</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -405,7 +403,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
               showHidden={showHidden}
               selected={selectedTasks.has(task.id)}
               batchMode={batchMode}
-              onClick={() => batchMode ? toggleTaskSelection(task.id) : setSelectedTaskId(task.id)}
+              onClick={() => batchMode ? toggleTaskSelection(task.id) : navigate('/tasks/' + task.id)}
               onSelect={() => toggleTaskSelection(task.id)}
               onDelete={() => setConfirmDelete(task.id)}
               onHide={() => setConfirmHide(task.id)}
@@ -415,7 +413,6 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
           ))}
         </div>
       )}
-      <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
 
       <EditTaskModal
         task={editingTask}
