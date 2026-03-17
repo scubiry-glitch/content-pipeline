@@ -1,7 +1,7 @@
 {
-  "name": "content-pipeline-api",
-  "version": "1.0.0",
-  "description": "内容生产流水线 - API服务 (MVP)",
+  "name": "@content-pipeline/api",
+  "version": "3.0.0",
+  "description": "内容生产流水线 - API服务",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {

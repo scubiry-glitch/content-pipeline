@@ -1,0 +1,390 @@
+/* Terracotta Theme Layout - 陶土主题布局 */
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header - 陶土质感的头部 */
+.app-header {
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--ochre) 50%, var(--clay) 100%);
+  color: white;
+  padding: 16px 24px;
+  box-shadow: var(--shadow-md);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 3px solid rgba(255, 255, 255, 0.15);
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Logo/Title - 陶土风格的标题 */
+.header-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-title::before {
+  content: '🏺';
+  font-size: 26px;
+  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+/* Navigation - 陶土按钮风格的导航 */
+.header-nav {
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(8px);
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-link::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0);
+  transition: background var(--transition-fast);
+  border-radius: var(--radius);
+}
+
+.nav-link:hover {
+  color: white;
+}
+
+.nav-link:hover::before {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.nav-link.active {
+  color: var(--terracotta);
+  background: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-link.active::before {
+  display: none;
+}
+
+/* Main Content - 陶土质感的背景 */
+.app-main {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Common Components - 陶土卡片 */
+.card {
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+  border: 1px solid var(--linen);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--terracotta) 0%, var(--ochre) 50%, var(--sage) 100%);
+  opacity: 0.6;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--soil);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--sand);
+}
+
+/* Buttons - 陶土按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--clay) 100%);
+  color: white;
+  box-shadow: 0 4px 0 var(--terracotta-dark), var(--shadow-sm);
+  transform: translateY(0);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--terracotta-light) 0%, var(--terracotta) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 var(--terracotta-dark), var(--shadow);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--terracotta-dark), var(--shadow-sm);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--cream-dark) 0%, var(--linen) 100%);
+  color: var(--earth);
+  box-shadow: 0 4px 0 var(--stone), var(--shadow-sm);
+  transform: translateY(0);
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(135deg, var(--sand) 0%, var(--cream-dark) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 var(--stone), var(--shadow);
+}
+
+.btn-secondary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--stone), var(--shadow-sm);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, var(--danger) 0%, #B84A4A 100%);
+  color: white;
+  box-shadow: 0 4px 0 #A04040, var(--shadow-sm);
+  transform: translateY(0);
+}
+
+.btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #A04040, var(--shadow);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* Badges - 陶土徽章 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.badge-pending {
+  background: var(--cream-dark);
+  color: var(--pebble);
+  border-color: var(--stone);
+}
+
+.badge-planning {
+  background: rgba(212, 102, 72, 0.12);
+  color: var(--stage-1);
+  border-color: rgba(212, 102, 72, 0.3);
+}
+
+.badge-researching {
+  background: rgba(138, 154, 91, 0.12);
+  color: var(--sage-dark);
+  border-color: rgba(138, 154, 91, 0.3);
+}
+
+.badge-writing {
+  background: rgba(198, 123, 92, 0.12);
+  color: var(--ochre);
+  border-color: rgba(198, 123, 92, 0.3);
+}
+
+.badge-reviewing {
+  background: rgba(184, 138, 107, 0.12);
+  color: var(--stage-4);
+  border-color: rgba(184, 138, 107, 0.3);
+}
+
+.badge-completed {
+  background: rgba(122, 158, 107, 0.12);
+  color: var(--sage-dark);
+  border-color: rgba(122, 158, 107, 0.3);
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--pebble);
+}
+
+/* Empty State - 陶土空状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--pebble);
+}
+
+.empty-icon {
+  font-size: 56px;
+  margin-bottom: 20px;
+  opacity: 0.7;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--earth);
+  margin-bottom: 8px;
+}
+
+/* Form Elements - 陶土表单 */
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--linen);
+  border-radius: var(--radius);
+  font-size: 14px;
+  background: white;
+  color: var(--soil);
+  transition: all var(--transition-fast);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
+}
+
+.form-input::placeholder {
+  color: var(--pebble);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--linen);
+  border-radius: var(--radius);
+  font-size: 14px;
+  min-height: 120px;
+  resize: vertical;
+  background: white;
+  color: var(--soil);
+  transition: all var(--transition-fast);
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
+}
+
+/* Grid */
+.grid {
+  display: grid;
+  gap: 20px;
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .header-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .header-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .app-main {
+    padding: 16px;
+  }
+
+  .card {
+    padding: 18px;
+  }
+}

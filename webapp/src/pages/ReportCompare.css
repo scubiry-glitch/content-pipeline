@@ -1,0 +1,274 @@
+/* 研报对比页面样式 */
+
+.report-compare-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-left {
+  flex: 1;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* 对比表格 */
+.compare-table-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.compare-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.compare-label {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #4b5563;
+  white-space: nowrap;
+  width: 120px;
+}
+
+.report-column {
+  min-width: 250px;
+}
+
+.report-header-cell {
+  text-align: left;
+}
+
+.report-header-cell .report-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.report-header-cell .report-institution {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* 评分和评级样式 */
+.rating-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.target-price {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 16px;
+}
+
+.quality-score {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+/* 标签样式 */
+.tags-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tags-cell .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #e0e7ff;
+  color: #4338ca;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* 列表样式 */
+.keypoints-cell ul,
+.risks-cell ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.keypoints-cell li,
+.risks-cell li {
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.summary-cell {
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+/* 观点冲突分析 */
+.conflict-analysis {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.conflict-analysis h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #1f2937;
+}
+
+.conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conflict-item {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.conflict-header {
+  margin-bottom: 12px;
+}
+
+.conflict-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #f59e0b;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.conflict-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.conflict-side {
+  flex: 1;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+}
+
+.conflict-vs {
+  font-weight: 700;
+  color: #9ca3af;
+  font-size: 18px;
+}
+
+/* 加载和错误状态 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.error-icon {
+  font-size: 48px;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .report-compare-page {
+    padding: 16px;
+  }
+
+  .compare-table-container {
+    overflow-x: scroll;
+  }
+
+  .report-column {
+    min-width: 200px;
+  }
+
+  .conflict-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .conflict-vs {
+    transform: rotate(90deg);
+  }
+}

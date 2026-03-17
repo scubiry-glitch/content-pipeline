@@ -1,45 +1,73 @@
-# 内容生产流水线 - 前端管理界面
+# React + TypeScript + Vite
 
-## 使用方式
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-直接用浏览器打开 `index.html` 文件即可：
+Currently, two official plugins are available:
 
-```bash
-open index.html
-# 或
-open /Users/行业研究/demo-project/content-pipeline/webapp/index.html
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## 功能
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-### 任务管理
-- **创建任务**: 输入研究主题，选择输出格式
-- **查看进度**: 实时显示任务状态和进度条
-- **BlueTeam评审**: 查看2轮×3专家的评审意见
-- **人工确认**: 对待确认的任务进行通过/拒绝操作
-- **预览/下载**: 完成的任务可预览内容或下载Markdown文件
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-### 素材库
-- **上传素材**: 支持PDF、TXT、Markdown格式
-- **标签管理**: 为素材添加标签便于检索
-- **内容预览**: 自动提取文本内容预览
-
-## API配置
-
-前端默认连接:
-- API地址: `http://localhost:3000/api/v1`
-- API Key: `dev-api-key-change-in-production`
-
-如需修改，编辑 `index.html` 中的以下配置:
-```javascript
-const API_KEY = 'dev-api-key-change-in-production';
-const BASE_URL = 'http://localhost:3000/api/v1';
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-## 界面预览
-
-界面包含两个主要标签页:
-1. **任务管理** - 查看和创建内容生产任务
-2. **素材库** - 管理上传的研究素材
-
-任务列表会自动每5秒刷新一次。

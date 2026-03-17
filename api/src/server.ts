@@ -11,7 +11,22 @@ import { outputRoutes } from './routes/outputs.js';
 import { rssRoutes } from './routes/rss.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
+import { researchRoutes } from './routes/research.js';
+import { reportRoutes } from './routes/reports.js';
+import { v34ReportRoutes } from './routes/v34-reports.js';
+import { v34HotTopicRoutes } from './routes/v34-hot-topics.js';
+import { v34AssetRoutes } from './routes/v34-assets.js';
+import { v40ComplianceRoutes } from './routes/v40-compliance.js';
+import { v41OrchestratorRoutes } from './routes/v41-orchestrator.js';
+import { v42Stage3Routes } from './routes/v42-stage3.js';
+import { v43PredictionRoutes } from './routes/v43-prediction.js';
+import { v44CopilotRoutes } from './routes/v44-copilot.js';
+import { v45I18nRoutes } from './routes/v45-i18n.js';
+import { expertRoutes } from './routes/experts.js';
+import { sentimentRoutes } from './routes/sentiment.js';
+import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
+import { startRSSCron } from './services/rssCrawler.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment, MockProvider } from './providers/index.js';
@@ -74,7 +89,7 @@ async function main() {
     return {
       status: 'ok',
       service: 'content-pipeline-api',
-      version: '1.0.0-mvp',
+      version: '3.0.0',
       timestamp: new Date().toISOString()
     };
   });
@@ -86,6 +101,40 @@ async function main() {
   await fastify.register(rssRoutes, { prefix: '/api/v1/rss' });
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
+  await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
+  await fastify.register(reportRoutes, { prefix: '/api/v1/reports' });
+
+  // v3.4 内容质量输入体系路由
+  await fastify.register(v34ReportRoutes, { prefix: '/api/v1/quality/reports' });
+  await fastify.register(v34HotTopicRoutes, { prefix: '/api/v1/quality/hot-topics' });
+  await fastify.register(v34AssetRoutes, { prefix: '/api/v1/quality/assets' });
+
+  // v4.0 智能审核与合规路由
+  await fastify.register(v40ComplianceRoutes, { prefix: '/api/v1/compliance' });
+
+  // v4.1 智能流水线编排路由
+  await fastify.register(v41OrchestratorRoutes, { prefix: '/api/v1/orchestrator' });
+
+  // v4.2 Stage 3 文稿生成增强路由
+  await fastify.register(v42Stage3Routes, { prefix: '/api/v1/stage3' });
+
+  // v4.3 内容表现预测路由
+  await fastify.register(v43PredictionRoutes, { prefix: '/api/v1/prediction' });
+
+  // v4.4 Copilot AI助手路由
+  await fastify.register(v44CopilotRoutes, { prefix: '/api/v1/copilot' });
+
+  // v4.5 国际化 (i18n) 路由
+  await fastify.register(v45I18nRoutes, { prefix: '/api/v1/i18n' });
+
+  // 专家库路由 (v2.0)
+  await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
+
+  // 情感分析路由 (v2.2)
+  await fastify.register(sentimentRoutes, { prefix: '/api/v1/sentiment' });
+
+  // Public API routes (v3.0)
+  await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
@@ -112,6 +161,9 @@ async function main() {
     // Initialize directory watcher service
     const watcherService = getDirectoryWatcherService();
     await watcherService.initialize();
+
+    // Start v3.4 RSS crawler
+    startRSSCron(30); // 每30分钟抓取一次
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

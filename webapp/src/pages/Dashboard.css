@@ -1,0 +1,452 @@
+/* Terracotta Theme Dashboard - 陶土主题仪表盘 */
+
+/* Refresh Status Bar */
+.refresh-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+}
+
+.refresh-info {
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.offline-indicator {
+  color: #fa8c16;
+  font-weight: 500;
+}
+
+.last-refresh {
+  color: var(--gray-600);
+}
+
+.refresh-btn {
+  padding: 6px 12px;
+  background: var(--sage);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--sage-dark);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-btn.refreshing {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Dashboard with Sidebar Layout */
+.dashboard-with-sidebar {
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0; /* Prevent flex item overflow */
+}
+
+/* Stats Grid - 陶土统计卡片 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.stat-card {
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
+  box-shadow: var(--shadow);
+  text-align: center;
+  border: 1px solid var(--linen);
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--terracotta) 0%, var(--ochre) 50%, var(--sage) 100%);
+  opacity: 0.4;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--soil);
+  margin-bottom: 8px;
+  line-height: 1;
+  font-family: 'SF Pro Display', -apple-system, sans-serif;
+}
+
+.stat-value.stat-pending {
+  color: var(--pebble);
+}
+
+.stat-value.stat-processing {
+  color: var(--terracotta);
+}
+
+.stat-value.stat-completed {
+  color: var(--sage);
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--earth);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Quick Actions Grid - 快捷操作网格 */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border: 2px solid var(--linen);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--action-color, var(--terracotta));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.quick-action-btn:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--action-color, var(--terracotta));
+}
+
+.quick-action-btn:hover::before {
+  opacity: 1;
+}
+
+.quick-action-icon {
+  font-size: 32px;
+  line-height: 1;
+  transition: transform var(--transition);
+}
+
+.quick-action-btn:hover .quick-action-icon {
+  transform: scale(1.1);
+}
+
+.quick-action-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--soil);
+}
+
+/* Pipeline Grid - 陶土管道卡片 */
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.pipeline-card {
+  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  border-top: 5px solid;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+  transition: all var(--transition);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+  position: relative;
+}
+
+.pipeline-card::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20px;
+  right: 20px;
+  height: 8px;
+  background: inherit;
+  border-radius: 50%;
+  filter: blur(8px);
+  opacity: 0.3;
+  z-index: -1;
+}
+
+.pipeline-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: var(--shadow-lg);
+}
+
+.pipeline-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.pipeline-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 50%);
+}
+
+.pipeline-info {
+  flex: 1;
+}
+
+.pipeline-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--soil);
+  margin-bottom: 6px;
+}
+
+.pipeline-desc {
+  font-size: 13px;
+  color: var(--pebble);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.pipeline-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--terracotta);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pipeline-count::before {
+  content: '●';
+  font-size: 8px;
+}
+
+/* Recent Tasks - 陶土任务列表 */
+.recent-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recent-task-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(145deg, white 0%, var(--cream-dark) 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--linen);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.recent-task-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--terracotta) 0%, var(--ochre) 100%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.recent-task-item:hover {
+  background: white;
+  box-shadow: var(--shadow);
+  transform: translateX(4px);
+}
+
+.recent-task-item:hover::before {
+  opacity: 1;
+}
+
+.recent-task-topic {
+  font-size: 14px;
+  color: var(--soil);
+  font-weight: 600;
+  flex: 1;
+  margin-right: 16px;
+}
+
+/* Task Status Badge - 任务状态徽章 */
+.task-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Decorative Elements */
+.terracotta-decoration {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(135deg, var(--terracotta) 0%, var(--ochre) 100%);
+  border-radius: 50%;
+  opacity: 0.1;
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pipeline-grid,
+  .quick-actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-value {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid,
+  .pipeline-grid,
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .pipeline-card {
+    padding: 20px;
+  }
+
+  .recent-task-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .recent-task-topic {
+    margin-right: 0;
+  }
+}
+
+/* Animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card,
+.pipeline-card,
+.recent-task-item {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.stat-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.stat-card:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.stat-card:nth-child(4) {
+  animation-delay: 0.3s;
+}

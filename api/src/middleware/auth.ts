@@ -21,3 +21,14 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     };
   }
 }
+
+// 可选认证 - 支持匿名和登录用户
+export async function optionalAuth(request: FastifyRequest, reply: FastifyReply) {
+  const apiKey = request.headers['x-api-key'];
+
+  if (apiKey && apiKey === API_KEY) {
+    // 认证通过，设置用户标识
+    (request as any).user = { id: 'authenticated', role: 'user' };
+  }
+  // 未认证也继续执行
+}

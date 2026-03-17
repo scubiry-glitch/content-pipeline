@@ -1,0 +1,490 @@
+openapi: 3.0.0
+info:
+  title: 内容质量输入体系 API v3.4
+  version: 3.4.0
+  description: 研报管理、热点追踪、素材库 API 规格
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: 本地开发环境
+
+paths:
+  /reports:
+    get:
+      summary: 获取研报列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: institution
+          in: query
+          schema:
+            type: string
+        - name: minQuality
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Report'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+
+    post:
+      summary: 创建研报记录
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportDTO'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+
+  /reports/upload:
+    post:
+      summary: 上传并解析研报
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                autoParse:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResult'
+
+  /reports/{id}:
+    get:
+      summary: 获取研报详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetail'
+
+    put:
+      summary: 更新研报
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportDTO'
+      responses:
+        '200':
+          description: 更新成功
+
+    delete:
+      summary: 删除研报
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 删除成功
+
+  /reports/{id}/related:
+    get:
+      summary: 获取关联内容
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedContent'
+
+  /reports/{id}/parse:
+    post:
+      summary: 触发研报解析
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 解析任务已启动
+
+  /hot-topics:
+    get:
+      summary: 获取热点列表
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: trend
+          in: query
+          schema:
+            type: string
+            enum: [up, stable, down]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HotTopic'
+
+  /hot-topics/{id}/follow:
+    post:
+      summary: 关注热点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 关注成功
+
+  /hot-topics/{id}/unfollow:
+    post:
+      summary: 取消关注热点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 取消关注成功
+
+  /assets:
+    get:
+      summary: 获取素材列表
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [chart, quote, data, insight]
+        - name: sourceId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+
+    post:
+      summary: 创建素材
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetDTO'
+      responses:
+        '201':
+          description: 创建成功
+
+  /assets/extract:
+    post:
+      summary: 从研报提取素材
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reportId:
+                  type: string
+                  format: uuid
+                selections:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: 提取成功
+
+  /assets/{id}/quote:
+    post:
+      summary: 一键引用素材
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 引用成功
+
+components:
+  schemas:
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        institution:
+          type: string
+        publishDate:
+          type: string
+          format: date
+        pageCount:
+          type: integer
+        qualityScore:
+          type: object
+          properties:
+            overall:
+              type: integer
+            authority:
+              type: integer
+            completeness:
+              type: integer
+            logic:
+              type: integer
+            freshness:
+              type: integer
+            citations:
+              type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, parsing, parsed, error]
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportDetail:
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          properties:
+            abstract:
+              type: string
+            keyPoints:
+              type: array
+              items:
+                type: string
+            sections:
+              type: array
+              items:
+                type: object
+            fileUrl:
+              type: string
+
+    CreateReportDTO:
+      type: object
+      properties:
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        institution:
+          type: string
+        publishDate:
+          type: string
+          format: date
+
+    UpdateReportDTO:
+      type: object
+      properties:
+        title:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    UploadResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, parsing, parsed, error]
+        parsedData:
+          $ref: '#/components/schemas/ReportDetail'
+
+    RelatedContent:
+      type: object
+      properties:
+        hotTopics:
+          type: array
+          items:
+            $ref: '#/components/schemas/HotTopic'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        relatedReports:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+
+    HotTopic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        source:
+          type: string
+        sourceUrl:
+          type: string
+        hotScore:
+          type: integer
+        trend:
+          type: string
+          enum: [up, stable, down]
+        sentiment:
+          type: string
+          enum: [positive, neutral, negative]
+        publishedAt:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [chart, quote, data, insight]
+        title:
+          type: string
+        content:
+          type: string
+        source:
+          type: string
+        sourceId:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+        qualityScore:
+          type: integer
+        usageCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateAssetDTO:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [chart, quote, data, insight]
+        title:
+          type: string
+        content:
+          type: string
+        sourceId:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string

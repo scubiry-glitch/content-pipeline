@@ -252,7 +252,8 @@ async function setupMVPSchema(): Promise<void> {
     ALTER TABLE tasks
     ADD COLUMN IF NOT EXISTS final_draft TEXT,
     ADD COLUMN IF NOT EXISTS final_draft_edited BOOLEAN DEFAULT false,
-    ADD COLUMN IF NOT EXISTS final_draft_edit_id UUID
+    ADD COLUMN IF NOT EXISTS final_draft_edit_id UUID,
+    ADD COLUMN IF NOT EXISTS research_config JSONB
   `);
 
   // Outputs table - final generated content
@@ -306,10 +307,11 @@ async function setupMVPSchema(): Promise<void> {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       source_id VARCHAR(50) NOT NULL,
       fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      fetched_date DATE DEFAULT CURRENT_DATE,
       status VARCHAR(20) NOT NULL,
       items_count INTEGER DEFAULT 0,
       error_message TEXT,
-      UNIQUE(source_id, DATE(fetched_at))
+      UNIQUE(source_id, fetched_date)
     )
   `);
 
@@ -354,6 +356,31 @@ async function setupMVPSchema(): Promise<void> {
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_task_archives_task ON task_archives(task_id)`);
 
+  // Translation cache table (ML-002 ~ ML-004)
+  await query(`
+    CREATE TABLE IF NOT EXISTS translation_cache (
+      hash VARCHAR(64) PRIMARY KEY,
+      original TEXT NOT NULL,
+      translated TEXT NOT NULL,
+      source_language VARCHAR(10) NOT NULL DEFAULT 'en',
+      target_language VARCHAR(10) NOT NULL DEFAULT 'zh',
+      quality_score DECIMAL(3,2) DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create index
+  await query(`CREATE INDEX IF NOT EXISTS idx_translation_cache_created ON translation_cache(created_at)`);
+
+  // Add translation columns to rss_items
+  await query(`
+    ALTER TABLE rss_items
+    ADD COLUMN IF NOT EXISTS translated_title VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS translated_summary TEXT,
+    ADD COLUMN IF NOT EXISTS translation_quality DECIMAL(3,2),
+    ADD COLUMN IF NOT EXISTS translated_at TIMESTAMP WITH TIME ZONE
+  `);
+
   // Create vector index for semantic search (HNSW for fast approximate search)
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_embedding ON assets USING hnsw (embedding vector_cosine_ops)`).catch(() => {
     console.log('[DB] HNSW index creation failed, trying ivfflat...');
@@ -361,6 +388,91 @@ async function setupMVPSchema(): Promise<void> {
       console.log('[DB] Vector index creation skipped (may need more data)');
     });
   });
+
+  // Reports table - research reports library (v3.3)
+  await query(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title VARCHAR(500) NOT NULL,
+      authors JSONB DEFAULT '[]',
+      institution VARCHAR(200),
+      publish_date DATE,
+      page_count INTEGER,
+      file_url TEXT,
+      content TEXT,
+      key_points JSONB DEFAULT '[]',
+      tags JSONB DEFAULT '[]',
+      quality_score DECIMAL(4,3) DEFAULT 0.5,
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Add missing columns to existing reports table
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS quality_score DECIMAL(4,3) DEFAULT 0.5`);
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS key_points JSONB DEFAULT '[]'`);
+  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'`);
+
+  // Create indexes for reports
+  await query(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)`);
+
+  // Experts table - expert library (v2.0)
+  await query(`
+    CREATE TABLE IF NOT EXISTS experts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      title VARCHAR(200),
+      company VARCHAR(200),
+      angle VARCHAR(50) DEFAULT 'challenger',
+      domain VARCHAR(200),
+      bio TEXT,
+      status VARCHAR(20) DEFAULT 'active',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes for experts
+  await query(`CREATE INDEX IF NOT EXISTS idx_experts_status ON experts(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_experts_domain ON experts(domain)`);
+
+  // Sentiment analysis table (v2.2 - SA-001 ~ SA-005)
+  await query(`
+    CREATE TABLE IF NOT EXISTS sentiment_analysis (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_id VARCHAR(100) NOT NULL,
+      topic_id VARCHAR(50),
+      source_type VARCHAR(50) NOT NULL,
+      polarity VARCHAR(20) NOT NULL CHECK (polarity IN ('positive', 'negative', 'neutral')),
+      intensity INTEGER DEFAULT 0 CHECK (intensity >= 0 AND intensity <= 100),
+      confidence DECIMAL(3,2) DEFAULT 0,
+      keywords JSONB DEFAULT '[]',
+      analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(content_id)
+    )
+  `);
+
+  // Hot topics table for sentiment tracking
+  await query(`
+    CREATE TABLE IF NOT EXISTS hot_topics (
+      id VARCHAR(50) PRIMARY KEY,
+      title VARCHAR(500) NOT NULL,
+      category VARCHAR(100),
+      sentiment_score DECIMAL(5,2) DEFAULT 0,
+      mention_count INTEGER DEFAULT 0,
+      trend_direction VARCHAR(20) DEFAULT 'stable',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Create indexes for sentiment analysis
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_topic ON sentiment_analysis(topic_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_polarity ON sentiment_analysis(polarity)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_analyzed_at ON sentiment_analysis(analyzed_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_source ON sentiment_analysis(source_type, analyzed_at)`);
 
   console.log('[DB] MVP Schema initialized successfully');
 }

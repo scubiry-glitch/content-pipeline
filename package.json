@@ -1,0 +1,35 @@
+{
+  "name": "content-pipeline-monorepo",
+  "version": "3.0.0",
+  "description": "内容生产流水线 - Monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "api",
+    "webapp"
+  ],
+  "scripts": {
+    "dev": "npm run dev:api & npm run dev:webapp",
+    "dev:open": "npm run dev & sleep 6 && open http://localhost:5173",
+    "dev:api": "cd api && npm run dev",
+    "dev:webapp": "cd webapp && npm run dev",
+    "open": "open http://localhost:5173",
+    "build": "npm run build:api && npm run build:webapp",
+    "build:api": "cd api && npm run build",
+    "build:webapp": "cd webapp && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "db:init": "cd api && npm run db:init",
+    "demo": "cd api && npm run demo"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
