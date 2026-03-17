@@ -1,8 +1,8 @@
 # 产品规格: 内容质量输入体系 v3.0 (Final)
 
 **版本**: v3.0 Final
-**日期**: 2026-03-16
-**状态**: ✅ 已完成 (6轮迭代, 149 tests)
+**日期**: 2026-03-18
+**状态**: ✅ 已完成 (7轮迭代, 192 tests)
 **负责人**: 产品研发运营协作体系
 
 ---
@@ -151,6 +151,53 @@ hotScore = (velocity × 0.3 + authority × 10 × 0.3 + |sentiment| × 100 × 0.2
 
 ---
 
+### 2.7 第七轮: 素材智能复用 (v3.0.1-3.0.3) (13 tests)
+
+**功能**:
+- ✅ 写作场景素材推荐 (v3.0.1)
+- ✅ 素材引用统计 (v3.0.2)
+- ✅ 智能标签补全 (v3.0.3)
+
+**v3.0.1 写作场景素材推荐**:
+```typescript
+// 输入监听 + 语义匹配
+function recommendAssets(inputText: string): Asset[] {
+  const keywords = extractKeywords(inputText);
+  return assets.filter(asset =>
+    semanticMatch(asset.tags, keywords) > 0.3
+  ).sort(byRelevance).slice(0, 5);
+}
+```
+- 防抖处理500ms
+- 推荐准确率>70%
+- 一键插入引用
+
+**v3.0.2 素材引用统计**:
+```typescript
+interface AssetUsage {
+  assetId: string;
+  quoteCount: number;
+  lastUsedAt: string;
+  usedInTasks: string[];
+}
+```
+- 引用计数准确
+- 使用历史可追溯
+- 热门素材Top10
+
+**v3.0.3 智能标签补全**:
+- 从标题/内容/来源自动提取标签
+- 标签准确率>80%
+- 批量自动打标签
+
+**文件**:
+- `webapp/src/components/AssetRecommendPanel.tsx`
+- `webapp/src/hooks/useAssetRecommendation.ts`
+- `webapp/src/services/assetUsageService.ts`
+- `webapp/src/services/autoTagService.ts`
+
+---
+
 ## 3. RSS源配置
 
 **配置文件**: `content-pipeline/config/rss-sources.json`
@@ -245,7 +292,10 @@ content-pipeline/
 | 5 | ContentGenerationIntegration | 18 | ✅ |
 | 6 | RSSDatabaseIntegration | 31 | ✅ |
 | v3.1-1 | SmartRecommender | 30 | ✅ |
-| **累计** | **7模块** | **179** | **✅** |
+| v3.0.1 | 写作场景素材推荐 | 5 | ✅ |
+| v3.0.2 | 素材引用统计 | 4 | ✅ |
+| v3.0.3 | 智能标签补全 | 4 | ✅ |
+| **累计** | **10模块** | **192** | **✅** |
 
 ---
 
@@ -258,6 +308,7 @@ content-pipeline/
 - [第五轮](https://github.com/scubiry-glitch/content-pipeline/commit/05882eb): ContentGenerationIntegration
 - [第六轮](https://github.com/scubiry-glitch/content-pipeline/commit/41820ed): RSSDatabaseIntegration
 - [v3.1第一轮](https://github.com/scubiry-glitch/content-pipeline/commit/df7d01e): SmartRecommender
+- [v3.0 Enhanced](https://github.com/scubiry-glitch/content-pipeline/commit/f38387b): 素材智能复用 (v3.0.1-3.0.3)
 
 ---
 
@@ -288,5 +339,5 @@ npm test
 ---
 
 **状态**: 已冻结归档
-**归档日期**: 2026-03-16
-**归档版本**: v3.0.0
+**归档日期**: 2026-03-18
+**归档版本**: v3.0.0+v3.0 Enhanced
