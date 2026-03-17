@@ -1,0 +1,415 @@
+/* 专家知识图谱页面样式 */
+
+.expert-knowledge-graph-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.expert-knowledge-graph-page.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 页面头部 */
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.page-header .subtitle {
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* 控制面板 */
+.control-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.filter-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-section .label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.domain-select {
+  padding: 8px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #475569;
+  background: white;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.domain-select:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.view-toggle .label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-group button {
+  padding: 8px 16px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-group button:hover {
+  background: #e2e8f0;
+}
+
+.toggle-group button.active {
+  background: #6366f1;
+  color: white;
+}
+
+/* 主内容区 */
+.graph-content {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  height: calc(100vh - 280px);
+  min-height: 600px;
+}
+
+.chart-container {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* 信息面板 */
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* 节点详情卡片 */
+.node-detail-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 20px;
+  text-align: center;
+  color: white;
+}
+
+.card-header .node-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.card-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.card-body .description {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.expert-title {
+  font-size: 14px;
+  color: #6366f1;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.expert-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.expert-stats .stat {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.expert-stats .stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  display: block;
+}
+
+.expert-stats .stat-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+  display: block;
+}
+
+.expert-philosophy h4,
+.topic-keywords h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.expert-philosophy ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.expert-philosophy li {
+  font-size: 13px;
+  color: #475569;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  position: relative;
+  padding-left: 16px;
+}
+
+.expert-philosophy li:last-child {
+  border-bottom: none;
+}
+
+.expert-philosophy li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #6366f1;
+}
+
+.topic-keywords .keyword-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyword-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #ede9fe;
+  color: #7c3aed;
+  border-radius: 20px;
+}
+
+.card-actions {
+  padding: 16px 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* 空面板 */
+.empty-panel {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-panel .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.empty-panel p {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.empty-panel span {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* 图例面板 */
+.legend-panel {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 16px 20px;
+}
+
+.legend-panel h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.legend-item .symbol {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.legend-item .line {
+  width: 20px;
+  height: 2px;
+  flex-shrink: 0;
+}
+
+.legend-item .line.solid {
+  background: #cbd5e1;
+}
+
+.legend-item .line.dashed {
+  background: repeating-linear-gradient(
+    to right,
+    #cbd5e1,
+    #cbd5e1 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  height: 2px;
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .graph-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .info-panel {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .node-detail-card,
+  .empty-panel,
+  .legend-panel {
+    min-width: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .control-panel {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toggle-group {
+    flex-wrap: wrap;
+  }
+
+  .expert-knowledge-graph-page {
+    padding: 16px;
+  }
+}

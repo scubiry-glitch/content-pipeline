@@ -25,6 +25,7 @@ import { HotTopicDetail } from './pages/HotTopicDetail';
 import { HotTopicInsights } from './pages/HotTopicInsights';
 import { ExpertComparison } from './pages/ExpertComparison';
 import { ExpertNetwork } from './pages/ExpertNetwork';
+import { ExpertKnowledgeGraph } from './pages/ExpertKnowledgeGraph';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -71,6 +72,7 @@ function App() {
               <Route path="hot-topics/:id" element={<HotTopicDetail />} />
               <Route path="expert-comparison" element={<ExpertComparison />} />
               <Route path="expert-network" element={<ExpertNetwork />} />
+<Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

@@ -147,6 +147,9 @@ export function ExpertLibrary() {
           <button className="btn-network" onClick={() => navigate('/expert-network')}>
             🕸️ 专家网络
           </button>
+          <button className="btn-knowledge" onClick={() => navigate('/expert-knowledge-graph')}>
+            🧠 知识图谱
+          </button>
           <button className="btn-comparison" onClick={() => navigate('/expert-comparison')}>
             ⚖️ 专家对比
           </button>

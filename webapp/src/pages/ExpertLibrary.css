@@ -67,6 +67,8 @@
 .header-actions {
   float: right;
   margin-top: -50px;
+  display: flex;
+  gap: 10px;
 }
 
 .btn-comparison {
@@ -101,6 +103,23 @@
 .btn-network:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn-knowledge {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-knowledge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 /* 统计栏 */
