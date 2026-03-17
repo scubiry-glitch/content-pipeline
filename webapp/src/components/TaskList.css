@@ -4,6 +4,13 @@
   gap: 16px;
 }
 
+/* 虚拟滚动容器 */
+.task-list-virtual {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .task-card {
   background: white;
   border-radius: 12px;

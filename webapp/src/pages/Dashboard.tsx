@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, STAGES } from '../types';
@@ -13,10 +13,39 @@ const QUICK_ACTIONS = [
   { icon: '✏️', label: '开始写作', path: '/tasks', color: '#722ed1' },
 ];
 
+// 格式化相对时间
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 10) return '刚刚';
+  if (seconds < 60) return `${seconds}秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}分钟前`;
+  return `${Math.floor(minutes / 60)}小时前`;
+}
+
 export function Dashboard() {
-  const { tasks } = useTasks();
+  const { tasks, loading, fetchTasks, isOffline } = useTasks();
   const navigate = useNavigate();
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 手动刷新数据
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchTasks();
+    setLastRefresh(new Date());
+    setIsRefreshing(false);
+  };
+
+  // 监听自动刷新（通过 SWR 自动处理，这里只更新时间显示）
+  useEffect(() => {
+    if (!loading) {
+      setLastRefresh(new Date());
+    }
+  }, [tasks, loading]);
 
   const stats = {
     total: tasks.length,
@@ -54,6 +83,27 @@ export function Dashboard() {
     <div className="dashboard dashboard-with-sidebar">
       {/* Main Content */}
       <div className="dashboard-main">
+      {/* Refresh Status Bar */}
+      <div className="refresh-status-bar">
+        <div className="refresh-info">
+          {isOffline ? (
+            <span className="offline-indicator">⚠️ 离线模式 - 使用缓存数据</span>
+          ) : (
+            <span className="last-refresh">
+              {isRefreshing ? '🔄 刷新中...' : `✅ 上次更新: ${formatRelativeTime(lastRefresh)}`}
+            </span>
+          )}
+        </div>
+        <button
+          className={`refresh-btn ${isRefreshing ? 'refreshing' : ''}`}
+          onClick={handleManualRefresh}
+          disabled={isRefreshing || isOffline}
+          title="立即刷新数据"
+        >
+          {isRefreshing ? '⟳' : '↻'} 刷新
+        </button>
+      </div>
+
       {/* Stats Overview */}
       <div className="stats-grid">
         <div className="stat-card">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { assetsApi, themesApi, bindingsApi, type Asset, type AssetTheme, type DirectoryBinding } from '../api/client';
+import { LazyImage } from '../components/LazyImage';
 import './Assets.css';
 
 type FilterType = 'all' | 'pinned' | 'pdf' | 'txt' | 'image';
@@ -394,7 +395,7 @@ export function Assets() {
                     {asset.is_pinned && <span className="pin-badge">📌</span>}
                     <div className="asset-preview">
                       {asset.content_type?.startsWith('image/') && asset.filename ? (
-                        <img src={asset.filename} alt={asset.title} />
+                        <LazyImage src={asset.filename} alt={asset.title} />
                       ) : (
                         <div className="asset-icon">{getAssetIcon(asset.content_type)}</div>
                       )}

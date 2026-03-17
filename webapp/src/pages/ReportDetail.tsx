@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { reportsApi, tasksApi, type Report, type ReportMatch, type Task } from '../api/client';
+import { PDFPreview } from '../components/PDFPreview';
 import './ReportDetail.css';
 
 // Helper function to download blob as file
@@ -22,7 +23,7 @@ export function ReportDetail() {
   const [matches, setMatches] = useState<ReportMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'quality' | 'matches' | 'citations'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'preview' | 'quality' | 'matches' | 'citations'>('overview');
   const [citations, setCitations] = useState<Task[]>([]);
   const [citationsLoading, setCitationsLoading] = useState(false);
 
@@ -162,6 +163,11 @@ export function ReportDetail() {
         <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
           📄 概览
         </button>
+        {report.fileUrl && (
+          <button className={`tab ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>
+            👁️ PDF预览
+          </button>
+        )}
         <button className={`tab ${activeTab === 'quality' ? 'active' : ''}`} onClick={() => setActiveTab('quality')}>
           📊 质量分析
         </button>
@@ -174,6 +180,12 @@ export function ReportDetail() {
       </div>
 
       <div className="detail-content">
+        {activeTab === 'preview' && report.fileUrl && (
+          <div className="preview-panel">
+            <PDFPreview pdfUrl={report.fileUrl} />
+          </div>
+        )}
+
         {activeTab === 'overview' && (
           <div className="overview-panel">
             {report.keyPoints && report.keyPoints.length > 0 && (

@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, type Task } from '../types';
 import { TaskDetail } from './TaskDetail';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 interface EditTaskModalProps {
   task: Task | null;
@@ -179,12 +181,13 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     );
   }
 
-  return (
-    <>
-      <div className="task-list">
-        {filteredTasks.map((task) => (
+  // 虚拟滚动行渲染器
+  const Row = useCallback(
+    ({ index, style }: { index: number; style: React.CSSProperties }) => {
+      const task = filteredTasks[index];
+      return (
+        <div style={{ ...style, padding: '8px 0' }}>
           <TaskCard
-            key={task.id}
             task={task}
             showHidden={showHidden}
             onClick={() => setSelectedTaskId(task.id)}
@@ -193,8 +196,48 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
             onUnhide={() => setConfirmUnhide(task.id)}
             onEdit={() => setEditingTask(task)}
           />
-        ))}
-      </div>
+        </div>
+      );
+    },
+    [filteredTasks, showHidden]
+  );
+
+  // 当任务数较少时，使用普通渲染；超过50条时使用虚拟滚动
+  const useVirtualScroll = filteredTasks.length > 50;
+
+  return (
+    <>
+      {useVirtualScroll ? (
+        <div className="task-list-virtual" style={{ height: 'calc(100vh - 200px)' }}>
+          <AutoSizer>
+            {({ height, width }: { height: number; width: number }) => (
+              <List
+                height={height}
+                itemCount={filteredTasks.length}
+                itemSize={180}
+                width={width}
+              >
+                {Row}
+              </List>
+            )}
+          </AutoSizer>
+        </div>
+      ) : (
+        <div className="task-list">
+          {filteredTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              showHidden={showHidden}
+              onClick={() => setSelectedTaskId(task.id)}
+              onDelete={() => setConfirmDelete(task.id)}
+              onHide={() => setConfirmHide(task.id)}
+              onUnhide={() => setConfirmUnhide(task.id)}
+              onEdit={() => setEditingTask(task)}
+            />
+          ))}
+        </div>
+      )}
       <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
 
       <EditTaskModal

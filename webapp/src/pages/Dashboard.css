@@ -1,5 +1,64 @@
 /* Terracotta Theme Dashboard - 陶土主题仪表盘 */
 
+/* Refresh Status Bar */
+.refresh-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+}
+
+.refresh-info {
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.offline-indicator {
+  color: #fa8c16;
+  font-weight: 500;
+}
+
+.last-refresh {
+  color: var(--gray-600);
+}
+
+.refresh-btn {
+  padding: 6px 12px;
+  background: var(--sage);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--sage-dark);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-btn.refreshing {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .dashboard {
   display: flex;
   flex-direction: column;
