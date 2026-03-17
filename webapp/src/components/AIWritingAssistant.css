@@ -1,0 +1,110 @@
+/* AI写作助手样式 */
+.ai-writing-assistant {
+  position: relative;
+}
+
+.ai-assistant-toggle {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.ai-assistant-toggle:hover {
+  transform: translateY(-2px);
+}
+
+.ai-assistant-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 280px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--linen);
+}
+
+.panel-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--earth);
+}
+
+.panel-header button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  color: var(--pebble);
+  cursor: pointer;
+}
+
+.ai-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+}
+
+.ai-pulse {
+  width: 12px;
+  height: 12px;
+  background: var(--terracotta);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.ai-actions {
+  padding: 8px;
+}
+
+.ai-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ai-action-btn:hover {
+  background: var(--cream);
+}
+
+.action-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--earth);
+}
+
+.action-desc {
+  font-size: 12px;
+  color: var(--pebble);
+  margin-top: 2px;
+}
