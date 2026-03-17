@@ -200,7 +200,7 @@ export interface Expert {
   name: string;
   title: string;
   company: string;
-  angle: 'challenger' | 'expander' | 'synthesizer';
+  angle?: 'challenger' | 'expander' | 'synthesizer';
   domain: string;
   bio?: string;
   status: 'active' | 'inactive';

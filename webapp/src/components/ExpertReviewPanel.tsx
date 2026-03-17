@@ -47,7 +47,9 @@ export function ExpertReviewPanel({
 
       const generatedReviews: ExpertReview[] = [];
 
-      for (const expert of result.domainExperts) {
+      // v5.1.1: 防御性检查，确保 domainExperts 存在且可迭代
+      const domainExperts = result.domainExperts || [];
+      for (const expert of domainExperts) {
         const review = generateExpertOpinion(expert, content, contentType);
         review.taskId = taskId;
         generatedReviews.push(review);

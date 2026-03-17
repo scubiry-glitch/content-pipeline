@@ -128,17 +128,16 @@ function generateExpertEmbedding(expert: Expert): ExpertEmbedding {
   }`;
   const domainEmbedding = textToEmbedding(domainText);
 
-  // 2. 思想体系嵌入 - 基于核心思想+方法论+决策框架
+  // 2. 思想体系嵌入 - 基于核心思想+名言
   const philosophyText = [
     ...expert.philosophy.core,
-    ...(expert.philosophy.methodology || []),
-    ...(expert.decisionFramework?.dimensions?.map((d) => d.name) || []),
+    ...expert.philosophy.quotes,
   ].join(' ');
   const philosophyEmbedding = textToEmbedding(philosophyText);
 
-  // 3. 成功案例嵌入 - 基于成功案例标题+领域+描述
+  // 3. 成功案例嵌入 - 基于成功案例标题+影响+描述
   const achievementsText = expert.achievements
-    ?.map((a) => `${a.title} ${a.domain} ${a.description || ''}`)
+    ?.map((a) => `${a.title} ${a.impact} ${a.description || ''}`)
     .join(' ') || '';
   const achievementsEmbedding = textToEmbedding(achievementsText);
 
@@ -274,13 +273,20 @@ export function semanticMatchExperts(
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, topK);
 
-  // 构建匹配结果（需要expertService提供专家对象）
+  // 构建匹配结果（返回部分结果，expertService会补充完整）
   return {
     experts: sortedSimilarities.map((s) => ({
       expertId: s.expertId,
       role: 'primary',
       reasoning: `语义相似度: ${(s.similarity * 100).toFixed(1)}%`,
     })),
+    domainExperts: [], // expertService会填充
+    universalExperts: {
+      factChecker: {} as Expert,
+      logicChecker: {} as Expert,
+      readerRep: {} as Expert,
+    }, // expertService会填充
+    matchReasons: [], // expertService会填充
     confidence: sortedSimilarities[0]?.similarity || 0,
     matchingMethod: 'semantic',
     domainScores: topDomains.map((d) => ({
