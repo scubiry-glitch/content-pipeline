@@ -470,4 +470,36 @@ CREATE TABLE assets (
 
 ---
 
-**状态**: 需求冻结中，等待 /冻结 确认
+**状态**: ✅ 已完成 (2026-03-18)
+
+---
+
+## 9. 实现状态
+
+| 版本 | 功能 | 状态 | 完成日期 |
+|------|------|------|---------|
+| v3.0.1 | 研报上传 + 基础解析 | ✅ 完成 | 2026-03-17 |
+| v3.0.2 | 质量评分 + 标签生成 | ✅ 完成 | 2026-03-17 |
+| v3.0.3 | RSS热点抓取 | ✅ 完成 | 2026-03-17 |
+| v3.0.4 | 素材库 + 检索 | ✅ 完成 | 2026-03-17 |
+| v3.0.5 | 关联推荐 + 优化 | ✅ 完成 | 2026-03-18 |
+
+### 实现文件清单
+
+**前端页面:**
+- `webapp/src/pages/Reports.tsx` - 研报管理
+- `webapp/src/pages/ReportDetail.tsx` - 研报详情
+- `webapp/src/pages/HotTopics.tsx` - 热点追踪
+- `webapp/src/pages/HotTopicInsights.tsx` - 热点专家解读
+- `webapp/src/pages/Assets.tsx` - 素材库
+- `webapp/src/pages/AssetDetail.tsx` - 素材详情
+
+**服务层:**
+- `webapp/src/api/client.ts` - API客户端
+- `webapp/src/services/favoritesService.ts` - 收藏服务
+
+**后端API:**
+- `api/src/routes/reports.ts` - 研报路由
+- `api/src/routes/rss.ts` - RSS热点路由
+- `api/src/routes/assets.ts` - 素材路由
+- `api/src/routes/favorites.ts` - 收藏路由
