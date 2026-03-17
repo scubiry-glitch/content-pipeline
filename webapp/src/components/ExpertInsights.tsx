@@ -155,7 +155,7 @@ export function ExpertInsights() {
                     zIndex: topic.experts.length - idx,
                   }}
                   title={`${expert.name} - ${expert.profile.title}`}
-                  onClick={() => navigate(`/experts?highlight=${expert.id}`)}
+                  onClick={() => navigate(`/hot-topics/${topic.id}`)}
                 >
                   {expert.name.charAt(0)}
                 </div>
@@ -176,9 +176,9 @@ export function ExpertInsights() {
 
       <button
         className="view-all-experts"
-        onClick={() => navigate('/experts')}
+        onClick={() => navigate('/hot-topics')}
       >
-        查看全部 {topExperts.length} 位推荐专家 →
+        查看全部热点话题解读 →
       </button>
     </div>
   );

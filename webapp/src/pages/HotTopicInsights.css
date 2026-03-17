@@ -36,6 +36,115 @@
   margin-bottom: 16px;
 }
 
+/* 选择器头部 */
+.selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.btn-favorites-toggle {
+  padding: 8px 16px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-favorites-toggle:hover {
+  background: #e2e8f0;
+}
+
+.btn-favorites-toggle.active {
+  background: #fecaca;
+  border-color: #f87171;
+  color: #dc2626;
+}
+
+/* 收藏面板 */
+.favorites-panel {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+}
+
+.empty-favorites {
+  text-align: center;
+  padding: 40px;
+}
+
+.empty-favorites p {
+  font-size: 15px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.empty-favorites span {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.favorite-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.favorite-item:hover {
+  background: #f1f5f9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.favorite-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.favorite-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.favorite-time {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.btn-delete-favorite {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.btn-delete-favorite:hover {
+  background: #fee2e2;
+}
+
 .topic-list {
   display: flex;
   flex-direction: column;
@@ -176,13 +285,18 @@
   transition: all 0.2s;
 }
 
-.btn-save {
+.btn-favorite {
   background: #f1f5f9;
   color: #475569;
 }
 
-.btn-save:hover {
+.btn-favorite:hover {
   background: #e2e8f0;
+}
+
+.btn-favorite.active {
+  background: #fecaca;
+  color: #dc2626;
 }
 
 .btn-share {

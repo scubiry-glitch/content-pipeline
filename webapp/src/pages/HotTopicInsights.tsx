@@ -81,11 +81,25 @@ export function HotTopicInsights() {
   const [report, setReport] = useState<ExpertInsightReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [savedReports, setSavedReports] = useState<string[]>([]);
+  // 报告缓存
+  const [reportCache, setReportCache] = useState<Record<string, ExpertInsightReport>>({});
+  // 收藏的报告
+  const [favoriteReports, setFavoriteReports] = useState<ExpertInsightReport[]>([]);
+  const [showFavorites, setShowFavorites] = useState(false);
+
+  // 切换话题时优先使用缓存
+  const handleTopicChange = (topic: typeof HOT_TOPICS[0]) => {
+    setSelectedTopic(topic);
+    if (reportCache[topic.id]) {
+      setReport(reportCache[topic.id]);
+    } else {
+      generateReport(topic);
+    }
+  };
 
   // 生成解读报告
   const generateReport = async (topic: typeof HOT_TOPICS[0]) => {
     setLoading(true);
-    setSelectedTopic(topic);
 
     // 模拟API延迟
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -147,6 +161,8 @@ export function HotTopicInsights() {
       synthesis,
     };
 
+    // 存入缓存
+    setReportCache((prev) => ({ ...prev, [topic.id]: newReport }));
     setReport(newReport);
     setLoading(false);
   };
@@ -177,8 +193,46 @@ export function HotTopicInsights() {
     alert('PDF导出功能开发中...');
   };
 
+  // 收藏/取消收藏报告
+  const toggleFavorite = () => {
+    if (!report) return;
+
+    const isFavorite = favoriteReports.some((r) => r.id === report.id);
+    let updated: ExpertInsightReport[];
+
+    if (isFavorite) {
+      updated = favoriteReports.filter((r) => r.id !== report.id);
+    } else {
+      updated = [...favoriteReports, report];
+    }
+
+    setFavoriteReports(updated);
+    localStorage.setItem('expertReports', JSON.stringify(updated));
+  };
+
+  // 加载收藏的报告
+  const loadFavoriteReport = (favReport: ExpertInsightReport) => {
+    const topic = HOT_TOPICS.find((t) => t.id === favReport.topicId);
+    if (topic) {
+      setSelectedTopic(topic);
+      setReport(favReport);
+      setShowFavorites(false);
+    }
+  };
+
+  // 删除收藏的报告
+  const deleteFavorite = (reportId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = favoriteReports.filter((r) => r.id !== reportId);
+    setFavoriteReports(updated);
+    localStorage.setItem('expertReports', JSON.stringify(updated));
+  };
+
   useEffect(() => {
     generateReport(selectedTopic);
+    // 加载收藏的报告
+    const saved = JSON.parse(localStorage.getItem('expertReports') || '[]');
+    setFavoriteReports(saved);
   }, []);
 
   return (
@@ -191,21 +245,65 @@ export function HotTopicInsights() {
 
       {/* 话题选择器 */}
       <div className="topic-selector">
-        <h3>选择话题</h3>
-        <div className="topic-list">
-          {HOT_TOPICS.map((topic) => (
-            <button
-              key={topic.id}
-              className={`topic-btn ${selectedTopic.id === topic.id ? 'active' : ''}`}
-              onClick={() => generateReport(topic)}
-              disabled={loading}
-            >
-              <span className="topic-heat">🔥 {topic.heat}</span>
-              <span className="topic-title">{topic.title}</span>
-              <span className="topic-category">{topic.category}</span>
-            </button>
-          ))}
+        <div className="selector-header">
+          <h3>选择话题</h3>
+          <button
+            className={`btn-favorites-toggle ${showFavorites ? 'active' : ''}`}
+            onClick={() => setShowFavorites(!showFavorites)}
+          >
+            ❤️ 我的收藏 ({favoriteReports.length})
+          </button>
         </div>
+
+        {showFavorites ? (
+          <div className="favorites-panel">
+            {favoriteReports.length === 0 ? (
+              <div className="empty-favorites">
+                <p>暂无收藏的报告</p>
+                <span>点击报告中的"收藏"按钮保存您感兴趣的解读</span>
+              </div>
+            ) : (
+              <div className="favorites-list">
+                {favoriteReports.map((fav) => (
+                  <div
+                    key={fav.id}
+                    className="favorite-item"
+                    onClick={() => loadFavoriteReport(fav)}
+                  >
+                    <div className="favorite-info">
+                      <span className="favorite-title">{fav.topicTitle}</span>
+                      <span className="favorite-time">
+                        {new Date(fav.generatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <button
+                      className="btn-delete-favorite"
+                      onClick={(e) => deleteFavorite(fav.id, e)}
+                      title="删除收藏"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="topic-list">
+            {HOT_TOPICS.map((topic) => (
+              <button
+                key={topic.id}
+                className={`topic-btn ${selectedTopic.id === topic.id ? 'active' : ''}`}
+                onClick={() => handleTopicChange(topic)}
+                disabled={loading}
+              >
+                <span className="topic-heat">🔥 {topic.heat}</span>
+                <span className="topic-title">{topic.title}</span>
+                <span className="topic-category">{topic.category}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 加载状态 */}
@@ -229,8 +327,11 @@ export function HotTopicInsights() {
               </span>
             </div>
             <div className="report-actions">
-              <button className="btn-save" onClick={saveReport}>
-                💾 保存
+              <button
+                className={`btn-favorite ${favoriteReports.some((r) => r.id === report.id) ? 'active' : ''}`}
+                onClick={toggleFavorite}
+              >
+                {favoriteReports.some((r) => r.id === report.id) ? '❤️ 已收藏' : '🤍 收藏'}
               </button>
               <button className="btn-share" onClick={shareReport}>
                 📤 分享

@@ -2,6 +2,7 @@
 // 展示75位专家（10位特级+65位领域专家）
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getAllExperts, getExpertsByDomain, getSeniorExperts, getExpertFeedbackStats, getExpertWorkload, getExpertReviewHistory, type ExpertReviewHistory } from '../services/expertService';
 import type { Expert } from '../types';
 import './ExpertLibrary.css';
@@ -23,6 +24,7 @@ const DOMAINS = [
 ];
 
 export function ExpertLibrary() {
+  const navigate = useNavigate();
   const [experts, setExperts] = useState<Expert[]>([]);
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
@@ -140,6 +142,11 @@ export function ExpertLibrary() {
         <div className="header-title">
           <h1>专家库 v5.1</h1>
           <span className="version-badge">75位专家</span>
+        </div>
+        <div className="header-actions">
+          <button className="btn-comparison" onClick={() => navigate('/expert-comparison')}>
+            ⚖️ 专家对比
+          </button>
         </div>
         <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
       </div>

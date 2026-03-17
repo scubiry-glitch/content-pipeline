@@ -394,9 +394,33 @@
 
 /* 响应式 */
 @media (max-width: 640px) {
+  .asset-expert-review-modal {
+    width: 95%;
+    max-height: 95vh;
+  }
+
   .composite-score-section {
     flex-direction: column;
     align-items: center;
+    padding: 16px;
+  }
+
+  .score-circle {
+    width: 80px;
+    height: 80px;
+  }
+
+  .score-inner {
+    width: 64px;
+    height: 64px;
+  }
+
+  .score-value {
+    font-size: 22px;
+  }
+
+  .dimension-scores {
+    width: 100%;
   }
 
   .expert-review-header {
@@ -405,5 +429,14 @@
 
   .detailed-scores {
     grid-template-columns: 1fr;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
   }
 }
