@@ -438,6 +438,86 @@
   color: #6b7280;
 }
 
+.citations-stats .stat-card.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.citations-stats .stat-card.primary .stat-value,
+.citations-stats .stat-card.primary .stat-label {
+  color: white;
+}
+
+.stat-trend {
+  display: block;
+  font-size: 12px;
+  color: #fbbf24;
+  margin-top: 4px;
+}
+
+/* 引用任务列表 */
+.citation-tasks {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.citation-tasks h3 {
+  font-size: 16px;
+  color: #111827;
+  margin-bottom: 16px;
+}
+
+.citation-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.citation-task-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.citation-task-item .task-name {
+  flex: 1;
+  font-size: 14px;
+  color: #374151;
+}
+
+.citation-task-item .task-status {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.citation-task-item .task-status.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.citation-task-item .task-status.processing {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.citation-task-item .citation-date {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.empty-citations {
+  text-align: center;
+  padding: 40px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
 .citation-actions,
 .usage-tips {
   background: white;

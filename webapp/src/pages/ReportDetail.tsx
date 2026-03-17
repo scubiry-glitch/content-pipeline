@@ -328,11 +328,11 @@ export function ReportDetail() {
                   </div>
                   <div className="match-stat-item">
                     <span className="stat-dot medium"></span>
-                    <span>中置信度 (60-80): {matches.filter(m => m.matchScore >= 60 && m.matchScore < 80).length}</span>
+                    <span>中置信度 (60{'<'}-80): {matches.filter(m => m.matchScore >= 60 && m.matchScore < 80).length}</span>
                   </div>
                   <div className="match-stat-item">
                     <span className="stat-dot low"></span>
-                    <span>低置信度 (<60): {matches.filter(m => m.matchScore < 60).length}</span>
+                    <span>低置信度 (&lt;60): {matches.filter(m => m.matchScore < 60).length}</span>
                   </div>
                 </div>
 

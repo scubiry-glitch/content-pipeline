@@ -227,6 +227,16 @@
   background: #e8e8e8;
 }
 
+.btn-success {
+  background: #52c41a;
+  color: white;
+  border-color: #52c41a;
+}
+
+.btn-success:hover {
+  background: #73d13d;
+}
+
 .btn-link {
   border: none;
   background: transparent;

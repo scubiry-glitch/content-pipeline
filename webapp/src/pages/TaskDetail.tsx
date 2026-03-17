@@ -26,6 +26,8 @@ import { ExternalLinksList } from '../components/ExternalLinksList';
 import { AssetLinksList } from '../components/AssetLinksList';
 import { DataCleaningPanel } from '../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../components/CrossValidationPanel';
+import { VersionComparePanel } from '../components/VersionComparePanel';
+import { ExportPanel } from '../components/ExportPanel';
 
 // 流程步骤定义
 const STAGE_PIPELINES = {
@@ -1788,6 +1790,16 @@ export function TaskDetail() {
                   <div className="writing-draft">
                     {task.writing_data.draft || '文稿正在生成中...'}
                   </div>
+                </div>
+
+                {/* 版本对比 */}
+                <div className="info-card">
+                  <h3 className="card-title">📜 版本历史</h3>
+                  <VersionComparePanel
+                    versions={task.versions || []}
+                    currentVersion={task.writing_data?.version}
+                    onRollback={(versionId) => console.log('Rollback to:', versionId)}
+                  />
                 </div>
               </div>
             ) : (

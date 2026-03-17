@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { TaskList } from '../components/TaskList';
 import { CreateTaskModal, type CreateTaskData } from '../components/CreateTaskModal';
 import { useTasks } from '../contexts/TasksContext';
@@ -18,6 +19,17 @@ export function Tasks() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { createTask } = useTasks();
+  const location = useLocation();
+
+  // 处理从其他页面导航过来的创建任务请求
+  useEffect(() => {
+    const state = location.state as { createTask?: boolean; topic?: string };
+    if (state?.createTask) {
+      setShowCreateModal(true);
+      // 清除 state 避免刷新后再次触发
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const handleCreateTask = async (data: CreateTaskData) => {
     try {
@@ -26,10 +38,20 @@ export function Tasks() {
         .filter(([, checked]) => checked)
         .map(([key]) => key);
 
-      // Pass additional data via context or description
-      const enrichedTopic = data.context
-        ? `${data.topic}\n\n[背景资料]\n${data.context}`
-        : data.topic;
+      // Build enriched topic with context and source materials
+      let enrichedTopic = data.topic;
+
+      if (data.context) {
+        enrichedTopic += `\n\n[背景资料]\n${data.context}`;
+      }
+
+      // Add source materials info
+      if (data.sourceMaterials && data.sourceMaterials.length > 0) {
+        enrichedTopic += `\n\n[参考素材]\n`;
+        data.sourceMaterials.forEach((material, index) => {
+          enrichedTopic += `${index + 1}. ${material.title}\n`;
+        });
+      }
 
       await createTask(enrichedTopic, formats);
       setShowCreateModal(false);

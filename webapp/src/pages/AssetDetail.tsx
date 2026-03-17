@@ -286,9 +286,10 @@ export function AssetDetail() {
         {activeTab === 'citations' && (
           <div className="citations-panel">
             <div className="citations-stats">
-              <div className="stat-card">
+              <div className="stat-card primary">
                 <span className="stat-value">{asset.citation_count || 0}</span>
                 <span className="stat-label">被引用次数</span>
+                <span className="stat-trend">{(asset.citation_count || 0) > 5 ? '🔥 热门素材' : ''}</span>
               </div>
               <div className="stat-card">
                 <span className="stat-value">{asset.view_count || 0}</span>
@@ -297,6 +298,27 @@ export function AssetDetail() {
               <div className="stat-card">
                 <span className="stat-value">{(asset.quality_score || 0) > 80 ? '高' : (asset.quality_score || 0) > 60 ? '中' : '低'}</span>
                 <span className="stat-label">引用质量</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-value">{asset.influence_score || '--'}</span>
+                <span className="stat-label">影响力分</span>
+              </div>
+            </div>
+
+            {/* 引用任务列表 */}
+            <div className="citation-tasks">
+              <h3>📋 引用该素材的任务</h3>
+              <div className="citation-tasks-list">
+                {/* 模拟数据 - 实际应从API获取 */}
+                {(asset.citation_count || 0) > 0 ? (
+                  <div className="citation-task-item">
+                    <span className="task-name">保租房REITs市场分析</span>
+                    <span className="task-status completed">已完成</span>
+                    <span className="citation-date">2026-03-15</span>
+                  </div>
+                ) : (
+                  <div className="empty-citations">暂无任务引用该素材</div>
+                )}
               </div>
             </div>
 

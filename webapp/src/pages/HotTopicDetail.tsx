@@ -70,6 +70,20 @@ export function HotTopicDetail() {
     }
   };
 
+  // 基于热点创建任务
+  const handleCreateTask = () => {
+    if (!topic) return;
+
+    navigate('/tasks', {
+      state: {
+        createTask: true,
+        topic: `【热点追踪】${topic.title}`,
+        formats: ['markdown', 'summary'],
+        context: `热点来源: ${topic.source}\n热度分数: ${topic.hotScore}\n趋势: ${topic.trend === 'up' ? '上升' : topic.trend === 'down' ? '下降' : '稳定'}\n情感倾向: ${topic.sentiment === 'positive' ? '正面' : topic.sentiment === 'negative' ? '负面' : '中性'}`,
+      }
+    });
+  };
+
   if (loading) {
     return <div className="hot-topic-detail loading">加载中...</div>;
   }
@@ -105,6 +119,9 @@ export function HotTopicDetail() {
         <div className="topic-actions">
           <button className={`btn ${isFollowing ? 'btn-secondary' : 'btn-primary'}`} onClick={handleFollow}>
             {isFollowing ? '已关注' : '+ 关注'}
+          </button>
+          <button className="btn btn-success" onClick={handleCreateTask}>
+            ➕ 创建任务
           </button>
           {topic.sourceUrl && (
             <a href={topic.sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-link">
