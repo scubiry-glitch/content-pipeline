@@ -5,6 +5,12 @@ import type {
   ExpertAssignment,
   ExpertMatchRequest,
 } from '../types';
+import {
+  initExpertEmbeddings,
+  semanticMatchExperts,
+  updateExpertEmbedding,
+  getMatchingExplanation,
+} from './semanticMatchingService';
 
 // 专家数据存储 (实际应从API获取)
 let expertsCache: Expert[] = [];
@@ -12,6 +18,8 @@ let expertsCache: Expert[] = [];
 // 初始化专家数据
 export function initExperts(experts: Expert[]) {
   expertsCache = experts;
+  // v5.1.1: 初始化语义向量嵌入
+  initExpertEmbeddings(experts);
 }
 
 // 获取所有专家
@@ -36,18 +44,42 @@ export function getSeniorExperts(): Expert[] {
   return expertsCache.filter((e) => e.level === 'senior' && e.status === 'active');
 }
 
-// 智能匹配专家
-export function matchExperts(request: ExpertMatchRequest): ExpertAssignment {
+// 智能匹配专家（支持负载均衡和语义匹配）
+export function matchExperts(
+  request: ExpertMatchRequest,
+  options?: { taskId?: string; useLoadBalancing?: boolean; useSemanticMatch?: boolean }
+): ExpertAssignment {
+  const { useSemanticMatch = true } = options || {};
+
+  // v5.1.1: 优先使用语义向量匹配
+  if (useSemanticMatch) {
+    try {
+      return semanticMatchExperts(request, { topK: 3 });
+    } catch (error) {
+      console.warn('语义匹配失败，回退到关键词匹配:', error);
+    }
+  }
+
+  // 回退到原有匹配逻辑
   const { topic, industry, importance = 0.5 } = request;
+  const { taskId, useLoadBalancing = true } = options || {};
 
   // 1. 解析领域
   const domainCode = extractDomainFromTopic(topic, industry);
 
   // 2. 匹配领域专家 (2-3位)
-  const domainExperts = expertsCache
-    .filter((e) => e.domainCode === domainCode && e.level === 'domain')
-    .sort((a, b) => b.acceptanceRate - a.acceptanceRate)
-    .slice(0, 3);
+  let domainExperts: Expert[];
+
+  if (useLoadBalancing && taskId) {
+    // 使用负载均衡分配
+    domainExperts = assignExpertsWithLoadBalancing(domainCode, taskId, 3);
+  } else {
+    // 传统方式：按采纳率排序
+    domainExperts = expertsCache
+      .filter((e) => e.domainCode === domainCode && e.level === 'domain')
+      .sort((a, b) => b.acceptanceRate - a.acceptanceRate)
+      .slice(0, 3);
+  }
 
   // 3. 获取通用专家
   const universalExperts = {
@@ -61,8 +93,37 @@ export function matchExperts(request: ExpertMatchRequest): ExpertAssignment {
   let matchReasons: string[] = [];
 
   if (importance > 0.8) {
-    seniorExpert = findBestSeniorExpert(domainCode, topic);
-    matchReasons.push(`任务重要性${(importance * 100).toFixed(0)}%，启用特级专家`);
+    if (useLoadBalancing && taskId) {
+      // 负载均衡：选择最空闲的特级专家
+      const seniorPool = expertsCache.filter(
+        (e) => e.level === 'senior' && e.status === 'active'
+      );
+      const availableSeniors = seniorPool.filter((e) => {
+        const workload = getExpertWorkload(e.id);
+        return workload.availability !== 'unavailable';
+      });
+
+      if (availableSeniors.length > 0) {
+        // 选择负载最轻的特级专家
+        seniorExpert = availableSeniors.sort((a, b) => {
+          const workloadA = getExpertWorkload(a.id).pendingReviews;
+          const workloadB = getExpertWorkload(b.id).pendingReviews;
+          return workloadA - workloadB;
+        })[0];
+
+        // 更新工作量
+        if (seniorExpert) {
+          workloadStore[seniorExpert.id].pendingReviews += 1;
+          workloadStore[seniorExpert.id].assignedTasks.push(taskId);
+        }
+      }
+    } else {
+      seniorExpert = findBestSeniorExpert(domainCode, topic);
+    }
+
+    if (seniorExpert) {
+      matchReasons.push(`任务重要性${(importance * 100).toFixed(0)}%，启用特级专家`);
+    }
   }
 
   matchReasons.push(`主题"${topic}"匹配${domainExperts[0]?.domainName || '通用'}领域`);
@@ -303,33 +364,365 @@ function generateSuggestionsByExpert(expert: Expert, content: string): string[] 
   return baseSuggestions;
 }
 
+// ==================== 专家工作量调度系统 ====================
+
+// 工作量数据存储（实际应从后端API获取）
+interface ExpertWorkloadData {
+  pendingReviews: number;
+  avgReviewTime: number;
+  assignedTasks: string[];
+  lastAssignedAt: string;
+}
+
+const workloadStore: Record<string, ExpertWorkloadData> = {};
+
+// 初始化所有专家的工作量数据
+function initWorkloadStore() {
+  const experts = getAllExperts();
+  experts.forEach(expert => {
+    if (!workloadStore[expert.id]) {
+      workloadStore[expert.id] = {
+        pendingReviews: Math.floor(Math.random() * 4), // 随机0-3个待处理
+        avgReviewTime: expert.avgResponseTime,
+        assignedTasks: [],
+        lastAssignedAt: new Date().toISOString(),
+      };
+    }
+  });
+}
+
 // 获取专家工作量
 export function getExpertWorkload(expertId: string): {
   pendingReviews: number;
   avgReviewTime: number;
   availability: 'available' | 'busy' | 'unavailable';
 } {
-  // 模拟数据
-  const workloads: Record<string, { pending: number; time: number }> = {
-    'S-01': { pending: 2, time: 10 },
-    'S-02': { pending: 1, time: 8 },
-    'S-03': { pending: 3, time: 12 },
+  // 确保已初始化
+  initWorkloadStore();
+
+  const workload = workloadStore[expertId] || {
+    pendingReviews: 0,
+    avgReviewTime: 5,
+    assignedTasks: [],
+    lastAssignedAt: new Date().toISOString(),
   };
 
-  const workload = workloads[expertId] || { pending: 0, time: 5 };
-
+  // 根据待处理数量计算可用性
   let availability: 'available' | 'busy' | 'unavailable' = 'available';
-  if (workload.pending > 5) {
+  if (workload.pendingReviews > 5) {
     availability = 'unavailable';
-  } else if (workload.pending > 2) {
+  } else if (workload.pendingReviews > 2) {
     availability = 'busy';
   }
 
   return {
-    pendingReviews: workload.pending,
-    avgReviewTime: workload.time,
+    pendingReviews: workload.pendingReviews,
+    avgReviewTime: workload.avgReviewTime,
     availability,
   };
+}
+
+// 分配专家到任务（带负载均衡）
+export function assignExpertWithLoadBalancing(
+  domainCode: string,
+  taskId: string
+): Expert | null {
+  initWorkloadStore();
+
+  // 获取该领域所有可用专家
+  const domainExperts = getExpertsByDomain(domainCode).filter(e => {
+    const workload = getExpertWorkload(e.id);
+    return workload.availability !== 'unavailable';
+  });
+
+  if (domainExperts.length === 0) {
+    return null;
+  }
+
+  // 按待处理任务数排序，优先分配空闲专家
+  const sortedExperts = domainExperts.sort((a, b) => {
+    const workloadA = workloadStore[a.id]?.pendingReviews || 0;
+    const workloadB = workloadStore[b.id]?.pendingReviews || 0;
+    return workloadA - workloadB;
+  });
+
+  // 选择负载最轻的专家
+  const selectedExpert = sortedExperts[0];
+
+  // 更新工作量数据
+  workloadStore[selectedExpert.id].pendingReviews += 1;
+  workloadStore[selectedExpert.id].assignedTasks.push(taskId);
+  workloadStore[selectedExpert.id].lastAssignedAt = new Date().toISOString();
+
+  return selectedExpert;
+}
+
+// 释放专家（任务完成时调用）
+export function releaseExpert(expertId: string, taskId: string): void {
+  if (!workloadStore[expertId]) return;
+
+  workloadStore[expertId].pendingReviews = Math.max(
+    0,
+    workloadStore[expertId].pendingReviews - 1
+  );
+  workloadStore[expertId].assignedTasks = workloadStore[expertId].assignedTasks.filter(
+    id => id !== taskId
+  );
+}
+
+// 获取所有专家工作量统计
+export function getAllExpertWorkloads(): Record<
+  string,
+  ReturnType<typeof getExpertWorkload>
+> {
+  initWorkloadStore();
+
+  const result: Record<string, ReturnType<typeof getExpertWorkload>> = {};
+  const experts = getAllExperts();
+
+  experts.forEach(expert => {
+    result[expert.id] = getExpertWorkload(expert.id);
+  });
+
+  return result;
+}
+
+// 负载均衡分配多个专家
+export function assignExpertsWithLoadBalancing(
+  domainCode: string,
+  taskId: string,
+  count: number = 2
+): Expert[] {
+  const assigned: Expert[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const expert = assignExpertWithLoadBalancing(domainCode, taskId);
+    if (expert) {
+      assigned.push(expert);
+    }
+  }
+
+  return assigned;
+}
+
+// ==================== 用户反馈持久化系统 (Phase 1.3) ====================
+
+// 专家反馈记录
+interface ExpertFeedbackRecord {
+  expertId: string;
+  reviewId: string;
+  taskId: string;
+  action: 'accepted' | 'rejected' | 'ignored';
+  timestamp: string;
+  contentPreview?: string;
+}
+
+// 用户反馈存储
+const expertFeedbackStore: ExpertFeedbackRecord[] = [];
+
+// 专家采纳率统计缓存
+const expertStatsCache: Record<string, {
+  totalReviews: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  ignoredCount: number;
+  lastUpdated: string;
+}> = {};
+
+/**
+ * 记录用户对专家观点的反馈
+ */
+export function recordExpertFeedback(
+  expertId: string,
+  taskId: string,
+  action: 'accepted' | 'rejected' | 'ignored',
+  options?: {
+    reviewId?: string;
+    contentPreview?: string;
+  }
+): void {
+  const record: ExpertFeedbackRecord = {
+    expertId,
+    reviewId: options?.reviewId || `${taskId}-${expertId}-${Date.now()}`,
+    taskId,
+    action,
+    timestamp: new Date().toISOString(),
+    contentPreview: options?.contentPreview,
+  };
+
+  expertFeedbackStore.push(record);
+
+  // 更新统计缓存
+  updateExpertStatsCache(expertId);
+
+  // 更新专家的 totalReviews 和 acceptanceRate
+  updateExpertAcceptanceRate(expertId);
+
+  console.log(`[ExpertFeedback] 专家 ${expertId} 的观点被${action === 'accepted' ? '接受' : action === 'rejected' ? '拒绝' : '忽略'}`);
+}
+
+/**
+ * 更新专家统计缓存
+ */
+function updateExpertStatsCache(expertId: string): void {
+  const feedbacks = expertFeedbackStore.filter(f => f.expertId === expertId);
+
+  expertStatsCache[expertId] = {
+    totalReviews: feedbacks.length,
+    acceptedCount: feedbacks.filter(f => f.action === 'accepted').length,
+    rejectedCount: feedbacks.filter(f => f.action === 'rejected').length,
+    ignoredCount: feedbacks.filter(f => f.action === 'ignored').length,
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+/**
+ * 更新专家的采纳率
+ */
+function updateExpertAcceptanceRate(expertId: string): void {
+  const stats = expertStatsCache[expertId];
+  if (!stats || stats.totalReviews === 0) return;
+
+  const expert = expertsCache.find(e => e.id === expertId);
+  if (expert) {
+    // 计算加权采纳率 (已接受 / (已接受 + 已拒绝))
+    const validReviews = stats.acceptedCount + stats.rejectedCount;
+    if (validReviews > 0) {
+      expert.acceptanceRate = stats.acceptedCount / validReviews;
+    }
+    expert.totalReviews = stats.totalReviews;
+  }
+}
+
+/**
+ * 获取专家的反馈统计
+ */
+export function getExpertFeedbackStats(expertId: string): {
+  totalReviews: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  ignoredCount: number;
+  acceptanceRate: number;
+} | null {
+  // 确保缓存是最新的
+  updateExpertStatsCache(expertId);
+
+  const stats = expertStatsCache[expertId];
+  if (!stats) return null;
+
+  const validReviews = stats.acceptedCount + stats.rejectedCount;
+  return {
+    totalReviews: stats.totalReviews,
+    acceptedCount: stats.acceptedCount,
+    rejectedCount: stats.rejectedCount,
+    ignoredCount: stats.ignoredCount,
+    acceptanceRate: validReviews > 0 ? stats.acceptedCount / validReviews : 0,
+  };
+}
+
+/**
+ * 获取所有专家的反馈统计
+ */
+export function getAllExpertFeedbackStats(): Record<string, ReturnType<typeof getExpertFeedbackStats>> {
+  const stats: Record<string, ReturnType<typeof getExpertFeedbackStats>> = {};
+  const experts = getAllExperts();
+
+  experts.forEach(expert => {
+    stats[expert.id] = getExpertFeedbackStats(expert.id);
+  });
+
+  return stats;
+}
+
+/**
+ * 获取用户的反馈历史
+ */
+export function getUserFeedbackHistory(
+  options?: {
+    expertId?: string;
+    taskId?: string;
+    action?: 'accepted' | 'rejected' | 'ignored';
+    limit?: number;
+  }
+): ExpertFeedbackRecord[] {
+  let results = [...expertFeedbackStore];
+
+  if (options?.expertId) {
+    results = results.filter(r => r.expertId === options.expertId);
+  }
+
+  if (options?.taskId) {
+    results = results.filter(r => r.taskId === options.taskId);
+  }
+
+  if (options?.action) {
+    results = results.filter(r => r.action === options.action);
+  }
+
+  // 按时间倒序
+  results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  if (options?.limit) {
+    results = results.slice(0, options.limit);
+  }
+
+  return results;
+}
+
+/**
+ * 获取个性化推荐权重
+ * 基于用户历史反馈，为专家计算推荐权重
+ */
+export function getExpertRecommendationWeight(expertId: string): number {
+  const stats = getExpertFeedbackStats(expertId);
+  if (!stats || stats.totalReviews === 0) return 1.0;
+
+  // 基础权重为 1.0
+  let weight = 1.0;
+
+  // 根据采纳率调整权重
+  weight *= (0.5 + stats.acceptanceRate);
+
+  // 根据总评审数进行微调（更多评审 = 更稳定的评价）
+  const experienceBonus = Math.min(stats.totalReviews / 10, 0.2);
+  weight *= (1 + experienceBonus);
+
+  return Math.round(weight * 100) / 100;
+}
+
+/**
+ * 批量接受专家观点（用于任务完成时）
+ */
+export function batchAcceptExpertReviews(
+  expertIds: string[],
+  taskId: string,
+  options?: {
+    contentPreview?: string;
+  }
+): void {
+  expertIds.forEach(expertId => {
+    recordExpertFeedback(expertId, taskId, 'accepted', {
+      contentPreview: options?.contentPreview,
+    });
+  });
+}
+
+/**
+ * 获取最受欢迎的专家（按采纳率排序）
+ */
+export function getTopExpertsByAcceptanceRate(limit: number = 10): Expert[] {
+  const experts = getAllExperts();
+  const expertsWithStats = experts.map(expert => ({
+    expert,
+    stats: getExpertFeedbackStats(expert.id),
+    weight: getExpertRecommendationWeight(expert.id),
+  }));
+
+  return expertsWithStats
+    .filter(item => item.stats && item.stats.totalReviews > 0)
+    .sort((a, b) => b.stats!.acceptanceRate - a.stats!.acceptanceRate)
+    .slice(0, limit)
+    .map(item => item.expert);
 }
 
 // 加载专家数据 - 完整75位专家

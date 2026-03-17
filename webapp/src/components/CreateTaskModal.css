@@ -578,6 +578,26 @@
   color: #94a3b8;
 }
 
+/* 工作量状态 */
+.workload-stat {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+
+.workload-stat.available .stat-value {
+  color: #22c55e;
+}
+
+.workload-stat.busy .stat-value {
+  color: #f59e0b;
+}
+
+.workload-stat.unavailable .stat-value {
+  color: #ef4444;
+}
+
 .no-experts-hint {
   text-align: center;
   padding: 20px;

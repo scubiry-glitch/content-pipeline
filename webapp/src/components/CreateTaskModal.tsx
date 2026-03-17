@@ -1,7 +1,7 @@
 // 创建任务弹窗 - 恢复原版 HTML 的详细功能
 import { useState, useEffect, useCallback } from 'react';
 import { assetsApi, type Asset } from '../api/client';
-import { matchExperts, getAllExperts } from '../services/expertService';
+import { matchExperts, getAllExperts, getExpertWorkload } from '../services/expertService';
 import type { Expert, ExpertAssignment } from '../types';
 import './CreateTaskModal.css';
 
@@ -89,6 +89,7 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
   const [suggestedExperts, setSuggestedExperts] = useState<Expert[]>([]);
   const [expertMatchResult, setExpertMatchResult] = useState<ExpertAssignment | null>(null);
   const [isMatchingExperts, setIsMatchingExperts] = useState(false);
+  const [expertWorkloads, setExpertWorkloads] = useState<Record<string, { pendingReviews: number; availability: 'available' | 'busy' | 'unavailable' }>>({});
 
   const handleFormatChange = (key: keyof CreateTaskData['outputFormats'], checked: boolean) => {
     setFormData((prev) => ({
@@ -187,6 +188,17 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
         allExperts.unshift(result.seniorExpert);
       }
       setSuggestedExperts(allExperts);
+
+      // 获取专家工作量信息
+      const workloads: Record<string, { pendingReviews: number; availability: 'available' | 'busy' | 'unavailable' }> = {};
+      allExperts.forEach(expert => {
+        const workload = getExpertWorkload(expert.id);
+        workloads[expert.id] = {
+          pendingReviews: workload.pendingReviews,
+          availability: workload.availability,
+        };
+      });
+      setExpertWorkloads(workloads);
     } catch (error) {
       console.error('匹配专家失败:', error);
     } finally {
@@ -484,6 +496,20 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
                           <span className="stat-value">{(expert.acceptanceRate * 100).toFixed(0)}%</span>
                           <span className="stat-label">采纳率</span>
                         </div>
+                        {expertWorkloads[expert.id] && (
+                          <div className={`stat workload-stat ${expertWorkloads[expert.id].availability}`}>
+                            <span className="stat-value">
+                              {expertWorkloads[expert.id].availability === 'available'
+                                ? '空闲'
+                                : expertWorkloads[expert.id].availability === 'busy'
+                                  ? '忙碌'
+                                  : '满载'}
+                            </span>
+                            <span className="stat-label">
+                              待评审: {expertWorkloads[expert.id].pendingReviews}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

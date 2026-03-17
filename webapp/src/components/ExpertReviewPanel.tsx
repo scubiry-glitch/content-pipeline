@@ -5,6 +5,7 @@ import {
   matchExperts,
   generateExpertOpinion,
   getExpertWorkload,
+  recordExpertFeedback,
 } from '../services/expertService';
 
 interface ExpertReviewPanelProps {
@@ -209,17 +210,27 @@ function ExpertReviewCard({
   onRefresh,
   isGenerating,
 }: ExpertReviewCardProps) {
-  const [action, setAction] = useState<'accept' | 'ignore' | null>(
+  const [action, setAction] = useState<'accepted' | 'rejected' | null>(
     review.userAction || null
   );
 
   const handleAccept = () => {
-    setAction('accept');
+    setAction('accepted');
+    // 记录用户反馈
+    recordExpertFeedback(expert.id, review.taskId, 'accepted', {
+      reviewId: review.id,
+      contentPreview: review.opinion.slice(0, 100),
+    });
     onAccept();
   };
 
   const handleIgnore = () => {
-    setAction('ignore');
+    setAction('rejected');
+    // 记录用户反馈
+    recordExpertFeedback(expert.id, review.taskId, 'rejected', {
+      reviewId: review.id,
+      contentPreview: review.opinion.slice(0, 100),
+    });
     onIgnore();
   };
 
@@ -286,15 +297,15 @@ function ExpertReviewCard({
               disabled={isGenerating}
             >{isGenerating ? '🔄' : '↻'} 重新生成</button>
             <button
-              className={`btn-action accept ${action === 'accept' ? 'active' : ''}`}
+              className={`btn-action accept ${action === 'accepted' ? 'active' : ''}`}
               onClick={handleAccept}
               disabled={action !== null}
-            >{action === 'accept' ? '✓ 已接受' : '✓ 接受'}</button>
+            >{action === 'accepted' ? '✓ 已接受' : '✓ 接受'}</button>
             <button
-              className={`btn-action ignore ${action === 'ignore' ? 'active' : ''}`}
+              className={`btn-action ignore ${action === 'rejected' ? 'active' : ''}`}
               onClick={handleIgnore}
               disabled={action !== null}
-            >{action === 'ignore' ? '✗ 已忽略' : '✗ 忽略'}</button>
+            >{action === 'rejected' ? '✗ 已忽略' : '✗ 忽略'}</button>
           </div>
         </div>
       </div>

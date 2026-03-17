@@ -2,7 +2,7 @@
 // 展示75位专家（10位特级+65位领域专家）
 
 import { useState, useEffect } from 'react';
-import { getAllExperts, getExpertsByDomain, getSeniorExperts } from '../services/expertService';
+import { getAllExperts, getExpertsByDomain, getSeniorExperts, getExpertFeedbackStats, getExpertWorkload } from '../services/expertService';
 import type { Expert } from '../types';
 import './ExpertLibrary.css';
 
@@ -27,8 +27,30 @@ export function ExpertLibrary() {
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
+  const [selectedExpertStats, setSelectedExpertStats] = useState<{
+    totalReviews: number;
+    acceptedCount: number;
+    rejectedCount: number;
+    ignoredCount: number;
+    acceptanceRate: number;
+  } | null>(null);
+  const [selectedExpertWorkload, setSelectedExpertWorkload] = useState<{
+    pendingReviews: number;
+    availability: 'available' | 'busy' | 'unavailable';
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // 加载专家反馈统计
+  const loadExpertStats = (expert: Expert) => {
+    const stats = getExpertFeedbackStats(expert.id);
+    setSelectedExpertStats(stats);
+    const workload = getExpertWorkload(expert.id);
+    setSelectedExpertWorkload({
+      pendingReviews: workload.pendingReviews,
+      availability: workload.availability,
+    });
+  };
 
   useEffect(() => {
     // 从服务加载专家数据
@@ -187,7 +209,10 @@ export function ExpertLibrary() {
               <div
                 key={expert.id}
                 className={`expert-card ${expert.level}`}
-                onClick={() => setSelectedExpert(expert)}
+                onClick={() => {
+                  setSelectedExpert(expert);
+                  loadExpertStats(expert);
+                }}
               >
                 <div className="card-header">
                   <div
@@ -361,6 +386,47 @@ export function ExpertLibrary() {
                     <span className="stat-label">平均响应</span>
                   </div>
                 </div>
+
+                {/* 反馈统计 */}
+                {selectedExpertStats && selectedExpertStats.totalReviews > 0 && (
+                  <div className="feedback-stats">
+                    <h5>用户反馈详情</h5>
+                    <div className="feedback-grid">
+                      <div className="feedback-item accepted">
+                        <span className="feedback-value">{selectedExpertStats.acceptedCount}</span>
+                        <span className="feedback-label">已接受</span>
+                      </div>
+                      <div className="feedback-item rejected">
+                        <span className="feedback-value">{selectedExpertStats.rejectedCount}</span>
+                        <span className="feedback-label">已拒绝</span>
+                      </div>
+                      <div className="feedback-item ignored">
+                        <span className="feedback-value">{selectedExpertStats.ignoredCount}</span>
+                        <span className="feedback-label">已忽略</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 工作量状态 */}
+                {selectedExpertWorkload && (
+                  <div className="workload-status">
+                    <h5>当前状态</h5>
+                    <div className={`availability-badge ${selectedExpertWorkload.availability}`}>
+                      <span className="status-dot"></span>
+                      <span className="status-text">
+                        {selectedExpertWorkload.availability === 'available'
+                          ? '空闲'
+                          : selectedExpertWorkload.availability === 'busy'
+                            ? '忙碌'
+                            : '满载'}
+                      </span>
+                      <span className="pending-count">
+                        (待评审: {selectedExpertWorkload.pendingReviews})
+                      </span>
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
 

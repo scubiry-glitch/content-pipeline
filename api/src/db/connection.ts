@@ -80,6 +80,11 @@ async function setupMVPSchema(): Promise<void> {
     console.log('[DB] pgvector extension may not be available, continuing...');
   });
 
+  // Enable pg_trgm for similarity search
+  await query('CREATE EXTENSION IF NOT EXISTS pg_trgm').catch(() => {
+    console.log('[DB] pg_trgm extension may not be available, continuing...');
+  });
+
   // Tasks table - production pipeline tasks
   await query(`
     CREATE TABLE IF NOT EXISTS tasks (
