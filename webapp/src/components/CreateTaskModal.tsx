@@ -435,6 +435,77 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
               )}
             </div>
           )}
+
+          {/* 专家推荐 */}
+          {formData.topic && formData.topic.length >= 3 && (
+            <div className="form-group expert-recommendations">
+              <label className="form-label">
+                <span className="label-icon">🎯</span> 智能匹配专家
+                {isMatchingExperts && <span className="searching-indicator">匹配中...</span>}
+              </label>
+
+              {expertMatchResult && expertMatchResult.matchReasons.length > 0 && (
+                <div className="match-reasons">
+                  {expertMatchResult.matchReasons.map((reason, idx) => (
+                    <span key={idx} className="match-reason-tag">{reason}</span>
+                  ))}
+                </div>
+              )}
+
+              {suggestedExperts.length > 0 ? (
+                <div className="suggested-experts-list">
+                  {suggestedExperts.map((expert) => (
+                    <div key={expert.id} className={`suggested-expert-item ${expert.level}`}>
+                      <div
+                        className="expert-avatar"
+                        style={{
+                          background: expert.level === 'senior'
+                            ? 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)'
+                            : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                        }}
+                      >
+                        {expert.name.charAt(0)}
+                      </div>
+                      <div className="expert-info">
+                        <div className="expert-header">
+                          <span className="expert-name">{expert.name}</span>
+                          <span className={`expert-level ${expert.level}`}>
+                            {expert.level === 'senior' ? '特级专家' : '领域专家'}
+                          </span>
+                        </div>
+                        <div className="expert-title">{expert.profile.title}</div>
+                        <div className="expert-domain">{expert.domainName}</div>
+                        <div className="expert-philosophy-preview">
+                          {expert.philosophy.core.slice(0, 2).join(' · ')}
+                        </div>
+                      </div>
+                      <div className="expert-stats">
+                        <div className="stat">
+                          <span className="stat-value">{(expert.acceptanceRate * 100).toFixed(0)}%</span>
+                          <span className="stat-label">采纳率</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                !isMatchingExperts && (
+                  <div className="no-experts-hint">
+                    <span>💡</span> 输入主题后将自动匹配相关领域专家
+                  </div>
+                )
+              )}
+
+              {expertMatchResult?.seniorExpert && (
+                <div className="senior-expert-notice">
+                  <span className="notice-icon">⭐</span>
+                  <span className="notice-text">
+                    检测到高优先级任务，已启用特级专家 <strong>{expertMatchResult.seniorExpert.name}</strong> 参与评审
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
