@@ -144,6 +144,9 @@ export function ExpertLibrary() {
           <span className="version-badge">75位专家</span>
         </div>
         <div className="header-actions">
+          <button className="btn-network" onClick={() => navigate('/expert-network')}>
+            🕸️ 专家网络
+          </button>
           <button className="btn-comparison" onClick={() => navigate('/expert-comparison')}>
             ⚖️ 专家对比
           </button>

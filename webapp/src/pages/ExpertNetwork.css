@@ -1,0 +1,371 @@
+/* 专家协作网络分析页面样式 */
+
+.expert-network-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.expert-network-page.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 页面头部 */
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.page-header .subtitle {
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* 视图控制 */
+.view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.control-group .label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.btn-group {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-group button {
+  padding: 8px 16px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-group button:hover {
+  background: #e2e8f0;
+}
+
+.btn-group button.active {
+  background: #6366f1;
+  color: white;
+}
+
+.stats-summary {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.stat-item strong {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+/* 主内容区 */
+.network-content {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  height: calc(100vh - 240px);
+  min-height: 600px;
+}
+
+.chart-container {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* 信息面板 */
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 专家详情卡片 */
+.expert-detail-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.expert-header {
+  padding: 20px;
+  text-align: center;
+  color: white;
+}
+
+.expert-avatar-large {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 auto 12px;
+  border: 3px solid white;
+}
+
+.expert-title h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.expert-title span {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.expert-stats {
+  padding: 16px 20px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.expert-actions {
+  padding: 16px 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.btn-primary {
+  flex: 1;
+  padding: 10px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-secondary {
+  flex: 1;
+  padding: 10px;
+  background: white;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #f8fafc;
+}
+
+/* 空面板 */
+.empty-panel {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.empty-panel p {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.empty-panel span {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* 网络图例 */
+.network-legend {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 16px 20px;
+}
+
+.network-legend h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.network-legend ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.network-legend li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 10px;
+}
+
+.network-legend li:last-child {
+  margin-bottom: 0;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6366f1;
+}
+
+.dot.senior {
+  width: 16px;
+  height: 16px;
+  background: #f59e0b;
+}
+
+.dot.domain {
+  width: 10px;
+  height: 10px;
+  background: #6366f1;
+}
+
+.line {
+  width: 20px;
+  height: 2px;
+  background: #cbd5e1;
+}
+
+.color-bar {
+  width: 20px;
+  height: 4px;
+  background: linear-gradient(90deg, #6366f1, #22c55e, #f59e0b);
+  border-radius: 2px;
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .network-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .info-panel {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .expert-detail-card,
+  .empty-panel,
+  .network-legend {
+    min-width: 280px;
+  }
+}
+
+@media (max-width: 640px) {
+  .view-controls {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .btn-group {
+    flex-wrap: wrap;
+  }
+
+  .stats-summary {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

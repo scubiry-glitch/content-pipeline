@@ -304,9 +304,47 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Expert library table - for BlueTeam reviewers
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_library (
+      id VARCHAR(50) PRIMARY KEY DEFAULT 'expert_' || SUBSTRING(MD5(RANDOM()::TEXT), 1, 8),
+      name VARCHAR(100) NOT NULL,
+      title VARCHAR(200),
+      role VARCHAR(50) NOT NULL,
+      domains TEXT[] DEFAULT '{}',
+      expertise_level INTEGER DEFAULT 3,
+      system_prompt TEXT,
+      bio TEXT,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Seed default experts for BlueTeam if none exist
+  const expertCount = await query(`SELECT COUNT(*) FROM expert_library WHERE is_active = true`);
+  if (parseInt(expertCount.rows[0].count) === 0) {
+    await query(`
+      INSERT INTO expert_library (id, name, title, role, domains, expertise_level, system_prompt, bio) VALUES
+      ('expert_general_fact', '陈事实', '资深数据核查专家', 'fact_checker', ARRAY['通用', '数据'], 5,
+       '你是一位严谨的事实核查专家，专注于检查数据准确性、来源可靠性和统计正确性。',
+       '10年数据核查经验，曾为多家主流媒体把关'),
+      ('expert_general_logic', '罗逻辑', '逻辑分析专家', 'logic_checker', ARRAY['通用', '逻辑'], 5,
+       '你是一位敏锐的逻辑检察官，专注于检查论证严密性、推理合理性和逻辑一致性。',
+       '哲学博士，专精于论证分析和逻辑推理'),
+      ('expert_general_domain', '李行家', '产业研究专家', 'domain_expert', ARRAY['通用', '产业'], 5,
+       '你是一位资深的行业专家，专注于检查专业术语使用、趋势判断准确性和洞察深度。',
+       '20年产业研究经验，覆盖多个行业领域'),
+      ('expert_general_reader', '张读者', '用户体验专家', 'reader_rep', ARRAY['通用', '阅读'], 5,
+       '你是一位代表读者视角的专家，专注于检查文章可读性、流畅度和易理解程度。',
+       '资深编辑，深谙读者心理')
+    `);
+  }
+
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_research_reports_topic ON research_reports(topic_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_role ON expert_library(role)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_active ON expert_library(is_active)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_tags ON assets USING GIN(tags)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_theme ON assets(theme_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_pinned ON assets(is_pinned, pinned_at)`);
