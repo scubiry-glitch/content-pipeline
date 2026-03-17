@@ -104,7 +104,40 @@ export const assetsApi = {
 
   quote: (id: string) =>
     client.post(`/assets/${id}/quote`) as Promise<any>,
+
+  // v3.0.2: 素材引用统计
+  getUsageStats: (id: string) =>
+    client.get(`/assets/${id}/usage`) as Promise<AssetUsage>,
+
+  getPopularAssets: (limit?: number) =>
+    client.get('/assets/popular', { params: { limit } }) as Promise<{ items: PopularAsset[] }>,
+
+  // v3.0.3: 智能标签补全
+  autoTag: (id: string) =>
+    client.post(`/assets/${id}/auto-tag`) as Promise<{ suggestedTags: string[] }>,
+
+  updateTags: (id: string, tags: string[]) =>
+    client.put(`/assets/${id}/tags`, { tags }) as Promise<Asset>,
 };
+
+// 素材使用统计类型 (v3.0.2)
+export interface AssetUsage {
+  assetId: string;
+  quoteCount: number;
+  lastUsedAt: string;
+  usedInTasks: string[];
+  usageHistory: Array<{
+    taskId: string;
+    taskTitle: string;
+    usedAt: string;
+  }>;
+}
+
+export interface PopularAsset {
+  asset: Asset;
+  quoteCount: number;
+  lastUsedAt: string;
+}
 
 // 主题相关 API
 export const themesApi = {

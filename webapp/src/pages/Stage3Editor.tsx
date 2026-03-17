@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { stage3Api, type Annotation, type Version, type ChangeLog } from '../api/client';
+import { stage3Api, type Annotation, type Version, type ChangeLog, type Asset } from '../api/client';
+import { AssetRecommendPanel } from '../components/AssetRecommendPanel/AssetRecommendPanel';
 import './Stage3Editor.css';
 
 export function Stage3Editor() {
@@ -128,6 +129,31 @@ export function Stage3Editor() {
     await handleAutoSave();
   };
 
+  // v3.0.1: 处理素材选择
+  const handleAssetSelect = (asset: Asset) => {
+    // 在光标位置插入素材引用
+    const textarea = contentRef.current;
+    if (!textarea) return;
+
+    const cursorPos = textarea.selectionStart;
+    const before = content.substring(0, cursorPos);
+    const after = content.substring(cursorPos);
+
+    // 构建引用文本
+    const quoteText = `[引用: ${asset.title}]\n> 来源: ${asset.source || '未知'}\n\n`;
+
+    setContent(before + quoteText + after);
+
+    // 记录引用
+    if (draftId) {
+      fetch(`/api/assets/${asset.id}/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: draftId }),
+      }).catch(err => console.error('Failed to record quote:', err));
+    }
+  };
+
   const getAnnotationTypeText = (type: string) => {
     const map: Record<string, string> = {
       comment: '评论',
@@ -205,6 +231,12 @@ export function Stage3Editor() {
             <div className="editor-help">
               选中文字可添加标注 | 字数: {content.length}
             </div>
+            {/* v3.0.1: 素材推荐面板 */}
+            <AssetRecommendPanel
+              inputText={content}
+              onAssetSelect={handleAssetSelect}
+              maxRecommendations={5}
+            />
           </div>
         )}
 

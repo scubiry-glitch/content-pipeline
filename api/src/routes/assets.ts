@@ -369,4 +369,174 @@ export async function assetRoutes(fastify: FastifyInstance) {
       items: result.rows
     };
   });
+
+  // v3.0.2: 素材引用统计相关路由
+
+  // 获取素材使用统计
+  fastify.get('/:assetId/usage', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+
+    const usageResult = await query(
+      `SELECT
+        a.id as asset_id,
+        COUNT(DISTINCT aq.task_id) as quote_count,
+        MAX(aq.created_at) as last_used_at,
+        ARRAY_AGG(DISTINCT aq.task_id) FILTER (WHERE aq.task_id IS NOT NULL) as used_in_tasks
+      FROM assets a
+      LEFT JOIN asset_quotes aq ON a.id = aq.asset_id
+      WHERE a.id = $1
+      GROUP BY a.id`,
+      [assetId]
+    );
+
+    if (usageResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Asset not found', code: 'ASSET_NOT_FOUND' };
+    }
+
+    const usage = usageResult.rows[0];
+
+    // 获取详细使用历史
+    const historyResult = await query(
+      `SELECT
+        aq.task_id,
+        p.topic as task_title,
+        aq.created_at as used_at
+      FROM asset_quotes aq
+      LEFT JOIN production_tasks p ON aq.task_id = p.id
+      WHERE aq.asset_id = $1
+      ORDER BY aq.created_at DESC
+      LIMIT 20`,
+      [assetId]
+    );
+
+    return {
+      assetId: usage.asset_id,
+      quoteCount: parseInt(usage.quote_count) || 0,
+      lastUsedAt: usage.last_used_at,
+      usedInTasks: usage.used_in_tasks || [],
+      usageHistory: historyResult.rows
+    };
+  });
+
+  // 记录素材引用
+  fastify.post('/:assetId/quote', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+    const { taskId } = request.body as { taskId?: string };
+
+    await query(
+      `INSERT INTO asset_quotes (asset_id, task_id, created_at)
+       VALUES ($1, $2, NOW())`,
+      [assetId, taskId || null]
+    );
+
+    // 更新素材的引用计数
+    await query(
+      `UPDATE assets SET quote_count = quote_count + 1, last_quoted_at = NOW()
+       WHERE id = $1`,
+      [assetId]
+    );
+
+    return { success: true, message: '引用记录已保存' };
+  });
+
+  // 获取热门素材
+  fastify.get('/popular', { preHandler: authenticate }, async (request) => {
+    const { limit = '10' } = request.query as any;
+
+    const result = await query(
+      `SELECT
+        a.*,
+        COUNT(DISTINCT aq.task_id) as quote_count,
+        MAX(aq.created_at) as last_used_at
+      FROM assets a
+      LEFT JOIN asset_quotes aq ON a.id = aq.asset_id
+      GROUP BY a.id
+      HAVING COUNT(DISTINCT aq.task_id) > 0
+      ORDER BY quote_count DESC, last_used_at DESC
+      LIMIT $1`,
+      [parseInt(limit)]
+    );
+
+    return {
+      items: result.rows.map(row => ({
+        asset: row,
+        quoteCount: parseInt(row.quote_count),
+        lastUsedAt: row.last_used_at
+      }))
+    };
+  });
+
+  // v3.0.3: 智能标签补全相关路由
+
+  // 自动标签建议
+  fastify.post('/:assetId/auto-tag', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+
+    const assetResult = await query(
+      `SELECT title, content, source, tags FROM assets WHERE id = $1`,
+      [assetId]
+    );
+
+    if (assetResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Asset not found', code: 'ASSET_NOT_FOUND' };
+    }
+
+    const asset = assetResult.rows[0];
+    const suggestedTags: string[] = [];
+
+    // 从标题提取关键词
+    const industryKeywords = [
+      '新能源', '半导体', '人工智能', 'AI', '芯片', '电动车',
+      '光伏', '储能', '电池', '医疗', '医药', '金融',
+      '房地产', '消费', '零售', '制造', '科技', '互联网'
+    ];
+
+    const title = asset.title || '';
+    industryKeywords.forEach(keyword => {
+      if (title.toLowerCase().includes(keyword.toLowerCase())) {
+        suggestedTags.push(keyword);
+      }
+    });
+
+    // 提取年份
+    const yearMatch = title.match(/20\d{2}/g);
+    if (yearMatch) {
+      suggestedTags.push(...yearMatch);
+    }
+
+    // 提取季度
+    const quarterMatch = title.match(/Q[1-4]|第[一二三四]季度/g);
+    if (quarterMatch) {
+      suggestedTags.push(...quarterMatch);
+    }
+
+    // 添加来源标签
+    if (asset.source && !suggestedTags.includes(asset.source)) {
+      suggestedTags.push(asset.source);
+    }
+
+    return { suggestedTags: [...new Set(suggestedTags)] };
+  });
+
+  // 更新素材标签
+  fastify.put('/:assetId/tags', { preHandler: authenticate }, async (request, reply) => {
+    const { assetId } = request.params as any;
+    const { tags } = request.body as { tags: string[] };
+
+    const result = await query(
+      `UPDATE assets SET tags = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [tags, assetId]
+    );
+
+    if (result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Asset not found', code: 'ASSET_NOT_FOUND' };
+    }
+
+    return result.rows[0];
+  });
 }
