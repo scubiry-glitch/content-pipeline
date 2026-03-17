@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { GlobalSearch } from './GlobalSearch';
+import { NotificationBell } from './NotificationBell';
 import './Layout.css';
 
 export function Layout() {
@@ -33,6 +34,7 @@ export function Layout() {
             🔍 搜索
             <span className="shortcut">⌘K</span>
           </button>
+          <NotificationBell />
         </div>
         <div className="header-content">
           <h1 className="header-title">内容生产流水线</h1>

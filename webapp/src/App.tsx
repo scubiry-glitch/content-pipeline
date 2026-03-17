@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
@@ -28,6 +29,7 @@ import { RSSSources } from './pages/RSSSources';
 import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
+import { Notifications } from './pages/Notifications';
 
 import './App.css';
 
@@ -35,7 +37,8 @@ function App() {
   return (
     <ErrorBoundary>
       <SettingsProvider>
-        <TasksProvider>
+        <NotificationProvider>
+          <TasksProvider>
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Layout />}>
@@ -61,12 +64,14 @@ function App() {
               <Route path="archive/recycle-bin" element={<RecycleBin />} />
               <Route path="quality-dashboard" element={<QualityDashboard />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="notifications" element={<Notifications />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
         </BrowserRouter>
         <ApiErrorContainer />
       </TasksProvider>
+      </NotificationProvider>
       </SettingsProvider>
     </ErrorBoundary>
   );
