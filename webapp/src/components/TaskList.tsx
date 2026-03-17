@@ -5,7 +5,7 @@ import { STATUS_MAP, type Task } from '../types';
 import { TaskDetail } from './TaskDetail';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
-import AutoSizer from 'react-virtualized-auto-sizer';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 
 interface EditTaskModalProps {
   task: Task | null;
@@ -123,6 +123,12 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
   const [confirmUnhide, setConfirmUnhide] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
+  // 批量操作状态
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchActionModal, setBatchActionModal] = useState<'delete' | 'hide' | 'stage' | null>(null);
+  const [batchProcessing, setBatchProcessing] = useState(false);
+
   const filteredTasks = tasks.filter((task) => {
     if (showHidden) return task.is_hidden;
     if (filter === 'all') return !task.is_hidden;
@@ -164,6 +170,83 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     await updateTask(id, data);
   };
 
+  // 批量操作函数
+  const toggleTaskSelection = (id: string) => {
+    setSelectedTasks((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllSelection = () => {
+    if (selectedTasks.size === filteredTasks.length) {
+      setSelectedTasks(new Set());
+    } else {
+      setSelectedTasks(new Set(filteredTasks.map((t) => t.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedTasks(new Set());
+    setBatchMode(false);
+  };
+
+  const handleBatchDelete = async () => {
+    setBatchProcessing(true);
+    try {
+      for (const id of selectedTasks) {
+        await deleteTask(id);
+      }
+      setSelectedTasks(new Set());
+      setBatchMode(false);
+    } catch (err) {
+      console.error('Batch delete failed:', err);
+      alert('批量删除失败，请重试');
+    } finally {
+      setBatchProcessing(false);
+      setBatchActionModal(null);
+    }
+  };
+
+  const handleBatchHide = async () => {
+    setBatchProcessing(true);
+    try {
+      for (const id of selectedTasks) {
+        await hideTask(id);
+      }
+      setSelectedTasks(new Set());
+      setBatchMode(false);
+    } catch (err) {
+      console.error('Batch hide failed:', err);
+      alert('批量隐藏失败，请重试');
+    } finally {
+      setBatchProcessing(false);
+      setBatchActionModal(null);
+    }
+  };
+
+  const handleBatchStageChange = async (newStatus: string) => {
+    setBatchProcessing(true);
+    try {
+      for (const id of selectedTasks) {
+        await updateTask(id, { status: newStatus });
+      }
+      setSelectedTasks(new Set());
+      setBatchMode(false);
+    } catch (err) {
+      console.error('Batch stage change failed:', err);
+      alert('批量修改阶段失败，请重试');
+    } finally {
+      setBatchProcessing(false);
+      setBatchActionModal(null);
+    }
+  };
+
   if (loading && tasks.length === 0) {
     return <div className="loading">加载中...</div>;
   }
@@ -181,6 +264,46 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     );
   }
 
+  // 批量操作工具栏
+  const BatchToolbar = () => (
+    <div className="batch-toolbar">
+      <div className="batch-info">
+        <input
+          type="checkbox"
+          checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
+          onChange={toggleAllSelection}
+        />
+        <span>已选择 {selectedTasks.size} 个任务</span>
+      </div>
+      <div className="batch-actions">
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={() => setBatchActionModal('stage')}
+          disabled={selectedTasks.size === 0}
+        >
+          修改阶段
+        </button>
+        <button
+          className="btn btn-sm btn-warning"
+          onClick={() => setBatchActionModal('hide')}
+          disabled={selectedTasks.size === 0}
+        >
+          隐藏
+        </button>
+        <button
+          className="btn btn-sm btn-danger"
+          onClick={() => setBatchActionModal('delete')}
+          disabled={selectedTasks.size === 0}
+        >
+          删除
+        </button>
+        <button className="btn btn-sm btn-secondary" onClick={clearSelection}>
+          取消
+        </button>
+      </div>
+    </div>
+  );
+
   // 虚拟滚动行渲染器
   const Row = useCallback(
     ({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -190,7 +313,10 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
           <TaskCard
             task={task}
             showHidden={showHidden}
-            onClick={() => setSelectedTaskId(task.id)}
+            selected={selectedTasks.has(task.id)}
+            batchMode={batchMode}
+            onClick={() => batchMode ? toggleTaskSelection(task.id) : setSelectedTaskId(task.id)}
+            onSelect={() => toggleTaskSelection(task.id)}
             onDelete={() => setConfirmDelete(task.id)}
             onHide={() => setConfirmHide(task.id)}
             onUnhide={() => setConfirmUnhide(task.id)}
@@ -199,7 +325,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
         </div>
       );
     },
-    [filteredTasks, showHidden]
+    [filteredTasks, showHidden, selectedTasks, batchMode]
   );
 
   // 当任务数较少时，使用普通渲染；超过50条时使用虚拟滚动
@@ -207,8 +333,28 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
 
   return (
     <>
+      {/* 批量模式切换 */}
+      <div className="batch-mode-toggle">
+        <label className="batch-mode-label">
+          <input
+            type="checkbox"
+            checked={batchMode}
+            onChange={(e) => {
+              setBatchMode(e.target.checked);
+              if (!e.target.checked) {
+                setSelectedTasks(new Set());
+              }
+            }}
+          />
+          <span>批量操作模式</span>
+        </label>
+      </div>
+
+      {/* 批量操作工具栏 */}
+      {batchMode && <BatchToolbar />}
+
       {useVirtualScroll ? (
-        <div className="task-list-virtual" style={{ height: 'calc(100vh - 200px)' }}>
+        <div className="task-list-virtual" style={{ height: 'calc(100vh - 280px)' }}>
           <AutoSizer>
             {({ height, width }: { height: number; width: number }) => (
               <List
@@ -229,7 +375,10 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
               key={task.id}
               task={task}
               showHidden={showHidden}
-              onClick={() => setSelectedTaskId(task.id)}
+              selected={selectedTasks.has(task.id)}
+              batchMode={batchMode}
+              onClick={() => batchMode ? toggleTaskSelection(task.id) : setSelectedTaskId(task.id)}
+              onSelect={() => toggleTaskSelection(task.id)}
               onDelete={() => setConfirmDelete(task.id)}
               onHide={() => setConfirmHide(task.id)}
               onUnhide={() => setConfirmUnhide(task.id)}
@@ -279,14 +428,122 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
         onConfirm={() => confirmUnhide && handleUnhide(confirmUnhide)}
         onCancel={() => setConfirmUnhide(null)}
       />
+
+      {/* 批量删除确认 */}
+      <ConfirmModal
+        isOpen={batchActionModal === 'delete'}
+        title="确认批量删除"
+        message={`确定要删除选中的 ${selectedTasks.size} 个任务吗？删除后任务将进入回收站。`}
+        confirmText={batchProcessing ? '删除中...' : '确认删除'}
+        cancelText="取消"
+        confirmVariant="danger"
+        onConfirm={handleBatchDelete}
+        onCancel={() => setBatchActionModal(null)}
+        disabled={batchProcessing}
+      />
+
+      {/* 批量隐藏确认 */}
+      <ConfirmModal
+        isOpen={batchActionModal === 'hide'}
+        title="确认批量隐藏"
+        message={`确定要隐藏选中的 ${selectedTasks.size} 个任务吗？`}
+        confirmText={batchProcessing ? '隐藏中...' : '确认隐藏'}
+        cancelText="取消"
+        confirmVariant="warning"
+        onConfirm={handleBatchHide}
+        onCancel={() => setBatchActionModal(null)}
+        disabled={batchProcessing}
+      />
+
+      {/* 批量修改阶段弹窗 */}
+      {batchActionModal === 'stage' && (
+        <BatchStageModal
+          isOpen={true}
+          count={selectedTasks.size}
+          onConfirm={handleBatchStageChange}
+          onCancel={() => setBatchActionModal(null)}
+          processing={batchProcessing}
+        />
+      )}
     </>
+  );
+}
+
+// 批量修改阶段弹窗
+function BatchStageModal({
+  isOpen,
+  count,
+  onConfirm,
+  onCancel,
+  processing,
+}: {
+  isOpen: boolean;
+  count: number;
+  onConfirm: (status: string) => void;
+  onCancel: () => void;
+  processing: boolean;
+}) {
+  const [selectedStatus, setSelectedStatus] = useState('planning');
+
+  if (!isOpen) return null;
+
+  const statusOptions = [
+    { key: 'pending', label: '待处理' },
+    { key: 'planning', label: '选题中' },
+    { key: 'researching', label: '研究中' },
+    { key: 'writing', label: '写作中' },
+    { key: 'reviewing', label: '评审中' },
+    { key: 'completed', label: '已完成' },
+  ];
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>批量修改阶段</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>将选中的 {count} 个任务修改为以下阶段：</p>
+          <div className="status-options">
+            {statusOptions.map((opt) => (
+              <label key={opt.key} className="radio-label">
+                <input
+                  type="radio"
+                  name="status"
+                  value={opt.key}
+                  checked={selectedStatus === opt.key}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancel} disabled={processing}>
+            取消
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => onConfirm(selectedStatus)}
+            disabled={processing}
+          >
+            {processing ? '处理中...' : '确认修改'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function TaskCard({
   task,
   showHidden,
+  selected,
+  batchMode,
   onClick,
+  onSelect,
   onDelete,
   onHide,
   onUnhide,
@@ -294,7 +551,10 @@ function TaskCard({
 }: {
   task: Task;
   showHidden?: boolean;
+  selected?: boolean;
+  batchMode?: boolean;
   onClick: () => void;
+  onSelect?: () => void;
   onDelete?: () => void;
   onHide?: () => void;
   onUnhide?: () => void;
@@ -303,8 +563,23 @@ function TaskCard({
   const status = STATUS_MAP[task.status] ?? { className: 'badge-pending', text: task.status };
 
   return (
-    <div className="task-card" onClick={onClick} style={{ cursor: 'pointer' }}>
+    <div
+      className={`task-card ${selected ? 'selected' : ''}`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+    >
       <div className="task-header">
+        {batchMode && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => {
+              e.stopPropagation();
+              onSelect?.();
+            }}
+            className="task-checkbox"
+          />
+        )}
         <h3 className="task-title">{task.topic}</h3>
         <span className={`badge ${status.className}`}>{status.text}</span>
       </div>
