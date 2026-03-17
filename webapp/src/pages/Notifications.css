@@ -1,0 +1,147 @@
+/* 通知中心页面样式 */
+
+.notifications-page {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--pebble);
+  margin: 4px 0 0 0;
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notification-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--linen);
+  transition: all 0.2s;
+}
+
+.notification-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.notification-card.unread {
+  border-left: 4px solid var(--terracotta);
+  background: linear-gradient(90deg, rgba(212, 102, 72, 0.03) 0%, white 100%);
+}
+
+.notification-main {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+}
+
+.notification-type-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.notification-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--earth);
+  margin: 0 0 6px 0;
+}
+
+.notification-card-message {
+  font-size: 14px;
+  color: var(--soil);
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+}
+
+.notification-card-time {
+  font-size: 12px;
+  color: var(--pebble);
+}
+
+.notification-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notification-card-actions .btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notification-card-actions .btn-secondary {
+  background: var(--cream-dark);
+  color: var(--earth);
+}
+
+.notification-card-actions .btn-secondary:hover {
+  background: var(--sand);
+}
+
+.notification-card-actions .btn-danger {
+  background: transparent;
+  color: #ff4d4f;
+}
+
+.notification-card-actions .btn-danger:hover {
+  background: rgba(255, 77, 79, 0.1);
+}
+
+/* 深色模式 */
+.dark .notification-card {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .notification-card.unread {
+  background: linear-gradient(90deg, rgba(212, 102, 72, 0.1) 0%, #1f2937 100%);
+}
+
+.dark .notification-card-title {
+  color: #f3f4f6;
+}
+
+.dark .notification-card-message {
+  color: #d1d5db;
+}
+
+.dark .notification-card-actions .btn-secondary {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.dark .notification-card-actions .btn-secondary:hover {
+  background: #4b5563;
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+  .notification-card {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .notification-card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
