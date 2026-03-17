@@ -19,13 +19,25 @@ export async function rssRoutes(fastify: FastifyInstance) {
   // 获取 RSS 源列表（与/sources保持一致，返回适配前端格式）
   fastify.get('/rss-sources', { preHandler: authenticate }, async (request) => {
     const config = await loadRSSConfig();
+
+    // 从数据库获取每个源的最后抓取时间
+    const fetchLogs = await query(`
+      SELECT source_id, MAX(fetched_at) as last_fetched
+      FROM rss_fetch_logs
+      GROUP BY source_id
+    `);
+
+    const lastFetchMap = new Map(
+      fetchLogs.rows.map((r: any) => [r.source_id, r.last_fetched])
+    );
+
     const sources = Object.entries(config.categories).flatMap(([category, catConfig]: [string, any]) =>
       catConfig.sources.map((s: any) => ({
         ...s,
         category,
         categoryName: catConfig.name,
         isActive: s.enabled !== false,
-        lastCrawledAt: s.lastFetched,
+        lastCrawledAt: lastFetchMap.get(s.id) || s.lastFetched || null,
       }))
     );
     return { items: sources };

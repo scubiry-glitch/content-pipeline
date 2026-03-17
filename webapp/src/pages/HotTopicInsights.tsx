@@ -9,6 +9,12 @@ import {
   getExpertWorkload,
   getTopExpertsByAcceptanceRate,
 } from '../services/expertService';
+import {
+  getFavorites,
+  addFavorite,
+  removeFavorite,
+  type FavoriteReport,
+} from '../services/favoritesService';
 import type { Expert, ExpertReview } from '../types';
 import './HotTopicInsights.css';
 
@@ -72,6 +78,37 @@ interface ExpertInsightReport {
   };
 }
 
+// 转换报告为可存储格式
+function convertToStorable(
+  report: ExpertInsightReport
+): FavoriteReport['reportData'] {
+  return {
+    id: report.id,
+    topicId: report.topicId,
+    topicTitle: report.topicTitle,
+    generatedAt: report.generatedAt,
+    seniorExpertReview: report.seniorExpertReview
+      ? {
+          expertId: report.seniorExpertReview.expert.id,
+          expertName: report.seniorExpertReview.expert.name,
+          opinion: report.seniorExpertReview.opinion,
+          focusAreas: report.seniorExpertReview.focusAreas,
+          suggestions: report.seniorExpertReview.suggestions,
+          confidence: report.seniorExpertReview.confidence,
+          timestamp: report.seniorExpertReview.timestamp,
+        }
+      : undefined,
+    domainExpertReviews: report.domainExpertReviews.map((r) => ({
+      expertId: r.expert.id,
+      expertName: r.expert.name,
+      expertTitle: r.expert.profile.title,
+      opinion: r.opinion,
+      confidence: r.confidence,
+    })),
+    synthesis: report.synthesis,
+  };
+}
+
 export function HotTopicInsights() {
   const navigate = useNavigate();
   const { topicId } = useParams();
@@ -84,8 +121,9 @@ export function HotTopicInsights() {
   // 报告缓存
   const [reportCache, setReportCache] = useState<Record<string, ExpertInsightReport>>({});
   // 收藏的报告
-  const [favoriteReports, setFavoriteReports] = useState<ExpertInsightReport[]>([]);
+  const [favoriteReports, setFavoriteReports] = useState<FavoriteReport[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
 
   // 切换话题时优先使用缓存
   const handleTopicChange = (topic: typeof HOT_TOPICS[0]) => {
@@ -171,10 +209,6 @@ export function HotTopicInsights() {
   const saveReport = () => {
     if (report && !savedReports.includes(report.id)) {
       setSavedReports([...savedReports, report.id]);
-      // 存储到localStorage
-      const saved = JSON.parse(localStorage.getItem('expertReports') || '[]');
-      saved.push(report);
-      localStorage.setItem('expertReports', JSON.stringify(saved));
       alert('报告已保存');
     }
   };
@@ -194,45 +228,77 @@ export function HotTopicInsights() {
   };
 
   // 收藏/取消收藏报告
-  const toggleFavorite = () => {
+  const toggleFavorite = async () => {
     if (!report) return;
 
-    const isFavorite = favoriteReports.some((r) => r.id === report.id);
-    let updated: ExpertInsightReport[];
+    const isFavorite = favoriteReports.some((r) => r.reportId === report.id);
 
-    if (isFavorite) {
-      updated = favoriteReports.filter((r) => r.id !== report.id);
-    } else {
-      updated = [...favoriteReports, report];
+    try {
+      if (isFavorite) {
+        await removeFavorite(report.id);
+        setFavoriteReports((prev) => prev.filter((r) => r.reportId !== report.id));
+      } else {
+        const newFavorite = await addFavorite(
+          report.id,
+          report.topicId,
+          report.topicTitle,
+          convertToStorable(report)
+        );
+        setFavoriteReports((prev) => [...prev, newFavorite]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      alert('操作失败，请稍后重试');
     }
-
-    setFavoriteReports(updated);
-    localStorage.setItem('expertReports', JSON.stringify(updated));
   };
 
   // 加载收藏的报告
-  const loadFavoriteReport = (favReport: ExpertInsightReport) => {
+  const loadFavoriteReport = (favReport: FavoriteReport) => {
     const topic = HOT_TOPICS.find((t) => t.id === favReport.topicId);
     if (topic) {
       setSelectedTopic(topic);
-      setReport(favReport);
+      // 从收藏数据恢复报告
+      const restoredReport: ExpertInsightReport = {
+        id: favReport.reportData.id,
+        topicId: favReport.reportData.topicId,
+        topicTitle: favReport.reportData.topicTitle,
+        generatedAt: favReport.reportData.generatedAt,
+        synthesis: favReport.reportData.synthesis,
+        domainExpertReviews: [], // 简化处理，从收藏加载时不需要完整专家对象
+      };
+      setReport(restoredReport);
       setShowFavorites(false);
     }
   };
 
   // 删除收藏的报告
-  const deleteFavorite = (reportId: string, e: React.MouseEvent) => {
+  const deleteFavorite = async (reportId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updated = favoriteReports.filter((r) => r.id !== reportId);
-    setFavoriteReports(updated);
-    localStorage.setItem('expertReports', JSON.stringify(updated));
+    try {
+      await removeFavorite(reportId);
+      setFavoriteReports((prev) => prev.filter((r) => r.reportId !== reportId));
+    } catch (error) {
+      console.error('Failed to remove favorite:', error);
+      alert('删除失败，请稍后重试');
+    }
+  };
+
+  // 加载收藏列表
+  const loadFavorites = async () => {
+    setIsLoadingFavorites(true);
+    try {
+      const favorites = await getFavorites();
+      setFavoriteReports(favorites);
+    } catch (error) {
+      console.error('Failed to load favorites:', error);
+    } finally {
+      setIsLoadingFavorites(false);
+    }
   };
 
   useEffect(() => {
     generateReport(selectedTopic);
-    // 加载收藏的报告
-    const saved = JSON.parse(localStorage.getItem('expertReports') || '[]');
-    setFavoriteReports(saved);
+    loadFavorites();
   }, []);
 
   return (
@@ -257,7 +323,11 @@ export function HotTopicInsights() {
 
         {showFavorites ? (
           <div className="favorites-panel">
-            {favoriteReports.length === 0 ? (
+            {isLoadingFavorites ? (
+              <div className="loading-favorites">
+                <span>加载中...</span>
+              </div>
+            ) : favoriteReports.length === 0 ? (
               <div className="empty-favorites">
                 <p>暂无收藏的报告</p>
                 <span>点击报告中的"收藏"按钮保存您感兴趣的解读</span>
@@ -273,12 +343,12 @@ export function HotTopicInsights() {
                     <div className="favorite-info">
                       <span className="favorite-title">{fav.topicTitle}</span>
                       <span className="favorite-time">
-                        {new Date(fav.generatedAt).toLocaleDateString()}
+                        {new Date(fav.createdAt).toLocaleDateString()}
                       </span>
                     </div>
                     <button
                       className="btn-delete-favorite"
-                      onClick={(e) => deleteFavorite(fav.id, e)}
+                      onClick={(e) => deleteFavorite(fav.reportId, e)}
                       title="删除收藏"
                     >
                       🗑️
@@ -328,10 +398,10 @@ export function HotTopicInsights() {
             </div>
             <div className="report-actions">
               <button
-                className={`btn-favorite ${favoriteReports.some((r) => r.id === report.id) ? 'active' : ''}`}
+                className={`btn-favorite ${favoriteReports.some((r) => r.reportId === report.id) ? 'active' : ''}`}
                 onClick={toggleFavorite}
               >
-                {favoriteReports.some((r) => r.id === report.id) ? '❤️ 已收藏' : '🤍 收藏'}
+                {favoriteReports.some((r) => r.reportId === report.id) ? '❤️ 已收藏' : '🤍 收藏'}
               </button>
               <button className="btn-share" onClick={shareReport}>
                 📤 分享

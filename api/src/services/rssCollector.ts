@@ -448,10 +448,10 @@ function generateSummary(content: string, maxLength: number = 300): string {
 async function updateSourceLastFetch(sourceId: string): Promise<void> {
   // 记录采集日志
   await query(
-    `INSERT INTO rss_fetch_logs (source_id, fetched_at, status)
-     VALUES ($1, NOW(), 'success')
-     ON CONFLICT (source_id, DATE(fetched_at))
-     DO UPDATE SET fetched_at = NOW()`,
+    `INSERT INTO rss_fetch_logs (source_id, fetched_at, fetched_date, status)
+     VALUES ($1, NOW(), CURRENT_DATE, 'success')
+     ON CONFLICT (source_id, fetched_date)
+     DO UPDATE SET fetched_at = NOW(), status = 'success'`,
     [sourceId]
   );
 }

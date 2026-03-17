@@ -180,6 +180,26 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Asset library table - for smart asset import with quality scoring
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_library (
+      id VARCHAR(50) PRIMARY KEY DEFAULT 'asset_' || SUBSTRING(MD5(RANDOM()::TEXT), 1, 8),
+      content TEXT NOT NULL,
+      content_type VARCHAR(50) NOT NULL,
+      auto_tags JSONB DEFAULT '[]',
+      quality_score DECIMAL(4,3) DEFAULT 0.5,
+      quality_factors JSONB DEFAULT '{}',
+      reference_weight DECIMAL(4,3) DEFAULT 0,
+      combined_weight DECIMAL(4,3) DEFAULT 0,
+      embedding VECTOR(1536),
+      source VARCHAR(255) NOT NULL,
+      source_url TEXT,
+      publish_date TIMESTAMP WITH TIME ZONE,
+      last_used_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Asset themes table - for categorizing assets by theme
   await query(`
     CREATE TABLE IF NOT EXISTS asset_themes (
@@ -272,8 +292,21 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Research reports table - for storing research results
+  await query(`
+    CREATE TABLE IF NOT EXISTS research_reports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      topic_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
+      data_package JSONB NOT NULL DEFAULT '[]',
+      analysis JSONB NOT NULL DEFAULT '{}',
+      insights JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_research_reports_topic ON research_reports(topic_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_tags ON assets USING GIN(tags)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_theme ON assets(theme_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_pinned ON assets(is_pinned, pinned_at)`);
