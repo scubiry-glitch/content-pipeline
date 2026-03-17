@@ -28,6 +28,7 @@ import { DataCleaningPanel } from '../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../components/CrossValidationPanel';
 import { VersionComparePanel } from '../components/VersionComparePanel';
 import { ExportPanel } from '../components/ExportPanel';
+import { ExpertReviewPanel } from '../components/ExpertReviewPanel';
 
 // 流程步骤定义
 const STAGE_PIPELINES = {
@@ -1064,6 +1065,21 @@ export function TaskDetail() {
             ))}
           </div>
         </div>
+
+        {/* 专家库深度评审 */}
+        {(task?.outline || task?.writing_data?.draft) && (
+          <div className="info-card expert-review-card">
+            <ExpertReviewPanel
+              taskId={task!.id}
+              topic={task!.topic}
+              content={task?.writing_data?.draft || JSON.stringify(task?.outline) || ''}
+              contentType={task?.writing_data?.draft ? 'draft' : 'outline'}
+              importance={0.85}
+              onAccept={(expertId) => console.log('接受专家意见:', expertId)}
+              onIgnore={(expertId) => console.log('忽略专家意见:', expertId)}
+            />
+          </div>
+        )}
 
         {/* 评审意见列表 */}
         {groupedReviews.critical.length > 0 && (
