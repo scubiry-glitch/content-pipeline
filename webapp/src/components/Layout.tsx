@@ -67,6 +67,9 @@ export function Layout() {
             <NavLink to="/expert-library" className="nav-link">
               专家库 (v5.1)
             </NavLink>
+            <NavLink to="/hot-topics/insights" className="nav-link">
+              专家解读 (v5.1)
+            </NavLink>
             <NavLink to="/reports" className="nav-link">
               研报 (v3.3)
             </NavLink>
@@ -74,7 +77,10 @@ export function Layout() {
               热点 (v3.4)
             </NavLink>
             <NavLink to="/rss-sources" className="nav-link">
-              RSS (v3.4)
+              RSS源
+            </NavLink>
+            <NavLink to="/rss-items" className="nav-link">
+              RSS文章
             </NavLink>
             <NavLink to="/quality-dashboard" className="nav-link">
               质量仪表盘

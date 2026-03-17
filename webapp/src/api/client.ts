@@ -308,6 +308,20 @@ export const hotTopicsApi = {
     client.post(`/quality/hot-topics/${id}/unfollow`) as Promise<void>,
 };
 
+// RSS文章类型
+export interface RSSItem {
+  id: string;
+  source_name: string;
+  title: string;
+  link: string;
+  summary: string;
+  published_at: string;
+  author?: string;
+  tags: string[];
+  relevance_score: number;
+  created_at: string;
+}
+
 // RSS源管理 API
 export const rssSourcesApi = {
   getAll: () =>
@@ -324,6 +338,13 @@ export const rssSourcesApi = {
 
   triggerCrawl: (id?: string) =>
     client.post('/quality/rss-sources/crawl', { id }) as Promise<{ crawled: number }>,
+
+  // RSS文章列表
+  getItems: (params?: { limit?: number; offset?: number; sourceId?: string }) =>
+    client.get('/quality/items', { params }) as Promise<{ items: RSSItem[]; pagination: { total: number; limit: number; offset: number } }>,
+
+  getStats: () =>
+    client.get('/quality/stats') as Promise<{ totalItems: number; todayItems: number; totalSources: number; activeSources: number; avgRelevance: number }>,
 };
 
 // 情感分析相关类型 (v3.2)

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { assetsApi, themesApi, bindingsApi, type Asset, type AssetTheme, type DirectoryBinding } from '../api/client';
 import { LazyImage } from '../components/LazyImage';
+import { AssetExpertReviewModal } from '../components/AssetExpertReviewModal';
+import { getAssetCompositeScore } from '../services/expertService';
 import './Assets.css';
 
 type FilterType = 'all' | 'pinned' | 'pdf' | 'txt' | 'image';
@@ -29,6 +31,7 @@ export function Assets() {
   const [showCreateThemeModal, setShowCreateThemeModal] = useState(false);
   const [showCreateBindingModal, setShowCreateBindingModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [expertReviewAsset, setExpertReviewAsset] = useState<Asset | null>(null);
 
   // 表单状态
   const [uploadForm, setUploadForm] = useState({
@@ -453,6 +456,9 @@ export function Assets() {
                         <button className="btn-sm" onClick={(e) => { e.stopPropagation(); handleTogglePin(asset); }}>
                           {asset.is_pinned ? '取消置顶' : '置顶'}
                         </button>
+                        <button className="btn-sm btn-expert" onClick={(e) => { e.stopPropagation(); setExpertReviewAsset(asset); }}>
+                          🎯 专家评估
+                        </button>
                         <button className="btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}>
                           删除
                         </button>
@@ -854,6 +860,16 @@ export function Assets() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 专家标注弹窗 */}
+      {expertReviewAsset && (
+        <AssetExpertReviewModal
+          assetId={expertReviewAsset.id}
+          assetTitle={expertReviewAsset.title}
+          isOpen={!!expertReviewAsset}
+          onClose={() => setExpertReviewAsset(null)}
+        />
       )}
     </div>
   );

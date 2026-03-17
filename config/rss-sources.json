@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "lastUpdated": "2026-03-17",
   "categories": {
     "tech": {
@@ -44,6 +44,56 @@
           "status": "active",
           "keywords": ["AI", "biotech", "climate", "innovation"],
           "language": "en"
+        },
+        {
+          "id": "36kr",
+          "name": "36氪",
+          "url": "https://36kr.com/feed",
+          "priority": "P0",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["科技", "创业", "融资", "AI", "互联网"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "jiqizhixin",
+          "name": "机器之心",
+          "url": "https://www.jiqizhixin.com/rss",
+          "priority": "P0",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["AI", "人工智能", "机器学习", "深度学习", "NLP"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "huxiu",
+          "name": "虎嗅",
+          "url": "https://www.huxiu.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["商业", "科技", "互联网", "创新"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "leiphone",
+          "name": "雷锋网",
+          "url": "https://www.leiphone.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["AI", "智能汽车", "IoT", "硬科技"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "geekpark",
+          "name": "极客公园",
+          "url": "https://www.geekpark.net/rss",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["科技", "产品", "互联网"],
+          "language": "zh-CN"
         }
       ]
     },
@@ -61,16 +111,6 @@
           "language": "en"
         },
         {
-          "id": "reuters-tech",
-          "name": "Reuters Technology",
-          "url": "https://www.reutersagency.com/feed/?taxonomy=markets&post_type=reuters-best",
-          "priority": "P1",
-          "fetchInterval": 30,
-          "status": "active",
-          "keywords": ["business", "markets", "tech", "finance"],
-          "language": "en"
-        },
-        {
           "id": "hackernews",
           "name": "Hacker News",
           "url": "https://news.ycombinator.com/rss",
@@ -79,6 +119,81 @@
           "status": "active",
           "keywords": ["startup", "tech", "programming", "AI"],
           "language": "en"
+        },
+        {
+          "id": "thepaper",
+          "name": "澎湃新闻",
+          "url": "https://www.thepaper.cn/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["新闻", "深度", "调查"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "jiemian",
+          "name": "界面新闻",
+          "url": "https://www.jiemian.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["商业", "财经", "新闻"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "sina-tech",
+          "name": "新浪科技",
+          "url": "https://tech.sina.com.cn/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["科技", "互联网", "通信", "手机"],
+          "language": "zh-CN"
+        }
+      ]
+    },
+    "finance": {
+      "name": "财经",
+      "sources": [
+        {
+          "id": "caixin",
+          "name": "财新",
+          "url": "https://www.caixin.com/rss",
+          "priority": "P0",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["财经", "金融", "经济", "政策"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "yicai",
+          "name": "第一财经",
+          "url": "https://www.yicai.com/rss",
+          "priority": "P0",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["财经", "股市", "宏观", "产业"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "wallstreetcn",
+          "name": "华尔街见闻",
+          "url": "https://wallstreetcn.com/rss",
+          "priority": "P1",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["全球", "市场", "投资", "宏观"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "cls",
+          "name": "财联社",
+          "url": "https://www.cls.cn/rss",
+          "priority": "P1",
+          "fetchInterval": 10,
+          "status": "active",
+          "keywords": ["快讯", "股市", "公告", "研报"],
+          "language": "zh-CN"
         }
       ]
     },
@@ -104,6 +219,26 @@
           "status": "active",
           "keywords": ["web design", "CSS", "UX", "frontend"],
           "language": "en"
+        },
+        {
+          "id": "ifeng-tech",
+          "name": "凤凰网科技",
+          "url": "https://tech.ifeng.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["科技", "互联网", "数码", "汽车科技"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "ithome",
+          "name": "IT之家",
+          "url": "https://www.ithome.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["IT", "数码", "手机", "电脑", "Windows"],
+          "language": "zh-CN"
         }
       ]
     },
@@ -119,6 +254,86 @@
           "status": "active",
           "keywords": ["science", "research", "biology", "physics"],
           "language": "en"
+        },
+        {
+          "id": "guokr",
+          "name": "果壳",
+          "url": "https://www.guokr.com/rss",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["科普", "科技", "健康", "生活"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "zhihu-daily",
+          "name": "知乎日报",
+          "url": "https://daily.zhihu.com/rss",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["科普", "知识", "生活", "科技"],
+          "language": "zh-CN"
+        }
+      ]
+    },
+    "research": {
+      "name": "研究",
+      "sources": [
+        {
+          "id": "report-100",
+          "name": "199IT互联网数据中心",
+          "url": "https://www.199it.com/rss",
+          "priority": "P0",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["报告", "数据", "研究", "行业分析"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "iresearch",
+          "name": "艾瑞咨询",
+          "url": "https://www.iresearch.cn/rss",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["报告", "互联网", "数据", "趋势"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "21jingji",
+          "name": "21世纪经济报道",
+          "url": "https://www.21jingji.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["财经", "产业", "经济", "商业"],
+          "language": "zh-CN"
+        }
+      ]
+    },
+    "international": {
+      "name": "国际",
+      "sources": [
+        {
+          "id": "techcrunch",
+          "name": "TechCrunch",
+          "url": "https://techcrunch.com/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["tech", "startup", "VC", "AI"],
+          "language": "en"
+        },
+        {
+          "id": "theverge-intl",
+          "name": "The Verge International",
+          "url": "https://www.theverge.com/rss/index.xml",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["tech", "AI", "international"],
+          "language": "en"
         }
       ]
     }
@@ -130,11 +345,13 @@
       "security", "hack", "vulnerability", "cyber",
       "climate", "energy", "renewable",
       "apple", "google", "microsoft", "amazon", "meta",
-      "tesla", "nvidia", "openai"
+      "tesla", "nvidia", "openai",
+      "科技", "创业", "融资", "人工智能", "互联网"
     ],
     "excludeKeywords": [
       "advertisement", "promoted", "sponsored",
-      "subscribe now", "click here to buy"
+      "subscribe now", "click here to buy",
+      "广告", "推广", "招聘"
     ],
     "minContentLength": 100,
     "maxContentLength": 50000

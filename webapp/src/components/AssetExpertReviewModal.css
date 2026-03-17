@@ -1,0 +1,409 @@
+/* 素材专家标注弹窗样式 */
+
+.asset-expert-review-modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 头部 */
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.header-content .asset-title {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: white;
+  font-size: 20px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* 内容区 */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 综合评分 */
+.composite-score-section {
+  display: flex;
+  gap: 24px;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.overall-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.score-inner {
+  width: 80px;
+  height: 80px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.score-label {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.score-badge {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 12px;
+  background: white;
+  border-radius: 20px;
+}
+
+.dimension-scores {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+}
+
+.dimension-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dimension-label {
+  width: 48px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.dimension-bar {
+  flex: 1;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dimension-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.dimension-value {
+  width: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+}
+
+/* 专家评审列表 */
+.expert-reviews-section {
+  margin-bottom: 24px;
+}
+
+.expert-reviews-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.expert-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.expert-review-card {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.expert-review-card:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.expert-review-card.expanded {
+  background: white;
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.expert-review-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.expert-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+}
+
+.expert-info {
+  flex: 1;
+}
+
+.expert-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.review-date {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.expert-score .score-tag {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.expert-review-content {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.expert-comment {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #475569;
+  margin-bottom: 12px;
+}
+
+.expert-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.expert-tags .tag {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-radius: 20px;
+}
+
+.detailed-scores {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-item span:first-child {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.detail-item span:last-child {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.expand-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* 使用建议 */
+.usage-suggestions {
+  padding: 16px;
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border-radius: 12px;
+  border: 1px solid #fde047;
+}
+
+.usage-suggestions h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.usage-suggestions ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.usage-suggestions li {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+/* 底部 */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-footer .btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-secondary {
+  background: white;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-secondary:hover {
+  background: #f1f5f9;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+  .composite-score-section {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .expert-review-header {
+    flex-wrap: wrap;
+  }
+
+  .detailed-scores {
+    grid-template-columns: 1fr;
+  }
+}

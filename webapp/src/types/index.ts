@@ -458,6 +458,31 @@ export interface ExpertReview {
   userAction?: 'accept' | 'ignore' | 'partial';
   userNote?: string;
   createdAt: string;
+  // v5.1.2 个性化生成元数据
+  personalizationMeta?: {
+    angle: string;
+    philosophyAligned: boolean;
+    achievementReferenced: boolean;
+  };
+}
+
+// v5.1.2 专家观点接口
+export interface ExpertOpinion {
+  id: string;
+  expertId: string;
+  expertName: string;
+  content: string;
+  timestamp: string;
+  confidence: number;
+  intensity: 'strong' | 'moderate' | 'weak';
+  dimensions: string[];
+  relatedAchievements?: string[];
+  personalization?: {
+    angle: string;
+    philosophyAlignment: boolean;
+    achievementReferences: boolean;
+    tone: string;
+  };
 }
 
 export interface ExpertAssignment {

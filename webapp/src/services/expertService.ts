@@ -352,9 +352,38 @@ function findBestSeniorExpert(domainCode: string, topic: string): Expert | undef
 export function generateExpertOpinion(
   expert: Expert,
   content: string,
-  contentType: 'outline' | 'draft' | 'research'
+  contentType: 'outline' | 'draft' | 'research',
+  options?: {
+    usePersonalization?: boolean; // v5.1.2: 是否使用个性化生成
+    importance?: number;
+  }
 ): ExpertReview {
-  // 基于专家特点生成观点
+  const { usePersonalization = true, importance = 0.5 } = options || {};
+
+  // v5.1.2: 使用个性化观点生成
+  if (usePersonalization) {
+    const personalizedOpinion = generatePersonalizedExpertOpinion(expert, content, {
+      contentType,
+      importance,
+    });
+
+    return {
+      id: `review_${Date.now()}`,
+      expertId: expert.id,
+      expertName: expert.name,
+      taskId: '',
+      contentType,
+      opinion: personalizedOpinion.opinion,
+      focusAreas: personalizedOpinion.focusAreas,
+      suggestions: personalizedOpinion.suggestions,
+      confidence: personalizedOpinion.confidence,
+      differentiationTags: expert.philosophy.core.slice(0, 3),
+      personalizationMeta: personalizedOpinion.personalizationMeta, // v5.1.2
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  // 原有逻辑（兼容模式）
   const opinion = generateOpinionByExpertStyle(expert, content, contentType);
   const focusAreas = expert.reviewDimensions;
   const suggestions = generateSuggestionsByExpert(expert, content);
@@ -372,6 +401,173 @@ export function generateExpertOpinion(
     differentiationTags: expert.philosophy.core.slice(0, 3),
     createdAt: new Date().toISOString(),
   };
+}
+
+// v5.1.2: 生成个性化专家观点
+function generatePersonalizedExpertOpinion(
+  expert: Expert,
+  content: string,
+  options: { contentType: string; importance: number }
+): {
+  opinion: string;
+  focusAreas: string[];
+  suggestions: string[];
+  confidence: number;
+  personalizationMeta: {
+    angle: string;
+    philosophyAligned: boolean;
+    achievementReferenced: boolean;
+  };
+} {
+  const { contentType, importance } = options;
+  const typeLabel = contentType === 'outline' ? '大纲' : contentType === 'draft' ? '文稿' : '研究';
+
+  // 根据专家角度选择差异化模板
+  const angle = expert.angle || 'synthesizer';
+
+  // 生成开场白（引用核心思想）
+  const opening = generateExpertOpening(expert);
+
+  // 生成分析框架
+  const framework = generateExpertFramework(expert, content);
+
+  // 关联成功案例
+  const achievementRef = generateAchievementReference(expert);
+
+  // 生成差异化核心观点
+  const coreOpinion = generateAngleBasedOpinion(expert, angle, content, typeLabel);
+
+  // 生成具体建议
+  const suggestions = generateSuggestionsByExpert(expert, content);
+
+  // 生成结尾（标志性句式）
+  const closing = generateExpertClosing(expert);
+
+  // 组装观点
+  const sections = [opening, framework, achievementRef, coreOpinion, closing].filter(
+    (s) => s && s.length > 0
+  );
+
+  const opinion = sections.join('\n\n');
+
+  return {
+    opinion,
+    focusAreas: expert.reviewDimensions.slice(0, 3),
+    suggestions,
+    confidence: calculateExpertConfidence(expert, importance),
+    personalizationMeta: {
+      angle,
+      philosophyAligned: opening.includes(expert.philosophy.core[0]?.slice(0, 5) || ''),
+      achievementReferenced: !!achievementRef,
+    },
+  };
+}
+
+// v5.1.2: 生成专家开场白
+function generateExpertOpening(expert: Expert): string {
+  const coreIdeas = expert.philosophy.core;
+  const quotes = expert.philosophy.quotes;
+
+  // 50%概率引用名言
+  if (quotes.length > 0 && Math.random() > 0.5) {
+    return `${quotes[0]}`;
+  }
+
+  // 否则引用核心思想
+  if (coreIdeas.length > 0) {
+    return `正如我常提到的，${coreIdeas[0]}...`;
+  }
+
+  return `关于这个话题，${expert.name}有以下观点：`;
+}
+
+// v5.1.2: 生成专家分析框架
+function generateExpertFramework(expert: Expert, content: string): string {
+  const frameworks: Record<string, string> = {
+    'S-01': '从第一性原理和数据驱动角度分析：',
+    'S-02': '从终局思维和效率竞争角度审视：',
+    'S-03': '从物理可行性和第一性原理出发：',
+    'S-04': '从护城河和价值投资角度评估：',
+    'S-05': '从长期愿景和技术革命角度思考：',
+    'S-06': '从生存能力和危机管理角度分析：',
+    default: `从${expert.domainName}专业角度分析：`,
+  };
+
+  return frameworks[expert.id] || frameworks.default;
+}
+
+// v5.1.2: 关联成功案例
+function generateAchievementReference(expert: Expert): string {
+  if (!expert.achievements || expert.achievements.length === 0) {
+    return '';
+  }
+
+  const achievement = expert.achievements[0];
+  return `这与我在${achievement.title}中的经验一致。当时的关键判断是：${achievement.impact.slice(0, 30)}...`;
+}
+
+// v5.1.2: 基于角度生成差异化观点
+function generateAngleBasedOpinion(
+  expert: Expert,
+  angle: string,
+  content: string,
+  typeLabel: string
+): string {
+  const angleViews: Record<string, Record<string, string>> = {
+    challenger: {
+      'S-01': '这里有个被忽视的风险：短期数据可能会误导长期判断。',
+      'S-02': '但是，大多数人忽视的结构性问题可能是致命的。',
+      'S-03': '现有方案在物理上可能不可持续，需要重新思考。',
+      'S-04': '估值可能过高，安全边际不足。',
+      default: '需要注意潜在风险和挑战。',
+    },
+    expander: {
+      'S-01': '更大的机会在于这个方向的信息效率提升。',
+      'S-02': '延伸来看，这可能重塑整个行业的竞争格局。',
+      'S-05': '这只是开始，AI革命将带来10倍的价值放大。',
+      default: '延伸机会可能比当前更大的多。',
+    },
+    synthesizer: {
+      'S-01': '综合来看，关键是找到长期价值的创造点。',
+      'S-02': '本质上，这是效率提升的又一次迭代。',
+      'S-04': '投资的核心还是护城河和估值的匹配。',
+      default: '综合各方观点，核心在于执行和专注。',
+    },
+  };
+
+  const view = angleViews[angle]?.[expert.id] || angleViews[angle]?.default || angleViews.synthesizer.default;
+
+  return `\n${view}\n\n具体到这个${typeLabel}，建议关注：\n1. ${expert.reviewDimensions[0] || '战略定位'}\n2. ${expert.reviewDimensions[1] || '执行落地'}\n3. ${expert.reviewDimensions[2] || '长期价值'}`;
+}
+
+// v5.1.2: 生成专家结尾
+function generateExpertClosing(expert: Expert): string {
+  const closings: Record<string, string> = {
+    'S-01': '保持耐心，延迟满足。',
+    'S-02': '深度思考是无可替代的。',
+    'S-03': '让我们把不可能变成可能。',
+    'S-04': '安全边际永远重要。',
+    'S-05': 'All in，没有退路。',
+    'S-06': '活下去，才有未来。',
+    default: expert.philosophy.quotes[0] || '',
+  };
+
+  return closings[expert.id] || closings.default;
+}
+
+// v5.1.2: 计算置信度
+function calculateExpertConfidence(expert: Expert, importance: number): number {
+  let baseConfidence = expert.acceptanceRate || 0.75;
+
+  if (expert.level === 'senior') {
+    baseConfidence += 0.05;
+  }
+
+  if (importance > 0.8) {
+    baseConfidence += 0.03;
+  }
+
+  return Math.min(baseConfidence + Math.random() * 0.1, 0.98);
 }
 
 // 根据专家风格生成观点
@@ -933,6 +1129,165 @@ export function addExpertReviewHistory(record: Omit<ExpertReviewHistory, 'id'>):
   };
   expertReviewHistoryStore.push(newRecord);
   return newRecord;
+}
+
+// ==================== 素材专家标注 (Phase 3) ====================
+
+// 素材专家评审接口
+export interface AssetExpertReview {
+  id: string;
+  assetId: string;
+  expertId: string;
+  expertName: string;
+  expertAvatar?: string;
+  qualityScore: number; // 0-100 质量分
+  credibilityScore: number; // 0-100 可信度
+  relevanceScore: number; // 0-100 相关性
+  tags: string[];
+  comment: string;
+  reviewedAt: string;
+}
+
+// 素材标注存储
+const assetExpertReviewsStore: Map<string, AssetExpertReview[]> = new Map();
+
+// 模拟评审评语模板
+const assetReviewComments = [
+  '该素材数据详实，来源可靠，具有很高的参考价值。',
+  '内容较为全面，但部分数据需要进一步核实。',
+  '观点独到，分析深入，是优质的行业参考资料。',
+  '信息密度较高，但结构可以进一步优化。',
+  '作为基础素材合格，建议结合其他资料使用。',
+  '时效性较强，适合当前研究主题。',
+  '专业度较高，适合深度分析引用。',
+];
+
+/**
+ * 为素材生成专家标注（模拟）
+ */
+export function generateAssetExpertReviews(assetId: string, assetTitle: string): AssetExpertReview[] {
+  // 根据assetId获取或生成评审
+  if (assetExpertReviewsStore.has(assetId)) {
+    return assetExpertReviewsStore.get(assetId)!;
+  }
+
+  // 匹配相关领域专家
+  const matchResult = matchExperts({
+    topic: assetTitle,
+    importance: 0.7,
+  });
+
+  const experts = matchResult.seniorExpert
+    ? [matchResult.seniorExpert, ...matchResult.domainExperts.slice(0, 2)]
+    : matchResult.domainExperts.slice(0, 3);
+
+  const reviews: AssetExpertReview[] = experts.map((expert, index) => {
+    // 根据专家级别调整分数范围
+    const baseScore = expert.level === 'senior' ? 85 : 75;
+    const variance = Math.floor(Math.random() * 15);
+
+    return {
+      id: `asset-review-${assetId}-${expert.id}`,
+      assetId,
+      expertId: expert.id,
+      expertName: expert.name,
+      expertAvatar: expert.name.charAt(0),
+      qualityScore: baseScore + variance - 5,
+      credibilityScore: baseScore + variance,
+      relevanceScore: baseScore + variance - Math.floor(Math.random() * 10),
+      tags: expert.reviewDimensions.slice(0, 2),
+      comment: assetReviewComments[Math.floor(Math.random() * assetReviewComments.length)],
+      reviewedAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+  });
+
+  assetExpertReviewsStore.set(assetId, reviews);
+  return reviews;
+}
+
+/**
+ * 获取素材的专家标注
+ */
+export function getAssetExpertReviews(assetId: string, assetTitle?: string): AssetExpertReview[] {
+  if (assetExpertReviewsStore.has(assetId)) {
+    return assetExpertReviewsStore.get(assetId)!;
+  }
+
+  if (assetTitle) {
+    return generateAssetExpertReviews(assetId, assetTitle);
+  }
+
+  return [];
+}
+
+/**
+ * 获取素材的综合评分
+ */
+export function getAssetCompositeScore(assetId: string): {
+  overall: number;
+  quality: number;
+  credibility: number;
+  relevance: number;
+  reviewCount: number;
+} | null {
+  const reviews = assetExpertReviewsStore.get(assetId);
+  if (!reviews || reviews.length === 0) return null;
+
+  const avgQuality = reviews.reduce((sum, r) => sum + r.qualityScore, 0) / reviews.length;
+  const avgCredibility = reviews.reduce((sum, r) => sum + r.credibilityScore, 0) / reviews.length;
+  const avgRelevance = reviews.reduce((sum, r) => sum + r.relevanceScore, 0) / reviews.length;
+  const overall = (avgQuality + avgCredibility + avgRelevance) / 3;
+
+  return {
+    overall: Math.round(overall),
+    quality: Math.round(avgQuality),
+    credibility: Math.round(avgCredibility),
+    relevance: Math.round(avgRelevance),
+    reviewCount: reviews.length,
+  };
+}
+
+/**
+ * 添加专家标注
+ */
+export function addAssetExpertReview(
+  assetId: string,
+  review: Omit<AssetExpertReview, 'id' | 'reviewedAt'>
+): AssetExpertReview {
+  const newReview: AssetExpertReview = {
+    ...review,
+    id: `asset-review-${assetId}-${Date.now()}`,
+    reviewedAt: new Date().toISOString(),
+  };
+
+  const existing = assetExpertReviewsStore.get(assetId) || [];
+  existing.push(newReview);
+  assetExpertReviewsStore.set(assetId, existing);
+
+  return newReview;
+}
+
+/**
+ * 获取高评分素材推荐
+ */
+export function getTopRatedAssets(assetIds: string[], limit: number = 5): Array<{
+  assetId: string;
+  score: number;
+  reviewCount: number;
+}> {
+  const scored = assetIds
+    .map((id) => ({ id, score: getAssetCompositeScore(id) }))
+    .filter((item): item is { id: string; score: NonNullable<ReturnType<typeof getAssetCompositeScore>> } =>
+      item.score !== null
+    )
+    .sort((a, b) => b.score.overall - a.score.overall)
+    .slice(0, limit);
+
+  return scored.map((item) => ({
+    assetId: item.id,
+    score: item.score.overall,
+    reviewCount: item.score.reviewCount,
+  }));
 }
 
 // 加载专家数据 - 完整75位专家

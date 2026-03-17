@@ -22,6 +22,7 @@ import { Reports } from './pages/Reports';
 import { ReportDetail } from './pages/ReportDetail';
 import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
+import { HotTopicInsights } from './pages/HotTopicInsights';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -30,6 +31,7 @@ import { CopilotChat } from './pages/CopilotChat';
 import { Prediction } from './pages/Prediction';
 import { I18nManager } from './pages/I18nManager';
 import { RSSSources } from './pages/RSSSources';
+import { RSSItems } from './pages/RSSItems';
 import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
@@ -62,6 +64,8 @@ function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="reports/:id" element={<ReportDetail />} />
               <Route path="hot-topics" element={<HotTopics />} />
+              <Route path="hot-topics/insights" element={<HotTopicInsights />} />
+              <Route path="hot-topics/insights/:topicId" element={<HotTopicInsights />} />
               <Route path="hot-topics/:id" element={<HotTopicDetail />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
@@ -70,6 +74,7 @@ function App() {
               <Route path="prediction" element={<Prediction />} />
               <Route path="i18n" element={<I18nManager />} />
               <Route path="rss-sources" element={<RSSSources />} />
+<Route path="rss-items" element={<RSSItems />} />
               <Route path="archive/hidden" element={<HiddenTasks />} />
               <Route path="archive/recycle-bin" element={<RecycleBin />} />
               <Route path="quality-dashboard" element={<QualityDashboard />} />

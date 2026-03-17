@@ -1,0 +1,559 @@
+/* 热点话题专家解读页面样式 */
+
+.hot-topic-insights-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* 页面头部 */
+.page-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.page-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.page-header .subtitle {
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* 话题选择器 */
+.topic-selector {
+  margin-bottom: 32px;
+}
+
+.topic-selector h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.topic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topic-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.topic-btn:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.topic-btn.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%);
+}
+
+.topic-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.topic-heat {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  white-space: nowrap;
+}
+
+.topic-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.topic-category {
+  font-size: 12px;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* 加载状态 */
+.loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 40px;
+  background: white;
+  border-radius: 16px;
+  border: 2px dashed #e2e8f0;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-panel p {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.loading-hint {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* 解读报告 */
+.insight-report {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  border: 1px solid #e2e8f0;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.report-title h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.report-time {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.report-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.report-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-save {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.btn-save:hover {
+  background: #e2e8f0;
+}
+
+.btn-share {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+}
+
+.btn-share:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-export {
+  background: #1e293b;
+  color: white;
+}
+
+/* 章节头部 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.section-icon {
+  font-size: 20px;
+}
+
+.section-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+}
+
+.expert-name {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 专家卡片 */
+.senior-expert-section {
+  margin-bottom: 32px;
+  padding: 24px;
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border-radius: 16px;
+  border: 1px solid #fde047;
+}
+
+.expert-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.expert-card.senior {
+  display: flex;
+  gap: 24px;
+}
+
+.expert-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.review-content {
+  flex: 1;
+}
+
+.review-content .opinion {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.focus-areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.focus-tag {
+  font-size: 12px;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  color: #475569;
+  border-radius: 20px;
+}
+
+.suggestions h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 10px;
+}
+
+.suggestions ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.suggestions li {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+
+/* 领域专家网格 */
+.domain-experts-section {
+  margin-bottom: 32px;
+}
+
+.domain-experts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.expert-card.domain {
+  border: 1px solid #e2e8f0;
+}
+
+.expert-card.domain .expert-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.expert-card.domain .expert-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+}
+
+.expert-card.domain .expert-info {
+  flex: 1;
+}
+
+.expert-card.domain .name {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.expert-card.domain .title {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.workload-badge {
+  font-size: 12px;
+}
+
+.workload-badge .available {
+  color: #22c55e;
+}
+
+.workload-badge .busy {
+  color: #f59e0b;
+}
+
+.expert-card.domain .opinion {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #475569;
+  margin-bottom: 12px;
+}
+
+.confidence-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.confidence-bar .confidence-fill {
+  height: 6px;
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.confidence-bar span {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* 综合洞察 */
+.synthesis-section {
+  margin-bottom: 32px;
+}
+
+.synthesis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.synthesis-card {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.synthesis-card h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.synthesis-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.synthesis-card li {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+.synthesis-card.insights {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.synthesis-card.insights h4 {
+  color: #1e40af;
+}
+
+.synthesis-card.insights li {
+  color: #1e40af;
+}
+
+.synthesis-card.risks {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.synthesis-card.risks h4 {
+  color: #991b1b;
+}
+
+.synthesis-card.risks li {
+  color: #991b1b;
+}
+
+.synthesis-card.opportunities {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.synthesis-card.opportunities h4 {
+  color: #166534;
+}
+
+.synthesis-card.opportunities li {
+  color: #166534;
+}
+
+.synthesis-card.recommendations {
+  background: #faf5ff;
+  border-color: #e9d5ff;
+}
+
+.synthesis-card.recommendations h4 {
+  color: #7c3aed;
+}
+
+.synthesis-card.recommendations li {
+  color: #7c3aed;
+}
+
+/* 相关素材 */
+.related-assets-section {
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.related-assets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.asset-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.asset-type {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #6366f1;
+  color: white;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.asset-title {
+  flex: 1;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.btn-view {
+  padding: 6px 14px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6366f1;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-view:hover {
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .report-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .report-actions {
+    width: 100%;
+  }
+
+  .expert-card.senior {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .synthesis-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .domain-experts-grid {
+    grid-template-columns: 1fr;
+  }
+}
