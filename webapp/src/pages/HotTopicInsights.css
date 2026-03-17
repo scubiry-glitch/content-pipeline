@@ -145,6 +145,18 @@
   background: #fee2e2;
 }
 
+/* 收藏加载状态 */
+.loading-favorites {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.loading-favorites span {
+  font-size: 14px;
+  color: #64748b;
+}
+
 .topic-list {
   display: flex;
   flex-direction: column;
