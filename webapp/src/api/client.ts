@@ -355,6 +355,30 @@ export interface RSSItem {
   created_at: string;
 }
 
+// RSS采集进度类型
+export interface RSSCollectionProgress {
+  jobId: string;
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  startedAt: string;
+  percent: number;
+  currentSource?: string;
+  processedSources: number;
+  totalSources: number;
+  totalFetched: number;
+  totalImported: number;
+  duplicates: number;
+  errors: number;
+  sourceProgress: Array<{
+    sourceId: string;
+    sourceName: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    fetched: number;
+    imported: number;
+    duplicates: number;
+    error?: string;
+  }>;
+}
+
 // RSS源管理 API
 export const rssSourcesApi = {
   getAll: () =>
@@ -370,14 +394,32 @@ export const rssSourcesApi = {
     client.delete(`/quality/rss-sources/${id}`) as Promise<void>,
 
   triggerCrawl: (id?: string) =>
-    client.post('/quality/rss-sources/crawl', { id }) as Promise<{ crawled: number }>,
+    client.post('/quality/rss-sources/crawl', { id }) as Promise<{ success: boolean; message: string; status: string; jobId?: string }>,
+
+  // 获取采集进度
+  getProgress: () =>
+    client.get('/quality/rss-sources/progress') as Promise<{ hasRunningJob: boolean; progress: RSSCollectionProgress | null }>,
+
+  // 获取历史任务
+  getHistory: (limit?: number) =>
+    client.get('/quality/rss-sources/history', { params: { limit } }) as Promise<{ items: Array<{
+      jobId: string;
+      status: string;
+      startedAt: string;
+      completedAt?: string;
+      totalSources: number;
+      totalFetched: number;
+      totalImported: number;
+      duplicates: number;
+      errors: number;
+    }> }>,
 
   // RSS文章列表
   getItems: (params?: { limit?: number; offset?: number; sourceId?: string }) =>
     client.get('/quality/items', { params }) as Promise<{ items: RSSItem[]; pagination: { total: number; limit: number; offset: number } }>,
 
   getStats: () =>
-    client.get('/quality/stats') as Promise<{ totalItems: number; todayItems: number; totalSources: number; activeSources: number; avgRelevance: number }>,
+    client.get('/quality/stats') as Promise<{ totalItems: number; todayItems: number; totalSources: number; activeSources: number; avgRelevance: number; hotTopicsCount: number; todayHotTopics: number }>,
 };
 
 // 情感分析相关类型 (v3.2)

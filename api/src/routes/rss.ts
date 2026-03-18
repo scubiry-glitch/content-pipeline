@@ -1,5 +1,5 @@
-// RSS 路由 - RSS Routes
-// FR-031 ~ FR-033: RSS 自动采集管理
+// RSS 路由 - RSS Routes v2.0
+// FR-031 ~ FR-033: RSS 自动采集管理 + 进度追踪
 
 import { FastifyInstance } from 'fastify';
 import {
@@ -8,6 +8,10 @@ import {
   loadRSSConfig,
   getRSSStats,
   saveRSSConfig,
+  getCurrentJob,
+  getJobHistory,
+  getRecentHotTopics,
+  RSSSource,
 } from '../services/rssCollector.js';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
@@ -16,7 +20,9 @@ import { authenticate } from '../middleware/auth.js';
 let rssSources: any[] = [];
 
 export async function rssRoutes(fastify: FastifyInstance) {
-  // 获取 RSS 源列表（与/sources保持一致，返回适配前端格式）
+  // ===== RSS 源管理 =====
+
+  // 获取 RSS 源列表（适配前端格式）
   fastify.get('/rss-sources', { preHandler: authenticate }, async (request) => {
     const config = await loadRSSConfig();
 
@@ -36,7 +42,7 @@ export async function rssRoutes(fastify: FastifyInstance) {
         ...s,
         category,
         categoryName: catConfig.name,
-        isActive: s.enabled !== false,
+        isActive: s.enabled !== false && s.status === 'active',
         lastCrawledAt: lastFetchMap.get(s.id) || s.lastFetched || null,
       }))
     );
@@ -81,15 +87,28 @@ export async function rssRoutes(fastify: FastifyInstance) {
     return { success: true };
   });
 
-  // 手动触发采集（兼容前端调用）
+  // ===== 采集触发 =====
+
+  // 手动触发采集（带进度追踪）
   fastify.post('/rss-sources/crawl', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.body as any;
 
+    // 检查是否有正在运行的任务
+    const currentJob = getCurrentJob();
+    if (currentJob && currentJob.status === 'running') {
+      return {
+        success: false,
+        message: '已有采集任务正在运行',
+        jobId: currentJob.jobId,
+        status: 'running',
+      };
+    }
+
     // 不管是单个还是全部，都异步执行，立即返回
-    setImmediate(async () => {
-      try {
-        if (id) {
-          // 采集单个源
+    if (id) {
+      // 采集单个源
+      setImmediate(async () => {
+        try {
           const config = await loadRSSConfig();
           const sources = Object.values(config.categories)
             .flatMap((c: any) => c.sources)
@@ -99,82 +118,109 @@ export async function rssRoutes(fastify: FastifyInstance) {
             const result = await collectSingleFeed(sources[0], config.filters);
             console.log(`[RSS] Single source ${sources[0].name} collection completed:`, result);
           }
-        } else {
-          // 采集所有源
+        } catch (error) {
+          console.error('[RSS] Single source collection failed:', error);
+        }
+      });
+
+      return {
+        success: true,
+        message: `RSS source ${id} collection started`,
+        status: 'running',
+      };
+    } else {
+      // 采集所有源
+      setImmediate(async () => {
+        try {
           const result = await collectAllFeeds();
           console.log('[RSS] All feeds collection completed:', result);
+        } catch (error) {
+          console.error('[RSS] Collection failed:', error);
         }
-      } catch (error) {
-        console.error('[RSS] Collection failed:', error);
-      }
-    });
+      });
 
-    return {
-      crawled: 0,
-      message: id ? `RSS source ${id} collection started in background` : 'RSS collection started in background',
-      status: 'running',
-    };
+      return {
+        success: true,
+        message: 'RSS collection started in background',
+        status: 'running',
+      };
+    }
   });
 
-  // 手动触发全量采集（管理员权限）- 保持兼容
-  fastify.post('/collect', { preHandler: authenticate }, async (request, reply) => {
-    const { sourceId } = request.body as any;
+  // ===== 进度追踪 =====
 
-    if (sourceId) {
-      // 采集单个源
-      const config = await loadRSSConfig();
-      const sources = Object.values(config.categories)
-        .flatMap(c => c.sources)
-        .filter(s => s.id === sourceId);
-
-      if (sources.length === 0) {
-        reply.status(404);
-        return { error: 'Source not found' };
-      }
-
-      const result = await collectSingleFeed(sources[0], config.filters);
+  // 获取当前采集进度
+  fastify.get('/rss-sources/progress', { preHandler: authenticate }, async () => {
+    const job = getCurrentJob();
+    
+    if (!job) {
       return {
-        sourceId,
-        sourceName: sources[0].name,
-        ...result,
+        hasRunningJob: false,
+        progress: null,
       };
     }
 
-    // 采集所有源（异步执行）
-    setImmediate(async () => {
-      try {
-        const result = await collectAllFeeds();
-        console.log('[RSS] Collection completed:', result);
-      } catch (error) {
-        console.error('[RSS] Collection failed:', error);
-      }
-    });
+    // 计算总体进度百分比
+    const percent = job.totalSources > 0 
+      ? Math.round(((job.processedSources + (job.currentSource ? 0.5 : 0)) / job.totalSources) * 100)
+      : 0;
 
     return {
-      message: 'RSS collection started in background',
-      status: 'running',
+      hasRunningJob: job.status === 'running',
+      progress: {
+        jobId: job.jobId,
+        status: job.status,
+        startedAt: job.startedAt,
+        percent,
+        currentSource: job.currentSource,
+        processedSources: job.processedSources,
+        totalSources: job.totalSources,
+        totalFetched: job.totalFetched,
+        totalImported: job.totalImported,
+        duplicates: job.duplicates,
+        errors: job.errors.length,
+        sourceProgress: Array.from(job.sourceProgress.values()).map(s => ({
+          sourceId: s.sourceId,
+          sourceName: s.sourceName,
+          status: s.status,
+          fetched: s.fetched,
+          imported: s.imported,
+          duplicates: s.duplicates,
+          error: s.error,
+        })),
+      },
     };
   });
 
-  // 获取 RSS 源列表
-  fastify.get('/sources', { preHandler: authenticate }, async (request) => {
-    const config = await loadRSSConfig();
-    const sources = Object.entries(config.categories).flatMap(([category, catConfig]) =>
-      catConfig.sources.map(s => ({
-        ...s,
-        category,
-        categoryName: catConfig.name,
-      }))
-    );
-
-    return { sources };
+  // 获取历史任务
+  fastify.get('/rss-sources/history', { preHandler: authenticate }, async (request) => {
+    const { limit = '10' } = request.query as any;
+    const history = getJobHistory(parseInt(limit));
+    
+    return {
+      items: history.map(job => ({
+        jobId: job.jobId,
+        status: job.status,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        totalSources: job.totalSources,
+        totalFetched: job.totalFetched,
+        totalImported: job.totalImported,
+        duplicates: job.duplicates,
+        errors: job.errors.length,
+      })),
+    };
   });
+
+  // ===== 统计数据 =====
 
   // 获取 RSS 采集统计
   fastify.get('/stats', { preHandler: authenticate }, async () => {
     const stats = await getRSSStats();
     return stats;
   });
+
+  // ===== RSS 条目管理 =====
 
   // 获取 RSS 条目列表
   fastify.get('/items', { preHandler: authenticate }, async (request) => {
@@ -189,7 +235,8 @@ export async function rssRoutes(fastify: FastifyInstance) {
     let sql = `
       SELECT
         id, source_name, title, link, summary,
-        published_at, author, tags, relevance_score, created_at
+        published_at, author, tags, relevance_score, 
+        hot_score, trend, sentiment, created_at
       FROM rss_items
       WHERE 1=1
     `;
@@ -265,7 +312,6 @@ export async function rssRoutes(fastify: FastifyInstance) {
     }
 
     const item = result.rows[0];
-    const { v4: uuidv4 } = await import('uuid');
 
     // 检查是否已导入
     const existingResult = await query(
@@ -334,6 +380,73 @@ export async function rssRoutes(fastify: FastifyInstance) {
         tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
         similarity: Math.max(row.title_sim, row.content_sim),
       })),
+    };
+  });
+
+  // ===== 热点话题 =====
+  // 注意: /hot-topics 路由已移至 v34-hot-topics.ts，避免重复定义
+
+  // ===== 兼容旧版路由 =====
+
+  // 获取 RSS 源列表（旧版）
+  fastify.get('/sources', { preHandler: authenticate }, async (request) => {
+    const config = await loadRSSConfig();
+    const sources = Object.entries(config.categories).flatMap(([category, catConfig]) =>
+      catConfig.sources.map(s => ({
+        ...s,
+        category,
+        categoryName: catConfig.name,
+      }))
+    );
+
+    return { sources };
+  });
+
+  // 手动触发全量采集（旧版）
+  fastify.post('/collect', { preHandler: authenticate }, async (request, reply) => {
+    const { sourceId } = request.body as any;
+
+    if (sourceId) {
+      const config = await loadRSSConfig();
+      const sources = Object.values(config.categories)
+        .flatMap(c => c.sources)
+        .filter(s => s.id === sourceId);
+
+      if (sources.length === 0) {
+        reply.status(404);
+        return { error: 'Source not found' };
+      }
+
+      const result = await collectSingleFeed(sources[0], config.filters);
+      return {
+        sourceId,
+        sourceName: sources[0].name,
+        ...result,
+      };
+    }
+
+    // 检查是否有正在运行的任务
+    const currentJob = getCurrentJob();
+    if (currentJob && currentJob.status === 'running') {
+      return {
+        message: 'RSS collection already running',
+        status: 'running',
+        jobId: currentJob.jobId,
+      };
+    }
+
+    // 异步执行
+    setImmediate(async () => {
+      try {
+        await collectAllFeeds();
+      } catch (error) {
+        console.error('[RSS] Collection failed:', error);
+      }
+    });
+
+    return {
+      message: 'RSS collection started in background',
+      status: 'running',
     };
   });
 }

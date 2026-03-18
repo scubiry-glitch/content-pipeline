@@ -160,6 +160,10 @@ export interface DifferentiationSuggestion {
   potentialValue: 'high' | 'medium' | 'low';
 }
 
+// 资产类型
+export type AssetType = 'file' | 'report' | 'quote' | 'data' | 'rss_item';
+
+// 资产基础接口
 export interface Asset {
   id: string;
   title: string;
@@ -174,8 +178,29 @@ export interface Asset {
   is_pinned: boolean;
   pinned_at?: string;
   theme_id?: string;
+  asset_type: AssetType; // 资产类型区分
   created_at: string;
   updated_at: string;
+}
+
+// 研报特有属性（作为 Asset 的扩展）
+export interface ReportAsset extends Asset {
+  asset_type: 'report';
+  authors: string[];
+  institution: string;
+  publish_date: string;
+  page_count: number;
+  key_points: string[];
+  quality_dimensions?: {
+    authority: number;
+    completeness: number;
+    logic: number;
+    freshness: number;
+  };
+  status: 'pending' | 'parsed' | 'matched' | 'completed';
+  // 研报关联
+  related_assets?: string[];
+  related_topics?: string[];
 }
 
 export interface AutoTag {

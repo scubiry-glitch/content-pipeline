@@ -20,7 +20,6 @@ const mainNavItems: NavItem[] = [
   { to: '/assets', label: '内容资产', icon: '📚' },
   { to: '/expert-library', label: '专家体系', icon: '👥' },
   { to: '/hot-topics', label: '热点洞察', icon: '🔥' },
-  { to: '/reports', label: '研报中心', icon: '📄' },
 ];
 
 const systemNavItems: NavItem[] = [

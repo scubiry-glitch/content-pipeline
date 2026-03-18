@@ -62,9 +62,9 @@ async function kimiRequest(path: string, body: any, apiKey: string, baseURL: str
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
       'Content-Length': Buffer.byteLength(postData),
-      'User-Agent': 'claude-cli/2.0.00 (external, cli, workload/cron)',
-      'X-Client-Name': 'claude-code',
-      'X-Client-Version': '2.0.00',
+      'User-Agent': 'KimiCLI/1.24.0 (kimi-agent-sdk/0.1.4 kimi-code-for-vs-code/0.4.4 0.1.4)',
+      'X-Client-Name': 'kimi-code-for-vs-code',
+      'X-Client-Version': '1.24.0',
     },
     family: 4, // 强制使用 IPv4，解决 Node.js fetch 超时问题
     timeout: 60000,

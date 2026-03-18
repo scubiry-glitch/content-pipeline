@@ -16,11 +16,10 @@ import { Tasks } from './pages/Tasks';
 import { TaskDetail } from './pages/TaskDetail';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
-import { PopularAssets } from './pages/PopularAssets';
 import { Experts } from './pages/Experts';
 import { ExpertLibrary } from './pages/ExpertLibrary';
-import { Reports } from './pages/Reports';
 import { ReportDetail } from './pages/ReportDetail';
+import { ReportCompare } from './pages/ReportCompare';
 import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
 import { HotTopicInsights } from './pages/HotTopicInsights';
@@ -40,7 +39,6 @@ import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
 import { Notifications } from './pages/Notifications';
-import { ReportCompare } from './pages/ReportCompare';
 
 import './App.css';
 
@@ -62,14 +60,19 @@ function App() {
               <Route path="tasks" element={<Tasks />} />
               <Route path="tasks/:id" element={<TaskDetail />} />
               <Route path="tasks/:id/edit" element={<Stage3Editor />} />
+              {/* 内容资产模块 - 整合素材和研报 */}
               <Route path="assets" element={<Assets />} />
-              <Route path="assets/popular" element={<PopularAssets />} />
               <Route path="assets/:id" element={<AssetDetail />} />
+              {/* 研报子路由 - 整合到内容资产 */}
+              <Route path="assets/reports/:id" element={<ReportDetail />} />
+              <Route path="assets/reports/compare" element={<ReportCompare />} />
+              {/* 旧研报路由重定向到新路由 */}
+              <Route path="reports" element={<Navigate to="/assets" replace />} />
+              <Route path="reports/:id" element={<Navigate to="/assets/reports/:id" replace />} />
+              <Route path="reports/compare" element={<Navigate to="/assets/reports/compare" replace />} />
+              
               <Route path="experts" element={<Experts />} />
               <Route path="expert-library" element={<ExpertLibrary />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="reports/:id" element={<ReportDetail />} />
-              <Route path="reports/compare" element={<ReportCompare />} />
               <Route path="hot-topics" element={<HotTopics />} />
               <Route path="hot-topics/insights" element={<HotTopicInsights />} />
               <Route path="hot-topics/insights/:topicId" element={<HotTopicInsights />} />

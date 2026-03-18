@@ -1,22 +1,12 @@
-// RSS 自动采集服务 - RSS Feed Collector Service
+// RSS 自动采集服务 - RSS Feed Collector Service v2.0
+// 功能整合：素材采集 + 热点追踪 + 进度监控
 // FR-031 ~ FR-033: 自动采集 RSS 源，智能入库
 
 import Parser from 'rss-parser';
 import crypto from 'crypto';
 import { query } from '../db/connection.js';
-// 获取文本的 embedding（简化实现，实际应调用 LLM 服务）
-async function getEmbedding(text: string): Promise<number[]> {
-  // 返回一个空的 1536 维向量作为占位符
-  // 实际实现应该调用 OpenAI/Claude 的 embedding API
-  return new Array(1536).fill(0).map(() => Math.random() * 2 - 1);
-}
 
-const rssParser = new Parser({
-  timeout: 10000,
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (compatible; ContentPipeline/1.0;)'
-  }
-});
+// ===== 类型定义 =====
 
 export interface RSSSource {
   id: string;
@@ -45,6 +35,10 @@ export interface RSSItem {
   relevanceScore: number;
   isDuplicate: boolean;
   embedding?: number[];
+  // 热点追踪字段
+  hotScore?: number;
+  trend?: 'up' | 'stable' | 'down';
+  sentiment?: 'positive' | 'neutral' | 'negative';
 }
 
 export interface RSSConfig {
@@ -60,9 +54,49 @@ export interface RSSConfig {
   };
 }
 
-// 加载 RSS 配置
+export interface CollectionProgress {
+  jobId: string;
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  startedAt: Date;
+  completedAt?: Date;
+  totalSources: number;
+  processedSources: number;
+  currentSource?: string;
+  totalFetched: number;
+  totalImported: number;
+  duplicates: number;
+  errors: string[];
+  sourceProgress: Map<string, SourceProgress>;
+}
+
+export interface SourceProgress {
+  sourceId: string;
+  sourceName: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  fetched: number;
+  imported: number;
+  duplicates: number;
+  error?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+// ===== 全局状态 =====
+
+// 当前采集任务进度（内存存储，支持实时查询）
+let currentJob: CollectionProgress | null = null;
+let jobHistory: CollectionProgress[] = [];
+
+const rssParser = new Parser({
+  timeout: 10000,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (compatible; ContentPipeline/1.0;)'
+  }
+});
+
+// ===== 配置加载 =====
+
 export async function loadRSSConfig(): Promise<RSSConfig> {
-  // 从文件加载配置
   try {
     const configModule = await import('../../../config/rss-sources.json', {
       assert: { type: 'json' }
@@ -81,25 +115,107 @@ export async function loadRSSConfig(): Promise<RSSConfig> {
   }
 }
 
+export async function saveRSSConfig(config: RSSConfig): Promise<void> {
+  // 实际项目中应该写入文件或数据库
+  console.log('[RSS] Config saved (mock)');
+}
+
+// ===== 进度管理 =====
+
+export function getCurrentJob(): CollectionProgress | null {
+  return currentJob;
+}
+
+export function getJobHistory(limit: number = 10): CollectionProgress[] {
+  return jobHistory.slice(-limit);
+}
+
+function createNewJob(totalSources: number): string {
+  const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  currentJob = {
+    jobId,
+    status: 'running',
+    startedAt: new Date(),
+    totalSources,
+    processedSources: 0,
+    totalFetched: 0,
+    totalImported: 0,
+    duplicates: 0,
+    errors: [],
+    sourceProgress: new Map()
+  };
+  return jobId;
+}
+
+function updateSourceProgress(sourceId: string, progress: Partial<SourceProgress>) {
+  if (!currentJob) return;
+  
+  const existing = currentJob.sourceProgress.get(sourceId);
+  if (existing) {
+    Object.assign(existing, progress);
+  } else {
+    currentJob.sourceProgress.set(sourceId, progress as SourceProgress);
+  }
+}
+
+function completeJob(success: boolean = true) {
+  if (!currentJob) return;
+  
+  currentJob.status = success ? 'completed' : 'failed';
+  currentJob.completedAt = new Date();
+  jobHistory.push({ ...currentJob });
+  
+  // 保留最近 50 条历史
+  if (jobHistory.length > 50) {
+    jobHistory = jobHistory.slice(-50);
+  }
+  
+  console.log(`[RSS] Job ${currentJob.jobId} ${success ? 'completed' : 'failed'}`);
+}
+
+// ===== 核心采集功能 =====
+
 /**
- * 采集所有活跃 RSS 源
+ * 采集所有活跃 RSS 源（带进度追踪）
  */
 export async function collectAllFeeds(): Promise<{
+  jobId: string;
   totalFetched: number;
   totalImported: number;
   duplicates: number;
   errors: string[];
 }> {
   const config = await loadRSSConfig();
-  const sources = extractSources(config);
+  const sources = extractSources(config).filter(s => s.status === 'active');
+  
+  // 创建新任务
+  const jobId = createNewJob(sources.length);
+  console.log(`[RSS] Starting collection job ${jobId}, ${sources.length} sources`);
 
   const errors: string[] = [];
   let totalFetched = 0;
   let totalImported = 0;
   let duplicates = 0;
 
-  for (const source of sources) {
-    if (source.status !== 'active') continue;
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+    
+    // 更新当前处理状态
+    if (currentJob) {
+      currentJob.currentSource = source.name;
+      currentJob.processedSources = i;
+    }
+
+    // 初始化源进度
+    updateSourceProgress(source.id, {
+      sourceId: source.id,
+      sourceName: source.name,
+      status: 'processing',
+      fetched: 0,
+      imported: 0,
+      duplicates: 0,
+      startedAt: new Date()
+    });
 
     try {
       const result = await collectSingleFeed(source, config.filters);
@@ -107,15 +223,49 @@ export async function collectAllFeeds(): Promise<{
       totalImported += result.imported;
       duplicates += result.duplicates;
 
-      console.log(`[RSS] ${source.name}: fetched ${result.fetched}, imported ${result.imported}`);
+      // 更新源进度
+      updateSourceProgress(source.id, {
+        status: 'completed',
+        fetched: result.fetched,
+        imported: result.imported,
+        duplicates: result.duplicates,
+        completedAt: new Date()
+      });
+
+      // 更新总进度
+      if (currentJob) {
+        currentJob.totalFetched = totalFetched;
+        currentJob.totalImported = totalImported;
+        currentJob.duplicates = duplicates;
+      }
+
+      console.log(`[RSS] [${i + 1}/${sources.length}] ${source.name}: fetched ${result.fetched}, imported ${result.imported}`);
     } catch (error) {
       const errorMsg = `[${source.name}] ${error instanceof Error ? error.message : String(error)}`;
       errors.push(errorMsg);
+      
+      updateSourceProgress(source.id, {
+        status: 'failed',
+        error: errorMsg,
+        completedAt: new Date()
+      });
+      
+      if (currentJob) {
+        currentJob.errors.push(errorMsg);
+      }
+      
       console.error(`[RSS] Error collecting ${source.name}:`, error);
     }
   }
 
-  return { totalFetched, totalImported, duplicates, errors };
+  // 完成任务
+  if (currentJob) {
+    currentJob.processedSources = sources.length;
+    currentJob.currentSource = undefined;
+  }
+  completeJob(errors.length === 0);
+
+  return { jobId, totalFetched, totalImported, duplicates, errors };
 }
 
 /**
@@ -130,8 +280,21 @@ export async function collectSingleFeed(
 
   let imported = 0;
   let duplicates = 0;
+  let processedCount = 0;
 
   for (const item of items.slice(0, 50)) { // 每个源最多处理 50 条
+    processedCount++;
+    
+    // 实时更新进度
+    updateSourceProgress(source.id, {
+      sourceId: source.id,
+      sourceName: source.name,
+      status: 'processing',
+      fetched: processedCount,
+      imported,
+      duplicates
+    });
+
     const rssItem = await parseRSSItem(item, source);
 
     // 内容过滤
@@ -148,6 +311,10 @@ export async function collectSingleFeed(
 
     // 保存到数据库
     await saveRSSItem(rssItem);
+    
+    // 同时保存到热点表（用于热点追踪）
+    await saveHotTopic(rssItem);
+    
     imported++;
   }
 
@@ -178,6 +345,12 @@ async function parseRSSItem(
   // 计算相关度分数
   const relevanceScore = calculateRelevance(title, content, source.keywords, tags);
 
+  // 计算热点追踪数据
+  const hoursAgo = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60);
+  const hotScore = Math.max(0, 100 - hoursAgo * 2);
+  const trend = hotScore > 80 ? 'up' : hotScore > 50 ? 'stable' : 'down';
+  const sentiment = analyzeSentiment(title + ' ' + (item.contentSnippet || content.slice(0, 500)));
+
   return {
     id,
     sourceId: source.id,
@@ -192,6 +365,9 @@ async function parseRSSItem(
     tags,
     relevanceScore,
     isDuplicate: false,
+    hotScore: Math.round(hotScore),
+    trend,
+    sentiment
   };
 }
 
@@ -276,9 +452,14 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
   await query(
     `INSERT INTO rss_items (
       id, source_id, source_name, title, link, content, summary,
-      published_at, author, categories, tags, relevance_score, embedding, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
-    ON CONFLICT (id) DO NOTHING`,
+      published_at, author, categories, tags, relevance_score, 
+      hot_score, trend, sentiment, embedding, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      hot_score = EXCLUDED.hot_score,
+      trend = EXCLUDED.trend,
+      sentiment = EXCLUDED.sentiment,
+      updated_at = NOW()`,
     [
       item.id,
       item.sourceId,
@@ -292,6 +473,9 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
       JSON.stringify(item.categories || []),
       JSON.stringify(item.tags),
       item.relevanceScore,
+      item.hotScore,
+      item.trend,
+      item.sentiment,
       embedding ? JSON.stringify(embedding) : null,
     ]
   );
@@ -303,14 +487,41 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
 }
 
 /**
+ * 保存热点数据
+ */
+async function saveHotTopic(item: RSSItem): Promise<void> {
+  // 只保存有热度的内容
+  if (!item.hotScore || item.hotScore < 30) return;
+
+  await query(
+    `INSERT INTO hot_topics (
+      id, title, source, source_url, hot_score, trend, sentiment, 
+      published_at, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      hot_score = EXCLUDED.hot_score,
+      trend = EXCLUDED.trend,
+      updated_at = NOW()`,
+    [
+      `rss-${item.id}`,
+      item.title,
+      item.sourceName,
+      item.link,
+      item.hotScore,
+      item.trend,
+      item.sentiment,
+      item.publishedAt
+    ]
+  );
+}
+
+/**
  * 导入到素材库
  */
 async function importToAssetLibrary(
   item: RSSItem,
   embedding?: number[] | null
 ): Promise<void> {
-  const { v4: uuidv4 } = await import('uuid');
-
   await query(
     `INSERT INTO assets (
       id, title, content, content_type, source, source_url,
@@ -361,6 +572,7 @@ async function extractTags(
     '政策', '监管', '央行', '降准', '降息',
     '华为', '苹果', '小米', '字节跳动',
     '房地产', 'REITs', '保租房',
+    'startup', 'funding', 'venture capital'
   ];
 
   for (const keyword of hotKeywords) {
@@ -370,11 +582,11 @@ async function extractTags(
   }
 
   // 3. 提取命名实体（简化版）
-  const companyPattern = /(?:比亚迪|特斯拉|华为|小米|苹果|字节跳动|腾讯|阿里巴巴|京东|美团|拼多多|蔚来|小鹏|理想)/g;
+  const companyPattern = /(?:比亚迪|特斯拉|华为|小米|苹果|字节跳动|腾讯|阿里巴巴|京东|美团|拼多多|蔚来|小鹏|理想|OpenAI|Google|Microsoft|Apple|Amazon|Meta|Tesla|Nvidia)/gi;
   const companies = text.match(companyPattern) || [];
   companies.forEach(c => tags.add(c));
 
-  return Array.from(tags).slice(0, 10); // 最多 10 个标签
+  return Array.from(tags).slice(0, 10);
 }
 
 /**
@@ -416,6 +628,29 @@ function calculateRelevance(
 }
 
 /**
+ * 情绪分析
+ */
+function analyzeSentiment(text: string): 'positive' | 'neutral' | 'negative' {
+  const positiveWords = ['增长', '上涨', '突破', '利好', '强劲', '创新高', '成功', '提升', '增长', 'rise', 'growth', 'surge', 'breakthrough', 'strong'];
+  const negativeWords = ['下降', '下跌', '跌破', '利空', '疲软', '创新低', '失败', '下滑', '下降', 'fall', 'decline', 'drop', 'crash', 'weak'];
+
+  let positiveCount = 0;
+  let negativeCount = 0;
+
+  for (const word of positiveWords) {
+    if (text.includes(word)) positiveCount++;
+  }
+
+  for (const word of negativeWords) {
+    if (text.includes(word)) negativeCount++;
+  }
+
+  if (positiveCount > negativeCount) return 'positive';
+  if (negativeCount > positiveCount) return 'negative';
+  return 'neutral';
+}
+
+/**
  * 生成摘要
  */
 function generateSummary(content: string, maxLength: number = 300): string {
@@ -446,7 +681,6 @@ function generateSummary(content: string, maxLength: number = 300): string {
  * 更新源的采集时间
  */
 async function updateSourceLastFetch(sourceId: string): Promise<void> {
-  // 记录采集日志
   await query(
     `INSERT INTO rss_fetch_logs (source_id, fetched_at, fetched_date, status)
      VALUES ($1, NOW(), CURRENT_DATE, 'success')
@@ -474,6 +708,8 @@ function extractSources(config: RSSConfig): RSSSource[] {
   return sources;
 }
 
+// ===== 统计和查询 =====
+
 /**
  * 获取 RSS 采集统计
  */
@@ -483,6 +719,8 @@ export async function getRSSStats(): Promise<{
   totalSources: number;
   activeSources: number;
   avgRelevance: number;
+  hotTopicsCount: number;
+  todayHotTopics: number;
 }> {
   const totalResult = await query(`SELECT COUNT(*) FROM rss_items`);
   const todayResult = await query(
@@ -490,6 +728,10 @@ export async function getRSSStats(): Promise<{
   );
   const relevanceResult = await query(
     `SELECT AVG(relevance_score) FROM rss_items WHERE created_at > NOW() - INTERVAL '7 days'`
+  );
+  const hotTopicsResult = await query(`SELECT COUNT(*) FROM hot_topics`);
+  const todayHotTopicsResult = await query(
+    `SELECT COUNT(*) FROM hot_topics WHERE created_at > NOW() - INTERVAL '1 day'`
   );
 
   const config = await loadRSSConfig();
@@ -501,10 +743,35 @@ export async function getRSSStats(): Promise<{
     totalSources: sources.length,
     activeSources: sources.filter(s => s.status === 'active').length,
     avgRelevance: parseFloat(relevanceResult.rows[0]?.avg || '0'),
+    hotTopicsCount: parseInt(hotTopicsResult.rows[0]?.count || '0'),
+    todayHotTopics: parseInt(todayHotTopicsResult.rows[0]?.count || '0'),
   };
 }
 
-// 默认过滤器配置
+/**
+ * 获取最近采集的热点话题
+ */
+export async function getRecentHotTopics(limit: number = 20): Promise<any[]> {
+  const result = await query(
+    `SELECT * FROM hot_topics 
+     WHERE created_at > NOW() - INTERVAL '7 days'
+     ORDER BY hot_score DESC, published_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+// ===== Embedding 工具 =====
+
+async function getEmbedding(text: string): Promise<number[]> {
+  // 返回一个空的 1536 维向量作为占位符
+  // 实际实现应该调用 OpenAI/Claude 的 embedding API
+  return new Array(1536).fill(0).map(() => Math.random() * 2 - 1);
+}
+
+// ===== 默认过滤器配置 =====
+
 const filters = {
   hotKeywords: [] as string[],
   excludeKeywords: [] as string[],
