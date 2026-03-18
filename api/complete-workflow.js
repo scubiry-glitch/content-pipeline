@@ -48,9 +48,11 @@ async function completeWorkflow() {
     }
 
     // Step 2: Writing
-    console.log('[Workflow] Step 2: Writing');
-    await pipeline.write(taskId);
-    console.log('[Workflow] Writing completed');
+    if (task.status !== 'completed') {
+      console.log('[Workflow] Step 2: Writing');
+      await pipeline.write(taskId);
+      console.log('[Workflow] Writing completed');
+    }
 
     // Step 3: Review
     console.log('[Workflow] Step 3: Review');

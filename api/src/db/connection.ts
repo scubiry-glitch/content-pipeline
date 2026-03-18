@@ -310,7 +310,7 @@ async function setupMVPSchema(): Promise<void> {
       id VARCHAR(50) PRIMARY KEY DEFAULT 'expert_' || SUBSTRING(MD5(RANDOM()::TEXT), 1, 8),
       name VARCHAR(100) NOT NULL,
       title VARCHAR(200),
-      role VARCHAR(50) NOT NULL,
+      role VARCHAR(50) NOT NULL DEFAULT 'domain_expert',
       domains TEXT[] DEFAULT '{}',
       expertise_level INTEGER DEFAULT 3,
       system_prompt TEXT,
@@ -318,7 +318,21 @@ async function setupMVPSchema(): Promise<void> {
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
-  `);
+  `).catch(async (err) => {
+    // Table might exist with different schema, try to add missing columns
+    if (err.message?.includes('already exists')) {
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'domain_expert'`);
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS domains TEXT[] DEFAULT '{}'`);
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS expertise_level INTEGER DEFAULT 3`);
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS system_prompt TEXT`);
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS bio TEXT`);
+      await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`);
+    }
+  });
+
+  // Ensure columns exist (for existing tables)
+  await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'domain_expert'`).catch(() => {});
+  await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`).catch(() => {});
 
   // Seed default experts for BlueTeam if none exist
   const expertCount = await query(`SELECT COUNT(*) FROM expert_library WHERE is_active = true`);
@@ -343,8 +357,9 @@ async function setupMVPSchema(): Promise<void> {
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_research_reports_topic ON research_reports(topic_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_role ON expert_library(role)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_active ON expert_library(is_active)`);
+  // Expert library indexes (only if table exists with correct schema)
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_role ON expert_library(role)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_active ON expert_library(is_active)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_tags ON assets USING GIN(tags)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_theme ON assets(theme_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_pinned ON assets(is_pinned, pinned_at)`);
