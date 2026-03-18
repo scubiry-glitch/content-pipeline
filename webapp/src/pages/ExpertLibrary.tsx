@@ -1,9 +1,9 @@
-// 专家库 v5.1 - Expert Library
-// 展示75位专家（10位特级+65位领域专家）
+// 专家库 v5.2 - Expert Library with Tab Navigation
+// 整合专家库列表、对比、网络、知识图谱
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getAllExperts, getExpertsByDomain, getSeniorExperts, getExpertFeedbackStats, getExpertWorkload, getExpertReviewHistory, type ExpertReviewHistory } from '../services/expertService';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getAllExperts, getExpertFeedbackStats, getExpertWorkload, getExpertReviewHistory, type ExpertReviewHistory } from '../services/expertService';
 import type { Expert } from '../types';
 import './ExpertLibrary.css';
 
@@ -22,6 +22,48 @@ const DOMAINS = [
   { code: 'E11', name: 'ESG可持续', color: '#10b981', icon: '🌱' },
   { code: 'E12', name: '跨境出海', color: '#0ea5e9', icon: '🚢' },
 ];
+
+const TABS = [
+  { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览75位专家的详细信息' },
+  { id: 'comparison', label: '⚖️ 专家对比', path: '/expert-comparison', description: '并排对比不同专家的观点' },
+  { id: 'network', label: '🕸️ 协作网络', path: '/expert-network', description: '可视化专家协作关系' },
+  { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
+];
+
+// Tab导航组件
+export function ExpertTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path === '/expert-comparison') return 'comparison';
+    if (path === '/expert-network') return 'network';
+    if (path === '/expert-knowledge-graph') return 'knowledge';
+    return 'list';
+  };
+
+  const activeTab = getActiveTab();
+
+  return (
+    <div className="expert-tabs">
+      <div className="tabs-nav">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => navigate(tab.path)}
+          >
+            <span className="tab-label">{tab.label}</span>
+            {activeTab === tab.id && (
+              <span className="tab-description">{tab.description}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ExpertLibrary() {
   const navigate = useNavigate();
@@ -44,7 +86,6 @@ export function ExpertLibrary() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 加载专家反馈统计和历史记录
   const loadExpertStats = (expert: Expert) => {
     const stats = getExpertFeedbackStats(expert.id);
     setSelectedExpertStats(stats);
@@ -53,13 +94,11 @@ export function ExpertLibrary() {
       pendingReviews: workload.pendingReviews,
       availability: workload.availability,
     });
-    // 加载历史评审记录
     const history = getExpertReviewHistory(expert.id, { limit: 5 });
     setSelectedExpertHistory(history);
   };
 
   useEffect(() => {
-    // 从服务加载专家数据
     const allExperts = getAllExperts();
     setExperts(allExperts);
     setFilteredExperts(allExperts);
@@ -68,13 +107,9 @@ export function ExpertLibrary() {
 
   useEffect(() => {
     let result = experts;
-
-    // 按领域筛选
     if (selectedDomain !== 'all') {
       result = result.filter((e) => e.domainCode === selectedDomain);
     }
-
-    // 按搜索词筛选
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -85,7 +120,6 @@ export function ExpertLibrary() {
           e.philosophy.core.some((p) => p.toLowerCase().includes(query))
       );
     }
-
     setFilteredExperts(result);
   }, [experts, selectedDomain, searchQuery]);
 
@@ -140,22 +174,14 @@ export function ExpertLibrary() {
       {/* 页面标题 */}
       <div className="page-header">
         <div className="header-title">
-          <h1>专家库 v5.1</h1>
+          <h1>专家库 v5.2</h1>
           <span className="version-badge">75位专家</span>
-        </div>
-        <div className="header-actions">
-          <button className="btn-network" onClick={() => navigate('/expert-network')}>
-            🕸️ 专家网络
-          </button>
-          <button className="btn-knowledge" onClick={() => navigate('/expert-knowledge-graph')}>
-            🧠 知识图谱
-          </button>
-          <button className="btn-comparison" onClick={() => navigate('/expert-comparison')}>
-            ⚖️ 专家对比
-          </button>
         </div>
         <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
       </div>
+
+      {/* Tab导航 */}
+      <ExpertTabs />
 
       {/* 统计栏 */}
       <div className="stats-bar">
@@ -327,7 +353,6 @@ export function ExpertLibrary() {
             </div>
 
             <div className="modal-body">
-              {/* 人设背景 */}
               <section className="detail-section">
                 <h4>🎯 人设背景</h4>
                 <p className="background-text">{selectedExpert.profile.background}</p>
@@ -337,7 +362,6 @@ export function ExpertLibrary() {
                 </p>
               </section>
 
-              {/* 核心思想 */}
               <section className="detail-section">
                 <h4>💡 核心思想</h4>
                 <div className="philosophy-core">
@@ -354,7 +378,6 @@ export function ExpertLibrary() {
                 )}
               </section>
 
-              {/* 成功实践 */}
               {selectedExpert.achievements.length > 0 && (
                 <section className="detail-section">
                   <h4>🏆 成功实践</h4>
@@ -374,7 +397,6 @@ export function ExpertLibrary() {
                 </section>
               )}
 
-              {/* 评审维度 */}
               <section className="detail-section">
                 <h4>📋 评审维度</h4>
                 <div className="review-dimensions">
@@ -386,7 +408,6 @@ export function ExpertLibrary() {
                 </div>
               </section>
 
-              {/* 统计数据 */}
               <section className="detail-section stats-section">
                 <h4>📊 统计数据</h4>
                 <div className="stats-grid">
@@ -404,7 +425,6 @@ export function ExpertLibrary() {
                   </div>
                 </div>
 
-                {/* 反馈统计 */}
                 {selectedExpertStats && selectedExpertStats.totalReviews > 0 && (
                   <div className="feedback-stats">
                     <h5>用户反馈详情</h5>
@@ -425,7 +445,6 @@ export function ExpertLibrary() {
                   </div>
                 )}
 
-                {/* 工作量状态 */}
                 {selectedExpertWorkload && (
                   <div className="workload-status">
                     <h5>当前状态</h5>
@@ -446,7 +465,6 @@ export function ExpertLibrary() {
                 )}
               </section>
 
-              {/* 历史评审记录 */}
               {selectedExpertHistory.length > 0 && (
                 <section className="detail-section history-section">
                   <h4>📜 历史评审记录</h4>
