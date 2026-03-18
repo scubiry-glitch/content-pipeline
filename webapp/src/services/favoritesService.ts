@@ -1,7 +1,7 @@
 // 收藏服务 - Favorites Service
 // 管理热点话题报告的收藏数据（持久化到后端）
 
-import { apiClient } from '../api/client';
+import client from '../api/client';
 
 export interface FavoriteReport {
   id: string;
@@ -46,7 +46,7 @@ const STORAGE_KEY = 'favorite_reports';
 // 获取用户收藏列表
 export async function getFavorites(): Promise<FavoriteReport[]> {
   try {
-    const response = await apiClient.get('/favorites');
+    const response = await client.get('/favorites');
     return response.data;
   } catch (error) {
     console.warn('API unavailable, falling back to localStorage');
@@ -62,7 +62,7 @@ export async function addFavorite(
   reportData: ExpertInsightReportData
 ): Promise<FavoriteReport> {
   try {
-    const response = await apiClient.post('/favorites', {
+    const response = await client.post('/favorites', {
       reportId,
       topicId,
       topicTitle,
@@ -87,7 +87,7 @@ export async function addFavorite(
 // 取消收藏
 export async function removeFavorite(reportId: string): Promise<void> {
   try {
-    await apiClient.delete(`/favorites/${reportId}`);
+    await client.delete(`/favorites/${reportId}`);
   } catch (error) {
     console.warn('API unavailable, removing from localStorage');
   }
@@ -98,7 +98,7 @@ export async function removeFavorite(reportId: string): Promise<void> {
 // 检查是否已收藏
 export async function isFavorite(reportId: string): Promise<boolean> {
   try {
-    const response = await apiClient.get(`/favorites/check/${reportId}`);
+    const response = await client.get(`/favorites/check/${reportId}`);
     return response.data.isFavorite;
   } catch (error) {
     return isFavoriteInLocal(reportId);

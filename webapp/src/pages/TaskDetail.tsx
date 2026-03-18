@@ -142,6 +142,28 @@ export function TaskDetail() {
   const [showResearchConfig, setShowResearchConfig] = useState(false);
   const [collectedItems, setCollectedItems] = useState<any[]>([]);
 
+  // 如果后端返回没有 `writing_data`，则从 `versions` 中取最新版本内容用于展示/导出/合规检查
+  const getDraftFromTask = (taskData: Task | null): { content: string; version?: number } | null => {
+    if (!taskData) return null;
+
+    const writingDraft = taskData.writing_data?.draft;
+    if (typeof writingDraft === 'string' && writingDraft.trim()) {
+      return { content: writingDraft, version: taskData.writing_data?.version };
+    }
+
+    // 兼容后端字段名差异：有的接口返回 `versions`，有的返回 `draft_versions`
+    const versions = taskData.versions || (taskData as any).draft_versions || [];
+    if (versions.length === 0) return null;
+
+    const sorted = [...versions].sort((a: any, b: any) => (a.version ?? 0) - (b.version ?? 0));
+    const latest = sorted[sorted.length - 1];
+    if (typeof latest?.content === 'string' && latest.content.trim()) {
+      return { content: latest.content, version: latest.version };
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     if (id) {
       loadTask();
@@ -506,14 +528,14 @@ export function TaskDetail() {
 
   // 合规检查
   const handleComplianceCheck = async () => {
-    const content = task?.writing_data?.draft;
-    if (!content) {
+    const draft = getDraftFromTask(task);
+    if (!draft?.content) {
       alert('暂无文稿内容可检查');
       return;
     }
     setCheckingCompliance(true);
     try {
-      const result = await complianceApi.checkContent(content);
+      const result = await complianceApi.checkContent(draft.content);
       setComplianceResult(result);
       if (result.overallScore >= 80) {
         alert(`✅ 合规检查通过！得分: ${result.overallScore}`);
@@ -1780,7 +1802,7 @@ export function TaskDetail() {
                 >
                   {actionLoading === 'redo-writing' ? '启动中...' : '🔄 重做文稿生成'}
                 </button>
-                {task.writing_data?.draft && (
+                {getDraftFromTask(task)?.content && (
                   <button
                     className="btn btn-primary"
                     onClick={handleComplianceCheck}
@@ -1832,12 +1854,12 @@ export function TaskDetail() {
               </div>
             )}
 
-            {task.writing_data ? (
+            {getDraftFromTask(task)?.content ? (
               <div className="writing-content">
                 <div className="info-card">
                   <h3 className="card-title">📝 生成内容</h3>
                   <div className="writing-draft">
-                    {task.writing_data.draft || '文稿正在生成中...'}
+                    {getDraftFromTask(task)?.content || '文稿正在生成中...'}
                   </div>
                 </div>
 
@@ -1845,8 +1867,8 @@ export function TaskDetail() {
                 <div className="info-card">
                   <h3 className="card-title">📜 版本历史</h3>
                   <VersionComparePanel
-                    versions={task.versions || []}
-                    currentVersion={task.writing_data?.version}
+                    versions={task.versions || (task as any).draft_versions || []}
+                    currentVersion={getDraftFromTask(task)?.version}
                     onRollback={(versionId) => console.log('Rollback to:', versionId)}
                   />
                 </div>
@@ -1855,7 +1877,7 @@ export function TaskDetail() {
                 <div className="info-card">
                   <h3 className="card-title">📤 导出文稿</h3>
                   <ExportPanel
-                    content={task.writing_data.draft}
+                    content={getDraftFromTask(task)?.content}
                     title={task.topic}
                     taskId={task.id}
                   />
