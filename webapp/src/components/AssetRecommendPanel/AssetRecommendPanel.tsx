@@ -22,76 +22,28 @@ export function AssetRecommendPanel({
 
   // 提取关键词
   const extractKeywords = useCallback((text: string): string[] => {
-    // 简单的关键词提取：长度>=4的词汇
     const words = text.split(/[\s,，。！？；：""''（）【】]+/);
-    return words.filter(w => w.length >= 4).slice(-10); // 取最近10个词
+    return words.filter(w => w.length >= 4).slice(-10);
   }, []);
 
-  // 语义匹配计算 - v3.0.1-fix: 优化匹配算法提高准确率
+  // 语义匹配计算 - v3.0.1初始版本
   const calculateRelevance = useCallback((asset: Asset, keywords: string[]): number => {
     if (!asset.tags || keywords.length === 0) return 0;
 
     const assetTags = asset.tags.map(t => t.toLowerCase());
     const assetTitle = asset.title?.toLowerCase() || '';
-    const assetContent = asset.content?.toLowerCase() || '';
 
-    // 同义词映射表
-    const synonymMap: Record<string, string[]> = {
-      '新能源': ['电动车', '光伏', '储能', '锂电池', '清洁能源'],
-      'ai': ['人工智能', '大模型', '机器学习', '深度学习'],
-      '芯片': ['半导体', '集成电路', '晶圆', '代工'],
-      '房地产': ['地产', '楼市', '房价', '商品房'],
-    };
-
-    let totalScore = 0;
-    let maxPossibleScore = 0;
-
+    let matchCount = 0;
     keywords.forEach(keyword => {
       const keywordLower = keyword.toLowerCase();
-      let keywordScore = 0;
-      maxPossibleScore += 1;
-
-      // 1. 标签完全匹配 (权重: 1.0)
       if (assetTags.some(tag => tag.includes(keywordLower))) {
-        keywordScore = Math.max(keywordScore, 1.0);
+        matchCount += 1;
+      } else if (assetTitle.includes(keywordLower)) {
+        matchCount += 0.5;
       }
-
-      // 2. 标题匹配 (权重: 0.8)
-      if (assetTitle.includes(keywordLower)) {
-        keywordScore = Math.max(keywordScore, 0.8);
-      }
-
-      // 3. 内容匹配 (权重: 0.5)
-      if (assetContent.includes(keywordLower)) {
-        keywordScore = Math.max(keywordScore, 0.5);
-      }
-
-      // 4. 同义词匹配 (权重: 0.7)
-      const synonyms = synonymMap[keyword] || synonymMap[keywordLower];
-      if (synonyms) {
-        for (const syn of synonyms) {
-          if (assetTags.some(tag => tag.includes(syn)) ||
-              assetTitle.includes(syn) ||
-              assetContent.includes(syn)) {
-            keywordScore = Math.max(keywordScore, 0.7);
-            break;
-          }
-        }
-      }
-
-      // 5. 反向查找：关键词是否是某个标签的同义词
-      assetTags.forEach(tag => {
-        const tagSynonyms = synonymMap[tag];
-        if (tagSynonyms?.some(syn => keywordLower.includes(syn) || syn.includes(keywordLower))) {
-          keywordScore = Math.max(keywordScore, 0.6);
-        }
-      });
-
-      totalScore += keywordScore;
     });
 
-    // 归一化到0-1
-    return maxPossibleScore > 0 ? totalScore / maxPossibleScore : 0;
+    return matchCount / keywords.length;
   }, []);
 
   // 获取推荐素材
@@ -106,23 +58,19 @@ export function AssetRecommendPanel({
       setError(null);
 
       try {
-        // 提取关键词
         const keywords = extractKeywords(inputText);
         if (keywords.length === 0) {
           setRecommendations([]);
           return;
         }
 
-        // 获取所有素材
         const allAssets = await assetsApi.getAll();
 
-        // 计算相关性并排序
         const scoredAssets = allAssets.map(asset => ({
           asset,
           score: calculateRelevance(asset, keywords),
         }));
 
-        // 过滤相关性>0.3的，取TopN
         const filtered = scoredAssets
           .filter(item => item.score > 0.3)
           .sort((a, b) => b.score - a.score)
@@ -138,7 +86,6 @@ export function AssetRecommendPanel({
       }
     };
 
-    // 防抖处理
     const timer = setTimeout(fetchRecommendations, 500);
     return () => clearTimeout(timer);
   }, [inputText, maxRecommendations, extractKeywords, calculateRelevance]);
@@ -195,7 +142,6 @@ export function AssetRecommendPanel({
   );
 }
 
-// 获取素材类型图标
 function getAssetTypeIcon(type?: string): string {
   switch (type) {
     case 'report': return '📄';
@@ -206,7 +152,6 @@ function getAssetTypeIcon(type?: string): string {
   }
 }
 
-// 截断文本
 function truncate(text: string, maxLength: number): string {
   if (!text || text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...';
