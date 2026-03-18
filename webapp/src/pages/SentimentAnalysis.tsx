@@ -1,7 +1,38 @@
 // 情感分析仪表盘 - 恢复原版 HTML 的 v3.2 功能
 import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { sentimentApi, type SentimentAnalysis as SentimentType, type SentimentStats } from '../api/client';
 import './SentimentAnalysis.css';
+
+// 热点洞察Tab导航
+function HotTopicsTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const tabs = [
+    { id: 'topics', label: '热点列表', icon: '🔥', path: '/hot-topics' },
+    { id: 'insights', label: '专家解读', icon: '👨‍💼', path: '/hot-topics/insights' },
+    { id: 'sentiment', label: '情感分析', icon: '😊', path: '/sentiment' },
+    { id: 'prediction', label: '预测分析', icon: '🔮', path: '/prediction' },
+  ];
+  
+  const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'sentiment';
+  
+  return (
+    <div className="hot-topics-tabs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => navigate(tab.path)}
+        >
+          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function SentimentAnalysisPage() {
   const [sentiments, setSentiments] = useState<SentimentType[]>([]);

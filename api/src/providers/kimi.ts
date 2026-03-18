@@ -3,11 +3,9 @@
 
 import { LLMProvider } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
-import { generateWithKimi, generateWithMock } from '../services/llm.js';
+import { generateWithKimi } from '../services/llm.js';
 
 export class KimiProvider extends LLMProvider {
-  private useMock: boolean = false;
-
   constructor(apiKey?: string) {
     const key = apiKey || process.env.KIMI_API_KEY || process.env.ANTHROPIC_API_KEY || '';
     super('kimi', key, 'https://api.kimi.com/coding/v1');
@@ -17,35 +15,18 @@ export class KimiProvider extends LLMProvider {
   }
 
   async generate(prompt: string, params?: GenerationParams): Promise<GenerationResult> {
-    // 如果之前检测到过连接问题，直接使用 mock
-    if (this.useMock) {
-      console.log('[KimiProvider] Using mock mode due to previous connection failure');
-      return generateWithMock(prompt, { ...params, model: params?.model || 'mock' }, 'default');
-    }
+    const result = await generateWithKimi(prompt, {
+      model: params?.model || 'kimi-for-coding',
+      temperature: params?.temperature,
+      maxTokens: params?.maxTokens,
+      systemPrompt: params?.systemPrompt,
+    });
 
-    try {
-      const result = await generateWithKimi(prompt, {
-        model: params?.model || 'kimi-for-coding',
-        temperature: params?.temperature,
-        maxTokens: params?.maxTokens,
-        systemPrompt: params?.systemPrompt,
-      });
-
-      return {
-        content: result.content,
-        model: result.model,
-        usage: result.usage,
-      };
-    } catch (error: any) {
-      // 连接超时或网络错误，切换到 mock 模式
-      if (error?.code === 'ETIMEDOUT' || error?.message?.includes('fetch failed') || error?.message?.includes('timeout')) {
-        console.warn('[KimiProvider] Connection timeout, switching to mock mode');
-        this.useMock = true;
-        return generateWithMock(prompt, { ...params, model: params?.model || 'mock' }, 'default');
-      }
-      console.error('[KimiProvider] Generation failed:', error);
-      throw error;
-    }
+    return {
+      content: result.content,
+      model: result.model,
+      usage: result.usage,
+    };
   }
 
   async embed(text: string): Promise<number[]> {

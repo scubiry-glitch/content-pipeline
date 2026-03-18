@@ -1,15 +1,61 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { ThemeSwitcher, ThemeSwitcherMini } from './ThemeSwitcher';
 import { useTheme } from '../themes';
 import './Layout.css';
 
+// 导航项配置
+interface NavItem {
+  to: string;
+  label: string;
+  icon?: string;
+  children?: NavItem[];
+}
+
+const mainNavItems: NavItem[] = [
+  { to: '/', label: '仪表盘', icon: '📊' },
+  { to: '/tasks', label: '任务中心', icon: '📋' },
+  { to: '/assets', label: '内容资产', icon: '📚' },
+  { to: '/expert-library', label: '专家体系', icon: '👥' },
+  { to: '/hot-topics', label: '热点洞察', icon: '🔥' },
+  { to: '/reports', label: '研报中心', icon: '📄' },
+];
+
+const systemNavItems: NavItem[] = [
+  { to: '/settings', label: '设置', icon: '⚙️' },
+  { to: '/notifications', label: '通知', icon: '🔔' },
+  { to: '/copilot', label: 'Copilot', icon: '🤖' },
+  { to: '/compliance', label: '合规', icon: '🛡️' },
+  { to: '/i18n', label: '国际化', icon: '🌍' },
+];
+
+// 检查当前路径是否匹配导航项
+const isActivePath = (pathname: string, item: NavItem): boolean => {
+  if (pathname === item.to) return true;
+  if (item.children) {
+    return item.children.some(child => pathname.startsWith(child.to));
+  }
+  // 特殊处理：专家体系相关页面
+  if (item.to === '/expert-library' && 
+      ['/expert-comparison', '/expert-network', '/expert-knowledge-graph'].some(p => pathname.startsWith(p))) {
+    return true;
+  }
+  // 特殊处理：热点洞察相关页面
+  if (item.to === '/hot-topics' && 
+      ['/hot-topics/insights'].some(p => pathname.startsWith(p))) {
+    return true;
+  }
+  return false;
+};
+
 export function Layout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isThemeSwitcherOpen, setIsThemeSwitcherOpen] = useState(false);
+  const [isSystemMenuOpen, setIsSystemMenuOpen] = useState(false);
   const { currentTheme, setTheme } = useTheme();
+  const location = useLocation();
 
   // 监听 Command/Ctrl + K 快捷键
   useEffect(() => {
@@ -55,63 +101,49 @@ export function Layout() {
         <div className="header-content">
           <h1 className="header-title">内容生产流水线</h1>
           <nav className="header-nav">
-            <NavLink to="/" className="nav-link" end>
-              仪表盘
-            </NavLink>
-            <NavLink to="/tasks" className="nav-link">
-              任务管理
-            </NavLink>
-            <NavLink to="/assets" className="nav-link">
-              素材库
-            </NavLink>
-            <NavLink to="/expert-library" className="nav-link">
-              专家库 (v5.1)
-            </NavLink>
-            <NavLink to="/hot-topics/insights" className="nav-link">
-              专家解读 (v5.1)
-            </NavLink>
-            <NavLink to="/reports" className="nav-link">
-              研报 (v3.3)
-            </NavLink>
-            <NavLink to="/hot-topics" className="nav-link">
-              热点 (v3.4)
-            </NavLink>
-            <NavLink to="/rss-sources" className="nav-link">
-              RSS源
-            </NavLink>
-            <NavLink to="/rss-items" className="nav-link">
-              RSS文章
-            </NavLink>
-            <NavLink to="/quality-dashboard" className="nav-link">
-              质量仪表盘
-            </NavLink>
-            <NavLink to="/sentiment" className="nav-link">
-              情感 (v3.2)
-            </NavLink>
-            <NavLink to="/compliance" className="nav-link">
-              合规 (v4.0)
-            </NavLink>
-            <NavLink to="/orchestrator" className="nav-link">
-              编排 (v4.1)
-            </NavLink>
-            <NavLink to="/prediction" className="nav-link">
-              预测 (v4.3)
-            </NavLink>
-            <NavLink to="/copilot" className="nav-link">
-              Copilot (v4.4)
-            </NavLink>
-            <NavLink to="/i18n" className="nav-link">
-              国际化 (v4.5)
-            </NavLink>
-            <NavLink to="/archive/hidden" className="nav-link">
-              隐藏任务
-            </NavLink>
-            <NavLink to="/archive/recycle-bin" className="nav-link">
-              回收站
-            </NavLink>
-            <NavLink to="/settings" className="nav-link">
-              ⚙️ 设置
-            </NavLink>
+            {mainNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => 
+                  `nav-link ${isActivePath(location.pathname, item) ? 'active' : ''}`
+                }
+                end={item.to === '/'}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </NavLink>
+            ))}
+            
+            {/* 系统管理下拉菜单 */}
+            <div className="nav-dropdown">
+              <button 
+                className={`nav-link dropdown-trigger ${systemNavItems.some(item => location.pathname.startsWith(item.to)) ? 'active' : ''}`}
+                onClick={() => setIsSystemMenuOpen(!isSystemMenuOpen)}
+                onBlur={() => setTimeout(() => setIsSystemMenuOpen(false), 200)}
+              >
+                <span className="nav-icon">⚙️</span>
+                <span className="nav-label">系统管理</span>
+                <span className="dropdown-arrow">{isSystemMenuOpen ? '▲' : '▼'}</span>
+              </button>
+              {isSystemMenuOpen && (
+                <div className="dropdown-menu">
+                  {systemNavItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) => 
+                        `dropdown-item ${isActive ? 'active' : ''}`
+                      }
+                      onClick={() => setIsSystemMenuOpen(false)}
+                    >
+                      <span className="item-icon">{item.icon}</span>
+                      <span className="item-label">{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
         </div>
       </header>

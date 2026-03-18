@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, STAGES } from '../types';
 import { StageConfig } from '../components/StageConfig';
@@ -8,6 +8,35 @@ import { DashboardCharts } from '../components/DashboardCharts';
 import { AISummary } from '../components/AISummary';
 import { ExpertInsights } from '../components/ExpertInsights';
 import './Dashboard.css';
+
+// 仪表盘Tab导航
+function DashboardTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const tabs = [
+    { id: 'overview', label: '概览', icon: '📊', path: '/' },
+    { id: 'quality', label: '质量看板', icon: '✨', path: '/quality-dashboard' },
+    { id: 'sentiment', label: '情感分析', icon: '😊', path: '/sentiment' },
+  ];
+  
+  const activeTab = tabs.find(t => location.pathname === t.path)?.id || 'overview';
+  
+  return (
+    <div className="dashboard-tabs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => navigate(tab.path)}
+        >
+          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const QUICK_ACTIONS = [
   { icon: '➕', label: '新建任务', path: '/tasks', color: '#1890ff' },

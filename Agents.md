@@ -118,10 +118,13 @@ quality_score DECIMAL
 
 ## 环境变量
 
+### 必需配置
+
 ```bash
-# LLM
-CLAUDE_API_KEY=sk-xxx
-OPENAI_API_KEY=sk-xxx
+# LLM API (至少配置一个，推荐使用 Kimi)
+KIMI_API_KEY=sk-xxx              # 推荐，获取地址: https://platform.moonshot.cn/
+CLAUDE_API_KEY=sk-xxx            # 备用，获取地址: https://console.anthropic.com/
+OPENAI_API_KEY=sk-xxx            # 用于 Embedding，获取地址: https://platform.openai.com/
 
 # Database
 DB_HOST=localhost
@@ -137,6 +140,28 @@ ADMIN_API_KEY=dev-api-key
 # Server
 PORT=3000
 NODE_ENV=development
+```
+
+### 可选配置
+
+```bash
+# Web Search API (用于深度研究，推荐配置)
+TAVILY_API_KEY=tvly-xxx          # 获取地址: https://tavily.com/
+SERPER_API_KEY=xxx               # 获取地址: https://serper.dev/
+
+# LLM 模型选择
+USE_KIMI=false                   # 强制禁用 Kimi（即使配置了 KIMI_API_KEY）
+```
+
+### API 配置检查
+
+系统启动时会自动检查 API 配置，如果没有配置任何 LLM API，系统将**拒绝启动**并显示错误信息。
+
+可用的配置组合：
+- ✅ **仅 KIMI_API_KEY** - 推荐配置，所有功能正常工作
+- ✅ **仅 CLAUDE_API_KEY** - 可用，但 Embedding 会使用随机向量
+- ✅ **仅 OPENAI_API_KEY** - 可用，但规划和蓝军评审质量可能不如 Kimi
+- ✅ **组合配置** - 系统会自动选择最佳模型
 ```
 
 ---

@@ -9,6 +9,7 @@ import {
   generateExpertOpinion,
   type Expert,
 } from '../services/expertService';
+import { ExpertTabs } from './ExpertLibrary';
 import './ExpertKnowledgeGraph.css';
 
 interface KnowledgeNode {
@@ -369,6 +370,9 @@ export function ExpertKnowledgeGraph() {
         <h1>🧠 专家知识图谱</h1>
         <p className="subtitle">可视化展示专家知识体系与概念关联</p>
       </div>
+
+      {/* Tab导航 */}
+      <ExpertTabs />
 
       {/* 控制面板 */}
       <div className="control-panel">

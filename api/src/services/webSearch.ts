@@ -56,9 +56,11 @@ export class WebSearchService {
       return this.searchWithSerper(options, maxResults);
     }
 
-    // Fallback: generate simulated search results
-    console.log('[WebSearch] No API keys configured, using mock search');
-    return this.generateMockResults(options, maxResults);
+    // No API keys configured - throw error
+    throw new Error(
+      'No web search API configured. ' +
+      'Please set TAVILY_API_KEY or SERPER_API_KEY in environment variables.'
+    );
   }
 
   /**
@@ -242,6 +244,7 @@ export class WebSearchService {
   async batchSearch(queries: string[], maxResultsPerQuery: number = 5): Promise<SearchResult[]> {
     const allResults: SearchResult[] = [];
     const seenUrls = new Set<string>();
+    const errors: string[] = [];
 
     for (const query of queries) {
       try {
@@ -257,9 +260,16 @@ export class WebSearchService {
             allResults.push(result);
           }
         }
-      } catch (error) {
-        console.error(`[WebSearch] Batch search failed for query "${query}":`, error);
+      } catch (error: any) {
+        const msg = `Query "${query}" failed: ${error.message}`;
+        console.error(`[WebSearch] ${msg}`);
+        errors.push(msg);
       }
+    }
+
+    // If no results and we have errors, throw the first error
+    if (allResults.length === 0 && errors.length > 0) {
+      throw new Error(`All web search queries failed. First error: ${errors[0]}`);
     }
 
     // Sort by relevance

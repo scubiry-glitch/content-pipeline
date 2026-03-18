@@ -30,12 +30,19 @@ import { setupAuth } from './middleware/auth.js';
 import { startRSSCron } from './services/rssCrawler.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
-import { initLLMRouter, isClaudeCodeEnvironment, MockProvider } from './providers/index.js';
+import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
 import { initDatabase } from './db/connection.js';
+import { printAPICheckReport, validateRequiredConfig } from './services/apiCheck.js';
 
 dotenv.config();
 
 async function main() {
+  // 打印 API 配置检查报告
+  printAPICheckReport();
+
+  // 验证必需的配置
+  validateRequiredConfig();
+
   // Initialize LLM Router
   const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -43,20 +50,14 @@ async function main() {
 
   const kimiApiKey = process.env.KIMI_API_KEY || (claudeApiKey?.startsWith('sk-kimi') ? claudeApiKey : undefined);
 
-  if (kimiApiKey || (claudeApiKey && !claudeApiKey.startsWith('sk-kimi')) || openaiApiKey || inClaudeCode) {
-    initLLMRouter({
-      kimiApiKey,
-      claudeApiKey: claudeApiKey?.startsWith('sk-kimi') ? undefined : claudeApiKey,
-      openaiApiKey,
-      useClaudeCode: inClaudeCode && !claudeApiKey,
-    });
-    console.log('✓ LLM Router initialized');
-  } else {
-    console.warn('⚠️ No LLM API keys found. Using MockProvider for development.');
-    const router = initLLMRouter({});
-    router.registerProvider(new MockProvider());
-    console.log('✓ LLM Router initialized with MockProvider');
-  }
+  // 初始化 LLM Router（如果没有配置 API Key 会抛出错误）
+  initLLMRouter({
+    kimiApiKey,
+    claudeApiKey: claudeApiKey?.startsWith('sk-kimi') ? undefined : claudeApiKey,
+    openaiApiKey,
+    useClaudeCode: inClaudeCode && !claudeApiKey,
+  });
+  console.log('✓ LLM Router initialized');
 
   // Initialize Database
   if (process.env.DATABASE_URL || process.env.DB_HOST) {

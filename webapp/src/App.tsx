@@ -40,6 +40,7 @@ import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
 import { Notifications } from './pages/Notifications';
+import { ReportCompare } from './pages/ReportCompare';
 
 import './App.css';
 
@@ -68,6 +69,7 @@ function App() {
               <Route path="expert-library" element={<ExpertLibrary />} />
               <Route path="reports" element={<Reports />} />
               <Route path="reports/:id" element={<ReportDetail />} />
+              <Route path="reports/compare" element={<ReportCompare />} />
               <Route path="hot-topics" element={<HotTopics />} />
               <Route path="hot-topics/insights" element={<HotTopicInsights />} />
               <Route path="hot-topics/insights/:topicId" element={<HotTopicInsights />} />

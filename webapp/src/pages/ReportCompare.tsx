@@ -1,8 +1,36 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { reportsApi } from '../api/client';
 import type { Report } from '../types';
 import './ReportCompare.css';
+
+// 研报中心Tab导航
+function ReportsTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const tabs = [
+    { id: 'list', label: '研报列表', icon: '📄', path: '/reports' },
+    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/reports/compare' },
+  ];
+  
+  const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'compare';
+  
+  return (
+    <div className="reports-tabs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => navigate(tab.path)}
+        >
+          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function ReportCompare() {
   const [searchParams] = useSearchParams();
@@ -81,6 +109,8 @@ export function ReportCompare() {
 
   return (
     <div className="report-compare-page">
+      {/* Tab导航 */}
+      <ReportsTabs />
       <div className="page-header">
         <div className="header-left">
           <h1 className="page-title">📊 研报对比</h1>

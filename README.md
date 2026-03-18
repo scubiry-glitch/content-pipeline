@@ -47,13 +47,26 @@ npm run dev
 
 ## 环境变量
 
-| 变量 | 必需 | 说明 |
-|-----|------|------|
-| `KIMI_API_KEY` | 是 | Kimi API 密钥 |
-| `DATABASE_URL` | 是 | PostgreSQL 连接字符串 |
-| `ADMIN_API_KEY` | 是 | API 认证密钥 |
+### 必需配置
 
-详见 [DEPLOY.md](DEPLOY.md)
+| 变量 | 必需 | 说明 | 获取地址 |
+|-----|------|------|----------|
+| `KIMI_API_KEY` | 是* | Kimi API 密钥 (推荐) | https://platform.moonshot.cn |
+| `CLAUDE_API_KEY` | 是* | Claude API 密钥 (备用) | https://console.anthropic.com |
+| `OPENAI_API_KEY` | 是* | OpenAI API 密钥 (备用) | https://platform.openai.com |
+| `DATABASE_URL` | 是 | PostgreSQL 连接字符串 | - |
+| `ADMIN_API_KEY` | 是 | API 认证密钥 | 自行设置 |
+
+\* **至少配置一个 LLM API**，推荐使用 Kimi
+
+### 可选配置
+
+| 变量 | 说明 |
+|-----|------|
+| `TAVILY_API_KEY` | Web 搜索 API (推荐用于深度研究) |
+| `SERPER_API_KEY` | Google 搜索 API (Tavily 的替代) |
+
+详见 [DEPLOY.md](DEPLOY.md) 和 [AGENTS.md](AGENTS.md)
 
 ## API 示例
 

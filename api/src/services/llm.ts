@@ -339,7 +339,22 @@ export async function generateWithMock(
   };
 }
 
-// 智能路由：优先 Kimi，失败 fallback Claude -> OpenAI -> mock
+// 检查是否有可用的 LLM API
+export function hasAvailableLLM(): boolean {
+  return !!(getKimiClient() || getAnthropicClient() || getOpenAIClient());
+}
+
+// 获取可用的 LLM 信息
+export function getAvailableLLMs(): { kimi: boolean; claude: boolean; openai: boolean } {
+  return {
+    kimi: !!getKimiClient(),
+    claude: !!getAnthropicClient(),
+    openai: !!getOpenAIClient(),
+  };
+}
+
+// 智能路由：优先 Kimi，失败 fallback Claude -> OpenAI
+// 如果所有 API 都失败，抛出错误（不使用 Mock）
 export async function generate(
   prompt: string,
   taskType: string = 'default',
@@ -347,65 +362,67 @@ export async function generate(
 ): Promise<GenerateResult> {
   // 根据任务类型选择模型
   const modelMap: Record<string, { model: string; temperature: number }> = {
-    planning: { model: 'k2p5', temperature: 0.7 },
-    writing: { model: 'k2p5', temperature: 0.8 },
-    blue_team: { model: 'k2p5', temperature: 0.9 },
-    analysis: { model: 'k2p5', temperature: 0.5 },
-    tagging: { model: 'k2p5', temperature: 0.3 },
-    default: { model: 'k2p5', temperature: 0.7 },
+    planning: { model: 'kimi-for-coding', temperature: 0.7 },
+    writing: { model: 'kimi-for-coding', temperature: 0.8 },
+    blue_team: { model: 'kimi-for-coding', temperature: 0.9 },
+    analysis: { model: 'kimi-for-coding', temperature: 0.5 },
+    tagging: { model: 'kimi-for-coding', temperature: 0.3 },
+    default: { model: 'kimi-for-coding', temperature: 0.7 },
   };
 
   const config = modelMap[taskType] || modelMap.default;
+  const errors: string[] = [];
 
   // 首选：Kimi (Moonshot)
   if (getKimiClient() && process.env.USE_KIMI !== 'false') {
     try {
+      console.log(`[LLM] Using Kimi for ${taskType} task`);
       return await generateWithKimi(prompt, {
         ...options,
         model: options.model || config.model,
         temperature: options.temperature ?? config.temperature,
       });
     } catch (error: any) {
-      console.warn('[LLM] Kimi failed:', error.message);
+      const msg = `Kimi failed: ${error.message}`;
+      console.warn(`[LLM] ${msg}`);
+      errors.push(msg);
     }
   }
 
   // Fallback: Claude
   if (getAnthropicClient()) {
     try {
+      console.log(`[LLM] Using Claude for ${taskType} task`);
       return await generateWithClaude(prompt, {
         ...options,
         model: options.model || 'claude-3-5-sonnet-20241022',
         temperature: options.temperature ?? config.temperature,
       });
-    } catch (error) {
-      console.warn('[LLM] Claude failed, trying OpenAI');
+    } catch (error: any) {
+      const msg = `Claude failed: ${error.message}`;
+      console.warn(`[LLM] ${msg}`);
+      errors.push(msg);
     }
   }
 
   // Fallback: OpenAI
   if (getOpenAIClient()) {
     try {
+      console.log(`[LLM] Using OpenAI for ${taskType} task`);
       return await generateWithOpenAI(prompt, options);
-    } catch (error) {
-      console.warn('[LLM] OpenAI failed, using mock');
+    } catch (error: any) {
+      const msg = `OpenAI failed: ${error.message}`;
+      console.warn(`[LLM] ${msg}`);
+      errors.push(msg);
     }
   }
 
-  // Fallback Kimi (Moonshot)
-  if (getKimiClient()) {
-    try {
-      return await generateWithKimi(prompt, {
-        ...options,
-        model: options.model || 'k2p5',
-      });
-    } catch (error) {
-      console.warn('[LLM] Kimi failed, using mock');
-    }
-  }
-
-  // Final fallback: mock
-  return generateWithMock(prompt, options, taskType);
+  // 所有 API 都失败，抛出错误
+  throw new Error(
+    `All LLM APIs failed for ${taskType} task. ` +
+    `Errors: ${errors.join('; ')}. ` +
+    `Please check your API keys: KIMI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY`
+  );
 }
 
 // 生成向量嵌入

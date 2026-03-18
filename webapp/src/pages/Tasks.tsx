@@ -1,10 +1,40 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { TaskList } from '../components/TaskList';
 import { CreateTaskModal, type CreateTaskData } from '../components/CreateTaskModal';
 import { ExportButton } from '../components/ExportButton';
 import { useTasks } from '../contexts/TasksContext';
 import './Tasks.css';
+
+// 任务中心Tab导航
+function TasksTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const tabs = [
+    { id: 'tasks', label: '任务列表', icon: '📋', path: '/tasks' },
+    { id: 'hidden', label: '隐藏任务', icon: '🙈', path: '/archive/hidden' },
+    { id: 'recycle', label: '回收站', icon: '🗑️', path: '/archive/recycle-bin' },
+    { id: 'orchestrator', label: '编排器', icon: '🎼', path: '/orchestrator' },
+  ];
+  
+  const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'tasks';
+  
+  return (
+    <div className="tasks-tabs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => navigate(tab.path)}
+        >
+          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -70,7 +100,7 @@ export function Tasks() {
     <div className="tasks-page">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">任务管理</h1>
+        <h1 className="page-title">任务中心</h1>
         <div className="page-actions">
           <ExportButton
             type="tasks"
@@ -85,6 +115,9 @@ export function Tasks() {
           </button>
         </div>
       </div>
+
+      {/* Tab导航 */}
+      <TasksTabs />
 
       {/* Filters */}
       <div className="filter-bar">

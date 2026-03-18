@@ -233,12 +233,23 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { taskId } = request.params as any;
     const body = (request.body || {}) as any;
 
-    const result = await productionService.redoPlanning(taskId, {
-      topic: body?.topic,
-      context: body?.context
+    // 异步执行选题策划重做（不阻塞响应，避免前端超时）
+    setImmediate(async () => {
+      try {
+        await productionService.redoPlanning(taskId, {
+          topic: body?.topic,
+          context: body?.context
+        });
+      } catch (error) {
+        console.error(`[Redo] Planning failed for task ${taskId}:`, error);
+      }
     });
 
-    return result;
+    return {
+      message: '选题策划重做已启动',
+      taskId,
+      status: 'planning'
+    };
   });
 
   // 2. 深度研究重做

@@ -9,6 +9,7 @@ import {
   generateExpertOpinion,
 } from '../services/expertService';
 import type { Expert, ExpertReview } from '../types';
+import { ExpertTabs } from './ExpertLibrary';
 import './ExpertComparison.css';
 
 interface ComparisonExpert {
@@ -129,6 +130,9 @@ export function ExpertComparison() {
         <h1>⚖️ 专家观点对比</h1>
         <p className="subtitle">选择2-3位专家，对比分析同一话题的不同观点</p>
       </div>
+
+      {/* Tab导航 */}
+      <ExpertTabs />
 
       {showSelector ? (
         <>

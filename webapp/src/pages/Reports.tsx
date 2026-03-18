@@ -1,8 +1,36 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { reportsApi } from '../api/client';
 import type { Report, ReportMatch } from '../types';
 import './Reports.css';
+
+// 研报中心Tab导航
+function ReportsTabs() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const tabs = [
+    { id: 'list', label: '研报列表', icon: '📄', path: '/reports' },
+    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/reports/compare' },
+  ];
+  
+  const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'list';
+  
+  return (
+    <div className="reports-tabs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => navigate(tab.path)}
+        >
+          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function Reports() {
   const navigate = useNavigate();
@@ -134,6 +162,9 @@ export function Reports() {
 
   return (
     <div className="reports-page">
+      {/* Tab导航 */}
+      <ReportsTabs />
+      
       <div className="page-header">
         <div className="header-left">
           <h1 className="page-title">📊 研报管理 (v3.3)</h1>

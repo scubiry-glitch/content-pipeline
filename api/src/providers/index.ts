@@ -193,12 +193,16 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
 
   // 确保至少有一个Provider
   if (router.getAvailableProviders().length === 0) {
-    console.warn('[LLM Router] 警告: 未配置任何LLM Provider');
-    console.warn('  请设置以下环境变量之一:');
-    console.warn('    - ANTHROPIC_API_KEY (推荐)');
-    console.warn('    - OPENAI_API_KEY');
-    console.warn('  或在Claude Code环境中运行');
+    throw new Error(
+      '未配置任何LLM Provider。请设置以下环境变量之一:\n' +
+      '  - KIMI_API_KEY (推荐)\n' +
+      '  - ANTHROPIC_API_KEY (Claude)\n' +
+      '  - OPENAI_API_KEY\n' +
+      '或在Claude Code环境中运行'
+    );
   }
+
+  console.log('[LLM Router] 可用 Providers:', router.getAvailableProviders().join(', '));
 
   routerInstance = router;
   return router;

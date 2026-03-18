@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { hotTopicsApi, rssSourcesApi, type HotTopic, type RSSSource } from '../api/client';
 import './HotTopics.css';
 
+type HotTopicsTab = 'topics' | 'insights' | 'stats' | 'sources';
+
 export function HotTopics() {
   const navigate = useNavigate();
   const [topics, setTopics] = useState<HotTopic[]>([]);
   const [sources, setSources] = useState<RSSSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'topics' | 'sources'>('topics');
+  const [activeTab, setActiveTab] = useState<HotTopicsTab>('topics');
   const [filter, setFilter] = useState<'all' | 'up' | 'stable' | 'down'>('all');
 
   useEffect(() => {
@@ -101,24 +103,35 @@ export function HotTopics() {
         </div>
       </div>
 
-      <div className="tabs">
+      {/* Tab导航 */}
+      <div className="hot-topics-tabs">
         <button
-          className={`tab ${activeTab === 'topics' ? 'active' : ''}`}
+          className={`tab-btn ${activeTab === 'topics' ? 'active' : ''}`}
           onClick={() => setActiveTab('topics')}
         >
-          热点列表
+          <span className="tab-icon">🔥</span>
+          <span className="tab-label">热点列表</span>
         </button>
         <button
-          className={`tab ${activeTab === 'stats' ? 'active' : ''}`}
+          className={`tab-btn ${activeTab === 'insights' ? 'active' : ''}`}
+          onClick={() => navigate('/hot-topics/insights')}
+        >
+          <span className="tab-icon">👨‍💼</span>
+          <span className="tab-label">专家解读</span>
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
           onClick={() => setActiveTab('stats')}
         >
-          📊 趋势统计
+          <span className="tab-icon">📊</span>
+          <span className="tab-label">趋势统计</span>
         </button>
         <button
-          className={`tab ${activeTab === 'sources' ? 'active' : ''}`}
+          className={`tab-btn ${activeTab === 'sources' ? 'active' : ''}`}
           onClick={() => setActiveTab('sources')}
         >
-          RSS源管理
+          <span className="tab-icon">📡</span>
+          <span className="tab-label">RSS源管理</span>
         </button>
       </div>
 

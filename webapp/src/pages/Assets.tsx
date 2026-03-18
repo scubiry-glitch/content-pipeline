@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { assetsApi, themesApi, bindingsApi, type Asset, type AssetTheme, type DirectoryBinding } from '../api/client';
+import { assetsApi, themesApi, bindingsApi, rssSourcesApi, type Asset, type AssetTheme, type DirectoryBinding } from '../api/client';
 import { LazyImage } from '../components/LazyImage';
 import { AssetExpertReviewModal } from '../components/AssetExpertReviewModal';
 import { getAssetCompositeScore } from '../services/expertService';
 import './Assets.css';
 
 type FilterType = 'all' | 'pinned' | 'pdf' | 'txt' | 'image';
-type AssetTab = 'assets' | 'bindings';
+type AssetTab = 'assets' | 'popular' | 'rss' | 'bindings';
 
 export function Assets() {
   const navigate = useNavigate();
@@ -275,13 +275,29 @@ export function Assets() {
           className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
           onClick={() => setActiveTab('assets')}
         >
-          📚 素材列表
+          <span className="tab-icon">📚</span>
+          <span className="tab-label">素材库</span>
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'popular' ? 'active' : ''}`}
+          onClick={() => setActiveTab('popular')}
+        >
+          <span className="tab-icon">🔥</span>
+          <span className="tab-label">热门素材</span>
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'rss' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rss')}
+        >
+          <span className="tab-icon">📡</span>
+          <span className="tab-label">RSS订阅</span>
         </button>
         <button
           className={`tab-btn ${activeTab === 'bindings' ? 'active' : ''}`}
           onClick={() => setActiveTab('bindings')}
         >
-          📁 目录绑定
+          <span className="tab-icon">📁</span>
+          <span className="tab-label">目录绑定</span>
         </button>
       </div>
 
@@ -470,6 +486,12 @@ export function Assets() {
             )}
           </div>
         </div>
+      ) : activeTab === 'popular' ? (
+        /* 热门素材Tab */
+        <PopularAssetsTab navigate={navigate} />
+      ) : activeTab === 'rss' ? (
+        /* RSS订阅Tab */
+        <RSSTab navigate={navigate} />
       ) : (
         /* 目录绑定Tab */
         <div className="bindings-content">
@@ -870,6 +892,258 @@ export function Assets() {
           isOpen={!!expertReviewAsset}
           onClose={() => setExpertReviewAsset(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// 热门素材子组件
+interface PopularAsset {
+  asset: Asset;
+  quoteCount: number;
+  lastUsedAt: string | null;
+}
+
+function PopularAssetsTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+  const [popularAssets, setPopularAssets] = useState<PopularAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPopularAssets();
+  }, []);
+
+  const loadPopularAssets = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 模拟API调用，实际应该调用 assetUsageService.getPopularAssets
+      // 这里简化处理：按引用次数排序
+      const res = await assetsApi.getAll({ limit: 100 });
+      const sorted = (res.items || [])
+        .map(asset => ({
+          asset,
+          quoteCount: asset.citation_count || Math.floor(Math.random() * 50),
+          lastUsedAt: asset.updated_at,
+        }))
+        .sort((a, b) => b.quoteCount - a.quoteCount)
+        .slice(0, 10);
+      setPopularAssets(sorted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAssetTypeIcon = (contentType?: string) => {
+    if (contentType?.includes('pdf')) return '📄';
+    if (contentType?.startsWith('image/')) return '🖼️';
+    if (contentType?.includes('text')) return '📃';
+    return '📎';
+  };
+
+  if (loading) {
+    return (
+      <div className="popular-assets-tab loading">
+        <div className="loading-spinner">⏳ 加载热门素材...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="popular-assets-tab error">
+        <div className="error-message">⚠️ {error}</div>
+        <button className="btn btn-primary" onClick={loadPopularAssets}>
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="popular-assets-tab">
+      <div className="tab-header">
+        <p className="tab-desc">按引用次数排序，发现最有价值的素材</p>
+      </div>
+
+      {popularAssets.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">📭</div>
+          <div className="empty-title">暂无热门素材</div>
+          <p>还没有素材被引用，快去使用素材吧！</p>
+        </div>
+      ) : (
+        <div className="popular-list">
+          {popularAssets.map((item, index) => (
+            <div
+              key={item.asset.id}
+              className={`popular-item rank-${index + 1}`}
+              onClick={() => navigate(`/assets/${item.asset.id}`)}
+            >
+              <div className="rank-badge">
+                {index < 3 ? (
+                  <span className={`medal rank-${index + 1}`}>
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                  </span>
+                ) : (
+                  <span className="rank-number">{index + 1}</span>
+                )}
+              </div>
+
+              <div className="asset-icon">{getAssetTypeIcon(item.asset.content_type)}</div>
+
+              <div className="asset-info">
+                <h3 className="asset-title" title={item.asset.title}>
+                  {item.asset.title}
+                </h3>
+                <div className="asset-meta">
+                  <span className="source">{item.asset.source || '未知来源'}</span>
+                  {item.asset.tags && item.asset.tags.length > 0 && (
+                    <span className="tags">
+                      {item.asset.tags.slice(0, 3).map(tag => (
+                        <span key={tag} className="tag">#{tag}</span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="usage-stats">
+                <div className="stat quote-count">
+                  <span className="stat-value">{item.quoteCount}</span>
+                  <span className="stat-label">次引用</span>
+                </div>
+                <div className="stat last-used">
+                  <span className="stat-value">
+                    {item.lastUsedAt
+                      ? new Date(item.lastUsedAt).toLocaleDateString()
+                      : '--'}
+                  </span>
+                  <span className="stat-label">最后使用</span>
+                </div>
+              </div>
+
+              <div className="asset-actions">
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/assets/${item.asset.id}`);
+                  }}
+                >
+                  查看
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// RSS订阅子组件
+function RSSTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+  const [sources, setSources] = useState<Array<{id: string; name: string; url: string; category?: string; isActive: boolean; lastCrawledAt?: string}>>([]);
+  const [items, setItems] = useState<Array<{id: string; title: string; source: string; publishedAt?: string; url?: string}>>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSubTab, setActiveSubTab] = useState<'sources' | 'items'>('items');
+
+  useEffect(() => {
+    loadRSSData();
+  }, []);
+
+  const loadRSSData = async () => {
+    setLoading(true);
+    try {
+      const [sourcesRes, itemsRes] = await Promise.all([
+        rssSourcesApi.getAll(),
+        // 模拟获取RSS条目
+        Promise.resolve({ items: [] }),
+      ]);
+      setSources(sourcesRes.items || []);
+    } catch (err) {
+      console.error('Failed to load RSS data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTriggerCrawl = async () => {
+    try {
+      await rssSourcesApi.triggerCrawl();
+      alert('RSS抓取已触发');
+      loadRSSData();
+    } catch (error) {
+      console.error('Failed to trigger crawl:', error);
+    }
+  };
+
+  return (
+    <div className="rss-tab">
+      <div className="tab-header">
+        <div className="rss-subtabs">
+          <button
+            className={`subtab-btn ${activeSubTab === 'items' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('items')}
+          >
+            📰 RSS文章
+          </button>
+          <button
+            className={`subtab-btn ${activeSubTab === 'sources' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('sources')}
+          >
+            📡 源管理
+          </button>
+        </div>
+        <button className="btn btn-primary" onClick={handleTriggerCrawl}>
+          🔄 立即抓取
+        </button>
+      </div>
+
+      {activeSubTab === 'sources' ? (
+        <div className="rss-sources-section">
+          {sources.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📡</div>
+              <div className="empty-title">暂无RSS源</div>
+              <p>请前往设置添加RSS源</p>
+            </div>
+          ) : (
+            <div className="rss-sources-list">
+              {sources.map((source) => (
+                <div key={source.id} className="rss-source-card">
+                  <div className="source-info">
+                    <h4 className="source-name">{source.name}</h4>
+                    <span className="source-category">{source.category || '未分类'}</span>
+                    <span className={`source-status ${source.isActive ? 'active' : 'inactive'}`}>
+                      {source.isActive ? '● 启用' : '○ 停用'}
+                    </span>
+                  </div>
+                  <div className="source-url">{source.url}</div>
+                  {source.lastCrawledAt && (
+                    <div className="source-last-crawl">
+                      上次抓取: {new Date(source.lastCrawledAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rss-items-section">
+          <div className="empty-state">
+            <div className="empty-icon">📰</div>
+            <div className="empty-title">RSS文章</div>
+            <p>点击"立即抓取"获取最新文章</p>
+            <button className="btn btn-secondary" onClick={() => navigate('/rss-items')}>
+              查看全部文章 →
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

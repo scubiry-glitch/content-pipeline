@@ -516,11 +516,17 @@ export function TaskDetail() {
     setActionLoading(`redo-${stage}`);
     try {
       await tasksApi.redoStage(id!, stage);
-      alert(`${stageNames[stage]}重做已启动`);
+      alert(`${stageNames[stage]}重做已在后台启动，请稍后刷新查看进度`);
       loadTask();
+      // 启动轮询，每 3 秒刷新一次状态
+      const pollInterval = setInterval(() => {
+        loadTask();
+      }, 3000);
+      // 30 秒后停止轮询
+      setTimeout(() => clearInterval(pollInterval), 30000);
     } catch (error) {
       console.error(`重做${stageNames[stage]}失败:`, error);
-      alert('操作失败');
+      alert('操作失败，请检查网络连接或稍后重试');
     } finally {
       setActionLoading(null);
     }
