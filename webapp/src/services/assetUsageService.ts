@@ -1,5 +1,5 @@
 // assetUsageService.ts
-// v3.0.2: 素材引用统计服务
+// v3.0.2: 素材引用统计服务 - Initial Version
 
 import { assetsApi, type AssetUsage, type PopularAsset } from '../api/client';
 
