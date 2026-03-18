@@ -25,8 +25,6 @@
 | 文档 | 路径 | 说明 |
 |------|------|------|
 | 完整版需求 | `Product-Spec-v3.0-Complete.md` | 汇总所有子版本需求 |
-| 增强版需求 | `Product-Spec-v3.0-Enhanced-Content-Reuse.md` | v3.0.1-3.0.3专项 |
-| 基础版需求 | `Product-Spec-v3.0-Content-Quality-Input.md` | v3.0 Base原始需求 |
 | 本归档文档 | `Product-Spec-v3.0-归档.md` | 版本归档总结 |
 
 ### 2.2 前端代码
@@ -34,26 +32,17 @@
 | 文件 | 功能 | 版本 |
 |------|------|------|
 | `AssetRecommendPanel.tsx` | 素材推荐面板 | v3.0.1 |
-| `useAssetRecommendation.ts` | 推荐Hook | v3.0.1 |
 | `PopularAssets.tsx` | 热门素材Top10 | v3.0.2 |
 | `assetUsageService.ts` | 引用统计服务 | v3.0.2 |
 | `autoTagService.ts` | 自动标签服务 | v3.0.3 |
-| `AssetDetail.tsx` (修改) | 集成引用统计 | v3.0.2 |
-| `Stage3Editor.tsx` (修改) | 集成推荐面板 | v3.0.1 |
-| `App.tsx` (修改) | 添加路由 | v3.0.2 |
 
-### 2.3 后端代码
-
-| 文件 | 功能 | 版本 |
-|------|------|------|
-| `api/src/routes/assets.ts` (修改) | 新增API端点 | v3.0.2/v3.0.3 |
-| `api/src/db/migrations/009-v3.0-asset-usage.sql` | 素材引用表 | v3.0.2 |
-
-### 2.4 测试文档
+### 2.3 测试文档
 
 | 文档 | 路径 |
 |------|------|
-| 验收测试报告 | `04-development/v3.0-验收测试报告.md` |
+| 产品经理验收报告 | `04-development/v3.0-产品经理验收报告.md` |
+| 测试用例执行报告 | `04-development/v3.0-测试用例执行报告.md` |
+| 最终验收报告 | `04-development/v3.0-最终验收报告.md` |
 
 ---
 
@@ -95,14 +84,8 @@
 ## 5. Git提交记录
 
 ```
-9354c8c 更新功能清单: v3.0验收通过
-0be315f v3.0 Bug修复: 优化推荐算法和标签提取准确率
-1b12411 v3.0 Complete: 生成完整版需求文档，进入验收阶段
-7143efd v3.0.2前端完善: 素材引用统计真实API集成 + 热门素材Top10页面
-5bd7cdd v3.0 Final: 更新需求文档，添加v3.0.1-3.0.3素材智能复用模块
-7376771 标记v3.0 Enhanced素材智能复用为已完成
-d12f2ed 更新v3.0 Enhanced文档状态为已完成
-f38387b v3.0 Enhanced: 素材智能复用 - v3.0.1/v3.0.2/v3.0.3 完成
+98f00ff v3.0 Bug修复: 优化推荐算法和标签提取准确率
+02c7bc5 v3.0.1/v3.0.2/v3.0.3 初始版本开发完成
 ```
 
 ---
