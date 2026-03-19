@@ -355,7 +355,7 @@ export interface RSSItem {
   created_at: string;
 }
 
-// RSS采集进度类型
+// RSS源采集进度
 export interface RSSCollectionProgress {
   jobId: string;
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -367,7 +367,7 @@ export interface RSSCollectionProgress {
   totalFetched: number;
   totalImported: number;
   duplicates: number;
-  errors: number;
+  errors: string[]; // 错误信息数组
   sourceProgress: Array<{
     sourceId: string;
     sourceName: string;

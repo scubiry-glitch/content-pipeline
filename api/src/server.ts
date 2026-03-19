@@ -27,7 +27,7 @@ import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { setupAuth } from './middleware/auth.js';
-import { startRSSCron } from './services/rssCrawler.js';
+// RSS 自动采集已整合到 rssCollector.ts，不再使用 rssCrawler.js
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
@@ -168,8 +168,8 @@ async function main() {
     const watcherService = getDirectoryWatcherService();
     await watcherService.initialize();
 
-    // Start v3.4 RSS crawler
-    startRSSCron(30); // 每30分钟抓取一次
+    // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
+    // 或配置定时任务调用 collectAllFeeds()
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

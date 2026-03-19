@@ -178,7 +178,7 @@ export async function rssRoutes(fastify: FastifyInstance) {
         totalFetched: job.totalFetched,
         totalImported: job.totalImported,
         duplicates: job.duplicates,
-        errors: job.errors.length,
+        errors: job.errors,
         sourceProgress: Array.from(job.sourceProgress.values()).map(s => ({
           sourceId: s.sourceId,
           sourceName: s.sourceName,

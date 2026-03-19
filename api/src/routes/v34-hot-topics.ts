@@ -68,13 +68,23 @@ export async function v34HotTopicRoutes(fastify: FastifyInstance) {
     return { items: trendData };
   });
 
-  // 触发RSS抓取（管理接口）
+  // 触发RSS抓取（管理接口）- 使用新的 rssCollector
   fastify.post('/crawl', { preHandler: authenticate }, async () => {
-    const { crawlRSSFeeds } = await import('../services/rssCrawler.js');
+    const { collectAllFeeds, getCurrentJob } = await import('../services/rssCollector.js');
+
+    // 检查是否已有运行中的任务
+    const currentJob = getCurrentJob();
+    if (currentJob && currentJob.status === 'running') {
+      return { 
+        message: 'RSS collection already running',
+        jobId: currentJob.jobId,
+        status: 'running'
+      };
+    }
 
     // 异步执行抓取
-    crawlRSSFeeds().catch(console.error);
+    collectAllFeeds().catch(console.error);
 
-    return { message: 'RSS crawling started' };
+    return { message: 'RSS collection started', status: 'running' };
   });
 }

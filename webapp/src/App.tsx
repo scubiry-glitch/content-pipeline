@@ -14,6 +14,8 @@ import { Dashboard } from './pages/Dashboard';
 import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetail } from './pages/TaskDetail';
+import { TaskDetailLayout } from './pages/TaskDetailLayout';
+import { OverviewTab, PlanningTab, ResearchTab, WritingTab, ReviewsTab, QualityTab } from './pages/task-detail';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
 import { Experts } from './pages/Experts';
@@ -58,7 +60,15 @@ function App() {
               <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="tasks" element={<Tasks />} />
-              <Route path="tasks/:id" element={<TaskDetail />} />
+              <Route path="tasks/:id" element={<TaskDetailLayout />}>
+                <Route index element={<OverviewTab />} />
+                <Route path="overview" element={<OverviewTab />} />
+                <Route path="planning" element={<PlanningTab />} />
+                <Route path="research" element={<ResearchTab />} />
+                <Route path="writing" element={<WritingTab />} />
+                <Route path="reviews" element={<ReviewsTab />} />
+                <Route path="quality" element={<QualityTab />} />
+              </Route>
               <Route path="tasks/:id/edit" element={<Stage3Editor />} />
               {/* 内容资产模块 - 整合素材和研报 */}
               <Route path="assets" element={<Assets />} />

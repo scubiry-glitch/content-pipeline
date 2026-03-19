@@ -1,58 +1,51 @@
-// RSS源管理页面 - v3.4 内容质量输入 + 进度追踪
-import { useState, useEffect, useCallback } from 'react';
+// RSS源管理页面 - 优化版
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { rssSourcesApi, type RSSSource, type RSSCollectionProgress } from '../api/client';
 import './RSSSources.css';
+
+interface SourceProgress {
+  sourceId: string;
+  sourceName: string;
+  status: string;
+  fetched: number;
+  imported: number;
+  duplicates: number;
+}
 
 export function RSSSources() {
   const [sources, setSources] = useState<RSSSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [crawling, setCrawling] = useState(false);
-  const [newSource, setNewSource] = useState({
-    name: '',
-    url: '',
-    category: 'tech',
-  });
-
-  // 进度追踪状态
+  
+  // 进度状态
+  const [jobStatus, setJobStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [progress, setProgress] = useState<RSSCollectionProgress | null>(null);
-  const [hasRunningJob, setHasRunningJob] = useState(false);
-  const [showProgressPanel, setShowProgressPanel] = useState(false);
-  const [history, setHistory] = useState<Array<{
-    jobId: string;
-    status: string;
-    startedAt: string;
-    totalSources: number;
-    totalFetched: number;
-    totalImported: number;
-  }>>([]);
-
+  const [showProgress, setShowProgress] = useState(false);
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+  
   // 统计
   const [stats, setStats] = useState({
     totalItems: 0,
     todayItems: 0,
-    hotTopicsCount: 0,
-    todayHotTopics: 0,
+    totalSources: 0,
   });
 
-  // 加载数据源
-  const loadSources = async () => {
+  // 加载数据
+  const loadData = async () => {
     try {
-      setLoading(true);
-      const data = await rssSourcesApi.getAll();
-      const sources = (data.items || []).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        url: s.url,
-        category: s.category,
-        isActive: s.isActive !== false,
-        lastCrawledAt: s.lastCrawledAt,
-      }));
-      setSources(sources);
+      const [sourcesData, statsData] = await Promise.all([
+        rssSourcesApi.getAll(),
+        rssSourcesApi.getStats(),
+      ]);
+      
+      setSources(sourcesData.items || []);
+      setStats({
+        totalItems: statsData.totalItems || 0,
+        todayItems: statsData.todayItems || 0,
+        totalSources: statsData.totalSources || 0,
+      });
     } catch (error) {
-      console.error('加载RSS源失败:', error);
-    } finally {
-      setLoading(false);
+      console.error('加载数据失败:', error);
     }
   };
 
@@ -60,285 +53,235 @@ export function RSSSources() {
   const loadProgress = useCallback(async () => {
     try {
       const data = await rssSourcesApi.getProgress();
-      setHasRunningJob(data.hasRunningJob);
-      setProgress(data.progress);
       
-      // 如果有运行中的任务，自动显示进度面板
-      if (data.hasRunningJob && data.progress) {
-        setShowProgressPanel(true);
+      if (data.progress) {
+        setProgress(data.progress);
+        setJobStatus(data.progress.status);
+        
+        // 任务完成时刷新数据
+        if (data.progress.status === 'completed' || data.progress.status === 'failed') {
+          if (pollInterval.current) {
+            clearInterval(pollInterval.current);
+            pollInterval.current = null;
+          }
+          setCrawling(false);
+          loadData(); // 刷新统计数据
+        }
+      } else {
+        setJobStatus('idle');
       }
     } catch (error) {
       console.error('加载进度失败:', error);
     }
   }, []);
 
-  // 加载统计
-  const loadStats = async () => {
-    try {
-      const data = await rssSourcesApi.getStats();
-      setStats({
-        totalItems: data.totalItems || 0,
-        todayItems: data.todayItems || 0,
-        hotTopicsCount: data.hotTopicsCount || 0,
-        todayHotTopics: data.todayHotTopics || 0,
-      });
-    } catch (error) {
-      console.error('加载统计失败:', error);
-    }
-  };
-
-  // 加载历史
-  const loadHistory = async () => {
-    try {
-      const data = await rssSourcesApi.getHistory(5);
-      setHistory(data.items || []);
-    } catch (error) {
-      console.error('加载历史失败:', error);
-    }
-  };
-
   // 初始加载
   useEffect(() => {
-    loadSources();
-    loadStats();
-    loadHistory();
+    loadData();
     loadProgress();
+    
+    // 定期刷新
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  // 定时轮询进度
+  // 任务运行时轮询进度
   useEffect(() => {
-    if (!hasRunningJob) return;
-
-    const interval = setInterval(() => {
-      loadProgress();
-      // 任务完成时刷新数据
-      if (hasRunningJob && progress?.status === 'running') {
-        loadSources();
-        loadStats();
-        loadHistory();
+    if (jobStatus === 'running' && !pollInterval.current) {
+      pollInterval.current = setInterval(loadProgress, 1000);
+      setShowProgress(true);
+    }
+    
+    return () => {
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+        pollInterval.current = null;
       }
-    }, 2000);
+    };
+  }, [jobStatus, loadProgress]);
 
-    return () => clearInterval(interval);
-  }, [hasRunningJob, loadProgress]);
-
-  const handleCreate = async () => {
-    if (!newSource.name.trim() || !newSource.url.trim()) return;
-    try {
-      await rssSourcesApi.create(newSource);
-      setShowCreateModal(false);
-      setNewSource({ name: '', url: '', category: 'tech' });
-      loadSources();
-    } catch (error) {
-      console.error('创建RSS源失败:', error);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个RSS源吗？')) return;
-    try {
-      await rssSourcesApi.delete(id);
-      loadSources();
-    } catch (error) {
-      console.error('删除RSS源失败:', error);
-    }
-  };
-
-  const handleTriggerCrawl = async (id?: string) => {
+  // 触发采集
+  const handleCrawl = async () => {
+    if (crawling) return;
+    
     try {
       setCrawling(true);
-      const result = await rssSourcesApi.triggerCrawl(id);
+      setJobStatus('running');
+      setShowProgress(true);
       
-      if (result.success) {
-        alert(result.message);
-        setShowProgressPanel(true);
-        // 立即查询进度
-        await loadProgress();
-      } else {
-        alert(result.message);
-      }
+      const result = await rssSourcesApi.triggerCrawl();
+      console.log('采集启动:', result);
+      
+      // 立即查询进度
+      await loadProgress();
     } catch (error) {
-      console.error('触发抓取失败:', error);
-      alert('抓取启动失败，请检查网络或后端服务');
-    } finally {
+      console.error('启动采集失败:', error);
+      alert('启动采集失败');
       setCrawling(false);
+      setJobStatus('idle');
     }
   };
 
-  const getCategoryLabel = (category?: string) => {
-    const map: Record<string, string> = {
-      tech: '科技',
-      finance: '财经',
-      news: '新闻',
-      research: '研究',
-      industry: '行业',
-      dev: '开发者',
-      science: '科学',
-      international: '国际',
-    };
-    return map[category || ''] || '其他';
+  // 计算进度百分比
+  const getProgressPercent = () => {
+    if (!progress) return 0;
+    if (progress.totalSources === 0) return 0;
+    return Math.round((progress.processedSources / progress.totalSources) * 100);
   };
 
-  const getCategoryColor = (category?: string) => {
-    const map: Record<string, string> = {
-      tech: '#6366f1',
-      finance: '#22c55e',
-      news: '#f59e0b',
-      research: '#ec4899',
-      industry: '#06b6d4',
-      dev: '#8b5cf6',
-      science: '#14b8a6',
-      international: '#f97316',
-    };
-    return map[category || ''] || '#6b7280';
-  };
-
-  const getStatusColor = (status?: string) => {
-    const map: Record<string, string> = {
-      completed: '#22c55e',
+  // 获取状态颜色
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
       running: '#3b82f6',
+      completed: '#22c55e',
       failed: '#ef4444',
-      pending: '#6b7280',
+      idle: '#6b7280',
     };
-    return map[status || ''] || '#6b7280';
+    return colors[status] || '#6b7280';
+  };
+
+  // 获取状态文本
+  const getStatusText = (status: string) => {
+    const texts: Record<string, string> = {
+      running: '采集中...',
+      completed: '已完成',
+      failed: '失败',
+      idle: '空闲',
+    };
+    return texts[status] || status;
   };
 
   return (
-    <div className="rss-sources-page">
-      <div className="page-header">
-        <h1>📡 RSS源管理</h1>
+    <div className="rss-page">
+      <div className="rss-header">
+        <h1>📡 RSS 采集管理</h1>
         <div className="header-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowProgressPanel(!showProgressPanel)}
-          >
-            {showProgressPanel ? '隐藏进度' : '查看进度'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => handleTriggerCrawl()}
-            disabled={crawling || hasRunningJob}
-          >
-            {hasRunningJob ? '⏳ 采集中...' : crawling ? '启动中...' : '🔄 全部采集'}
-          </button>
-          <button
+          <button 
             className="btn btn-primary"
-            onClick={() => setShowCreateModal(true)}
+            onClick={handleCrawl}
+            disabled={crawling}
           >
-            + 添加RSS源
+            {crawling ? '⏳ 采集中...' : '🚀 开始采集'}
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setShowProgress(!showProgress)}
+          >
+            {showProgress ? '隐藏进度' : '查看进度'}
           </button>
         </div>
       </div>
 
-      {/* 统计信息 */}
-      <div className="stats-bar">
-        <div className="stat-item">
-          <span className="stat-value">{sources.length}</span>
-          <span className="stat-label">总源数</span>
+      {/* 统计卡片 */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-value">{stats.totalSources}</div>
+          <div className="stat-label">RSS源总数</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-value">{sources.filter((s) => s.isActive).length}</span>
-          <span className="stat-label">启用中</span>
+        <div className="stat-card">
+          <div className="stat-value">{sources.filter(s => s.isActive).length}</div>
+          <div className="stat-label">启用中</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-value">{stats.totalItems}</span>
-          <span className="stat-label">总文章</span>
+        <div className="stat-card">
+          <div className="stat-value">{stats.totalItems}</div>
+          <div className="stat-label">已采集文章</div>
         </div>
-        <div className="stat-item">
-          <span className="stat-value" style={{ color: '#22c55e' }}>{stats.todayItems}</span>
-          <span className="stat-label">今日新增</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-value">{stats.hotTopicsCount}</span>
-          <span className="stat-label">热点话题</span>
+        <div className="stat-card highlight">
+          <div className="stat-value" style={{ color: '#22c55e' }}>{stats.todayItems}</div>
+          <div className="stat-label">今日新增</div>
         </div>
       </div>
 
-      {/* 进度追踪面板 */}
-      {showProgressPanel && (
-        <div className="progress-panel">
-          <div className="progress-panel-header">
+      {/* 进度面板 */}
+      {showProgress && (
+        <div className="progress-section">
+          <div className="progress-header">
             <h3>📊 采集进度</h3>
-            <button className="btn-close" onClick={() => setShowProgressPanel(false)}>×</button>
+            <span 
+              className="status-tag"
+              style={{ background: getStatusColor(jobStatus) }}
+            >
+              {getStatusText(jobStatus)}
+            </span>
           </div>
-          
-          {hasRunningJob && progress ? (
-            <div className="progress-content">
-              <div className="progress-overview">
-                <div className="progress-status">
-                  <span className={`status-badge ${progress.status}`}>
-                    {progress.status === 'running' ? '🔄 采集中' : 
-                     progress.status === 'completed' ? '✅ 完成' : 
-                     progress.status === 'failed' ? '❌ 失败' : '⏸️ 空闲'}
-                  </span>
-                  <span className="progress-time">
-                    开始于: {new Date(progress.startedAt).toLocaleTimeString()}
-                  </span>
-                </div>
-                
-                <div className="progress-bar-container">
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
-                      style={{ width: `${progress.percent}%` }}
-                    />
-                  </div>
-                  <span className="progress-percent">{progress.percent}%</span>
-                </div>
 
-                {progress.currentSource && (
-                  <div className="current-source">
-                    正在采集: <strong>{progress.currentSource}</strong>
-                    <span className="source-counter">
-                      ({progress.processedSources + 1} / {progress.totalSources})
-                    </span>
-                  </div>
-                )}
+          {progress ? (
+            <div className="progress-body">
+              {/* 总体进度 */}
+              <div className="overall-progress">
+                <div className="progress-bar-bg">
+                  <div 
+                    className="progress-bar-fill"
+                    style={{ width: `${getProgressPercent()}%` }}
+                  />
+                </div>
+                <span className="progress-text">{getProgressPercent()}%</span>
               </div>
 
-              <div className="progress-stats">
-                <div className="stat-box">
-                  <span className="stat-label">已获取</span>
-                  <span className="stat-value">{progress.totalFetched}</span>
+              {/* 当前源 */}
+              {progress.currentSource && (
+                <div className="current-source">
+                  正在采集: <strong>{progress.currentSource}</strong>
+                  <span className="source-count">
+                    ({progress.processedSources + 1} / {progress.totalSources})
+                  </span>
                 </div>
-                <div className="stat-box">
-                  <span className="stat-label">已导入</span>
-                  <span className="stat-value" style={{ color: '#22c55e' }}>{progress.totalImported}</span>
+              )}
+
+              {/* 统计数字 */}
+              <div className="progress-numbers">
+                <div className="number-box">
+                  <span className="number-value">{progress.totalFetched}</span>
+                  <span className="number-label">已获取</span>
                 </div>
-                <div className="stat-box">
-                  <span className="stat-label">重复</span>
-                  <span className="stat-value" style={{ color: '#f59e0b' }}>{progress.duplicates}</span>
+                <div className="number-box success">
+                  <span className="number-value">{progress.totalImported}</span>
+                  <span className="number-label">已导入</span>
                 </div>
-                <div className="stat-box">
-                  <span className="stat-label">错误</span>
-                  <span className="stat-value" style={{ color: '#ef4444' }}>{progress.errors}</span>
+                <div className="number-box warning">
+                  <span className="number-value">{progress.duplicates}</span>
+                  <span className="number-label">重复</span>
+                </div>
+                <div className="number-box error">
+                  <span className="number-value">{progress.errors.length}</span>
+                  <span className="number-label">错误</span>
                 </div>
               </div>
 
-              {/* 源详情进度 */}
-              {progress.sourceProgress.length > 0 && (
-                <div className="source-progress-list">
+              {/* 各源详情 */}
+              {progress.sourceProgress && progress.sourceProgress.size > 0 && (
+                <div className="source-list">
                   <h4>各源进度</h4>
-                  <div className="source-progress-items">
-                    {progress.sourceProgress.map((source) => (
-                      <div key={source.sourceId} className={`source-progress-item ${source.status}`}>
-                        <div className="source-info">
-                          <span className="source-name">{source.sourceName}</span>
-                          <span className={`source-status-badge ${source.status}`}>
-                            {source.status === 'processing' ? '🔄' : 
-                             source.status === 'completed' ? '✅' : 
-                             source.status === 'failed' ? '❌' : '⏳'}
+                  <div className="source-items">
+                    {Array.from(progress.sourceProgress.values()).map((sp: SourceProgress) => (
+                      <div key={sp.sourceId} className={`source-item ${sp.status}`}>
+                        <div className="source-row">
+                          <span className="source-name">{sp.sourceName}</span>
+                          <span className={`source-status ${sp.status}`}>
+                            {sp.status === 'processing' && '🔄'}
+                            {sp.status === 'completed' && '✅'}
+                            {sp.status === 'failed' && '❌'}
+                            {sp.status === 'pending' && '⏳'}
                           </span>
                         </div>
-                        <div className="source-numbers">
-                          <span>获取: {source.fetched}</span>
-                          <span>导入: {source.imported}</span>
-                          {source.duplicates > 0 && <span>重复: {source.duplicates}</span>}
+                        <div className="source-stats">
+                          <span>获取: {sp.fetched}</span>
+                          <span>导入: {sp.imported}</span>
+                          {sp.duplicates > 0 && <span>重复: {sp.duplicates}</span>}
                         </div>
-                        {source.error && (
-                          <div className="source-error">{source.error}</div>
-                        )}
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 错误信息 */}
+              {progress.errors.length > 0 && (
+                <div className="error-section">
+                  <h4>❌ 错误 ({progress.errors.length})</h4>
+                  <div className="error-list">
+                    {progress.errors.slice(0, 3).map((err, idx) => (
+                      <div key={idx} className="error-item">{err}</div>
                     ))}
                   </div>
                 </div>
@@ -347,151 +290,77 @@ export function RSSSources() {
           ) : (
             <div className="progress-empty">
               <p>暂无运行中的采集任务</p>
-              {history.length > 0 && (
-                <div className="recent-history">
-                  <h4>最近任务</h4>
-                  {history.slice(0, 3).map((job) => (
-                    <div key={job.jobId} className="history-item">
-                      <span className="history-time">
-                        {new Date(job.startedAt).toLocaleString()}
-                      </span>
-                      <span className={`history-status ${job.status}`}>
-                        {job.status === 'completed' ? '✅' : job.status === 'failed' ? '❌' : '⏳'}
-                      </span>
-                      <span className="history-stats">
-                        {job.totalSources}源 / {job.totalFetched}条 / 导入{job.totalImported}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p className="hint">点击"开始采集"按钮启动</p>
             </div>
           )}
         </div>
       )}
 
       {/* RSS源列表 */}
-      {loading ? (
-        <div className="loading">加载中...</div>
-      ) : sources.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📡</div>
-          <div className="empty-title">暂无RSS源</div>
-          <p>点击"添加RSS源"按钮创建第一个源</p>
-        </div>
-      ) : (
-        <div className="sources-grid">
-          {sources.map((source) => (
-            <div key={source.id} className={`source-card ${!source.isActive ? 'inactive' : ''}`}>
-              <div className="source-header">
+      <div className="sources-section">
+        <h3>📡 RSS 源列表 ({sources.length}个)</h3>
+        {loading ? (
+          <div className="loading">加载中...</div>
+        ) : (
+          <div className="sources-table">
+            <div className="table-header">
+              <span>名称</span>
+              <span>分类</span>
+              <span>状态</span>
+              <span>上次采集</span>
+            </div>
+            {sources.map(source => (
+              <div key={source.id} className="table-row">
                 <div className="source-info">
-                  <h3 className="source-name">{source.name}</h3>
-                  <span
-                    className="source-category"
-                    style={{ background: getCategoryColor(source.category) }}
-                  >
-                    {getCategoryLabel(source.category)}
-                  </span>
+                  <div className="source-name">{source.name}</div>
+                  <div className="source-url">{source.url}</div>
                 </div>
-                <div className="source-status">
-                  <span className={`status-badge ${source.isActive ? 'active' : 'inactive'}`}>
-                    {source.isActive ? '● 启用' : '○ 停用'}
-                  </span>
-                </div>
+                <span className="category-tag" style={{ 
+                  background: getCategoryColor(source.category) 
+                }}>
+                  {getCategoryLabel(source.category)}
+                </span>
+                <span className={`status-badge ${source.isActive ? 'active' : 'inactive'}`}>
+                  {source.isActive ? '● 启用' : '○ 停用'}
+                </span>
+                <span className="last-crawl">
+                  {source.lastCrawledAt 
+                    ? new Date(source.lastCrawledAt).toLocaleString() 
+                    : '从未'}
+                </span>
               </div>
-
-              <div className="source-url">
-                <a href={source.url} target="_blank" rel="noopener noreferrer">
-                  {source.url}
-                </a>
-              </div>
-
-              {source.lastCrawledAt && (
-                <div className="source-last-crawl">
-                  上次抓取: {new Date(source.lastCrawledAt).toLocaleString('zh-CN')}
-                </div>
-              )}
-
-              <div className="source-actions">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => handleTriggerCrawl(source.id)}
-                  disabled={crawling || hasRunningJob}
-                >
-                  🔄 采集
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => handleDelete(source.id)}
-                >
-                  🗑️ 删除
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 创建弹窗 */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>添加RSS源</h3>
-              <button className="modal-close" onClick={() => setShowCreateModal(false)}>
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>源名称 *</label>
-                <input
-                  type="text"
-                  value={newSource.name}
-                  onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
-                  placeholder="例如：36氪"
-                />
-              </div>
-              <div className="form-group">
-                <label>RSS地址 *</label>
-                <input
-                  type="url"
-                  value={newSource.url}
-                  onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
-                  placeholder="https://example.com/feed.xml"
-                />
-              </div>
-              <div className="form-group">
-                <label>分类</label>
-                <select
-                  value={newSource.category}
-                  onChange={(e) => setNewSource({ ...newSource, category: e.target.value })}
-                >
-                  <option value="tech">科技</option>
-                  <option value="finance">财经</option>
-                  <option value="news">新闻</option>
-                  <option value="research">研究</option>
-                  <option value="dev">开发者</option>
-                  <option value="science">科学</option>
-                  <option value="international">国际</option>
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                取消
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleCreate}
-                disabled={!newSource.name.trim() || !newSource.url.trim()}
-              >
-                添加
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
+}
+
+function getCategoryLabel(category?: string) {
+  const map: Record<string, string> = {
+    tech: '科技',
+    finance: '财经',
+    news: '新闻',
+    research: '研究',
+    industry: '行业',
+    dev: '开发者',
+    science: '科学',
+    international: '国际',
+  };
+  return map[category || ''] || '其他';
+}
+
+function getCategoryColor(category?: string) {
+  const map: Record<string, string> = {
+    tech: '#6366f1',
+    finance: '#22c55e',
+    news: '#f59e0b',
+    research: '#ec4899',
+    industry: '#06b6d4',
+    dev: '#8b5cf6',
+    science: '#14b8a6',
+    international: '#f97316',
+  };
+  return map[category || ''] || '#6b7280';
 }
