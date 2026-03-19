@@ -1,7 +1,8 @@
 // 任务详情 - 质量分析 Tab
+import { useOutletContext } from 'react-router-dom';
 import type { Task } from '../../types';
 
-interface QualityTabProps {
+interface TaskContext {
   task: Task;
   sentiment: {
     msiIndex: number;
@@ -25,13 +26,8 @@ interface QualityTabProps {
   }>;
 }
 
-export function QualityTab({
-  task,
-  sentiment,
-  hotTopics,
-  suggestions,
-  alerts,
-}: QualityTabProps) {
+export function QualityTab() {
+  const { task, sentiment, hotTopics, suggestions, alerts } = useOutletContext<TaskContext>();
   return (
     <div className="tab-panel quality-panel">
       <div className="quality-grid">

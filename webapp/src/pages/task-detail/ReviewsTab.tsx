@@ -1,8 +1,9 @@
 // 任务详情 - 蓝军评审 Tab
+import { useOutletContext } from 'react-router-dom';
 import { ExpertReviewPanel } from '../../components/ExpertReviewPanel';
 import type { Task, BlueTeamReview } from '../../types';
 
-interface ReviewsTabProps {
+interface TaskContext {
   task: Task;
   reviews: BlueTeamReview[];
   reviewSummary: {
@@ -27,15 +28,16 @@ const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string; 
   reader_rep: { name: '读者代表', icon: '👁️', color: '#10b981', desc: '可读性' }
 };
 
-export function ReviewsTab({
-  task,
-  reviews,
-  reviewSummary,
-  onReviewDecision,
-  onBatchDecision,
-  onReReview,
-  onRedoReview,
-}: ReviewsTabProps) {
+export function ReviewsTab() {
+  const {
+    task,
+    reviews,
+    reviewSummary,
+    onReviewDecision,
+    onBatchDecision,
+    onReReview,
+    onRedoReview,
+  } = useOutletContext<TaskContext>();
   const groupedReviews = {
     critical: [] as any[],
     warning: [] as any[],

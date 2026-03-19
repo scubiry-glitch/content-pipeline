@@ -1,21 +1,17 @@
 // 任务详情 - 概览 Tab
+import { useOutletContext } from 'react-router-dom';
 import type { Task } from '../../types';
 
-interface OverviewTabProps {
+interface TaskContext {
   task: Task;
-  workflowRules?: any[];
-  onConfirmOutline?: () => void;
-  onRedoStage?: (stage: 'planning' | 'research') => void;
-  actionLoading?: string | null;
+  workflowRules: any[];
+  actionLoading: string | null;
+  onConfirmOutline: () => void;
+  onRedoStage: (stage: 'planning' | 'research' | 'writing' | 'review') => void;
 }
 
-export function OverviewTab({
-  task,
-  workflowRules = [],
-  onConfirmOutline,
-  onRedoStage,
-  actionLoading,
-}: OverviewTabProps) {
+export function OverviewTab() {
+  const { task, workflowRules, actionLoading, onConfirmOutline, onRedoStage } = useOutletContext<TaskContext>();
   const getStageProgress = (status: string) => {
     const stageMap: Record<string, number> = {
       pending: 0, planning: 25, researching: 50, writing: 75,

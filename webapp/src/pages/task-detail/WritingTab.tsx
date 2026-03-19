@@ -1,29 +1,33 @@
 // 任务详情 - 文稿生成 Tab
+import { useOutletContext } from 'react-router-dom';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ExportPanel } from '../../components/ExportPanel';
 import type { Task } from '../../types';
 
-interface WritingTabProps {
+interface TaskContext {
   task: Task;
-  draftContent: { content: string; version?: number } | null;
   complianceResult: any;
   checkingCompliance: boolean;
+  actionLoading: string | null;
+  getDraftFromTask: () => { content: string; version?: number } | null;
   onRedoWriting: () => void;
   onComplianceCheck: () => void;
   onClearComplianceResult: () => void;
-  actionLoading?: string | null;
 }
 
-export function WritingTab({
-  task,
-  draftContent,
-  complianceResult,
-  checkingCompliance,
-  onRedoWriting,
-  onComplianceCheck,
-  onClearComplianceResult,
-  actionLoading,
-}: WritingTabProps) {
+export function WritingTab() {
+  const {
+    task,
+    complianceResult,
+    checkingCompliance,
+    actionLoading,
+    getDraftFromTask,
+    onRedoWriting,
+    onComplianceCheck,
+    onClearComplianceResult,
+  } = useOutletContext<TaskContext>();
+
+  const draftContent = getDraftFromTask();
   return (
     <div className="tab-panel writing-panel">
       {/* 操作按钮区 */}

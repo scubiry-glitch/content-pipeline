@@ -1,31 +1,33 @@
 // 任务详情 - 选题策划 Tab
+import { useOutletContext } from 'react-router-dom';
 import type { Task } from '../../types';
 
-interface PlanningTabProps {
+interface TaskContext {
   task: Task;
   editingOutline: boolean;
   outlineDraft: string;
+  actionLoading: string | null;
   onEditOutline: () => void;
   onSaveOutline: () => void;
   onCancelEdit: () => void;
   onOutlineChange: (value: string) => void;
   onConfirmOutline: () => void;
-  onRedoStage: (stage: 'planning') => void;
-  actionLoading?: string | null;
+  onRedoStage: (stage: 'planning' | 'research' | 'writing' | 'review') => void;
 }
 
-export function PlanningTab({
-  task,
-  editingOutline,
-  outlineDraft,
-  onEditOutline,
-  onSaveOutline,
-  onCancelEdit,
-  onOutlineChange,
-  onConfirmOutline,
-  onRedoStage,
-  actionLoading,
-}: PlanningTabProps) {
+export function PlanningTab() {
+  const {
+    task,
+    editingOutline,
+    outlineDraft,
+    actionLoading,
+    onEditOutline,
+    onSaveOutline,
+    onCancelEdit,
+    onOutlineChange,
+    onConfirmOutline,
+    onRedoStage,
+  } = useOutletContext<TaskContext>();
   const outline = task.outline || {};
   const evaluation = task.evaluation;
   const competitorAnalysis = task.competitor_analysis || {};

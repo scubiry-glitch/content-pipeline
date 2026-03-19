@@ -1,4 +1,5 @@
 // 任务详情 - 深度研究 Tab
+import { useOutletContext } from 'react-router-dom';
 import { DataReviewTable } from '../../components/DataReviewTable';
 import { ExternalLinksList } from '../../components/ExternalLinksList';
 import { AssetLinksList } from '../../components/AssetLinksList';
@@ -6,31 +7,32 @@ import { DataCleaningPanel } from '../../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../../components/CrossValidationPanel';
 import type { Task, ResearchConfig } from '../../types';
 
-interface ResearchTabProps {
+interface TaskContext {
   task: Task;
   researchConfig: ResearchConfig;
   showResearchConfig: boolean;
+  actionLoading: string | null;
   onShowResearchConfigChange: (show: boolean) => void;
   onResearchConfigChange: (config: ResearchConfig) => void;
   onSaveResearchConfig: () => void;
   onCollectResearch: () => void;
-  onRedoStage: (stage: 'research') => void;
+  onRedoStage: (stage: 'planning' | 'research' | 'writing' | 'review') => void;
   onAddExternalLink: () => void;
-  actionLoading?: string | null;
 }
 
-export function ResearchTab({
-  task,
-  researchConfig,
-  showResearchConfig,
-  onShowResearchConfigChange,
-  onResearchConfigChange,
-  onSaveResearchConfig,
-  onCollectResearch,
-  onRedoStage,
-  onAddExternalLink,
-  actionLoading,
-}: ResearchTabProps) {
+export function ResearchTab() {
+  const {
+    task,
+    researchConfig,
+    showResearchConfig,
+    actionLoading,
+    onShowResearchConfigChange,
+    onResearchConfigChange,
+    onSaveResearchConfig,
+    onCollectResearch,
+    onRedoStage,
+    onAddExternalLink,
+  } = useOutletContext<TaskContext>();
   return (
     <div className="tab-panel research-panel">
       {/* 操作按钮区 */}

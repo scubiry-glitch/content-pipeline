@@ -1369,18 +1369,28 @@ function PopularAssetsTab({ navigate, assets }: { navigate: ReturnType<typeof us
 // RSS订阅子组件
 function RSSTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
   const [sources, setSources] = useState<Array<{id: string; name: string; url: string; category?: string; isActive: boolean; lastCrawledAt?: string}>>([]);
+  const [items, setItems] = useState<Array<any>>([]);
+  const [stats, setStats] = useState({ totalItems: 0, todayItems: 0 });
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<'sources' | 'items'>('items');
 
   useEffect(() => {
     loadRSSData();
+    loadRSSItems();
   }, []);
 
   const loadRSSData = async () => {
     setLoading(true);
     try {
-      const sourcesRes = await rssSourcesApi.getAll();
+      const [sourcesRes, statsRes] = await Promise.all([
+        rssSourcesApi.getAll(),
+        rssSourcesApi.getStats(),
+      ]);
       setSources(sourcesRes.items || []);
+      setStats({
+        totalItems: statsRes.totalItems || 0,
+        todayItems: statsRes.todayItems || 0,
+      });
     } catch (err) {
       console.error('Failed to load RSS data:', err);
     } finally {
@@ -1388,14 +1398,32 @@ function RSSTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
     }
   };
 
+  const loadRSSItems = async () => {
+    try {
+      const itemsRes = await rssSourcesApi.getItems({ limit: 10, offset: 0 });
+      setItems(itemsRes.items || []);
+    } catch (err) {
+      console.error('Failed to load RSS items:', err);
+    }
+  };
+
   const handleTriggerCrawl = async () => {
     try {
       await rssSourcesApi.triggerCrawl();
-      alert('RSS抓取已触发');
+      alert('RSS抓取已触发，请稍后刷新查看');
       loadRSSData();
     } catch (error) {
       console.error('Failed to trigger crawl:', error);
     }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
@@ -1406,13 +1434,13 @@ function RSSTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
             className={`subtab-btn ${activeSubTab === 'items' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('items')}
           >
-            📰 RSS文章
+            📰 RSS文章 ({stats.totalItems})
           </button>
           <button
             className={`subtab-btn ${activeSubTab === 'sources' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('sources')}
           >
-            📡 源管理
+            📡 源管理 ({sources.length})
           </button>
         </div>
         <button className="btn btn-primary" onClick={handleTriggerCrawl}>
@@ -1452,14 +1480,53 @@ function RSSTab({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
         </div>
       ) : (
         <div className="rss-items-section">
-          <div className="empty-state">
-            <div className="empty-icon">📰</div>
-            <div className="empty-title">RSS文章</div>
-            <p>点击"立即抓取"获取最新文章</p>
-            <button className="btn btn-secondary" onClick={() => navigate('/rss-items')}>
-              查看全部文章 →
-            </button>
-          </div>
+          {items.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📰</div>
+              <div className="empty-title">暂无RSS文章</div>
+              <p>点击"立即抓取"获取最新文章</p>
+              <div className="stats-summary">
+                <span>总文章: {stats.totalItems}</span>
+                <span>今日新增: {stats.todayItems}</span>
+              </div>
+              <button className="btn btn-secondary" onClick={() => navigate('/rss-items')}>
+                查看全部文章 →
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="rss-stats-bar">
+                <span>📊 总文章: {stats.totalItems}</span>
+                <span>📈 今日: {stats.todayItems}</span>
+                <button className="btn btn-sm btn-secondary" onClick={() => navigate('/rss-items')}>
+                  查看全部 →
+                </button>
+              </div>
+              <div className="rss-items-list-preview">
+                {items.map((item) => (
+                  <div key={item.id} className="rss-item-card-preview">
+                    <div className="rss-item-header">
+                      <span className="rss-item-source">{item.source_name}</span>
+                      <span className="rss-item-date">{formatDate(item.published_at)}</span>
+                    </div>
+                    <h4 className="rss-item-title">
+                      <a href={item.link} target="_blank" rel="noopener noreferrer">
+                        {item.title}
+                      </a>
+                    </h4>
+                    <p className="rss-item-summary">{item.summary?.substring(0, 150)}...</p>
+                    {item.tags && item.tags.length > 0 && (
+                      <div className="rss-item-tags">
+                        {item.tags.slice(0, 3).map((tag: string, idx: number) => (
+                          <span key={idx} className="rss-tag">{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
