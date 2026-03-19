@@ -818,8 +818,4 @@ export function TaskDetailLayout() {
   );
 }
 
-// 自定义hook供子路由使用
-export function useTaskContext() {
-  const { context } = require('react-router-dom').useOutletContext();
-  return context;
-}
+

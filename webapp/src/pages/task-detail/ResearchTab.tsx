@@ -5,7 +5,8 @@ import { ExternalLinksList } from '../../components/ExternalLinksList';
 import { AssetLinksList } from '../../components/AssetLinksList';
 import { DataCleaningPanel } from '../../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../../components/CrossValidationPanel';
-import type { Task, ResearchConfig } from '../../types';
+import type { Task } from '../../types';
+import type { ResearchConfig } from '../../api/client';
 
 interface TaskContext {
   task: Task;

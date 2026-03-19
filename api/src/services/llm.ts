@@ -67,7 +67,7 @@ async function kimiRequest(path: string, body: any, apiKey: string, baseURL: str
       'X-Client-Version': '1.24.0',
     },
     family: 4, // 强制使用 IPv4，解决 Node.js fetch 超时问题
-    timeout: 60000,
+    timeout: 180000, // 3分钟超时
   };
 
   return new Promise((resolve, reject) => {
@@ -374,7 +374,9 @@ export async function generate(
   const errors: string[] = [];
 
   // 首选：Kimi (Moonshot)
-  if (getKimiClient() && process.env.USE_KIMI !== 'false') {
+  const kimiClient = getKimiClient();
+  console.log(`[LLM] Checking Kimi client:`, kimiClient ? 'available' : 'not available', 'KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'set' : 'not set');
+  if (kimiClient && process.env.USE_KIMI !== 'false') {
     try {
       console.log(`[LLM] Using Kimi for ${taskType} task`);
       return await generateWithKimi(prompt, {

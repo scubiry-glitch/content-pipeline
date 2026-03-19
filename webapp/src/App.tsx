@@ -13,7 +13,6 @@ import { initTheme } from './themes';
 import { Dashboard } from './pages/Dashboard';
 import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
-import { TaskDetail } from './pages/TaskDetail';
 import { TaskDetailLayout } from './pages/TaskDetailLayout';
 import { OverviewTab, PlanningTab, ResearchTab, WritingTab, ReviewsTab, QualityTab } from './pages/task-detail';
 import { Assets } from './pages/Assets';
@@ -61,7 +60,7 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="tasks" element={<Tasks />} />
               <Route path="tasks/:id" element={<TaskDetailLayout />}>
-                <Route index element={<OverviewTab />} />
+                <Route index element={<Navigate to="overview" replace />} />
                 <Route path="overview" element={<OverviewTab />} />
                 <Route path="planning" element={<PlanningTab />} />
                 <Route path="research" element={<ResearchTab />} />
