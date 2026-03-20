@@ -1,8 +1,10 @@
 // 任务详情 - 文稿生成 Tab
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ExportPanel } from '../../components/ExportPanel';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -29,6 +31,9 @@ export function WritingTab() {
   } = useOutletContext<TaskContext>();
 
   const draftContent = getDraftFromTask();
+  
+  // 视图模式切换：rendered(渲染) | source(源码)
+  const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
 
   return (
     <div className="tab-panel writing-panel">
@@ -140,10 +145,37 @@ export function WritingTab() {
           <div className="info-card full-width output-card">
             <div className="card-header-with-actions">
               <h3 className="card-title">📝 生成内容</h3>
-              <span className="version-tag">版本 {draftContent.version || 1}</span>
+              <div className="header-actions">
+                {/* 视图切换 */}
+                <div className="view-toggle">
+                  <button 
+                    className={`btn-toggle ${viewMode === 'rendered' ? 'active' : ''}`}
+                    onClick={() => setViewMode('rendered')}
+                    title="Markdown 渲染视图"
+                  >
+                    👁️ 预览
+                  </button>
+                  <button 
+                    className={`btn-toggle ${viewMode === 'source' ? 'active' : ''}`}
+                    onClick={() => setViewMode('source')}
+                    title="Markdown 源码"
+                  >
+                    📄 源码
+                  </button>
+                </div>
+                <span className="version-tag">版本 {draftContent.version || 1}</span>
+              </div>
             </div>
-            <div className="writing-draft">
-              {draftContent.content}
+            
+            {/* 内容显示区 */}
+            <div className="writing-draft-container">
+              {viewMode === 'rendered' ? (
+                <MarkdownRenderer content={draftContent.content} />
+              ) : (
+                <pre className="writing-draft-source">
+                  <code>{draftContent.content}</code>
+                </pre>
+              )}
             </div>
           </div>
 
