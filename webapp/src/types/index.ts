@@ -168,6 +168,7 @@ export interface Asset {
   id: string;
   title: string;
   content: string;
+  content_preview?: string;
   content_type: string;
   filename?: string;
   source: string;

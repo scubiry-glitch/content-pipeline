@@ -129,16 +129,29 @@ export function TaskDetailLayout() {
   });
   const [showResearchConfig, setShowResearchConfig] = useState(false);
 
-  // 获取文稿内容
-  const getDraftFromTask = useCallback((taskData: Task | null): { content: string; version?: number } | null => {
-    if (!taskData) return null;
+  // 生产流水线手风琴展开状态
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(() => {
+    // 默认展开当前进行中的阶段
+    const initial = new Set<number>();
+    if (task) {
+      const currentStageNum = getCurrentStageNum(task.status);
+      if (currentStageNum > 0) {
+        initial.add(currentStageNum);
+      }
+    }
+    return initial;
+  });
 
-    const writingDraft = (taskData as any).writing_data?.draft;
+  // 获取文稿内容
+  const getDraftFromTask = useCallback((): { content: string; version?: number } | null => {
+    if (!task) return null;
+
+    const writingDraft = (task as any).writing_data?.draft;
     if (typeof writingDraft === 'string' && writingDraft.trim()) {
-      return { content: writingDraft, version: (taskData as any).writing_data?.version };
+      return { content: writingDraft, version: (task as any).writing_data?.version };
     }
 
-    const versions = (taskData as any).versions || (taskData as any).draft_versions || [];
+    const versions = (task as any).versions || (task as any).draft_versions || [];
     if (versions.length === 0) return null;
 
     const sorted = [...versions].sort((a: any, b: any) => (a.version ?? 0) - (b.version ?? 0));
@@ -148,26 +161,89 @@ export function TaskDetailLayout() {
     }
 
     return null;
+  }, [task]);
+
+  // 生成优化建议
+  const generateSuggestions = useCallback((taskData: Task) => {
+    const newSuggestions: any[] = [];
+    if (!taskData.outline) {
+      newSuggestions.push({ area: '大纲', suggestion: '任务尚未生成大纲，建议进入选题策划阶段', priority: 'high', impact: '明确写作方向' });
+    }
+    if (!taskData.research_data?.sources?.length) {
+      newSuggestions.push({ area: '研究', suggestion: '缺少引用来源，建议进行深度研究收集资料', priority: 'medium', impact: '提升内容可信度' });
+    }
+    if (taskData.evaluation && taskData.evaluation.score < 70) {
+      newSuggestions.push({ area: '质量', suggestion: '选题评分较低，建议优化选题或寻找差异化角度', priority: 'high', impact: '提高内容竞争力' });
+    }
+    setSuggestions(newSuggestions);
+  }, []);
+
+  // 生成预警信息
+  const generateAlerts = useCallback((taskData: Task, currentReviews: BlueTeamReview[]) => {
+    const newAlerts: any[] = [];
+    
+    // 安全检查 updated_at 是否存在
+    if (taskData.updated_at) {
+      const lastUpdate = new Date(taskData.updated_at);
+      const now = new Date();
+      const daysDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysDiff > 7) {
+        newAlerts.push({ type: 'freshness', severity: 'warning', message: `任务已${daysDiff}天未更新`, suggestion: '建议检查任务状态或更新进度' });
+      }
+    }
+
+    const pendingReviews = currentReviews.filter(r => r.status === 'pending');
+    if (pendingReviews.length > 0) {
+      newAlerts.push({ type: 'review', severity: 'info', message: `有${pendingReviews.length}条评审意见待处理`, suggestion: '请及时处理蓝军评审意见' });
+    }
+
+    setAlerts(newAlerts);
+  }, []);
+
+  // 加载蓝军评审
+  const loadReviews = useCallback(async (taskId: string) => {
+    try {
+      const reviewsData = await blueTeamApi.getReviews(taskId);
+      const items = reviewsData.items || [];
+      setReviews(items);
+
+      const summary = { total: 0, critical: 0, warning: 0, praise: 0, accepted: 0, ignored: 0, pending: 0 };
+      items.forEach((review: BlueTeamReview) => {
+        review.questions?.forEach((q: any) => {
+          summary.total++;
+          if (q.severity === 'high') summary.critical++;
+          else if (q.severity === 'medium') summary.warning++;
+          else if (q.severity === 'praise') summary.praise++;
+
+          if (q.status === 'accepted') summary.accepted++;
+          else if (q.status === 'ignored') summary.ignored++;
+          else summary.pending++;
+        });
+      });
+
+      setReviewSummary(summary);
+      return items;
+    } catch (error) {
+      console.error('加载评审失败:', error);
+      return [];
+    }
   }, []);
 
   // 加载任务数据
-  useEffect(() => {
-    if (id) {
-      loadTask();
-      loadAssets();
-      loadWorkflowRules();
-    }
-  }, [id]);
-
-  const loadTask = async () => {
+  const loadTask = useCallback(async () => {
+    if (!id) return;
+    
     try {
       setLoading(true);
-      const data = await tasksApi.getById(id!);
+      const data = await tasksApi.getById(id);
       setTask(data);
 
+      let loadedReviews: BlueTeamReview[] = [];
+      
       // 加载蓝军评审
       if (['reviewing', 'completed', 'awaiting_approval'].includes(data.status)) {
-        await loadReviews();
+        loadedReviews = await loadReviews(id);
       }
 
       // 加载热点话题
@@ -188,95 +264,42 @@ export function TaskDetailLayout() {
 
       // 生成优化建议和预警
       generateSuggestions(data);
-      generateAlerts(data);
+      generateAlerts(data, loadedReviews);
     } catch (error) {
       console.error('加载任务失败:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, loadReviews, generateSuggestions, generateAlerts]);
 
-  const loadReviews = async () => {
-    try {
-      const reviewsData = await blueTeamApi.getReviews(id!);
-      const items = reviewsData.items || [];
-      setReviews(items);
-
-      const summary = { total: 0, critical: 0, warning: 0, praise: 0, accepted: 0, ignored: 0, pending: 0 };
-      items.forEach((review: BlueTeamReview) => {
-        review.questions?.forEach((q: any) => {
-          summary.total++;
-          if (q.severity === 'high') summary.critical++;
-          else if (q.severity === 'medium') summary.warning++;
-          else if (q.severity === 'praise') summary.praise++;
-
-          if (q.status === 'accepted') summary.accepted++;
-          else if (q.status === 'ignored') summary.ignored++;
-          else summary.pending++;
-        });
-      });
-      setReviewSummary(summary);
-    } catch (error) {
-      console.error('加载评审失败:', error);
-    }
-  };
-
-  const loadAssets = async () => {
+  // 加载素材
+  const loadAssets = useCallback(async () => {
     try {
       const data = await assetsApi.getAll();
       setAvailableAssets(data.items || []);
     } catch (error) {
       console.error('加载素材失败:', error);
     }
-  };
+  }, []);
 
-  const loadWorkflowRules = async () => {
+  // 加载工作流规则
+  const loadWorkflowRules = useCallback(async () => {
     try {
       const data = await orchestratorApi.getRules();
       setWorkflowRules(data.items || []);
     } catch (error) {
       console.error('加载工作流规则失败:', error);
     }
-  };
+  }, []);
 
-  const generateSuggestions = (taskData: Task) => {
-    const newSuggestions: any[] = [];
-    if (!taskData.outline) {
-      newSuggestions.push({ area: '大纲', suggestion: '任务尚未生成大纲，建议进入选题策划阶段', priority: 'high', impact: '明确写作方向' });
+  // 初始加载
+  useEffect(() => {
+    if (id) {
+      loadTask();
+      loadAssets();
+      loadWorkflowRules();
     }
-    if (!taskData.research_data?.sources?.length) {
-      newSuggestions.push({ area: '研究', suggestion: '缺少引用来源，建议进行深度研究收集资料', priority: 'medium', impact: '提升内容可信度' });
-    }
-    if (taskData.evaluation && taskData.evaluation.score < 70) {
-      newSuggestions.push({ area: '质量', suggestion: '选题评分较低，建议优化选题或寻找差异化角度', priority: 'high', impact: '提高内容竞争力' });
-    }
-    setSuggestions(newSuggestions);
-  };
-
-  const generateAlerts = (taskData: Task) => {
-    const newAlerts: any[] = [];
-    const lastUpdate = new Date(taskData.updated_at);
-    const now = new Date();
-    const daysDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (daysDiff > 7) {
-      newAlerts.push({ type: 'freshness', severity: 'warning', message: `任务已${daysDiff}天未更新`, suggestion: '建议检查任务状态或更新进度' });
-    }
-
-    const pendingReviews = reviews.filter(r => r.status === 'pending');
-    if (pendingReviews.length > 0) {
-      newAlerts.push({ type: 'review', severity: 'info', message: `有${pendingReviews.length}条评审意见待处理`, suggestion: '请及时处理蓝军评审意见' });
-    }
-
-    setAlerts(newAlerts);
-  };
-
-  // 获取当前激活的Tab
-  const getActiveTab = () => {
-    const path = location.pathname;
-    const tab = TABS.find(t => path.includes(`/tasks/${id}/${t.path}`));
-    return tab?.id || 'overview';
-  };
+  }, [id, loadTask, loadAssets, loadWorkflowRules]);
 
   // 辅助函数
   const getStageProgress = (status: string) => {
@@ -285,6 +308,19 @@ export function TaskDetailLayout() {
       reviewing: 90, awaiting_approval: 95, converting: 95, completed: 100
     };
     return stageMap[status] || 0;
+  };
+
+  // 切换阶段展开/收起
+  const toggleStage = (stageNumber: number) => {
+    setExpandedStages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(stageNumber)) {
+        newSet.delete(stageNumber);
+      } else {
+        newSet.add(stageNumber);
+      }
+      return newSet;
+    });
   };
 
   const getStageName = (status: string) => {
@@ -308,7 +344,7 @@ export function TaskDetailLayout() {
   const handleReviewDecision = async (reviewId: string, questionId: string, decision: 'accept' | 'ignore' | 'manual_resolved', note?: string) => {
     try {
       await blueTeamApi.submitDecision(id!, reviewId, { questionId, decision, note });
-      await loadReviews();
+      await loadReviews(id!);
     } catch (error) {
       console.error('提交决策失败:', error);
       alert('操作失败，请重试');
@@ -319,7 +355,7 @@ export function TaskDetailLayout() {
     if (!confirm(`确定要${decision === 'accept' ? '全部接受' : '全部忽略'}所有待处理的评审意见吗？`)) return;
     try {
       await blueTeamApi.batchDecide(id!, { decision });
-      await loadReviews();
+      await loadReviews(id!);
     } catch (error) {
       console.error('批量决策失败:', error);
       alert('操作失败');
@@ -417,7 +453,7 @@ export function TaskDetailLayout() {
   };
 
   const handleComplianceCheck = async () => {
-    const draft = getDraftFromTask(task);
+    const draft = getDraftFromTask();
     if (!draft?.content) {
       alert('暂无文稿内容可检查');
       return;
@@ -526,7 +562,6 @@ export function TaskDetailLayout() {
   }
 
   const currentStage = getCurrentStageNum(task.status);
-  const activeTab = getActiveTab();
 
   // 准备context传递给子路由
   const taskContext = {
@@ -545,7 +580,7 @@ export function TaskDetailLayout() {
     actionLoading,
     editingOutline,
     outlineDraft,
-    getDraftFromTask: () => getDraftFromTask(task),
+    getDraftFromTask,
     // 回调函数
     onConfirmOutline: handleConfirmOutline,
     onRedoStage: handleRedoStage,
@@ -597,13 +632,18 @@ export function TaskDetailLayout() {
               const stageNumber = parseInt(stageNum);
               const isActive = currentStage >= stageNumber;
               const isCurrent = currentStage === stageNumber;
+              const isExpanded = expandedStages.has(stageNumber);
 
               return (
                 <div
                   key={stageNum}
-                  className={`pipeline-stage-item ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''}`}
+                  className={`pipeline-stage-item ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''} ${isExpanded ? 'expanded' : ''}`}
                 >
-                  <div className="stage-header-compact">
+                  <div 
+                    className="stage-header-compact clickable"
+                    onClick={() => toggleStage(stageNumber)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div className={`stage-icon-compact ${isActive ? 'completed' : ''}`}>
                       {isActive ? '✓' : stageNumber}
                     </div>
@@ -613,11 +653,14 @@ export function TaskDetailLayout() {
                         {isActive ? (isCurrent ? '进行中...' : '已完成') : '等待中'}
                       </span>
                     </div>
+                    <span className="stage-toggle-icon">
+                      {isExpanded ? '▼' : '▶'}
+                    </span>
                   </div>
-                  {isCurrent && (
+                  {isExpanded && (
                     <div className="pipeline-steps-compact">
-                      {stage.steps.map((step, idx) => (
-                        <div key={step.id} className="pipeline-step-compact">
+                      {stage.steps.map((step) => (
+                        <div key={step.id} className={`pipeline-step-compact ${isCurrent ? 'current-step' : ''}`}>
                           <span className="step-icon-compact">{step.icon}</span>
                           <span className="step-name-compact">{step.name}</span>
                         </div>
@@ -817,5 +860,3 @@ export function TaskDetailLayout() {
     </div>
   );
 }
-
-

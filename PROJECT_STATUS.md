@@ -148,3 +148,136 @@
 
 *维护: 系统自动生成 + 人工更新*
 *更新频率: 每日站会时*
+
+## 2026-03-19 Assets 页面路由重构
+
+### 变更内容
+- **拆分 Assets 页面**：将原来的单页面 tab 切换改为独立的子路由结构
+- **新增路由**：
+  - `/assets` - 素材库（默认）
+  - `/assets/reports` - 研报中心
+  - `/assets/popular` - 热门素材 Top10
+  - `/assets/rss` - RSS 订阅
+  - `/assets/bindings` - 目录绑定
+
+### 新文件
+- `webapp/src/pages/AssetsLayout.tsx` - 布局组件，包含子导航
+
+### 修改文件
+- `webapp/src/pages/Assets.tsx` - 精简为仅素材库功能
+- `webapp/src/App.tsx` - 更新为嵌套路由结构
+- `webapp/src/pages/Reports.tsx` - 修复导航路径
+- `webapp/src/pages/ReportCompare.tsx` - 修复导航路径
+- `webapp/src/pages/ReportDetail.tsx` - 修复返回路径
+- `webapp/src/pages/Dashboard.tsx` - 修复快捷入口路径
+- `webapp/src/components/GlobalSearch.tsx` - 修复搜索结果路径
+
+### 效果
+- 每个子页面都有独立的 URL，可直接访问和刷新
+- 浏览器前进/后退正常工作
+- 导航菜单自动高亮当前子页面
+
+## 2026-03-19 Assets 页面路由重构完成
+
+### 变更摘要
+将 `/assets` 页面的 tabs 拆分为独立的子路由，每个 tab 成为独立的子页面。
+
+### 路由结构
+```
+/assets              → 素材库 (默认子页面)
+/assets/reports      → 研报中心
+/assets/popular      → 热门素材 Top10
+/assets/rss          → RSS 订阅
+/assets/bindings     → 目录绑定
+/assets/:id          → 素材详情
+```
+
+### 新增文件
+- `webapp/src/pages/AssetsLayout.tsx` - 布局组件，包含子导航
+
+### 修改文件
+| 文件 | 变更内容 |
+|------|----------|
+| `App.tsx` | 使用嵌套路由结构 `<Route path="assets" element={<AssetsLayout />}>`, 添加子路由 |
+| `Assets.tsx` | 精简为仅素材库功能，移除 tab 切换逻辑 |
+| `Layout.tsx` | 子导航添加"研报"选项 |
+| `Reports.tsx` | 修复导航路径为 `/assets/reports`, 添加 `qualityScore` 字符串转数字 |
+| `ReportDetail.tsx` | 修复返回路径, 添加 `qualityScore` 类型转换 |
+| `ReportCompare.tsx` | 修复导航路径为 `/assets/*` |
+| `Dashboard.tsx` | 修复快捷入口路径 |
+| `GlobalSearch.tsx` | 修复搜索结果路径 |
+
+### 数据类型修复
+API 返回的数值字段为字符串类型，前端已添加 `parseFloat()` 转换：
+- `Assets.tsx`: `quality_score` string → number
+- `Reports.tsx`: `qualityScore` string → number  
+- `ReportDetail.tsx`: `qualityScore` string → number
+- `RSSAssets.tsx`: `relevance_score` string → number
+
+### 验证状态
+- ✅ 所有子路由可正常访问 (200)
+- ✅ TypeScript 编译无错误
+- ✅ 后端 API 数据正常返回
+- ✅ 页面能正确展示后端数据
+
+## 2026-03-19 Assets 路由拆分 - 最终验证完成
+
+### 路由结构 ✅
+```
+/assets              → 素材库 (Assets.tsx)
+/assets/reports      → 研报中心 (Reports.tsx)  
+/assets/popular      → 热门素材 Top10 (PopularAssets.tsx)
+/assets/rss          → RSS 订阅 (RSSAssets.tsx)
+/assets/bindings     → 目录绑定 (Bindings.tsx)
+```
+
+### 验证结果 ✅
+| 检查项 | 状态 |
+|--------|------|
+| TypeScript 编译 | ✅ 无错误 |
+| 所有子路由 HTTP 200 | ✅ 5/5 |
+| 后端 API 数据正常 | ✅ 4/4 |
+| 前端页面渲染数据 | ✅ 已验证 |
+| 数据类型转换 | ✅ 已处理 |
+
+### 数据类型修复
+- `quality_score` (Assets): string → number ✅
+- `qualityScore` (Reports): string → number ✅  
+- `relevance_score` (RSS): string → number ✅
+
+### 服务访问
+- 前端: http://localhost:5174/
+- 后端: http://localhost:3000/
+
+
+## 2026-03-19 Assets 路由拆分 - 验证完成
+
+### 完成状态 ✅
+
+| 检查项 | 状态 |
+|--------|------|
+| 路由拆分 | ✅ 5 个独立子路由 |
+| HTTP 状态码 | ✅ 全部 200 |
+| 后端 API 数据 | ✅ 正常返回 |
+| 前端数据渲染 | ✅ 正确展示 |
+| TypeScript 编译 | ✅ 0 错误 |
+| 数据类型转换 | ✅ 已处理 |
+
+### 路由映射
+```
+/assets              → Assets.tsx (素材库)
+/assets/reports      → Reports.tsx (研报中心)
+/assets/popular      → PopularAssets.tsx (热门素材)
+/assets/rss          → RSSAssets.tsx (RSS订阅)
+/assets/bindings     → Bindings.tsx (目录绑定)
+```
+
+### 数据类型修复
+- `Assets.tsx`: quality_score string → number
+- `Reports.tsx`: qualityScore string → number
+- `RSSAssets.tsx`: relevance_score string → number
+
+### 服务状态
+- 前端: http://localhost:5173/
+- 后端: http://localhost:3000/
+

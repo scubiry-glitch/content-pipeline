@@ -1495,11 +1495,29 @@ export function TaskDetail() {
                     {task.outline.sections?.map((section: any, idx: number) => (
                       <div key={idx} className="outline-section">
                         <h4 className="section-title">{idx + 1}. {section.title}</h4>
-                        <ul className="key-points">
-                          {section.key_points?.map((point: string, pidx: number) => (
-                            <li key={pidx}>{point}</li>
-                          ))}
-                        </ul>
+                        {/* 兼容后端返回的 content 结构 */}
+                        {section.content && (
+                          <p className="section-content">{section.content}</p>
+                        )}
+                        {/* 兼容后端返回的 subsections 结构 */}
+                        {section.subsections && section.subsections.length > 0 && (
+                          <ul className="subsections">
+                            {section.subsections.map((sub: any, sidx: number) => (
+                              <li key={sidx}>
+                                <strong>{sub.title}</strong>
+                                {sub.content && <span>: {sub.content}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {/* 兼容前端期望的 key_points 结构 */}
+                        {section.key_points && section.key_points.length > 0 && (
+                          <ul className="key-points">
+                            {section.key_points?.map((point: string, pidx: number) => (
+                              <li key={pidx}>{point}</li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1729,18 +1747,20 @@ export function TaskDetail() {
                   <div className="info-card">
                     <h3 className="card-title">💡 研究洞察</h3>
                     <div className="insights-list">
-                      {task.research_data.insights.map((insight: any) => (
-                        <div key={insight.id} className="insight-item">
+                      {task.research_data.insights.map((insight: any, idx: number) => (
+                        <div key={insight.id || idx} className="insight-item">
                           <div className="insight-header">
                             <span className={`insight-type type-${insight.type}`}>
                               {insight.type === 'data' ? '数据' :
                                insight.type === 'trend' ? '趋势' :
-                               insight.type === 'case' ? '案例' : '专家'}
+                               insight.type === 'case' ? '案例' : '洞察'}
                             </span>
-                            <span className="insight-source">来源: {insight.source}</span>
+                            {insight.source && <span className="insight-source">来源: {insight.source}</span>}
                           </div>
                           <p className="insight-content">{insight.content}</p>
-                          <div className="insight-confidence">置信度: {(insight.confidence * 100).toFixed(0)}%</div>
+                          {insight.confidence && (
+                            <div className="insight-confidence">置信度: {(insight.confidence * 100).toFixed(0)}%</div>
+                          )}
                         </div>
                       ))}
                     </div>

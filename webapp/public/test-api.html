@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>API Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+    h2 { color: #333; }
+    pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h1>内容生产流水线 - API数据测试</h1>
+  <div id="status">加载中...</div>
+  <div id="content"></div>
+
+  <script>
+    async function loadData() {
+      const statusDiv = document.getElementById('status');
+      const contentDiv = document.getElementById('content');
+      
+      try {
+        const response = await fetch('/api/v1/production/task_1773715503898', {
+          headers: { 'X-API-Key': 'dev-api-key-change-in-production' }
+        });
+        
+        if (!response.ok) {
+          throw new Error('API请求失败: ' + response.status);
+        }
+        
+        const data = await response.json();
+        statusDiv.innerHTML = '<span class="success">✅ API数据加载成功</span>';
+        
+        contentDiv.innerHTML = `
+          <div class="section">
+            <h2>基本信息</h2>
+            <p><strong>ID:</strong> ${data.id}</p>
+            <p><strong>主题:</strong> ${data.topic}</p>
+            <p><strong>状态:</strong> ${data.status}</p>
+            <p><strong>进度:</strong> ${data.progress}%</p>
+          </div>
+          
+          <div class="section">
+            <h2>选题策划 - 大纲</h2>
+            <p><strong>标题:</strong> ${data.outline?.title || '无'}</p>
+            <p><strong>章节数:</strong> ${data.outline?.sections?.length || 0}</p>
+            <h3>章节列表:</h3>
+            <ul>
+              ${data.outline?.sections?.map(s => `<li>${s.title}</li>`).join('') || '<li>无</li>'}
+            </ul>
+          </div>
+          
+          <div class="section">
+            <h2>深度研究 - 洞察</h2>
+            <p><strong>洞察数量:</strong> ${data.research_data?.insights?.length || 0}</p>
+            ${data.research_data?.insights?.map(i => `
+              <div style="margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                <span style="color: blue;">[${i.type}]</span> ${i.content}
+              </div>
+            `).join('') || '<p>无洞察数据</p>'}
+          </div>
+          
+          <div class="section">
+            <h2>文稿生成 - 稿件版本</h2>
+            <p><strong>版本数量:</strong> ${data.draft_versions?.length || 0}</p>
+            ${data.draft_versions?.map(d => `
+              <div style="margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                <strong>版本 ${d.version}</strong> - ${d.content?.length || 0} 字符
+                <pre style="margin-top: 5px; max-height: 100px; overflow: auto;">${d.content?.substring(0, 200) || '无内容'}...</pre>
+              </div>
+            `).join('') || '<p>无稿件数据</p>'}
+          </div>
+          
+          <div class="section">
+            <h2>蓝军评审 - 评审意见</h2>
+            <p><strong>评审记录数:</strong> ${data.blue_team_reviews?.length || 0}</p>
+          </div>
+          
+          <div class="section">
+            <h2>原始数据</h2>
+            <pre>${JSON.stringify(data, null, 2).substring(0, 2000)}...</pre>
+          </div>
+        `;
+      } catch (error) {
+        statusDiv.innerHTML = `<span class="error">❌ 错误: ${error.message}</span>`;
+        contentDiv.innerHTML = `<pre>${error.stack}</pre>`;
+      }
+    }
+    
+    loadData();
+  </script>
+</body>
+</html>

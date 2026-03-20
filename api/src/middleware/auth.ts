@@ -3,7 +3,10 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
-const API_KEY = process.env.ADMIN_API_KEY || 'dev-api-key-change-in-production';
+// 使用函数延迟获取，确保 dotenv 已加载
+function getAPIKey(): string {
+  return process.env.ADMIN_API_KEY || 'dev-api-key-change-in-production';
+}
 
 export function setupAuth(fastify: FastifyInstance) {
   // No global auth setup needed for MVP
@@ -12,7 +15,7 @@ export function setupAuth(fastify: FastifyInstance) {
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   const apiKey = request.headers['x-api-key'];
 
-  if (!apiKey || apiKey !== API_KEY) {
+  if (!apiKey || apiKey !== getAPIKey()) {
     reply.status(401);
     return {
       error: 'Unauthorized',
@@ -26,7 +29,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 export async function optionalAuth(request: FastifyRequest, reply: FastifyReply) {
   const apiKey = request.headers['x-api-key'];
 
-  if (apiKey && apiKey === API_KEY) {
+  if (apiKey && apiKey === getAPIKey()) {
     // 认证通过，设置用户标识
     (request as any).user = { id: 'authenticated', role: 'user' };
   }

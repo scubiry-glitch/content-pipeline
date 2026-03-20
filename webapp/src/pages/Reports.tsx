@@ -10,8 +10,8 @@ function ReportsTabs() {
   const location = useLocation();
   
   const tabs = [
-    { id: 'list', label: '研报列表', icon: '📄', path: '/reports' },
-    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/reports/compare' },
+    { id: 'list', label: '研报列表', icon: '📄', path: '/assets/reports' },
+    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/assets/reports/compare' },
   ];
   
   const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'list';
@@ -48,7 +48,14 @@ export function Reports() {
     setLoading(true);
     try {
       const response = await reportsApi.getAll({ limit: 50 });
-      setReports(response.items);
+      // 转换数据类型：API 返回的 qualityScore 是字符串
+      const normalizedItems = (response.items || []).map(report => ({
+        ...report,
+        qualityScore: typeof report.qualityScore === 'string'
+          ? parseFloat(report.qualityScore)
+          : report.qualityScore,
+      }));
+      setReports(normalizedItems);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {

@@ -1,4 +1,5 @@
 // 任务详情 - 质量分析 Tab
+// 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
 import { useOutletContext } from 'react-router-dom';
 import type { Task } from '../../types';
 
@@ -28,12 +29,19 @@ interface TaskContext {
 
 export function QualityTab() {
   const { task, sentiment, hotTopics, suggestions, alerts } = useOutletContext<TaskContext>();
+
   return (
     <div className="tab-panel quality-panel">
-      <div className="quality-grid">
+      {/* ========== 1. 输入 ========== */}
+      <div className="section-header">
+        <h3 className="section-title">📥 输入</h3>
+        <span className="section-desc">市场情绪与热点数据</span>
+      </div>
+
+      <div className="input-grid">
         {/* 情感分析 (MSI) */}
         {sentiment && (
-          <div className="info-card sentiment-card">
+          <div className="info-card input-card">
             <h3 className="card-title">📊 市场情绪指数 (MSI)</h3>
             <div className="sentiment-display">
               <div className="msi-gauge-small">
@@ -81,7 +89,7 @@ export function QualityTab() {
         )}
 
         {/* 热点话题 */}
-        <div className="info-card">
+        <div className="info-card input-card">
           <h3 className="card-title">🔥 热点话题</h3>
           {hotTopics.length > 0 ? (
             <div className="hot-topics-list">
@@ -97,9 +105,42 @@ export function QualityTab() {
           )}
         </div>
 
-        {/* 优化建议 */}
-        {suggestions.length > 0 && (
-          <div className="info-card full-width">
+        {/* 选题评估摘要 */}
+        {task.evaluation && (
+          <div className="info-card input-card">
+            <h3 className="card-title">📋 选题评估</h3>
+            <div className="evaluation-summary-compact">
+              <div className="evaluation-score-large">
+                <span className="score-number">{task.evaluation.score}</span>
+                <span className="score-label">综合评分</span>
+              </div>
+              <div className="evaluation-details">
+                <div className="eval-item">
+                  <span className="eval-label">风险等级</span>
+                  <span className={`eval-value risk-${task.evaluation.riskLevel}`}>
+                    {task.evaluation.riskLevel === 'low' ? '低风险' :
+                     task.evaluation.riskLevel === 'medium' ? '中风险' : '高风险'}
+                  </span>
+                </div>
+                <div className="eval-item">
+                  <span className="eval-label">强烈推荐</span>
+                  <span className="eval-value">{task.evaluation.stronglyRecommended ? '✅ 是' : '❌ 否'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========== 2. 加工 ========== */}
+      {suggestions.length > 0 && (
+        <>
+          <div className="section-header">
+            <h3 className="section-title">⚙️ 加工</h3>
+            <span className="section-desc">智能优化建议</span>
+          </div>
+
+          <div className="info-card full-width process-card">
             <h3 className="card-title">💡 优化建议</h3>
             <div className="suggestions-list">
               {suggestions.map((s, idx) => (
@@ -116,12 +157,20 @@ export function QualityTab() {
               ))}
             </div>
           </div>
-        )}
+        </>
+      )}
 
+      {/* ========== 3. 输出 ========== */}
+      <div className="section-header">
+        <h3 className="section-title">📤 输出</h3>
+        <span className="section-desc">质量预警与评估报告</span>
+      </div>
+
+      <div className="output-content">
         {/* 预警信息 */}
         {alerts.length > 0 && (
-          <div className="info-card full-width">
-            <h3 className="card-title">⚠️ 预警信息</h3>
+          <div className="info-card full-width output-card alerts-card">
+            <h3 className="card-title">⚠️ 质量预警</h3>
             <div className="alerts-list">
               {alerts.map((alert, idx) => (
                 <div key={idx} className={`alert-item severity-${alert.severity}`}>
@@ -142,36 +191,63 @@ export function QualityTab() {
           </div>
         )}
 
-        {/* 选题评估摘要 */}
-        {task.evaluation && (
-          <div className="info-card full-width">
-            <h3 className="card-title">📋 选题评估摘要</h3>
-            <div className="evaluation-summary">
-              <div className="evaluation-score-large">
-                <span className="score-number">{task.evaluation.score}</span>
-                <span className="score-label">综合评分</span>
-              </div>
-              <div className="evaluation-details">
-                <div className="eval-item">
-                  <span className="eval-label">风险等级</span>
-                  <span className={`eval-value risk-${task.evaluation.riskLevel}`}>
-                    {task.evaluation.riskLevel === 'low' ? '低风险' :
-                     task.evaluation.riskLevel === 'medium' ? '中风险' : '高风险'}
-                  </span>
-                </div>
-                <div className="eval-item">
-                  <span className="eval-label">强烈推荐</span>
-                  <span className="eval-value">{task.evaluation.stronglyRecommended ? '✅ 是' : '❌ 否'}</span>
-                </div>
-                {task.evaluation.analysis && (
-                  <div className="eval-analysis">
-                    <strong>分析：</strong>{task.evaluation.analysis}
-                  </div>
-                )}
-              </div>
+        {/* 详细评估分析 */}
+        {task.evaluation?.analysis && (
+          <div className="info-card output-card">
+            <h3 className="card-title">📊 评估分析</h3>
+            <div className="evaluation-analysis-full">
+              {task.evaluation.analysis}
             </div>
           </div>
         )}
+
+        {/* 评估维度详情 */}
+        {task.evaluation?.dimensions && (
+          <div className="info-card output-card">
+            <h3 className="card-title">📈 维度评分详情</h3>
+            <div className="dimension-details-list">
+              {Object.entries(task.evaluation.dimensions).map(([key, value]: [string, any]) => {
+                const labels: Record<string, string> = {
+                  dataAvailability: '数据可得性',
+                  topicHeat: '话题热度',
+                  differentiation: '差异化',
+                  timeliness: '时效性'
+                };
+                return (
+                  <div key={key} className="dimension-detail-item">
+                    <span className="dimension-name">{labels[key] || key}</span>
+                    <div className="dimension-bar-container">
+                      <div className="dimension-bar-bg">
+                        <div className="dimension-bar-fill" style={{ width: `${value}%` }}></div>
+                      </div>
+                      <span className="dimension-score">{value}分</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========== 4. 辅助工具 ========== */}
+      <div className="section-header">
+        <h3 className="section-title">🛠️ 辅助工具</h3>
+        <span className="section-desc">数据刷新与导出</span>
+      </div>
+
+      <div className="info-card tools-card">
+        <h3 className="card-title">⚡ 质量工具</h3>
+        <div className="tools-actions">
+          <button className="btn btn-secondary" onClick={() => window.location.reload()}>
+            🔄 刷新数据
+          </button>
+          {task.evaluation && (
+            <button className="btn btn-secondary" onClick={() => alert('评估报告导出功能开发中')}>
+              📥 导出评估报告
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

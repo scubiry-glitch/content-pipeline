@@ -4217,3 +4217,394 @@
     width: 100%;
   }
 }
+
+/* ============================================
+   统一的 Tab 布局样式 - 输入/加工/输出/辅助工具
+   ============================================ */
+
+/* 区域标题 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 32px 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--linen);
+}
+
+.section-header:first-of-type {
+  margin-top: 0;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--soil);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: var(--pebble);
+  font-weight: 400;
+}
+
+/* 输入区样式 */
+.input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.input-card {
+  background: linear-gradient(145deg, #f8f6f3 0%, white 100%);
+  border-left: 4px solid var(--terracotta);
+}
+
+.input-card .card-title {
+  color: var(--terracotta);
+}
+
+/* 加工区样式 */
+.process-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.process-card {
+  background: linear-gradient(145deg, #f5f7f4 0%, white 100%);
+  border-left: 4px solid var(--sage);
+}
+
+.process-card .card-title {
+  color: var(--sage-dark);
+}
+
+/* 输出区样式 */
+.output-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.output-card {
+  background: linear-gradient(145deg, #faf9f7 0%, white 100%);
+  border-left: 4px solid var(--ochre);
+}
+
+.output-card .card-title {
+  color: var(--ochre);
+}
+
+.output-card.critical-group {
+  border-left-color: #ef4444;
+}
+
+.output-card.warning-group {
+  border-left-color: #f59e0b;
+}
+
+.output-card.praise-group {
+  border-left-color: #10b981;
+}
+
+/* 辅助工具区样式 */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.tools-card {
+  background: linear-gradient(145deg, #f0f4f8 0%, white 100%);
+  border-left: 4px solid #6366f1;
+}
+
+.tools-card .card-title {
+  color: #6366f1;
+}
+
+.tools-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tools-actions .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* 数据输入样式 */
+.data-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--linen);
+}
+
+.source-item.active {
+  border-color: var(--sage);
+  background: rgba(138, 154, 91, 0.05);
+}
+
+.source-icon {
+  font-size: 20px;
+}
+
+.source-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--soil);
+}
+
+.source-status {
+  font-size: 16px;
+  color: var(--sage);
+}
+
+.param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.param-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--linen);
+}
+
+.param-item:last-child {
+  border-bottom: none;
+}
+
+.param-label {
+  font-size: 13px;
+  color: var(--earth);
+}
+
+.param-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--soil);
+}
+
+.keywords-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linen);
+}
+
+.keywords-label {
+  font-size: 13px;
+  color: var(--earth);
+  width: 100%;
+}
+
+.keyword-tag {
+  padding: 4px 10px;
+  background: var(--cream-dark);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--earth);
+}
+
+/* 处理状态 */
+.process-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--linen);
+}
+
+.status-label {
+  font-size: 14px;
+  color: var(--earth);
+}
+
+.status-value {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.progress-text {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--terracotta);
+}
+
+/* 写作主题 */
+.writing-topic {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--linen);
+}
+
+.topic-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--soil);
+  line-height: 1.5;
+}
+
+/* 数据来源汇总 */
+.data-source-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.source-count {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.count-label {
+  font-size: 13px;
+  color: var(--earth);
+}
+
+.count-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--soil);
+}
+
+/* 版本标签 */
+.version-tag {
+  padding: 4px 10px;
+  background: var(--cream-dark);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--earth);
+}
+
+/* 评审处理列表 */
+.review-processing-list {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--linen);
+}
+
+.review-processing-list h4 {
+  font-size: 14px;
+  color: var(--earth);
+  margin-bottom: 12px;
+}
+
+/* 优化建议卡片增强 */
+.suggestion-card {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border-left: 3px solid var(--stone);
+  margin-bottom: 10px;
+}
+
+.suggestion-card.priority-high {
+  border-left-color: #ef4444;
+}
+
+.suggestion-card.priority-medium {
+  border-left-color: #f59e0b;
+}
+
+.suggestion-card.priority-low {
+  border-left-color: #3b82f6;
+}
+
+.suggestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.suggestion-area {
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--cream-dark);
+  border-radius: 4px;
+  color: var(--earth);
+}
+
+.priority-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.priority-badge.high {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.priority-badge.medium {
+  background: #fde68a;
+  color: #92400e;
+}
+
+.priority-badge.low {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.suggestion-text {
+  font-size: 14px;
+  color: var(--soil);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.suggestion-impact {
+  font-size: 12px;
+  color: var(--sage);
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .input-grid,
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .tools-actions {
+    flex-direction: column;
+  }
+  
+  .tools-actions .btn {
+    width: 100%;
+  }
+}

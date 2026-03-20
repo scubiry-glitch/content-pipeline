@@ -502,3 +502,54 @@
     padding: 18px;
   }
 }
+
+/* 子导航样式 */
+.nav-item-wrapper {
+  position: relative;
+}
+
+.sub-nav {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 160px;
+  padding: 8px;
+  z-index: 1000;
+  animation: dropdownSlideIn 0.2s ease;
+}
+
+.sub-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  color: var(--soil);
+  text-decoration: none;
+  font-size: 14px;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.sub-nav-link:hover {
+  background: var(--cream);
+  color: var(--terracotta);
+}
+
+.sub-nav-link.active {
+  background: var(--terracotta);
+  color: white;
+}
+
+.sub-nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.sub-nav-label {
+  white-space: nowrap;
+}

@@ -1,10 +1,13 @@
 // 内容生产流水线 API Server (MVP)
 // 技术栈: Fastify + TypeScript + PostgreSQL + BullMQ
 
+// 首先加载环境变量，确保在所有模块导入前完成
+import dotenv from 'dotenv';
+dotenv.config();
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
-import dotenv from 'dotenv';
 import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
@@ -33,8 +36,6 @@ import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
 import { initDatabase } from './db/connection.js';
 import { printAPICheckReport, validateRequiredConfig } from './services/apiCheck.js';
-
-dotenv.config();
 
 async function main() {
   // 打印 API 配置检查报告
@@ -74,7 +75,9 @@ async function main() {
   // Register plugins
   await fastify.register(cors, {
     origin: true,
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'X-API-Key', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
   });
 
   await fastify.register(multipart, {

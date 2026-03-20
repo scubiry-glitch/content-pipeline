@@ -17,7 +17,18 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { to: '/', label: '仪表盘', icon: '📊' },
   { to: '/tasks', label: '任务中心', icon: '📋' },
-  { to: '/assets', label: '内容资产', icon: '📚' },
+  { 
+    to: '/assets', 
+    label: '内容资产', 
+    icon: '📚',
+    children: [
+      { to: '/assets', label: '素材库', icon: '📁' },
+      { to: '/assets/reports', label: '研报', icon: '📊' },
+      { to: '/assets/popular', label: '热门素材', icon: '🔥' },
+      { to: '/assets/rss', label: 'RSS订阅', icon: '📡' },
+      { to: '/assets/bindings', label: '目录绑定', icon: '📂' },
+    ]
+  },
   { to: '/expert-library', label: '专家体系', icon: '👥' },
   { to: '/hot-topics', label: '热点洞察', icon: '🔥' },
 ];
@@ -101,17 +112,36 @@ export function Layout() {
           <h1 className="header-title">内容生产流水线</h1>
           <nav className="header-nav">
             {mainNavItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => 
-                  `nav-link ${isActivePath(location.pathname, item) ? 'active' : ''}`
-                }
-                end={item.to === '/'}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <span className="nav-label">{item.label}</span>
-              </NavLink>
+              <div key={item.to} className="nav-item-wrapper">
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) => 
+                    `nav-link ${isActivePath(location.pathname, item) ? 'active' : ''}`
+                  }
+                  end={item.to === '/'}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </NavLink>
+                {/* 子导航菜单 */}
+                {item.children && isActivePath(location.pathname, item) && (
+                  <div className="sub-nav">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        className={({ isActive }) => 
+                          `sub-nav-link ${isActive ? 'active' : ''}`
+                        }
+                        end={child.to === item.to}
+                      >
+                        <span className="sub-nav-icon">{child.icon}</span>
+                        <span className="sub-nav-label">{child.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
             
             {/* 系统管理下拉菜单 */}

@@ -15,8 +15,11 @@ import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetailLayout } from './pages/TaskDetailLayout';
 import { OverviewTab, PlanningTab, ResearchTab, WritingTab, ReviewsTab, QualityTab } from './pages/task-detail';
+import { AssetsLayout } from './pages/AssetsLayout';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
+import { PopularAssets } from './pages/PopularAssets';
+import { Reports } from './pages/Reports';
 import { Experts } from './pages/Experts';
 import { ExpertLibrary } from './pages/ExpertLibrary';
 import { ReportDetail } from './pages/ReportDetail';
@@ -36,6 +39,8 @@ import { Prediction } from './pages/Prediction';
 import { I18nManager } from './pages/I18nManager';
 import { RSSSources } from './pages/RSSSources';
 import { RSSItems } from './pages/RSSItems';
+import { RSSAssets } from './pages/RSSAssets';
+import { Bindings } from './pages/Bindings';
 import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
@@ -69,14 +74,19 @@ function App() {
                 <Route path="quality" element={<QualityTab />} />
               </Route>
               <Route path="tasks/:id/edit" element={<Stage3Editor />} />
-              {/* 内容资产模块 - 整合素材和研报 */}
-              <Route path="assets" element={<Assets />} />
-              <Route path="assets/:id" element={<AssetDetail />} />
-              {/* 研报子路由 - 整合到内容资产 */}
-              <Route path="assets/reports/:id" element={<ReportDetail />} />
-              <Route path="assets/reports/compare" element={<ReportCompare />} />
-              {/* 旧研报路由重定向到新路由 */}
-              <Route path="reports" element={<Navigate to="/assets" replace />} />
+              {/* 内容资产模块 - 嵌套路由 */}
+              <Route path="assets" element={<AssetsLayout />}>
+                <Route index element={<Assets />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="reports/:id" element={<ReportDetail />} />
+                <Route path="reports/compare" element={<ReportCompare />} />
+                <Route path="popular" element={<PopularAssets />} />
+                <Route path="rss" element={<RSSAssets />} />
+                <Route path="bindings" element={<Bindings />} />
+                <Route path=":id" element={<AssetDetail />} />
+              </Route>
+              {/* 旧路由重定向 */}
+              <Route path="reports" element={<Navigate to="/assets/reports" replace />} />
               <Route path="reports/:id" element={<Navigate to="/assets/reports/:id" replace />} />
               <Route path="reports/compare" element={<Navigate to="/assets/reports/compare" replace />} />
               

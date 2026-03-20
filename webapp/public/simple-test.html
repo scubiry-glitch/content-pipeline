@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>简单测试</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
+    .box { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    h2 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+    .loading { color: #666; }
+    .error { color: red; }
+    .success { color: green; }
+    pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>📝 内容生产流水线 - 数据验证</h1>
+  <div id="loading" class="loading">正在加载数据...</div>
+  <div id="error" class="error" style="display:none;"></div>
+  <div id="content"></div>
+
+  <script>
+    fetch('/api/v1/production/task_1773715503898', {
+      headers: { 'X-API-Key': 'dev-api-key-change-in-production' }
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('API错误: ' + r.status);
+      return r.json();
+    })
+    .then(data => {
+      document.getElementById('loading').style.display = 'none';
+      
+      const html = `
+        <div class="box success">
+          <h2>✅ API连接成功</h2>
+          <p>任务ID: ${data.id}</p>
+          <p>主题: ${data.topic}</p>
+          <p>状态: ${data.status} (${data.progress}%)</p>
+        </div>
+
+        <div class="box">
+          <h2>1️⃣ 选题策划 - 大纲</h2>
+          <p><strong>${data.outline?.title || '无标题'}</strong></p>
+          <ul>
+            ${(data.outline?.sections || []).map(s => `<li>${s.title}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="box">
+          <h2>2️⃣ 深度研究 - 洞察</h2>
+          <p>洞察数量: ${data.research_data?.insights?.length || 0}</p>
+          ${(data.research_data?.insights || []).map(i => `
+            <div style="background:#f0f0f0;padding:10px;margin:5px 0;border-radius:4px;">
+              <b>[${i.type}]</b> ${i.content}
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="box">
+          <h2>3️⃣ 文稿生成 - 稿件</h2>
+          <p>版本数量: ${data.draft_versions?.length || 0}</p>
+          ${(data.draft_versions || []).map(d => `
+            <div style="background:#f0f0f0;padding:10px;margin:5px 0;border-radius:4px;">
+              <b>版本 ${d.version}</b> - ${d.content?.length || 0} 字符
+              <pre style="margin-top:5px;max-height:100px;overflow:auto;font-size:12px;">${(d.content || '').substring(0, 300)}...</pre>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="box">
+          <h2>4️⃣ 蓝军评审</h2>
+          <p>评审记录: ${data.blue_team_reviews?.length || 0} 条</p>
+        </div>
+      `;
+      
+      document.getElementById('content').innerHTML = html;
+    })
+    .catch(err => {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = '错误: ' + err.message;
+    });
+  </script>
+</body>
+</html>

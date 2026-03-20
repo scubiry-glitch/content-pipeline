@@ -70,7 +70,7 @@ export const tasksApi = {
 
   // 确认大纲并继续 (FR-005)
   confirmOutline: (id: string) =>
-    client.post(`/production/${id}/confirm-outline`) as Promise<void>,
+    client.post(`/production/${id}/outline/confirm`) as Promise<void>,
 
   // 重做某个阶段
   redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review') =>
@@ -281,7 +281,7 @@ export const blueTeamApi = {
 
   // 批量决策 (FR-021)
   batchDecide: (taskId: string, data: { decision: 'accept' | 'ignore' }) =>
-    client.post(`/production/${taskId}/reviews/batch-decide`, data) as Promise<void>,
+    client.post(`/production/${taskId}/review-items/batch-decide`, data) as Promise<void>,
 
   // 申请重新评审 (FR-023)
   requestReReview: (taskId: string, data: { expertRole: string; reason?: string }) =>
@@ -352,6 +352,9 @@ export interface RSSItem {
   author?: string;
   tags: string[];
   relevance_score: number;
+  hot_score?: number;
+  trend?: string;
+  sentiment?: string;
   created_at: string;
 }
 

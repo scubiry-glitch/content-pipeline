@@ -113,10 +113,38 @@
   box-shadow: 0 0 0 2px rgba(214, 104, 83, 0.1);
 }
 
+.pipeline-stage-item.expanded {
+  background: var(--cream, #faf8f5);
+}
+
 .stage-header-compact {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.stage-header-compact.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.stage-header-compact.clickable:hover {
+  opacity: 0.8;
+}
+
+.stage-toggle-icon {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--pebble, #9a9590);
+  transition: transform 0.2s;
+}
+
+.pipeline-stage-item.expanded .stage-toggle-icon {
+  transform: rotate(0deg);
+}
+
+.pipeline-stage-item:not(.expanded) .stage-toggle-icon {
+  transform: rotate(-90deg);
 }
 
 .stage-icon-compact {
@@ -161,26 +189,48 @@
 
 .pipeline-steps-compact {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
   margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--linen, #e8e0d5);
+  padding: 10px;
+  padding-left: 34px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .pipeline-step-compact {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: var(--cream, #faf8f5);
+  gap: 8px;
+  padding: 6px 10px;
+  background: white;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--earth, #6b6560);
+  border: 1px solid var(--linen, #e8e0d5);
+  transition: all 0.2s;
+}
+
+.pipeline-step-compact.current-step {
+  background: rgba(214, 104, 83, 0.08);
+  border-color: var(--terracotta, #d66853);
+  color: var(--terracotta, #d66853);
 }
 
 .step-icon-compact {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* 快捷操作区 */

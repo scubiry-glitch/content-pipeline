@@ -10,8 +10,8 @@ function ReportsTabs() {
   const location = useLocation();
   
   const tabs = [
-    { id: 'list', label: '研报列表', icon: '📄', path: '/reports' },
-    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/reports/compare' },
+    { id: 'list', label: '研报列表', icon: '📄', path: '/assets/reports' },
+    { id: 'compare', label: '研报对比', icon: '⚖️', path: '/assets/reports/compare' },
   ];
   
   const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'compare';
@@ -99,7 +99,7 @@ export function ReportCompare() {
         <div className="error-card">
           <div className="error-icon">⚠️</div>
           <div className="error-message">{error}</div>
-          <button className="btn btn-primary" onClick={() => navigate('/reports')}>
+          <button className="btn btn-primary" onClick={() => navigate('/assets/reports')}>
             返回研报列表
           </button>
         </div>
@@ -116,7 +116,7 @@ export function ReportCompare() {
           <h1 className="page-title">📊 研报对比</h1>
           <p className="page-subtitle">对比{reports.length}篇研报的关键信息</p>
         </div>
-        <button className="btn btn-secondary" onClick={() => navigate('/reports')}>
+        <button className="btn btn-secondary" onClick={() => navigate('/assets/reports')}>
           ← 返回列表
         </button>
       </div>

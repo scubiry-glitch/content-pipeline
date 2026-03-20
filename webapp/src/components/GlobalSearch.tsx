@@ -56,7 +56,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         title: `研报: ${searchQuery} 分析报告`,
         type: 'report',
         subtitle: '平安证券 · 2026',
-        path: '/reports',
+        path: '/assets/reports',
       },
       {
         id: '4',

@@ -46,7 +46,14 @@ export function ReportDetail() {
     setLoading(true);
     try {
       const res = await reportsApi.getById(id!);
-      setReport(res);
+      // 转换数据类型：API 返回的 qualityScore 是字符串
+      const normalizedReport = {
+        ...res,
+        qualityScore: typeof res.qualityScore === 'string'
+          ? parseFloat(res.qualityScore)
+          : res.qualityScore,
+      };
+      setReport(normalizedReport);
     } catch (error) {
       console.error('Failed to load report:', error);
     } finally {
@@ -190,7 +197,7 @@ export function ReportDetail() {
   return (
     <div className="report-detail">
       <div className="detail-header">
-        <button className="btn btn-link back-btn" onClick={() => navigate('/reports')}>
+        <button className="btn btn-link back-btn" onClick={() => navigate('/assets/reports')}>
           ← 返回研报库
         </button>
       </div>

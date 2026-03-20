@@ -31,7 +31,14 @@ export function RSSItems() {
         limit: pagination.limit,
         offset: pagination.offset,
       });
-      setItems(data.items || []);
+      // 转换数据类型，确保 relevance_score 是数字
+      const normalizedItems = (data.items || []).map(item => ({
+        ...item,
+        relevance_score: typeof item.relevance_score === 'string' 
+          ? parseFloat(item.relevance_score) 
+          : item.relevance_score,
+      }));
+      setItems(normalizedItems);
       setPagination((prev) => ({ ...prev, total: data.pagination?.total || 0 }));
     } catch (error) {
       console.error('加载RSS文章失败:', error);

@@ -40,7 +40,7 @@ function DashboardTabs() {
 
 const QUICK_ACTIONS = [
   { icon: '➕', label: '新建任务', path: '/tasks', color: '#1890ff' },
-  { icon: '📄', label: '上传研报', path: '/reports', color: '#52c41a' },
+  { icon: '📄', label: '上传研报', path: '/assets/reports', color: '#52c41a' },
   { icon: '🔥', label: '查看热点', path: '/hot-topics', color: '#fa8c16' },
   { icon: '✏️', label: '开始写作', path: '/tasks', color: '#722ed1' },
 ];
