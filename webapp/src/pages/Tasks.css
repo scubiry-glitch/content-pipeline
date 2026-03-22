@@ -1,56 +1,292 @@
-.tasks-page {
+/* 任务列表页面 - 侧边栏布局 */
+
+/* 整体布局 */
+.tasks-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+  min-height: calc(100vh - 64px);
+  background: var(--cream, #faf8f5);
+}
+
+/* 左侧边栏 */
+.tasks-sidebar {
+  background: white;
+  border-right: 1px solid var(--linen, #e8e0d5);
+  padding: 20px 16px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 64px);
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-title {
-  font-size: 24px;
+/* 新建任务按钮 */
+.btn-create {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--gray-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--terracotta, #d66853) 0%, var(--ochre, #c67b5c) 100%);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(214, 104, 83, 0.25);
 }
 
-.filter-bar {
+.btn-create:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(214, 104, 83, 0.35);
+}
+
+.plus-icon {
+  font-size: 20px;
+  font-weight: 400;
+}
+
+/* 筛选区域 */
+.sidebar-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pebble, #9a9590);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 12px;
+  margin-bottom: 4px;
+}
+
+/* 筛选列表 */
+.filter-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 筛选项 */
+.filter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--earth, #6b6560);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.filter-item:hover {
+  background: var(--cream, #faf8f5);
+  color: var(--soil, #3d352e);
+}
+
+.filter-item.active {
+  background: var(--cream-dark, #f0ebe5);
+  color: var(--soil, #3d352e);
+  font-weight: 600;
+}
+
+.filter-label {
+  flex: 1;
+}
+
+.filter-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pebble, #9a9590);
+  background: var(--cream, #faf8f5);
+  padding: 2px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.filter-item.active .filter-count {
+  background: white;
+  color: var(--terracotta, #d66853);
+}
+
+/* 边栏底部 */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--linen, #e8e0d5);
+}
+
+.sidebar-footer .export-button {
+  width: 100%;
+}
+
+/* 主内容区 */
+.tasks-main {
+  padding: 24px 32px;
+  overflow-y: auto;
+  min-height: calc(100vh - 64px);
+}
+
+/* 页面头部 */
+.tasks-header {
+  margin-bottom: 20px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-title h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--soil, #3d352e);
+  margin: 0;
+}
+
+.task-count {
+  font-size: 14px;
+  color: var(--pebble, #9a9590);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-tag {
+  padding: 4px 10px;
+  background: var(--terracotta, #d66853);
+  color: white;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ============================================
+   二级导航 - 横向Tab样式（参考expert-library）
+   ============================================ */
+
+.tasks-tabs {
+  margin-bottom: 24px;
+}
+
+.tabs-nav {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  padding: 4px;
+  background: var(--cream, #faf8f5);
+  border-radius: 12px;
+  border: 1px solid var(--linen, #e8e0d5);
 }
 
-.filter-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--gray-200);
-  background: white;
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
   border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--earth, #6b6560);
   font-size: 14px;
-  color: var(--gray-600);
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.filter-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--soil, #3d352e);
 }
 
-.filter-btn.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
+.tab-btn.active {
+  background: white;
+  color: var(--terracotta, #d66853);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
 }
 
-/* Modal */
+.tab-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tab-description {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--pebble, #9a9590);
+  text-align: center;
+  max-width: 200px;
+}
+
+.tab-btn.active .tab-description {
+  color: var(--ochre, #c67b5c);
+}
+
+/* 响应式布局 */
+@media (max-width: 1024px) {
+  .tasks-layout {
+    grid-template-columns: 220px 1fr;
+  }
+  
+  .tasks-main {
+    padding: 20px 24px;
+  }
+  
+  .tabs-nav {
+    flex-wrap: wrap;
+  }
+  
+  .tab-btn {
+    flex: 1 1 calc(50% - 4px);
+    padding: 10px 12px;
+  }
+  
+  .tab-description {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .tasks-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .tasks-sidebar {
+    display: none;
+  }
+  
+  .tasks-main {
+    padding: 16px;
+  }
+  
+  .tab-btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* 保留的原有样式 - Modal等 */
 .modal-overlay {
   position: fixed;
   top: 0;

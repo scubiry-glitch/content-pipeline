@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List } from 'react-window';
 import { useTasks } from '../contexts/TasksContext';
 import { STATUS_MAP, type Task } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
-import { AutoSizer } from 'react-virtualized-auto-sizer';
 import { PriorityBadge, PriorityFilter, PrioritySortButton } from './PriorityBadge';
 import { sortTasksByPriority, calculatePriority } from '../utils/priority';
 
@@ -306,34 +304,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     </div>
   );
 
-  // 虚拟滚动行渲染器 - 必须在所有条件return之前定义
-  const Row = useCallback(
-    ({ index, style }: { index: number; style: React.CSSProperties }) => {
-      const task = filteredTasks[index];
-      return (
-        <div style={{ ...style, padding: '8px 0' }}>
-          <TaskCard
-            task={task}
-            showHidden={showHidden}
-            selected={selectedTasks.has(task.id)}
-            batchMode={batchMode}
-            onClick={() => batchMode ? toggleTaskSelection(task.id) : navigate('/tasks/' + task.id)}
-            onSelect={() => toggleTaskSelection(task.id)}
-            onDelete={() => setConfirmDelete(task.id)}
-            onHide={() => setConfirmHide(task.id)}
-            onUnhide={() => setConfirmUnhide(task.id)}
-            onEdit={() => setEditingTask(task)}
-          />
-        </div>
-      );
-    },
-    [filteredTasks, showHidden, selectedTasks, batchMode]
-  );
-
-  // 当任务数较少时，使用普通渲染；超过50条时使用虚拟滚动
-  const useVirtualScroll = filteredTasks.length > 50;
-
-  // 条件渲染必须在所有hooks之后
+  // 条件渲染
   if (loading && tasks.length === 0) {
     return <div className="loading">加载中...</div>;
   }
@@ -379,40 +350,23 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
       {/* 批量操作工具栏 */}
       {batchMode && <BatchToolbar />}
 
-      {useVirtualScroll ? (
-        <div className="task-list-virtual" style={{ height: 'calc(100vh - 280px)' }}>
-          <AutoSizer>
-            {({ height, width }: { height: number; width: number }) => (
-              <List
-                height={height}
-                itemCount={filteredTasks.length}
-                itemSize={180}
-                width={width}
-              >
-                {Row}
-              </List>
-            )}
-          </AutoSizer>
-        </div>
-      ) : (
-        <div className="task-list">
-          {filteredTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              showHidden={showHidden}
-              selected={selectedTasks.has(task.id)}
-              batchMode={batchMode}
-              onClick={() => batchMode ? toggleTaskSelection(task.id) : navigate('/tasks/' + task.id)}
-              onSelect={() => toggleTaskSelection(task.id)}
-              onDelete={() => setConfirmDelete(task.id)}
-              onHide={() => setConfirmHide(task.id)}
-              onUnhide={() => setConfirmUnhide(task.id)}
-              onEdit={() => setEditingTask(task)}
-            />
-          ))}
-        </div>
-      )}
+      <div className="task-list">
+        {filteredTasks.map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            showHidden={showHidden}
+            selected={selectedTasks.has(task.id)}
+            batchMode={batchMode}
+            onClick={() => batchMode ? toggleTaskSelection(task.id) : navigate('/tasks/' + task.id)}
+            onSelect={() => toggleTaskSelection(task.id)}
+            onDelete={() => setConfirmDelete(task.id)}
+            onHide={() => setConfirmHide(task.id)}
+            onUnhide={() => setConfirmUnhide(task.id)}
+            onEdit={() => setEditingTask(task)}
+          />
+        ))}
+      </div>
 
       <EditTaskModal
         task={editingTask}

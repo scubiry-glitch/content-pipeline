@@ -1,6 +1,8 @@
 // 任务详情 - 选题策划 Tab
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -29,9 +31,47 @@ export function PlanningTab() {
     onConfirmOutline,
     onRedoStage,
   } = useOutletContext<TaskContext>();
+  
   const outline = task.outline || {};
   const evaluation = task.evaluation;
   const competitorAnalysis = task.competitor_analysis || {};
+  
+  // 视图模式切换：rendered(渲染) | source(源码)
+  const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
+
+  // 将大纲转换为 Markdown 格式
+  const outlineToMarkdown = () => {
+    if (!outline.sections || outline.sections.length === 0) return '';
+    
+    let md = `# ${task.topic}\n\n`;
+    
+    outline.sections.forEach((section: any, idx: number) => {
+      md += `## ${idx + 1}. ${section.title}\n\n`;
+      
+      if (section.content) {
+        md += `${section.content}\n\n`;
+      }
+      
+      if (section.subsections?.length > 0) {
+        section.subsections.forEach((sub: any, sidx: number) => {
+          md += `### ${idx + 1}.${sidx + 1} ${sub.title}\n\n`;
+          if (sub.content) {
+            md += `${sub.content}\n\n`;
+          }
+        });
+      }
+      
+      if (section.key_points?.length > 0) {
+        md += `**要点：**\n\n`;
+        section.key_points.forEach((point: string) => {
+          md += `- ${point}\n`;
+        });
+        md += `\n`;
+      }
+    });
+    
+    return md;
+  };
 
   return (
     <div className="tab-panel planning-panel">
@@ -221,8 +261,27 @@ export function PlanningTab() {
       <div className="info-card full-width output-card">
         <div className="card-header-with-actions">
           <h3 className="card-title">📝 文章大纲</h3>
-          {(task.status === 'planning' || task.status === 'outline_pending') && !editingOutline && (
-            <div className="card-actions">
+          <div className="header-actions">
+            {/* 视图切换 */}
+            {!editingOutline && outline.sections && outline.sections.length > 0 && (
+              <div className="view-toggle">
+                <button 
+                  className={`btn-toggle ${viewMode === 'rendered' ? 'active' : ''}`}
+                  onClick={() => setViewMode('rendered')}
+                  title="Markdown 渲染视图"
+                >
+                  👁️ 预览
+                </button>
+                <button 
+                  className={`btn-toggle ${viewMode === 'source' ? 'active' : ''}`}
+                  onClick={() => setViewMode('source')}
+                  title="Markdown 源码"
+                >
+                  📄 源码
+                </button>
+              </div>
+            )}
+            {(task.status === 'planning' || task.status === 'outline_pending') && !editingOutline && (
               <button
                 className="btn btn-success"
                 onClick={onConfirmOutline}
@@ -230,8 +289,8 @@ export function PlanningTab() {
               >
                 {actionLoading === 'confirm-outline' ? '确认中...' : '✓ 确认大纲并继续'}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {editingOutline ? (
@@ -252,32 +311,14 @@ export function PlanningTab() {
             </div>
           </div>
         ) : outline.sections && outline.sections.length > 0 ? (
-          <div className="outline-preview-detailed">
-            {outline.sections.map((section: any, idx: number) => (
-              <div key={idx} className="outline-section-detailed">
-                <h4 className="section-title-main">
-                  {idx + 1}. {section.title}
-                </h4>
-                <p className="section-content">{section.content}</p>
-                {section.subsections?.length > 0 && (
-                  <div className="subsections">
-                    {section.subsections.map((sub: any, sidx: number) => (
-                      <div key={sidx} className="subsection">
-                        <h5>{idx + 1}.{sidx + 1} {sub.title}</h5>
-                        <p>{sub.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {section.key_points?.length > 0 && (
-                  <ul className="key-points-list">
-                    {section.key_points.map((point: string, pidx: number) => (
-                      <li key={pidx}>{point}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
+          <div className="outline-content-container">
+            {viewMode === 'rendered' ? (
+              <MarkdownRenderer content={outlineToMarkdown()} />
+            ) : (
+              <pre className="outline-source">
+                <code>{outlineToMarkdown()}</code>
+              </pre>
+            )}
           </div>
         ) : (
           <div className="empty-state">

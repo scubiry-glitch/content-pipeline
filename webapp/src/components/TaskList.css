@@ -1,26 +1,38 @@
+/* 任务列表 - 响应式网格布局 */
 .task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
 }
 
-/* 虚拟滚动容器 */
-.task-list-virtual {
-  width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
+@media (max-width: 1200px) {
+  .task-list {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
 }
+
+@media (max-width: 768px) {
+  .task-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 
 .task-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: var(--shadow);
-  transition: box-shadow 0.2s;
+  transition: all 0.2s;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .task-card:hover {
   box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .task-header {
@@ -78,6 +90,9 @@
 .task-actions {
   display: flex;
   gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+  flex-wrap: wrap;
 }
 
 .task-actions .btn-sm {

@@ -4680,3 +4680,30 @@
   color: var(--terracotta, #d66853);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+
+
+/* ========== PlanningTab 大纲 Markdown 样式 ========== */
+
+.outline-content-container {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.outline-source {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--soil, #3d352e);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.outline-source code {
+  font-family: inherit;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
