@@ -3,7 +3,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
-import { generate } from './llm.js';
 import { getLLMRouter } from '../providers/index.js';
 
 export interface DraftSection {
@@ -71,7 +70,9 @@ export async function generateDraftStreaming(
   // 2. 准备上下文
   const context = buildGenerationContext(topic, outline, researchData);
 
-  // 3. 初始化进度
+  // 3. 初始化进度（支持断点续传）
+  let startIndex = 0;
+  let accumulatedContent = '';
   const sections: DraftSection[] = flatOutline.map(node => ({
     id: uuidv4(),
     outlineNodeId: node.id || uuidv4(),
@@ -80,14 +81,29 @@ export async function generateDraftStreaming(
     content: '',
     wordCount: 0,
     sources: [],
-    status: 'pending'
+    status: 'pending' as const
   }));
 
-  let accumulatedContent = '';
+  // 检查是否有可恢复的进度
+  const existingProgress = await getDraftProgress(taskId);
+  if (existingProgress && existingProgress.status === 'running' && existingProgress.sections?.length > 0) {
+    const doneSections = existingProgress.sections.filter((s: any) => s.status === 'done');
+    if (doneSections.length > 0) {
+      startIndex = doneSections.length;
+      accumulatedContent = existingProgress.accumulatedContent || '';
+      // 恢复已完成段落的状态
+      for (let j = 0; j < startIndex && j < sections.length; j++) {
+        sections[j].status = 'done';
+        sections[j].wordCount = existingProgress.sections[j]?.wordCount || 0;
+      }
+      console.log(`[StreamingDraft] Resuming from section ${startIndex}/${flatOutline.length}`);
+    }
+  }
+
   const estimatedTotalWordCount = estimateTotalWordCount(flatOutline);
 
-  // 4. 串行生成段落
-  for (let i = 0; i < flatOutline.length; i++) {
+  // 4. 串行生成段落（从 startIndex 开始支持续传）
+  for (let i = startIndex; i < flatOutline.length; i++) {
     const node = flatOutline[i];
     const section = sections[i];
 
@@ -123,10 +139,18 @@ export async function generateDraftStreaming(
       // 4.4 更新段落内容
       section.content = generatedContent;
       section.wordCount = countWords(generatedContent);
+
+      // 4.4.1 字数校验 + 单次重试
+      const validated = await validateSectionWordCount(section, node);
+      if (validated !== section.content) {
+        section.content = validated;
+        section.wordCount = countWords(validated);
+      }
+
       section.status = 'done';
 
       // 4.5 更新累计内容
-      const sectionMarkdown = `${'#'.repeat(node.level || 1)} ${section.title}\n\n${generatedContent}\n\n`;
+      const sectionMarkdown = `${'#'.repeat(node.level || 1)} ${section.title}\n\n${section.content}\n\n`;
       accumulatedContent += sectionMarkdown;
 
       console.log(`[StreamingDraft] Section ${i + 1}/${flatOutline.length} completed: ${section.title} (${section.wordCount} words)`);
@@ -158,6 +182,16 @@ export async function generateDraftStreaming(
     } catch (error) {
       console.error(`[StreamingDraft] Failed to generate section ${i}:`, error);
       section.status = 'error';
+      // 保存失败进度，支持后续续传
+      if (saveProgress) {
+        await saveDraftProgress({
+          taskId,
+          sections,
+          accumulatedContent,
+          progress: i / flatOutline.length,
+          status: 'error'
+        });
+      }
       throw error;
     }
   }
@@ -166,10 +200,10 @@ export async function generateDraftStreaming(
   const title = `# ${topic}\n\n`;
   const summary = await generateSummary(topic, sections);
 
-  // 6. 组装最终内容
-  const finalContent = `${title}${summary}\n${accumulatedContent}`;
+  // 6. 组装原始内容
+  const rawContent = `${title}${summary}\n${accumulatedContent}`;
 
-  // 7. 保存最终版本
+  // 7. 先保存初始版本（status='draft'）
   const draftId = uuidv4();
   await query(
     `INSERT INTO draft_versions (id, task_id, version, status, outline, content, sections, word_count, created_at)
@@ -180,10 +214,20 @@ export async function generateDraftStreaming(
       1,
       'draft',
       JSON.stringify(outline),
-      finalContent,
+      rawContent,
       JSON.stringify(sections),
-      countWords(finalContent)
+      countWords(rawContent)
     ]
+  );
+
+  // 7.5 润色阶段（status: draft → polishing → draft）
+  await query(`UPDATE draft_versions SET status = 'polishing' WHERE id = $1`, [draftId]);
+  console.log(`[StreamingDraft] Starting content polishing for ${taskId}...`);
+  const finalContent = await polishContent(topic, rawContent);
+  console.log(`[StreamingDraft] Polishing completed: ${countWords(rawContent)} → ${countWords(finalContent)} words`);
+  await query(
+    `UPDATE draft_versions SET status = 'draft', content = $2, word_count = $3 WHERE id = $1`,
+    [draftId, finalContent, countWords(finalContent)]
   );
 
   // 8. 清理进度记录
@@ -237,7 +281,8 @@ async function generateSectionWithContext(params: {
     style
   });
 
-  const result = await generate(prompt, 'writing', {
+  const llmRouter = getLLMRouter();
+  const result = await llmRouter.generate(prompt, 'writing', {
     temperature: 0.7,
     maxTokens: (node.requiredLength || 500) * 2
   });
@@ -333,7 +378,8 @@ ${sectionSummaries}
 `;
 
   try {
-    const result = await generate(prompt, 'writing', { temperature: 0.5, maxTokens: 500 });
+    const llmRouter = getLLMRouter();
+    const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.5, maxTokens: 500 });
     return `## 执行摘要\n\n${result.content.trim()}\n\n---\n\n`;
   } catch (error) {
     console.error('[StreamingDraft] Failed to generate summary:', error);
@@ -506,6 +552,85 @@ function extractKeyContext(content: string, maxLength: number): string {
 }
 
 /**
+ * 段落字数校验 + 单次重试
+ */
+async function validateSectionWordCount(
+  section: DraftSection,
+  node: any
+): Promise<string> {
+  const target = node.requiredLength || estimateWordCountForNode(node);
+  const ratio = section.wordCount / target;
+
+  if (ratio >= 0.6 && ratio <= 1.5) return section.content;
+
+  console.log(`[StreamingDraft] Section "${section.title}" ${section.wordCount}字，目标${target}字 (${Math.round(ratio * 100)}%)，重试中...`);
+
+  const direction = ratio < 0.6 ? 'expand' : 'condense';
+  const prompt = direction === 'expand'
+    ? `以下段落过短（当前${section.wordCount}字，目标${target}字）。请扩展补充数据和分析，达到${target}字左右。保持原有观点和风格。\n\n${section.content}`
+    : `以下段落过长（当前${section.wordCount}字，目标${target}字）。请精简冗余，保留核心论点和数据，精简到${target}字左右。\n\n${section.content}`;
+
+  try {
+    const llmRouter = getLLMRouter();
+    const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.5 });
+    const adjusted = (result.content || '').trim();
+    if (adjusted && adjusted.length > 50) {
+      console.log(`[StreamingDraft] Retry result: ${countWords(adjusted)}字`);
+      return adjusted;
+    }
+  } catch (error) {
+    console.error(`[StreamingDraft] Word count retry failed for "${section.title}":`, error);
+  }
+
+  return section.content;
+}
+
+function estimateWordCountForNode(node: any): number {
+  const level = node.level || 1;
+  return level === 1 ? 800 : level === 2 ? 500 : 300;
+}
+
+/**
+ * 内容润色 — 语言优化、风格统一、可读性提升
+ */
+async function polishContent(topic: string, content: string): Promise<string> {
+  const llmRouter = getLLMRouter();
+  const prompt = `你是一位资深文稿编辑。请对以下研究报告进行润色，不改变核心观点和数据。
+
+## 润色要求
+1. 消除口语化表达，统一专业术语
+2. 确保全文语气、人称、时态一致
+3. 优化过长句子，改善段落过渡
+4. 合并重复论点，删除冗余表达
+5. 统一标点、数字格式
+
+## 原文
+${content.substring(0, 12000)}
+
+请输出润色后的完整文稿（Markdown格式）。仅做语言润色，不增删核心内容：`;
+
+  try {
+    const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.3, maxTokens: 10000 });
+    const polished = (result.content || '').trim();
+
+    // 安全校验：润色结果不能偏离原文太多
+    if (!polished || polished.length < content.length * 0.5 || polished.length > content.length * 1.5) {
+      console.warn(`[StreamingDraft] Polishing result length anomaly (${polished.length} vs ${content.length}), using original`);
+      return content;
+    }
+    if (!/^#{1,6}\s/m.test(polished) && /^#{1,6}\s/m.test(content)) {
+      console.warn('[StreamingDraft] Polishing lost headings, using original');
+      return content;
+    }
+
+    return polished;
+  } catch (error) {
+    console.error('[StreamingDraft] Polishing failed, using original:', error);
+    return content;
+  }
+}
+
+/**
  * 找到相邻段落信息
  */
 function findSiblingInfo(node: any, fullOutline: any[]): { previous?: string; next?: string } {
@@ -525,8 +650,9 @@ async function saveDraftProgress(params: {
   sections: DraftSection[];
   accumulatedContent: string;
   progress: number;
+  status?: string;
 }) {
-  const { taskId, sections, accumulatedContent, progress } = params;
+  const { taskId, sections, accumulatedContent, progress, status = 'running' } = params;
 
   try {
     await query(
@@ -535,6 +661,7 @@ async function saveDraftProgress(params: {
         accumulated_content, sections, progress, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       ON CONFLICT (task_id) DO UPDATE SET
+        status = EXCLUDED.status,
         current_section_index = EXCLUDED.current_section_index,
         accumulated_content = EXCLUDED.accumulated_content,
         sections = EXCLUDED.sections,
@@ -543,7 +670,7 @@ async function saveDraftProgress(params: {
       [
         uuidv4(),
         taskId,
-        'running',
+        status,
         sections.filter(s => s.status === 'done').length,
         sections.length,
         accumulatedContent,

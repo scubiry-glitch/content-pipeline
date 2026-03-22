@@ -141,9 +141,17 @@ async function setupMVPSchema(): Promise<void> {
       version INTEGER NOT NULL,
       content TEXT NOT NULL,
       change_summary TEXT,
+      -- 串行评审版本链支持
+      source_review_id VARCHAR(50),
+      previous_version_id UUID REFERENCES draft_versions(id),
+      round INTEGER DEFAULT 0,
+      expert_role VARCHAR(20),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+  
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_task ON draft_versions(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_round ON draft_versions(round)`);
 
   // Assets table - research materials (with pgvector support)
   await query(`
@@ -746,18 +754,6 @@ async function setupMVPSchema(): Promise<void> {
     CREATE VIEW draft_version_tree AS
     SELECT dv.*, COALESCE(dv.parent_id::text, '') AS parent_path
     FROM draft_versions dv
-  `);
-
-  // 视图: 任务评审进度
-  await query(`DROP VIEW IF EXISTS task_review_progress`);
-  await query(`
-    CREATE VIEW task_review_progress AS
-    SELECT task_id,
-      COUNT(*) as total_rounds,
-      COUNT(*) FILTER (WHERE status = 'completed') as completed_rounds,
-      MAX(round) as current_round
-    FROM expert_reviews
-    GROUP BY task_id
   `);
 
   // 确保 tasks 表有评审相关字段

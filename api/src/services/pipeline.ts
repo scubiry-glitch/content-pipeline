@@ -170,6 +170,7 @@ export class PipelineService {
       { maxSearchUrls: 20, enableWebSearch: true };
 
     // 使用 ResearchAgent 进行研究（包含网页搜索）
+    console.log(`[Pipeline] Starting ResearchAgent for ${taskId}, topic: ${task.topic}, sections: ${(outline?.sections || []).length}, dataReqs: ${(outline?.dataRequirements || []).length}`);
     const researchResult = await this.researchAgent.execute({
       topicId: taskId,
       topic: task.topic,
@@ -183,6 +184,7 @@ export class PipelineService {
     });
 
     if (!researchResult.success) {
+      console.error(`[Pipeline] Research failed for ${taskId}:`, researchResult.error, researchResult.logs);
       throw new Error(`Research failed: ${researchResult.error}`);
     }
 
@@ -321,11 +323,33 @@ export class PipelineService {
     const task = await this.getTask(taskId);
     if (!task) throw new Error('Task not found');
 
-    // 获取最终稿件
-    const draftResult = await query(
-      `SELECT content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+    // 质量门控：检查评审报告
+    const reviewReport = await query(
+      `SELECT decision, final_score, critical_count FROM review_reports
+       WHERE task_id = $1 ORDER BY generated_at DESC LIMIT 1`,
       [taskId]
     );
+
+    if (reviewReport.rows.length > 0) {
+      const report = reviewReport.rows[0];
+      if (report.decision === 'reject') {
+        throw new Error(`Quality gate: review decision is 'reject' (score: ${report.final_score}). Cannot generate output.`);
+      }
+      if (report.critical_count > 0) {
+        throw new Error(`Quality gate: ${report.critical_count} critical issues unresolved.`);
+      }
+    }
+
+    // 获取最终稿件
+    const draftResult = await query(
+      `SELECT id, content, status FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+      [taskId]
+    );
+
+    // 状态生命周期检查（仅日志警告，不阻塞旧任务）
+    if (reviewReport.rows.length > 0 && draftResult.rows[0]?.status !== 'final') {
+      console.warn(`[Pipeline] Draft status is '${draftResult.rows[0]?.status}', expected 'final' for task ${taskId}`);
+    }
 
     const content = draftResult.rows[0]?.content;
     if (!content) throw new Error('No content found');

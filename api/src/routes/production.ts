@@ -644,181 +644,6 @@ export async function productionRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // ===== 串行多轮评审 API (v5.0) =====
-
-  // 配置串行评审
-  fastify.post('/:taskId/sequential-review/configure', { preHandler: authenticate }, async (request, reply) => {
-    const { taskId } = request.params as any;
-    const { topic } = request.body as any;
-
-    const { configureSequentialReview } = await import('../services/sequentialReview.js');
-    const config = await configureSequentialReview(taskId, topic);
-
-    // 保存配置到任务
-    await query(
-      `UPDATE tasks SET sequential_review_config = $1 WHERE id = $2`,
-      [JSON.stringify(config), taskId]
-    );
-
-    return config;
-  });
-
-  // 执行串行评审
-  fastify.post('/:taskId/sequential-review/conduct', { preHandler: authenticate }, async (request, reply) => {
-    const { taskId } = request.params as any;
-
-    // 获取任务信息
-    const taskResult = await query(
-      `SELECT sequential_review_config FROM tasks WHERE id = $1`,
-      [taskId]
-    );
-
-    if (taskResult.rows.length === 0) {
-      reply.status(404);
-      return { error: 'Task not found' };
-    }
-
-    const config = taskResult.rows[0].sequential_review_config;
-    if (!config) {
-      reply.status(400);
-      return { error: 'Sequential review not configured. Please call configure endpoint first.' };
-    }
-
-    // 异步执行串行评审（带超时控制）
-    setImmediate(async () => {
-      try {
-        const reviewTask = async () => {
-          const { conductSequentialReview } = await import('../services/sequentialReview.js');
-
-          // 获取当前草稿
-          const draftResult = await query(
-            `SELECT id, task_id, version, content, status FROM draft_versions
-             WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
-            [taskId]
-          );
-
-          if (draftResult.rows.length === 0) {
-            throw new Error(`No draft found for task ${taskId}`);
-          }
-
-          const initialDraft = draftResult.rows[0];
-
-          // 获取事实核查和逻辑检查结果
-          const checkResult = await query(
-            `SELECT fact_check, logic_check FROM blue_team_checks WHERE task_id = $1`,
-            [taskId]
-          );
-
-          const factCheck = checkResult.rows[0]?.fact_check || { overallScore: 80, claims: [] };
-          const logicCheck = checkResult.rows[0]?.logic_check || { overallScore: 80 };
-
-          // 执行串行评审
-          const result = await conductSequentialReview(
-            taskId,
-            initialDraft,
-            factCheck,
-            logicCheck,
-            config
-          );
-
-          console.log(`[SequentialReview] Completed for task ${taskId}. Final draft: ${result.finalDraft.id}`);
-        };
-
-        await withTimeout(reviewTask(), 15 * 60 * 1000, `Sequential review for ${taskId}`);
-      } catch (error) {
-        console.error(`[SequentialReview] Failed/timed out for task ${taskId}:`, error);
-        await query(
-          `UPDATE tasks SET status = 'failed', current_stage = 'review_failed', updated_at = NOW() WHERE id = $1`,
-          [taskId]
-        );
-      }
-    });
-
-    return {
-      message: '串行评审已启动',
-      taskId,
-      expertCount: config.reviewQueue.length,
-    };
-  });
-
-  // 获取串行评审结果
-  fastify.get('/:taskId/sequential-review/results', { preHandler: authenticate }, async (request, reply) => {
-    const { taskId } = request.params as any;
-
-    const reviewsResult = await query(
-      `SELECT * FROM expert_reviews WHERE task_id = $1 ORDER BY round`,
-      [taskId]
-    );
-
-    const chainResult = await query(
-      `SELECT * FROM review_chains WHERE task_id = $1 ORDER BY round`,
-      [taskId]
-    );
-
-    return {
-      reviews: reviewsResult.rows,
-      chain: chainResult.rows,
-      totalReviews: reviewsResult.rows.length,
-      completedReviews: reviewsResult.rows.filter((r: any) => r.status === 'completed').length,
-      averageScore: reviewsResult.rows.length > 0
-        ? reviewsResult.rows.reduce((sum: number, r: any) => sum + (r.overall_score || 0), 0) / reviewsResult.rows.length
-        : 0,
-    };
-  });
-
-  // 获取单轮评审详情
-  fastify.get('/:taskId/sequential-review/round/:round', { preHandler: authenticate }, async (request, reply) => {
-    const { taskId, round } = request.params as any;
-
-    const reviewResult = await query(
-      `SELECT * FROM expert_reviews WHERE task_id = $1 AND round = $2`,
-      [taskId, parseInt(round)]
-    );
-
-    if (reviewResult.rows.length === 0) {
-      reply.status(404);
-      return { error: 'Review round not found' };
-    }
-
-    return reviewResult.rows[0];
-  });
-
-  // 获取评审进度
-  fastify.get('/:taskId/sequential-review/progress', { preHandler: authenticate }, async (request, reply) => {
-    const { taskId } = request.params as any;
-
-    const progressResult = await query(
-      `SELECT * FROM task_review_progress WHERE task_id = $1`,
-      [taskId]
-    );
-
-    if (progressResult.rows.length === 0) {
-      return {
-        taskId,
-        progress: 0,
-        currentRound: 0,
-        totalRounds: 0,
-        status: 'not_started',
-      };
-    }
-
-    const progress = progressResult.rows[0];
-    const config = await query(
-      `SELECT sequential_review_config FROM tasks WHERE id = $1`,
-      [taskId]
-    );
-    const totalRounds = config.rows[0]?.sequential_review_config?.totalRounds || 5;
-
-    return {
-      taskId,
-      progress: Math.round((progress.completed_reviews / totalRounds) * 100),
-      currentRound: progress.latest_round || 0,
-      totalRounds,
-      averageScore: progress.avg_score,
-      status: progress.completed_reviews >= totalRounds ? 'completed' : 'in_progress',
-    };
-  });
-
   // ===== 流式文稿生成 API (v5.0 新增) =====
 
   // 查询文稿生成进度
@@ -1107,4 +932,115 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const englishWords = (content.match(/[a-zA-Z]+/g) || []).length;
     return chineseChars + englishWords;
   }
+
+  // ===== 串行评审 API (Sequential Review) =====
+
+  // 获取串行评审状态
+  fastify.get('/:taskId/sequential-review/status', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getSequentialReviewProgress } = await import('../services/sequentialReview.js');
+    
+    const progress = await getSequentialReviewProgress(taskId);
+    if (!progress) {
+      reply.status(404);
+      return { error: 'Sequential review not configured for this task' };
+    }
+    
+    return {
+      taskId,
+      status: progress.status,
+      totalRounds: progress.total_rounds,
+      currentRound: progress.current_round,
+      reviewQueue: progress.review_queue,
+      currentDraftId: progress.current_draft_id,
+      finalDraftId: progress.final_draft_id,
+      startedAt: progress.started_at,
+      completedAt: progress.completed_at,
+    };
+  });
+
+  // 配置串行评审
+  fastify.post('/:taskId/sequential-review/configure', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { topic } = request.body as any;
+    
+    const { configureSequentialReview } = await import('../services/sequentialReview.js');
+    const config = await configureSequentialReview(taskId, topic);
+    
+    return {
+      success: true,
+      taskId,
+      totalRounds: config.totalRounds,
+      reviewQueue: config.reviewQueue.map((e, i) => ({
+        round: i + 1,
+        name: e.name,
+        type: e.type,
+        role: e.role,
+        profile: e.profile,
+      })),
+    };
+  });
+
+  // 启动串行评审
+  fastify.post('/:taskId/sequential-review/start', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { draftId } = request.body as any;
+    
+    const draftResult = await query(
+      `SELECT content FROM draft_versions WHERE id = \$1 AND task_id = \$2`,
+      [draftId, taskId]
+    );
+    
+    if (draftResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Draft not found' };
+    }
+    
+    const { startSequentialReview } = await import('../services/sequentialReview.js');
+    const result = await startSequentialReview(taskId, draftId, draftResult.rows[0].content);
+    
+    return result;
+  });
+
+  // 获取评审链
+  fastify.get('/:taskId/sequential-review/chain', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getReviewChain } = await import('../services/sequentialReview.js');
+    
+    const chain = await getReviewChain(taskId);
+    return {
+      taskId,
+      chain: chain.map((item: any) => ({
+        round: item.round,
+        expertName: item.expert_name,
+        expertRole: item.expert_role,
+        inputDraftId: item.input_draft_id,
+        outputDraftId: item.output_draft_id,
+        score: item.score,
+        status: item.status,
+        createdAt: item.created_at,
+      })),
+    };
+  });
+
+  // 获取版本列表
+  fastify.get('/:taskId/sequential-review/versions', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getDraftVersions } = await import('../services/sequentialReview.js');
+    
+    const versions = await getDraftVersions(taskId);
+    return {
+      taskId,
+      versions: versions.map((v: any) => ({
+        id: v.id,
+        version: v.version,
+        round: v.round,
+        expertName: v.expert_name,
+        expertRole: v.expert_role,
+        changeSummary: v.change_summary,
+        previousVersionId: v.previous_version_id,
+        createdAt: v.created_at,
+      })),
+    };
+  });
 }

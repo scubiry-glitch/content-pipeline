@@ -3,7 +3,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
-import { generate } from './llm.js';
+import { getLLMRouter } from '../providers/index.js';
 
 // ===== 类型定义 =====
 
@@ -302,7 +302,7 @@ ${context || '无特定背景'}
 - 重点关注被忽视的角度和潜在机会`;
 
     try {
-      const result = await generate(prompt, 'analysis', {
+      const result = await getLLMRouter().generate(prompt, 'analysis', {
         temperature: 0.7,
         maxTokens: 2000,
       });
@@ -367,7 +367,7 @@ ${context || '无特定背景'}
 - 优先考虑反共识但合理的视角`;
 
     try {
-      const result = await generate(prompt, 'planning', {
+      const result = await getLLMRouter().generate(prompt, 'planning', {
         temperature: 0.8,
         maxTokens: 2000,
       });
@@ -421,7 +421,7 @@ ${context || '无特定背景'}
       previousLayers,
     });
 
-    const result = await generate(prompt, 'planning', {
+    const result = await getLLMRouter().generate(prompt, 'planning', {
       temperature: 0.7,
       maxTokens: 3000,
     });
@@ -518,7 +518,7 @@ ${comments.map((c, idx) => `${idx + 1}. ${c}`).join('\n')}
 }
 
 要求：
-1. 本层生成 2-3 个一级章节
+1. 本层生成至少 5 个一级章节（必须覆盖该层的各个关键维度）
 2. 每个一级章节包含 2-3 个子章节
 3. 必须承接上文逻辑（如有上层结构）
 4. 融入相关洞见和新角度
@@ -601,7 +601,7 @@ ${JSON.stringify(outline, null, 2)}
 请识别所有需要的数据点，并标注优先级。`;
 
     try {
-      const result = await generate(prompt, 'analysis', {
+      const result = await getLLMRouter().generate(prompt, 'analysis', {
         temperature: 0.5,
         maxTokens: 2000,
       });

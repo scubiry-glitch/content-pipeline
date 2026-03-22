@@ -36,8 +36,17 @@ export class WebSearchService {
   private baseUrl: string;
 
   constructor() {
-    this.apiKey = process.env.SEARCH_API_KEY || process.env.TAVILY_API_KEY || null;
-    this.baseUrl = process.env.SEARCH_API_URL || 'https://api.tavily.com';
+    // 延迟读取，确保 dotenv 已加载
+    this.apiKey = null;
+    this.baseUrl = 'https://api.tavily.com';
+  }
+
+  private getApiKey(): string | null {
+    if (!this.apiKey) {
+      this.apiKey = process.env.SEARCH_API_KEY || process.env.TAVILY_API_KEY || null;
+      this.baseUrl = process.env.SEARCH_API_URL || 'https://api.tavily.com';
+    }
+    return this.apiKey;
   }
 
   /**
@@ -47,7 +56,8 @@ export class WebSearchService {
     const maxResults = options.maxResults || 20;
 
     // Try Tavily API first (better for research)
-    if (this.apiKey && this.baseUrl.includes('tavily')) {
+    const apiKey = this.getApiKey();
+    if (apiKey && this.baseUrl.includes('tavily')) {
       return this.searchWithTavily(options, maxResults);
     }
 

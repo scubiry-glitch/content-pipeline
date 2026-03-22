@@ -2,6 +2,7 @@
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
 import { useOutletContext } from 'react-router-dom';
 import { ExpertReviewPanel } from '../../components/ExpertReviewPanel';
+import { SequentialReviewChain } from '../../components/SequentialReviewChain';
 import type { Task, BlueTeamReview } from '../../types';
 
 interface TaskContext {
@@ -215,7 +216,7 @@ export function ReviewsTab() {
         <div className="info-card input-card">
           <h3 className="card-title">👥 专家评审分工</h3>
           <div className="experts-grid">
-            {Object.entries(EXPERT_ROLES).map(([role, info]) => (
+            {Object.entries(EXPERT_ROLES).filter(([role]) => ['challenger', 'expander', 'synthesizer'].includes(role)).map(([role, info]) => (
               <div key={role} className="expert-role-card" style={{ borderLeftColor: info.color }}>
                 <div className="expert-icon">{info.icon}</div>
                 <div className="expert-info">
@@ -225,6 +226,17 @@ export function ReviewsTab() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* 串行评审版本链 */}
+        <div className="info-card full-width input-card">
+          <SequentialReviewChain 
+            taskId={task!.id}
+            onVersionSelect={(versionId) => {
+              console.log('Selected version:', versionId);
+              // 可以在这里添加查看版本的逻辑
+            }}
+          />
         </div>
 
         {/* 专家库深度评审 */}
