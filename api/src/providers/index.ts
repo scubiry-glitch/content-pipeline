@@ -5,9 +5,10 @@ import { ClaudeProvider } from './claude';
 import { OpenAIProvider } from './openai';
 import { ClaudeCodeProvider, isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider } from './claudeCode';
 import { KimiProvider } from './kimi';
+import { DashboardLlmProvider } from './dashboardLlm';
 import { GenerationParams, GenerationResult } from '../types/index.js';
 
-export { LLMProvider, ClaudeProvider, OpenAIProvider, ClaudeCodeProvider, KimiProvider };
+export { LLMProvider, ClaudeProvider, OpenAIProvider, ClaudeCodeProvider, KimiProvider, DashboardLlmProvider };
 export { isClaudeCodeEnvironment, getClaudeCodeModel, createClaudeProvider };
 
 // Mock provider for demo/testing
@@ -24,21 +25,26 @@ interface ModelRoutingRule {
 export class LLMRouter {
   private providers: Map<string, LLMProvider> = new Map();
   private routingRules: ModelRoutingRule[] = [
-    // Deep reasoning tasks - prefer Kimi, fallback to Claude
-    { taskType: 'planning', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
-    { taskType: 'analysis', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
-    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
+    // Deep reasoning tasks - prefer Dashboard LLM, fallback to Kimi/Claude
+    { taskType: 'planning', priority: 'quality', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
+    { taskType: 'analysis', priority: 'quality', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
+    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
     // Writing tasks
-    { taskType: 'writing', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'claude' },
-    { taskType: 'summarization', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
+    { taskType: 'writing', priority: 'quality', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
+    { taskType: 'summarization', priority: 'speed', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
     // Fast tasks
-    { taskType: 'tagging', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
+    { taskType: 'tagging', priority: 'speed', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'openai' },
-    { taskType: 'health_check', priority: 'speed', preferredProvider: 'kimi', fallbackProvider: 'openai' },
+    { taskType: 'health_check', priority: 'speed', preferredProvider: 'dashboard-llm', fallbackProvider: 'kimi' },
   ];
 
   // Model configs for different priorities
   private modelConfigs: Record<string, Record<string, string>> = {
+    'dashboard-llm': {
+      quality: 'k2p5',
+      speed: 'k2p5',
+      cost: 'k2p5',
+    },
     kimi: {
       quality: 'kimi-for-coding',
       speed: 'kimi-for-coding',
@@ -144,6 +150,8 @@ export interface LLMRouterConfig {
   claudeApiKey?: string;
   openaiApiKey?: string;
   kimiApiKey?: string;
+  dashboardLlmToken?: string; // Dashboard LLM API Token
+  dashboardLlmBaseUrl?: string; // Dashboard LLM API Base URL
   useClaudeCode?: boolean; // 强制使用Claude Code环境
   embeddingProvider?: 'openai' | 'claude';
 }
@@ -152,13 +160,18 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
   const router = new LLMRouter();
   const cfg = config || {};
 
-  // 0. 优先检查Kimi (如果配置了)
-  if (cfg.kimiApiKey || process.env.KIMI_API_KEY) {
+  // 0. 优先检查 Dashboard LLM (如果配置了 LLM_API_TOKEN)
+  if (cfg.dashboardLlmToken || process.env.LLM_API_TOKEN) {
+    console.log('[LLM Router] 注册 Dashboard LLM Provider');
+    router.registerProvider(new DashboardLlmProvider(cfg.dashboardLlmToken, cfg.dashboardLlmBaseUrl));
+  }
+  // 1. 检查Kimi (如果配置了且 Dashboard LLM 未配置)
+  else if (cfg.kimiApiKey || process.env.KIMI_API_KEY) {
     console.log('[LLM Router] 注册Kimi Provider');
     router.registerProvider(new KimiProvider(cfg.kimiApiKey));
   }
 
-  // 1. 优先检查是否强制使用Claude Code
+  // 2. 检查是否强制使用Claude Code
   if (cfg.useClaudeCode || (!cfg.claudeApiKey && isClaudeCodeEnvironment())) {
     console.log('[LLM Router] 使用Claude Code环境提供的模型');
     router.registerProvider(new ClaudeCodeProvider());
@@ -195,7 +208,8 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
   if (router.getAvailableProviders().length === 0) {
     throw new Error(
       '未配置任何LLM Provider。请设置以下环境变量之一:\n' +
-      '  - KIMI_API_KEY (推荐)\n' +
+      '  - LLM_API_TOKEN (Dashboard LLM, 推荐)\n' +
+      '  - KIMI_API_KEY (Kimi)\n' +
       '  - ANTHROPIC_API_KEY (Claude)\n' +
       '  - OPENAI_API_KEY\n' +
       '或在Claude Code环境中运行'

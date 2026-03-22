@@ -238,7 +238,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
       try {
         await productionService.redoPlanning(taskId, {
           topic: body?.topic,
-          context: body?.context
+          context: body?.context,
+          comments: body?.comments || [],
+          comment: body?.comment
         });
       } catch (error) {
         console.error(`[Redo] Planning failed for task ${taskId}:`, error);
@@ -464,5 +466,114 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { getEditHistory } = await import('../services/finalDraftEditor.js');
     const history = await getEditHistory(taskId);
     return { history };
+  });
+
+  // ===== 大纲评论 API =====
+
+  // 添加大纲评论
+  fastify.post('/:taskId/outline/comments', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { content, createdBy = 'user' } = request.body as any;
+
+    if (!content || content.trim().length === 0) {
+      reply.status(400);
+      return { error: 'Comment content is required' };
+    }
+
+    const result = await query(
+      `INSERT INTO outline_comments (task_id, content, created_by, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING *`,
+      [taskId, content, createdBy]
+    );
+
+    reply.status(201);
+    return result.rows[0];
+  });
+
+  // 获取大纲评论列表
+  fastify.get('/:taskId/outline/comments', { preHandler: authenticate }, async (request) => {
+    const { taskId } = request.params as any;
+    const result = await query(
+      `SELECT * FROM outline_comments 
+       WHERE task_id = $1 
+       ORDER BY created_at DESC`,
+      [taskId]
+    );
+    return { items: result.rows };
+  });
+
+  // 删除大纲评论
+  fastify.delete('/:taskId/outline/comments/:commentId', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, commentId } = request.params as any;
+    await query(
+      `DELETE FROM outline_comments WHERE id = $1 AND task_id = $2`,
+      [commentId, taskId]
+    );
+    reply.status(204);
+  });
+
+  // ===== 大纲版本历史 API =====
+
+  // 获取大纲版本历史
+  fastify.get('/:taskId/outline/versions', { preHandler: authenticate }, async (request) => {
+    const { taskId } = request.params as any;
+    const result = await query(
+      `SELECT id, version, comment, created_by, created_at 
+       FROM outline_versions 
+       WHERE task_id = $1 
+       ORDER BY version DESC`,
+      [taskId]
+    );
+    return { items: result.rows };
+  });
+
+  // 获取特定版本的大纲
+  fastify.get('/:taskId/outline/versions/:version', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, version } = request.params as any;
+    const result = await query(
+      `SELECT * FROM outline_versions 
+       WHERE task_id = $1 AND version = $2`,
+      [taskId, parseInt(version)]
+    );
+
+    if (result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Version not found' };
+    }
+
+    return result.rows[0];
+  });
+
+  // 比较两个版本的大纲
+  fastify.post('/:taskId/outline/compare', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { version1, version2 } = request.body as any;
+
+    if (!version1 || !version2) {
+      reply.status(400);
+      return { error: 'Both version1 and version2 are required' };
+    }
+
+    const [v1Result, v2Result] = await Promise.all([
+      query(`SELECT * FROM outline_versions WHERE task_id = $1 AND version = $2`, [taskId, version1]),
+      query(`SELECT * FROM outline_versions WHERE task_id = $1 AND version = $2`, [taskId, version2])
+    ]);
+
+    if (v1Result.rows.length === 0 || v2Result.rows.length === 0) {
+      reply.status(404);
+      return { error: 'One or both versions not found' };
+    }
+
+    // 简单的对比逻辑：返回两个版本的差异
+    const v1 = v1Result.rows[0];
+    const v2 = v2Result.rows[0];
+
+    return {
+      version1: { version: v1.version, created_at: v1.created_at },
+      version2: { version: v2.version, created_at: v2.created_at },
+      outline1: v1.outline,
+      outline2: v2.outline
+    };
   });
 }

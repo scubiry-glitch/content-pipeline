@@ -1,9 +1,10 @@
 // 任务详情 - 选题策划 Tab
-// 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
-import { useState } from 'react';
+// 布局逻辑: 1.输出 2.输入 3.加工 4.辅助工具(悬浮)
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
-import type { Task } from '../../types';
+import { tasksApi } from '../../api/client';
+import type { Task, OutlineComment, OutlineVersion } from '../../types';
 
 interface TaskContext {
   task: Task;
@@ -15,8 +16,11 @@ interface TaskContext {
   onCancelEdit: () => void;
   onOutlineChange: (value: string) => void;
   onConfirmOutline: () => void;
-  onRedoStage: (stage: 'planning' | 'research' | 'writing' | 'review') => void;
+  onRedoStage: (stage: 'planning' | 'research' | 'writing' | 'review', data?: any) => void;
 }
+
+// 编辑器模式：edit(编辑) | preview(预览) | split(分屏)
+type EditorMode = 'edit' | 'preview' | 'split';
 
 export function PlanningTab() {
   const {
@@ -36,16 +40,173 @@ export function PlanningTab() {
   const evaluation = task.evaluation;
   const competitorAnalysis = task.competitor_analysis || {};
   
-  // 视图模式切换：rendered(渲染) | source(源码)
-  const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
+  // 编辑器模式切换
+  const [editorMode, setEditorMode] = useState<EditorMode>('preview');
+  
+  // Refs for scrolling
+  const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
+  const processRef = useRef<HTMLDivElement>(null);
+
+  // ===== 评论相关状态 =====
+  const [comments, setComments] = useState<OutlineComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [loadingComments, setLoadingComments] = useState(false);
+
+  // ===== 版本历史相关状态 =====
+  const [versions, setVersions] = useState<OutlineVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [compareVersion, setCompareVersion] = useState<number | null>(null);
+  const [versionOutline, setVersionOutline] = useState<any>(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [showVersionCompare, setShowVersionCompare] = useState(false);
+
+  // ===== 重做对话框状态 =====
+  const [showRedoDialog, setShowRedoDialog] = useState(false);
+  const [redoComment, setRedoComment] = useState('');
+  const [isRedoing, setIsRedoing] = useState(false);
+
+  // 平滑滚动到指定区域
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // 处理编辑模式切换
+  const handleEditClick = () => {
+    setEditorMode('split');
+    onEditOutline();
+  };
+
+  const handleSaveClick = () => {
+    onSaveOutline();
+    setEditorMode('preview');
+  };
+
+  const handleCancelClick = () => {
+    onCancelEdit();
+    setEditorMode('preview');
+  };
+
+  // ===== 加载评论 =====
+  const loadComments = useCallback(async () => {
+    if (!task.id) return;
+    setLoadingComments(true);
+    try {
+      const result = await tasksApi.getOutlineComments(task.id);
+      setComments(result.items || []);
+    } catch (error) {
+      console.error('Failed to load comments:', error);
+    } finally {
+      setLoadingComments(false);
+    }
+  }, [task.id]);
+
+  // ===== 添加评论 =====
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !task.id) return;
+    try {
+      await tasksApi.addOutlineComment(task.id, newComment.trim());
+      setNewComment('');
+      loadComments();
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      alert('添加评论失败');
+    }
+  };
+
+  // ===== 删除评论 =====
+  const handleDeleteComment = async (commentId: string) => {
+    if (!task.id || !confirm('确定要删除这条评论吗？')) return;
+    try {
+      await tasksApi.deleteOutlineComment(task.id, commentId);
+      loadComments();
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
+      alert('删除评论失败');
+    }
+  };
+
+  // ===== 加载版本历史 =====
+  const loadVersions = useCallback(async () => {
+    if (!task.id) return;
+    setLoadingVersions(true);
+    try {
+      const result = await tasksApi.getOutlineVersions(task.id);
+      setVersions(result.items || []);
+    } catch (error) {
+      console.error('Failed to load versions:', error);
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [task.id]);
+
+  // ===== 切换版本查看 =====
+  const handleVersionChange = async (version: number | null) => {
+    setSelectedVersion(version);
+    if (version === null) {
+      setVersionOutline(null);
+      return;
+    }
+    if (!task.id) return;
+    try {
+      const result = await tasksApi.getOutlineVersion(task.id, version);
+      setVersionOutline(result.outline);
+    } catch (error) {
+      console.error('Failed to load version:', error);
+      alert('加载版本失败');
+    }
+  };
+
+  // ===== 重做选题策划 =====
+  const handleRedoClick = () => {
+    // 收集所有评论作为上下文
+    const commentTexts = comments.map(c => c.content);
+    
+    if (commentTexts.length === 0) {
+      // 没有评论，直接重做
+      if (confirm('确定要重做选题策划吗？当前大纲将被保存到历史版本。')) {
+        onRedoStage('planning', { comment: '重做前版本' });
+      }
+      return;
+    }
+    
+    // 有评论，显示对话框
+    setShowRedoDialog(true);
+    setRedoComment(commentTexts.join('\n'));
+  };
+
+  const handleConfirmRedo = async () => {
+    setIsRedoing(true);
+    const commentTexts = comments.map(c => c.content);
+    if (redoComment.trim()) {
+      commentTexts.push(redoComment.trim());
+    }
+    
+    onRedoStage('planning', { 
+      comments: commentTexts,
+      comment: redoComment.trim() || '重做前版本'
+    });
+    
+    setShowRedoDialog(false);
+    setIsRedoing(false);
+    
+    // 清空评论
+    setComments([]);
+  };
+
+  // 初始加载
+  useEffect(() => {
+    loadComments();
+    loadVersions();
+  }, [loadComments, loadVersions]);
 
   // 将大纲转换为 Markdown 格式
-  const outlineToMarkdown = () => {
-    if (!outline.sections || outline.sections.length === 0) return '';
+  const outlineToMarkdown = (ol: any = outline) => {
+    if (!ol?.sections || ol.sections.length === 0) return '';
     
-    let md = `# ${task.topic}\n\n`;
+    let md = `# ${ol.title || task.topic}\n\n`;
     
-    outline.sections.forEach((section: any, idx: number) => {
+    ol.sections.forEach((section: any, idx: number) => {
       md += `## ${idx + 1}. ${section.title}\n\n`;
       
       if (section.content) {
@@ -73,10 +234,184 @@ export function PlanningTab() {
     return md;
   };
 
+  // 当前显示的大纲（可能是历史版本）
+  const displayOutline = versionOutline || outline;
+
   return (
     <div className="tab-panel planning-panel">
-      {/* ========== 1. 输入 ========== */}
-      <div className="section-header">
+      {/* ========== Sticky 导航栏 ========== */}
+      <nav className="planning-nav">
+        <button 
+          className="nav-btn active" 
+          onClick={() => scrollToSection(outputRef)}
+        >
+          📤 大纲
+        </button>
+        <button 
+          className="nav-btn" 
+          onClick={() => scrollToSection(inputRef)}
+        >
+          📥 评估
+        </button>
+        {(outline.knowledgeInsights?.length > 0 || outline.novelAngles?.length > 0) && (
+          <button 
+            className="nav-btn" 
+            onClick={() => scrollToSection(processRef)}
+          >
+            ⚙️ 洞见
+          </button>
+        )}
+        {versions.length > 0 && (
+          <button 
+            className="nav-btn" 
+            onClick={() => scrollToSection(versionRef)}
+          >
+            📜 版本历史
+          </button>
+        )}
+      </nav>
+
+      {/* ========== 版本选择器 ========== */}
+      {versions.length > 0 && (
+        <div className="version-selector-bar">
+          <label>版本：</label>
+          <select 
+            value={selectedVersion || ''} 
+            onChange={(e) => handleVersionChange(e.target.value ? parseInt(e.target.value) : null)}
+            className="version-select"
+          >
+            <option value="">当前版本</option>
+            {versions.map((v) => (
+              <option key={v.version} value={v.version}>
+                版本 {v.version} ({new Date(v.created_at).toLocaleDateString()})
+                {v.comment ? ` - ${v.comment.substring(0, 20)}...` : ''}
+              </option>
+            ))}
+          </select>
+          {selectedVersion && (
+            <button 
+              className="btn btn-sm btn-secondary"
+              onClick={() => handleVersionChange(null)}
+            >
+              返回当前
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ========== 1. 输出 (置顶) ========== */}
+      <div ref={outputRef} className="section-header">
+        <h3 className="section-title">📤 输出</h3>
+        <span className="section-desc">文章大纲</span>
+      </div>
+
+      <div className="info-card full-width output-card">
+        <div className="card-header-with-actions">
+          <h3 className="card-title">
+            📝 文章大纲
+            {selectedVersion && <span className="version-badge">历史版本 {selectedVersion}</span>}
+          </h3>
+          <div className="header-actions">
+            {/* 编辑器模式切换 */}
+            {!editingOutline && displayOutline.sections && displayOutline.sections.length > 0 && !selectedVersion && (
+              <div className="editor-mode-toggle">
+                <button 
+                  className={`btn-mode ${editorMode === 'edit' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('edit')}
+                  title="仅编辑"
+                >
+                  ✏️ 编辑
+                </button>
+                <button 
+                  className={`btn-mode ${editorMode === 'preview' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('preview')}
+                  title="仅预览"
+                >
+                  👁️ 预览
+                </button>
+                <button 
+                  className={`btn-mode ${editorMode === 'split' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('split')}
+                  title="分屏模式"
+                >
+                  ⬌ 分屏
+                </button>
+              </div>
+            )}
+            {(task.status === 'planning' || task.status === 'outline_pending') && !editingOutline && !selectedVersion && (
+              <button
+                className="btn btn-success"
+                onClick={onConfirmOutline}
+                disabled={actionLoading === 'confirm-outline'}
+              >
+                {actionLoading === 'confirm-outline' ? '确认中...' : '✓ 确认大纲并继续'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {editingOutline ? (
+          <div className={`outline-container mode-${editorMode}`}>
+            {(editorMode === 'edit' || editorMode === 'split') && (
+              <div className="outline-editor-panel">
+                <textarea
+                  value={outlineDraft}
+                  onChange={(e) => onOutlineChange(e.target.value)}
+                  className="outline-textarea"
+                  rows={editorMode === 'split' ? 25 : 20}
+                />
+                <div className="editor-actions">
+                  <button className="btn btn-secondary" onClick={handleCancelClick}>
+                    取消
+                  </button>
+                  <button className="btn btn-primary" onClick={handleSaveClick}>
+                    保存
+                  </button>
+                </div>
+              </div>
+            )}
+            {(editorMode === 'preview' || editorMode === 'split') && (
+              <div className="outline-preview-panel">
+                <MarkdownRenderer content={outlineToMarkdown()} />
+              </div>
+            )}
+          </div>
+        ) : displayOutline.sections && displayOutline.sections.length > 0 ? (
+          <div className={`outline-container mode-${editorMode}`}>
+            {editorMode === 'edit' ? (
+              <div className="outline-editor-panel">
+                <pre className="outline-source">
+                  <code>{outlineToMarkdown(displayOutline)}</code>
+                </pre>
+              </div>
+            ) : editorMode === 'preview' ? (
+              <div className="outline-preview-panel">
+                <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+              </div>
+            ) : (
+              <>
+                <div className="outline-editor-panel">
+                  <pre className="outline-source">
+                    <code>{outlineToMarkdown(displayOutline)}</code>
+                  </pre>
+                </div>
+                <div className="outline-preview-panel">
+                  <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">📝</div>
+            <div className="empty-title">暂无大纲</div>
+            <p>任务进入选题策划阶段后将自动生成文章大纲</p>
+          </div>
+        )}
+      </div>
+
+      {/* ========== 2. 输入 ========== */}
+      <div ref={inputRef} className="section-header">
         <h3 className="section-title">📥 输入</h3>
         <span className="section-desc">选题评估与竞品分析</span>
       </div>
@@ -195,10 +530,10 @@ export function PlanningTab() {
         )}
       </div>
 
-      {/* ========== 2. 加工 ========== */}
+      {/* ========== 3. 加工 ========== */}
       {(outline.knowledgeInsights?.length > 0 || outline.novelAngles?.length > 0) && (
         <>
-          <div className="section-header">
+          <div ref={processRef} className="section-header">
             <h3 className="section-title">⚙️ 加工</h3>
             <span className="section-desc">知识库洞见与新观点</span>
           </div>
@@ -241,8 +576,8 @@ export function PlanningTab() {
                           {impact === 'high' ? '高影响力' : impact === 'medium' ? '中影响力' : '低影响力'}
                         </span>
                       </div>
-                      <p><strong>理由:</strong> {angle.description}</p>
-                      <p><strong>差异化评分:</strong> {angle.differentiation_score}/10</p>
+                      <p><strong>理由:</strong> {angle.description || angle.rationale}</p>
+                      <p><strong>差异化评分:</strong> {angle.differentiation_score || 0}/10</p>
                     </div>
                   );
                 })}
@@ -252,106 +587,176 @@ export function PlanningTab() {
         </>
       )}
 
-      {/* ========== 3. 输出 ========== */}
+      {/* ========== 4. 评论区域 ========== */}
       <div className="section-header">
-        <h3 className="section-title">📤 输出</h3>
-        <span className="section-desc">文章大纲</span>
+        <h3 className="section-title">💬 评论</h3>
+        <span className="section-desc">对大纲的意见和建议</span>
       </div>
 
-      <div className="info-card full-width output-card">
-        <div className="card-header-with-actions">
-          <h3 className="card-title">📝 文章大纲</h3>
-          <div className="header-actions">
-            {/* 视图切换 */}
-            {!editingOutline && outline.sections && outline.sections.length > 0 && (
-              <div className="view-toggle">
-                <button 
-                  className={`btn-toggle ${viewMode === 'rendered' ? 'active' : ''}`}
-                  onClick={() => setViewMode('rendered')}
-                  title="Markdown 渲染视图"
-                >
-                  👁️ 预览
-                </button>
-                <button 
-                  className={`btn-toggle ${viewMode === 'source' ? 'active' : ''}`}
-                  onClick={() => setViewMode('source')}
-                  title="Markdown 源码"
-                >
-                  📄 源码
-                </button>
-              </div>
-            )}
-            {(task.status === 'planning' || task.status === 'outline_pending') && !editingOutline && (
-              <button
-                className="btn btn-success"
-                onClick={onConfirmOutline}
-                disabled={actionLoading === 'confirm-outline'}
-              >
-                {actionLoading === 'confirm-outline' ? '确认中...' : '✓ 确认大纲并继续'}
-              </button>
-            )}
-          </div>
+      <div className="info-card full-width comments-card">
+        <h3 className="card-title">大纲评论 ({comments.length})</h3>
+        
+        {/* 评论输入 */}
+        <div className="comment-input-area">
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="输入对大纲的意见或建议..."
+            className="comment-textarea"
+            rows={3}
+          />
+          <button 
+            className="btn btn-primary"
+            onClick={handleAddComment}
+            disabled={!newComment.trim()}
+          >
+            添加评论
+          </button>
         </div>
 
-        {editingOutline ? (
-          <div className="outline-editor">
-            <textarea
-              value={outlineDraft}
-              onChange={(e) => onOutlineChange(e.target.value)}
-              className="outline-textarea"
-              rows={20}
-            />
-            <div className="editor-actions">
-              <button className="btn btn-secondary" onClick={onCancelEdit}>
+        {/* 评论列表 */}
+        <div className="comments-list">
+          {loadingComments ? (
+            <div className="loading">加载中...</div>
+          ) : comments.length === 0 ? (
+            <div className="empty-comments">暂无评论，添加评论后可在重做选题策划时作为参考</div>
+          ) : (
+            comments.map((comment) => (
+              <div key={comment.id} className="comment-item">
+                <div className="comment-header">
+                  <span className="comment-author">{comment.created_by}</span>
+                  <span className="comment-time">
+                    {new Date(comment.created_at).toLocaleString()}
+                  </span>
+                  <button 
+                    className="comment-delete"
+                    onClick={() => handleDeleteComment(comment.id)}
+                    title="删除"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="comment-content">{comment.content}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ========== 5. 版本历史 ========== */}
+      {versions.length > 0 && (
+        <>
+          <div ref={versionRef} className="section-header">
+            <h3 className="section-title">📜 版本历史</h3>
+            <span className="section-desc">大纲修改记录</span>
+          </div>
+
+          <div className="info-card full-width versions-card">
+            <h3 className="card-title">历史版本 ({versions.length})</h3>
+            <div className="versions-list">
+              {versions.map((v) => (
+                <div key={v.version} className="version-item">
+                  <span className="version-num">版本 {v.version}</span>
+                  <span className="version-date">{new Date(v.created_at).toLocaleString()}</span>
+                  {v.comment && <span className="version-comment">{v.comment}</span>}
+                  <button 
+                    className="btn btn-sm"
+                    onClick={() => handleVersionChange(v.version)}
+                  >
+                    查看
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ========== 悬浮操作按钮 ========== */}
+      <div className="floating-actions">
+        {!editingOutline ? (
+          <button 
+            className="fab-primary" 
+            onClick={handleEditClick}
+            title="编辑大纲"
+          >
+            ✏️ 编辑
+          </button>
+        ) : (
+          <>
+            <button 
+              className="fab-success" 
+              onClick={handleSaveClick}
+              title="保存大纲"
+            >
+              ✓ 保存
+            </button>
+            <button 
+              className="fab-secondary" 
+              onClick={handleCancelClick}
+              title="取消编辑"
+            >
+              ✕ 取消
+            </button>
+          </>
+        )}
+        <button
+          className="fab-warning"
+          onClick={handleRedoClick}
+          disabled={actionLoading === 'redo-planning'}
+          title="重做选题策划（将当前大纲保存到历史版本，并根据评论重新生成）"
+        >
+          {actionLoading === 'redo-planning' ? '⏳' : '🔄 重做'}
+        </button>
+      </div>
+
+      {/* ========== 重做对话框 ========== */}
+      {showRedoDialog && (
+        <div className="modal-overlay">
+          <div className="modal-content redo-dialog">
+            <h3>🔄 重做选题策划</h3>
+            <p>当前大纲将被保存到历史版本，并根据以下评论重新生成大纲：</p>
+            
+            <div className="redo-comments-preview">
+              <h4>已添加的评论 ({comments.length})：</h4>
+              <ul>
+                {comments.map((c, i) => (
+                  <li key={c.id}>{i + 1}. {c.content.substring(0, 50)}{c.content.length > 50 ? '...' : ''}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="redo-comment-input">
+              <label>补充修改意见（可选）：</label>
+              <textarea
+                value={redoComment}
+                onChange={(e) => setRedoComment(e.target.value)}
+                placeholder="输入额外的修改建议..."
+                rows={4}
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowRedoDialog(false)}
+              >
                 取消
               </button>
-              <button className="btn btn-primary" onClick={onSaveOutline}>
-                保存
+              <button 
+                className="btn btn-primary"
+                onClick={handleConfirmRedo}
+                disabled={isRedoing}
+              >
+                {isRedoing ? '启动中...' : '确认重做'}
               </button>
             </div>
           </div>
-        ) : outline.sections && outline.sections.length > 0 ? (
-          <div className="outline-content-container">
-            {viewMode === 'rendered' ? (
-              <MarkdownRenderer content={outlineToMarkdown()} />
-            ) : (
-              <pre className="outline-source">
-                <code>{outlineToMarkdown()}</code>
-              </pre>
-            )}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-icon">📝</div>
-            <div className="empty-title">暂无大纲</div>
-            <p>任务进入选题策划阶段后将自动生成文章大纲</p>
-          </div>
-        )}
-      </div>
-
-      {/* ========== 4. 辅助工具 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">🛠️ 辅助工具</h3>
-        <span className="section-desc">大纲编辑与重算</span>
-      </div>
-
-      <div className="info-card tools-card">
-        <h3 className="card-title">⚡ 操作工具</h3>
-        <div className="tools-actions">
-          {!editingOutline && (
-            <button className="btn btn-primary" onClick={onEditOutline}>
-              ✏️ 编辑大纲
-            </button>
-          )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => onRedoStage('planning')}
-            disabled={actionLoading === 'redo-planning'}
-          >
-            {actionLoading === 'redo-planning' ? '重算中...' : '🔄 重做选题策划'}
-          </button>
         </div>
-      </div>
+      )}
+
+      {/* 隐藏的元素引用 */}
+      <div ref={versionRef} style={{ display: 'none' }} />
     </div>
   );
 }

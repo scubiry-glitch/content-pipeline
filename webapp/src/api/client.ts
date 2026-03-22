@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { Task, Asset, AssetTheme, Expert } from '../types';
 
-const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key-change-in-production';
+const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const client = axios.create({
@@ -10,7 +10,7 @@ const client = axios.create({
     'X-API-Key': API_KEY,
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 120000, // 2 minutes for LLM operations
 });
 
 // 请求拦截器
@@ -73,8 +73,28 @@ export const tasksApi = {
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,
 
   // 重做某个阶段
-  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review') =>
-    client.post(`/production/${id}/redo/${stage}`) as Promise<void>,
+  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string }) =>
+    client.post(`/production/${id}/redo/${stage}`, data) as Promise<void>,
+
+  // ===== 大纲评论 API =====
+  getOutlineComments: (id: string) =>
+    client.get(`/production/${id}/outline/comments`) as Promise<{ items: OutlineComment[] }>,
+
+  addOutlineComment: (id: string, content: string) =>
+    client.post(`/production/${id}/outline/comments`, { content }) as Promise<OutlineComment>,
+
+  deleteOutlineComment: (id: string, commentId: string) =>
+    client.delete(`/production/${id}/outline/comments/${commentId}`) as Promise<void>,
+
+  // ===== 大纲版本历史 API =====
+  getOutlineVersions: (id: string) =>
+    client.get(`/production/${id}/outline/versions`) as Promise<{ items: OutlineVersion[] }>,
+
+  getOutlineVersion: (id: string, version: number) =>
+    client.get(`/production/${id}/outline/versions/${version}`) as Promise<OutlineVersion>,
+
+  compareOutlineVersions: (id: string, version1: number, version2: number) =>
+    client.post(`/production/${id}/outline/compare`, { version1, version2 }) as Promise<{ version1: any; version2: any; outline1: any; outline2: any }>,
 };
 
 // 素材相关 API
@@ -102,8 +122,8 @@ export const assetsApi = {
   search: (query: string) =>
     client.get('/assets/search', { params: { q: query } }) as Promise<Asset[]>,
 
-  quote: (id: string) =>
-    client.post(`/assets/${id}/quote`) as Promise<any>,
+  quote: (id: string, taskId?: string) =>
+    client.post(`/assets/${id}/quote`, { taskId }) as Promise<any>,
 
   // v3.0.2: 素材引用统计
   getUsageStats: (id: string) =>
@@ -163,11 +183,16 @@ export interface DirectoryBinding {
   name: string;
   path: string;
   theme_id?: string;
-  autoSync: boolean;
+  autoSync?: boolean;
+  auto_import?: boolean;
   lastScannedAt?: string;
-  fileCount: number;
-  createdAt: string;
-  updatedAt: string;
+  last_scan_at?: string;
+  fileCount?: number;
+  total_imported?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // 目录绑定 API

@@ -73,8 +73,8 @@ export function Bindings() {
         name: form.name,
         path: form.path,
         theme_id: form.themeId || undefined,
-        autoSync: form.autoSync,
-      });
+        auto_import: form.autoSync,
+      } as Partial<DirectoryBinding>);
       setShowCreateModal(false);
       setForm({ name: '', path: '', themeId: '', autoSync: true });
       loadData();
@@ -119,7 +119,7 @@ export function Bindings() {
             <div key={binding.id} className="binding-card">
               <div className="binding-header">
                 <h3 className="binding-name">{binding.name}</h3>
-                {binding.autoSync && <span className="auto-sync-badge">🔄 自动同步</span>}
+                {(binding.auto_import || binding.autoSync) && <span className="auto-sync-badge">🔄 自动同步</span>}
               </div>
               
               <div className="binding-path">
@@ -134,11 +134,11 @@ export function Bindings() {
                   </span>
                 )}
                 <span className="file-count">
-                  📄 {binding.fileCount || 0} 个文件
+                  📄 {(binding.total_imported !== undefined ? binding.total_imported : binding.fileCount) || 0} 个文件
                 </span>
-                {binding.lastScannedAt && (
+                {(binding.last_scan_at || binding.lastScannedAt) && (
                   <span className="last-scan">
-                    上次扫描: {new Date(binding.lastScannedAt).toLocaleString()}
+                    上次扫描: {new Date(binding.last_scan_at || binding.lastScannedAt || '').toLocaleString()}
                   </span>
                 )}
               </div>

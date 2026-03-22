@@ -543,3 +543,23 @@ export interface ExpertMatchRequest {
   context?: string;
   requiredDimensions?: string[];
 }
+
+// ===== 大纲评论 =====
+export interface OutlineComment {
+  id: string;
+  task_id: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+}
+
+// ===== 大纲版本历史 =====
+export interface OutlineVersion {
+  id: string;
+  task_id: string;
+  version: number;
+  outline: Outline;
+  comment?: string;
+  created_by: string;
+  created_at: string;
+}

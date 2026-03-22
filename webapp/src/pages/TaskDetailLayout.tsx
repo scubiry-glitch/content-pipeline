@@ -419,12 +419,15 @@ export function TaskDetailLayout() {
     }
   };
 
-  const handleRedoStage = async (stage: 'planning' | 'research' | 'writing' | 'review') => {
+  const handleRedoStage = async (stage: 'planning' | 'research' | 'writing' | 'review', data?: any) => {
     const stageNames: Record<string, string> = { planning: '选题策划', research: '深度研究', writing: '文稿生成', review: '蓝军评审' };
-    if (!confirm(`确定要重做${stageNames[stage]}吗？`)) return;
+    
+    // planning 阶段有特殊处理（通过对话框），不需要确认
+    if (stage !== 'planning' && !confirm(`确定要重做${stageNames[stage]}吗？`)) return;
+    
     setActionLoading(`redo-${stage}`);
     try {
-      await tasksApi.redoStage(id!, stage);
+      await tasksApi.redoStage(id!, stage, data);
       alert(`${stageNames[stage]}重做已在后台启动，请稍后刷新查看进度`);
       loadTask();
       const pollInterval = setInterval(() => { loadTask(); }, 3000);

@@ -518,3 +518,247 @@
   color: var(--earth, #6b6560);
   margin-bottom: 8px;
 }
+
+/* ========== 版本选择器 ========== */
+.version-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid var(--linen, #e8e0d5);
+  margin-bottom: 16px;
+}
+
+.version-selector-bar label {
+  font-weight: 500;
+  color: var(--dark-gray, #333);
+}
+
+.version-select {
+  flex: 1;
+  max-width: 400px;
+  padding: 8px 12px;
+  border: 1px solid var(--linen, #e8e0d5);
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+}
+
+.version-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--terracotta, #d66853);
+  color: white;
+  font-size: 12px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+/* ========== 评论区域 ========== */
+.comments-card {
+  margin-top: 20px;
+}
+
+.comment-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--cream, #faf8f5);
+  border-radius: 8px;
+}
+
+.comment-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--linen, #e8e0d5);
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comment-item {
+  padding: 12px 16px;
+  background: white;
+  border: 1px solid var(--linen, #e8e0d5);
+  border-radius: 8px;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: var(--terracotta, #d66853);
+}
+
+.comment-time {
+  color: #999;
+}
+
+.comment-delete {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.comment-delete:hover {
+  color: #ef4444;
+}
+
+.comment-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dark-gray, #333);
+  white-space: pre-wrap;
+}
+
+.empty-comments {
+  padding: 24px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+/* ========== 版本历史 ========== */
+.versions-card {
+  margin-top: 20px;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.version-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: white;
+  border: 1px solid var(--linen, #e8e0d5);
+  border-radius: 8px;
+}
+
+.version-num {
+  font-weight: 600;
+  color: var(--terracotta, #d66853);
+  min-width: 60px;
+}
+
+.version-date {
+  color: #666;
+  font-size: 13px;
+}
+
+.version-comment {
+  flex: 1;
+  color: #999;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== 重做对话框 ========== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.redo-dialog h3 {
+  margin-top: 0;
+  color: var(--terracotta, #d66853);
+}
+
+.redo-comments-preview {
+  background: var(--cream, #faf8f5);
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.redo-comments-preview h4 {
+  margin-top: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.redo-comments-preview ul {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+}
+
+.redo-comments-preview li {
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.redo-comment-input {
+  margin: 16px 0;
+}
+
+.redo-comment-input label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.redo-comment-input textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--linen, #e8e0d5);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* ========== 按钮样式 ========== */
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 13px;
+}

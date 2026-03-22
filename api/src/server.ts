@@ -29,6 +29,7 @@ import { expertRoutes } from './routes/experts.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
+import { llmRoutes } from './routes/llm.js';
 import { setupAuth } from './middleware/auth.js';
 // RSS 自动采集已整合到 rssCollector.ts，不再使用 rssCrawler.js
 import { errorHandler } from './middleware/errorHandler.js';
@@ -144,6 +145,9 @@ async function main() {
 
   // Public API routes (v3.0)
   await fastify.register(publicAPIRoutes, { prefix: '/api/v3' });
+
+  // Dashboard LLM 路由
+  await fastify.register(llmRoutes, { prefix: '/api/llm' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);

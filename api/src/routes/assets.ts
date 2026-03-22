@@ -84,6 +84,17 @@ export async function assetRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // Search assets (alias for frontend compatibility)
+  fastify.get('/search', { preHandler: authenticate }, async (request) => {
+    const { q, tags, limit = '10' } = request.query as any;
+
+    return await assetService.search({
+      query: q,
+      tags: tags ? tags.split(',') : undefined,
+      limit: parseInt(limit)
+    });
+  });
+
   // Get asset detail
   fastify.get('/:assetId', { preHandler: authenticate }, async (request, reply) => {
     const { assetId } = request.params as any;
@@ -422,7 +433,8 @@ export async function assetRoutes(fastify: FastifyInstance) {
   // 记录素材引用
   fastify.post('/:assetId/quote', { preHandler: authenticate }, async (request, reply) => {
     const { assetId } = request.params as any;
-    const { taskId } = request.body as { taskId?: string };
+    const body = request.body as { taskId?: string } || {};
+    const { taskId } = body;
 
     await query(
       `INSERT INTO asset_quotes (asset_id, task_id, created_at)

@@ -434,8 +434,8 @@ ${JSON.stringify(outline, null, 2)}
 
   // ========== 环节重做功能 ==========
 
-  // 1. 选题策划重做 - 重新生成大纲
-  async redoPlanning(taskId: string, updates?: { topic?: string; context?: string }) {
+  // 1. 选题策划重做 - 重新生成大纲（异步执行）
+  async redoPlanning(taskId: string, updates?: { topic?: string; context?: string; comments?: string[]; comment?: string }) {
     const task = await this.getTask(taskId);
     if (!task) {
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
@@ -443,7 +443,24 @@ ${JSON.stringify(outline, null, 2)}
 
     console.log(`[Redo] Restarting planning for task ${taskId}`);
 
-    // 清空后续环节的数据
+    // 1. 保存当前大纲到历史版本表（如果有）
+    if (task.outline) {
+      const versionResult = await query(
+        `SELECT COALESCE(MAX(version), 0) + 1 as next_version 
+         FROM outline_versions WHERE task_id = $1`,
+        [taskId]
+      );
+      const nextVersion = versionResult.rows[0].next_version;
+
+      await query(
+        `INSERT INTO outline_versions (task_id, version, outline, comment, created_by, created_at)
+         VALUES ($1, $2, $3, $4, 'user', NOW())`,
+        [taskId, nextVersion, JSON.stringify(task.outline), updates?.comment || '重做前版本']
+      );
+      console.log(`[Redo] Saved current outline as version ${nextVersion}`);
+    }
+
+    // 2. 清空后续环节的数据
     await query(
       `UPDATE tasks SET
         outline = NULL,
@@ -456,34 +473,52 @@ ${JSON.stringify(outline, null, 2)}
       [taskId]
     );
 
-    // 删除之前的评审和稿件版本
+    // 3. 删除之前的评审和稿件版本
     await query(`DELETE FROM blue_team_reviews WHERE task_id = $1`, [taskId]);
     await query(`DELETE FROM draft_versions WHERE task_id = $1`, [taskId]);
 
-    // 重新生成大纲（使用更新后的主题/背景）
+    // 4. 异步重新生成大纲（避免前端超时）
     const topic = updates?.topic || task.topic;
     const context = updates?.context || task.context;
+    const comments = updates?.comments || [];
 
-    const outline = await this.pipelineService.regenerateOutline(taskId, topic, context);
+    setImmediate(async () => {
+      try {
+        console.log(`[Redo] Async generating outline for task ${taskId} with ${comments.length} comments`);
+        const outline = await this.pipelineService.regenerateOutline(taskId, topic, context, comments);
+        
+        // 5. 更新任务
+        await query(
+          `UPDATE tasks SET
+            topic = $1,
+            outline = $2,
+            status = 'outline_pending',
+            progress = 10,
+            current_stage = 'outline_pending',
+            updated_at = NOW()
+          WHERE id = $3`,
+          [topic, JSON.stringify(outline), taskId]
+        );
+        console.log(`[Redo] Outline generated successfully for task ${taskId}`);
+      } catch (error: any) {
+        console.error(`[Redo] Failed to regenerate outline for task ${taskId}:`, error);
+        // 更新任务状态为失败
+        await query(
+          `UPDATE tasks SET
+            current_stage = 'regenerate_failed',
+            updated_at = NOW()
+          WHERE id = $1`,
+          [taskId]
+        );
+      }
+    });
 
-    // 更新任务
-    await query(
-      `UPDATE tasks SET
-        topic = $1,
-        outline = $2,
-        status = 'planning_completed',
-        progress = 15,
-        current_stage = 'planning_completed',
-        updated_at = NOW()
-      WHERE id = $3`,
-      [topic, JSON.stringify(outline), taskId]
-    );
-
+    // 立即返回，不等待大纲生成完成
     return {
       id: taskId,
-      status: 'planning_completed',
-      outline,
-      message: '选题策划已重做，大纲已重新生成'
+      status: 'planning',
+      current_stage: 'regenerating_outline',
+      message: '选题策划重做已启动，大纲生成中...'
     };
   }
 

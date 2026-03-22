@@ -114,7 +114,7 @@ export class PipelineService {
   }
 
   // 重新生成大纲（用于重做选题策划）
-  async regenerateOutline(taskId: string, topic: string, context?: string) {
+  async regenerateOutline(taskId: string, topic: string, context?: string, comments?: string[]) {
     // 获取任务当前的搜索配置
     const taskResult = await query('SELECT search_config FROM tasks WHERE id = $1', [taskId]);
     const searchConfig = taskResult.rows[0]?.search_config || {};
@@ -127,7 +127,8 @@ export class PipelineService {
       topic,
       context,
       targetAudience: '产业研究人员和投资者',
-      desiredDepth: 'comprehensive'
+      desiredDepth: 'comprehensive',
+      comments
     });
 
     if (!result.success) {

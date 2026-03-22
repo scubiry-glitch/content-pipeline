@@ -11,6 +11,7 @@ export interface PlannerInput {
   context?: string;
   targetAudience?: string;
   desiredDepth?: 'macro' | 'meso' | 'micro' | 'comprehensive';
+  comments?: string[]; // 用户评论，用于指导大纲生成
 }
 
 export interface PlannerOutput {
@@ -48,10 +49,12 @@ export class PlannerAgent extends BaseAgent {
     const taskId = await this.saveTask('planning', 'running', input);
 
     try {
-      // Step 0: Analyze knowledge base for insights and novel angles
-      this.log('info', 'Analyzing knowledge base for insights');
-      const knowledgeInsights = await this.generateKnowledgeInsights(input);
-      const novelAngles = await this.generateNovelAngles(input, knowledgeInsights);
+      // Step 0: Analyze knowledge base for insights and novel angles (并行执行)
+      this.log('info', 'Analyzing knowledge base for insights and novel angles');
+      const [knowledgeInsights, novelAngles] = await Promise.all([
+        this.generateKnowledgeInsights(input),
+        this.generateNovelAnglesSimple(input) // 使用不依赖 insights 的版本
+      ]);
 
       // Step 1: Generate comprehensive outline using 三层穿透结构 (enhanced with insights)
       this.log('info', 'Generating outline with three-layer structure');
@@ -400,6 +403,71 @@ ${insights.map((i, idx) => `${idx + 1}. [${i.type}] ${i.content}`).join('\n')}
   }
 
   /**
+   * 生成新观点 - 简单版本（不依赖知识洞见，可并行执行）
+   */
+  private async generateNovelAnglesSimple(input: PlannerInput): Promise<NovelAngle[]> {
+    try {
+      const prompt = `你是一位富有洞察力的产业研究专家，擅长提出创新性的研究角度。
+
+## 待研究话题
+${input.topic}
+
+## 背景信息
+${input.context || '无特定背景'}
+
+## 任务
+基于以上话题，提出2-3个**新的研究角度**，要求：
+
+1. **差异化**：与现有研究形成明显区隔
+2. **创新性**：提出新观点、新框架或新解释
+3. **可行性**：有数据支撑的可能性
+4. **价值性**：对读者有实际启发
+
+## 输出格式
+请输出JSON数组：
+[
+  {
+    "angle": "新角度标题（15字以内）",
+    "rationale": "为什么这个角度有价值",
+    "differentiation": "与现有研究的主要区别",
+    "potentialImpact": "high|medium|low"
+  }
+]
+
+要求：
+- 角度必须具体，避免空泛
+- 要有明确的方法论或框架支撑
+- 优先考虑反共识但合理的视角`;
+
+      const result = await this.llmRouter.generate(prompt, 'planning', {
+        temperature: 0.8,
+        maxTokens: 2000,
+      });
+
+      const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/) ||
+                       result.content.match(/\[[\s\S]*\]/);
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(0, 3).map((item: any) => ({
+            angle: item.angle,
+            rationale: item.rationale,
+            differentiation: item.differentiation,
+            potentialImpact: ['high', 'medium', 'low'].includes(item.potentialImpact)
+              ? item.potentialImpact
+              : 'medium',
+          }));
+        }
+      }
+    } catch (error) {
+      this.log('warn', 'Failed to generate novel angles (simple)', { error });
+    }
+
+    return [];
+  }
+
+  /**
    * 查询知识库 - 获取相关历史内容
    */
   private async queryKnowledgeBase(topic: string): Promise<any[]> {
@@ -502,6 +570,11 @@ ${insights.map((i, idx) => `${idx + 1}. [${i.type}] ${i.content}`).join('\n')}
       ? `## 建议的新研究角度\n${novelAngles.map((a, idx) => `${idx + 1}. **${a.angle}** [影响: ${a.potentialImpact}]\n   - 差异化: ${a.differentiation}\n   - 理由: ${a.rationale}`).join('\n')}`
       : '';
 
+    // 新增：用户评论反馈
+    const commentsSection = input.comments && input.comments.length > 0
+      ? `## 用户反馈与修改建议\n${input.comments.map((c, idx) => `${idx + 1}. ${c}`).join('\n')}\n\n**重要：请务必根据以上用户反馈调整大纲结构或内容，体现用户的修改意图。**`
+      : '';
+
     return `你是一位资深产业研究专家，擅长构建系统性研究框架并提出创新观点。
 
 ## 话题
@@ -519,6 +592,8 @@ ${depthMap[input.desiredDepth || 'comprehensive']}
 ${insightsSection}
 
 ${anglesSection}
+
+${commentsSection}
 
 ## 输出要求
 请输出JSON格式，包含以下结构：
@@ -543,10 +618,11 @@ ${anglesSection}
 1. 至少包含3个一级章节，每个章节有2-3个子章节
 2. 必须融入上述洞见中的至少2个，体现知识积累
 3. 优先采用建议的新研究角度，形成差异化
-4. 宏观层关注：政策导向、经济周期、国际比较
-5. 中观层关注：产业链分析、区域差异、商业模式
-6. 微观层关注：标杆案例、数据验证、行动建议
-7. 标注每个章节的关键数据需求`;
+4. 如有用户反馈，必须根据反馈调整相应章节的内容或结构
+5. 宏观层关注：政策导向、经济周期、国际比较
+6. 中观层关注：产业链分析、区域差异、商业模式
+7. 微观层关注：标杆案例、数据验证、行动建议
+8. 标注每个章节的关键数据需求`;
   }
 
   private async savePlan(

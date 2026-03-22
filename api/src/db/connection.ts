@@ -144,20 +144,6 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
-  // Research annotations - for deep research citations
-  await query(`
-    CREATE TABLE IF NOT EXISTS research_annotations (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
-      type VARCHAR(20) NOT NULL CHECK (type IN ('url', 'asset')),
-      url TEXT,
-      asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE SET NULL,
-      title VARCHAR(500) NOT NULL,
-      credibility JSONB,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-
   // Assets table - research materials (with pgvector support)
   await query(`
     CREATE TABLE IF NOT EXISTS assets (
@@ -177,6 +163,20 @@ async function setupMVPSchema(): Promise<void> {
       theme_id VARCHAR(50),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Research annotations - for deep research citations
+  await query(`
+    CREATE TABLE IF NOT EXISTS research_annotations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) REFERENCES tasks(id) ON DELETE CASCADE,
+      type VARCHAR(20) NOT NULL CHECK (type IN ('url', 'asset')),
+      url TEXT,
+      asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE SET NULL,
+      title VARCHAR(500) NOT NULL,
+      credibility JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
 
