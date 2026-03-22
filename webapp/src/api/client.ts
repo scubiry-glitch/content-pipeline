@@ -224,6 +224,28 @@ export interface ResearchConfig {
   timeRange: string;
 }
 
+// 文稿生成进度类型 (v5.0)
+export interface DraftProgress {
+  currentIndex: number;
+  total: number;
+  currentTitle: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  generatedWordCount: number;
+  estimatedTotalWordCount: number;
+  sections: {
+    id: string;
+    title: string;
+    status: 'pending' | 'processing' | 'done' | 'error';
+    wordCount?: number;
+  }[];
+  currentSection: {
+    id: string;
+    title: string;
+    status: 'pending' | 'processing' | 'done' | 'error';
+  } | null;
+  accumulatedContent: string;
+}
+
 export interface CollectedResearch {
   id: string;
   type: string;

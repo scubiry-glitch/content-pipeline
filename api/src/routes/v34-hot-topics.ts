@@ -1,7 +1,10 @@
 // v3.4 热点路由 - 热点追踪
 import { FastifyInstance } from 'fastify';
 import { hotTopicService } from '../services/hotTopicService.js';
+import { getTopicUnificationService } from '../services/topicUnification.js';
 import { authenticate } from '../middleware/auth.js';
+
+const topicUnification = getTopicUnificationService();
 
 export async function v34HotTopicRoutes(fastify: FastifyInstance) {
   // 获取热点列表
@@ -86,5 +89,92 @@ export async function v34HotTopicRoutes(fastify: FastifyInstance) {
     collectAllFeeds().catch(console.error);
 
     return { message: 'RSS collection started', status: 'running' };
+  });
+
+  // ===== 多源热点接口 =====
+
+  // 获取归并后的热点列表
+  fastify.get('/unified', { preHandler: authenticate }, async (request) => {
+    const { limit, minConfidence, hasRss, hasWeb, hasCommunity } = request.query as any;
+    
+    const topics = await topicUnification.getUnifiedTopics({
+      limit: limit ? parseInt(limit) : 50,
+      minConfidence: minConfidence ? parseFloat(minConfidence) : 0.5,
+      hasRss,
+      hasWeb,
+      hasCommunity,
+    });
+
+    return { items: topics, total: topics.length };
+  });
+
+  // 获取跨平台验证的热点（多源确认）
+  fastify.get('/cross-platform', { preHandler: authenticate }, async () => {
+    const topics = await topicUnification.getUnifiedTopics({
+      limit: 50,
+      minConfidence: 0.6,
+    });
+
+    const crossPlatform = topics.filter(t => t.sourceCount >= 2);
+
+    return {
+      items: crossPlatform,
+      total: crossPlatform.length,
+      description: '这些话题在多个平台都有讨论，可信度较高',
+    };
+  });
+
+  // 按来源筛选热点
+  fastify.get('/by-source', { preHandler: authenticate }, async (request) => {
+    const { source, limit = 20 } = request.query as any;
+    
+    let topics;
+    switch (source) {
+      case 'rss':
+        topics = await topicUnification.getUnifiedTopics({ limit: parseInt(limit as string), hasRss: true });
+        break;
+      case 'web':
+        topics = await topicUnification.getUnifiedTopics({ limit: parseInt(limit as string), hasWeb: true });
+        break;
+      case 'community':
+        topics = await topicUnification.getUnifiedTopics({ limit: parseInt(limit as string), hasCommunity: true });
+        break;
+      default:
+        topics = await topicUnification.getUnifiedTopics({ limit: parseInt(limit as string) });
+    }
+
+    return { items: topics, source, total: topics.length };
+  });
+
+  // 执行话题归并
+  fastify.post('/unify', { preHandler: authenticate }, async () => {
+    try {
+      const stats = await topicUnification.unifyTopics();
+      return {
+        success: true,
+        message: 'Topic unification completed',
+        stats,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unification failed',
+      };
+    }
+  });
+
+  // 使用 Web Search 验证话题
+  fastify.post('/:id/verify', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as any;
+    
+    try {
+      const result = await topicUnification.verifyTopicWithSearch(id);
+      return result;
+    } catch (error) {
+      reply.status(500);
+      return {
+        error: error instanceof Error ? error.message : 'Verification failed',
+      };
+    }
   });
 }

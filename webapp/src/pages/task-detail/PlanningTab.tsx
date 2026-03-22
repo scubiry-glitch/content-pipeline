@@ -47,6 +47,7 @@ export function PlanningTab() {
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLDivElement>(null);
   const processRef = useRef<HTMLDivElement>(null);
+  const versionRef = useRef<HTMLDivElement>(null);
 
   // ===== 评论相关状态 =====
   const [comments, setComments] = useState<OutlineComment[]>([]);

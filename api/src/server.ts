@@ -25,6 +25,7 @@ import { v42Stage3Routes } from './routes/v42-stage3.js';
 import { v43PredictionRoutes } from './routes/v43-prediction.js';
 import { v44CopilotRoutes } from './routes/v44-copilot.js';
 import { v45I18nRoutes } from './routes/v45-i18n.js';
+import communityTopicRoutes from './routes/communityTopics.js';
 import { expertRoutes } from './routes/experts.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
@@ -114,6 +115,9 @@ async function main() {
   await fastify.register(v34ReportRoutes, { prefix: '/api/v1/quality/reports' });
   await fastify.register(v34HotTopicRoutes, { prefix: '/api/v1/quality/hot-topics' });
   await fastify.register(v34AssetRoutes, { prefix: '/api/v1/quality/assets' });
+  
+  // 社区话题抓取与归并路由 (v5.1)
+  await fastify.register(communityTopicRoutes, { prefix: '/api/v1/quality/community' });
 
   // v4.0 智能审核与合规路由
   await fastify.register(v40ComplianceRoutes, { prefix: '/api/v1/compliance' });

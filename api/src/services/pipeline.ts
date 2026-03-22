@@ -10,6 +10,7 @@ import { getLLMRouter } from '../providers/index.js';
 import { getWebSearchService } from './webSearch.js';
 import { evaluateTopic } from './topicEvaluation.js';
 import { analyzeCompetitors } from './competitorAnalysis.js';
+import { generateDraftStreaming, DraftProgress } from './streamingDraft.js';
 
 export interface CreateTaskInput {
   topic: string;
@@ -201,8 +202,43 @@ export class PipelineService {
     return researchData;
   }
 
-  // Step 3: 写作阶段
-  async write(taskId: string) {
+  // Step 3: 写作阶段（流式分段生成）
+  async write(taskId: string, onProgress?: (progress: DraftProgress) => void | Promise<void>) {
+    await this.updateStatus(taskId, 'writing', 40, 'generating_draft');
+
+    const task = await this.getTask(taskId);
+    if (!task) throw new Error('Task not found');
+
+    const outline = typeof task.outline === 'string' ? JSON.parse(task.outline) : task.outline;
+    const researchData = typeof task.research_data === 'string'
+      ? JSON.parse(task.research_data)
+      : task.research_data;
+
+    // 使用流式生成
+    const result = await generateDraftStreaming({
+      taskId,
+      topic: task.topic,
+      outline,
+      researchData,
+      style: 'formal',
+      options: {
+        includeContext: true,
+        realtimePreview: true,
+        saveProgress: true
+      }
+    }, onProgress || (() => {}));
+
+    await this.updateStatus(taskId, 'writing', 50, 'draft_generated');
+
+    return {
+      draftId: result.draftId,
+      content: result.content,
+      sections: result.sections
+    };
+  }
+
+  // 传统非流式写作（兼容旧版）
+  async writeLegacy(taskId: string) {
     await this.updateStatus(taskId, 'writing', 40, 'generating_draft');
 
     const task = await this.getTask(taskId);
@@ -210,7 +246,6 @@ export class PipelineService {
 
     const draft = await this.generateDraft(task.topic, task.outline, task.research_data);
 
-    // 保存初稿
     await query(
       `INSERT INTO draft_versions (id, task_id, version, content, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,

@@ -323,6 +323,209 @@ export class WebSearchService {
 
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
+
+  /**
+   * Verify topic with multiple search queries
+   * Used for cross-platform validation
+   */
+  async verifyTopic(title: string): Promise<{
+    verified: boolean;
+    searchResults: number;
+    newsCoverage: number;
+    discussionVolume: number;
+    authoritySources: number;
+    adjustedScore: number;
+  }> {
+    try {
+      const [generalSearch, newsSearch, discussionSearch] = await Promise.all([
+        this.search({ query: title, maxResults: 10 }),
+        this.search({ query: `${title} news`, maxResults: 5 }),
+        this.search({ query: `${title} discussion`, maxResults: 5 }),
+      ]);
+
+      const searchResults = generalSearch.length;
+      const newsCoverage = newsSearch.length;
+      const discussionVolume = discussionSearch.length;
+      
+      // Count authority sources
+      const authorityDomains = ['gov.cn', 'people.com.cn', 'xinhuanet.com', 'csrc.gov.cn', 'pbc.gov.cn'];
+      const authoritySources = generalSearch.filter(r => 
+        authorityDomains.some(domain => r.url.includes(domain))
+      ).length;
+
+      // Calculate adjusted score
+      const adjustedScore = Math.min(100, 
+        searchResults * 3 + 
+        newsCoverage * 8 + 
+        discussionVolume * 5 + 
+        authoritySources * 10
+      );
+
+      return {
+        verified: searchResults >= 3 || newsCoverage >= 1,
+        searchResults,
+        newsCoverage,
+        discussionVolume,
+        authoritySources,
+        adjustedScore,
+      };
+    } catch (error) {
+      console.error('[WebSearch] Topic verification failed:', error);
+      return {
+        verified: false,
+        searchResults: 0,
+        newsCoverage: 0,
+        discussionVolume: 0,
+        authoritySources: 0,
+        adjustedScore: 0,
+      };
+    }
+  }
+
+  /**
+   * Discover trending topics using search
+   */
+  async discoverTrendingTopics(): Promise<Array<{
+    title: string;
+    hotScore: number;
+    sources: string[];
+    discoverySource: string;
+  }>> {
+    const trendQueries = [
+      '"热议" OR "热搜" OR "爆火" 今天',
+      '"新规定" OR "新政策" 发布 2024',
+      '"财报" OR "业绩" 超预期 OR 不及预期',
+      '"融资" OR "IPO" OR "上市" 最新',
+    ];
+
+    const allResults: SearchResult[] = [];
+
+    for (const query of trendQueries) {
+      try {
+        const results = await this.search({ query, maxResults: 10 });
+        allResults.push(...results);
+      } catch (error) {
+        console.warn(`[WebSearch] Query failed: ${query}`, error);
+      }
+    }
+
+    // Deduplicate and cluster
+    const uniqueResults = this.deduplicateByUrl(allResults);
+    const clusters = this.clusterBySimilarity(uniqueResults);
+
+    // Map to topic format
+    return clusters
+      .filter(cluster => cluster.length >= 2) // At least 2 sources
+      .map(cluster => ({
+        title: this.extractTopicTitle(cluster),
+        hotScore: Math.min(100, cluster.length * 15),
+        sources: cluster.map(r => r.url),
+        discoverySource: 'web_search',
+      }));
+  }
+
+  /**
+   * Search for competitor coverage
+   */
+  async searchCompetitorCoverage(topic: string, competitorDomains: string[]): Promise<{
+    covered: boolean;
+    coverageCount: number;
+    urls: string[];
+  }> {
+    try {
+      const results = await this.search({ 
+        query: topic,
+        maxResults: 20,
+      });
+
+      const competitorResults = results.filter(r => 
+        competitorDomains.some(domain => r.url.includes(domain))
+      );
+
+      return {
+        covered: competitorResults.length > 0,
+        coverageCount: competitorResults.length,
+        urls: competitorResults.map(r => r.url),
+      };
+    } catch (error) {
+      console.error('[WebSearch] Competitor search failed:', error);
+      return {
+        covered: false,
+        coverageCount: 0,
+        urls: [],
+      };
+    }
+  }
+
+  /**
+   * Deduplicate results by URL
+   */
+  private deduplicateByUrl(results: SearchResult[]): SearchResult[] {
+    const seen = new Map<string, SearchResult>();
+    for (const result of results) {
+      if (!seen.has(result.url) || result.relevance > seen.get(result.url)!.relevance) {
+        seen.set(result.url, result);
+      }
+    }
+    return Array.from(seen.values());
+  }
+
+  /**
+   * Cluster results by title similarity
+   */
+  private clusterBySimilarity(results: SearchResult[]): SearchResult[][] {
+    const clusters: SearchResult[][] = [];
+    const processed = new Set<string>();
+
+    for (const result of results) {
+      if (processed.has(result.url)) continue;
+
+      const cluster: SearchResult[] = [result];
+      processed.add(result.url);
+
+      for (const other of results) {
+        if (processed.has(other.url)) continue;
+
+        const similarity = this.calculateTitleSimilarity(result.title, other.title);
+        if (similarity > 0.6) {
+          cluster.push(other);
+          processed.add(other.url);
+        }
+      }
+
+      clusters.push(cluster);
+    }
+
+    return clusters;
+  }
+
+  /**
+   * Calculate title similarity
+   */
+  private calculateTitleSimilarity(title1: string, title2: string): number {
+    const t1 = title1.toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9]/g, '');
+    const t2 = title2.toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9]/g, '');
+
+    if (t1 === t2) return 1.0;
+
+    const set1 = new Set(t1.split(''));
+    const set2 = new Set(t2.split(''));
+
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+
+    return intersection.size / union.size;
+  }
+
+  /**
+   * Extract topic title from cluster
+   */
+  private extractTopicTitle(cluster: SearchResult[]): string {
+    // Use longest title as it usually contains more information
+    return cluster.reduce((longest, current) =>
+      current.title.length > longest.title.length ? current : longest
+    ).title;
+  }
 }
 
 // Singleton instance

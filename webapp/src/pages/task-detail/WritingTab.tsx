@@ -1,10 +1,11 @@
-// 任务详情 - 文稿生成 Tab
+// 任务详情 - 文稿生成 Tab (v5.0 - 流式分段生成)
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ExportPanel } from '../../components/ExportPanel';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
+import { DraftGenerationProgress } from '../../components/DraftGenerationProgress';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -34,6 +35,9 @@ export function WritingTab() {
   
   // 视图模式切换：rendered(渲染) | source(源码)
   const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
+  
+  // 是否正在生成（用于显示进度面板）
+  const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
 
   return (
     <div className="tab-panel writing-panel">
@@ -138,6 +142,18 @@ export function WritingTab() {
         <h3 className="section-title">📤 输出</h3>
         <span className="section-desc">生成内容与导出</span>
       </div>
+
+      {/* 流式生成进度面板 */}
+      {isGenerating && !draftContent?.content && (
+        <div className="info-card full-width">
+          <h3 className="card-title">🔄 正在生成文稿</h3>
+          <DraftGenerationProgress
+            taskId={task.id}
+            onComplete={() => window.location.reload()}
+            onError={(error) => alert(`生成失败: ${error}`)}
+          />
+        </div>
+      )}
 
       {draftContent?.content ? (
         <div className="output-content">

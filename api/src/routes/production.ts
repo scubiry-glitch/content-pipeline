@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ProductionService } from '../services/production.js';
 import { evaluateTopic } from '../services/topicEvaluation.js';
 import { authenticate } from '../middleware/auth.js';
+import { query } from '../db/connection.js';
 
 // Validation schemas
 const createTaskSchema = z.object({
@@ -76,6 +77,39 @@ export async function productionRoutes(fastify: FastifyInstance) {
     }
 
     return task;
+  });
+
+  // Update task (including asset association)
+  fastify.put('/:taskId', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = request.body as any;
+
+    // Check if task exists
+    const existingTask = await productionService.getTask(taskId);
+    if (!existingTask) {
+      reply.status(404);
+      return { error: 'Task not found', code: 'TASK_NOT_FOUND' };
+    }
+
+    // Update asset_ids if provided
+    if (body.asset_ids !== undefined) {
+      await query(
+        `UPDATE tasks SET asset_ids = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(body.asset_ids), taskId]
+      );
+    }
+
+    // Update other fields if needed
+    if (body.topic !== undefined) {
+      await query(
+        `UPDATE tasks SET topic = $1, updated_at = NOW() WHERE id = $2`,
+        [body.topic, taskId]
+      );
+    }
+
+    // Return updated task
+    const updatedTask = await productionService.getTask(taskId);
+    return updatedTask;
   });
 
   // Manual approval endpoint
@@ -576,4 +610,452 @@ export async function productionRoutes(fastify: FastifyInstance) {
       outline2: v2.outline
     };
   });
+
+  // ===== 串行多轮评审 API (v5.0) =====
+
+  // 配置串行评审
+  fastify.post('/:taskId/sequential-review/configure', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { topic } = request.body as any;
+
+    const { configureSequentialReview } = await import('../services/sequentialReview.js');
+    const config = await configureSequentialReview(taskId, topic);
+
+    // 保存配置到任务
+    await query(
+      `UPDATE tasks SET sequential_review_config = $1 WHERE id = $2`,
+      [JSON.stringify(config), taskId]
+    );
+
+    return config;
+  });
+
+  // 执行串行评审
+  fastify.post('/:taskId/sequential-review/conduct', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    // 获取任务信息
+    const taskResult = await query(
+      `SELECT sequential_review_config FROM tasks WHERE id = $1`,
+      [taskId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Task not found' };
+    }
+
+    const config = taskResult.rows[0].sequential_review_config;
+    if (!config) {
+      reply.status(400);
+      return { error: 'Sequential review not configured. Please call configure endpoint first.' };
+    }
+
+    // 异步执行串行评审
+    setImmediate(async () => {
+      try {
+        const { conductSequentialReview } = await import('../services/sequentialReview.js');
+
+        // 获取当前草稿
+        const draftResult = await query(
+          `SELECT id, task_id, version, content, status FROM draft_versions
+           WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+          [taskId]
+        );
+
+        if (draftResult.rows.length === 0) {
+          console.error(`[SequentialReview] No draft found for task ${taskId}`);
+          return;
+        }
+
+        const initialDraft = draftResult.rows[0];
+
+        // 获取事实核查和逻辑检查结果
+        const checkResult = await query(
+          `SELECT fact_check, logic_check FROM blue_team_checks WHERE task_id = $1`,
+          [taskId]
+        );
+
+        const factCheck = checkResult.rows[0]?.fact_check || { overallScore: 80, claims: [] };
+        const logicCheck = checkResult.rows[0]?.logic_check || { overallScore: 80 };
+
+        // 执行串行评审
+        const result = await conductSequentialReview(
+          taskId,
+          initialDraft,
+          factCheck,
+          logicCheck,
+          config
+        );
+
+        console.log(`[SequentialReview] Completed for task ${taskId}. Final draft: ${result.finalDraft.id}`);
+      } catch (error) {
+        console.error(`[SequentialReview] Failed for task ${taskId}:`, error);
+      }
+    });
+
+    return {
+      message: '串行评审已启动',
+      taskId,
+      expertCount: config.reviewQueue.length,
+    };
+  });
+
+  // 获取串行评审结果
+  fastify.get('/:taskId/sequential-review/results', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    const reviewsResult = await query(
+      `SELECT * FROM expert_reviews WHERE task_id = $1 ORDER BY round`,
+      [taskId]
+    );
+
+    const chainResult = await query(
+      `SELECT * FROM review_chains WHERE task_id = $1 ORDER BY round`,
+      [taskId]
+    );
+
+    return {
+      reviews: reviewsResult.rows,
+      chain: chainResult.rows,
+      totalReviews: reviewsResult.rows.length,
+      completedReviews: reviewsResult.rows.filter((r: any) => r.status === 'completed').length,
+      averageScore: reviewsResult.rows.length > 0
+        ? reviewsResult.rows.reduce((sum: number, r: any) => sum + (r.overall_score || 0), 0) / reviewsResult.rows.length
+        : 0,
+    };
+  });
+
+  // 获取单轮评审详情
+  fastify.get('/:taskId/sequential-review/round/:round', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, round } = request.params as any;
+
+    const reviewResult = await query(
+      `SELECT * FROM expert_reviews WHERE task_id = $1 AND round = $2`,
+      [taskId, parseInt(round)]
+    );
+
+    if (reviewResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Review round not found' };
+    }
+
+    return reviewResult.rows[0];
+  });
+
+  // 获取评审进度
+  fastify.get('/:taskId/sequential-review/progress', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    const progressResult = await query(
+      `SELECT * FROM task_review_progress WHERE task_id = $1`,
+      [taskId]
+    );
+
+    if (progressResult.rows.length === 0) {
+      return {
+        taskId,
+        progress: 0,
+        currentRound: 0,
+        totalRounds: 0,
+        status: 'not_started',
+      };
+    }
+
+    const progress = progressResult.rows[0];
+    const config = await query(
+      `SELECT sequential_review_config FROM tasks WHERE id = $1`,
+      [taskId]
+    );
+    const totalRounds = config.rows[0]?.sequential_review_config?.totalRounds || 5;
+
+    return {
+      taskId,
+      progress: Math.round((progress.completed_reviews / totalRounds) * 100),
+      currentRound: progress.latest_round || 0,
+      totalRounds,
+      averageScore: progress.avg_score,
+      status: progress.completed_reviews >= totalRounds ? 'completed' : 'in_progress',
+    };
+  });
+
+  // ===== 流式文稿生成 API (v5.0 新增) =====
+
+  // 查询文稿生成进度
+  fastify.get('/:taskId/draft/progress', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getDraftProgress } = await import('../services/streamingDraft.js');
+    const progress = await getDraftProgress(taskId);
+
+    if (!progress) {
+      return {
+        status: 'not_started',
+        currentSection: 0,
+        totalSections: 0,
+        currentTitle: '',
+        generatedWordCount: 0,
+        estimatedTotalWordCount: 0,
+        progress: 0,
+        sections: [],
+        accumulatedContent: ''
+      };
+    }
+
+    return progress;
+  });
+
+  // 启动流式文稿生成（SSE 推送）
+  fastify.get('/:taskId/draft/generate-stream', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { generateDraftStreaming, getDraftProgress } = await import('../services/streamingDraft.js');
+
+    // 设置 SSE 头
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    const task = await productionService.getTask(taskId);
+    if (!task) {
+      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: 'Task not found' })}\n\n`);
+      reply.raw.end();
+      return;
+    }
+
+    const outline = typeof task.outline === 'string' ? JSON.parse(task.outline) : task.outline;
+    const researchData = typeof task.research_data === 'string'
+      ? JSON.parse(task.research_data)
+      : task.research_data;
+
+    try {
+      // 推送开始事件
+      reply.raw.write(`event: start\ndata: ${JSON.stringify({ taskId, totalSections: countSections(outline) })}\n\n`);
+
+      // 执行流式生成
+      await generateDraftStreaming({
+        taskId,
+        topic: task.topic,
+        outline,
+        researchData,
+        style: 'formal',
+        options: { includeContext: true, realtimePreview: true, saveProgress: true }
+      }, async (progress) => {
+        // 推送进度更新
+        reply.raw.write(`event: progress\ndata: ${JSON.stringify(progress)}\n\n`);
+      });
+
+      // 推送完成事件
+      reply.raw.write(`event: complete\ndata: ${JSON.stringify({ taskId, status: 'completed' })}\n\n`);
+      reply.raw.end();
+
+    } catch (error) {
+      console.error('[DraftStream] Generation failed:', error);
+      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+      reply.raw.end();
+    }
+  });
+
+  // 辅助函数：计算大纲段落数
+  function countSections(outline: any): number {
+    let count = 0;
+    const traverse = (nodes: any[]) => {
+      for (const node of nodes) {
+        count++;
+        if (node.subsections?.length) traverse(node.subsections);
+      }
+    };
+    traverse(outline.sections || outline || []);
+    return count;
+  }
+
+  // ===== Stage4 蓝军评审后流式修改 API (v5.0 新增) =====
+
+  // 查询修订进度
+  fastify.get('/:taskId/draft/:draftId/revision/progress', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, draftId } = request.params as any;
+    const { getRevisionProgress } = await import('../services/streamingRevision.js');
+    const progress = await getRevisionProgress(taskId, draftId);
+
+    if (!progress) {
+      return {
+        status: 'not_started',
+        currentIndex: 0,
+        total: 0,
+        currentTitle: '',
+        revisedWordCount: 0,
+        totalWordCount: 0,
+        progress: 0,
+        sections: [],
+        appliedSuggestions: 0,
+        totalSuggestions: 0,
+        accumulatedContent: ''
+      };
+    }
+
+    return progress;
+  });
+
+  // 启动流式修订（SSE 推送）
+  fastify.post('/:taskId/draft/:draftId/revision/stream', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, draftId } = request.params as any;
+    const { suggestions, revisionMode = 'balanced' } = request.body as any;
+
+    if (!suggestions || !Array.isArray(suggestions)) {
+      reply.status(400);
+      return { error: 'suggestions array is required' };
+    }
+
+    const { reviseDraftStreaming, getRevisionProgress } = await import('../services/streamingRevision.js');
+
+    // 获取任务和草稿信息
+    const task = await productionService.getTask(taskId);
+    if (!task) {
+      reply.status(404);
+      return { error: 'Task not found' };
+    }
+
+    const draftResult = await query(
+      `SELECT content, outline FROM draft_versions WHERE id = $1 AND task_id = $2`,
+      [draftId, taskId]
+    );
+
+    if (draftResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Draft not found' };
+    }
+
+    const draft = draftResult.rows[0];
+    const outline = typeof draft.outline === 'string' ? JSON.parse(draft.outline) : draft.outline;
+
+    // 设置 SSE 头
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    try {
+      // 推送开始事件
+      reply.raw.write(`event: start\ndata: ${JSON.stringify({
+        taskId,
+        draftId,
+        totalSuggestions: suggestions.length,
+        mode: revisionMode
+      })}\n\n`);
+
+      // 执行流式修订
+      const result = await reviseDraftStreaming({
+        taskId,
+        draftId,
+        topic: task.topic,
+        outline,
+        originalContent: draft.content,
+        suggestions,
+        revisionMode,
+        options: { includeContext: true, realtimePreview: true, saveProgress: true, saveVersions: true }
+      }, async (progress) => {
+        // 推送进度更新
+        reply.raw.write(`event: progress\ndata: ${JSON.stringify(progress)}\n\n`);
+      });
+
+      // 推送完成事件
+      reply.raw.write(`event: complete\ndata: ${JSON.stringify({
+        revisionId: result.revisionId,
+        newDraftId: result.draftId,
+        version: result.version,
+        appliedSuggestions: result.appliedSuggestions,
+        wordCount: countWords(result.content)
+      })}\n\n`);
+      reply.raw.end();
+
+    } catch (error) {
+      console.error('[RevisionStream] Revision failed:', error);
+      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+      reply.raw.end();
+    }
+  });
+
+  // 获取修订历史
+  fastify.get('/:taskId/revisions', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getRevisionHistory } = await import('../services/streamingRevision.js');
+    const history = await getRevisionHistory(taskId);
+    return { items: history };
+  });
+
+  // 获取版本对比
+  fastify.get('/:taskId/draft/:draftId/diff/:newDraftId', { preHandler: authenticate }, async (request, reply) => {
+    const { draftId, newDraftId } = request.params as any;
+    const { getRevisionDiff } = await import('../services/streamingRevision.js');
+    const diff = await getRevisionDiff(draftId, newDraftId);
+    return diff;
+  });
+
+  // 获取版本树（版本历史链）
+  fastify.get('/:taskId/version-tree', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await query(
+      `SELECT * FROM draft_version_tree WHERE task_id = $1 ORDER BY version_path`,
+      [taskId]
+    );
+    return { items: result.rows };
+  });
+
+  // 获取中间版本列表
+  fastify.get('/:taskId/draft/:draftId/intermediate-versions', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, draftId } = request.params as any;
+    const result = await query(
+      `SELECT * FROM draft_intermediate_versions 
+       WHERE task_id = $1 AND parent_draft_id = $2 
+       ORDER BY version, sub_version`,
+      [taskId, draftId]
+    );
+    return { items: result.rows };
+  });
+
+  // 回滚到指定版本
+  fastify.post('/:taskId/draft/:draftId/rollback', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, draftId } = request.params as any;
+    const { version } = request.body as any;
+
+    if (!version) {
+      reply.status(400);
+      return { error: 'version is required' };
+    }
+
+    // 查找目标版本
+    const targetResult = await query(
+      `SELECT * FROM draft_versions WHERE task_id = $1 AND version = $2`,
+      [taskId, version]
+    );
+
+    if (targetResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Version not found' };
+    }
+
+    const targetVersion = targetResult.rows[0];
+
+    // 创建回滚记录
+    await query(
+      `INSERT INTO draft_revisions (task_id, draft_id, new_draft_id, version, mode, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [taskId, draftId, targetVersion.id, version, 'rollback']
+    );
+
+    return {
+      success: true,
+      message: `Rolled back to version ${version}`,
+      draftId: targetVersion.id,
+      version
+    };
+  });
+
+  // 辅助函数：统计字数
+  function countWords(content: string): number {
+    const chineseChars = (content.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const englishWords = (content.match(/[a-zA-Z]+/g) || []).length;
+    return chineseChars + englishWords;
+  }
 }

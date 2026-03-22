@@ -99,6 +99,7 @@ async function setupMVPSchema(): Promise<void> {
       research_data JSONB,
       approval_feedback TEXT,
       output_ids JSONB DEFAULT '[]',
+      asset_ids JSONB NOT NULL DEFAULT '[]',
       is_hidden BOOLEAN DEFAULT false,
       hidden_at TIMESTAMP WITH TIME ZONE,
       evaluation JSONB,
