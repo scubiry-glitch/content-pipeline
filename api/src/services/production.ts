@@ -365,52 +365,58 @@ ${JSON.stringify(outline, null, 2)}
     };
 
     for (const row of reviewsResult.rows) {
-      const question = typeof row.questions === 'string'
+      // Parse questions array
+      const questions = typeof row.questions === 'string'
         ? JSON.parse(row.questions)
         : row.questions;
-
-      const severity = question.severity === 'high' ? 'critical'
-        : question.severity === 'medium' ? 'warning'
-        : 'praise';
-
-      summary.total++;
-      summary[severity]++;
-
+      
+      // Ensure it's an array
+      const questionsArray = Array.isArray(questions) ? questions : [questions];
+      
       const status = row.status || 'pending';
 
-      const issue = {
-        id: row.id,
-        round: row.round,
-        expert: row.expert_role,
-        severity,
-        location: question.location || '全文',
-        question: question.question,
-        suggestion: question.suggestion,
-        rationale: question.rationale,
-        status, // pending, accepted, ignored, manual_resolved
-        userDecision: row.user_decision,
-        decisionNote: row.decision_note,
-        decidedAt: row.decided_at
-      };
+      for (const question of questionsArray) {
+        const severity = question.severity === 'high' ? 'critical'
+          : question.severity === 'medium' ? 'warning'
+          : 'praise';
 
-      // Count by decision status
-      if (status === 'accepted' || status === 'manual_resolved') {
-        summary.accepted++;
-      } else if (status === 'pending') {
-        summary.pending++;
-      } else if (status === 'ignored') {
-        summary.ignored++;
-      }
+        summary.total++;
+        summary[severity]++;
 
-      // Categorize by expert role
-      if (row.expert_role === 'challenger') {
-        experts.factChecker.issues.push(issue);
-      } else if (row.expert_role === 'expander') {
-        experts.logicChecker.issues.push(issue);
-      } else if (row.expert_role === 'synthesizer') {
-        experts.industryExpert.issues.push(issue);
-      } else {
-        experts.readerRep.issues.push(issue);
+        const issue = {
+          id: `${row.id}-${question.id || Math.random().toString(36).substr(2, 9)}`,
+          round: row.round,
+          expert: row.expert_role,
+          severity,
+          location: question.location || '全文',
+          question: question.question,
+          suggestion: question.suggestion,
+          rationale: question.rationale,
+          status,
+          userDecision: row.user_decision,
+          decisionNote: row.decision_note,
+          decidedAt: row.decided_at
+        };
+
+        // Count by decision status
+        if (status === 'accepted' || status === 'manual_resolved') {
+          summary.accepted++;
+        } else if (status === 'pending') {
+          summary.pending++;
+        } else if (status === 'ignored') {
+          summary.ignored++;
+        }
+
+        // Categorize by expert role
+        if (row.expert_role === 'challenger') {
+          experts.factChecker.issues.push(issue);
+        } else if (row.expert_role === 'expander') {
+          experts.logicChecker.issues.push(issue);
+        } else if (row.expert_role === 'synthesizer') {
+          experts.industryExpert.issues.push(issue);
+        } else {
+          experts.readerRep.issues.push(issue);
+        }
       }
     }
 

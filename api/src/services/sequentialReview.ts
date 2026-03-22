@@ -406,6 +406,31 @@ ${factCheck.claims.filter(c => c.status !== 'verified').map(c => `- ${c.claim}: 
     maxTokens: 8000,
   });
 
+  // 验证修订稿质量
+  const revisedContent = (response.content || '').trim();
+
+  if (!revisedContent || revisedContent.length < 100) {
+    console.warn(`[Review] Revised draft empty/too short (${revisedContent.length} chars), keeping original`);
+    return currentDraft;
+  }
+
+  const originalLen = currentDraft.content.length;
+  const revisedLen = revisedContent.length;
+
+  // 字数变化不超过 ±50%
+  if (revisedLen < originalLen * 0.5 || revisedLen > originalLen * 2.0) {
+    console.warn(`[Review] Revised draft length anomaly: ${revisedLen} vs original ${originalLen}, keeping original`);
+    return currentDraft;
+  }
+
+  // Markdown 结构完整性检查
+  const originalHasHeadings = /^#{1,6}\s/m.test(currentDraft.content);
+  const revisedHasHeadings = /^#{1,6}\s/m.test(revisedContent);
+  if (originalHasHeadings && !revisedHasHeadings) {
+    console.warn(`[Review] Revised draft lost all headings, keeping original`);
+    return currentDraft;
+  }
+
   // 创建新版本Draft
   const newDraftResult = await query(
     `INSERT INTO draft_versions (
@@ -416,8 +441,8 @@ ${factCheck.claims.filter(c => c.status !== 'verified').map(c => `- ${c.claim}: 
       currentDraft.taskId,
       currentDraft.version + 1,
       'reviewing',
-      response.content,
-      response.content.length,
+      revisedContent,
+      revisedContent.length,
     ]
   );
 
@@ -425,7 +450,7 @@ ${factCheck.claims.filter(c => c.status !== 'verified').map(c => `- ${c.claim}: 
     id: newDraftResult.rows[0].id,
     taskId: currentDraft.taskId,
     version: newDraftResult.rows[0].version,
-    content: response.content,
+    content: revisedContent,
     status: 'reviewing',
   };
 }

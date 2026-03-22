@@ -205,22 +205,35 @@ export function TaskDetailLayout() {
   const loadReviews = useCallback(async (taskId: string) => {
     try {
       const reviewsData = await blueTeamApi.getReviews(taskId);
-      const items = reviewsData.items || [];
+      // API returns { taskId, status, summary, experts, rawReviews }
+      // Convert rawReviews to BlueTeamReview[] format
+      const rawReviews = (reviewsData as any).rawReviews || [];
+      const apiSummary = (reviewsData as any).summary || {};
+      
+      // Convert to BlueTeamReview format
+      const items: BlueTeamReview[] = rawReviews.map((row: any) => ({
+        id: row.id,
+        task_id: row.task_id,
+        round: row.round,
+        expert_role: row.expert_role,
+        questions: Array.isArray(row.questions) ? row.questions : 
+                   typeof row.questions === 'string' ? JSON.parse(row.questions) : [],
+        status: row.status,
+        created_at: row.created_at
+      }));
+      
       setReviews(items);
 
-      const summary = { total: 0, critical: 0, warning: 0, praise: 0, accepted: 0, ignored: 0, pending: 0 };
-      items.forEach((review: BlueTeamReview) => {
-        review.questions?.forEach((q: any) => {
-          summary.total++;
-          if (q.severity === 'high') summary.critical++;
-          else if (q.severity === 'medium') summary.warning++;
-          else if (q.severity === 'praise') summary.praise++;
-
-          if (q.status === 'accepted') summary.accepted++;
-          else if (q.status === 'ignored') summary.ignored++;
-          else summary.pending++;
-        });
-      });
+      // Use API summary or calculate from items
+      const summary = { 
+        total: apiSummary.total || 0, 
+        critical: apiSummary.critical || 0, 
+        warning: apiSummary.warning || 0, 
+        praise: apiSummary.praise || 0, 
+        accepted: apiSummary.accepted || 0, 
+        ignored: apiSummary.ignored || 0, 
+        pending: apiSummary.pending || 0 
+      };
 
       setReviewSummary(summary);
       return items;

@@ -7,6 +7,7 @@ import { ProductionService } from '../services/production.js';
 import { evaluateTopic } from '../services/topicEvaluation.js';
 import { authenticate } from '../middleware/auth.js';
 import { query } from '../db/connection.js';
+import { withTimeout } from '../utils/timeout.js';
 
 // Validation schemas
 const createTaskSchema = z.object({
@@ -267,17 +268,25 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { taskId } = request.params as any;
     const body = (request.body || {}) as any;
 
-    // 异步执行选题策划重做（不阻塞响应，避免前端超时）
+    // 异步执行选题策划重做（带超时控制）
     setImmediate(async () => {
       try {
-        await productionService.redoPlanning(taskId, {
-          topic: body?.topic,
-          context: body?.context,
-          comments: body?.comments || [],
-          comment: body?.comment
-        });
+        await withTimeout(
+          productionService.redoPlanning(taskId, {
+            topic: body?.topic,
+            context: body?.context,
+            comments: body?.comments || [],
+            comment: body?.comment
+          }),
+          5 * 60 * 1000,
+          `Planning redo for ${taskId}`
+        );
       } catch (error) {
-        console.error(`[Redo] Planning failed for task ${taskId}:`, error);
+        console.error(`[Redo] Planning failed/timed out for task ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'planning_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -293,12 +302,20 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { taskId } = request.params as any;
     const body = request.body as any;
 
-    // 异步执行研究（不阻塞响应）
+    // 异步执行研究（带超时控制）
     setImmediate(async () => {
       try {
-        await productionService.redoResearch(taskId, body?.searchConfig);
+        await withTimeout(
+          productionService.redoResearch(taskId, body?.searchConfig),
+          5 * 60 * 1000,
+          `Research redo for ${taskId}`
+        );
       } catch (error) {
-        console.error(`[Redo] Research failed for task ${taskId}:`, error);
+        console.error(`[Redo] Research failed/timed out for task ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'research_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -313,12 +330,20 @@ export async function productionRoutes(fastify: FastifyInstance) {
   fastify.post('/:taskId/redo/writing', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
 
-    // 异步执行写作（不阻塞响应）
+    // 异步执行写作（带超时控制）
     setImmediate(async () => {
       try {
-        await productionService.redoWriting(taskId);
+        await withTimeout(
+          productionService.redoWriting(taskId),
+          10 * 60 * 1000,
+          `Writing redo for ${taskId}`
+        );
       } catch (error) {
-        console.error(`[Redo] Writing failed for task ${taskId}:`, error);
+        console.error(`[Redo] Writing failed/timed out for task ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'writing_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -333,12 +358,20 @@ export async function productionRoutes(fastify: FastifyInstance) {
   fastify.post('/:taskId/redo/review', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
 
-    // 异步执行评审（不阻塞响应）
+    // 异步执行评审（带超时控制）
     setImmediate(async () => {
       try {
-        await productionService.redoReview(taskId);
+        await withTimeout(
+          productionService.redoReview(taskId),
+          15 * 60 * 1000,
+          `Review redo for ${taskId}`
+        );
       } catch (error) {
-        console.error(`[Redo] Review failed for task ${taskId}:`, error);
+        console.error(`[Redo] Review failed/timed out for task ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'review_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -651,46 +684,53 @@ export async function productionRoutes(fastify: FastifyInstance) {
       return { error: 'Sequential review not configured. Please call configure endpoint first.' };
     }
 
-    // 异步执行串行评审
+    // 异步执行串行评审（带超时控制）
     setImmediate(async () => {
       try {
-        const { conductSequentialReview } = await import('../services/sequentialReview.js');
+        const reviewTask = async () => {
+          const { conductSequentialReview } = await import('../services/sequentialReview.js');
 
-        // 获取当前草稿
-        const draftResult = await query(
-          `SELECT id, task_id, version, content, status FROM draft_versions
-           WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
-          [taskId]
-        );
+          // 获取当前草稿
+          const draftResult = await query(
+            `SELECT id, task_id, version, content, status FROM draft_versions
+             WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+            [taskId]
+          );
 
-        if (draftResult.rows.length === 0) {
-          console.error(`[SequentialReview] No draft found for task ${taskId}`);
-          return;
-        }
+          if (draftResult.rows.length === 0) {
+            throw new Error(`No draft found for task ${taskId}`);
+          }
 
-        const initialDraft = draftResult.rows[0];
+          const initialDraft = draftResult.rows[0];
 
-        // 获取事实核查和逻辑检查结果
-        const checkResult = await query(
-          `SELECT fact_check, logic_check FROM blue_team_checks WHERE task_id = $1`,
-          [taskId]
-        );
+          // 获取事实核查和逻辑检查结果
+          const checkResult = await query(
+            `SELECT fact_check, logic_check FROM blue_team_checks WHERE task_id = $1`,
+            [taskId]
+          );
 
-        const factCheck = checkResult.rows[0]?.fact_check || { overallScore: 80, claims: [] };
-        const logicCheck = checkResult.rows[0]?.logic_check || { overallScore: 80 };
+          const factCheck = checkResult.rows[0]?.fact_check || { overallScore: 80, claims: [] };
+          const logicCheck = checkResult.rows[0]?.logic_check || { overallScore: 80 };
 
-        // 执行串行评审
-        const result = await conductSequentialReview(
-          taskId,
-          initialDraft,
-          factCheck,
-          logicCheck,
-          config
-        );
+          // 执行串行评审
+          const result = await conductSequentialReview(
+            taskId,
+            initialDraft,
+            factCheck,
+            logicCheck,
+            config
+          );
 
-        console.log(`[SequentialReview] Completed for task ${taskId}. Final draft: ${result.finalDraft.id}`);
+          console.log(`[SequentialReview] Completed for task ${taskId}. Final draft: ${result.finalDraft.id}`);
+        };
+
+        await withTimeout(reviewTask(), 15 * 60 * 1000, `Sequential review for ${taskId}`);
       } catch (error) {
-        console.error(`[SequentialReview] Failed for task ${taskId}:`, error);
+        console.error(`[SequentialReview] Failed/timed out for task ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'review_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -828,6 +868,13 @@ export async function productionRoutes(fastify: FastifyInstance) {
       ? JSON.parse(task.research_data)
       : task.research_data;
 
+    // SSE 服务端超时（10分钟）
+    const SSE_TIMEOUT = 10 * 60 * 1000;
+    const sseTimer = setTimeout(() => {
+      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: '生成超时，请重试' })}\n\n`);
+      reply.raw.end();
+    }, SSE_TIMEOUT);
+
     try {
       // 推送开始事件
       reply.raw.write(`event: start\ndata: ${JSON.stringify({ taskId, totalSections: countSections(outline) })}\n\n`);
@@ -846,10 +893,12 @@ export async function productionRoutes(fastify: FastifyInstance) {
       });
 
       // 推送完成事件
+      clearTimeout(sseTimer);
       reply.raw.write(`event: complete\ndata: ${JSON.stringify({ taskId, status: 'completed' })}\n\n`);
       reply.raw.end();
 
     } catch (error) {
+      clearTimeout(sseTimer);
       console.error('[DraftStream] Generation failed:', error);
       reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
       reply.raw.end();

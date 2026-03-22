@@ -607,5 +607,174 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_analyzed_at ON sentiment_analysis(analyzed_at)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_sentiment_source ON sentiment_analysis(source_type, analyzed_at)`);
 
+  // ========== Pipeline v5.0 补全: 流式生成 + 评审所需表结构 ==========
+
+  // 扩展 draft_versions 表 — 添加流式生成和修订所需的列
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS status VARCHAR(50)`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS outline JSONB`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS sections JSONB`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS word_count INTEGER`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS parent_id UUID`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS revision_notes JSONB`);
+
+  // 草稿生成进度表 — 支持流式生成断点续传
+  await query(`
+    CREATE TABLE IF NOT EXISTS draft_generation_progress (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      status VARCHAR(20) DEFAULT 'running',
+      current_section_index INTEGER DEFAULT 0,
+      total_sections INTEGER DEFAULT 0,
+      accumulated_content TEXT DEFAULT '',
+      sections JSONB DEFAULT '[]',
+      outline JSONB,
+      config JSONB,
+      progress DECIMAL(5,4) DEFAULT 0,
+      error_message TEXT,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(task_id)
+    )
+  `);
+
+  // 草稿修订进度表 — 支持流式修订断点续传
+  await query(`
+    CREATE TABLE IF NOT EXISTS draft_revision_progress (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      draft_id UUID,
+      status VARCHAR(20) DEFAULT 'running',
+      current_section_index INTEGER DEFAULT 0,
+      total_sections INTEGER DEFAULT 0,
+      accumulated_content TEXT DEFAULT '',
+      sections JSONB DEFAULT '[]',
+      applied_suggestions INTEGER DEFAULT 0,
+      total_suggestions INTEGER DEFAULT 0,
+      progress DECIMAL(5,4) DEFAULT 0,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(task_id, draft_id)
+    )
+  `);
+
+  // 草稿修订记录表
+  await query(`
+    CREATE TABLE IF NOT EXISTS draft_revisions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      draft_id UUID,
+      new_draft_id UUID,
+      version INTEGER,
+      suggestions_applied INTEGER DEFAULT 0,
+      suggestions_total INTEGER DEFAULT 0,
+      mode VARCHAR(20) DEFAULT 'balanced',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // 草稿中间版本表 — 修订过程中的检查点
+  await query(`
+    CREATE TABLE IF NOT EXISTS draft_intermediate_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      parent_draft_id UUID,
+      version INTEGER,
+      sub_version INTEGER,
+      content TEXT,
+      sections_completed INTEGER,
+      total_sections INTEGER,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // 专家评审记录表 — 串行多轮评审
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      draft_id UUID,
+      round INTEGER NOT NULL,
+      expert_type VARCHAR(10) NOT NULL,
+      expert_role VARCHAR(20),
+      expert_id VARCHAR(50),
+      expert_name VARCHAR(100),
+      expert_profile TEXT,
+      status VARCHAR(20) DEFAULT 'pending',
+      input_draft_id UUID,
+      output_draft_id UUID,
+      questions JSONB,
+      overall_score INTEGER,
+      summary TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      completed_at TIMESTAMP WITH TIME ZONE
+    )
+  `);
+
+  // 真人专家评审任务表
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_review_tasks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      expert_id VARCHAR(50),
+      task_id VARCHAR(50) NOT NULL,
+      review_id UUID,
+      draft_id UUID,
+      status VARCHAR(20) DEFAULT 'pending',
+      draft_content TEXT,
+      fact_check_summary JSONB,
+      logic_check_summary JSONB,
+      score INTEGER,
+      summary TEXT,
+      questions JSONB,
+      deadline TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      completed_at TIMESTAMP WITH TIME ZONE
+    )
+  `);
+
+  // 大纲评论表
+  await query(`
+    CREATE TABLE IF NOT EXISTS outline_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50) NOT NULL,
+      content TEXT NOT NULL,
+      author VARCHAR(100) DEFAULT 'user',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // 视图: 草稿版本树
+  await query(`DROP VIEW IF EXISTS draft_version_tree`);
+  await query(`
+    CREATE VIEW draft_version_tree AS
+    SELECT dv.*, COALESCE(dv.parent_id::text, '') AS parent_path
+    FROM draft_versions dv
+  `);
+
+  // 视图: 任务评审进度
+  await query(`DROP VIEW IF EXISTS task_review_progress`);
+  await query(`
+    CREATE VIEW task_review_progress AS
+    SELECT task_id,
+      COUNT(*) as total_rounds,
+      COUNT(*) FILTER (WHERE status = 'completed') as completed_rounds,
+      MAX(round) as current_round
+    FROM expert_reviews
+    GROUP BY task_id
+  `);
+
+  // 确保 tasks 表有评审相关字段
+  await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sequential_review_config JSONB`);
+  await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS current_review_round INTEGER DEFAULT 0`);
+
+  // 索引
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_gen_progress_task ON draft_generation_progress(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_rev_progress_task ON draft_revision_progress(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_revisions_task ON draft_revisions(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_reviews_task ON expert_reviews(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_reviews_round ON expert_reviews(task_id, round)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_review_tasks_expert ON expert_review_tasks(expert_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_expert_review_tasks_status ON expert_review_tasks(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_outline_comments_task ON outline_comments(task_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_parent ON draft_versions(parent_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_status ON draft_versions(status)`);
+
   console.log('[DB] MVP Schema initialized successfully');
 }

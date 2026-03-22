@@ -23,6 +23,11 @@ interface TaskContext {
 }
 
 const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string; desc: string }> = {
+  // 新版蓝军评审角色 (3×3×2 模式)
+  challenger: { name: '批判者', icon: '🔍', color: '#ef4444', desc: '挑战逻辑漏洞、数据可靠性' },
+  expander: { name: '拓展者', icon: '⚖️', color: '#f59e0b', desc: '扩展关联因素、国际对比' },
+  synthesizer: { name: '提炼者', icon: '👔', color: '#06b6d4', desc: '归纳核心论点、结构优化' },
+  // 兼容旧版角色
   fact_checker: { name: '事实核查员', icon: '🔍', color: '#ef4444', desc: '数据准确性' },
   logic_checker: { name: '逻辑检察官', icon: '⚖️', color: '#f59e0b', desc: '论证严密性' },
   domain_expert: { name: '行业专家', icon: '👔', color: '#06b6d4', desc: '专业深度' },
@@ -47,8 +52,15 @@ export function ReviewsTab() {
   };
 
   reviews.forEach(review => {
+    const expertInfo = EXPERT_ROLES[review.expert_role] || { name: '专家', icon: '👤', color: '#666' };
     review.questions?.forEach((q: any) => {
-      const item = { ...q, reviewId: review.id };
+      const item = { 
+        ...q, 
+        reviewId: review.id,
+        expertRole: review.expert_role,
+        expertName: expertInfo.name,
+        expertIcon: expertInfo.icon
+      };
       if (q.severity === 'high') groupedReviews.critical.push(item);
       else if (q.severity === 'medium') groupedReviews.warning.push(item);
       else if (q.severity === 'praise') groupedReviews.praise.push(item);
@@ -74,12 +86,24 @@ export function ReviewsTab() {
       >
         <div className="review-question-header">
           <div className="reviewer-badge">
-            <span className="reviewer-icon">
-              {item.expertRole === 'challenger' ? '🔍' :
-               item.expertRole === 'expander' ? '⚖️' :
-               item.expertRole === 'synthesizer' ? '👔' : '👁️'}
+            <span className="reviewer-icon">{item.expertIcon || '👤'}</span>
+            <span style={{ fontWeight: 600, color: '#374151' }}>{item.expertName || '专家'}</span>
+            <span style={{ 
+              fontSize: '11px', 
+              padding: '2px 8px', 
+              background: item.expertRole === 'challenger' ? '#fee2e2' : 
+                         item.expertRole === 'expander' ? '#fef3c7' : 
+                         item.expertRole === 'synthesizer' ? '#e0f2fe' : '#f3f4f6',
+              color: item.expertRole === 'challenger' ? '#991b1b' : 
+                     item.expertRole === 'expander' ? '#92400e' : 
+                     item.expertRole === 'synthesizer' ? '#075985' : '#4b5563',
+              borderRadius: '4px',
+              marginLeft: '8px'
+            }}>
+              {item.expertRole === 'challenger' ? '批判者' : 
+               item.expertRole === 'expander' ? '拓展者' : 
+               item.expertRole === 'synthesizer' ? '提炼者' : item.expertRole}
             </span>
-            <span>{item.expertName || '专家'}</span>
             {item.location && <span className="location">📍 {item.location}</span>}
           </div>
           <div className="review-badges">

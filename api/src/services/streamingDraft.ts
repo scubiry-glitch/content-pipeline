@@ -476,10 +476,33 @@ function extractKeywords(node: any): string[] {
 function extractKeyContext(content: string, maxLength: number): string {
   if (content.length <= maxLength) return content;
 
-  // 提取最后 maxLength 字符，并在段落边界截断
-  const truncated = content.slice(-maxLength);
-  const firstNewline = truncated.indexOf('\n\n');
-  return firstNewline > 0 ? truncated.slice(firstNewline + 2) : truncated.slice(0, 200);
+  const paragraphs = content.split('\n\n').filter(p => p.trim().length > 0);
+  if (paragraphs.length <= 2) return content.slice(-maxLength);
+
+  // 30% 给开篇（保留核心论点），70% 给最近内容（保持上下文连贯）
+  const openingBudget = Math.floor(maxLength * 0.3);
+  const recentBudget = maxLength - openingBudget;
+
+  let opening = '';
+  for (const p of paragraphs) {
+    if ((opening + p + '\n\n').length > openingBudget) break;
+    opening += p + '\n\n';
+  }
+  if (!opening) opening = paragraphs[0].slice(0, openingBudget) + '...\n\n';
+
+  let recent = '';
+  for (let i = paragraphs.length - 1; i >= 0; i--) {
+    const candidate = paragraphs[i] + '\n\n' + recent;
+    if (candidate.length > recentBudget) break;
+    recent = candidate;
+  }
+  if (!recent) {
+    recent = content.slice(-recentBudget);
+    const nl = recent.indexOf('\n\n');
+    if (nl > 0) recent = recent.slice(nl + 2);
+  }
+
+  return `${opening.trim()}\n\n[...]\n\n${recent.trim()}`;
 }
 
 /**

@@ -11,6 +11,7 @@ import { getWebSearchService } from './webSearch.js';
 import { evaluateTopic } from './topicEvaluation.js';
 import { analyzeCompetitors } from './competitorAnalysis.js';
 import { generateDraftStreaming, DraftProgress } from './streamingDraft.js';
+import { withTimeout } from '../utils/timeout.js';
 
 export interface CreateTaskInput {
   topic: string;
@@ -98,12 +99,16 @@ export class PipelineService {
       [taskId]
     );
 
-    // 异步启动研究阶段
+    // 异步启动研究阶段（带超时控制）
     setImmediate(async () => {
       try {
-        await this.research(taskId);
+        await withTimeout(this.research(taskId), 5 * 60 * 1000, `Research for ${taskId}`);
       } catch (error) {
-        console.error(`[Pipeline] Auto research failed for ${taskId}:`, error);
+        console.error(`[Pipeline] Research failed/timed out for ${taskId}:`, error);
+        await query(
+          `UPDATE tasks SET status = 'failed', current_stage = 'research_failed', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
     });
 
@@ -204,10 +209,23 @@ export class PipelineService {
 
   // Step 3: 写作阶段（流式分段生成）
   async write(taskId: string, onProgress?: (progress: DraftProgress) => void | Promise<void>) {
-    await this.updateStatus(taskId, 'writing', 40, 'generating_draft');
-
     const task = await this.getTask(taskId);
     if (!task) throw new Error('Task not found');
+
+    // 前置条件守卫：确保研究数据充分
+    const researchDataRaw = task.research_data
+      ? (typeof task.research_data === 'string' ? JSON.parse(task.research_data) : task.research_data)
+      : null;
+    if (!researchDataRaw || (!researchDataRaw.insights?.length && !researchDataRaw.dataPoints?.length && !researchDataRaw.keyFindings?.length)) {
+      throw new Error(`Cannot write: research data insufficient for task ${taskId}. Run research first.`);
+    }
+
+    // 前置条件守卫：确保大纲已确认
+    if (!task.outline) {
+      throw new Error(`Cannot write: outline not confirmed for task ${taskId}.`);
+    }
+
+    await this.updateStatus(taskId, 'writing', 40, 'generating_draft');
 
     const outline = typeof task.outline === 'string' ? JSON.parse(task.outline) : task.outline;
     const researchData = typeof task.research_data === 'string'
@@ -270,6 +288,11 @@ export class PipelineService {
 
     const draft = draftResult.rows[0]?.content;
     if (!draft) throw new Error('No draft found');
+
+    // 前置条件守卫：确保稿件内容充分
+    if (draft.trim().length < 100) {
+      throw new Error(`Cannot review: draft content too short (${draft.trim().length} chars) for task ${taskId}.`);
+    }
 
     // 执行 BlueTeam 评审
     const result = await this.blueTeamAgent.execute({

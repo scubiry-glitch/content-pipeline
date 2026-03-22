@@ -268,6 +268,400 @@ function classifyContent(title: string, summary: string): string {
 
 ---
 
+### 步骤 1.4: 流式大纲生成 (Streaming Outline Generation)
+
+#### 功能规格
+
+| 项目 | 规格 |
+|------|------|
+| 输入 | 选题主题、背景信息、知识库洞见、新角度 |
+| 输出 | 流式生成的大纲章节 + 实时进度 |
+| 处理 | 分层递进生成，带上下文传递 |
+| 优先级 | P0 |
+
+#### 流式生成架构
+
+```
+用户输入选题 → 并行生成洞察+角度 → 流式生成大纲
+                                              ↓
+                    ┌─────────────────────────────────────────┐
+                    │           流式大纲生成器                 │
+                    │  ┌─────────┐ → ┌─────────┐ → ┌────────┐ │
+                    │  │ 宏观层  │ → │ 中观层  │ → │ 微观层 │ │
+                    │  │ 生成中  │   │ 生成中  │   │ 生成中 │ │
+                    │  └────┬────┘   └────┬────┘   └───┬────┘ │
+                    │       │             │            │      │
+                    │       └─────────────┴────────────┘      │
+                    │                   │                      │
+                    │              实时推送进度                 │
+                    │                   ↓                      │
+                    │         WebSocket / SSE                 │
+                    └─────────────────────────────────────────┘
+```
+
+#### 核心特性
+
+```typescript
+interface StreamingOutlineConfig {
+  taskId: string;
+  topic: string;
+  context?: string;
+  knowledgeInsights?: KnowledgeInsight[];
+  novelAngles?: NovelAngle[];
+  comments?: string[];
+  options?: {
+    enableStreaming: boolean;      // 是否启用流式
+    streamInterval: number;        // 推送间隔(ms)
+    includeContext: boolean;       // 是否带上文
+    saveProgress: boolean;         // 是否保存中间进度
+  };
+}
+
+interface OutlineLayer {
+  id: string;
+  name: 'macro' | 'meso' | 'micro';
+  title: string;
+  sections: OutlineSection[];
+  status: 'pending' | 'generating' | 'completed' | 'error';
+  generatedAt?: Date;
+}
+
+interface OutlineProgress {
+  currentLayer: 'macro' | 'meso' | 'micro' | 'insights' | 'angles';
+  layerProgress: {
+    macro: number;
+    meso: number;
+    micro: number;
+  };
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  layers: OutlineLayer[];
+  accumulatedOutline: OutlineSection[];
+  insights?: KnowledgeInsight[];
+  novelAngles?: NovelAngle[];
+}
+
+type OutlineProgressCallback = (progress: OutlineProgress) => void | Promise<void>;
+```
+
+#### 分层生成流程
+
+```typescript
+async function generateOutlineStreaming(
+  config: StreamingOutlineConfig,
+  onProgress: OutlineProgressCallback
+): Promise<OutlineGenerationResult> {
+  
+  const { topic, knowledgeInsights, novelAngles, comments } = config;
+  
+  // 1. 初始化三层结构
+  const layers: OutlineLayer[] = [
+    { id: 'macro', name: 'macro', title: '宏观视野层', sections: [], status: 'pending' },
+    { id: 'meso', name: 'meso', title: '中观解剖层', sections: [], status: 'pending' },
+    { id: 'micro', name: 'micro', title: '微观行动层', sections: [], status: 'pending' },
+  ];
+  
+  // 2. 顺序生成各层（带上下文传递）
+  let accumulatedContext = '';
+  
+  for (let i = 0; i < layers.length; i++) {
+    const layer = layers[i];
+    layer.status = 'generating';
+    
+    // 推送进度 - 开始生成当前层
+    await onProgress({
+      currentLayer: layer.name,
+      layerProgress: calculateLayerProgress(layers),
+      status: 'processing',
+      layers,
+      accumulatedOutline: flattenLayers(layers),
+      insights: knowledgeInsights,
+      novelAngles,
+    });
+    
+    // 生成当前层
+    const generatedSections = await generateLayerWithContext({
+      layer,
+      topic,
+      context: accumulatedContext,
+      knowledgeInsights,
+      novelAngles,
+      comments,
+      previousLayers: layers.slice(0, i),
+    });
+    
+    layer.sections = generatedSections;
+    layer.status = 'completed';
+    layer.generatedAt = new Date();
+    
+    // 更新累计上下文
+    accumulatedContext += buildLayerContext(layer);
+    
+    // 推送进度 - 当前层完成
+    await onProgress({
+      currentLayer: i === layers.length - 1 ? 'completed' : layers[i + 1].name,
+      layerProgress: calculateLayerProgress(layers),
+      status: i === layers.length - 1 ? 'completed' : 'processing',
+      layers,
+      accumulatedOutline: flattenLayers(layers),
+      insights: knowledgeInsights,
+      novelAngles,
+    });
+    
+    // 保存中间进度
+    if (config.options?.saveProgress) {
+      await saveOutlineProgress({
+        taskId: config.taskId,
+        layers,
+        currentLayerIndex: i,
+      });
+    }
+  }
+  
+  // 3. 生成数据需求
+  const dataRequirements = await analyzeDataRequirements(
+    topic, 
+    flattenLayers(layers)
+  );
+  
+  return {
+    outline: flattenLayers(layers),
+    layers,
+    dataRequirements,
+    insights: knowledgeInsights,
+    novelAngles,
+  };
+}
+```
+
+#### 带上下文的层生成
+
+```typescript
+async function generateLayerWithContext(params: {
+  layer: OutlineLayer;
+  topic: string;
+  context: string;
+  knowledgeInsights?: KnowledgeInsight[];
+  novelAngles?: NovelAngle[];
+  comments?: string[];
+  previousLayers?: OutlineLayer[];
+}): Promise<OutlineSection[]> {
+  
+  const { layer, topic, context, knowledgeInsights, novelAngles, comments, previousLayers } = params;
+  
+  // 筛选与当前层相关的洞察
+  const relevantInsights = filterInsightsByLayer(knowledgeInsights, layer.name);
+  
+  // 筛选与当前层相关的角度
+  const relevantAngles = filterAnglesByLayer(novelAngles, layer.name);
+  
+  const prompt = buildLayerPrompt({
+    layer,
+    topic,
+    context,
+    insights: relevantInsights,
+    angles: relevantAngles,
+    comments,
+    previousLayers,
+  });
+  
+  const result = await llmRouter.generate(prompt, 'planning', {
+    temperature: 0.7,
+    maxTokens: 3000,
+  });
+  
+  return parseAndValidateOutline(result.content);
+}
+
+function buildLayerPrompt(params: {
+  layer: OutlineLayer;
+  topic: string;
+  context: string;
+  insights?: KnowledgeInsight[];
+  angles?: NovelAngle[];
+  comments?: string[];
+  previousLayers?: OutlineLayer[];
+}): string {
+  const { layer, topic, context, insights, angles, comments, previousLayers } = params;
+  
+  const layerGuides = {
+    macro: {
+      focus: '政策导向、经济周期、国际比较、宏观趋势',
+      requirement: '提供全局视野，建立分析框架',
+    },
+    meso: {
+      focus: '产业链分析、区域差异、商业模式、竞争格局',
+      requirement: '承上启下，将宏观趋势落到产业层面',
+    },
+    micro: {
+      focus: '标杆案例、数据验证、行动建议、操作细节',
+      requirement: '具体可执行，给出明确建议',
+    },
+  };
+  
+  const guide = layerGuides[layer.name];
+  
+  return `
+你是一位资深产业研究专家，正在为"${topic}"撰写研究报告大纲。
+
+【当前层级】${layer.title}
+${guide.requirement}
+
+【本层关注点】
+${guide.focus}
+
+${previousLayers?.length ? `
+【已生成的上层结构】
+${previousLayers.map(l => `${l.title}:
+${l.sections.map(s => `- ${s.title}`).join('\n')}`).join('\n\n')}
+` : ''}
+
+${context ? `
+【前文上下文】
+${context}
+` : ''}
+
+${insights?.length ? `
+【相关知识洞见】
+${insights.map((i, idx) => `${idx + 1}. [${i.type}] ${i.content}`).join('\n')}
+` : ''}
+
+${angles?.length ? `
+【建议采用的新角度】
+${angles.map((a, idx) => `${idx + 1}. ${a.angle}: ${a.rationale}`).join('\n')}
+` : ''}
+
+${comments?.length ? `
+【用户反馈】
+${comments.map((c, idx) => `${idx + 1}. ${c}`).join('\n')}
+` : ''}
+
+【输出要求】
+请生成 ${layer.title} 的章节结构，输出JSON格式：
+{
+  "sections": [
+    {
+      "title": "章节标题",
+      "level": 1,
+      "content": "核心论述要点",
+      "subsections": [
+        {
+          "title": "子章节",
+          "level": 2,
+          "content": "子章节要点"
+        }
+      ]
+    }
+  ]
+}
+
+要求：
+1. 本层生成 2-3 个一级章节
+2. 每个一级章节包含 2-3 个子章节
+3. 必须承接上文逻辑（如有上层结构）
+4. 融入相关洞见和新角度
+5. 考虑用户反馈进行调整
+`;
+}
+```
+
+#### 实时推送机制
+
+```typescript
+// WebSocket 连接管理
+class OutlineStreamingManager {
+  private connections = new Map<string, WebSocket>();
+  
+  register(taskId: string, ws: WebSocket) {
+    this.connections.set(taskId, ws);
+  }
+  
+  async pushProgress(taskId: string, progress: OutlineProgress) {
+    const ws = this.connections.get(taskId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'progress',
+        data: progress,
+      }));
+    }
+  }
+  
+  async pushLayerComplete(taskId: string, layer: OutlineLayer) {
+    const ws = this.connections.get(taskId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'layer_complete',
+        data: layer,
+      }));
+    }
+  }
+  
+  unregister(taskId: string) {
+    this.connections.delete(taskId);
+  }
+}
+
+// SSE 推送（备用方案）
+async function streamOutlineSSE(
+  req: Request,
+  res: Response,
+  config: StreamingOutlineConfig
+) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  await generateOutlineStreaming(config, (progress) => {
+    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+  });
+  
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+```
+
+#### 数据库存储
+
+```sql
+-- 大纲生成进度表
+CREATE TABLE outline_generation_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id VARCHAR(50) NOT NULL,
+  status VARCHAR(20) DEFAULT 'running',
+  current_layer VARCHAR(20),  -- macro/meso/micro/completed
+  layers JSONB DEFAULT '[]',
+  accumulated_outline JSONB DEFAULT '[]',
+  insights JSONB DEFAULT '[]',
+  novel_angles JSONB DEFAULT '[]',
+  layer_progress JSONB DEFAULT '{"macro":0,"meso":0,"micro":0}',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  
+  UNIQUE(task_id)
+);
+
+-- 大纲版本表（记录每次生成的版本）
+CREATE TABLE outline_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id VARCHAR(50) NOT NULL,
+  version INTEGER NOT NULL,
+  outline JSONB NOT NULL,
+  layers JSONB,
+  insights JSONB,
+  novel_angles JSONB,
+  data_requirements JSONB,
+  generated_by VARCHAR(50),  -- user/system
+  generation_mode VARCHAR(20) DEFAULT 'streaming',  -- streaming/batch
+  layer_progress JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_outline_versions_task ON outline_versions(task_id, version DESC);
+```
+
+---
+
 ### 步骤 1.5: Web Search 主动发现
 
 #### 功能规格

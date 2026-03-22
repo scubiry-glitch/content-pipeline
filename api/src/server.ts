@@ -26,6 +26,7 @@ import { v43PredictionRoutes } from './routes/v43-prediction.js';
 import { v44CopilotRoutes } from './routes/v44-copilot.js';
 import { v45I18nRoutes } from './routes/v45-i18n.js';
 import communityTopicRoutes from './routes/communityTopics.js';
+import streamingOutlineRoutes from './routes/streamingOutline.js';
 import { expertRoutes } from './routes/experts.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
@@ -118,6 +119,9 @@ async function main() {
   
   // 社区话题抓取与归并路由 (v5.1)
   await fastify.register(communityTopicRoutes, { prefix: '/api/v1/quality/community' });
+  
+  // 流式大纲生成路由 (v5.1)
+  await fastify.register(streamingOutlineRoutes, { prefix: '/api/v1/planning' });
 
   // v4.0 智能审核与合规路由
   await fastify.register(v40ComplianceRoutes, { prefix: '/api/v1/compliance' });
