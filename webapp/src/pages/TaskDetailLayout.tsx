@@ -632,7 +632,7 @@ export function TaskDetailLayout() {
     onReviewDecision: handleReviewDecision,
     onBatchDecision: handleBatchDecision,
     onReReview: handleReReview,
-    onRedoReview: (config?: any) => handleRedoStage('review', config ? { config } : undefined),
+    onRedoReview: (config?: any) => handleRedoStage('review', { config }),
   };
 
   return (

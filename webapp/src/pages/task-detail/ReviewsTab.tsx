@@ -6,7 +6,9 @@ import { FinalDecisionSection } from '../../components/FinalDecisionSection';
 import { BlueTeamPanel } from '../../components/BlueTeamPanel';
 import { SequentialPanel } from '../../components/SequentialPanel';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
+import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
 import { blueTeamApi, tasksApi } from '../../api/client';
+import type { ReviewConfig } from '../../types';
 
 // Icons definition
 const REVIEW_ICONS: Record<string, string> = {
@@ -80,6 +82,9 @@ export function ReviewsTab() {
   // Version comparison state
   const [sidebarView, setSidebarView] = useState<SidebarView>('timeline');
   const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>();
+  
+  // 配置面板状态
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
 
   const {
     task,
@@ -204,6 +209,24 @@ export function ReviewsTab() {
       setDecisionStatus('overridden');
     } catch (error) {
       console.error('Override failed:', error);
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
+  // 处理配置确认
+  const handleConfigConfirm = async (config: ReviewConfig) => {
+    setShowConfigPanel(false);
+    
+    if (!confirm('确定要使用新配置重新运行评审吗？')) return;
+    
+    setDecisionLoading(true);
+    try {
+      await onRedoReview?.(config);
+      alert('评审已重新启动，请稍候刷新查看结果');
+    } catch (error) {
+      console.error('Redo review failed:', error);
+      alert('重新启动评审失败');
     } finally {
       setDecisionLoading(false);
     }
@@ -526,7 +549,7 @@ export function ReviewsTab() {
           </h3>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onRedoReview?.()}
+              onClick={() => setShowConfigPanel(true)}
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
               title="重新配置并运行评审"
             >
@@ -637,6 +660,13 @@ export function ReviewsTab() {
         onAccept={handleAccept}
         onOverride={handleOverride}
         loading={decisionLoading}
+      />
+
+      {/* Review Config Panel */}
+      <ReviewConfigPanel
+        isOpen={showConfigPanel}
+        onClose={() => setShowConfigPanel(false)}
+        onConfirm={handleConfigConfirm}
       />
     </div>
   );
