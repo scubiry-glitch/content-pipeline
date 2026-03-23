@@ -30,20 +30,11 @@ const TABS = [
   { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
 ];
 
-// Tab导航组件
+// Tab navigation component used across expert library pages
 export function ExpertTabs() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const getActiveTab = () => {
-    const path = location.pathname;
-    if (path === '/expert-comparison') return 'comparison';
-    if (path === '/expert-network') return 'network';
-    if (path === '/expert-knowledge-graph') return 'knowledge';
-    return 'list';
-  };
-
-  const activeTab = getActiveTab();
+  const currentPath = location.pathname;
 
   return (
     <div className="expert-tabs">
@@ -51,13 +42,11 @@ export function ExpertTabs() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+            className={`tab-btn ${currentPath === tab.path ? 'active' : ''}`}
             onClick={() => navigate(tab.path)}
+            title={tab.description}
           >
-            <span className="tab-label">{tab.label}</span>
-            {activeTab === tab.id && (
-              <span className="tab-description">{tab.description}</span>
-            )}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
@@ -179,9 +168,6 @@ export function ExpertLibrary() {
         </div>
         <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
       </div>
-
-      {/* Tab导航 */}
-      <ExpertTabs />
 
       {/* 统计栏 */}
       <div className="stats-bar">

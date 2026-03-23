@@ -18,36 +18,6 @@ import {
 import type { Expert, ExpertReview } from '../types';
 import './HotTopicInsights.css';
 
-// Tab导航组件
-function HotTopicsTabs() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  
-  const tabs = [
-    { id: 'topics', label: '热点列表', icon: '🔥', path: '/hot-topics' },
-    { id: 'insights', label: '专家解读', icon: '👨‍💼', path: '/hot-topics/insights' },
-    { id: 'sentiment', label: '情感分析', icon: '😊', path: '/sentiment' },
-    { id: 'prediction', label: '预测分析', icon: '🔮', path: '/prediction' },
-  ];
-  
-  const activeTab = tabs.find(t => location.pathname.startsWith(t.path))?.id || 'insights';
-  
-  return (
-    <div className="hot-topics-tabs">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-          onClick={() => navigate(tab.path)}
-        >
-          <span className="tab-icon">{tab.icon}</span>
-          <span className="tab-label">{tab.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // 热点话题数据
 const HOT_TOPICS = [
   {
@@ -338,9 +308,6 @@ export function HotTopicInsights() {
         <h1>🔥 热点话题专家解读</h1>
         <p className="subtitle">AI驱动的多专家联合深度分析</p>
       </div>
-
-      {/* Tab导航 */}
-      <HotTopicsTabs />
 
       {/* 话题选择器 */}
       <div className="topic-selector">

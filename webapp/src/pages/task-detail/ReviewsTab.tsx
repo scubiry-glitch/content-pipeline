@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import type { BlueTeamReview, CommentItem, DraftVersion } from '../../types';
-import { DocumentEditor } from '../../components/DocumentEditor';
+import type { BlueTeamReview, DraftVersion } from '../../types';
+import { DocumentEditor, type CommentItem } from '../../components/DocumentEditor';
 import { FinalDecisionSection } from '../../components/FinalDecisionSection';
 import { BlueTeamPanel } from '../../components/BlueTeamPanel';
 import { SequentialPanel } from '../../components/SequentialPanel';
+import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { blueTeamApi, tasksApi } from '../../api/client';
 
 // Icons definition
@@ -18,7 +19,19 @@ const REVIEW_ICONS: Record<string, string> = {
   reader_rep: '👁️',
 };
 
+// 专家角色配置
+const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string; desc: string }> = {
+  challenger: { name: '批判者', icon: '⚡', color: '#ef4444', desc: '挑战观点' },
+  expander: { name: '拓展者', icon: '🔍', color: '#f59e0b', desc: '扩展视角' },
+  synthesizer: { name: '提炼者', icon: '💡', color: '#06b6d4', desc: '归纳提炼' },
+  fact_checker: { name: '事实核查员', icon: '🔍', color: '#ef4444', desc: '数据准确性' },
+  logic_checker: { name: '逻辑检察官', icon: '🧩', color: '#f59e0b', desc: '论证严密性' },
+  domain_expert: { name: '行业专家', icon: '🎓', color: '#06b6d4', desc: '专业深度' },
+  reader_rep: { name: '读者代表', icon: '👁️', color: '#10b981', desc: '可读性' }
+};
+
 type ReviewTab = 'blue-team' | 'sequential';
+type SidebarView = 'timeline' | 'compare';
 
 // Define the context type expected from TaskDetailLayout
 interface TaskContext {
@@ -56,18 +69,25 @@ export function ReviewsTab() {
   const [selectMode, setSelectMode] = useState(false);
   
   // Finalize 异步状态
-  const [finalizeStatus, setFinalizeStatus] = useState<{
+  type FinalizeStatusType = {
     status: 'idle' | 'doing' | 'completed' | 'failed';
     progress: number;
     message: string;
     error?: string;
-  }>({ status: 'idle', progress: 0, message: '' });
-  
-  const { 
-    task, 
-    reviews = [], 
+  };
+  const [finalizeStatus, setFinalizeStatus] = useState<FinalizeStatusType>({ status: 'idle', progress: 0, message: '' });
+
+  // Version comparison state
+  const [sidebarView, setSidebarView] = useState<SidebarView>('timeline');
+  const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>();
+
+  const {
+    task,
+    reviews = [],
     reviewSummary = { total: 0, critical: 0, warning: 0, praise: 0, accepted: 0, ignored: 0, pending: 0 },
     onBatchDecision,
+    onReReview,
+    onRedoReview,
   } = useOutletContext<TaskContext>();
 
   // 处理单个评论接受
@@ -116,6 +136,11 @@ export function ReviewsTab() {
   // 处理接受并Finalize（异步版本）
   const handleAccept = async () => {
     const selectedIds = Array.from(selectedComments);
+    // 从 commentId (格式: "reviewId::questionIndex") 提取 reviewIds
+    const reviewIds = selectedIds.length > 0 
+      ? [...new Set(selectedIds.map(id => id.split('::')[0]))]
+      : undefined;
+    
     const confirmMsg = selectedIds.length > 0 
       ? `确定要 Finalize 选中的 ${selectedIds.length} 条评审意见吗？`
       : '确定要接受并 Finalize 所有评审意见吗？';
@@ -127,7 +152,7 @@ export function ReviewsTab() {
     
     try {
       // 1. 启动异步 Finalize
-      const result = await tasksApi.finalize(task.id, selectedIds.length > 0 ? selectedIds : undefined);
+      const result = await tasksApi.finalize(task.id, reviewIds);
       
       if (!result.success) {
         setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: result.error });
@@ -141,7 +166,7 @@ export function ReviewsTab() {
           const status = await tasksApi.getFinalizeStatus(task.id);
           
           setFinalizeStatus({
-            status: status.status,
+            status: status.status === 'pending' ? 'idle' : status.status as FinalizeStatusType['status'],
             progress: status.progress,
             message: status.message,
             error: status.error,
@@ -184,6 +209,35 @@ export function ReviewsTab() {
     }
   };
 
+  // 批量选择相关函数
+  const toggleSelectComment = (commentId: string) => {
+    setSelectedComments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId);
+      } else {
+        newSet.add(commentId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllComments = () => {
+    const pendingComments = comments.filter(c => c.status === 'pending');
+    setSelectedComments(new Set(pendingComments.map(c => c.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedComments(new Set());
+  };
+
+  const toggleSelectMode = () => {
+    setSelectMode(prev => !prev);
+    if (selectMode) {
+      clearSelection();
+    }
+  };
+
   // Convert BlueTeamReview[] to CommentItem[] for DocumentEditor
   // 优先从 question_decisions 获取状态，如果没有则使用 review 级别状态
   const comments: CommentItem[] = useMemo(() => {
@@ -213,8 +267,10 @@ export function ReviewsTab() {
           status = 'ignored';
         } else {
           // 如果 question 没有单独决策，回退到 review 级别状态
-          status = reviewStatus === 'accept' || reviewStatus === 'accepted' ? 'accepted' 
-                 : reviewStatus === 'ignore' || reviewStatus === 'ignored' ? 'ignored' 
+          // reviewStatus 类型: 'pending' | 'completed' | 'revise' | 'reject' + user_decision: 'accept' | 'revise' | 'reject'
+          const decisionStr = String(reviewStatus);
+          status = decisionStr === 'accept' ? 'accepted' 
+                 : decisionStr === 'ignore' ? 'ignored' 
                  : 'pending';
         }
         
@@ -225,7 +281,7 @@ export function ReviewsTab() {
           authorType: 'ai',
           authorRole: review.expert_role,
           severity: severity,
-          timestamp: review.created_at || new Date().toISOString(),
+          timestamp: (review as any).created_at || (review as any).createdAt || new Date().toISOString(),
           location: `Q${idx + 1}`,
           suggestion: q.suggestion,
           status,
@@ -315,9 +371,20 @@ export function ReviewsTab() {
     timestamp: v.created_at,
     author: 'System',
   }));
-  
+
   // Determine sequential review count
   const sequentialCount = 5; // Fixed 5 rounds for sequential review
+
+  // Handle version comparison from DocumentEditor history tab
+  const handleHistorySelect = (item: { id: string; version: string }) => {
+    const versionNum = parseInt(item.version.replace('v', '').split('.')[0]);
+    const currentVersionNum = currentVersion?.version || versions.length;
+
+    if (versionNum !== currentVersionNum) {
+      setCompareVersions([versionNum, currentVersionNum]);
+      setSidebarView('compare');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -333,16 +400,173 @@ export function ReviewsTab() {
         </div>
       </div>
 
-      {/* Document Editor */}
-      <DocumentEditor 
-        content={documentContent}
-        comments={comments}
-        history={history}
-        tasks={tasks}
-        version={currentVersion ? `v${versionWithSubVersions[versionWithSubVersions.length - 1]?.displayVersion || currentVersion.version}` : undefined}
-        onCommentAccept={handleCommentAccept}
-        onCommentIgnore={handleCommentIgnore}
-      />
+      {/* Finalize 进度条 */}
+      {finalizeStatus.status === 'doing' && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+              <span className="material-symbols-outlined animate-spin">refresh</span>
+              Finalize 进行中...
+            </span>
+            <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{finalizeStatus.progress}%</span>
+          </div>
+          <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: `${finalizeStatus.progress}%` }}
+            />
+          </div>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{finalizeStatus.message}</p>
+        </div>
+      )}
+
+      {finalizeStatus.status === 'failed' && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+            <span className="material-symbols-outlined">error</span>
+            <span className="font-medium">Finalize 失败</span>
+          </div>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">{finalizeStatus.error}</p>
+        </div>
+      )}
+
+      {/* 批量选择工具栏 */}
+      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleSelectMode}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              selectMode 
+                ? 'bg-primary text-white' 
+                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">checklist</span>
+            {selectMode ? '退出选择' : '批量选择'}
+          </button>
+          
+          {selectMode && (
+            <>
+              <button
+                onClick={selectAllComments}
+                className="text-sm text-slate-600 dark:text-slate-400 hover:text-primary px-2"
+              >
+                全选
+              </button>
+              <button
+                onClick={clearSelection}
+                className="text-sm text-slate-600 dark:text-slate-400 hover:text-primary px-2"
+              >
+                清空
+              </button>
+              <span className="text-sm text-slate-500">
+                已选 {selectedComments.size} 条
+              </span>
+            </>
+          )}
+        </div>
+        
+        {selectMode && selectedComments.size > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const selectedArray = Array.from(selectedComments);
+                Promise.all(selectedArray.map(id => handleCommentAccept(id)));
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">check</span>
+              接受
+            </button>
+            <button
+              onClick={handleAccept}
+              disabled={decisionLoading || finalizeStatus.status === 'doing'}
+              className="flex items-center gap-2 px-4 py-1.5 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+              Finalize ({selectedComments.size})
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Document Editor with Version Comparison */}
+      {sidebarView === 'compare' ? (
+        <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/40 shadow-sm overflow-hidden">
+          <VersionComparePanel
+            versions={versions}
+            currentVersion={currentVersion?.version}
+            onRollback={(versionId) => console.log('Rollback to:', versionId)}
+            onApprove={() => setSidebarView('timeline')}
+            initialCompareVersions={compareVersions}
+          />
+        </div>
+      ) : (
+        <DocumentEditor 
+          content={documentContent}
+          comments={comments}
+          history={history}
+          tasks={tasks}
+          version={currentVersion ? `v${versionWithSubVersions[versionWithSubVersions.length - 1]?.displayVersion || currentVersion.version}` : undefined}
+          onCommentAccept={handleCommentAccept}
+          onCommentIgnore={handleCommentIgnore}
+          onHistorySelect={handleHistorySelect}
+          selectMode={selectMode}
+          selectedComments={selectedComments}
+          onToggleSelect={toggleSelectComment}
+        />
+      )}
+
+      {/* 专家评审分工 & 配置 */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-headline font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">groups</span>
+            专家评审分工
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onRedoReview?.()}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="重新配置并运行评审"
+            >
+              <span className="material-symbols-outlined text-sm">settings</span>
+              配置
+            </button>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Object.entries(EXPERT_ROLES).slice(0, 4).map(([role, info]) => {
+            const hasReview = reviews.some(r => r.expert_role === role);
+            return (
+              <div 
+                key={role} 
+                className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50"
+                style={{ borderLeftColor: info.color, borderLeftWidth: '3px' }}
+              >
+                <span className="text-xl">{info.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-slate-900 dark:text-white truncate">{info.name}</div>
+                  <div className="text-xs text-slate-500 truncate">{info.desc}</div>
+                </div>
+                {hasReview && task?.status === 'awaiting_approval' && (
+                  <button
+                    onClick={() => onReReview?.(role)}
+                    className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                    title={`申请${info.name}重新评审`}
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                  </button>
+                )}
+                {hasReview && (
+                  <span className="w-2 h-2 rounded-full bg-green-500" title="已有评审" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Tab Switcher */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">

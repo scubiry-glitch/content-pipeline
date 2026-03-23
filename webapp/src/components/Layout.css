@@ -135,6 +135,29 @@
   font-size: 16px;
 }
 
+/* Secondary Navigation - 紧贴一级导航 */
+.secondary-nav {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.secondary-nav-link {
+  display: flex;
+  align-items: center;
+  position: relative;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s ease;
+}
+
+.secondary-nav-link:hover {
+  border-bottom-color: #cbd5e1;
+}
+
+.secondary-nav-link.active {
+  border-bottom-color: var(--primary);
+}
+
 /* Dropdown Styles */
 .nav-dropdown {
   position: relative;

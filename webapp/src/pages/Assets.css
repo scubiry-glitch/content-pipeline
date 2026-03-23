@@ -1,69 +1,19 @@
 /* Assets.css - v3.1.0: 素材库页面样式 - 参考 Content Assets Library 设计 */
 
-/* ==================== Assets Layout - 二级导航 ==================== */
-.assets-page {
+/* ==================== Assets Layout ==================== */
+.assets-layout-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 128px); /* 减去 header 64px + secondary nav 64px */
+}
+
+/* 页面内容区域 */
+.assets-content-area {
+  flex: 1;
   padding: 24px 32px;
   max-width: 1600px;
   margin: 0 auto;
-}
-
-.assets-header {
-  margin-bottom: 16px;
-}
-
-.assets-header h1 {
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: #2d3335;
-  margin: 0 0 4px 0;
-}
-
-.assets-header .subtitle {
-  font-size: 14px;
-  color: #5b5f64;
-  margin: 0;
-}
-
-/* 二级导航 - 水平排列 */
-.assets-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  padding: 4px;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #e5e9eb;
-  width: fit-content;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #5b5f64;
-  text-decoration: none;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.tab-btn:hover {
-  background: #f8f9fa;
-  color: #2d3335;
-}
-
-.tab-btn.active {
-  background: #005bc1;
-  color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 91, 193, 0.2);
-}
-
-.tab-icon {
-  font-size: 16px;
+  width: 100%;
 }
 
 /* ==================== 页面布局 ==================== */

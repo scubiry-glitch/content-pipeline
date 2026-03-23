@@ -41,6 +41,7 @@ export type TaskStatus =
   | 'writing'
   | 'reviewing'
   | 'awaiting_approval'
+  | 'finalizing'
   | 'converting'
   | 'completed'
   | 'failed';

@@ -29,8 +29,26 @@ const mainNavItems: NavItem[] = [
       { to: '/assets/bindings', label: '目录绑定', icon: '📂' },
     ]
   },
-  { to: '/expert-library', label: '专家体系', icon: '👥' },
-  { to: '/hot-topics', label: '热点洞察', icon: '🔥' },
+  { 
+    to: '/expert-library', 
+    label: '专家体系', 
+    icon: '👥',
+    children: [
+      { to: '/expert-library', label: '专家库', icon: '👥' },
+      { to: '/expert-comparison', label: '专家对比', icon: '⚖️' },
+      { to: '/expert-network', label: '专家网络', icon: '🕸️' },
+      { to: '/expert-knowledge-graph', label: '知识图谱', icon: '🧠' },
+    ]
+  },
+  { 
+    to: '/hot-topics', 
+    label: '热点洞察', 
+    icon: '🔥',
+    children: [
+      { to: '/hot-topics', label: '热点列表', icon: '📋' },
+      { to: '/hot-topics/insights', label: '洞察分析', icon: '💡' },
+    ]
+  },
 ];
 
 const systemNavItems: NavItem[] = [
@@ -47,16 +65,6 @@ const isActivePath = (pathname: string, item: NavItem): boolean => {
   if (item.children) {
     return item.children.some(child => pathname.startsWith(child.to));
   }
-  // 特殊处理：专家体系相关页面
-  if (item.to === '/expert-library' && 
-      ['/expert-comparison', '/expert-network', '/expert-knowledge-graph'].some(p => pathname.startsWith(p))) {
-    return true;
-  }
-  // 特殊处理：热点洞察相关页面
-  if (item.to === '/hot-topics' && 
-      ['/hot-topics/insights'].some(p => pathname.startsWith(p))) {
-    return true;
-  }
   return false;
 };
 
@@ -67,6 +75,11 @@ export function Layout() {
   const { currentTheme, setTheme } = useTheme();
   const location = useLocation();
 
+  // 获取当前激活的父导航项
+  const activeParentItem = mainNavItems.find(item => 
+    item.children && isActivePath(location.pathname, item)
+  );
+
   // 监听 Command/Ctrl + K 快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -74,7 +87,6 @@ export function Layout() {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
       }
-      // 主题切换快捷键 Cmd/Ctrl + Shift + T
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
         e.preventDefault();
         setIsThemeSwitcherOpen((prev) => !prev);
@@ -94,6 +106,8 @@ export function Layout() {
         currentTheme={currentTheme}
         onThemeChange={setTheme}
       />
+      
+      {/* 一级导航 */}
       <header className="sticky top-0 z-50 flex justify-between items-center w-full px-6 h-16 bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between w-full mx-auto max-w-[1600px]">
           <div className="flex items-center gap-8">
@@ -102,7 +116,7 @@ export function Layout() {
 
           <nav className="header-nav hidden md:flex gap-6 items-center">
             {mainNavItems.map((item) => (
-              <div key={item.to} className="nav-item-wrapper relative group">
+              <div key={item.to} className="nav-item-wrapper relative">
                 <NavLink
                   to={item.to}
                   className={({ isActive }) => 
@@ -113,23 +127,6 @@ export function Layout() {
                 >
                   <span className="nav-label">{item.label}</span>
                 </NavLink>
-                {/* 子导航菜单 */}
-                {item.children && isActivePath(location.pathname, item) && (
-                  <div className="sub-nav absolute top-full left-0 mt-2 bg-white shadow-lg rounded-lg border border-slate-100 p-2 z-50 min-w-max hidden group-hover:block">
-                    {item.children.map((child) => (
-                      <NavLink
-                        key={child.to}
-                        to={child.to}
-                        className={({ isActive }) => 
-                          `sub-nav-link block px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-primary rounded ${isActive ? 'bg-slate-50 text-primary font-bold' : ''}`
-                        }
-                        end={child.to === item.to}
-                      >
-                        <span className="sub-nav-label">{child.label}</span>
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </nav>
@@ -148,7 +145,7 @@ export function Layout() {
             <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
             <NotificationBell />
             
-            {/* 系统管理下拉菜单 (移至右上角) */}
+            {/* 系统管理下拉菜单 */}
             <div className="nav-dropdown relative">
               <button 
                 className={`p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all flex items-center justify-center`}
@@ -179,6 +176,33 @@ export function Layout() {
           </div>
         </div>
       </header>
+
+      {/* 二级横向导航 - 紧贴一级导航 */}
+      {activeParentItem?.children && (
+        <nav className="secondary-nav sticky top-16 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+          <div className="max-w-[1600px] mx-auto px-6">
+            <div className="flex gap-1">
+              {activeParentItem.children.map((child) => (
+                <NavLink
+                  key={child.to}
+                  to={child.to}
+                  end={child.to === activeParentItem.to}
+                  className={({ isActive }) => 
+                    `secondary-nav-link px-4 py-3 text-sm font-medium transition-colors relative ${
+                      isActive 
+                        ? 'text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary' 
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`
+                  }
+                >
+                  {child.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </nav>
+      )}
+
       <main className={`app-main animate-fade-in ${location.pathname.startsWith('/tasks/') ? 'app-main-fullwidth' : 'app-main'}`}>
         <Outlet />
       </main>

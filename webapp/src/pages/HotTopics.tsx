@@ -21,39 +21,6 @@ const TREND_FILTERS = [
   { key: 'down', label: '📉 下降' },
 ];
 
-// Tab导航组件
-function HotTopicsTabs({ activeTab, onTabChange }: { activeTab: HotTopicsTab; onTabChange: (tab: HotTopicsTab) => void }) {
-  const navigate = useNavigate();
-  
-  const handleTabClick = (tabId: HotTopicsTab) => {
-    if (tabId === 'insights') {
-      navigate('/hot-topics/insights');
-    } else {
-      onTabChange(tabId);
-    }
-  };
-
-  return (
-    <div className="hot-topics-tabs">
-      <div className="tabs-nav">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => handleTabClick(tab.id as HotTopicsTab)}
-          >
-            <span className="tab-icon">{tab.icon}</span>
-            <span className="tab-label">{tab.label}</span>
-            {activeTab === tab.id && (
-              <span className="tab-description">{tab.description}</span>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function HotTopics() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -216,9 +183,6 @@ export function HotTopics() {
             </span>
           </div>
         </header>
-
-        {/* 二级导航 */}
-        <HotTopicsTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* 内容区域 */}
         {activeTab === 'topics' && (

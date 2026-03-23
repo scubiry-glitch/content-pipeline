@@ -82,6 +82,12 @@ export interface DocumentEditorProps {
     factCheck?: number;
     wordCount?: number;
   };
+  /** 批量选择模式 */
+  selectMode?: boolean;
+  /** 已选择的评论 */
+  selectedComments?: Set<string>;
+  /** 切换选择回调 */
+  onToggleSelect?: (id: string) => void;
 }
 
 const severityConfig = {
@@ -143,6 +149,9 @@ export function DocumentEditor({
   showHeader = true,
   defaultTab = 'comments',
   metrics,
+  selectMode = false,
+  selectedComments = new Set(),
+  onToggleSelect,
 }: DocumentEditorProps) {
   const [activeTab, setActiveTab] = useState<CommentTab>(defaultTab);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
@@ -284,14 +293,32 @@ export function DocumentEditor({
                     return (
                       <div
                         key={comment.id}
-                        onClick={() => handleCommentClick(comment)}
-                        className={`bg-white dark:bg-slate-900 p-4 rounded-xl border-l-4 ${config.borderColor} shadow-sm space-y-2 cursor-pointer transition-all hover:shadow-md ${
+                        onClick={() => !selectMode && handleCommentClick(comment)}
+                        className={`bg-white dark:bg-slate-900 p-4 rounded-xl border-l-4 ${config.borderColor} shadow-sm space-y-2 transition-all hover:shadow-md ${
                           isSelected ? 'ring-2 ring-primary/20' : ''
-                        }`}
+                        } ${selectMode ? '' : 'cursor-pointer'}`}
                       >
-                        {/* Header */}
+                        {/* Header with Checkbox */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
+                            {/* 批量选择复选框 */}
+                            {selectMode && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleSelect?.(comment.id);
+                                }}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                  selectedComments.has(comment.id)
+                                    ? 'bg-primary border-primary'
+                                    : 'border-slate-300 hover:border-primary'
+                                }`}
+                              >
+                                {selectedComments.has(comment.id) && (
+                                  <span className="material-symbols-outlined text-white text-sm">check</span>
+                                )}
+                              </button>
+                            )}
                             {comment.authorType === 'ai' ? (
                               <div className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}>
                                 <span className={`material-symbols-outlined text-[14px] ${config.iconColor}`}>{icon}</span>

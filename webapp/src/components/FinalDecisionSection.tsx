@@ -1,7 +1,8 @@
 // FinalDecisionSection.tsx
 // 蓝军评审的最终决策区域
 
-import type { DraftVersion, CommentItem } from '../types';
+import type { DraftVersion } from '../types';
+import type { CommentItem } from './DocumentEditor';
 
 interface ReviewSummary {
   total: number;

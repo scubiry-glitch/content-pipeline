@@ -277,7 +277,7 @@ export function ResearchTab() {
                         onClick={handleRetryWebSearch}
                         disabled={webSearchLoading || !researchConfig.sources.includes('web')}
                         className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
-                        title="重新加载 Web Search"
+                        title="重新加载热点话题"
                       >
                         <span className={`material-symbols-outlined text-sm ${webSearchLoading ? 'animate-spin' : ''}`}>refresh</span>
                       </button>
@@ -317,6 +317,23 @@ export function ResearchTab() {
                 {selectedWebItems.size > 0 && (
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span className="text-[10px] text-blue-600 font-medium">{selectedWebItems.size} selected</span>
+                  </div>
+                )}
+                
+                {/* Start Collection Button */}
+                {researchConfig.sources.includes('web') && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-auto">
+                    <button
+                      onClick={onCollectResearch}
+                      disabled={actionLoading === 'collect-research'}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className={`material-symbols-outlined text-sm ${actionLoading === 'collect-research' ? 'animate-spin' : ''}`}>
+                        {actionLoading === 'collect-research' ? 'sync' : 'travel_explore'}
+                      </span>
+                      {actionLoading === 'collect-research' ? '采集中...' : '开始采集'}
+                    </button>
+                    <p className="text-[9px] text-slate-400 text-center mt-1">调用 Tavily API 实时搜索</p>
                   </div>
                 )}
              </div>

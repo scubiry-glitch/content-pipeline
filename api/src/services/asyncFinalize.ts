@@ -40,9 +40,9 @@ export async function startAsyncFinalize(
       return { success: false, error: '已有进行中的 Finalize 任务' };
     }
 
-    // 2. 更新任务状态为 doing（进行中）
+    // 2. 更新任务状态为 finalizing（进行中）
     await query(
-      `UPDATE tasks SET status = 'doing', updated_at = NOW() WHERE id = $1`,
+      `UPDATE tasks SET status = 'finalizing', updated_at = NOW() WHERE id = $1`,
       [taskId]
     );
 
@@ -221,12 +221,12 @@ export function getFinalizeStatus(taskId: string): AsyncFinalizeStatus | null {
 }
 
 /**
- * 查询任务是否处于 doing 状态
+ * 查询任务是否处于 finalizing 状态
  */
-export async function isTaskDoing(taskId: string): Promise<boolean> {
+export async function isTaskFinalizing(taskId: string): Promise<boolean> {
   const result = await query(
     `SELECT status FROM tasks WHERE id = $1`,
     [taskId]
   );
-  return result.rows[0]?.status === 'doing';
+  return result.rows[0]?.status === 'finalizing';
 }

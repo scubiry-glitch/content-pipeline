@@ -95,6 +95,12 @@ export function ExportPanel({ content, title, taskId }: ExportPanelProps) {
   const handleDownload = (job: ExportJob) => {
     if (!job.downloadUrl) return;
 
+    if (job.format === 'pdf') {
+      // 使用浏览器打印转 PDF
+      generatePDF();
+      return;
+    }
+
     // 创建 Blob 并下载
     const blob = new Blob([content || ''], { type: getMimeType(job.format) });
     const url = URL.createObjectURL(blob);
@@ -105,6 +111,141 @@ export function ExportPanel({ content, title, taskId }: ExportPanelProps) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const generatePDF = () => {
+    // 打开新窗口并打印为 PDF
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('请允许弹出窗口以生成 PDF');
+      return;
+    }
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title || 'Document'}</title>
+  <style>
+    @page { margin: 2cm; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 { font-size: 24px; margin-bottom: 20px; color: #1a1a1a; }
+    h2 { font-size: 20px; margin-top: 30px; margin-bottom: 15px; color: #2a2a2a; }
+    h3 { font-size: 16px; margin-top: 20px; margin-bottom: 10px; color: #3a3a3a; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-bottom: 12px; padding-left: 24px; }
+    li { margin-bottom: 4px; }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #f8f8f8;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    blockquote {
+      border-left: 4px solid #ddd;
+      margin: 0;
+      padding-left: 16px;
+      color: #666;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background: #f0f0f0; padding: 12px 20px; margin: -20px -20px 20px; text-align: center;">
+    <button onclick="window.print()" style="padding: 8px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+      点击此处打印 / 保存为 PDF
+    </button>
+    <p style="margin: 8px 0 0; font-size: 12px; color: #666;">提示：打印时选择"另存为 PDF"作为目标打印机</p>
+  </div>
+  ${markdownToHTML(content || '')}
+</body>
+</html>`;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  const markdownToHTML = (md: string): string => {
+    // 简单的 Markdown 转 HTML
+    return md
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // 代码块
+      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      // 行内代码
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // 标题
+      .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+      .replace(/^##### (.*$)/gim, '<h5>$5</h5>')
+      .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      // 粗体和斜体
+      .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      // 删除线
+      .replace(/~~(.*?)~~/g, '<del>$1</del>')
+      // 引用
+      .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
+      // 链接
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      // 图片
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2" style="max-width:100%;">')
+      // 无序列表
+      .replace(/^\* (.*$)/gim, '<li>$1</li>')
+      .replace(/^- (.*$)/gim, '<li>$1</li>')
+      // 有序列表
+      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+      // 水平线
+      .replace(/^---$/gim, '<hr>')
+      // 段落和换行
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>')
+      // 包裹段落
+      .replace(/^(.+)$/gim, '<p>$1</p>')
+      // 清理空段落
+      .replace(/<p><\/p>/g, '')
+      .replace(/<p>(<h[1-6]>)/g, '$1')
+      .replace(/(<\/h[1-6]>)<\/p>/g, '$1')
+      .replace(/<p>(<pre>)/g, '$1')
+      .replace(/(<\/pre>)<\/p>/g, '$1')
+      .replace(/<p>(<blockquote>)/g, '$1')
+      .replace(/(<\/blockquote>)<\/p>/g, '$1');
   };
 
   const getMimeType = (format: ExportFormat): string => {

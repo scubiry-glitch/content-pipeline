@@ -1,9 +1,10 @@
 // 任务详情 - 选题策划 Tab
 // 布局逻辑: 1.输出 2.输入 3.加工 4.辅助工具(悬浮)
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import { VersionTimeline } from '../../components/content';
+import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { tasksApi, rssSourcesApi, hotTopicsApi } from '../../api/client';
 import type { Task, OutlineComment, OutlineVersion } from '../../types';
 import type { RSSItem, HotTopic } from '../../api/client';
@@ -63,6 +64,7 @@ export function PlanningTab() {
   const [versionOutline, setVersionOutline] = useState<any>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [showVersionCompare, setShowVersionCompare] = useState(false);
+  const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>();
 
   // 构建包含当前大纲的版本列表（兼容旧任务没有 outline_versions 的情况）
   const getVersionsWithCurrent = useCallback((): OutlineVersion[] => {
@@ -193,6 +195,12 @@ export function PlanningTab() {
       console.error('Failed to load version:', error);
       alert('加载版本失败');
     }
+  };
+
+  // ===== 处理版本对比 =====
+  const handleVersionCompare = (selectedVersions: [number, number]) => {
+    setCompareVersions(selectedVersions);
+    setShowVersionCompare(true);
   };
 
   // ===== 重做选题策划 =====
@@ -363,6 +371,18 @@ export function PlanningTab() {
     
     return md;
   };
+
+  // Convert outline versions to DraftVersion format for VersionComparePanel
+  const outlineVersionsForCompare = useMemo(() => {
+    return getVersionsWithCurrent().map(v => ({
+      id: v.id || `v${v.version}`,
+      version: v.version,
+      created_at: v.created_at,
+      change_summary: v.comment || `Version ${v.version}`,
+      created_by: v.created_by,
+      content: outlineToMarkdown(v.outline),
+    }));
+  }, [versions, task.outline, getVersionsWithCurrent]);
 
   // 当前显示的大纲（可能是历史版本）
   const displayOutline = versionOutline || outline;
@@ -641,6 +661,34 @@ export function PlanningTab() {
             </div>
           </section>
 
+        {/* ========== Section 3: Output (with Version Compare) ========== */}
+        {showVersionCompare ? (
+          <section className="relative pl-12 mb-8">
+            <div className="absolute left-0 top-0 w-10 h-10 bg-tertiary text-on-tertiary rounded-full flex items-center justify-center z-10 shadow-lg">
+              <span className="material-symbols-outlined">compare</span>
+            </div>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold font-headline text-on-surface">Version Comparison</h3>
+              <button
+                onClick={() => setShowVersionCompare(false)}
+                className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined">close</span>
+                Close Compare
+              </button>
+            </div>
+            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/40 shadow-sm overflow-hidden">
+              <VersionComparePanel
+                versions={outlineVersionsForCompare}
+                currentVersion={selectedVersion || undefined}
+                onRollback={(versionId) => console.log('Rollback to:', versionId)}
+                onApprove={() => setShowVersionCompare(false)}
+                initialCompareVersions={compareVersions}
+              />
+            </div>
+          </section>
+        ) : null}
+
         {/* ========== Section 3: Output ========== */}
         <section ref={outputRef} className="relative pl-12">
           <div className="absolute left-0 top-0 w-10 h-10 bg-tertiary text-on-tertiary rounded-full flex items-center justify-center z-10 shadow-lg">
@@ -845,8 +893,9 @@ export function PlanningTab() {
                         currentVersion={selectedVersion || undefined}
                         onVersionSelect={(version) => handleVersionChange(version)}
                         onViewDetail={(v) => handleVersionChange(v.version)}
+                        onCompare={handleVersionCompare}
                         maxHeight="500px"
-                        enableCompare={false}
+                        enableCompare={true}
                       />
                    )}
                 </div>

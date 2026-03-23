@@ -408,13 +408,26 @@ export async function productionRoutes(fastify: FastifyInstance) {
     // 异步执行评审（带超时控制）
     setImmediate(async () => {
       try {
+        console.log(`[Redo] Starting review redo for task ${taskId}...`);
         await withTimeout(
           productionService.redoReview(taskId, config),
           15 * 60 * 1000,
           `Review redo for ${taskId}`
         );
+        console.log(`[Redo] Review redo completed for task ${taskId}`);
       } catch (error) {
-        console.error(`[Redo] Review failed/timed out for task ${taskId}:`, error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : '';
+        console.error(`[Redo] Review failed/timed out for task ${taskId}:`, errorMsg);
+        console.error(`[Redo] Error stack:`, errorStack);
+        
+        // 记录错误到任务日志
+        await query(
+          `INSERT INTO task_logs (task_id, action, details, created_at)
+           VALUES ($1, $2, $3, NOW())`,
+          [taskId, 'review_redo_failed', JSON.stringify({ error: errorMsg, stack: errorStack })]
+        );
+        
         await query(
           `UPDATE tasks SET status = 'failed', current_stage = 'review_failed', updated_at = NOW() WHERE id = $1`,
           [taskId]
