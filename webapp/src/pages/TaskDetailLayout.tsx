@@ -20,47 +20,6 @@ import type { Task, Asset } from '../types';
 import './TaskDetailLayout.css';
 import './TaskDetail.css';
 
-// 流程步骤定义 - 生产流水线看板
-const STAGE_PIPELINES = {
-  1: {
-    name: '选题策划',
-    steps: [
-      { id: 'rss', name: 'RSS聚合', icon: '📡' },
-      { id: 'quality', name: '质量评估', icon: '✅' },
-      { id: 'hot', name: '热点分析', icon: '🔥' },
-      { id: 'competitor', name: '竞品分析', icon: '⚔️' },
-      { id: 'score', name: '评分排序', icon: '📊' }
-    ]
-  },
-  2: {
-    name: '深度研究',
-    steps: [
-      { id: 'collect', name: '数据采集', icon: '📥' },
-      { id: 'clean', name: '数据清洗', icon: '🧹' },
-      { id: 'analyze', name: '数据分析', icon: '🔬' },
-      { id: 'insight', name: '洞察提炼', icon: '💡' }
-    ]
-  },
-  3: {
-    name: '文稿生成',
-    steps: [
-      { id: 'draft', name: '初稿生成', icon: '📝' },
-      { id: 'polish', name: '内容润色', icon: '✨' },
-      { id: 'fact', name: '事实核查', icon: '🔍' },
-      { id: 'format', name: '格式调整', icon: '🎨' }
-    ]
-  },
-  4: {
-    name: '蓝军评审',
-    steps: [
-      { id: 'fact_check', name: '事实核查', icon: '🔍' },
-      { id: 'logic_check', name: '逻辑检查', icon: '🧠' },
-      { id: 'expert_review', name: '专家评审', icon: '👔' },
-      { id: 'reader_test', name: '读者测试', icon: '👁️' }
-    ]
-  }
-};
-
 // Tab 配置 (映射为左侧边导航)
 const TABS = [
   { id: 'overview', label: '概览', materialIcon: 'dashboard', path: 'overview' },
@@ -128,19 +87,6 @@ export function TaskDetailLayout() {
     timeRange: '30d',
   });
   const [showResearchConfig, setShowResearchConfig] = useState(false);
-
-  // 生产流水线手风琴展开状态
-  const [expandedStages, setExpandedStages] = useState<Set<number>>(() => {
-    // 默认展开当前进行中的阶段
-    const initial = new Set<number>();
-    if (task) {
-      const currentStageNum = getCurrentStageNum(task.status);
-      if (currentStageNum > 0) {
-        initial.add(currentStageNum);
-      }
-    }
-    return initial;
-  });
 
   // 获取文稿内容
   const getDraftFromTask = useCallback((): { content: string; version?: number } | null => {
@@ -332,19 +278,6 @@ export function TaskDetailLayout() {
       reviewing: 90, awaiting_approval: 95, converting: 95, completed: 100
     };
     return stageMap[status] || 0;
-  };
-
-  // 切换阶段展开/收起
-  const toggleStage = (stageNumber: number) => {
-    setExpandedStages(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(stageNumber)) {
-        newSet.delete(stageNumber);
-      } else {
-        newSet.add(stageNumber);
-      }
-      return newSet;
-    });
   };
 
   const getStageName = (status: string) => {
@@ -690,123 +623,6 @@ export function TaskDetailLayout() {
             <span className="material-symbols-outlined text-sm">delete</span>
             <span>删除任务</span>
           </button>
-        </div>
-
-        {/* 任务标题 */}
-        <div className="task-header-info">
-          <h1 className="task-topic" title={task.topic}>{task.topic}</h1>
-          <div className="task-meta-compact">
-            <span className={`status-badge status-${task.status}`}>
-              {getStageName(task.status)}
-            </span>
-            <span className="task-id">ID: {task.id.slice(-8)}</span>
-          </div>
-        </div>
-
-        {/* 生产流水线看板 */}
-        <div className="pipeline-section">
-          <h3 className="sidebar-section-title">🔄 生产流水线</h3>
-          <div className="pipeline-stages">
-            {Object.entries(STAGE_PIPELINES).map(([stageNum, stage]) => {
-              const stageNumber = parseInt(stageNum);
-              const isActive = currentStage >= stageNumber;
-              const isCurrent = currentStage === stageNumber;
-              const isExpanded = expandedStages.has(stageNumber);
-
-              return (
-                <div
-                  key={stageNum}
-                  className={`pipeline-stage-item ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''} ${isExpanded ? 'expanded' : ''}`}
-                >
-                  <div 
-                    className="stage-header-compact clickable"
-                    onClick={() => toggleStage(stageNumber)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={`stage-icon-compact ${isActive ? 'completed' : ''}`}>
-                      {isActive ? '✓' : stageNumber}
-                    </div>
-                    <div className="stage-info-compact">
-                      <span className="stage-name-compact">{stage.name}</span>
-                      <span className="stage-status-compact">
-                        {isActive ? (isCurrent ? '进行中...' : '已完成') : '等待中'}
-                      </span>
-                    </div>
-                    <span className="stage-toggle-icon">
-                      {isExpanded ? '▼' : '▶'}
-                    </span>
-                  </div>
-                  {isExpanded && (
-                    <div className="pipeline-steps-compact">
-                      {stage.steps.map((step) => (
-                        <div key={step.id} className={`pipeline-step-compact ${isCurrent ? 'current-step' : ''}`}>
-                          <span className="step-icon-compact">{step.icon}</span>
-                          <span className="step-name-compact">{step.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 快捷操作 */}
-        <div className="quick-actions-section">
-          <h3 className="sidebar-section-title">⚡ 快捷操作</h3>
-          <div className="quick-actions-list">
-            {(task.status === 'planning' || task.status === 'outline_pending') && (
-              <button
-                className="quick-action-btn primary"
-                onClick={handleConfirmOutline}
-                disabled={actionLoading === 'confirm-outline'}
-              >
-                {actionLoading === 'confirm-outline' ? '...' : '✓ 确认大纲'}
-              </button>
-            )}
-            {task.status === 'awaiting_approval' && (
-              <>
-                <button className="quick-action-btn success" onClick={() => handleApprove(true)}>
-                  ✅ 确认发布
-                </button>
-                <button className="quick-action-btn danger" onClick={() => handleApprove(false)}>
-                  ❌ 打回修改
-                </button>
-              </>
-            )}
-            <button className="quick-action-btn" onClick={() => setShowAssetModal(true)}>
-              📎 关联素材
-            </button>
-            <button className="quick-action-btn" onClick={handleDelete}>
-              🗑️ 删除任务
-            </button>
-          </div>
-        </div>
-
-        {/* 任务信息 */}
-        <div className="task-info-section">
-          <h3 className="sidebar-section-title">📋 任务信息</h3>
-          <div className="info-list-compact">
-            <div className="info-item-compact">
-              <span className="label">格式</span>
-              <span className="value">{task.target_formats?.join(', ') || 'markdown'}</span>
-            </div>
-            <div className="info-item-compact">
-              <span className="label">进度</span>
-              <span className="value">{task.progress}%</span>
-            </div>
-            <div className="info-item-compact">
-              <span className="label">创建</span>
-              <span className="value">{new Date(task.created_at).toLocaleDateString()}</span>
-            </div>
-            {task.asset_ids && task.asset_ids.length > 0 && (
-              <div className="info-item-compact">
-                <span className="label">素材</span>
-                <span className="value">{task.asset_ids.length} 个</span>
-              </div>
-            )}
-          </div>
         </div>
       </aside>
       {/* 右侧主内容区 */}

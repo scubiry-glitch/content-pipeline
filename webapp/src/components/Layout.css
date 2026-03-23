@@ -194,6 +194,15 @@
   animation: fadeIn 0.6s ease-out;
 }
 
+/* Full-width layout for TaskDetail pages */
+.app-main-fullwidth {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  animation: fadeIn 0.6s ease-out;
+}
+
 /* Card Design Enhancement */
 .card {
   background: var(--surface);
