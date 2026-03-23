@@ -238,20 +238,46 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return result;
   });
 
-  // 最终确认任务 - Finalize
+  // 最终确认任务 - Finalize（异步版本）
   fastify.post('/:taskId/finalize', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
+    const { selectedReviewIds } = request.body as { selectedReviewIds?: string[] };
     
     try {
-      const { finalizeTask } = await import('../services/finalizeTask.js');
-      const result = await finalizeTask(taskId);
+      const { startAsyncFinalize } = await import('../services/asyncFinalize.js');
+      const result = await startAsyncFinalize(taskId, selectedReviewIds);
       
       if (!result.success) {
         reply.status(400);
         return { error: result.error };
       }
       
-      return result;
+      return {
+        success: true,
+        jobId: result.jobId,
+        message: 'Finalize 任务已启动，请通过状态接口查询进度',
+        status: 'doing'
+      };
+    } catch (error) {
+      reply.status(500);
+      return { error: (error as Error).message };
+    }
+  });
+
+  // 查询 Finalize 状态
+  fastify.get('/:taskId/finalize-status', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    
+    try {
+      const { getFinalizeStatus } = await import('../services/asyncFinalize.js');
+      const status = getFinalizeStatus(taskId);
+      
+      if (!status) {
+        reply.status(404);
+        return { error: '未找到 Finalize 任务' };
+      }
+      
+      return status;
     } catch (error) {
       reply.status(500);
       return { error: (error as Error).message };

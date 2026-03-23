@@ -69,9 +69,29 @@ export const tasksApi = {
   getReviews: (id: string) =>
     client.get(`/production/${id}/reviews`) as Promise<BlueTeamReview[]>,
 
-  // 最终确认任务 - Finalize
-  finalize: (id: string) =>
-    client.post(`/production/${id}/finalize`, {}) as Promise<{ success: boolean; finalDraftId?: string; outputPath?: string; error?: string }>,
+  // 最终确认任务 - Finalize（异步版本）
+  finalize: (id: string, selectedReviewIds?: string[]) =>
+    client.post(`/production/${id}/finalize`, { selectedReviewIds }) as Promise<{ 
+      success: boolean; 
+      jobId?: string;
+      status?: 'doing' | 'completed' | 'failed';
+      message?: string;
+      error?: string;
+    }>,
+
+  // 查询 Finalize 状态
+  getFinalizeStatus: (id: string) =>
+    client.get(`/production/${id}/finalize-status`) as Promise<{
+      taskId: string;
+      status: 'pending' | 'doing' | 'completed' | 'failed';
+      progress: number;
+      message: string;
+      finalDraftId?: string;
+      outputPath?: string;
+      error?: string;
+      startedAt?: string;
+      completedAt?: string;
+    }>,
 
   // 确认大纲并继续 (FR-005)
   confirmOutline: (id: string) =>

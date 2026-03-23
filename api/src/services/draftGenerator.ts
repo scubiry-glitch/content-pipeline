@@ -14,9 +14,14 @@ export interface DraftResult {
 /**
  * 生成最终稿件
  * 基于最新版本和已接受的评审意见生成最终版本
+ * 
+ * @param selectedReviewIds - 可选，只处理指定的评审意见ID
  */
-export async function generateFinalDraft(taskId: string): Promise<DraftResult> {
-  console.log(`[DraftGenerator] Generating final draft for task ${taskId}`);
+export async function generateFinalDraft(
+  taskId: string,
+  selectedReviewIds?: string[]
+): Promise<DraftResult> {
+  console.log(`[DraftGenerator] Generating final draft for task ${taskId}`, { selectedReviewIds });
 
   try {
     // 1. 获取最新稿件版本
@@ -36,13 +41,20 @@ export async function generateFinalDraft(taskId: string): Promise<DraftResult> {
     const latestDraft = draftResult.rows[0];
     let finalContent = latestDraft.content;
 
-    // 2. 获取所有已接受的评审意见
-    const acceptedReviews = await query(
-      `SELECT id, expert_role, questions, decision_note
-       FROM blue_team_reviews
-       WHERE task_id = $1 AND user_decision = 'accept'`,
-      [taskId]
-    );
+    // 2. 获取已接受的评审意见（如果指定了 selectedReviewIds，只获取这些）
+    let acceptedReviewsQuery = `
+      SELECT id, expert_role, questions, decision_note
+      FROM blue_team_reviews
+      WHERE task_id = $1 AND user_decision = 'accept'
+    `;
+    const queryParams: any[] = [taskId];
+    
+    if (selectedReviewIds && selectedReviewIds.length > 0) {
+      acceptedReviewsQuery += ` AND id = ANY($2)`;
+      queryParams.push(selectedReviewIds);
+    }
+    
+    const acceptedReviews = await query(acceptedReviewsQuery, queryParams);
 
     // 3. 如果有接受的评审，应用修订
     if (acceptedReviews.rows.length > 0) {

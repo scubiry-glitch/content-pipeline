@@ -50,6 +50,19 @@ export function ReviewsTab() {
   const [activeTab, setActiveTab] = useState<ReviewTab>('blue-team');
   const [decisionStatus, setDecisionStatus] = useState<'pending' | 'accepted' | 'overridden'>('pending');
   const [decisionLoading, setDecisionLoading] = useState(false);
+  
+  // 批量选择状态
+  const [selectedComments, setSelectedComments] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  
+  // Finalize 异步状态
+  const [finalizeStatus, setFinalizeStatus] = useState<{
+    status: 'idle' | 'doing' | 'completed' | 'failed';
+    progress: number;
+    message: string;
+    error?: string;
+  }>({ status: 'idle', progress: 0, message: '' });
+  
   const { 
     task, 
     reviews = [], 
@@ -100,27 +113,57 @@ export function ReviewsTab() {
     }
   };
 
-  // 处理接受并Finalize
+  // 处理接受并Finalize（异步版本）
   const handleAccept = async () => {
-    if (!confirm('确定要接受并 finalize 所有评审意见吗？')) return;
+    const selectedIds = Array.from(selectedComments);
+    const confirmMsg = selectedIds.length > 0 
+      ? `确定要 Finalize 选中的 ${selectedIds.length} 条评审意见吗？`
+      : '确定要接受并 Finalize 所有评审意见吗？';
+    
+    if (!confirm(confirmMsg)) return;
+    
     setDecisionLoading(true);
+    setFinalizeStatus({ status: 'doing', progress: 0, message: '启动 Finalize 任务...' });
+    
     try {
-      // 1. 先批量接受所有待处理的评审
-      await onBatchDecision('accept');
+      // 1. 启动异步 Finalize
+      const result = await tasksApi.finalize(task.id, selectedIds.length > 0 ? selectedIds : undefined);
       
-      // 2. 调用 finalize API 完成任务
-      const result = await tasksApi.finalize(task.id);
-      
-      if (result.success) {
-        setDecisionStatus('accepted');
-        alert(`✅ 任务已完成！\n最终稿件ID: ${result.finalDraftId || 'N/A'}\n\n即将跳转到任务列表...`);
-        // 3. 跳转到任务列表
-        navigate('/tasks');
-      } else {
+      if (!result.success) {
+        setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: result.error });
         alert(`❌ Finalize 失败: ${result.error || '未知错误'}`);
+        return;
       }
+      
+      // 2. 轮询状态
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await tasksApi.getFinalizeStatus(task.id);
+          
+          setFinalizeStatus({
+            status: status.status,
+            progress: status.progress,
+            message: status.message,
+            error: status.error,
+          });
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            setDecisionStatus('accepted');
+            alert(`✅ Finalize 完成！\n最终稿件ID: ${status.finalDraftId || 'N/A'}\n\n即将跳转到任务列表...`);
+            setTimeout(() => navigate('/tasks'), 2000);
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            alert(`❌ Finalize 失败: ${status.error || '未知错误'}`);
+          }
+        } catch (e) {
+          console.error('Poll error:', e);
+        }
+      }, 2000); // 每2秒轮询一次
+      
     } catch (error) {
       console.error('Accept failed:', error);
+      setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: '操作失败' });
       alert('操作失败，请重试');
     } finally {
       setDecisionLoading(false);

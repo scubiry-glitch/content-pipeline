@@ -278,56 +278,10 @@ export function WritingTab() {
         )}
       </section>
 
-      {/* 3. Output Section: Live Markdown Preview */}
+      {/* 3. Output Section: Live Markdown Preview / Version Compare */}
       <section className="flex-1 flex flex-col lg:flex-row gap-4 min-h-[500px]">
-        {/* Markdown Editor/Preview */}
-        <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between p-3 border-b border-surface-container">
-            <div className="flex items-center gap-2">
-              <TabButton 
-                active={editorTab === 'preview'} 
-                onClick={() => setEditorTab('preview')}
-                icon="visibility"
-                label="Preview"
-              />
-              <TabButton 
-                active={editorTab === 'export'} 
-                onClick={() => setEditorTab('export')}
-                icon="download"
-                label="Export"
-              />
-            </div>
-            {draftContent?.version && (
-              <span className="text-xs font-bold text-on-surface-variant">Version {draftContent.version}</span>
-            )}
-          </div>
-          
-          <div className="flex-1 overflow-y-auto bg-white">
-            {!draftContent?.content ? (
-               <div className="empty-state py-32 text-center flex flex-col items-center h-full justify-center">
-                 <div className="material-symbols-outlined text-6xl mb-4 text-outline-variant/30">edit_document</div>
-                 <div className="text-lg font-bold text-on-surface mb-2">Editor Standby</div>
-                 <p className="text-sm text-on-surface-variant">Draft content will populate here chronologically.</p>
-               </div>
-            ) : editorTab === 'export' ? (
-               <div className="p-6">
-                 <ExportPanel content={draftContent.content} title={task.topic} taskId={task.id} />
-               </div>
-            ) : (
-                <LivePreviewMarkdown
-                  content={draftContent.content}
-                  version={draftContent.version}
-                  minHeight="100%"
-                  className="h-full border-none shadow-none"
-                  showFooter={false}
-                />
-            )}
-          </div>
-        </div>
-
-        {/* Version History / Compare Sidebar */}
-        <div className="w-full lg:w-80 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col shrink-0">
-          {sidebarView === 'compare' ? (
+        {sidebarView === 'compare' ? (
+          <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col overflow-hidden">
             <VersionComparePanel
               versions={versions}
               currentVersion={draftContent?.version}
@@ -335,8 +289,56 @@ export function WritingTab() {
               onApprove={() => setSidebarView('timeline')}
               initialCompareVersions={compareVersions}
             />
-          ) : (
-            <>
+          </div>
+        ) : (
+          <>
+            {/* Markdown Editor/Preview */}
+            <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col">
+              <div className="flex items-center justify-between p-3 border-b border-surface-container">
+                <div className="flex items-center gap-2">
+                  <TabButton 
+                    active={editorTab === 'preview'} 
+                    onClick={() => setEditorTab('preview')}
+                    icon="visibility"
+                    label="Preview"
+                  />
+                  <TabButton 
+                    active={editorTab === 'export'} 
+                    onClick={() => setEditorTab('export')}
+                    icon="download"
+                    label="Export"
+                  />
+                </div>
+                {draftContent?.version && (
+                  <span className="text-xs font-bold text-on-surface-variant">Version {draftContent.version}</span>
+                )}
+              </div>
+              
+              <div className="flex-1 overflow-y-auto bg-white">
+                {!draftContent?.content ? (
+                   <div className="empty-state py-32 text-center flex flex-col items-center h-full justify-center">
+                     <div className="material-symbols-outlined text-6xl mb-4 text-outline-variant/30">edit_document</div>
+                     <div className="text-lg font-bold text-on-surface mb-2">Editor Standby</div>
+                     <p className="text-sm text-on-surface-variant">Draft content will populate here chronologically.</p>
+                   </div>
+                ) : editorTab === 'export' ? (
+                   <div className="p-6">
+                     <ExportPanel content={draftContent.content} title={task.topic} taskId={task.id} />
+                   </div>
+                ) : (
+                    <LivePreviewMarkdown
+                      content={draftContent.content}
+                      version={draftContent.version}
+                      minHeight="100%"
+                      className="h-full border-none shadow-none"
+                      showFooter={false}
+                    />
+                )}
+              </div>
+            </div>
+
+            {/* Version History Sidebar */}
+            <div className="w-full lg:w-80 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col shrink-0">
               <div className="p-4 border-b border-surface-container">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
@@ -363,9 +365,9 @@ export function WritingTab() {
                      />
                  )}
               </div>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </section>
 
       {/* Footer Toolbox (Fixed Global Action Bar analog) */}
