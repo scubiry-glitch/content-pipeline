@@ -341,9 +341,20 @@ export function VersionComparePanel({
               className="text-xs text-slate-500 hover:text-blue-700 underline"
               onClick={() => {
                 const data = {
-                  old: diffResult.oldVersion,
-                  new: diffResult.newVersion,
-                  diff: inlineDiffContent,
+                  oldVersion: {
+                    version: diffResult.oldVersion.version,
+                    created_at: diffResult.oldVersion.created_at,
+                    change_summary: diffResult.oldVersion.change_summary,
+                    content_preview: diffResult.oldVersion.content?.substring(0, 500) + '...',
+                  },
+                  newVersion: {
+                    version: diffResult.newVersion.version,
+                    created_at: diffResult.newVersion.created_at,
+                    change_summary: diffResult.newVersion.change_summary,
+                    content_preview: diffResult.newVersion.content?.substring(0, 500) + '...',
+                  },
+                  changes_count: diffResult.changes,
+                  exported_at: new Date().toISOString(),
                 };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);

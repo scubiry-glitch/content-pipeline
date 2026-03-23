@@ -334,19 +334,31 @@ export function DocumentEditor({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onCommentAccept?.(comment.id);
+                              const btn = e.currentTarget;
+                              btn.classList.add('scale-95', 'bg-green-500', 'text-white');
+                              btn.classList.remove('bg-primary/10', 'text-primary');
+                              setTimeout(() => {
+                                onCommentAccept?.(comment.id);
+                              }, 200);
                             }}
-                            className="flex-1 py-1.5 text-[10px] font-bold bg-primary/10 text-primary rounded-md hover:bg-primary/20 transition-colors"
+                            className="flex-1 py-1.5 text-[10px] font-bold bg-primary/10 text-primary rounded-md hover:bg-primary/20 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1 group"
                           >
+                            <span className="material-symbols-outlined text-[12px] transition-transform group-hover:rotate-12">check</span>
                             Accept
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onCommentIgnore?.(comment.id);
+                              const btn = e.currentTarget;
+                              btn.classList.add('scale-95', 'bg-slate-400', 'text-white');
+                              btn.classList.remove('border-slate-200', 'text-slate-500');
+                              setTimeout(() => {
+                                onCommentIgnore?.(comment.id);
+                              }, 200);
                             }}
-                            className="flex-1 py-1.5 text-[10px] font-bold border border-slate-200 text-slate-500 rounded-md hover:bg-slate-50 transition-colors"
+                            className="flex-1 py-1.5 text-[10px] font-bold border border-slate-200 text-slate-500 rounded-md hover:bg-slate-50 hover:border-slate-300 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1 group"
                           >
+                            <span className="material-symbols-outlined text-[12px] transition-transform group-hover:rotate-90">close</span>
                             Ignore
                           </button>
                         </div>

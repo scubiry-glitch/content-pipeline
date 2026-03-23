@@ -192,6 +192,30 @@ export function ReviewsTab() {
     return items;
   }, [reviews]);
 
+  // 生成待办任务列表（从已接受的评审意见）
+  const tasks = useMemo(() => {
+    const items: Array<{
+      id: string;
+      title: string;
+      status: 'pending' | 'in_progress' | 'completed';
+      assignee?: string;
+    }> = [];
+    
+    comments.forEach(comment => {
+      if (comment.status === 'accepted') {
+        // 为每个接受的评审意见生成一个待办任务
+        items.push({
+          id: `task-${comment.id}`,
+          title: comment.suggestion || `处理: ${comment.content.slice(0, 50)}...`,
+          status: 'pending',
+          assignee: comment.author,
+        });
+      }
+    });
+    
+    return items;
+  }, [comments]);
+
   // Debug: log task data
   console.log('[ReviewsTab] task:', task?.id, 'draft_versions:', task?.draft_versions?.length, 'versions:', task?.versions?.length);
   
@@ -248,16 +272,6 @@ export function ReviewsTab() {
     timestamp: v.created_at,
     author: 'System',
   }));
-  
-  // Generate tasks from pending reviews
-  const tasks = comments
-    .filter(c => c.status === 'pending')
-    .map((c, idx) => ({
-      id: c.id,
-      title: c.content.slice(0, 60) + (c.content.length > 60 ? '...' : ''),
-      status: 'pending' as const,
-      assignee: c.authorRole,
-    }));
   
   // Determine sequential review count
   const sequentialCount = 5; // Fixed 5 rounds for sequential review

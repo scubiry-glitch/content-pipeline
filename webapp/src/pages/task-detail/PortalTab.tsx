@@ -1,7 +1,7 @@
 // 任务详情 - 门户 Tab (v1.0 - Pipeline Overview Design)
 // 布局逻辑: 1.内容预览 2.内容结构 3.市场情报 4.发布操作
 import { useOutletContext } from 'react-router-dom';
-import type { Task } from '../../types';
+import type { Task, OutlineSection, ResearchInsight } from '../../types';
 
 interface TaskContext {
   task: Task;
@@ -11,10 +11,15 @@ export function PortalTab() {
   const { task } = useOutletContext<TaskContext>();
 
   // 从 task 数据中提取大纲结构
-  const outline = task.outline || {};
-  const macro = outline.macro || { title: '暂无宏观主题', description: '' };
-  const meso = outline.meso || [];
-  const micro = outline.micro || [];
+  const outline = task.outline;
+  const sections = outline?.sections || [];
+  
+  // 获取宏观主题（第一个section）
+  const macroSection = sections[0];
+  // 获取中观层级（中间sections）
+  const mesoSections = sections.slice(1, Math.min(3, sections.length));
+  // 获取微观层级（最后section）
+  const microSection = sections.length > 3 ? sections[sections.length - 1] : null;
 
   // 获取任务状态颜色
   const getStatusColor = (status: string) => {
@@ -42,22 +47,28 @@ export function PortalTab() {
     return labels[status] || status;
   };
 
+  // 获取字数（从writing_data）
+  const wordCount = task.writing_data?.word_count || 2450;
+  
+  // 获取研究洞察
+  const insights = task.research_data?.insights || [];
+
   return (
     <div className="tab-panel portal-panel animate-fade-in pb-24">
       {/* ========== Header ========== */}
       <header className="mb-8">
         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-primary dark:text-primary-light">Pipeline Portal</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-primary dark:text-primary-light">发布预览</span>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-xs font-bold uppercase tracking-wider">内容发布中心</span>
+          <span className="text-xs font-bold uppercase tracking-wider">预览与发布</span>
         </div>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white mb-2">
-              {task.topic || '内容门户'}
+              {task.topic || '发布预览'}
             </h1>
             <nav className="flex text-xs text-slate-500 dark:text-slate-400 gap-2 items-center">
-              <span>{task.title || task.topic || 'Untitled'}</span>
+              <span>{task.topic || 'Untitled'}</span>
               <span>/</span>
               <span className="font-mono bg-surface-container-high px-1.5 py-0.5 rounded">ID-{task.id?.slice(0, 8).toUpperCase() || '0000'}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${getStatusColor(task.status)}`}>
@@ -93,7 +104,7 @@ export function PortalTab() {
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">article</span>
               <span className="font-headline font-bold text-sm text-on-surface dark:text-white">
-                内容预览: {task.title || task.topic || '未命名内容'}
+                发布预览: {task.topic || '未命名内容'}
               </span>
             </div>
             <div className="flex gap-2">
@@ -114,7 +125,7 @@ export function PortalTab() {
               </div>
               <div className="prose prose-sm max-w-none text-on-surface-variant dark:text-slate-400">
                 <p className="line-clamp-3">
-                  {task.outline?.macro?.description || 
+                  {sections[0]?.key_points?.[0] || 
                    '内容正在生成中。完成后的内容将在此处显示预览，包括核心论点、关键洞察和数据支撑。'}
                 </p>
               </div>
@@ -124,7 +135,7 @@ export function PortalTab() {
                 <div className="p-3 bg-white dark:bg-slate-700 border border-outline-variant/30 rounded-lg">
                   <div className="text-[9px] uppercase font-bold text-on-surface-variant mb-1">字数</div>
                   <div className="text-lg font-headline font-bold text-on-surface dark:text-white">
-                    {task.word_count?.toLocaleString() || '2,450'}
+                    {wordCount.toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 bg-white dark:bg-slate-700 border border-outline-variant/30 rounded-lg">
@@ -175,25 +186,25 @@ export function PortalTab() {
               <div className="p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[9px] font-bold bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded">宏观</span>
-                  <span className="text-xs font-bold text-on-surface dark:text-white">{macro.title}</span>
+                  <span className="text-xs font-bold text-on-surface dark:text-white">{macroSection?.title || '暂无宏观主题'}</span>
                 </div>
                 <p className="text-[10px] text-on-surface-variant dark:text-slate-400">
-                  {macro.description || '宏观主题描述'}
+                  {macroSection?.key_points?.[0] || '宏观主题描述'}
                 </p>
               </div>
               
               {/* Meso */}
-              {meso.length > 0 ? (
-                meso.slice(0, 2).map((item: any, idx: number) => (
+              {mesoSections.length > 0 ? (
+                mesoSections.map((section: OutlineSection, idx: number) => (
                   <div key={idx} className="pl-4 border-l-2 border-outline-variant dark:border-slate-700 space-y-3">
                     <div className="p-3 bg-surface-container-low dark:bg-slate-700/50 rounded-lg border border-outline-variant/30">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[9px] font-bold bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded">中观</span>
-                        <span className="text-xs font-semibold text-on-surface dark:text-white">{item.title || `中观层级 ${idx + 1}`}</span>
+                        <span className="text-xs font-semibold text-on-surface dark:text-white">{section.title || `中观层级 ${idx + 1}`}</span>
                       </div>
-                      {item.points && (
+                      {section.key_points && (
                         <div className="pl-4 mt-2 space-y-1">
-                          {item.points.slice(0, 2).map((point: string, pidx: number) => (
+                          {section.key_points.slice(0, 2).map((point: string, pidx: number) => (
                             <div key={pidx} className="flex items-center gap-2 text-[10px] text-on-surface-variant dark:text-slate-400">
                               <span className="w-1 h-1 rounded-full bg-primary"></span>
                               <span className="truncate">{point}</span>
@@ -222,17 +233,15 @@ export function PortalTab() {
               )}
               
               {/* Micro */}
-              {micro.length > 0 ? (
-                micro.slice(0, 1).map((item: any, idx: number) => (
-                  <div key={idx} className="pl-8 border-l-2 border-outline-variant/30 dark:border-slate-700/50">
-                    <div className="p-3 bg-surface-container-lowest dark:bg-slate-800/50 border border-outline-variant/30 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">微观</span>
-                        <span className="text-xs font-medium italic text-on-surface dark:text-white">{item.title || '微观细节'}</span>
-                      </div>
+              {microSection ? (
+                <div className="pl-8 border-l-2 border-outline-variant/30 dark:border-slate-700/50">
+                  <div className="p-3 bg-surface-container-lowest dark:bg-slate-800/50 border border-outline-variant/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-bold bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">微观</span>
+                      <span className="text-xs font-medium italic text-on-surface dark:text-white">{microSection.title || '微观细节'}</span>
                     </div>
                   </div>
-                ))
+                </div>
               ) : (
                 <div className="pl-8 border-l-2 border-outline-variant/30 dark:border-slate-700/50">
                   <div className="p-3 bg-surface-container-lowest dark:bg-slate-800/50 border border-outline-variant/30 rounded-lg">
@@ -271,7 +280,7 @@ export function PortalTab() {
                   <div className="text-[10px] uppercase font-bold text-on-surface-variant dark:text-slate-400">内容质量</div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold font-headline text-primary">
-                      {task.evaluation?.score >= 80 ? '优秀' : task.evaluation?.score >= 60 ? '良好' : '一般'}
+                      {task.evaluation?.score && task.evaluation.score >= 80 ? '优秀' : task.evaluation?.score && task.evaluation.score >= 60 ? '良好' : '一般'}
                     </span>
                     <span className="text-xs font-medium text-on-surface-variant dark:text-slate-400">
                       ({task.evaluation?.score || '--'}/100)
@@ -283,14 +292,16 @@ export function PortalTab() {
               <div className="p-4 bg-surface-container-low dark:bg-slate-700/30 rounded-xl border border-outline-variant/30">
                 <h4 className="text-xs font-bold text-on-surface dark:text-white mb-3">核心研究洞察</h4>
                 <ul className="space-y-3">
-                  {task.research_data?.insights?.slice(0, 2).map((insight: string, idx: number) => (
-                    <li key={idx} className="flex gap-3 items-start">
-                      <span className="material-symbols-outlined text-primary text-sm mt-0.5">auto_awesome</span>
-                      <p className="text-[11px] text-on-surface-variant dark:text-slate-400 leading-relaxed">
-                        <span className="font-bold text-on-surface dark:text-white">洞察 {idx + 1}:</span> {insight}
-                      </p>
-                    </li>
-                  )) || (
+                  {insights.length > 0 ? (
+                    insights.slice(0, 2).map((insight: ResearchInsight, idx: number) => (
+                      <li key={insight.id || idx} className="flex gap-3 items-start">
+                        <span className="material-symbols-outlined text-primary text-sm mt-0.5">auto_awesome</span>
+                        <p className="text-[11px] text-on-surface-variant dark:text-slate-400 leading-relaxed">
+                          <span className="font-bold text-on-surface dark:text-white">洞察 {idx + 1}:</span> {insight.content}
+                        </p>
+                      </li>
+                    ))
+                  ) : (
                     <>
                       <li className="flex gap-3 items-start">
                         <span className="material-symbols-outlined text-primary text-sm mt-0.5">auto_awesome</span>
@@ -352,7 +363,7 @@ export function PortalTab() {
                 { id: 'writing', label: '文稿生成', icon: 'edit_note', desc: 'AI 初稿已完成', done: task.status !== 'researching' && task.status !== 'pending' },
                 { id: 'reviews', label: '蓝军评审', icon: 'fact_check', desc: '多轮评审完成', done: task.status === 'completed' || task.status === 'reviewing' || task.status === 'awaiting_approval' },
                 { id: 'publishing', label: '发布就绪', icon: 'publish', desc: '等待最终发布', done: task.status === 'completed' }
-              ].map((step, idx) => (
+              ].map((step) => (
                 <div key={step.id} className="flex gap-4 items-start relative">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${
                     step.done 
@@ -389,7 +400,7 @@ export function PortalTab() {
               </h3>
             </div>
             <div className="space-y-3">
-              {task.versions.slice(-3).reverse().map((version: any, idx: number) => (
+              {task.versions.slice(-3).reverse().map((version, idx: number) => (
                 <div 
                   key={version.id || idx} 
                   className={`p-3 rounded-lg border cursor-pointer transition-colors ${
