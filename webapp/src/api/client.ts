@@ -2,8 +2,8 @@ import axios from 'axios';
 import type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion } from '../types';
 export type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion };
 
-const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+export const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
+export const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const client = axios.create({
   baseURL: BASE_URL,

@@ -179,7 +179,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main className="app-main animate-fade-in ${location.pathname.startsWith('/tasks/') ? 'app-main-fullwidth' : 'app-main'}`}>
+      <main className={`app-main animate-fade-in ${location.pathname.startsWith('/tasks/') ? 'app-main-fullwidth' : 'app-main'}`}>
         <Outlet />
       </main>
     </div>

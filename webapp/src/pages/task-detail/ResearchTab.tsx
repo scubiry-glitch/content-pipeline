@@ -215,45 +215,66 @@ export function ResearchTab() {
           </div>
 
           {!hasResearchData ? (
-             <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {/* Dummy Module 1 */}
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold">Data Aggregation</span>
-                      <span className={`text-xs font-bold ${actionLoading === 'collect-research' ? 'text-indigo-600' : 'text-slate-400'}`}>{actionLoading === 'collect-research' ? 'Processing...' : 'Waiting'}</span>
+             <div className="bg-surface-container-lowest rounded-2xl p-6 border border-transparent shadow-sm">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Processing Module 1: Data Aggregation */}
+                  <div className="bg-surface-container-low p-5 rounded-xl border border-transparent">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary" data-icon="database">database</span>
+                        <span className="text-sm font-bold text-on-surface">Data Aggregation</span>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${actionLoading === 'collect-research' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container text-on-surface-variant'}`}>
+                        {actionLoading === 'collect-research' ? 'Processing' : 'Waiting'}
+                      </span>
                     </div>
-                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                       <div className={`h-full bg-indigo-500 rounded-full transition-all duration-[3000ms] ${actionLoading === 'collect-research' ? 'w-[75%]' : 'w-0'}`}></div>
+                    <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                       <div className={`bg-primary h-full rounded-full transition-all duration-[3000ms] ${actionLoading === 'collect-research' ? 'w-[75%]' : 'w-0'}`}></div>
                     </div>
+                    <p className="text-[10px] text-on-surface-variant mt-2">Multi-source data fusion and normalization</p>
                   </div>
-                  {/* Dummy Module 2 */}
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold">Fact-Checking & Validation</span>
-                      <span className={`text-xs font-bold ${actionLoading === 'collect-research' ? 'text-indigo-600' : 'text-slate-400'}`}>{actionLoading === 'collect-research' ? 'Queued' : 'Waiting'}</span>
+                  {/* Processing Module 2: Fact-Checking */}
+                  <div className="bg-surface-container-low p-5 rounded-xl border border-transparent">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-tertiary" data-icon="fact_check">fact_check</span>
+                        <span className="text-sm font-bold text-on-surface">Fact-Checking</span>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${actionLoading === 'collect-research' ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface-variant'}`}>
+                        {actionLoading === 'collect-research' ? 'Queued' : 'Waiting'}
+                      </span>
                     </div>
-                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                       <div className={`h-full bg-indigo-500 rounded-full transition-all duration-1000 ${actionLoading === 'collect-research' ? 'w-[10%]' : 'w-0'}`}></div>
+                    <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                       <div className={`bg-tertiary h-full rounded-full transition-all duration-1000 ${actionLoading === 'collect-research' ? 'w-[10%]' : 'w-0'}`}></div>
                     </div>
+                    <p className="text-[10px] text-on-surface-variant mt-2">Cross-validation and credibility scoring</p>
                   </div>
-                  {/* Dummy Module 3 */}
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold">Insight Generation</span>
-                      <span className="text-xs font-bold text-slate-400">Waiting</span>
+                  {/* Processing Module 3: Insight Generation */}
+                  <div className="bg-surface-container-low p-5 rounded-xl border border-transparent">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-secondary" data-icon="lightbulb">lightbulb</span>
+                        <span className="text-sm font-bold text-on-surface">Insight Generation</span>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">Waiting</span>
                     </div>
-                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+                    <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                       <div className="bg-secondary h-0 rounded-full transition-all duration-1000"></div>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant mt-2">AI-driven pattern recognition and synthesis</p>
                   </div>
                </div>
              </div>
           ) : (
-             <div className="process-grid space-y-8">
+             <div className="space-y-6">
                 {/* 数据审核表格 */}
                 {task.research_data.annotations && task.research_data.annotations.length > 0 && (
-                  <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
-                        <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-indigo-500">checklist</span> 数据审核面板 (Annotation Review)</h3>
+                  <div className="bg-surface-container-lowest rounded-xl p-5 border border-transparent shadow-sm">
+                    <div className="border-b border-outline-variant/20 pb-3 mb-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 m-0 text-on-surface">
+                          <span className="material-symbols-outlined text-primary" data-icon="checklist">checklist</span> 
+                          数据审核面板 (Annotation Review)
+                        </h3>
                     </div>
                     <DataReviewTable
                       annotations={task.research_data.annotations}
@@ -263,45 +284,64 @@ export function ResearchTab() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                    {/* 数据清洗面板 */}
-                    {task.research_data.annotations && task.research_data.annotations.length > 0 && (
-                      <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-                        <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
-                            <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-orange-500">cleaning_services</span> 数据清洗 (Data Scrubber)</h3>
-                        </div>
-                        <DataCleaningPanel
-                          annotations={task.research_data.annotations}
-                          onClean={(cleaned) => console.log('Cleaned annotations:', cleaned)}
-                        />
-                      </div>
-                    )}
+                {/* 数据清洗面板 - 单独一行 */}
+                {task.research_data.annotations && task.research_data.annotations.length > 0 && (
+                  <div className="bg-surface-container-lowest rounded-xl p-5 border border-transparent shadow-sm">
+                    <div className="border-b border-outline-variant/20 pb-3 mb-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 m-0 text-on-surface">
+                          <span className="material-symbols-outlined text-tertiary" data-icon="cleaning_services">cleaning_services</span> 
+                          数据清洗 (Data Scrubber)
+                        </h3>
+                    </div>
+                    <DataCleaningPanel
+                      annotations={task.research_data.annotations}
+                      onClean={(cleaned) => console.log('Cleaned annotations:', cleaned)}
+                    />
+                  </div>
+                )}
 
+                {/* 三列布局：交叉验证 + 外部链接 + 内部素材 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* 交叉验证面板 */}
-                    <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-                      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
-                        <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-blue-500">done_all</span> 多维交叉验证 (Cross Validation)</h3>
+                    <div className="bg-surface-container-lowest rounded-xl p-5 border border-transparent shadow-sm">
+                      <div className="border-b border-outline-variant/20 pb-3 mb-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 m-0 text-on-surface">
+                          <span className="material-symbols-outlined text-secondary" data-icon="done_all">done_all</span> 
+                          多维交叉验证 (Cross Validation)
+                        </h3>
                       </div>
                       <CrossValidationPanel
                         results={task.research_data.validation_results || []}
                         onResolve={(id, source) => console.log('Resolved:', id, source)}
                       />
                     </div>
-                </div>
 
-                {/* 外部链接与素材引用 */}
-                {task.research_data.annotations && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="info-card process-card bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-                      <h3 className="card-title text-sm border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">🔗 External Reference Discovery</h3>
-                      <ExternalLinksList annotations={task.research_data.annotations} />
+                    {/* 外部链接 */}
+                    <div className="bg-surface-container-low rounded-xl p-5 border border-transparent">
+                      <h3 className="text-sm font-bold border-b border-outline-variant/20 pb-2 mb-4 text-on-surface flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary" data-icon="link">link</span>
+                        External Reference Discovery
+                      </h3>
+                      {task.research_data.annotations ? (
+                        <ExternalLinksList annotations={task.research_data.annotations} />
+                      ) : (
+                        <p className="text-xs text-on-surface-variant">No external references available</p>
+                      )}
                     </div>
-                    <div className="info-card process-card bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-                      <h3 className="card-title text-sm border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">📁 Internal Asset Matched</h3>
-                      <AssetLinksList annotations={task.research_data.annotations} />
+
+                    {/* 内部素材 */}
+                    <div className="bg-surface-container-low rounded-xl p-5 border border-transparent">
+                      <h3 className="text-sm font-bold border-b border-outline-variant/20 pb-2 mb-4 text-on-surface flex items-center gap-2">
+                        <span className="material-symbols-outlined text-tertiary" data-icon="folder">folder</span>
+                        Internal Asset Matched
+                      </h3>
+                      {task.research_data.annotations ? (
+                        <AssetLinksList annotations={task.research_data.annotations} />
+                      ) : (
+                        <p className="text-xs text-on-surface-variant">No internal assets matched</p>
+                      )}
                     </div>
-                  </div>
-                )}
+                </div>
              </div>
           )}
         </section>

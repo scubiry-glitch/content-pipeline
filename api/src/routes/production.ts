@@ -674,11 +674,14 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { taskId } = request.params as any;
     const { generateDraftStreaming, getDraftProgress } = await import('../services/streamingDraft.js');
 
-    // 设置 SSE 头
+    // 设置 SSE 头（包含 CORS）
+    const origin = request.headers.origin || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     const task = await productionService.getTask(taskId);
@@ -802,11 +805,14 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const draft = draftResult.rows[0];
     const outline = typeof draft.outline === 'string' ? JSON.parse(draft.outline) : draft.outline;
 
-    // 设置 SSE 头
+    // 设置 SSE 头（包含 CORS）
+    const origin = request.headers.origin || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     try {
@@ -1048,28 +1054,41 @@ export async function productionRoutes(fastify: FastifyInstance) {
   fastify.get('/:taskId/drafts/:draftId', { preHandler: authenticate }, async (request, reply) => {
     const { taskId, draftId } = request.params as any;
     
-    const draftResult = await query(
-      `SELECT id, task_id, version, content, change_summary, round, expert_role, created_at 
-       FROM draft_versions 
-       WHERE id = $1 AND task_id = $2`,
-      [draftId, taskId]
-    );
-    
-    if (draftResult.rows.length === 0) {
-      reply.status(404);
-      return { error: 'Draft version not found' };
+    // 验证 draftId 是否为有效的 UUID 格式
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(draftId)) {
+      reply.status(400);
+      return { error: 'Invalid draft ID format', details: `ID must be a valid UUID, got: ${draftId}` };
     }
     
-    const draft = draftResult.rows[0];
-    return {
-      id: draft.id,
-      taskId: draft.task_id,
-      version: draft.version,
-      round: draft.round,
-      expertRole: draft.expert_role,
-      content: draft.content,
-      changeSummary: draft.change_summary,
-      createdAt: draft.created_at,
-    };
+    try {
+      const draftResult = await query(
+        `SELECT id, task_id, version, content, change_summary, round, expert_role, created_at 
+         FROM draft_versions 
+         WHERE id = $1 AND task_id = $2`,
+        [draftId, taskId]
+      );
+      
+      if (draftResult.rows.length === 0) {
+        reply.status(404);
+        return { error: 'Draft version not found' };
+      }
+      
+      const draft = draftResult.rows[0];
+      return {
+        id: draft.id,
+        taskId: draft.task_id,
+        version: draft.version,
+        round: draft.round,
+        expertRole: draft.expert_role,
+        content: draft.content,
+        changeSummary: draft.change_summary,
+        createdAt: draft.created_at,
+      };
+    } catch (err: any) {
+      console.error('[Draft API] Error fetching draft:', err);
+      reply.status(500);
+      return { error: 'Internal server error', details: err.message };
+    }
   });
 }

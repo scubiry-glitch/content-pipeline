@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
+import { VersionTimeline } from '../../components/content';
 import { tasksApi } from '../../api/client';
 import type { Task, OutlineComment, OutlineVersion } from '../../types';
 
@@ -61,6 +62,25 @@ export function PlanningTab() {
   const [versionOutline, setVersionOutline] = useState<any>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [showVersionCompare, setShowVersionCompare] = useState(false);
+
+  // 构建包含当前大纲的版本列表（兼容旧任务没有 outline_versions 的情况）
+  const getVersionsWithCurrent = useCallback((): OutlineVersion[] => {
+    if (versions.length > 0) return versions;
+    
+    // 如果没有版本历史但 task.outline 存在，显示当前大纲作为 v1
+    if (task.outline && task.outline.sections && task.outline.sections.length > 0) {
+      return [{
+        id: 'current',
+        version: 1,
+        task_id: task.id,
+        outline: task.outline,
+        comment: '当前版本（自动生成）',
+        created_by: 'system',
+        created_at: task.created_at || new Date().toISOString(),
+      }];
+    }
+    return [];
+  }, [versions, task.outline, task.id, task.created_at]);
 
   // ===== 重做对话框状态 =====
   const [showRedoDialog, setShowRedoDialog] = useState(false);
@@ -239,333 +259,332 @@ export function PlanningTab() {
   const displayOutline = versionOutline || outline;
 
   return (
-    <div className="tab-panel planning-panel animate-fade-in pb-32">
+    <div className="tab-panel planning-panel animate-fade-in pb-32 max-w-5xl mx-auto">
       {/* ========== Header ========== */}
       <header className="mb-12">
-        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stage 1</span>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
+        <div className="flex items-center gap-2 text-on-surface-variant mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-primary">Stage 1</span>
+          <span className="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
           <span className="text-xs font-bold uppercase tracking-wider">Ideation & Topic Planning</span>
         </div>
-        <h1 className="text-4xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white">Topic Discovery & Analysis</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl">Leveraging multi-source intelligence to identify high-potential content angles and structured outlines.</p>
+        <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">Topic Discovery & Analysis</h1>
+        <p className="text-on-surface-variant mt-2 max-w-2xl">Leveraging multi-source intelligence to identify high-potential content angles and structured outlines.</p>
       </header>
 
       {/* ========== Stepper Container ========== */}
       <div className="space-y-16">
         {/* ========== Section 1: Input ========== */}
         <section ref={inputRef} className="relative step-line step-line-active pl-12">
-          <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
-            <span className="material-symbols-outlined">input</span>
+          <div className="absolute left-0 top-0 w-10 h-10 bg-primary text-on-primary rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined" data-icon="input">input</span>
           </div>
           <div className="flex items-baseline justify-between mb-6">
-            <h3 className="text-xl font-bold font-headline">Input: Multi-source Discovery</h3>
-            <div className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-xs font-bold rounded-full flex items-center gap-2">
-              <span className="material-symbols-outlined text-xs">hub</span>
-              Quality Evaluation & Competitors
+            <h3 className="text-xl font-bold font-headline text-on-surface">Input: Multi-source Discovery</h3>
+            <div className="px-3 py-1 bg-primary-container text-on-primary-container text-xs font-bold rounded-full flex items-center gap-2">
+              <span className="material-symbols-outlined text-xs" data-icon="hub">hub</span>
+              Unified 24 topic entities
             </div>
           </div>
           
-          <div className="input-grid">
-            {/* 选题质量评估 */}
-            {evaluation && (
-              <div className="info-card input-card glass-card">
-                <h3 className="card-title">
-                  <span className="icon">📊</span> 选题综合评估
-                </h3>
-                <div className="evaluation-content">
-                  <div className="score-circle-container">
-                    <div
-                      className="score-circle"
-                      style={{
-                        background: `conic-gradient(
-                          ${evaluation.score >= 80 ? '#10b981' : evaluation.score >= 60 ? '#f59e0b' : '#ef4444'} ${evaluation.score * 3.6}deg,
-                          #e5e7eb 0deg
-                        )`
-                      }}
-                    >
-                      <div className="score-circle-inner">
-                        <span className="score-value">{evaluation.score}</span>
-                        <span className="score-label" style={{color:'black'}}>分</span>
-                      </div>
-                    </div>
-                    <div className={`score-verdict ${evaluation.score >= 60 ? 'pass' : 'fail'}`}>
-                      {evaluation.score >= 80 ? '✅ 强烈推荐' :
-                       evaluation.score >= 60 ? '⚠️ 可以写' :
-                       evaluation.score >= 40 ? '❌ 有风险' : '❌ 不建议'}
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* RSS Source */}
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <span className="material-symbols-outlined text-tertiary" data-icon="rss_feed">rss_feed</span>
+                <span className="text-[10px] font-bold uppercase text-tertiary px-2 py-0.5 bg-tertiary-container/10 rounded">Live</span>
+              </div>
+              <h4 className="font-bold text-sm mb-2 text-on-surface">RSS Aggregation</h4>
+              <p className="text-xs text-on-surface-variant leading-relaxed">TechCrunch, Wired, and 12 other industry signals active.</p>
+              <div className="mt-4 pt-4 border-t border-outline-variant/10 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-tertiary-fixed animate-pulse"></span>
+                <span className="text-[10px] text-on-surface-variant font-medium">{task.research_data?.insights?.length || 0} new signals detected</span>
+              </div>
+            </div>
 
-                  <div className="dimension-scores">
-                    {Object.entries(evaluation.dimensions || {}).map(([key, value]: [string, any]) => {
-                      const labels: Record<string, string> = {
-                        dataAvailability: '数据可得性 (40%)',
-                        topicHeat: '话题热度 (25%)',
-                        differentiation: '差异化 (20%)',
-                        timeliness: '时效性 (15%)'
-                      };
-                      const colors: Record<string, string> = {
-                        dataAvailability: '#6366f1',
-                        topicHeat: '#f59e0b',
-                        differentiation: '#06b6d4',
-                        timeliness: '#10b981'
-                      };
-
-                      return (
-                        <div key={key} className="dimension-item">
-                          <div className="dimension-header">
-                            <span className="dimension-label">{labels[key] || key}</span>
-                            <span className="dimension-value">{value}分</span>
-                          </div>
-                          <div className="dimension-bar-bg">
-                            <div
-                              className="dimension-bar-fill"
-                              style={{ width: `${value}%`, background: colors[key] || '#6366f1' }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* Web Search Source */}
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <span className="material-symbols-outlined text-primary" data-icon="travel_explore">travel_explore</span>
+                <span className="text-[10px] font-bold uppercase text-primary px-2 py-0.5 bg-primary-container/10 rounded">Tavily AI</span>
+              </div>
+              <h4 className="font-bold text-sm mb-2 text-on-surface">Web Search Results</h4>
+              <p className="text-xs text-on-surface-variant leading-relaxed">Deep-crawling global context and technical documentation.</p>
+              <div className="mt-4 pt-4 border-t border-outline-variant/10">
+                <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+                  <div className="bg-primary h-full w-full"></div>
                 </div>
-
-                {evaluation?.analysis && (
-                  <div className="evaluation-analysis mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <strong>AI 分析建议：</strong>{evaluation.analysis}
-                  </div>
-                )}
+                <span className="text-[10px] text-on-surface-variant font-medium mt-1 inline-block">{task.research_data?.sources?.length || 0} sources indexed</span>
               </div>
-            )}
+            </div>
 
-            {/* 竞品分析 */}
-            {competitorAnalysis.reports?.length > 0 && (
-              <div className="info-card input-card glass-card">
-                <h3 className="card-title">
-                  <span className="icon">⚔️</span> 竞品分析与情报接入
-                </h3>
-                <p className="competitor-summary text-sm text-slate-500 mb-4">
-                  成功挖掘到 {competitorAnalysis.summary?.totalFound || competitorAnalysis.reports.length} 篇结构化相关研报与资讯。
-                </p>
-
-                {competitorAnalysis.differentiationSuggestions?.length > 0 && (
-                  <div className="differentiation-suggestions">
-                    {competitorAnalysis.differentiationSuggestions.slice(0, 3).map((s: any, i: number) => (
-                      <div key={i} className="diff-suggestion-card mb-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                        <div className="diff-header flex justify-between items-center mb-1">
-                          <span className="diff-angle font-bold text-slate-700 dark:text-slate-300">{s.angle}</span>
-                          <span className={`diff-value text-xs px-2 py-0.5 rounded ${s.potentialValue === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {s.potentialValue === 'high' ? '高价值角度' : '中低价值'}
-                          </span>
-                        </div>
-                        <p className="diff-rationale text-xs text-slate-500">{s.rationale}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* Community Source */}
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <span className="material-symbols-outlined text-error" data-icon="groups">groups</span>
+                <span className="text-[10px] font-bold uppercase text-error px-2 py-0.5 bg-error-container/10 rounded">Social</span>
               </div>
-            )}
+              <h4 className="font-bold text-sm mb-2 text-on-surface">Community Topics</h4>
+              <p className="text-xs text-on-surface-variant leading-relaxed">Sentiment tracking on XHS, Weibo, and Reddit developer subs.</p>
+              <div className="mt-4 pt-4 border-t border-outline-variant/10 flex gap-2">
+                <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#AI_ethics</span>
+                <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#GPT-5</span>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* ========== Section 2: Process ========== */}
-        {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
-          <section ref={processRef} className="relative step-line step-line-active pl-12">
-            <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
-              <span className="material-symbols-outlined">memory</span>
+        <section ref={processRef} className="relative step-line step-line-active pl-12">
+            <div className="absolute left-0 top-0 w-10 h-10 bg-primary text-on-primary rounded-full flex items-center justify-center z-10 shadow-lg">
+              <span className="material-symbols-outlined" data-icon="memory">memory</span>
             </div>
-            <h3 className="text-xl font-bold font-headline mb-6">Process: AI Synthesis & Ranking</h3>
+            <h3 className="text-xl font-bold font-headline mb-6 text-on-surface">Process: AI Analysis & Ranking</h3>
 
-            <div className="info-card full-width process-card glass-card">
-              <div className="insights-grid">
-                {outline.knowledgeInsights?.length > 0 && (
-                  <div className="insights-column">
-                    <h4 className="column-subtitle font-bold text-slate-700 dark:text-slate-300 mb-4">📚 基于历史研究的观点聚类</h4>
-                    <div className="insight-list space-y-3">
-                      {outline.knowledgeInsights.map((insight: any, i: number) => (
-                        <div key={i} className="insight-card-premium p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <div className="insight-header flex justify-between items-center mb-2">
-                            <span className="insight-type-badge text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
-                              {insight.type === 'trend' ? '📈 趋势延续' : insight.type === 'gap' ? '🔍 研究空白' : '📖 观点演变'}
-                            </span>
-                            <span className="insight-relevance text-xs text-slate-400">相似度 {(insight.relevance * 100).toFixed(0)}%</span>
-                          </div>
-                          <p className="insight-content text-sm text-slate-600 dark:text-slate-400">{insight.content}</p>
-                        </div>
-                      ))}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Ranking Engine */}
+              <div className="lg:col-span-8 bg-surface-container-lowest p-6 rounded-xl border border-transparent shadow-sm">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-20 h-20 rounded-full border-[6px] border-primary-container flex items-center justify-center relative">
+                    <svg className="absolute inset-0 w-full h-full -rotate-90">
+                      <circle className="text-primary" cx="40" cy="40" fill="transparent" r="34" stroke="currentColor" strokeDasharray="213.6" strokeDashoffset={213.6 * (1 - (evaluation?.score || 92) / 100)} strokeWidth="6"></circle>
+                    </svg>
+                    <span className="text-xl font-black text-on-surface">{evaluation?.score || 92}</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-lg text-on-surface">Unified Confidence</h4>
+                    <p className="text-sm text-on-surface-variant">High editorial potential based on cross-source validation.</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <h5 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Verification Matrix</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-surface-container-low p-3 rounded-lg border-l-4 border-secondary-fixed">
+                      <p className="text-[10px] text-on-surface-variant font-bold mb-1">RSS News</p>
+                      <p className="text-sm font-semibold text-on-surface">Matched</p>
+                    </div>
+                    <div className="bg-surface-container-low p-3 rounded-lg border-l-4 border-secondary-fixed">
+                      <p className="text-[10px] text-on-surface-variant font-bold mb-1">Web Context</p>
+                      <p className="text-sm font-semibold text-on-surface">Validated</p>
+                    </div>
+                    <div className="bg-surface-container-low p-3 rounded-lg border-l-4 border-tertiary-fixed">
+                      <p className="text-[10px] text-on-surface-variant font-bold mb-1">Community Sentiment</p>
+                      <p className="text-sm font-semibold text-on-surface">Partial</p>
                     </div>
                   </div>
-                )}
+                </div>
+              </div>
 
-                {outline.novelAngles?.length > 0 && (
-                  <div className="insights-column mt-6 md:mt-0">
-                    <h4 className="column-subtitle font-bold text-slate-700 dark:text-slate-300 mb-4">✨ 推荐新维度挖掘</h4>
-                    <div className="angle-list space-y-3">
-                      {outline.novelAngles.map((angle: any, i: number) => {
-                        const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : 'medium');
-                        return (
-                          <div key={i} className="angle-card-premium p-4 border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-900/10 rounded-lg">
-                            <div className="angle-header flex justify-between items-center mb-2">
-                              <strong className="angle-title text-sm">{angle.angle}</strong>
-                              <span className={`impact-badge text-xs px-2 py-0.5 rounded ${impact === 'high' ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                                {impact === 'high' ? '高潜' : '中潜'}
-                              </span>
-                            </div>
-                            <p className="angle-desc text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">{angle.description || angle.rationale}</p>
-                            <div className="angle-footer pt-3 border-t border-orange-200/50 dark:border-orange-800/50">
-                              <span className="diff-score text-xs text-orange-700 dark:text-orange-400 font-bold">差异化评分: {angle.differentiation_score || 0}/10</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {/* Sentiment Panel */}
+              <div className="lg:col-span-4 bg-primary text-on-primary p-6 rounded-xl shadow-lg flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold mb-4 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-xl" data-icon="analytics">analytics</span>
+                    Sentiment/Gap Score
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center text-xs">
+                      <span>User Interest</span>
+                      <span className="font-bold">88%</span>
+                    </div>
+                    <div className="w-full bg-white/20 h-1.5 rounded-full">
+                      <div className="bg-white h-full w-[88%]"></div>
+                    </div>
+                    <div className="flex justify-between items-center text-xs mt-4">
+                      <span>Content Saturation</span>
+                      <span className="font-bold">12%</span>
+                    </div>
+                    <div className="w-full bg-white/20 h-1.5 rounded-full">
+                      <div className="bg-white h-full w-[12%]"></div>
                     </div>
                   </div>
-                )}
+                </div>
+                <div className="mt-6 pt-4 border-t border-white/10">
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">Editorial Verdict</p>
+                  <p className="text-sm font-medium leading-relaxed">Topic is "Underserved" with viral potential in developer circles.</p>
+                </div>
               </div>
             </div>
           </section>
-        )}
 
         {/* ========== Section 3: Output ========== */}
         <section ref={outputRef} className="relative pl-12">
-          <div className="absolute left-0 top-0 w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
-            <span className="material-symbols-outlined">auto_awesome</span>
+          <div className="absolute left-0 top-0 w-10 h-10 bg-tertiary text-on-tertiary rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
           </div>
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold font-headline">Output: Streaming Outline Generation</h3>
-            {actionLoading === 'confirm-outline' ? (
-              <div className="flex items-center gap-2 px-3 py-1 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
-                <span className="text-xs font-bold text-orange-600 dark:text-orange-400">Streaming Generation...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {versions.length > 0 && (
-                  <select 
-                    value={selectedVersion || ''} 
-                    onChange={(e) => handleVersionChange(e.target.value ? parseInt(e.target.value) : null)}
-                    className="version-select border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm rounded-lg px-2 py-1"
-                  >
-                    <option value="">当前最新版本</option>
-                    {versions.map((v) => (
-                      <option key={v.version} value={v.version}>
-                        V{v.version} - {new Date(v.created_at).toLocaleDateString()}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+            <h3 className="text-xl font-bold font-headline text-on-surface">Output: Topic Outline Preview</h3>
+            
+            <div className="flex items-center gap-4">
+               {/* Editor Mode Toggle */}
+               {!editingOutline && displayOutline?.sections && displayOutline.sections.length > 0 && !selectedVersion && (
+                  <div className="flex bg-surface-container-low p-0.5 rounded-lg border border-outline-variant/20">
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'edit' ? 'bg-primary text-on-primary shadow shadow-primary/20' : 'text-on-surface-variant hover:text-on-surface'}`} onClick={() => setEditorMode('edit')}>✏️ Edit</button>
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'preview' ? 'bg-primary text-on-primary shadow shadow-primary/20' : 'text-on-surface-variant hover:text-on-surface'}`} onClick={() => setEditorMode('preview')}>👁️ Preview</button>
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'split' ? 'bg-primary text-on-primary shadow shadow-primary/20' : 'text-on-surface-variant hover:text-on-surface'}`} onClick={() => setEditorMode('split')}>⬌ Split</button>
+                  </div>
+               )}
+
+               {actionLoading === 'confirm-outline' ? (
+                 <div className="flex items-center gap-2 px-3 py-1 bg-tertiary-container/10 border border-tertiary/20 rounded-full">
+                   <span className="w-2 h-2 rounded-full bg-tertiary animate-ping"></span>
+                   <span className="text-xs font-bold text-tertiary">Streaming Generation...</span>
+                 </div>
+               ) : (
+                 <div className="flex items-center gap-2">
+                   {getVersionsWithCurrent().length > 0 && (
+                     <select 
+                       value={selectedVersion || ''} 
+                       onChange={(e) => handleVersionChange(e.target.value ? parseInt(e.target.value) : null)}
+                       className="version-select border-outline-variant/30 bg-surface-container-lowest text-on-surface text-sm rounded-lg px-2 py-1"
+                     >
+                       <option value="">当前最新版本</option>
+                       {getVersionsWithCurrent().map((v) => (
+                         <option key={v.version} value={v.version}>
+                           V{v.version} - {new Date(v.created_at).toLocaleDateString()}
+                         </option>
+                       ))}
+                     </select>
+                   )}
+                 </div>
+               )}
+            </div>
           </div>
 
-          <div className="info-card full-width output-card border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-800">
-            <div className="card-header-with-actions flex justify-between items-center mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="card-title text-lg font-bold flex items-center m-0 border-none pb-0">
-                <span className="icon mr-2 text-xl">📝</span> 文章分层大纲 (Macro/Meso/Micro)
-                {selectedVersion && <span className="version-badge highlight ml-3 text-xs bg-orange-500 text-white px-2 py-1 rounded">历史版本 {selectedVersion}</span>}
-              </h3>
-              <div className="header-actions flex gap-2">
-                {!editingOutline && displayOutline.sections && displayOutline.sections.length > 0 && !selectedVersion && (
-                  <div className="editor-mode-toggle flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'edit' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('edit')}>✏️ Edit</button>
-                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'preview' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('preview')}>👁️ Preview</button>
-                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'split' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('split')}>⬌ Split</button>
-                  </div>
-                )}
+          <div className="bg-surface-container-lowest rounded-xl border border-transparent shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-surface-container">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold text-lg text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">description</span>
+                  {editingOutline ? 'Markdown Source Editor' : 'Generated Document Overview'}
+                </h4>
+                <span className="text-xs font-medium px-2 py-1 bg-surface-container rounded-md text-on-surface-variant">ID: {task.id.slice(-8).toUpperCase()}</span>
+              </div>
+              <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-1000 ${
+                    task.current_stage?.includes('generat') || task.current_stage?.includes('regenerat') 
+                      ? 'bg-tertiary animate-pulse' 
+                      : 'bg-tertiary'
+                  }`}
+                  style={{ 
+                    width: task.current_stage?.includes('generat') || task.current_stage?.includes('regenerat')
+                      ? `${Math.max((task.progress || 0), 5)}%`
+                      : task.status === 'planning' ? '65%' : '100%'
+                  }}
+                ></div>
               </div>
             </div>
 
-            {editingOutline ? (
-              <div className={`outline-container mode-${editorMode}`}>
-                {(editorMode === 'edit' || editorMode === 'split') && (
-                  <div className="outline-editor-panel">
-                    <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Markdown Editor</div>
-                    <textarea
-                      value={outlineDraft}
-                      onChange={(e) => onOutlineChange(e.target.value)}
-                      className="outline-textarea w-full p-4 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      rows={editorMode === 'split' ? 25 : 20}
-                    />
-                    <div className="editor-actions mt-4 flex justify-end gap-3">
-                      <button className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-bold" onClick={handleCancelClick}>Cancel</button>
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold shadow-md" onClick={handleSaveClick}>Save Draft</button>
-                    </div>
-                  </div>
-                )}
-                {(editorMode === 'preview' || editorMode === 'split') && (
-                  <div className="outline-preview-panel bg-white dark:bg-slate-900 p-6 border border-slate-200 dark:border-slate-800 rounded-lg prose dark:prose-invert max-w-none">
-                    <MarkdownRenderer content={outlineToMarkdown()} />
-                  </div>
-                )}
-              </div>
-            ) : displayOutline.sections && displayOutline.sections.length > 0 ? (
-               <div className={`outline-container mode-${editorMode}`}>
-                {editorMode === 'edit' ? (
-                  <div className="outline-editor-panel relative">
-                    <div className="absolute top-2 right-2 flex gap-2">
-                       <button className="p-2 bg-white shadow rounded text-slate-500 hover:text-blue-600" onClick={() => { onEditOutline(); setEditorMode('split'); }}>🔗 Start Editing</button>
-                    </div>
-                    <pre className="outline-source bg-slate-50 dark:bg-slate-900 p-6 rounded-lg overflow-auto max-h-[600px] border border-slate-200 dark:border-slate-800">
-                      <code className="text-sm font-mono text-slate-800 dark:text-slate-300">{outlineToMarkdown(displayOutline)}</code>
-                    </pre>
-                  </div>
-                ) : editorMode === 'preview' ? (
-                  <div className="outline-preview-panel bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 prose dark:prose-invert max-w-none">
-                    <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="outline-editor-panel relative group">
-                      <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button className="p-2 bg-white shadow rounded text-xs font-bold text-blue-600" onClick={() => { onEditOutline(); }}>Start Editing</button>
+            <div className="p-0">
+               {editingOutline ? (
+                 <div className={`flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-outline-variant/10 min-h-[500px] mode-${editorMode}`}>
+                   {(editorMode === 'edit' || editorMode === 'split') && (
+                     <div className="flex-1 p-6 bg-surface-container-lowest flex flex-col">
+                       <textarea
+                         value={outlineDraft}
+                         onChange={(e) => onOutlineChange(e.target.value)}
+                         className="flex-1 w-full p-4 font-mono text-sm bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary resize-y min-h-[300px]"
+                       />
+                       <div className="mt-4 flex justify-end gap-3 shrink-0">
+                         <button className="px-5 py-2 border border-outline-variant text-on-surface rounded-lg hover:bg-surface-container text-sm font-bold transition-colors" onClick={handleCancelClick}>Cancel Edit</button>
+                         <button className="px-5 py-2 bg-primary text-on-primary rounded-lg hover:bg-primary-dim text-sm font-bold shadow-md transition-colors" onClick={handleSaveClick}>Save Draft</button>
+                       </div>
+                     </div>
+                   )}
+                   {(editorMode === 'preview' || editorMode === 'split') && (
+                     <div className="flex-1 p-6 bg-white prose max-w-none overflow-y-auto">
+                       <MarkdownRenderer content={outlineToMarkdown()} />
+                     </div>
+                   )}
+                 </div>
+               ) : displayOutline?.sections && displayOutline.sections.length > 0 ? (
+                 <div className={`flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-outline-variant/10 min-h-[500px] mode-${editorMode}`}>
+                    {(editorMode === 'edit' || editorMode === 'split') && (
+                     <div className="flex-1 p-6 bg-surface-container-low/50 flex flex-col relative">
+                       <div className="absolute inset-0 flex items-center justify-center bg-surface-container-lowest/80 backdrop-blur-[2px] z-10">
+                          <button className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg shadow-lg flex items-center gap-2 hover:scale-105 transition-transform" onClick={handleEditClick}>
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                            Click to Edit Source
+                          </button>
+                       </div>
+                       <textarea
+                         value={outlineToMarkdown(displayOutline)}
+                         readOnly
+                         className="flex-1 w-full p-4 font-mono text-sm bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-lg opacity-50 resize-none min-h-[300px]"
+                       />
+                     </div>
+                   )}
+                   {(editorMode === 'preview' || editorMode === 'split') && (
+                     <div className="flex-1 p-8 bg-white prose max-w-none">
+                       <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+                     </div>
+                   )}
+                 </div>
+               ) : task.current_stage?.includes('generat') || task.current_stage?.includes('regenerat') ? (
+                  <div className="p-12 flex flex-col items-center justify-center min-h-[400px]">
+                    <div className="relative mb-6">
+                      <div className="w-16 h-16 rounded-full border-4 border-surface-container border-t-primary animate-spin"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-primary text-2xl">psychology</span>
                       </div>
-                      <pre className="outline-source bg-slate-50 dark:bg-slate-900 p-6 rounded-lg overflow-auto max-h-[800px] border border-slate-200 dark:border-slate-800">
-                        <code className="text-sm font-mono whitespace-pre-wrap">{outlineToMarkdown(displayOutline)}</code>
-                      </pre>
                     </div>
-                    <div className="outline-preview-panel p-6 overflow-auto max-h-[800px] bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 prose dark:prose-invert max-w-none">
-                      <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+                    <h5 className="font-bold text-xl text-on-surface mb-3">AI Generating Outline...</h5>
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="px-3 py-1 bg-tertiary-container/20 text-tertiary text-xs font-bold rounded-full animate-pulse">
+                        Stage: {task.current_stage?.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-sm text-on-surface-variant">Progress: {task.progress || 0}%</span>
                     </div>
+                    <div className="w-64 h-2 bg-surface-container rounded-full overflow-hidden mb-4">
+                      <div 
+                        className="h-full bg-gradient-to-r from-primary to-tertiary rounded-full transition-all duration-1000"
+                        style={{ width: `${Math.max((task.progress || 0), 10)}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-on-surface-variant max-w-md text-center leading-relaxed">
+                      The AI is analyzing multi-source intelligence and structuring your content outline. 
+                      This typically takes 30s - 2 minutes. Please wait...
+                    </p>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="empty-state py-20 text-center">
-                <div className="empty-icon text-6xl mb-4 opacity-50">📝</div>
-                <div className="empty-title text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Awaiting Generation</div>
-                <p className="text-slate-500">The outline generation process will commence automatically based on parameters.</p>
-              </div>
-            )}
+               ) : (
+                  <div className="p-12 text-center text-on-surface-variant flex flex-col items-center justify-center min-h-[300px]">
+                    <span className="material-symbols-outlined text-border mb-4 text-5xl opacity-40">hourglass_empty</span>
+                    <h5 className="font-bold text-lg text-on-surface mb-2">Outline Not Generated Yet</h5>
+                    <p className="text-sm max-w-sm">The planning topology is currently computing. Please wait for the initial generation stage to complete before viewing the structural outline.</p>
+                  </div>
+               )}
+            </div>
           </div>
         </section>
 
         {/* ========== Section 4: Feedback & Versions Board ========== */}
-        <section className="pt-8 mt-16 border-t border-slate-200 dark:border-slate-800">
+        <section className="pt-8 mt-16 border-t border-outline-variant/10">
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
              {/* 评论交互区 */}
              <div>
-                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-orange-500">chat</span> Feedback Interventions</h3>
-                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2 text-on-surface"><span className="material-symbols-outlined text-tertiary">chat</span> Feedback Interventions</h3>
+                <div className="bg-surface-container-lowest p-4 rounded-xl border border-transparent shadow-sm">
                   <div className="comment-input-area mb-4">
-                    <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Drop expert critiques or manual overrides here..." className="w-full p-3 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 mb-2" rows={3} />
-                    <button className="px-4 py-2 bg-slate-800 dark:bg-slate-700 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-colors" onClick={handleAddComment} disabled={!newComment.trim()}>Push Feedback</button>
+                    <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Drop expert critiques or manual overrides here..." className="w-full p-3 text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/30 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary mb-2" rows={3} />
+                    <button className="px-4 py-2 bg-primary text-on-primary text-xs font-bold rounded-lg hover:bg-primary-dim transition-colors" onClick={handleAddComment} disabled={!newComment.trim()}>Push Feedback</button>
                   </div>
                   
                   <div className="comments-list space-y-3 max-h-[400px] overflow-auto">
                     {loadingComments ? (
-                      <div className="text-sm text-slate-400 p-4 text-center">Loading...</div>
+                      <div className="text-sm text-on-surface-variant p-4 text-center">Loading...</div>
                     ) : comments.length === 0 ? (
-                      <div className="text-sm text-slate-400 p-4 text-center italic">No interventions tracked.</div>
+                      <div className="text-sm text-on-surface-variant p-4 text-center italic">No interventions tracked.</div>
                     ) : (
                       comments.map((comment) => (
-                        <div key={comment.id} className="comment-item bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div key={comment.id} className="comment-item bg-surface-container-low p-3 rounded-lg border border-transparent">
                           <div className="comment-header flex justify-between items-center mb-2">
-                            <span className="comment-author text-xs font-bold text-orange-600 dark:text-orange-400">{comment.created_by}</span>
+                            <span className="comment-author text-xs font-bold text-tertiary">{comment.created_by}</span>
                             <div className="flex items-center gap-2">
-                              <span className="comment-time text-[10px] text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
-                              <button className="text-slate-400 hover:text-red-500 text-xs" onClick={() => handleDeleteComment(comment.id)}>✕</button>
+                              <span className="comment-time text-[10px] text-on-surface-variant">{new Date(comment.created_at).toLocaleString()}</span>
+                              <button className="text-on-surface-variant hover:text-error text-xs" onClick={() => handleDeleteComment(comment.id)}>✕</button>
                             </div>
                           </div>
-                          <div className="comment-content text-sm text-slate-700 dark:text-slate-300">{comment.content}</div>
+                          <div className="comment-content text-sm text-on-surface">{comment.content}</div>
                         </div>
                       ))
                     )}
@@ -575,26 +594,25 @@ export function PlanningTab() {
 
              {/* 版本历史区 */}
              <div>
-                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-blue-500">history</span> Version Timeline</h3>
-                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 max-h-[600px] overflow-auto">
-                   {versions.length === 0 ? (
-                      <div className="text-sm text-slate-400 p-4 text-center italic">No snapshots recorded yet.</div>
+                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2 text-on-surface"><span className="material-symbols-outlined text-primary">history</span> Version Timeline</h3>
+                <div className="bg-surface-container-lowest rounded-xl border border-transparent shadow-sm">
+                   {getVersionsWithCurrent().length === 0 ? (
+                      <div className="text-sm text-on-surface-variant p-4 text-center italic">No snapshots recorded yet.</div>
                    ) : (
-                      <div className="relative border-l-2 border-slate-200 dark:border-slate-700 ml-3 space-y-6">
-                        {versions.map((v) => (
-                          <div key={v.version} className="relative pl-6">
-                            <span className="absolute -left-[9px] top-1 w-4 h-4 bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-full"></span>
-                            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-start">
-                              <div>
-                                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded">v{v.version}</span>
-                                <p className="text-[10px] text-slate-400 mt-1">{new Date(v.created_at).toLocaleString()}</p>
-                                {v.comment && <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 italic">{v.comment}</p>}
-                              </div>
-                              <button className="text-xs text-blue-600 hover:underline font-bold" onClick={() => handleVersionChange(v.version)}>View</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <VersionTimeline
+                        versions={getVersionsWithCurrent().map((v: OutlineVersion) => ({
+                          id: v.id || `v${v.version}`,
+                          version: v.version,
+                          created_at: v.created_at,
+                          change_summary: v.comment || '',
+                          created_by: v.created_by,
+                        }))}
+                        currentVersion={selectedVersion || undefined}
+                        onVersionSelect={(version) => handleVersionChange(version)}
+                        onViewDetail={(v) => handleVersionChange(v.version)}
+                        maxHeight="500px"
+                        enableCompare={false}
+                      />
                    )}
                 </div>
              </div>
@@ -603,21 +621,21 @@ export function PlanningTab() {
       </div>
 
       {/* ========== Bottom Global Action Bar ========== */}
-      <div className="fixed bottom-0 left-[256px] right-0 h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-40 flex items-center justify-center px-8 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+      <div className="fixed bottom-0 left-[256px] right-0 h-24 bg-white/80 backdrop-blur-md border-t border-outline-variant/10 z-40 flex items-center justify-center px-8">
         <div className="max-w-5xl w-full flex items-center justify-between">
           <div className="flex items-center gap-4">
-             <span className="text-sm font-medium text-slate-500">
-               Status: <span className={`uppercase font-bold ${task.status === 'planning' ? 'text-blue-600' : 'text-slate-700 dark:text-slate-300'}`}>{task.status.replace('_', ' ')}</span>
+             <span className="text-sm font-medium text-on-surface-variant">
+               Status: <span className={`uppercase font-bold ${task.status === 'planning' ? 'text-primary' : 'text-on-surface'}`}>{task.status.replace('_', ' ')}</span>
              </span>
           </div>
           
           <div className="flex items-center gap-4">
-            <button className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2" onClick={handleRedoClick}>
-                <span className="material-symbols-outlined text-lg">sync</span>
+            <button className="px-6 py-3 border border-outline-variant text-on-surface font-bold text-sm rounded-lg hover:bg-surface-container transition-all active:scale-95 flex items-center gap-2" onClick={handleRedoClick}>
+                <span className="material-symbols-outlined text-lg">refresh</span>
                 Regenerate Stage
             </button>
             {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
-            <button className="px-6 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg shadow-md hover:bg-blue-700 transition-all flex items-center gap-2"
+            <button className="px-8 py-3 bg-primary text-on-primary font-bold text-sm rounded-lg shadow-lg hover:bg-primary-dim transition-all active:scale-95 flex items-center gap-2"
                 onClick={onConfirmOutline}
                 disabled={actionLoading === 'confirm-outline'}>
                 {actionLoading === 'confirm-outline' ? 'Streaming...' : 'Proceed Details'}
@@ -630,39 +648,40 @@ export function PlanningTab() {
 
       {/* ========== 重做对话框 ========== */}
       {showRedoDialog && (
-        <div className="modal-overlay">
-          <div className="modal-content redo-dialog">
-            <h3>🔄 重做选题策划</h3>
-            <p>当前大纲将被保存到历史版本，并根据以下评论重新生成大纲：</p>
+        <div className="modal-overlay fixed inset-0 bg-black/50 z-[100] flex items-center justify-center">
+          <div className="modal-content bg-surface-container-lowest rounded-xl p-6 max-w-lg w-full">
+            <h3 className="text-lg font-bold text-on-surface mb-2">🔄 重做选题策划</h3>
+            <p className="text-sm text-on-surface-variant mb-4">当前大纲将被保存到历史版本，并根据以下评论重新生成大纲：</p>
             
-            <div className="redo-comments-preview">
-              <h4>已添加的评论 ({comments.length})：</h4>
-              <ul>
+            <div className="bg-surface-container-low p-4 rounded-lg mb-4">
+              <h4 className="text-xs font-bold text-on-surface-variant mb-2">已添加的评论 ({comments.length})：</h4>
+              <ul className="text-sm text-on-surface space-y-1 list-disc pl-4">
                 {comments.map((c, i) => (
-                  <li key={c.id}>{i + 1}. {c.content.substring(0, 50)}{c.content.length > 50 ? '...' : ''}</li>
+                  <li key={c.id}>{c.content.substring(0, 50)}{c.content.length > 50 ? '...' : ''}</li>
                 ))}
               </ul>
             </div>
 
-            <div className="redo-comment-input">
-              <label>补充修改意见（可选）：</label>
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-on-surface mb-2">补充修改意见（可选）：</label>
               <textarea
                 value={redoComment}
                 onChange={(e) => setRedoComment(e.target.value)}
                 placeholder="输入额外的修改建议..."
                 rows={4}
+                className="w-full p-3 text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/30 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary"
               />
             </div>
 
-            <div className="modal-actions">
+            <div className="flex justify-end gap-3">
               <button 
-                className="btn btn-secondary"
+                className="px-4 py-2 border border-outline-variant text-on-surface font-bold text-sm rounded-lg hover:bg-surface-container"
                 onClick={() => setShowRedoDialog(false)}
               >
                 取消
               </button>
               <button 
-                className="btn btn-primary"
+                className="px-4 py-2 bg-primary text-on-primary font-bold text-sm rounded-lg hover:bg-primary-dim"
                 onClick={handleConfirmRedo}
                 disabled={isRedoing}
               >

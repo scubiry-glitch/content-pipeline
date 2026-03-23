@@ -172,12 +172,14 @@ export function SequentialReviewChain({
                     {new Date(initialVersion.createdAt).toLocaleString('zh-CN')}
                   </span>
                 </div>
-                <button 
-                  className={`version-select-btn ${selectedVersionId === initialVersion.id ? 'active' : ''}`}
-                  onClick={() => onVersionSelect?.(initialVersion.id)}
-                >
-                  查看
-                </button>
+                {initialVersion.id && !initialVersion.id.startsWith(':') && (
+                  <button 
+                    className={`version-select-btn ${selectedVersionId === initialVersion.id ? 'active' : ''}`}
+                    onClick={() => onVersionSelect?.(initialVersion.id)}
+                  >
+                    查看
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -241,12 +243,14 @@ export function SequentialReviewChain({
                         {item.outputVersion.changeSummary || '基于专家评审意见自动修订'}
                       </div>
                       <div className="version-actions">
-                        <button 
-                          className={`version-select-btn ${selectedVersionId === item.outputVersion.id ? 'active' : ''}`}
-                          onClick={() => onVersionSelect?.(item.outputVersion.id)}
-                        >
-                          查看此版本
-                        </button>
+                        {item.outputVersion.id && !item.outputVersion.id.startsWith(':') && (
+                          <button 
+                            className={`version-select-btn ${selectedVersionId === item.outputVersion.id ? 'active' : ''}`}
+                            onClick={() => onVersionSelect?.(item.outputVersion.id)}
+                          >
+                            查看此版本
+                          </button>
+                        )}
                         {!item.isFirst && (
                           <button 
                             className="version-compare-btn"

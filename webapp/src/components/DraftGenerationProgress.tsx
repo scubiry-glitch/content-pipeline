@@ -1,6 +1,7 @@
 // 文稿生成进度面板 - 实时显示分段生成进度
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { DraftProgress } from '../api/client';
+import { BASE_URL, API_KEY } from '../api/client';
 import './DraftGenerationProgress.css';
 
 interface DraftGenerationProgressProps {
@@ -27,8 +28,8 @@ export function DraftGenerationProgress({ taskId, onComplete, onError }: DraftGe
   const fetchCurrentProgress = useCallback(async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/production/${taskId}/draft/progress`,
-        { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY } }
+        `${BASE_URL}/production/${taskId}/draft/progress`,
+        { headers: { 'X-API-Key': API_KEY } }
       );
       const data = await response.json();
       if (data.status !== 'not_started') {
@@ -56,7 +57,7 @@ export function DraftGenerationProgress({ taskId, onComplete, onError }: DraftGe
       if (isCompletedRef.current) return;
 
       const eventSource = new EventSource(
-        `${import.meta.env.VITE_API_URL}/production/${taskId}/draft/generate-stream`,
+        `${BASE_URL}/production/${taskId}/draft/generate-stream`,
         { withCredentials: true }
       );
       eventSourceRef.current = eventSource;

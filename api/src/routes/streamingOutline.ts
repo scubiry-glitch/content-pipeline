@@ -157,11 +157,14 @@ export default async function streamingOutlineRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const config = request.body as StreamingOutlineConfig;
 
-    // 设置 SSE 头
+    // 设置 SSE 头（包含 CORS）
+    const origin = request.headers.origin || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     try {

@@ -1,12 +1,29 @@
-// 任务详情 - 文稿生成 Tab (v5.0 - 流式分段生成)
-// 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+// 任务详情 - 文稿生成 Tab (v5.0 - 流式分段设计整合版)
 import { useState } from 'react';
+
+// Tab 类型
+type EditorTab = 'preview' | 'export';
+
+// Tab 按钮组件
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+        active 
+          ? 'bg-primary text-on-primary' 
+          : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+      }`}
+    >
+      <span className="material-symbols-outlined text-sm">{icon}</span>
+      {label}
+    </button>
+  );
+}
 import { useOutletContext } from 'react-router-dom';
-import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ExportPanel } from '../../components/ExportPanel';
-import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import { DraftGenerationProgress } from '../../components/DraftGenerationProgress';
-import { ConfigCard, GlobalActionBar } from '../../components/common';
+import { LivePreviewMarkdown, VersionTimeline } from '../../components/content';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -34,280 +51,247 @@ export function WritingTab() {
 
   const draftContent = getDraftFromTask();
   
-  // 视图模式切换：rendered(渲染) | source(源码)
-  const [viewMode, setViewMode] = useState<'rendered' | 'source'>('rendered');
+  // 编辑器 Tab 状态
+  const [editorTab, setEditorTab] = useState<EditorTab>('preview');
   
-  // 是否正在生成（用于显示进度面板）
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
+  // 规范化版本数据，确保字段与 VersionTimeline 组件兼容
+  const rawVersions = task.versions || (task as any).draft_versions || [];
+  const versions = rawVersions.map((v: any) => ({
+    ...v,
+    created_at: v.created_at || v.createdAt || new Date().toISOString(),
+    change_summary: v.change_summary || v.changeSummary || (v.expert_role ? `${v.expert_role} 修订 (R${v.round || 0})` : ''),
+  }));
 
   return (
-    <div className="tab-panel writing-panel animate-fade-in pb-32">
-      {/* ========== Header ========== */}
-      <header className="mb-12">
-        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stage 3</span>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-xs font-bold uppercase tracking-wider">Copy Generation Engine</span>
-        </div>
-        <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-4xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white mb-2">Draft Generation</h1>
-            <p className="text-slate-500 dark:text-slate-400 max-w-2xl">Streaming multi-layer content drafts based on finalized macro-topics and deep research intel.</p>
+    <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto animate-fade-in pb-32">
+      {/* 1. Input Section: Drafting Configuration */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+        <div className="md:col-span-2 bg-surface-container-lowest p-5 rounded-lg border border-outline-variant/50 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold flex items-center gap-2 text-on-surface">
+              <span className="material-symbols-outlined text-primary text-lg">settings_input_component</span>
+              Drafting Configuration
+            </h3>
+            <span className="text-[10px] font-bold text-outline uppercase tracking-tight">Stage 3.1</span>
           </div>
-          <div className="flex gap-3">
-             <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                <span className="material-symbols-outlined text-[18px]">tune</span> AI Settings
-             </button>
+          <div className="p-3 bg-surface-container-low rounded-lg mb-4 border border-outline-variant/30 text-sm font-medium text-on-surface">
+            {task.topic || 'Untitled Topic'}
           </div>
-        </div>
-      </header>
-
-      {/* ========== Stepper Container ========== */}
-      <div className="space-y-16 flex flex-col">
-        {/* ========== Section 1: Input ========== */}
-        <section className="relative step-line step-line-active pl-12">
-          <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
-            <span className="material-symbols-outlined">settings_input_component</span>
-          </div>
-          <div className="flex items-baseline justify-between mb-6">
-            <h3 className="text-xl font-bold font-headline">Input: Drafting Configuration</h3>
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest text-right">Pre-flight Checks</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <ConfigCard title="Target Topic" icon="edit_document" className="md:col-span-2">
-               <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed">{task.topic}</p>
-               </div>
-               <div className="grid grid-cols-2 gap-4 mt-6">
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold text-slate-500 uppercase">Audience Persona</label>
-                     <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-500 cursor-pointer transition-all">
-                        <span className="text-xs font-medium dark:text-slate-300">General Public / Tech Enthusiasts</span>
-                        <span className="material-symbols-outlined text-xs text-slate-400">expand_more</span>
-                     </div>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold text-slate-500 uppercase">Tone & Style</label>
-                     <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-500 cursor-pointer transition-all">
-                        <span className="text-xs font-medium dark:text-slate-300">Objective & Professional</span>
-                        <span className="material-symbols-outlined text-xs text-slate-400">tune</span>
-                     </div>
-                  </div>
-               </div>
-            </ConfigCard>
-
-            <ConfigCard title="Asset Reference Context" icon="database">
-               <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                     <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-orange-500 text-base">lightbulb</span>
-                        <span className="text-sm font-medium dark:text-slate-300">研究洞察 (Insights)</span>
-                     </div>
-                     <span className="font-black text-slate-700 dark:text-slate-200">{task.research_data?.insights?.length || 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                     <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-blue-500 text-base">link</span>
-                        <span className="text-sm font-medium dark:text-slate-300">引用来源 (Citations)</span>
-                     </div>
-                     <span className="font-black text-slate-700 dark:text-slate-200">{task.research_data?.sources?.length || 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                     <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-purple-500 text-base">folder_special</span>
-                        <span className="text-sm font-medium dark:text-slate-300">强制素材 (Assets)</span>
-                     </div>
-                     <span className="font-black text-slate-700 dark:text-slate-200">{task.asset_ids?.length || 0}</span>
-                  </div>
-               </div>
-            </ConfigCard>
-          </div>
-        </section>
-
-        {/* ========== Section 2: Process (Streaming) ========== */}
-        <section className={`relative step-line pl-12 ${draftContent?.content || isGenerating ? 'step-line-active' : ''}`}>
-          <div className={`absolute left-0 top-0 w-10 h-10 rounded-full flex items-center justify-center z-10 shadow-lg ${isGenerating ? 'bg-indigo-600 text-white animate-pulse' : (draftContent?.content ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400')}`}>
-            <span className="material-symbols-outlined">network_node</span>
-          </div>
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="text-xl font-bold font-headline">Process: AI Streaming & Validation</h3>
-              <p className="text-sm text-slate-500 mt-1">Real-time content generation and multi-dimensional compliance checks.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-outline-variant uppercase">Audience Persona</label>
+              <div className="flex items-center justify-between p-2.5 bg-surface-container-low rounded border border-transparent hover:border-primary-dim cursor-pointer transition-all">
+                <span className="text-xs font-medium text-on-surface">Enterprise Tech Decision Makers</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant">expand_more</span>
+              </div>
             </div>
-            {isGenerating && (
-                 <div className="text-right">
-                    <span className="text-2xl font-black text-indigo-500 animate-pulse">Streaming...</span>
-                 </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-outline-variant uppercase">Tone & Style</label>
+              <div className="flex items-center justify-between p-2.5 bg-surface-container-low rounded border border-transparent hover:border-primary-dim cursor-pointer transition-all">
+                <span className="text-xs font-medium text-on-surface">Authoritative & Insightful</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant">tune</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface-container-lowest p-5 rounded-lg border border-outline-variant/50 shadow-sm">
+          <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-on-surface">
+            <span className="material-symbols-outlined text-tertiary text-lg">description</span>
+            Asset Reference
+          </h3>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
+              <span className="material-symbols-outlined text-primary text-base">task_alt</span>
+              <span className="text-xs font-medium truncate text-on-surface">Approved Outline - {task.outline?.sections?.length || 0} Sections</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
+              <span className="material-symbols-outlined text-tertiary text-base">analytics</span>
+              <span className="text-xs font-medium truncate text-on-surface">Research Insights - {task.research_data?.insights?.length || 0} Items</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
+              <span className="material-symbols-outlined text-error text-base">folder_special</span>
+              <span className="text-xs font-medium truncate text-on-surface">Hard Requirements - {task.asset_ids?.length || 0} Assets</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. Process Section: AI Streaming Engine */}
+      <section className="bg-surface-container-lowest rounded-lg border border-primary/20 shadow-lg shadow-primary/5 overflow-hidden flex flex-col shrink-0 min-h-[160px]">
+        {isGenerating && !draftContent?.content ? (
+          <>
+            <div className="bg-primary/5 p-4 border-b border-primary/10 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
+                  <h3 className="text-sm font-bold text-primary">AI Streaming Drafting Engine</h3>
+                </div>
+              </div>
+            </div>
+            <div className="p-6">
+              <DraftGenerationProgress taskId={task.id} onComplete={() => window.location.reload()} onError={(error) => alert(`Error: ${error}`)} />
+            </div>
+          </>
+        ) : draftContent?.content ? (
+           <div className="flex items-center gap-3 p-6 bg-surface-container-lowest text-on-surface rounded-lg">
+             <span className="material-symbols-outlined text-primary text-3xl" style={{fontVariationSettings: "'FILL' 1"}}>check_circle</span>
+             <div>
+               <h3 className="text-base font-bold text-on-surface mb-1">Base Draft Generation Completed</h3>
+               <p className="text-sm text-on-surface-variant">The content has been fully generated based on the approved outline and research materials.</p>
+             </div>
+           </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-8 bg-surface-container-low text-on-surface-variant min-h-[200px]">
+            <span className="material-symbols-outlined text-5xl mb-4 opacity-40">network_node</span>
+            <p className="font-bold mb-1">Process Standard By</p>
+            <p className="text-sm">Initiate the generation process from the action bar to begin the streaming draft.</p>
+          </div>
+        )}
+
+        {/* 合规检查结果 */}
+        {complianceResult && (
+          <div className="border-t border-outline-variant/20 p-6 bg-surface-container-lowest">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold flex items-center gap-2 text-on-surface"><span className="material-symbols-outlined text-tertiary-fixed">policy</span> AI Compliance Analysis</h3>
+              <button className="text-xs font-bold text-on-surface-variant hover:text-on-surface" onClick={onClearComplianceResult}>Dismiss</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+               <div className="md:col-span-1 border-r border-outline-variant/20 pr-6 flex flex-col justify-center items-center">
+                   <div className={`text-6xl font-black mb-2 ${complianceResult.overallScore >= 80 ? 'text-primary' : complianceResult.overallScore >= 60 ? 'text-tertiary-fixed' : 'text-error'}`}>
+                     {complianceResult.overallScore}
+                   </div>
+                   <div className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-widest ${complianceResult.overallScore >= 80 ? 'bg-primary-container/20 text-primary' : complianceResult.overallScore >= 60 ? 'bg-tertiary-container/20 text-tertiary-fixed' : 'bg-error-container/20 text-error'}`}>
+                     {complianceResult.overallScore >= 80 ? 'Compliant' : complianceResult.overallScore >= 60 ? 'Warning' : 'High Risk'}
+                   </div>
+               </div>
+               <div className="md:col-span-3 space-y-4">
+                   <h4 className="text-xs font-bold text-on-surface-variant uppercase">Found Issues ({complianceResult.issues.length})</h4>
+                   {complianceResult.issues.map((issue: any, idx: number) => (
+                     <div key={idx} className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                       <div className="flex items-center gap-2 mb-2">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${issue.level === 'high' ? 'bg-error-container/20 text-error' : issue.level === 'medium' ? 'bg-tertiary-container/20 text-tertiary-fixed' : 'bg-primary-container/20 text-primary'}`}>{issue.level} Risk</span>
+                          <span className="text-xs font-bold text-on-surface">{issue.type}</span>
+                       </div>
+                       <p className="text-sm text-on-surface mb-2">{issue.content}</p>
+                       <p className="text-xs text-primary font-medium">💡 Suggestion: {issue.suggestion}</p>
+                     </div>
+                   ))}
+                   {complianceResult.issues.length === 0 && (
+                       <div className="text-sm text-on-surface-variant italic">No significant compliance issues detected.</div>
+                   )}
+               </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 3. Output Section: Live Markdown Preview */}
+      <section className="flex-1 flex flex-col lg:flex-row gap-4 min-h-[500px]">
+        {/* Markdown Editor/Preview */}
+        <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between p-3 border-b border-surface-container">
+            <div className="flex items-center gap-2">
+              <TabButton 
+                active={editorTab === 'preview'} 
+                onClick={() => setEditorTab('preview')}
+                icon="visibility"
+                label="Preview"
+              />
+              <TabButton 
+                active={editorTab === 'export'} 
+                onClick={() => setEditorTab('export')}
+                icon="download"
+                label="Export"
+              />
+            </div>
+            {draftContent?.version && (
+              <span className="text-xs font-bold text-on-surface-variant">Version {draftContent.version}</span>
             )}
           </div>
-
-          {!draftContent?.content && !isGenerating ? (
-             <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800 text-center">
-               <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-700 mb-2">article</span>
-               <p className="text-slate-500">Initiate generation from the bottom action bar to begin drafting workflow.</p>
-             </div>
-          ) : isGenerating && !draftContent?.content ? (
-             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-xl shadow-indigo-500/5 overflow-hidden flex flex-col shrink-0">
-               <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 border-b border-indigo-100 dark:border-indigo-800 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                     <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                        <h3 className="text-sm font-bold text-indigo-700 dark:text-indigo-400">AI Streaming Drafting Engine</h3>
-                     </div>
-                  </div>
+          
+          <div className="flex-1 overflow-y-auto bg-white">
+            {!draftContent?.content ? (
+               <div className="empty-state py-32 text-center flex flex-col items-center h-full justify-center">
+                 <div className="material-symbols-outlined text-6xl mb-4 text-outline-variant/30">edit_document</div>
+                 <div className="text-lg font-bold text-on-surface mb-2">Editor Standby</div>
+                 <p className="text-sm text-on-surface-variant">Draft content will populate here chronologically.</p>
                </div>
-               <div className="p-8">
-                  <DraftGenerationProgress taskId={task.id} onComplete={() => window.location.reload()} onError={(error) => alert(`Error: ${error}`)} />
+            ) : editorTab === 'export' ? (
+               <div className="p-6">
+                 <ExportPanel content={draftContent.content} title={task.topic} taskId={task.id} />
                </div>
-             </div>
-          ) : (
-             <div className="space-y-6">
-                {/* 已经生成完毕 */}
-                <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-xl border border-green-200 dark:border-green-800/50">
-                   <span className="material-symbols-outlined">check_circle</span>
-                   <span className="text-sm font-bold">Base Draft Generation Completed Successfully.</span>
-                </div>
-
-                {/* 合规检查结果 */}
-                {complianceResult && (
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                      <h3 className="font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200"><span className="material-symbols-outlined text-orange-500">policy</span> AI Compliance Analysis</h3>
-                      <button className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={onClearComplianceResult}>Dismiss</button>
-                    </div>
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-8">
-                       <div className="md:col-span-1 border-r border-slate-100 dark:border-slate-800 pr-6 flex flex-col justify-center items-center">
-                           <div className={`text-6xl font-black mb-2 ${complianceResult.overallScore >= 80 ? 'text-green-500' : complianceResult.overallScore >= 60 ? 'text-orange-500' : 'text-red-500'}`}>
-                             {complianceResult.overallScore}
-                           </div>
-                           <div className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-widest ${complianceResult.overallScore >= 80 ? 'bg-green-100 text-green-700' : complianceResult.overallScore >= 60 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
-                             {complianceResult.overallScore >= 80 ? 'Compliant' : complianceResult.overallScore >= 60 ? 'Warning' : 'High Risk'}
-                           </div>
-                           <p className="text-xs text-slate-500 mt-4 text-center">Status: {complianceResult.passed ? '✅ Passed' : '❌ Failed'}</p>
-                       </div>
-                       <div className="md:col-span-3 space-y-4">
-                           <h4 className="text-xs font-bold text-slate-500 uppercase">Found Issues ({complianceResult.issues.length})</h4>
-                           {complianceResult.issues.map((issue: any, idx: number) => (
-                             <div key={idx} className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200/50 dark:border-slate-700">
-                               <div className="flex items-center gap-2 mb-2">
-                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${issue.level === 'high' ? 'bg-red-100 text-red-700' : issue.level === 'medium' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{issue.level} Risk</span>
-                                  <span className="text-xs font-bold dark:text-slate-300">{issue.type}</span>
-                               </div>
-                               <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{issue.content}</p>
-                               <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">💡 Suggestion: {issue.suggestion}</p>
-                             </div>
-                           ))}
-                           {complianceResult.issues.length === 0 && (
-                               <div className="text-sm text-slate-500 italic">No significant compliance issues detected.</div>
-                           )}
-                       </div>
-                    </div>
-                  </div>
-                )}
-             </div>
-          )}
-        </section>
-
-        {/* ========== Section 3: Output ========== */}
-        <section className="relative pl-12 flex-1 flex flex-col mb-12">
-          <div className={`absolute left-0 top-0 w-10 h-10 rounded-full flex items-center justify-center z-10 shadow-lg ${draftContent?.content ? 'bg-orange-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
-            <span className="material-symbols-outlined">edit_square</span>
+            ) : (
+                <LivePreviewMarkdown
+                  content={draftContent.content}
+                  version={draftContent.version}
+                  minHeight="100%"
+                  className="h-full border-none shadow-none"
+                  showFooter={false}
+                />
+            )}
           </div>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold font-headline">Output: Live Markdown Workspace</h3>
+        </div>
+
+        {/* Version History Sidebar */}
+        <div className="w-full lg:w-72 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col shrink-0">
+          <div className="p-4 border-b border-surface-container">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">history</span>
+              Version History
+            </h3>
           </div>
-
-          {!draftContent?.content ? (
-             <div className="empty-state py-20 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
-               <div className="empty-icon text-6xl mb-4 opacity-50">✍️</div>
-               <div className="empty-title text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Editor Standby</div>
-               <p className="text-slate-500">Draft content will populate here chronologically.</p>
-             </div>
-          ) : (
-             <div className="flex flex-col lg:flex-row gap-6 mt-4 items-stretch h-full">
-               {/* 主编辑器/预览舱 */}
-               <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl shadow-black/[0.03] flex flex-col min-h-[600px]">
-                 <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 rounded-t-2xl">
-                    <div className="flex items-center gap-4">
-                       <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Live Editor Preview</span>
-                       <div className="flex gap-1 bg-white dark:bg-slate-800 p-0.5 rounded shadow-sm border border-slate-200 dark:border-slate-700">
-                          <button onClick={() => setViewMode('rendered')} className={`px-3 py-1 text-xs font-bold rounded transition-colors ${viewMode === 'rendered' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Preview</button>
-                          <button onClick={() => setViewMode('source')} className={`px-3 py-1 text-xs font-bold rounded transition-colors ${viewMode === 'source' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Source</button>
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                       <div className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-bold rounded border border-indigo-100 dark:border-indigo-800">
-                          Version {draftContent.version || 1}
-                       </div>
-                    </div>
-                 </div>
-                 
-                 <div className="flex-1 p-8 overflow-y-auto bg-slate-50/30 dark:bg-slate-900/30 relative">
-                     {viewMode === 'rendered' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <MarkdownRenderer content={draftContent.content} />
-                        </div>
-                     ) : (
-                        <pre className="w-full h-full whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-slate-300">
-                           <code>{draftContent.content}</code>
-                        </pre>
-                     )}
-                 </div>
-
-                 {/* Export Panel Embedded at bottom of Document */}
-                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 rounded-b-2xl">
-                     <ExportPanel content={draftContent.content} title={task.topic} taskId={task.id} />
-                 </div>
-               </div>
-
-               {/* 右侧比对与历史舱 */}
-               <div className="w-full lg:w-80 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col shrink-0">
-                  <div className="p-5 border-b border-slate-100 dark:border-slate-800">
-                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">history</span> Timeline & Version Control
-                     </h3>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-0">
-                     <VersionComparePanel versions={task.versions || (task as any).draft_versions || []} currentVersion={draftContent?.version} onRollback={(versionId) => console.log('Rollback to:', versionId)} />
-                  </div>
-               </div>
-             </div>
-          )}
-        </section>
-      </div>
-
-      <GlobalActionBar
-        customLeftContent={
-          <div className="flex items-center gap-4">
-             <span className="text-sm font-medium text-slate-500">
-               Status: <span className={`uppercase font-bold ${isGenerating ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-300'}`}>{task.status.replace('_', ' ')}</span>
-             </span>
-             {draftContent?.content && (
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 ml-4 border-l border-slate-200 dark:border-slate-700 pl-4">
-                   <span className="material-symbols-outlined text-[16px]">cloud_done</span> Auto-Saved
-                </div>
+          <div className="flex-1 overflow-y-auto p-0">
+             {versions.length === 0 && !draftContent?.content ? (
+                <div className="p-6 text-center text-sm text-on-surface-variant italic">No versions recorded yet.</div>
+             ) : (
+                <VersionTimeline
+                   versions={versions}
+                   currentVersion={draftContent?.version}
+                   onRollback={(version) => console.log('Rollback to:', version)}
+                   maxHeight="100%"
+                   enableCompare={true}
+                 />
              )}
           </div>
-        }
-        extraActions={
-          draftContent?.content ? [{
-            label: checkingCompliance ? 'Auditing...' : 'Run Compliance Audit',
-            onClick: onComplianceCheck,
-            disabled: checkingCompliance,
-            icon: 'policy',
-            variant: 'secondary'
-          }] : []
-        }
-        primaryAction={{
-          label: draftContent?.content ? 'Discard & Regenerate' : 'Start Deep Draft Engine',
-          onClick: onRedoWriting,
-          disabled: actionLoading === 'redo-writing' ? true : false,
-          loading: actionLoading === 'redo-writing' ? true : false,
-          icon: draftContent?.content ? 'restart_alt' : 'play_arrow',
-          variant: draftContent?.content ? 'danger' : 'primary'
-        }}
-      />
+        </div>
+      </section>
+
+      {/* Footer Toolbox (Fixed Global Action Bar analog) */}
+      <div className="fixed bottom-0 left-[256px] right-0 h-20 bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant/20 z-40 flex items-center justify-between px-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-4">
+           {draftContent?.content ? (
+             <button className="flex items-center gap-2 px-6 py-2.5 bg-error/10 text-error rounded-lg font-headline text-sm font-bold hover:bg-error/20 transition-all active:scale-95" onClick={onRedoWriting} disabled={actionLoading === 'redo-writing'}>
+               <span className="material-symbols-outlined text-sm">restart_alt</span>
+               {actionLoading === 'redo-writing' ? 'Restarting...' : 'Discard & Regenerate'}
+             </button>
+           ) : (
+             <button className="flex items-center gap-2 px-8 py-2.5 bg-primary text-on-primary rounded-lg font-headline text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary-dim transition-all active:scale-95" onClick={onRedoWriting} disabled={actionLoading === 'redo-writing' || isGenerating}>
+               <span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 1"}}>play_arrow</span>
+               {isGenerating ? 'Streaming...' : 'Start Draft Generation'}
+             </button>
+           )}
+        </div>
+        
+        <div className="flex items-center gap-6">
+           {draftContent?.content && (
+              <>
+               <div className="flex flex-col items-end mr-4">
+                 <span className="text-[10px] font-bold text-outline uppercase tracking-wider">Quality Core</span>
+                 <div className="flex items-center gap-1.5">
+                   <span className="text-sm font-black text-on-surface">{task.evaluation?.score || 92} / 100</span>
+                 </div>
+               </div>
+               <button className="flex items-center gap-2 px-6 py-2.5 bg-on-surface text-surface-container-lowest rounded-lg font-headline text-sm font-bold hover:bg-inverse-surface transition-all active:scale-95" onClick={onComplianceCheck} disabled={checkingCompliance}>
+                 <span className="material-symbols-outlined text-sm">rule</span>
+                 {checkingCompliance ? 'Auditing...' : 'Audit Draft'}
+               </button>
+              </>
+           )}
+        </div>
+      </div>
     </div>
   );
 }
+
