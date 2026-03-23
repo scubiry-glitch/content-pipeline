@@ -37,19 +37,24 @@ export function ResearchTab() {
   } = useOutletContext<TaskContext>();
 
   const hasResearchData = !!task.research_data;
+  const researchData = task.research_data as any;
 
   return (
-    <div className="tab-panel research-panel">
+    <div className="tab-panel research-panel animate-fade-in">
       {/* ========== 1. 输入 ========== */}
       <div className="section-header">
-        <h3 className="section-title">📥 输入</h3>
-        <span className="section-desc">数据源配置与采集参数</span>
+        <h3 className="section-title">
+          <span className="icon">📥</span> 输入
+        </h3>
+        <span className="section-desc">定义数据源配置与深度研究的采集参数</span>
       </div>
 
       <div className="input-grid">
         {/* 数据源配置 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">📊 数据源配置</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">📊</span> 数据源配置
+          </h3>
           <div className="data-source-list">
             <div className={`source-item ${researchConfig.sources.includes('web') ? 'active' : ''}`}>
               <span className="source-icon">🌐</span>
@@ -76,8 +81,10 @@ export function ResearchTab() {
         </div>
 
         {/* 采集参数配置 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">⚙️ 采集参数</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">⚙️</span> 采集参数
+          </h3>
           <div className="param-list">
             <div className="param-item">
               <span className="param-label">最大结果数</span>
@@ -215,8 +222,10 @@ export function ResearchTab() {
         <>
           {/* ========== 2. 加工 ========== */}
           <div className="section-header">
-            <h3 className="section-title">⚙️ 加工</h3>
-            <span className="section-desc">数据审核、清洗与验证</span>
+            <h3 className="section-title">
+              <span className="icon">⚙️</span> 加工
+            </h3>
+            <span className="section-desc">对采集到的数据进行多维度审核、清洗与交叉验证</span>
           </div>
 
           <div className="process-grid">
@@ -269,8 +278,10 @@ export function ResearchTab() {
 
           {/* ========== 3. 输出 ========== */}
           <div className="section-header">
-            <h3 className="section-title">📤 输出</h3>
-            <span className="section-desc">研究洞察与引用来源</span>
+            <h3 className="section-title">
+              <span className="icon">📤</span> 输出
+            </h3>
+            <span className="section-desc">基于核心数据的研究洞察与权威引用来源</span>
           </div>
 
           <div className="output-grid">
@@ -336,10 +347,10 @@ export function ResearchTab() {
           </div>
         </>
       ) : (
-        <div className="empty-state">
+        <div className="empty-state animate-fade-in">
           <div className="empty-icon">🔍</div>
           <div className="empty-title">暂无研究数据</div>
-          <p>任务进入深度研究阶段后将自动采集相关内容</p>
+          <p>任务进入深度研究阶段后将自动采集并为您提炼核心内容</p>
         </div>
       )}
 

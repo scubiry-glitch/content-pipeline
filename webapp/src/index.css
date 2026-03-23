@@ -1,87 +1,69 @@
 :root {
-  /* Theme System - 动态主题系统 v3.7 */
+  /* Premium Design System v4.0 - Content Pipeline */
 
-  /* Primary Colors */
-  --primary: #E07A5F;
-  --primary-dark: #C85A3E;
-  --primary-light: #F0947A;
+  /* Global Colors (HSL for harmony) */
+  --p-h: 12;   /* Primary Hue: Terracotta */
+  --p-s: 68%;
+  --p-l: 62%;
+  
+  --s-h: 76;   /* Secondary Hue: Sage */
+  --s-s: 26%;
+  --s-l: 48%;
 
-  /* Secondary Colors */
-  --secondary: #8A9A5B;
-  --secondary-dark: #6B7B47;
+  --primary: hsl(var(--p-h), var(--p-s), var(--p-l));
+  --primary-dark: hsl(var(--p-h), var(--p-s), 45%);
+  --primary-light: hsl(var(--p-h), var(--p-s), 75%);
+  --primary-alpha: hsla(var(--p-h), var(--p-s), var(--p-l), 0.1);
 
-  /* Accent Color */
-  --accent: #C67B5C;
+  --secondary: hsl(var(--s-h), var(--s-s), var(--s-l));
+  --secondary-dark: hsl(var(--s-h), var(--s-s), 35%);
+  --secondary-light: hsl(var(--s-h), var(--s-s), 65%);
 
+  --accent: hsl(18, 55%, 55%); /* Ochre */
+  
   /* Background & Surface */
-  --background: #FDF8F3;
-  --surface: #FFFFFF;
-  --surface-elevated: #FFFFFF;
-
+  --background: hsl(30, 40%, 98%);
+  --surface: hsl(0, 0%, 100%);
+  --surface-alt: hsl(30, 20%, 96%);
+  --surface-glass: rgba(255, 255, 255, 0.75);
+  --border-glass: rgba(255, 255, 255, 0.4);
+  
   /* Text Colors */
-  --text: #5E4B35;
-  --text-secondary: #8B7355;
-  --text-muted: #B8A89A;
-
-  /* Border & Divider */
-  --border: #E8DDD4;
-  --divider: #F2E8DF;
+  --text: hsl(30, 25%, 25%);
+  --text-secondary: hsl(30, 15%, 45%);
+  --text-muted: hsl(30, 10%, 65%);
+  --text-on-primary: #ffffff;
 
   /* Status Colors */
-  --success: #7A9E6B;
-  --warning: #D4A574;
-  --danger: #C75B5B;
-  --info: #6B9FB8;
+  --success: hsl(142, 45%, 45%);
+  --warning: hsl(38, 92%, 50%);
+  --danger: hsl(0, 84%, 60%);
+  --info: hsl(199, 89%, 48%);
 
-  /* Stage Colors */
-  --stage-1: #D46648;
-  --stage-2: #8A9A5B;
-  --stage-3: #C67B5C;
-  --stage-4: #B88A6B;
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(94, 75, 53, 0.06);
-  --shadow: 0 4px 6px rgba(94, 75, 53, 0.08), 0 2px 4px rgba(94, 75, 53, 0.04);
-  --shadow-md: 0 10px 15px rgba(94, 75, 53, 0.1), 0 4px 6px rgba(94, 75, 53, 0.05);
-  --shadow-lg: 0 20px 25px rgba(94, 75, 53, 0.12), 0 10px 10px rgba(94, 75, 53, 0.04);
+  /* Shadows - Layered for depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.02);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.1);
+  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.05);
 
   /* Radius */
-  --radius-sm: 8px;
+  --radius-sm: 6px;
   --radius: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
   --radius-full: 9999px;
 
-  /* Fonts */
-  --font-heading: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-  --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-
   /* Transitions */
-  --transition-fast: 0.15s ease;
-  --transition: 0.25s ease;
-  --transition-slow: 0.35s ease;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.15s ease;
+  --transition-bounce: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
-  /* Legacy variables for backward compatibility */
-  --terracotta: var(--primary);
-  --terracotta-dark: var(--primary-dark);
-  --terracotta-light: var(--primary-light);
-  --clay: var(--primary);
-  --ochre: var(--accent);
-  --sand: var(--background);
-  --sage: var(--secondary);
-  --sage-light: var(--secondary);
-  --sage-dark: var(--secondary-dark);
-  --cream: var(--background);
-  --cream-dark: var(--divider);
-  --linen: var(--border);
-  --stone: var(--text-muted);
-  --pebble: var(--text-muted);
-  --earth: var(--text-secondary);
-  --soil: var(--text);
-  --charcoal: var(--text);
+  /* Glassmorphism Defaults */
+  --glass-blur: 12px;
 }
 
+/* Base Styles */
 * {
   margin: 0;
   padding: 0;
@@ -89,46 +71,151 @@
 }
 
 body {
-  font-family: var(--font-body);
-  background: var(--background);
-  background-attachment: fixed;
+  font-family: 'Lexend', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--background);
   color: var(--text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
-  transition: background-color var(--transition), color var(--transition);
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(var(--p-h), var(--p-s), var(--p-l), 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(var(--s-h), var(--s-s), var(--s-l), 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
 }
 
-#root {
-  min-height: 100vh;
+/* Glassmorphism Utilities */
+.glass-effect {
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
 }
 
-/* Scrollbar - 自适应滚动条 */
+.glass-card {
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  transition: var(--transition);
+}
+
+.glass-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* UI Elements */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-bounce);
+  border: 1px solid transparent;
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 14px hsla(var(--p-h), var(--p-s), var(--p-l), 0.4);
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  box-shadow: 0 6px 20px hsla(var(--p-h), var(--p-s), var(--p-l), 0.5);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--text);
+  border: 1px solid var(--divider);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover {
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 hsla(var(--p-h), var(--p-s), var(--p-l), 0.4); }
+  70% { transform: scale(1.02); box-shadow: 0 0 0 10px hsla(var(--p-h), var(--p-s), var(--p-l), 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 hsla(var(--p-h), var(--p-s), var(--p-l), 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--divider);
-  border-radius: var(--radius-full);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--text-muted);
   border-radius: var(--radius-full);
-  border: 2px solid var(--divider);
+  border: 2px solid var(--background);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--primary);
+  background: var(--primary-light);
 }
 
 /* Selection */
 ::selection {
-  background: var(--primary-light);
+  background: var(--primary-alpha);
+  color: var(--primary-dark);
+}
+
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Lexend', sans-serif;
   color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+/* Dark Theme Support (Auto) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: hsl(220, 20%, 10%);
+    --surface: hsl(220, 20%, 14%);
+    --surface-alt: hsl(220, 20%, 18%);
+    --surface-glass: rgba(20, 22, 28, 0.7);
+    --border-glass: rgba(255, 255, 255, 0.1);
+    --text: hsl(220, 10%, 95%);
+    --text-secondary: hsl(220, 10%, 75%);
+    --text-muted: hsl(220, 10%, 55%);
+    --divider: hsl(220, 20%, 20%);
+    --border: hsl(220, 20%, 25%);
+  }
+}
+
+#root {
+  min-height: 100vh;
 }
 
 /* Theme-specific adjustments */

@@ -26,6 +26,7 @@ export interface Task {
   evaluation?: TopicEvaluation;
   competitor_analysis?: CompetitorAnalysis;
   asset_ids?: string[];
+  external_links?: Array<{ title: string; url: string }>;
   versions?: DraftVersion[];
   created_at: string;
   updated_at: string;
@@ -35,9 +36,11 @@ export interface Task {
 export type TaskStatus =
   | 'pending'
   | 'planning'
+  | 'outline_pending'
   | 'researching'
   | 'writing'
   | 'reviewing'
+  | 'awaiting_approval'
   | 'converting'
   | 'completed'
   | 'failed';
@@ -88,6 +91,11 @@ export interface ResearchData {
   insights: ResearchInsight[];
   annotations: ResearchAnnotation[];
   sources: ResearchSource[];
+  searchStats?: {
+    webSources: number;
+    assetSources: number;
+  };
+  validation_results?: any[];
 }
 
 export interface ResearchInsight {
@@ -123,6 +131,9 @@ export interface TopicEvaluation {
     expertiseMatch: number;
   };
   suggestions: string[];
+  analysis?: string;
+  riskLevel?: 'low' | 'medium' | 'high';
+  stronglyRecommended?: boolean;
 }
 
 export interface CompetitorAnalysis {
@@ -339,9 +350,11 @@ export const STAGES: Record<number, StageInfo> = {
 export const STATUS_MAP: Record<TaskStatus, { text: string; className: string; stage: number }> = {
   pending: { text: '待处理', className: 'badge-pending', stage: 0 },
   planning: { text: '选题策划中', className: 'badge-planning', stage: 1 },
+  outline_pending: { text: '待确认大纲', className: 'badge-planning', stage: 1 },
   researching: { text: '深度研究中', className: 'badge-researching', stage: 2 },
   writing: { text: '文稿生成中', className: 'badge-writing', stage: 3 },
   reviewing: { text: '评审中', className: 'badge-reviewing', stage: 3 },
+  awaiting_approval: { text: '待正式发布', className: 'badge-reviewing', stage: 4 },
   converting: { text: '多态转换中', className: 'badge-converting', stage: 4 },
   completed: { text: '已完成', className: 'badge-completed', stage: 4 },
   failed: { text: '失败', className: 'badge-failed', stage: -1 },

@@ -57,7 +57,7 @@ export type ProgressCallback = (progress: DraftProgress) => void | Promise<void>
 export async function generateDraftStreaming(
   config: StreamingDraftConfig,
   onProgress: ProgressCallback
-): Promise<{ draftId: string; content: string; sections: DraftSection[] }> {
+): Promise<{ draftId: string; content: string; sections: DraftSection[]; structureReport?: StructureReport }> {
   const { taskId, topic, outline, researchData, style = 'formal', options = {} } = config;
   const { includeContext = true, saveProgress = true } = options;
 
@@ -230,6 +230,24 @@ export async function generateDraftStreaming(
     [draftId, finalContent, countWords(finalContent)]
   );
 
+  // 7.6 结构完整性校验
+  const structureReport = validateStructureCompleteness(flatOutline, finalContent);
+  if (structureReport.missingHeadings.length > 0) {
+    console.warn(`[StreamingDraft] ⚠️ Structure completeness check FAILED for ${taskId}:`);
+    console.warn(`  Expected ${structureReport.expectedCount} headings, found ${structureReport.foundCount}`);
+    console.warn(`  Missing headings: ${structureReport.missingHeadings.join(', ')}`);
+    // 将校验结果存入 draft_versions 的 metadata
+    await query(
+      `UPDATE draft_versions SET sections = $2 WHERE id = $1`,
+      [draftId, JSON.stringify({
+        ...JSON.parse(JSON.stringify(sections)),
+        _structureCheck: structureReport
+      })]
+    );
+  } else {
+    console.log(`[StreamingDraft] ✅ Structure check passed: ${structureReport.foundCount}/${structureReport.expectedCount} headings present`);
+  }
+
   // 8. 清理进度记录
   await query(
     `DELETE FROM draft_generation_progress WHERE task_id = $1`,
@@ -241,7 +259,8 @@ export async function generateDraftStreaming(
   return {
     draftId,
     content: finalContent,
-    sections
+    sections,
+    structureReport
   };
 }
 
@@ -448,6 +467,95 @@ function countWords(content: string): number {
 }
 
 /**
+ * 结构完整性校验 — 对比大纲节点 vs 生成内容中的标题
+ * 检查是否有大纲段落在生成过程中丢失
+ */
+interface StructureReport {
+  expectedCount: number;
+  foundCount: number;
+  missingHeadings: string[];
+  extraHeadings: string[];
+  coverageRate: number;
+}
+
+function validateStructureCompleteness(flatOutline: any[], content: string): StructureReport {
+  // 提取大纲中所有预期的标题
+  const expectedTitles = flatOutline.map(node => ({
+    title: (node.title || '').trim(),
+    level: node.level || 1
+  })).filter(n => n.title);
+
+  // 提取内容中实际生成的标题
+  const headingRegex = /^(#{1,6})\s+(.+)$/gm;
+  const actualHeadings: { title: string; level: number }[] = [];
+  let match;
+  while ((match = headingRegex.exec(content)) !== null) {
+    actualHeadings.push({
+      level: match[1].length,
+      title: match[2].trim()
+    });
+  }
+
+  // 模糊匹配：标题可能被润色微调，用包含关系判定
+  const foundTitles = new Set<string>();
+  const missingHeadings: string[] = [];
+
+  for (const expected of expectedTitles) {
+    const normalizedExpected = normalizeTitle(expected.title);
+    const found = actualHeadings.some(actual => {
+      const normalizedActual = normalizeTitle(actual.title);
+      // 完全匹配 或 包含关系（任一方向）
+      return normalizedActual === normalizedExpected
+        || normalizedActual.includes(normalizedExpected)
+        || normalizedExpected.includes(normalizedActual);
+    });
+    if (found) {
+      foundTitles.add(expected.title);
+    } else {
+      missingHeadings.push(`[${'#'.repeat(expected.level)}] ${expected.title}`);
+    }
+  }
+
+  // 检查多余标题（内容中有但大纲中没有的）
+  const extraHeadings: string[] = [];
+  for (const actual of actualHeadings) {
+    const normalizedActual = normalizeTitle(actual.title);
+    const inOutline = expectedTitles.some(exp => {
+      const normalizedExp = normalizeTitle(exp.title);
+      return normalizedActual === normalizedExp
+        || normalizedActual.includes(normalizedExp)
+        || normalizedExp.includes(normalizedActual);
+    });
+    if (!inOutline) {
+      extraHeadings.push(`[${'#'.repeat(actual.level)}] ${actual.title}`);
+    }
+  }
+
+  const coverageRate = expectedTitles.length > 0
+    ? foundTitles.size / expectedTitles.length
+    : 1;
+
+  return {
+    expectedCount: expectedTitles.length,
+    foundCount: foundTitles.size,
+    missingHeadings,
+    extraHeadings,
+    coverageRate
+  };
+}
+
+/**
+ * 标题归一化 — 去除标点、空格差异
+ */
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/[\s\u3000]+/g, '')           // 去除空格
+    .replace(/[，。、；：！？（）【】""''—·…]/g, '')  // 去除中文标点
+    .replace(/[,.;:!?()[\]"'\-]/g, '')     // 去除英文标点
+    .toLowerCase();
+}
+
+/**
  * 构建生成上下文
  */
 function buildGenerationContext(topic: string, outline: any, researchData: any): GenerationContext {
@@ -592,40 +700,139 @@ function estimateWordCountForNode(node: any): number {
 
 /**
  * 内容润色 — 语言优化、风格统一、可读性提升
+ * 支持分段润色：将长文按一级标题拆分，分段处理后合并
  */
 async function polishContent(topic: string, content: string): Promise<string> {
+  const CHUNK_CHAR_LIMIT = 12000;
+
+  // 短文直接整体润色
+  if (content.length <= CHUNK_CHAR_LIMIT) {
+    return polishChunk(topic, content, '完整文稿');
+  }
+
+  // 长文：按一级标题 (# ) 拆分为多个 chunk
+  console.log(`[StreamingDraft] Content too long (${content.length} chars), splitting into chunks for polishing`);
+  const chunks = splitByTopHeadings(content);
+  console.log(`[StreamingDraft] Split into ${chunks.length} chunks: ${chunks.map(c => `"${c.title}" (${c.content.length}ch)`).join(', ')}`);
+
+  const polishedChunks: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const label = `第${i + 1}/${chunks.length}段: ${chunk.title}`;
+    console.log(`[StreamingDraft] Polishing chunk ${i + 1}/${chunks.length}: "${chunk.title}" (${chunk.content.length} chars)`);
+
+    // 如果单个 chunk 仍然超长，截取但保留完整段落
+    let chunkContent = chunk.content;
+    if (chunkContent.length > CHUNK_CHAR_LIMIT * 1.5) {
+      // 在段落边界截取
+      const cutPoint = chunkContent.lastIndexOf('\n\n', CHUNK_CHAR_LIMIT);
+      const safeCut = cutPoint > CHUNK_CHAR_LIMIT * 0.5 ? cutPoint : CHUNK_CHAR_LIMIT;
+      const remaining = chunkContent.substring(safeCut);
+      chunkContent = chunkContent.substring(0, safeCut);
+      // 超长段落的剩余部分单独润色
+      const polishedMain = await polishChunk(topic, chunkContent, label + '(上)');
+      const polishedRest = await polishChunk(topic, remaining, label + '(下)');
+      polishedChunks.push(polishedMain + '\n\n' + polishedRest);
+    } else {
+      polishedChunks.push(await polishChunk(topic, chunkContent, label));
+    }
+  }
+
+  const finalContent = polishedChunks.join('\n\n');
+
+  // 全局安全校验
+  const originalHeadings = (content.match(/^#{1,3}\s+.+$/gm) || []).length;
+  const polishedHeadings = (finalContent.match(/^#{1,3}\s+.+$/gm) || []).length;
+  if (polishedHeadings < originalHeadings * 0.7) {
+    console.warn(`[StreamingDraft] Chunk-polishing lost too many headings (${polishedHeadings}/${originalHeadings}), using original`);
+    return content;
+  }
+
+  const lengthRatio = finalContent.length / content.length;
+  if (lengthRatio < 0.5 || lengthRatio > 1.5) {
+    console.warn(`[StreamingDraft] Chunk-polishing length anomaly (ratio: ${lengthRatio.toFixed(2)}), using original`);
+    return content;
+  }
+
+  console.log(`[StreamingDraft] Chunk-polishing completed: ${content.length} → ${finalContent.length} chars`);
+  return finalContent;
+}
+
+/**
+ * 按一级标题拆分内容为多个 chunk
+ */
+function splitByTopHeadings(content: string): { title: string; content: string }[] {
+  // 匹配一级标题行: "# 标题"
+  const h1Regex = /^# .+$/gm;
+  const matches: { index: number; title: string }[] = [];
+  let match;
+  while ((match = h1Regex.exec(content)) !== null) {
+    matches.push({ index: match.index, title: match[0].replace(/^#\s+/, '') });
+  }
+
+  // 没有一级标题 → 整体返回
+  if (matches.length === 0) {
+    return [{ title: '全文', content }];
+  }
+
+  const chunks: { title: string; content: string }[] = [];
+
+  // 标题前的内容（标题、摘要等）
+  if (matches[0].index > 0) {
+    const preamble = content.substring(0, matches[0].index).trim();
+    if (preamble) {
+      chunks.push({ title: '导言与摘要', content: preamble });
+    }
+  }
+
+  // 按一级标题分段
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index;
+    const end = i < matches.length - 1 ? matches[i + 1].index : content.length;
+    chunks.push({ title: matches[i].title, content: content.substring(start, end).trim() });
+  }
+
+  return chunks;
+}
+
+/**
+ * 润色单个 chunk
+ */
+async function polishChunk(topic: string, content: string, label: string): Promise<string> {
   const llmRouter = getLLMRouter();
-  const prompt = `你是一位资深文稿编辑。请对以下研究报告进行润色，不改变核心观点和数据。
+  const prompt = `你是一位资深文稿编辑。请对以下研究报告片段进行润色，不改变核心观点和数据。
 
 ## 润色要求
 1. 消除口语化表达，统一专业术语
-2. 确保全文语气、人称、时态一致
+2. 确保语气、人称、时态一致
 3. 优化过长句子，改善段落过渡
 4. 合并重复论点，删除冗余表达
 5. 统一标点、数字格式
+6. **保留所有 Markdown 标题（#、##、###）**，不合并不删除
 
 ## 原文
-${content.substring(0, 12000)}
+${content}
 
-请输出润色后的完整文稿（Markdown格式）。仅做语言润色，不增删核心内容：`;
+请输出润色后的完整内容（Markdown格式）。仅做语言润色，不增删核心内容：`;
 
   try {
-    const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.3, maxTokens: 10000 });
+    const maxTokens = Math.max(10000, Math.ceil(content.length / 2));
+    const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.3, maxTokens });
     const polished = (result.content || '').trim();
 
-    // 安全校验：润色结果不能偏离原文太多
+    // 安全校验
     if (!polished || polished.length < content.length * 0.5 || polished.length > content.length * 1.5) {
-      console.warn(`[StreamingDraft] Polishing result length anomaly (${polished.length} vs ${content.length}), using original`);
+      console.warn(`[StreamingDraft] Polish chunk "${label}" length anomaly (${polished.length} vs ${content.length}), using original`);
       return content;
     }
     if (!/^#{1,6}\s/m.test(polished) && /^#{1,6}\s/m.test(content)) {
-      console.warn('[StreamingDraft] Polishing lost headings, using original');
+      console.warn(`[StreamingDraft] Polish chunk "${label}" lost headings, using original`);
       return content;
     }
 
     return polished;
   } catch (error) {
-    console.error('[StreamingDraft] Polishing failed, using original:', error);
+    console.error(`[StreamingDraft] Polish chunk "${label}" failed, using original:`, error);
     return content;
   }
 }

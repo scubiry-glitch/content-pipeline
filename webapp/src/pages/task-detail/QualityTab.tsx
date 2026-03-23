@@ -31,18 +31,22 @@ export function QualityTab() {
   const { task, sentiment, hotTopics, suggestions, alerts } = useOutletContext<TaskContext>();
 
   return (
-    <div className="tab-panel quality-panel">
+    <div className="tab-panel quality-panel animate-fade-in">
       {/* ========== 1. 输入 ========== */}
       <div className="section-header">
-        <h3 className="section-title">📥 输入</h3>
-        <span className="section-desc">市场情绪与热点数据</span>
+        <h3 className="section-title">
+          <span className="icon">📥</span> 输入
+        </h3>
+        <span className="section-desc">多维度市场情绪与实时热点话题数据</span>
       </div>
 
       <div className="input-grid">
         {/* 情感分析 (MSI) */}
         {sentiment && (
-          <div className="info-card input-card">
-            <h3 className="card-title">📊 市场情绪指数 (MSI)</h3>
+          <div className="info-card input-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">📊</span> 市场情绪指数 (MSI)
+            </h3>
             <div className="sentiment-display">
               <div className="msi-gauge-small">
                 <span className="msi-value-small">{sentiment.msiIndex}</span>
@@ -89,8 +93,10 @@ export function QualityTab() {
         )}
 
         {/* 热点话题 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">🔥 热点话题</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">🔥</span> 热点话题
+          </h3>
           {hotTopics.length > 0 ? (
             <div className="hot-topics-list">
               {hotTopics.slice(0, 5).map((topic) => (
@@ -107,8 +113,10 @@ export function QualityTab() {
 
         {/* 选题评估摘要 */}
         {task.evaluation && (
-          <div className="info-card input-card">
-            <h3 className="card-title">📋 选题评估</h3>
+          <div className="info-card input-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">📋</span> 选题评估
+            </h3>
             <div className="evaluation-summary-compact">
               <div className="evaluation-score-large">
                 <span className="score-number">{task.evaluation.score}</span>
@@ -136,12 +144,16 @@ export function QualityTab() {
       {suggestions.length > 0 && (
         <>
           <div className="section-header">
-            <h3 className="section-title">⚙️ 加工</h3>
-            <span className="section-desc">智能优化建议</span>
+            <h3 className="section-title">
+              <span className="icon">⚙️</span> 加工
+            </h3>
+            <span className="section-desc">基于数据分析的智能内容优化建议</span>
           </div>
 
-          <div className="info-card full-width process-card">
-            <h3 className="card-title">💡 优化建议</h3>
+          <div className="info-card full-width process-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">💡</span> 优化建议
+            </h3>
             <div className="suggestions-list">
               {suggestions.map((s, idx) => (
                 <div key={idx} className={`suggestion-card priority-${s.priority}`}>

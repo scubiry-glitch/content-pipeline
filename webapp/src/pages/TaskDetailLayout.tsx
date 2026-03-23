@@ -12,13 +12,13 @@ import {
   orchestratorApi,
   type BlueTeamReview,
   type HotTopic,
-  type Asset,
   type ResearchConfig,
   type ComplianceCheckResult,
   type WorkflowRule
 } from '../api/client';
-import type { Task } from '../types';
+import type { Task, Asset } from '../types';
 import './TaskDetailLayout.css';
+import './TaskDetail.css';
 
 // 流程步骤定义 - 生产流水线看板
 const STAGE_PIPELINES = {
@@ -154,8 +154,16 @@ export function TaskDetailLayout() {
     const versions = (task as any).versions || (task as any).draft_versions || [];
     if (versions.length === 0) return null;
 
-    const sorted = [...versions].sort((a: any, b: any) => (a.version ?? 0) - (b.version ?? 0));
-    const latest = sorted[sorted.length - 1];
+    // 按版本号降序，同版本按内容长度降序（取最完整的版本）
+    const sorted = [...versions].sort((a: any, b: any) => {
+      const versionDiff = (b.version ?? 0) - (a.version ?? 0);
+      if (versionDiff !== 0) return versionDiff;
+      // 同版本号时，优先选内容最长的（最完整的修订稿）
+      const aLen = typeof a.content === 'string' ? a.content.length : 0;
+      const bLen = typeof b.content === 'string' ? b.content.length : 0;
+      return bLen - aLen;
+    });
+    const latest = sorted[0];
     if (typeof latest?.content === 'string' && latest.content.trim()) {
       return { content: latest.content, version: latest.version };
     }
@@ -598,6 +606,7 @@ export function TaskDetailLayout() {
     hotTopics,
     suggestions,
     alerts,
+    latestOutput: getDraftFromTask(),
     researchConfig,
     showResearchConfig,
     complianceResult,

@@ -40,25 +40,31 @@ export function WritingTab() {
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
 
   return (
-    <div className="tab-panel writing-panel">
+    <div className="tab-panel writing-panel animate-fade-in">
       {/* ========== 1. 输入 ========== */}
       <div className="section-header">
-        <h3 className="section-title">📥 输入</h3>
-        <span className="section-desc">大纲与研究数据来源</span>
+        <h3 className="section-title">
+          <span className="icon">📥</span> 输入
+        </h3>
+        <span className="section-desc">作为写作基石的大纲与深度研究数据</span>
       </div>
 
       <div className="input-grid">
         {/* 任务主题 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">📝 写作主题</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">📝</span> 写作主题
+          </h3>
           <div className="writing-topic">
             <p className="topic-text">{task.topic}</p>
           </div>
         </div>
 
         {/* 参考数据来源 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">📚 参考数据</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">📚</span> 参考数据
+          </h3>
           <div className="data-source-summary">
             <div className="source-count">
               <span className="count-label">研究洞察:</span>
@@ -80,8 +86,10 @@ export function WritingTab() {
       {draftContent?.content && (
         <>
           <div className="section-header">
-            <h3 className="section-title">⚙️ 加工</h3>
-            <span className="section-desc">文稿生成与合规检查</span>
+            <h3 className="section-title">
+              <span className="icon">⚙️</span> 加工
+            </h3>
+            <span className="section-desc">对生成文稿进行版本管理与多维度合规检查</span>
           </div>
 
           {/* 合规检查结果 */}

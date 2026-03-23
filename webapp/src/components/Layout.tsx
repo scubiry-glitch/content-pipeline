@@ -94,22 +94,12 @@ export function Layout() {
         currentTheme={currentTheme}
         onThemeChange={setTheme}
       />
-      <header className="app-header">
+      <header className="app-header glass-effect">
         <div className="header-content">
-          <h1 className="header-title">内容生产流水线</h1>
-          <button
-            className="search-trigger"
-            onClick={() => setIsSearchOpen(true)}
-            title="搜索 (⌘K / Ctrl+K)"
-          >
-            🔍 搜索
-            <span className="shortcut">⌘K</span>
-          </button>
-          <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
-          <NotificationBell />
-        </div>
-        <div className="header-content">
-          <h1 className="header-title">内容生产流水线</h1>
+          <div className="header-left">
+            <h1 className="header-title">内容生产流水线</h1>
+          </div>
+
           <nav className="header-nav">
             {mainNavItems.map((item) => (
               <div key={item.to} className="nav-item-wrapper">
@@ -125,7 +115,7 @@ export function Layout() {
                 </NavLink>
                 {/* 子导航菜单 */}
                 {item.children && isActivePath(location.pathname, item) && (
-                  <div className="sub-nav">
+                  <div className="sub-nav glass-effect">
                     {item.children.map((child) => (
                       <NavLink
                         key={child.to}
@@ -152,11 +142,11 @@ export function Layout() {
                 onBlur={() => setTimeout(() => setIsSystemMenuOpen(false), 200)}
               >
                 <span className="nav-icon">⚙️</span>
-                <span className="nav-label">系统管理</span>
+                <span className="nav-label">管理</span>
                 <span className="dropdown-arrow">{isSystemMenuOpen ? '▲' : '▼'}</span>
               </button>
               {isSystemMenuOpen && (
-                <div className="dropdown-menu">
+                <div className="dropdown-menu glass-effect">
                   {systemNavItems.map((item) => (
                     <NavLink
                       key={item.to}
@@ -174,9 +164,22 @@ export function Layout() {
               )}
             </div>
           </nav>
+
+          <div className="header-right">
+            <button
+              className="search-trigger"
+              onClick={() => setIsSearchOpen(true)}
+              title="搜索 (⌘K / Ctrl+K)"
+            >
+              🔍 搜索
+              <span className="shortcut">⌘K</span>
+            </button>
+            <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
+            <NotificationBell />
+          </div>
         </div>
       </header>
-      <main className="app-main">
+      <main className="app-main animate-fade-in">
         <Outlet />
       </main>
     </div>

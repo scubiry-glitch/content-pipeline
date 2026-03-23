@@ -36,9 +36,9 @@ export function PlanningTab() {
     onRedoStage,
   } = useOutletContext<TaskContext>();
   
-  const outline = task.outline || {};
-  const evaluation = task.evaluation;
-  const competitorAnalysis = task.competitor_analysis || {};
+  const outline = (task.outline || {}) as any;
+  const evaluation = task.evaluation as any;
+  const competitorAnalysis = (task.competitor_analysis || {}) as any;
   
   // 编辑器模式切换
   const [editorMode, setEditorMode] = useState<EditorMode>('preview');
@@ -239,37 +239,39 @@ export function PlanningTab() {
   const displayOutline = versionOutline || outline;
 
   return (
-    <div className="tab-panel planning-panel">
+    <div className="tab-panel planning-panel animate-fade-in">
       {/* ========== Sticky 导航栏 ========== */}
-      <nav className="planning-nav">
-        <button 
-          className="nav-btn active" 
-          onClick={() => scrollToSection(outputRef)}
-        >
-          📤 大纲
-        </button>
-        <button 
-          className="nav-btn" 
-          onClick={() => scrollToSection(inputRef)}
-        >
-          📥 评估
-        </button>
-        {(outline.knowledgeInsights?.length > 0 || outline.novelAngles?.length > 0) && (
+      <nav className="planning-nav-pill glass-card">
+        <div className="nav-pill-items">
           <button 
-            className="nav-btn" 
-            onClick={() => scrollToSection(processRef)}
+            className="nav-pill-item active" 
+            onClick={() => scrollToSection(outputRef)}
           >
-            ⚙️ 洞见
+            <span className="icon">📤</span> 大纲
           </button>
-        )}
-        {versions.length > 0 && (
           <button 
-            className="nav-btn" 
-            onClick={() => scrollToSection(versionRef)}
+            className="nav-pill-item" 
+            onClick={() => scrollToSection(inputRef)}
           >
-            📜 版本历史
+            <span className="icon">📥</span> 评估
           </button>
-        )}
+          {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
+            <button 
+              className="nav-pill-item" 
+              onClick={() => scrollToSection(processRef)}
+            >
+              <span className="icon">⚙️</span> 洞见
+            </button>
+          )}
+          {versions.length > 0 && (
+            <button 
+              className="nav-pill-item" 
+              onClick={() => scrollToSection(versionRef)}
+            >
+              <span className="icon">📜</span> 历史
+            </button>
+          )}
+        </div>
       </nav>
 
       {/* ========== 版本选择器 ========== */}
@@ -302,15 +304,17 @@ export function PlanningTab() {
 
       {/* ========== 1. 输出 (置顶) ========== */}
       <div ref={outputRef} className="section-header">
-        <h3 className="section-title">📤 输出</h3>
-        <span className="section-desc">文章大纲</span>
+        <h3 className="section-title">
+          <span className="icon">📤</span> 输出
+        </h3>
+        <span className="section-desc">根据生产流水线生成的文章大纲</span>
       </div>
 
       <div className="info-card full-width output-card">
         <div className="card-header-with-actions">
           <h3 className="card-title">
-            📝 文章大纲
-            {selectedVersion && <span className="version-badge">历史版本 {selectedVersion}</span>}
+            <span className="icon">📝</span> 文章大纲
+            {selectedVersion && <span className="version-badge highlight">历史版本 {selectedVersion}</span>}
           </h3>
           <div className="header-actions">
             {/* 编辑器模式切换 */}
@@ -339,7 +343,7 @@ export function PlanningTab() {
                 </button>
               </div>
             )}
-            {(task.status === 'planning' || task.status === 'outline_pending') && !editingOutline && !selectedVersion && (
+            {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
               <button
                 className="btn btn-success"
                 onClick={onConfirmOutline}
@@ -413,15 +417,19 @@ export function PlanningTab() {
 
       {/* ========== 2. 输入 ========== */}
       <div ref={inputRef} className="section-header">
-        <h3 className="section-title">📥 输入</h3>
-        <span className="section-desc">选题评估与竞品分析</span>
+        <h3 className="section-title">
+          <span className="icon">📥</span> 输入
+        </h3>
+        <span className="section-desc">初期的评价指标与相关竞品分析</span>
       </div>
 
       <div className="input-grid">
         {/* 选题质量评估 */}
         {evaluation && (
-          <div className="info-card input-card">
-            <h3 className="card-title">📊 选题质量评估</h3>
+          <div className="info-card input-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">📊</span> 选题质量评估
+            </h3>
             <div className="evaluation-content">
               <div className="score-circle-container">
                 <div
@@ -478,13 +486,13 @@ export function PlanningTab() {
               </div>
             </div>
 
-            {evaluation.analysis && (
+            {evaluation?.analysis && (
               <div className="evaluation-analysis">
                 <strong>分析：</strong>{evaluation.analysis}
               </div>
             )}
 
-            {evaluation.suggestions?.length > 0 && (
+            {evaluation?.suggestions?.length > 0 && (
               <div className={`evaluation-suggestions ${evaluation.score >= 60 ? 'positive' : 'warning'}`}>
                 <div className="suggestions-title">💡 建议</div>
                 {evaluation.suggestions.map((s: string, i: number) => (
@@ -497,8 +505,10 @@ export function PlanningTab() {
 
         {/* 竞品分析 */}
         {competitorAnalysis.reports?.length > 0 && (
-          <div className="info-card input-card">
-            <h3 className="card-title">⚔️ 竞品分析</h3>
+          <div className="info-card input-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">⚔️</span> 竞品分析
+            </h3>
             <p className="competitor-summary">
               找到 {competitorAnalysis.summary?.totalFound || competitorAnalysis.reports.length} 篇相关研报
             </p>
@@ -532,58 +542,68 @@ export function PlanningTab() {
       </div>
 
       {/* ========== 3. 加工 ========== */}
-      {(outline.knowledgeInsights?.length > 0 || outline.novelAngles?.length > 0) && (
+      {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
         <>
           <div ref={processRef} className="section-header">
             <h3 className="section-title">⚙️ 加工</h3>
             <span className="section-desc">知识库洞见与新观点</span>
           </div>
 
-          <div className="info-card full-width process-card">
-            <h3 className="card-title">💡 知识库洞见与新观点</h3>
+          <div className="info-card full-width process-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">💡</span> 知识库洞见与新观点
+            </h3>
 
-            {outline.knowledgeInsights?.length > 0 && (
-              <div className="insights-section">
-                <h4>📚 基于历史研究的发现</h4>
-                {outline.knowledgeInsights.map((insight: any, i: number) => (
-                  <div
-                    key={i}
-                    className="insight-card"
-                    style={{ borderLeftColor: insight.type === 'trend' ? '#10b981' : insight.type === 'gap' ? '#f59e0b' : '#06b6d4' }}
-                  >
-                    <div className="insight-header-row">
-                      <span className="insight-type-badge">
-                        {insight.type === 'trend' ? '📈 趋势延续' : insight.type === 'gap' ? '🔍 研究空白' : '📖 观点演变'}
-                      </span>
-                      <span className="insight-relevance">相关度 {(insight.relevance * 100).toFixed(0)}%</span>
-                    </div>
-                    <p className="insight-content-text">{insight.content}</p>
-                    {insight.source && <p className="insight-source-text">来源: {insight.source}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {outline.novelAngles?.length > 0 && (
-              <div className="novel-angles-section">
-                <h4>✨ 建议的新研究角度</h4>
-                {outline.novelAngles.map((angle: any, i: number) => {
-                  const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : angle.differentiation_score >= 5 ? 'medium' : 'low');
-                  return (
-                    <div key={i} className="angle-card">
-                      <div className="angle-header">
-                        <strong>{angle.angle}</strong>
-                        <span className={`impact-badge ${impact}`}>
-                          {impact === 'high' ? '高影响力' : impact === 'medium' ? '中影响力' : '低影响力'}
-                        </span>
+            <div className="insights-grid">
+              {outline.knowledgeInsights?.length > 0 && (
+                <div className="insights-column">
+                  <h4 className="column-subtitle">📚 基于历史研究的发现</h4>
+                  <div className="insight-list">
+                    {outline.knowledgeInsights.map((insight: any, i: number) => (
+                      <div
+                        key={i}
+                        className="insight-card-premium"
+                        data-type={insight.type}
+                      >
+                        <div className="insight-header">
+                          <span className="insight-type-badge">
+                            {insight.type === 'trend' ? '📈 趋势延续' : insight.type === 'gap' ? '🔍 研究空白' : '📖 观点演变'}
+                          </span>
+                          <span className="insight-relevance">相关度 {(insight.relevance * 100).toFixed(0)}%</span>
+                        </div>
+                        <p className="insight-content">{insight.content}</p>
+                        {insight.source && <p className="insight-source">来源: {insight.source}</p>}
                       </div>
-                      <p><strong>理由:</strong> {angle.description || angle.rationale}</p>
-                      <p><strong>差异化评分:</strong> {angle.differentiation_score || 0}/10</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {outline.novelAngles?.length > 0 && (
+                <div className="insights-column">
+                  <h4 className="column-subtitle">✨ 建议的新研究角度</h4>
+                  <div className="angle-list">
+                    {outline.novelAngles.map((angle: any, i: number) => {
+                      const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : angle.differentiation_score >= 5 ? 'medium' : 'low');
+                      return (
+                        <div key={i} className="angle-card-premium" data-impact={impact}>
+                          <div className="angle-header">
+                            <strong className="angle-title">{angle.angle}</strong>
+                            <span className={`impact-badge ${impact}`}>
+                              {impact === 'high' ? '高' : impact === 'medium' ? '中' : '低'}
+                            </span>
+                          </div>
+                          <p className="angle-desc"><strong>理由:</strong> {angle.description || angle.rationale}</p>
+                          <div className="angle-footer">
+                            <span className="diff-score">差异化: <strong>{angle.differentiation_score || 0}/10</strong></span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}

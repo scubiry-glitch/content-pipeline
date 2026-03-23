@@ -1,555 +1,257 @@
-/* Terracotta Theme Layout - 陶土主题布局 */
+/* Premium Shell Layout - Content Pipeline v4.0 */
 
 .app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: var(--background);
 }
 
-/* Header - 陶土质感的头部 */
+/* Header - Modern Glassmorphism */
 .app-header {
-  background: linear-gradient(135deg, var(--terracotta) 0%, var(--ochre) 50%, var(--clay) 100%);
-  color: white;
-  padding: 16px 24px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text);
+  padding: 12px 24px;
   box-shadow: var(--shadow-md);
   position: sticky;
   top: 0;
-  z-index: 100;
-  border-bottom: 3px solid rgba(255, 255, 255, 0.15);
+  z-index: 1000;
+  border-bottom: 1px solid var(--border-glass);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .header-content {
-  max-width: 1400px;
+  max-width: 1600px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-/* Logo/Title - 陶土风格的标题 */
+/* Logo & Title */
 .header-title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
 }
 
 .header-title::before {
-  content: '🏺';
-  font-size: 26px;
-  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2));
+  content: '';
+  width: 32px;
+  height: 32px;
+  background: var(--primary);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M13 10V3L4 14H11V21L20 10H13Z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M13 10V3L4 14H11V21L20 10H13Z'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-size: contain;
 }
 
-/* 搜索触发器 */
+/* Search Trigger */
 .search-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: white;
-  font-size: 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition);
+  margin-right: 12px;
 }
 
 .search-trigger:hover {
-  background: rgba(255, 255, 255, 0.25);
+  border-color: var(--primary-light);
+  background: white;
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .search-trigger .shortcut {
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--background);
+  border: 1px solid var(--divider);
   border-radius: 4px;
-  font-size: 12px;
-  opacity: 0.8;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
-/* Navigation - 陶土按钮风格的导航 */
+/* Navigation - Pill Style */
 .header-nav {
   display: flex;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  padding: 6px;
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(8px);
+  gap: 4px;
+  background: var(--surface-alt);
+  padding: 4px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--divider);
 }
 
 .nav-link {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-secondary);
   text-decoration: none;
-  padding: 10px 16px;
-  border-radius: var(--radius);
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
   font-size: 14px;
   font-weight: 500;
-  transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
+  transition: var(--transition-bounce);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   border: none;
   background: transparent;
   cursor: pointer;
 }
 
-.nav-link::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0);
-  transition: background var(--transition-fast);
-  border-radius: var(--radius);
-}
-
 .nav-link:hover {
-  color: white;
-}
-
-.nav-link:hover::before {
-  background: rgba(255, 255, 255, 0.15);
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .nav-link.active {
-  color: var(--terracotta);
-  background: white;
-  box-shadow: var(--shadow-sm);
-}
-
-.nav-link.active::before {
-  display: none;
+  color: white;
+  background: var(--primary);
+  box-shadow: 0 4px 12px hsla(var(--p-h), var(--p-s), var(--p-l), 0.3);
 }
 
 .nav-icon {
   font-size: 16px;
 }
 
-.nav-label {
-  white-space: nowrap;
-}
-
-/* 下拉菜单样式 */
+/* Dropdown Styles */
 .nav-dropdown {
   position: relative;
 }
 
-.dropdown-trigger {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dropdown-arrow {
-  font-size: 10px;
-  margin-left: 2px;
-  opacity: 0.7;
-}
-
 .dropdown-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 12px);
   right: 0;
-  background: white;
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glass);
   box-shadow: var(--shadow-lg);
-  min-width: 180px;
+  min-width: 200px;
   padding: 8px;
-  z-index: 1000;
-  animation: dropdownSlideIn 0.2s ease;
+  margin-top: 8px;
+  z-index: 1001;
 }
 
 @keyframes dropdownSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 10px 16px;
   border-radius: var(--radius);
-  color: var(--soil);
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 14px;
-  transition: all var(--transition-fast);
+  font-weight: 500;
+  transition: var(--transition);
 }
 
 .dropdown-item:hover {
-  background: var(--cream);
-  color: var(--terracotta);
+  background: var(--primary-alpha);
+  color: var(--primary);
 }
 
 .dropdown-item.active {
-  background: var(--terracotta);
+  background: var(--primary);
   color: white;
 }
 
-.item-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-}
-
-.item-label {
-  white-space: nowrap;
-}
-
-/* Main Content - 陶土质感的背景 */
+/* Main Content Area */
 .app-main {
   flex: 1;
-  max-width: 1400px;
+  max-width: 1600px;
   width: 100%;
   margin: 0 auto;
   padding: 24px;
+  animation: fadeIn 0.6s ease-out;
 }
 
-/* Common Components - 陶土卡片 */
+/* Card Design Enhancement */
 .card {
-  background: linear-gradient(145deg, white 0%, var(--cream) 100%);
+  background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
   margin-bottom: 24px;
-  border: 1px solid var(--linen);
-  position: relative;
-  overflow: hidden;
+  border: 1px solid var(--divider);
+  transition: var(--transition);
 }
 
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--terracotta) 0%, var(--ochre) 50%, var(--sage) 100%);
-  opacity: 0.6;
+.card:hover {
+  box-shadow: var(--shadow-lg);
 }
 
 .card-title {
   font-size: 18px;
   font-weight: 700;
-  color: var(--soil);
-  margin-bottom: 20px;
+  color: var(--text);
+  margin-bottom: 24px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 12px;
-  border-bottom: 2px dashed var(--sand);
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
 }
 
-/* Buttons - 陶土按钮 */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: none;
-  position: relative;
-  overflow: hidden;
-}
-
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
-  pointer-events: none;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--terracotta) 0%, var(--clay) 100%);
-  color: white;
-  box-shadow: 0 4px 0 var(--terracotta-dark), var(--shadow-sm);
-  transform: translateY(0);
-}
-
-.btn-primary:hover {
-  background: linear-gradient(135deg, var(--terracotta-light) 0%, var(--terracotta) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 var(--terracotta-dark), var(--shadow);
-}
-
-.btn-primary:active {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 var(--terracotta-dark), var(--shadow-sm);
-}
-
-.btn-secondary {
-  background: linear-gradient(135deg, var(--cream-dark) 0%, var(--linen) 100%);
-  color: var(--earth);
-  box-shadow: 0 4px 0 var(--stone), var(--shadow-sm);
-  transform: translateY(0);
-}
-
-.btn-secondary:hover {
-  background: linear-gradient(135deg, var(--sand) 0%, var(--cream-dark) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 var(--stone), var(--shadow);
-}
-
-.btn-secondary:active {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 var(--stone), var(--shadow-sm);
-}
-
-.btn-danger {
-  background: linear-gradient(135deg, var(--danger) 0%, #B84A4A 100%);
-  color: white;
-  box-shadow: 0 4px 0 #A04040, var(--shadow-sm);
-  transform: translateY(0);
-}
-
-.btn-danger:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 #A04040, var(--shadow);
-}
-
-.btn-sm {
-  padding: 8px 16px;
-  font-size: 13px;
-}
-
-/* Badges - 陶土徽章 */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid transparent;
-}
-
-.badge-pending {
-  background: var(--cream-dark);
-  color: var(--pebble);
-  border-color: var(--stone);
-}
-
-.badge-planning {
-  background: rgba(212, 102, 72, 0.12);
-  color: var(--stage-1);
-  border-color: rgba(212, 102, 72, 0.3);
-}
-
-.badge-researching {
-  background: rgba(138, 154, 91, 0.12);
-  color: var(--sage-dark);
-  border-color: rgba(138, 154, 91, 0.3);
-}
-
-.badge-writing {
-  background: rgba(198, 123, 92, 0.12);
-  color: var(--ochre);
-  border-color: rgba(198, 123, 92, 0.3);
-}
-
-.badge-reviewing {
-  background: rgba(184, 138, 107, 0.12);
-  color: var(--stage-4);
-  border-color: rgba(184, 138, 107, 0.3);
-}
-
-.badge-completed {
-  background: rgba(122, 158, 107, 0.12);
-  color: var(--sage-dark);
-  border-color: rgba(122, 158, 107, 0.3);
-}
-
-/* Loading */
-.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  color: var(--pebble);
-}
-
-/* Empty State - 陶土空状态 */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--pebble);
-}
-
-.empty-icon {
-  font-size: 56px;
-  margin-bottom: 20px;
-  opacity: 0.7;
-  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
-}
-
-.empty-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--earth);
-  margin-bottom: 8px;
-}
-
-/* Form Elements - 陶土表单 */
-.form-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid var(--linen);
-  border-radius: var(--radius);
-  font-size: 14px;
-  background: white;
-  color: var(--soil);
-  transition: all var(--transition-fast);
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--terracotta);
-  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
-}
-
-.form-input::placeholder {
-  color: var(--pebble);
-}
-
-.form-textarea {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid var(--linen);
-  border-radius: var(--radius);
-  font-size: 14px;
-  min-height: 120px;
-  resize: vertical;
-  background: white;
-  color: var(--soil);
-  transition: all var(--transition-fast);
-}
-
-.form-textarea:focus {
-  outline: none;
-  border-color: var(--terracotta);
-  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
-}
-
-/* Grid */
+/* Responsive Grid */
 .grid {
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 
-.grid-cols-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.grid-cols-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-/* Responsive */
-@media (max-width: 1024px) {
-  .grid-cols-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* Responsive Grid */
+.grid {
+  display: grid;
+  gap: 24px;
 }
 
 @media (max-width: 768px) {
-  .grid-cols-3,
-  .grid-cols-4 {
-    grid-template-columns: 1fr;
+  .app-header {
+    padding: 12px 16px;
   }
-
+  
   .header-content {
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 16px;
   }
-
+  
   .header-nav {
-    flex-wrap: wrap;
-    justify-content: center;
+    order: 3;
     width: 100%;
+    justify-content: center;
+    overflow-x: auto;
+    padding: 2px;
   }
-
+  
   .app-main {
     padding: 16px;
   }
-
-  .card {
-    padding: 18px;
-  }
-}
-
-/* 子导航样式 */
-.nav-item-wrapper {
-  position: relative;
-}
-
-.sub-nav {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  min-width: 160px;
-  padding: 8px;
-  z-index: 1000;
-  animation: dropdownSlideIn 0.2s ease;
-}
-
-.sub-nav-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  color: var(--soil);
-  text-decoration: none;
-  font-size: 14px;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.sub-nav-link:hover {
-  background: var(--cream);
-  color: var(--terracotta);
-}
-
-.sub-nav-link.active {
-  background: var(--terracotta);
-  color: white;
-}
-
-.sub-nav-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-}
-
-.sub-nav-label {
-  white-space: nowrap;
 }

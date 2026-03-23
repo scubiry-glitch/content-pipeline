@@ -186,18 +186,22 @@ export function ReviewsTab() {
   };
 
   return (
-    <div className="tab-panel reviews-panel">
+    <div className="tab-panel reviews-panel animate-fade-in">
       {/* ========== 1. 输入 ========== */}
       <div className="section-header">
-        <h3 className="section-title">📥 输入</h3>
+        <h3 className="section-title">
+          <span className="icon">📥</span> 输入
+        </h3>
         <span className="section-desc">评审概览与专家分工</span>
       </div>
 
       <div className="input-grid">
         {/* 评审统计概览 */}
-        <div className="info-card input-card">
+        <div className="info-card input-card glass-card">
           <div className="card-header-with-actions">
-            <h3 className="card-title">🔥 蓝军评审概览</h3>
+            <h3 className="card-title">
+              <span className="icon">🔥</span> 蓝军评审概览
+            </h3>
           </div>
 
           <div className="review-stats-grid">
@@ -252,8 +256,10 @@ export function ReviewsTab() {
         </div>
 
         {/* 专家评审分工 */}
-        <div className="info-card input-card">
-          <h3 className="card-title">👥 专家评审分工</h3>
+        <div className="info-card input-card glass-card">
+          <h3 className="card-title">
+            <span className="icon">👥</span> 专家评审分工
+          </h3>
           <div className="experts-grid">
             {Object.entries(EXPERT_ROLES).filter(([role]) => ['challenger', 'expander', 'synthesizer'].includes(role)).map(([role, info]) => (
               <div key={role} className="expert-role-card" style={{ borderLeftColor: info.color }}>
@@ -268,7 +274,7 @@ export function ReviewsTab() {
         </div>
 
         {/* 串行评审版本链 */}
-        <div className="info-card full-width input-card">
+        <div className="info-card full-width input-card glass-card">
           <SequentialReviewChain 
             taskId={task!.id}
             onVersionSelect={loadVersionContent}
@@ -383,12 +389,16 @@ export function ReviewsTab() {
       {task?.status === 'awaiting_approval' && reviewSummary.total > 0 && (
         <>
           <div className="section-header">
-            <h3 className="section-title">⚙️ 加工</h3>
+            <h3 className="section-title">
+              <span className="icon">⚙️</span> 加工
+            </h3>
             <span className="section-desc">评审处理与决策</span>
           </div>
 
-          <div className="info-card full-width process-card">
-            <h3 className="card-title">📝 评审处理</h3>
+          <div className="info-card full-width process-card glass-card">
+            <h3 className="card-title">
+              <span className="icon">📝</span> 评审处理
+            </h3>
             
             {!canProceed ? (
               <div className="cannot-proceed-warning">
