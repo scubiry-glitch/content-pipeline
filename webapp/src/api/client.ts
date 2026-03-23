@@ -74,7 +74,7 @@ export const tasksApi = {
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,
 
   // 重做某个阶段
-  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string }) =>
+  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string; config?: any }) =>
     client.post(`/production/${id}/redo/${stage}`, data) as Promise<void>,
 
   // ===== 大纲评论 API =====

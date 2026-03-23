@@ -354,15 +354,16 @@ export async function productionRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // 4. 蓝军评审重做
+  // 4. 蓝军评审重做（支持配置）
   fastify.post('/:taskId/redo/review', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
+    const { config } = request.body as { config?: any };
 
     // 异步执行评审（带超时控制）
     setImmediate(async () => {
       try {
         await withTimeout(
-          productionService.redoReview(taskId),
+          productionService.redoReview(taskId, config),
           15 * 60 * 1000,
           `Review redo for ${taskId}`
         );

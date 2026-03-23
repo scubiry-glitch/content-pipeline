@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Editor Pipeline - 2024 E-commerce Evolution</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-fixed-variant": "#001434",
+              "error-container": "#fa746f",
+              "surface-dim": "#d5dbdd",
+              "secondary-container": "#dfe3e8",
+              "tertiary-container": "#fa7e1d",
+              "tertiary-fixed-dim": "#e9720b",
+              "on-primary-container": "#000410",
+              "tertiary-fixed": "#fa7e1d",
+              "secondary-dim": "#4f5358",
+              "on-tertiary-fixed": "#000000",
+              "primary-fixed-dim": "#2a7bf1",
+              "error": "#a83836",
+              "on-secondary": "#f6f9ff",
+              "outline-variant": "#adb3b5",
+              "on-tertiary-fixed-variant": "#4b2000",
+              "surface": "#f8f9fa",
+              "on-tertiary-container": "#3d1800",
+              "on-background": "#2d3335",
+              "on-tertiary": "#fff7f5",
+              "surface-tint": "#005bc1",
+              "on-error-container": "#6e0a12",
+              "on-surface": "#2d3335",
+              "on-secondary-container": "#4e5257",
+              "primary-fixed": "#3d89ff",
+              "surface-container": "#ebeef0",
+              "tertiary-dim": "#873e00",
+              "inverse-on-surface": "#9b9d9e",
+              "outline": "#767c7e",
+              "secondary": "#5b5f64",
+              "surface-bright": "#f8f9fa",
+              "tertiary": "#9a4800",
+              "surface-container-high": "#e5e9eb",
+              "primary-dim": "#0050aa",
+              "inverse-primary": "#4a8eff",
+              "error-dim": "#67040d",
+              "primary": "#005bc1",
+              "secondary-fixed-dim": "#d1d5da",
+              "secondary-fixed": "#dfe3e8",
+              "on-primary": "#f9f8ff",
+              "on-error": "#fff7f6",
+              "primary-container": "#3d89ff",
+              "on-surface-variant": "#5a6062",
+              "surface-container-low": "#f1f4f5",
+              "background": "#f8f9fa",
+              "surface-container-highest": "#dee3e6",
+              "inverse-surface": "#0c0f10",
+              "on-secondary-fixed": "#3c4044",
+              "on-secondary-fixed-variant": "#585c61",
+              "surface-variant": "#dee3e6"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface flex flex-col h-screen overflow-hidden">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-blue-600 dark:text-blue-400">Editor Pipeline</span>
+<nav class="hidden md:flex gap-6 items-center h-full">
+<a class="font-['Manrope'] font-semibold text-sm text-slate-500 dark:text-slate-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors active:scale-95 duration-150" href="#">Dashboard</a>
+<a class="font-['Manrope'] font-semibold text-sm text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-blue-500 dark:hover:text-blue-300 transition-colors active:scale-95 duration-150" href="#">Projects</a>
+<a class="font-['Manrope'] font-semibold text-sm text-slate-500 dark:text-slate-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors active:scale-95 duration-150" href="#">Library</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-3 border-r border-slate-200 pr-4 mr-2">
+<button class="material-symbols-outlined text-slate-500 hover:text-blue-500 transition-colors" data-icon="fact_check">fact_check</button>
+<button class="material-symbols-outlined text-slate-500 hover:text-blue-500 transition-colors" data-icon="analytics">analytics</button>
+<button class="material-symbols-outlined text-slate-500 hover:text-blue-500 transition-colors" data-icon="settings">settings</button>
+</div>
+<button class="px-4 py-1.5 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-all active:scale-95">Save Draft</button>
+<button class="px-4 py-1.5 text-sm font-semibold text-white bg-primary hover:bg-primary-dim rounded shadow-md transition-all active:scale-95">Publish</button>
+<img alt="User profile" class="w-8 h-8 rounded-full ml-2 border border-slate-200" data-alt="User profile circular avatar photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDm3y96bftzxCzoxq3Q1Zq8tAQG8Z72gyyDGBqgx-1DEL8fGwsHxsGrzq17JTWM4vfDFE_NJeFEFhkDMvgrJ2xeBftkn55OQkxC7qT2fMfBDpIY0vFDo0Tgm3ojQAFa_6s0LiuU7UVztIRMAFJrl9bpio4Vgu1Q2gVG8CxkXY6RcM6Qq_XplKfjILcmQCq48KWW6AbHbd-fy0aB_cAcJiG_pRQ_HnQiJbNxHAAqjcp_V6McHufjo7TGX8C3iT9p4mYFSszfq_BM6mk"/>
+</div>
+</header>
+<!-- Editor Configuration Bar (Status & Intelligence) -->
+<div class="mt-16 bg-surface-container-low border-b border-outline-variant/30 px-6 py-3 flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-green-600 text-[18px]" data-icon="cloud_done">cloud_done</span>
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">Last saved 2m ago</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant/50"></div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-outline-variant/20 shadow-sm">
+<span class="text-[10px] font-bold text-slate-500 uppercase">Readability</span>
+<span class="text-sm font-bold text-primary">84%</span>
+<div class="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[84%]"></div>
+</div>
+</div>
+<div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-outline-variant/20 shadow-sm">
+<span class="text-[10px] font-bold text-slate-500 uppercase">Fact-Check</span>
+<span class="text-sm font-bold text-tertiary-fixed-dim">91%</span>
+<div class="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+<div class="bg-tertiary-fixed-dim h-full w-[91%]"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="p-1.5 rounded hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[20px] text-on-surface-variant" data-icon="history_edu">history_edu</span></button>
+<button class="p-1.5 rounded hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[20px] text-on-surface-variant" data-icon="visibility">visibility</span></button>
+<button class="p-1.5 rounded hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[20px] text-on-surface-variant" data-icon="more_vert">more_vert</span></button>
+</div>
+</div>
+<main class="flex flex-1 overflow-hidden relative">
+<!-- Editorial Drafting Area -->
+<section class="flex-1 overflow-y-auto bg-white p-12 md:p-20 lg:px-40 xl:px-64 scroll-smooth">
+<div class="max-w-4xl mx-auto">
+<div class="mb-10">
+<div class="flex items-center gap-2 mb-4">
+<span class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-widest rounded">Report</span>
+<span class="text-xs text-slate-400">Markdown Editor v4.2</span>
+</div>
+<h1 class="text-4xl md:text-5xl font-extrabold text-on-background tracking-tight mb-8 leading-tight">2024 E-commerce Evolution: The Hyper-Personalization Era</h1>
+</div>
+<div class="prose prose-slate max-w-none font-body leading-relaxed text-lg text-slate-700 space-y-6">
+<p class="relative group">
+                        As we enter the third quarter of 2024, the retail landscape has shifted from traditional digital storefronts to 
+                        <span class="bg-blue-50 border-b-2 border-blue-400 px-1 cursor-help group-hover:bg-blue-100 transition-colors">dynamic intelligence ecosystems</span>. 
+                        No longer is "personalization" a simple recommendation engine; it has evolved into a real-time behavioral predictive model.
+                        <button class="absolute -right-8 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-blue-500"><span class="material-symbols-outlined text-sm" data-icon="add_comment">add_comment</span></button>
+</p>
+<h2 class="text-2xl font-bold text-on-background pt-4">I. The Infrastructure of Intent</h2>
+<p>The core of this evolution lies in the <strong>Neural Commerce Architecture</strong>. By leveraging low-latency edge computing, retailers are now capable of adjusting UI components based on the user's micro-movements and dwell times within milliseconds.</p>
+<div class="my-8 p-6 bg-slate-50 rounded-lg border-l-4 border-primary">
+<p class="italic text-slate-600 font-medium">"The transition from reactive to proactive service models represents the single largest leap in conversion metrics since the introduction of one-click checkout."</p>
+<p class="text-sm font-bold text-slate-400 mt-2">— Industry Analysis Unit</p>
+</div>
+<p class="relative group">
+                        Key metrics indicate that organizations implementing these AI-driven pipelines have seen a 
+                        <span class="bg-orange-50 border-b-2 border-orange-400 px-1 cursor-help group-hover:bg-orange-100 transition-colors">42% increase in average order value (AOV)</span>
+                        while simultaneously reducing churn by 15%. This creates a sustainable growth loop that traditional retailers are struggling to match.
+                        <button class="absolute -right-8 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-orange-500"><span class="material-symbols-outlined text-sm" data-icon="fact_check" data-weight="fill">fact_check</span></button>
+</p>
+<h2 class="text-2xl font-bold text-on-background pt-4">II. Generative Product Experiences</h2>
+<p>Static product pages are becoming obsolete. In their place, we see the rise of <em>Generative Media</em> where product photography and descriptions are rendered on-the-fly to align with the specific aesthetic preferences of the individual shopper.</p>
+</div>
+</div>
+</section>
+<!-- SideNavBar (Process & Feedback) -->
+<aside class="fixed right-0 top-16 bottom-0 w-64 md:w-80 z-40 flex flex-col bg-slate-50 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 font-['Inter'] text-xs font-medium">
+<!-- Header -->
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 bg-white/50">
+<div class="flex items-center gap-3 mb-4">
+<img alt="Editor Avatar" class="w-10 h-10 rounded-full bg-slate-200" data-alt="System editor or AI avatar profile photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmixlcpz-6msciWau6t0yUIXNpxNQ4A7IbLabpbHE5S5hGJXwQiUpHiLdeLayPi_DrSObQmG6g-FJGD4rNckRC6klpGvxMnIne8L-5gkXHKpKOgeilyoYdL_XGfJ1Ditqt3ShHC1bKkfYfR2ceNBGhIDYfoC29nMEC1iCan-vEm9Du2f7tbXxn2tKRSthbzNwdbkNr3g7ILdktvxKMxOhhwWw2ZFHtSwBgImM9UD6S7r7j5DrjXlIIiVRnaALxySlTjhbTYx8Y2Uk"/>
+<div>
+<div class="text-sm font-bold text-slate-900 dark:text-white">Version 4.2</div>
+<div class="text-[10px] text-slate-500 uppercase tracking-tighter">Last edit 2m ago</div>
+</div>
+</div>
+<button class="w-full py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all active:scale-95">Compare Versions</button>
+</div>
+<!-- Tabs -->
+<div class="flex border-b border-slate-200 dark:border-slate-800">
+<button class="flex-1 py-3 text-blue-600 dark:text-blue-400 font-bold border-r border-slate-200 dark:border-slate-800 bg-white">
+<span class="material-symbols-outlined block mb-1" data-icon="comment">comment</span>
+                    Comments
+                </button>
+<button class="flex-1 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined block mb-1" data-icon="history">history</span>
+                    History
+                </button>
+<button class="flex-1 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined block mb-1" data-icon="rule">rule</span>
+                    Tasks
+                </button>
+</div>
+<!-- Expert Feedback List -->
+<div class="flex-1 overflow-y-auto p-4 space-y-4">
+<!-- Feedback 1 -->
+<div class="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-[10px] text-white">AC</div>
+<span class="font-bold text-on-surface">AI Challenger</span>
+<span class="text-[10px] text-slate-400 ml-auto">5m ago</span>
+</div>
+<p class="text-[11px] leading-relaxed text-slate-600 mb-3">The claim regarding "42% increase in AOV" needs a cited source for high-fidelity compliance.</p>
+<div class="flex gap-2">
+<button class="flex-1 py-1 bg-green-50 text-green-700 border border-green-200 rounded font-bold hover:bg-green-100 transition-colors">Accept</button>
+<button class="flex-1 py-1 bg-slate-50 text-slate-500 border border-slate-200 rounded font-bold hover:bg-slate-100 transition-colors">Ignore</button>
+</div>
+</div>
+<!-- Feedback 2 -->
+<div class="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-tertiary flex items-center justify-center text-[10px] text-white">DV</div>
+<span class="font-bold text-on-surface">Dr. Aris V.</span>
+<span class="text-[10px] text-slate-400 ml-auto">12m ago</span>
+</div>
+<p class="text-[11px] leading-relaxed text-slate-600 mb-3">Consider refining the definition of "Neural Commerce" to avoid sounding too jargon-heavy for executive readers.</p>
+<div class="flex gap-2">
+<button class="flex-1 py-1 bg-green-50 text-green-700 border border-green-200 rounded font-bold hover:bg-green-100 transition-colors">Accept</button>
+<button class="flex-1 py-1 bg-slate-50 text-slate-500 border border-slate-200 rounded font-bold hover:bg-slate-100 transition-colors">Ignore</button>
+</div>
+</div>
+<!-- History Snapshot Item -->
+<div class="pt-4 border-t border-slate-200 dark:border-slate-800 mt-4">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Version History</span>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-2 rounded hover:bg-white transition-colors cursor-pointer group">
+<span class="text-slate-600 group-hover:text-primary transition-colors">V3.4 — Narrative Polish</span>
+<span class="text-[10px] text-slate-400">1h ago</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded hover:bg-white transition-colors cursor-pointer group">
+<span class="text-slate-600 group-hover:text-primary transition-colors">V3.0 — AI Synthesis</span>
+<span class="text-[10px] text-slate-400">4h ago</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Tabs -->
+<div class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-2 flex gap-1">
+<button class="flex-1 flex items-center justify-center gap-2 py-2 text-slate-500 hover:text-blue-500 transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="help">help</span>
+<span>Help</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-2 text-slate-500 hover:text-blue-500 transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="rate_review">rate_review</span>
+<span>Feedback</span>
+</button>
+</div>
+</aside>
+</main>
+<!-- Bottom Functional Footer -->
+<footer class="h-14 bg-white border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-50">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded text-xs font-bold hover:bg-slate-800 transition-all active:scale-95 shadow-lg">
+<span class="material-symbols-outlined text-sm" data-icon="auto_fix_high" data-weight="fill">auto_fix_high</span>
+                Re-run Intelligence
+            </button>
+<div class="text-[10px] text-slate-400 uppercase flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Engine Ready
+            </div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-slate-500 text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="description">description</span>
+                1,240 Words
+            </div>
+<div class="h-4 w-[1px] bg-slate-200"></div>
+<button class="text-primary hover:text-primary-dim text-xs font-bold flex items-center gap-1 transition-colors">
+                Finalize Review
+                <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</footer>
+</body></html>

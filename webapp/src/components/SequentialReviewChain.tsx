@@ -58,6 +58,7 @@ export function SequentialReviewChain({
   selectedVersionId 
 }: SequentialReviewChainProps) {
   const [chain, setChain] = useState<ReviewChainItem[]>([]);
+  const [isCollapsed, setIsCollapsed] = useState(false); // 折叠状态
   const [versions, setVersions] = useState<DraftVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,14 +150,38 @@ export function SequentialReviewChain({
 
   return (
     <div className="sequential-review-chain">
-      <div className="chain-header">
+      <div className="chain-header" style={{ cursor: 'pointer' }} onClick={() => setIsCollapsed(!isCollapsed)}>
         <h3>📜 串行评审版本链</h3>
-        <span className="chain-stats">
-          共 {chain.length} 轮评审，{versions.length} 个版本
-        </span>
+        <div className="chain-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="chain-stats">
+            共 {chain.length} 轮评审，{versions.length} 个版本
+          </span>
+          <button 
+            className="collapse-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCollapsed(!isCollapsed);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '4px',
+              transition: 'transform 0.2s',
+              transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+            }}
+            title={isCollapsed ? '展开' : '隐藏'}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#666' }}>
+              expand_more
+            </span>
+          </button>
+        </div>
       </div>
 
-      <div className="chain-timeline">
+      {!isCollapsed && (
+        <div className="chain-timeline">
         {/* 初始版本 */}
         {initialVersion && (
           <div className="chain-node initial-node">
@@ -289,6 +314,7 @@ export function SequentialReviewChain({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

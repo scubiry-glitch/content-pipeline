@@ -278,7 +278,7 @@ export class PipelineService {
   }
 
   // Step 4: BlueTeam 评审
-  async review(taskId: string) {
+  async review(taskId: string, config?: any) {
     const task = await this.getTask(taskId);
     if (!task) throw new Error('Task not found');
 
@@ -296,13 +296,13 @@ export class PipelineService {
       throw new Error(`Cannot review: draft content too short (${draft.trim().length} chars) for task ${taskId}.`);
     }
 
-    // 执行 BlueTeam 评审
+    // 执行 BlueTeam 评审（传递配置）
     const result = await this.blueTeamAgent.execute({
       taskId,
       draftContent: draft,
       topic: task.topic,
       outline: task.outline
-    });
+    }, config);
 
     if (!result.success) {
       throw new Error(`BlueTeam review failed: ${result.error}`);

@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 // Tab 类型
 type EditorTab = 'preview' | 'export';
+type AssetTab = 'outline' | 'insights' | 'assets' | null;
 
 // Tab 按钮组件
 function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
@@ -53,15 +54,29 @@ export function WritingTab() {
   
   // 编辑器 Tab 状态
   const [editorTab, setEditorTab] = useState<EditorTab>('preview');
+  const [expandedAsset, setExpandedAsset] = useState<AssetTab>(null);
   
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
   // 规范化版本数据，确保字段与 VersionTimeline 组件兼容
   const rawVersions = task.versions || (task as any).draft_versions || [];
-  const versions = rawVersions.map((v: any) => ({
-    ...v,
-    created_at: v.created_at || v.createdAt || new Date().toISOString(),
-    change_summary: v.change_summary || v.changeSummary || (v.expert_role ? `${v.expert_role} 修订 (R${v.round || 0})` : ''),
-  }));
+  const versions = rawVersions
+    .map((v: any) => ({
+      ...v,
+      created_at: v.created_at || v.createdAt || new Date().toISOString(),
+      change_summary: v.change_summary || v.changeSummary || (v.expert_role ? `${v.expert_role} 修订 (R${v.round || 0})` : ''),
+    }))
+    // 按版本号去重，保留最新的记录
+    .reduce((acc: any[], curr: any) => {
+      const existing = acc.find(v => v.version === curr.version);
+      if (!existing) {
+        acc.push(curr);
+      } else if (new Date(curr.created_at) > new Date(existing.created_at)) {
+        // 如果已存在相同版本号，保留更新的记录
+        const idx = acc.findIndex(v => v.version === curr.version);
+        acc[idx] = curr;
+      }
+      return acc;
+    }, []);
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto animate-fade-in pb-32">
@@ -102,17 +117,89 @@ export function WritingTab() {
             Asset Reference
           </h3>
           <div className="space-y-2">
-            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
-              <span className="material-symbols-outlined text-primary text-base">task_alt</span>
-              <span className="text-xs font-medium truncate text-on-surface">Approved Outline - {task.outline?.sections?.length || 0} Sections</span>
+            {/* Approved Outline */}
+            <div className="rounded bg-surface-container-low border border-outline-variant/30 overflow-hidden">
+              <button 
+                onClick={() => setExpandedAsset(expandedAsset === 'outline' ? null : 'outline')}
+                className="w-full flex items-center gap-2 p-2 hover:bg-surface-container-lowest transition-colors"
+              >
+                <span className="material-symbols-outlined text-primary text-base">task_alt</span>
+                <span className="text-xs font-medium truncate text-on-surface flex-1 text-left">Approved Outline - {task.outline?.sections?.length || 0} Sections</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant transition-transform" style={{ transform: expandedAsset === 'outline' ? 'rotate(180deg)' : 'rotate(0deg)' }}>expand_more</span>
+              </button>
+              {expandedAsset === 'outline' && task.outline?.sections && (
+                <div className="px-2 pb-2 border-t border-outline-variant/20">
+                  <div className="pt-2 space-y-1 max-h-32 overflow-y-auto">
+                    {task.outline.sections.map((section: any, idx: number) => (
+                      <div key={idx} className="text-xs text-on-surface-variant flex items-start gap-1.5 p-1.5 rounded hover:bg-surface-container-lowest">
+                        <span className="text-primary font-bold min-w-[16px]">{idx + 1}.</span>
+                        <span className="truncate">{section.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
-              <span className="material-symbols-outlined text-tertiary text-base">analytics</span>
-              <span className="text-xs font-medium truncate text-on-surface">Research Insights - {task.research_data?.insights?.length || 0} Items</span>
+
+            {/* Research Insights */}
+            <div className="rounded bg-surface-container-low border border-outline-variant/30 overflow-hidden">
+              <button 
+                onClick={() => setExpandedAsset(expandedAsset === 'insights' ? null : 'insights')}
+                className="w-full flex items-center gap-2 p-2 hover:bg-surface-container-lowest transition-colors"
+              >
+                <span className="material-symbols-outlined text-tertiary text-base">analytics</span>
+                <span className="text-xs font-medium truncate text-on-surface flex-1 text-left">Research Insights - {task.research_data?.insights?.length || 0} Items</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant transition-transform" style={{ transform: expandedAsset === 'insights' ? 'rotate(180deg)' : 'rotate(0deg)' }}>expand_more</span>
+              </button>
+              {expandedAsset === 'insights' && task.research_data?.insights && (
+                <div className="px-2 pb-2 border-t border-outline-variant/20">
+                  <div className="pt-2 space-y-1 max-h-32 overflow-y-auto">
+                    {task.research_data.insights.map((insight: any, idx: number) => (
+                      <div key={idx} className="text-xs text-on-surface-variant p-1.5 rounded hover:bg-surface-container-lowest">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            insight.type === 'data' ? 'bg-blue-500' :
+                            insight.type === 'trend' ? 'bg-orange-500' :
+                            insight.type === 'case' ? 'bg-purple-500' : 'bg-slate-400'
+                          }`} />
+                          <span className="font-medium text-on-surface capitalize">{insight.type}</span>
+                        </div>
+                        <p className="line-clamp-2 text-[10px] opacity-80">{insight.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-outline-variant/30 group cursor-pointer hover:bg-surface-container-lowest transition-colors">
-              <span className="material-symbols-outlined text-error text-base">folder_special</span>
-              <span className="text-xs font-medium truncate text-on-surface">Hard Requirements - {task.asset_ids?.length || 0} Assets</span>
+
+            {/* Hard Requirements / Assets */}
+            <div className="rounded bg-surface-container-low border border-outline-variant/30 overflow-hidden">
+              <button 
+                onClick={() => setExpandedAsset(expandedAsset === 'assets' ? null : 'assets')}
+                className="w-full flex items-center gap-2 p-2 hover:bg-surface-container-lowest transition-colors"
+              >
+                <span className="material-symbols-outlined text-error text-base">folder_special</span>
+                <span className="text-xs font-medium truncate text-on-surface flex-1 text-left">Hard Requirements - {task.asset_ids?.length || 0} Assets</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant transition-transform" style={{ transform: expandedAsset === 'assets' ? 'rotate(180deg)' : 'rotate(0deg)' }}>expand_more</span>
+              </button>
+              {expandedAsset === 'assets' && (
+                <div className="px-2 pb-2 border-t border-outline-variant/20">
+                  <div className="pt-2 space-y-1">
+                    {task.asset_ids && task.asset_ids.length > 0 ? (
+                      task.asset_ids.map((assetId: string, idx: number) => (
+                        <div key={idx} className="text-xs text-on-surface-variant flex items-center gap-1.5 p-1.5 rounded hover:bg-surface-container-lowest">
+                          <span className="material-symbols-outlined text-error text-sm">description</span>
+                          <span className="truncate font-mono">{assetId}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-on-surface-variant/60 text-center py-2">
+                        No assets linked
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

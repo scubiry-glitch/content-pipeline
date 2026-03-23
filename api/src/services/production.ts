@@ -598,14 +598,14 @@ ${JSON.stringify(outline, null, 2)}
     };
   }
 
-  // 4. 蓝军评审重做 - 重新执行评审
-  async redoReview(taskId: string) {
+  // 4. 蓝军评审重做 - 重新执行评审（支持配置）
+  async redoReview(taskId: string, config?: any) {
     const task = await this.getTask(taskId);
     if (!task) {
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    console.log(`[Redo] Restarting BlueTeam review for task ${taskId}`);
+    console.log(`[Redo] Restarting BlueTeam review for task ${taskId}`, config ? { config } : '(default config)');
 
     // 清空评审数据
     await query(
@@ -634,8 +634,8 @@ ${JSON.stringify(outline, null, 2)}
       [taskId]
     );
 
-    // 重新执行评审
-    await this.pipelineService.review(taskId);
+    // 重新执行评审（传递配置）
+    await this.pipelineService.review(taskId, config);
 
     return {
       id: taskId,

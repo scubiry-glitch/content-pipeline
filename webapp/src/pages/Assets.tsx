@@ -331,48 +331,54 @@ export function Assets() {
 
   return (
     <div className="assets-library">
-      {/* 工具栏 */}
+      {/* 工具栏 - 优化布局 */}
       <div className="toolbar">
-        <div className="filter-tabs">
-          <button
-            className={`tab-btn ${filter === 'all' && !selectedTheme ? 'active' : ''}`}
-            onClick={() => { setFilter('all'); setSelectedTheme(null); }}
-          >
-            全部
-          </button>
-          <button
-            className={`tab-btn ${filter === 'pinned' ? 'active' : ''}`}
-            onClick={() => setFilter('pinned')}
-          >
-            📌 置顶
-          </button>
-          <button
-            className={`tab-btn ${filter === 'pdf' ? 'active' : ''}`}
-            onClick={() => setFilter('pdf')}
-          >
-            📄 PDF
-          </button>
-          <button
-            className={`tab-btn ${filter === 'image' ? 'active' : ''}`}
-            onClick={() => setFilter('image')}
-          >
-            🖼️ 图片
-          </button>
-          <button
-            className={`tab-btn ${filter === 'txt' ? 'active' : ''}`}
-            onClick={() => setFilter('txt')}
-          >
-            📃 文本
-          </button>
+        <div className="toolbar-left">
+          <span className="toolbar-label">筛选:</span>
+          <div className="filter-pills">
+            <button
+              className={`pill ${filter === 'all' && !selectedTheme ? 'active' : ''}`}
+              onClick={() => { setFilter('all'); setSelectedTheme(null); }}
+            >
+              全部
+            </button>
+            <button
+              className={`pill ${filter === 'pinned' ? 'active' : ''}`}
+              onClick={() => setFilter('pinned')}
+            >
+              📌 置顶
+            </button>
+            <button
+              className={`pill ${filter === 'pdf' ? 'active' : ''}`}
+              onClick={() => setFilter('pdf')}
+            >
+              📄 PDF
+            </button>
+            <button
+              className={`pill ${filter === 'image' ? 'active' : ''}`}
+              onClick={() => setFilter('image')}
+            >
+              🖼️ 图片
+            </button>
+            <button
+              className={`pill ${filter === 'txt' ? 'active' : ''}`}
+              onClick={() => setFilter('txt')}
+            >
+              📃 文本
+            </button>
+          </div>
         </div>
 
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="搜索素材..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="toolbar-right">
+          <div className="search-box">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              placeholder="搜索素材..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
           <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
             <span>+</span> 添加素材
           </button>

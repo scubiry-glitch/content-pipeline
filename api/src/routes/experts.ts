@@ -8,7 +8,7 @@ import { authenticate } from '../middleware/auth.js';
 export async function expertRoutes(fastify: FastifyInstance) {
   // 获取专家列表
   fastify.get('/', { preHandler: authenticate }, async (request) => {
-    const { status = 'active', domain } = request.query as any;
+    const { status = 'active', domain, angle } = request.query as any;
 
     let sql = `
       SELECT id, name, title, company, angle, domain, bio, status,
@@ -26,6 +26,12 @@ export async function expertRoutes(fastify: FastifyInstance) {
     if (domain) {
       sql += ` AND domain ILIKE $${params.length + 1}`;
       params.push(`%${domain}%`);
+    }
+
+    // 支持按 angle 筛选，如 'reader' 筛选读者画像
+    if (angle) {
+      sql += ` AND angle = $${params.length + 1}`;
+      params.push(angle);
     }
 
     sql += ` ORDER BY created_at DESC`;

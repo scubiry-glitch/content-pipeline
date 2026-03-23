@@ -1,6 +1,5 @@
-// BlueTeam Agent - 蓝军评审专家 v2.0
-// 负责: 4位专家评审(事实核查员/逻辑检察官/行业专家/读者代表) × 2轮 深度评审
-// 支持: 专家库动态匹配
+// BlueTeam Agent - 蓝军评审专家 v3.0
+// 支持: 串行/并行评审模式、可配置专家数量、修订模式选择
 
 import { BaseAgent, AgentContext, AgentResult } from './base.js';
 import { query } from '../db/connection.js';
@@ -8,9 +7,12 @@ import { generate } from '../services/llm.js';
 import { expertLibrary, Expert, ExpertRole, ROLE_NAMES, ROLE_DESCRIPTIONS } from '../services/expertLibrary.js';
 
 export interface BlueTeamConfig {
-  expertCount: number;        // 4 (固定四位专家)
-  questionsPerExpert: number; // 2-3
-  rounds: number;             // 2
+  mode: 'sequential' | 'parallel';     // 串行或并行模式
+  aiExpertCount: number;               // AI专家数量 (1-4)
+  humanExpertCount: number;            // 真人专家数量 (0-3)
+  rounds: number;                      // 评审轮数 (1-3)
+  revisionMode: 'per_round' | 'final'; // 修订模式：每轮后修订 或 最后统一修订
+  selectedExpertIds?: string[];        // 指定专家ID列表 (可选)
 }
 
 export interface BlueTeamExpert {
@@ -19,6 +21,7 @@ export interface BlueTeamExpert {
   title: string;
   role: ExpertRole;
   systemPrompt: string;
+  type: 'ai' | 'human';
 }
 
 export interface BlueTeamQuestion {
@@ -28,6 +31,7 @@ export interface BlueTeamQuestion {
   expertTitle?: string;
   role: ExpertRole;
   roleName: string;
+  expertType: 'ai' | 'human';
   location?: string;
   question: string;
   issue?: string;
@@ -45,6 +49,13 @@ export interface BlueTeamRound {
   questions: BlueTeamQuestion[];
   revisionContent?: string;
   revisionSummary?: string;
+  expertReviews: {
+    expertId: string;
+    expertName: string;
+    expertType: 'ai' | 'human';
+    status: 'pending' | 'completed' | 'skipped';
+    questions: BlueTeamQuestion[];
+  }[];
 }
 
 export interface BlueTeamInput {
@@ -52,21 +63,31 @@ export interface BlueTeamInput {
   draftContent: string;
   topic: string;
   outline?: any[];
+  config?: Partial<BlueTeamConfig>;
 }
 
 export interface BlueTeamOutput {
   rounds: BlueTeamRound[];
   finalDraft: string;
-  status: 'completed' | 'awaiting_approval';
+  status: 'completed' | 'awaiting_approval' | 'awaiting_human_review';
+  config: BlueTeamConfig;
 }
 
+// 默认配置
+const DEFAULT_CONFIG: BlueTeamConfig = {
+  mode: 'parallel',
+  aiExpertCount: 4,
+  humanExpertCount: 0,
+  rounds: 2,
+  revisionMode: 'per_round'
+};
+
+// AI专家角色模板（使用 expertLibrary 定义的标准角色）
+const AI_EXPERT_ROLES: ExpertRole[] = ['fact_checker', 'logic_checker', 'domain_expert', 'reader_rep'];
+
 export class BlueTeamAgent extends BaseAgent {
-  private experts: Expert[] = [];
-  private config: BlueTeamConfig = {
-    expertCount: 4,
-    questionsPerExpert: 2,
-    rounds: 2
-  };
+  private experts: BlueTeamExpert[] = [];
+  private config: BlueTeamConfig = DEFAULT_CONFIG;
 
   constructor() {
     super('BlueTeamAgent', {} as any);
@@ -74,103 +95,107 @@ export class BlueTeamAgent extends BaseAgent {
 
   async execute(input: BlueTeamInput, context?: AgentContext): Promise<AgentResult<BlueTeamOutput>> {
     this.clearLogs();
-    this.log('info', 'Starting BlueTeam review v2.0', { taskId: input.taskId, config: this.config });
+    
+    // 合并配置
+    this.config = { ...DEFAULT_CONFIG, ...input.config };
+    this.log('info', 'Starting BlueTeam review v3.0', { 
+      taskId: input.taskId, 
+      config: this.config 
+    });
 
     try {
-      // 根据主题匹配四位专家
-      this.experts = await expertLibrary.matchFourExperts(input.topic);
-      this.log('info', '4 Experts matched for topic', {
-        topic: input.topic,
-        experts: this.experts.map(e => ({ name: e.name, role: e.role, roleName: ROLE_NAMES[e.role], domains: e.domains }))
+      // 配置专家
+      this.experts = await this.configureExperts(input.topic, input.config?.selectedExpertIds);
+      this.log('info', 'Experts configured', {
+        mode: this.config.mode,
+        expertCount: this.experts.length,
+        experts: this.experts.map(e => ({ name: e.name, type: e.type, role: e.role }))
       });
 
-      // 确保四位专家都匹配到
-      if (this.experts.length < 4) {
-        throw new Error(`专家匹配不完整，只匹配到 ${this.experts.length} 位专家`);
-      }
-
-      // 更新任务状态为 reviewing，并记录专家信息
+      // 更新任务状态
       await query(
-        `UPDATE tasks SET status = 'reviewing', current_stage = 'blue_team_round_1', updated_at = NOW() WHERE id = $1`,
+        `UPDATE tasks SET status = 'reviewing', current_stage = 'blue_team_review', updated_at = NOW() WHERE id = $1`,
         [input.taskId]
       );
 
-      // 保存专家信息到任务
+      // 保存配置到任务
       await query(
         `UPDATE tasks SET research_data = COALESCE(research_data, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
-        [JSON.stringify({ blue_team_experts: this.experts.map(e => ({ id: e.id, name: e.name, title: e.title, role: e.role, roleName: ROLE_NAMES[e.role] })) }), input.taskId]
+        [JSON.stringify({ 
+          blue_team_config: this.config,
+          blue_team_experts: this.experts.map(e => ({ id: e.id, name: e.name, type: e.type, role: e.role }))
+        }), input.taskId]
       );
 
       let currentDraft = input.draftContent;
       const rounds: BlueTeamRound[] = [];
 
-      // 执行2轮评审
+      // 执行评审轮次
       for (let round = 1; round <= this.config.rounds; round++) {
-        this.log('info', `BlueTeam Round ${round} started`);
+        this.log('info', `BlueTeam Round ${round}/${this.config.rounds} started`, { mode: this.config.mode });
 
-        // 4位专家并行评审
-        const roundQuestions: BlueTeamQuestion[] = [];
+        const roundResult = await this.executeRound(input.taskId, currentDraft, input.topic, round);
+        rounds.push(roundResult);
 
-        for (const expert of this.experts) {
-          this.log('info', `Expert ${expert.name} (${ROLE_NAMES[expert.role]}) reviewing`);
-
-          const questions = await this.generateExpertQuestions(
-            expert,
-            currentDraft,
-            input.topic,
-            round
-          );
-
-          roundQuestions.push(...questions);
+        // 根据修订模式处理
+        if (this.config.revisionMode === 'per_round') {
+          // 每轮后修订
+          if (roundResult.questions.length > 0) {
+            this.log('info', `Revising draft after round ${round}`);
+            const revision = await this.reviseDraft(currentDraft, roundResult.questions, round, input.topic);
+            currentDraft = revision.content;
+            roundResult.revisionContent = revision.content;
+            roundResult.revisionSummary = revision.summary;
+            await this.saveDraftVersion(input.taskId, round, currentDraft);
+          }
         }
 
-        // 保存评审问题到数据库
-        await this.saveQuestions(input.taskId, round, roundQuestions);
-
-        // 根据问题修改稿件
-        this.log('info', `Revising draft based on ${roundQuestions.length} questions`);
-        const revision = await this.reviseDraft(currentDraft, roundQuestions, round, input.topic);
-
-        // 保存修改版本
-        await this.saveDraftVersion(input.taskId, round, revision.content);
-
-        rounds.push({
-          round,
-          questions: roundQuestions,
-          revisionContent: revision.content,
-          revisionSummary: revision.summary
-        });
-
-        currentDraft = revision.content;
-
-        // 更新任务进度
+        // 更新进度
+        const progress = 50 + Math.round((round / this.config.rounds) * 30);
         await query(
-          `UPDATE tasks SET
-            progress = $1,
-            current_stage = $2,
-            updated_at = NOW()
-          WHERE id = $3`,
-          [50 + round * 20, `blue_team_round_${round}_completed`, input.taskId]
+          `UPDATE tasks SET progress = $1, current_stage = $2, updated_at = NOW() WHERE id = $3`,
+          [progress, `blue_team_round_${round}`, input.taskId]
         );
       }
 
-      // 2轮结束后，设置为等待人工确认
-      await query(
-        `UPDATE tasks SET
-          status = 'awaiting_approval',
-          progress = 90,
-          current_stage = 'awaiting_human_approval',
-          updated_at = NOW()
-        WHERE id = $1`,
-        [input.taskId]
+      // 最后统一修订（如果选择此模式）
+      if (this.config.revisionMode === 'final') {
+        const allQuestions = rounds.flatMap(r => r.questions);
+        if (allQuestions.length > 0) {
+          this.log('info', 'Final revision after all rounds');
+          const revision = await this.reviseDraft(currentDraft, allQuestions, this.config.rounds, input.topic);
+          currentDraft = revision.content;
+          // 更新最后一轮的修订结果
+          rounds[rounds.length - 1].revisionContent = revision.content;
+          rounds[rounds.length - 1].revisionSummary = revision.summary;
+          await this.saveDraftVersion(input.taskId, this.config.rounds + 1, currentDraft);
+        }
+      }
+
+      // 检查是否有待处理的真人专家评审
+      const hasPendingHumanReview = rounds.some(r => 
+        r.expertReviews.some(er => er.expertType === 'human' && er.status === 'pending')
       );
 
-      this.log('info', 'BlueTeam review completed, awaiting human approval');
+      const finalStatus = hasPendingHumanReview ? 'awaiting_human_review' : 'awaiting_approval';
+
+      await query(
+        `UPDATE tasks SET
+          status = $1,
+          progress = 90,
+          current_stage = $2,
+          updated_at = NOW()
+        WHERE id = $3`,
+        [finalStatus, finalStatus === 'awaiting_human_review' ? 'awaiting_human_experts' : 'awaiting_human_approval', input.taskId]
+      );
+
+      this.log('info', 'BlueTeam review completed', { status: finalStatus });
 
       return this.createSuccessResult({
         rounds,
         finalDraft: currentDraft,
-        status: 'awaiting_approval'
+        status: finalStatus,
+        config: this.config
       });
 
     } catch (error) {
@@ -180,8 +205,164 @@ export class BlueTeamAgent extends BaseAgent {
     }
   }
 
+  // 配置专家
+  private async configureExperts(topic: string, selectedIds?: string[]): Promise<BlueTeamExpert[]> {
+    const experts: BlueTeamExpert[] = [];
+
+    // 1. 配置 AI 专家
+    const aiRoles = AI_EXPERT_ROLES.slice(0, this.config.aiExpertCount);
+    for (let i = 0; i < aiRoles.length; i++) {
+      const role = aiRoles[i];
+      experts.push({
+        id: `ai_${role}`,
+        name: this.getAIRoleName(role),
+        title: ROLE_NAMES[role],
+        role: role,
+        systemPrompt: this.getAISystemPrompt(role),
+        type: 'ai'
+      });
+    }
+
+    // 2. 配置真人专家
+    if (this.config.humanExpertCount > 0) {
+      let humanExperts: Expert[] = [];
+      
+      if (selectedIds && selectedIds.length > 0) {
+        // 使用指定的专家
+        const result = await query(
+          `SELECT * FROM experts WHERE id = ANY($1) AND is_active = true`,
+          [selectedIds]
+        );
+        humanExperts = result.rows.slice(0, this.config.humanExpertCount);
+      } else {
+        // 从专家库匹配
+        const allExperts = await expertLibrary.listExperts();
+        // 根据主题相关度排序（简化处理）
+        humanExperts = allExperts
+          .slice(0, this.config.humanExpertCount);
+      }
+
+      for (const he of humanExperts) {
+        experts.push({
+          id: he.id,
+          name: he.name,
+          title: he.title || '领域专家',
+          role: (he.role as ExpertRole) || 'domain_expert',
+          systemPrompt: he.system_prompt || '',
+          type: 'human'
+        });
+      }
+    }
+
+    return experts;
+  }
+
+  // 执行一轮评审
+  private async executeRound(
+    taskId: string,
+    draft: string,
+    topic: string,
+    round: number
+  ): Promise<BlueTeamRound> {
+    const roundQuestions: BlueTeamQuestion[] = [];
+    const expertReviews: BlueTeamRound['expertReviews'] = [];
+
+    if (this.config.mode === 'parallel') {
+      // 并行模式：所有专家同时评审
+      for (const expert of this.experts) {
+        const result = await this.reviewByExpert(expert, draft, topic, round);
+        roundQuestions.push(...result.questions);
+        expertReviews.push({
+          expertId: expert.id,
+          expertName: expert.name,
+          expertType: expert.type,
+          status: result.status,
+          questions: result.questions
+        });
+      }
+    } else {
+      // 串行模式：专家依次评审
+      for (const expert of this.experts) {
+        this.log('info', `Sequential review: ${expert.name} (${expert.type})`);
+        
+        const result = await this.reviewByExpert(expert, draft, topic, round);
+        roundQuestions.push(...result.questions);
+        expertReviews.push({
+          expertId: expert.id,
+          expertName: expert.name,
+          expertType: expert.type,
+          status: result.status,
+          questions: result.questions
+        });
+
+        // 串行模式下，如果是AI专家且是每轮修订模式，可以实时看到修订
+        if (expert.type === 'ai' && this.config.revisionMode === 'per_round' && result.questions.length > 0) {
+          this.log('info', `Intermediate revision after ${expert.name}`);
+          const revision = await this.reviseDraft(draft, result.questions, round, topic, expert.name);
+          // 更新当前稿件供下一位专家评审
+          draft = revision.content;
+        }
+      }
+    }
+
+    // 保存所有问题到数据库
+    await this.saveQuestions(taskId, round, roundQuestions);
+
+    return {
+      round,
+      questions: roundQuestions,
+      expertReviews
+    };
+  }
+
+  // 单个专家评审
+  private async reviewByExpert(
+    expert: BlueTeamExpert,
+    draft: string,
+    topic: string,
+    round: number
+  ): Promise<{ questions: BlueTeamQuestion[]; status: 'completed' | 'pending' | 'skipped' }> {
+    
+    // 真人专家：创建待评审任务
+    if (expert.type === 'human') {
+      await this.createHumanReviewTask(expert, draft, topic, round);
+      return {
+        questions: [],
+        status: 'pending'
+      };
+    }
+
+    // AI专家：直接生成评审意见
+    const questions = await this.generateExpertQuestions(expert, draft, topic, round);
+    return {
+      questions,
+      status: 'completed'
+    };
+  }
+
+  // 创建真人专家评审任务
+  private async createHumanReviewTask(
+    expert: BlueTeamExpert,
+    draft: string,
+    topic: string,
+    round: number
+  ): Promise<void> {
+    const { v4: uuidv4 } = await import('uuid');
+    
+    await query(
+      `INSERT INTO expert_review_tasks (
+        id, expert_id, task_id, draft_content, topic, round, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())
+      ON CONFLICT (expert_id, task_id, round) DO NOTHING`,
+      [uuidv4(), expert.id, topic, draft.substring(0, 5000), topic, round]
+    );
+
+    this.log('info', `Created human review task for ${expert.name}`);
+  }
+
+  // 生成AI专家评审问题
   private async generateExpertQuestions(
-    expert: Expert,
+    expert: BlueTeamExpert,
     draft: string,
     topic: string,
     round: number
@@ -189,13 +370,14 @@ export class BlueTeamAgent extends BaseAgent {
     const roleName = ROLE_NAMES[expert.role];
     const roleDesc = ROLE_DESCRIPTIONS[expert.role];
 
-    const prompt = `${expert.system_prompt}
+    const prompt = `${expert.systemPrompt}
 
 ## 当前评审任务
 - 评审轮次：第${round}轮
 - 你的角色：${roleName}
 - 角色职责：${roleDesc}
 - 研究主题：${topic}
+- 专家类型：AI专家
 
 ## 待评审文稿
 ${draft.substring(0, 8000)}
@@ -203,9 +385,10 @@ ${draft.substring(0, 8000)}
 ## 评审要求
 1. 第1轮关注结构性问题（框架、逻辑、关键遗漏）
 2. 第2轮关注细节完善（数据准确性、表达优化）
-3. 问题要具体、专业，能直接指导修改
-4. 必须按角色的专业视角进行评审
-5. 识别问题时同时指出亮点（praise）
+3. 第3轮关注整体优化（可读性、专业度提升）
+4. 问题要具体、专业，能直接指导修改
+5. 必须按角色的专业视角进行评审
+6. 识别问题时同时指出亮点（praise）
 
 ## 严重等级定义
 - 🔴 high - 严重问题（事实错误、逻辑断裂、专业错误），必须修改
@@ -244,6 +427,7 @@ ${draft.substring(0, 8000)}
             expertTitle: expert.title,
             role: expert.role,
             roleName: ROLE_NAMES[expert.role],
+            expertType: 'ai',
             question: q.issue || q.question,
             severity: q.severity || 'medium',
             suggestion: q.suggestion || '',
@@ -259,27 +443,7 @@ ${draft.substring(0, 8000)}
       this.log('warn', `Failed to generate questions for ${expert.name}`, { error });
     }
 
-    // Fallback - 基于角色的默认反馈
-    const roleFallbacks: Record<ExpertRole, { question: string; suggestion: string }> = {
-      fact_checker: {
-        question: '请核查关键数据的来源和时效性',
-        suggestion: '补充数据来源标注，确认统计口径一致，更新过期数据'
-      },
-      logic_checker: {
-        question: '请检查论证逻辑的严密性',
-        suggestion: '梳理论证链条，补充隐含假设说明，强化因果推理依据'
-      },
-      domain_expert: {
-        question: '请评估专业分析的深度',
-        suggestion: '补充行业洞察，引用专业理论，深化趋势判断'
-      },
-      reader_rep: {
-        question: '请评估报告的可读性',
-        suggestion: '优化段落结构，简化专业术语，提升行文流畅度'
-      }
-    };
-
-    const fallback = roleFallbacks[expert.role];
+    // Fallback
     return [{
       id: `q_${round}_${expert.id}_0`,
       expertId: expert.id,
@@ -287,70 +451,66 @@ ${draft.substring(0, 8000)}
       expertTitle: expert.title,
       role: expert.role,
       roleName: ROLE_NAMES[expert.role],
-      question: `${expert.name}（${ROLE_NAMES[expert.role]}）：${fallback.question}`,
+      expertType: 'ai',
+      question: `${expert.name}：请检查${roleName}相关的问题`,
       severity: 'medium',
-      suggestion: fallback.suggestion,
+      suggestion: '建议根据角色定位进行优化',
       checkItems: [],
-      rationale: `从${ROLE_NAMES[expert.role]}角度进行评审`
+      rationale: `从${roleName}角度进行评审`
     }];
   }
 
+  // 修订稿件
   private async reviseDraft(
     draft: string,
     questions: BlueTeamQuestion[],
     round: number,
-    topic: string
+    topic: string,
+    afterExpert?: string
   ): Promise<{ content: string; summary: string }> {
-    // 按角色分组问题
-    const byRole: Record<ExpertRole, BlueTeamQuestion[]> = {
+    // 按专家类型和角色分组
+    const aiQuestions = questions.filter(q => q.expertType === 'ai');
+    const humanQuestions = questions.filter(q => q.expertType === 'human');
+
+    const byRole: Record<string, BlueTeamQuestion[]> = {
+      challenger: [],
+      expander: [],
+      synthesizer: [],
       fact_checker: [],
-      logic_checker: [],
       domain_expert: [],
       reader_rep: []
     };
 
     questions.forEach(q => {
-      if (byRole[q.role]) {
-        byRole[q.role].push(q);
-      }
+      const key = q.role || 'domain_expert';
+      if (!byRole[key]) byRole[key] = [];
+      byRole[key].push(q);
     });
 
-    // 统计各类型问题数量
     const highCount = questions.filter(q => q.severity === 'high').length;
     const mediumCount = questions.filter(q => q.severity === 'medium').length;
     const praiseCount = questions.filter(q => q.severity === 'praise').length;
 
-    const prompt = `你是一位资深研究报告修订专家。请基于Blue Team四位专家评审的反馈修改报告。
+    const afterExpertText = afterExpert ? `（在 ${afterExpert} 评审后）` : '';
+
+    const prompt = `你是一位资深研究报告修订专家。请基于Blue Team专家评审的反馈修改报告。
 
 ## 研究主题
 ${topic}
 
-## 当前版本：第${round}轮修订
+## 当前版本：第${round}轮修订${afterExpertText}
 ## 问题统计：严重${highCount}个 / 建议${mediumCount}个 / 亮点${praiseCount}个
+## AI专家意见：${aiQuestions.length}条 / 真人专家意见：${humanQuestions.length}条
 
-## 事实核查员意见（准确性问题 - 必须解决）
-${byRole.fact_checker.map((q, i) => `
+${Object.entries(byRole)
+  .filter(([_, qs]) => qs.length > 0)
+  .map(([role, qs]) => `
+## ${ROLE_NAMES[role as ExpertRole] || role}意见
+${qs.map((q, i) => `
 ${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
 建议：${q.suggestion}
-`).join('\n') || '无'}
-
-## 逻辑检察官意见（严密性问题 - 必须解决）
-${byRole.logic_checker.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
-建议：${q.suggestion}
-`).join('\n') || '无'}
-
-## 行业专家意见（专业度问题 - 推荐解决）
-${byRole.domain_expert.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
-建议：${q.suggestion}
-`).join('\n') || '无'}
-
-## 读者代表意见（可读性问题 - 推荐解决）
-${byRole.reader_rep.map((q, i) => `
-${i + 1}. [${q.severity}] ${q.location || ''} ${q.question}
-建议：${q.suggestion}
-`).join('\n') || '无'}
+`).join('\n')}
+`).join('\n')}
 
 ## 当前报告
 ${draft.substring(0, 6000)}...
@@ -384,6 +544,7 @@ ${draft.substring(0, 6000)}...
     }
   }
 
+  // 保存问题到数据库
   private async saveQuestions(
     taskId: string,
     round: number,
@@ -391,13 +552,17 @@ ${draft.substring(0, 6000)}...
   ): Promise<void> {
     for (const q of questions) {
       await query(
-        `INSERT INTO blue_team_reviews (task_id, round, expert_role, questions)
-         VALUES ($1, $2, $3, $4)`,
-        [taskId, round, q.role, JSON.stringify(q)]
+        `INSERT INTO blue_team_reviews (task_id, round, expert_role, expert_type, questions)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (task_id, round, expert_role) DO UPDATE SET
+         questions = EXCLUDED.questions,
+         expert_type = EXCLUDED.expert_type`,
+        [taskId, round, q.role, q.expertType, JSON.stringify(q)]
       );
     }
   }
 
+  // 保存稿件版本
   private async saveDraftVersion(
     taskId: string,
     version: number,
@@ -409,5 +574,35 @@ ${draft.substring(0, 6000)}...
        VALUES ($1, $2, $3, $4, NOW())`,
       [uuidv4(), taskId, version, content]
     );
+  }
+
+  // 获取AI角色名称
+  private getAIRoleName(role: ExpertRole): string {
+    const names: Record<string, string> = {
+      challenger: '批判者',
+      expander: '拓展者',
+      synthesizer: '提炼者',
+      fact_checker: '事实核查员'
+    };
+    return names[role] || ROLE_NAMES[role];
+  }
+
+  // 获取AI系统提示词
+  private getAISystemPrompt(role: ExpertRole): string {
+    const prompts: Record<string, string> = {
+      challenger: `你是一位严苛的批判者(Challenger)，负责找出文稿中的逻辑漏洞和问题。
+你的关注点是：逻辑漏洞、论证跳跃、数据可靠性、隐含假设。
+你要以批判的眼光审视每一个细节，找出可能的错误和不足。`,
+      expander: `你是一位拓展者(Expander)，负责提供补充视角和扩展内容。
+你的关注点是：关联因素、国际对比、交叉学科、长尾效应。
+你要帮助作者看到更广阔的视野，补充可能被忽略的内容。`,
+      synthesizer: `你是一位提炼者(Synthesizer)，负责优化表达和结构。
+你的关注点是：核心论点、结构优化、金句提炼、消除冗余。
+你要帮助提升文稿的整体质量和可读性。`,
+      fact_checker: `你是一位事实核查员(Fact Checker)，负责验证数据的准确性。
+你的关注点是：数据来源、统计口径、时效性、可信度。
+你要确保文稿中的每一个数据都是准确可靠的。`
+    };
+    return prompts[role] || `你是一位专业的文稿评审专家。`;
   }
 }

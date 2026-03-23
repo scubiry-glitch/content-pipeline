@@ -1,13 +1,15 @@
 // 任务详情 - 深度研究 Tab
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { DataReviewTable } from '../../components/DataReviewTable';
 import { ExternalLinksList } from '../../components/ExternalLinksList';
 import { AssetLinksList } from '../../components/AssetLinksList';
 import { DataCleaningPanel } from '../../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../../components/CrossValidationPanel';
+import { rssSourcesApi, hotTopicsApi, assetsApi } from '../../api/client';
 import type { Task } from '../../types';
-import type { ResearchConfig } from '../../api/client';
+import type { ResearchConfig, RSSItem, HotTopic, Asset } from '../../api/client';
 
 interface TaskContext {
   task: Task;
@@ -38,6 +40,119 @@ export function ResearchTab() {
 
   const hasResearchData = !!task.research_data;
   const researchData = task.research_data as any;
+
+  // ===== Multi-Source Engine 状态 =====
+  // RSS 数据
+  const [rssItems, setRssItems] = useState<RSSItem[]>([]);
+  const [rssLoading, setRssLoading] = useState(false);
+  const [selectedRssItems, setSelectedRssItems] = useState<Set<string>>(new Set());
+  
+  // Web Search 数据
+  const [webSearchResults, setWebSearchResults] = useState<HotTopic[]>([]);
+  const [webSearchLoading, setWebSearchLoading] = useState(false);
+  const [selectedWebItems, setSelectedWebItems] = useState<Set<string>>(new Set());
+  
+  // Private Assets 数据
+  const [privateAssets, setPrivateAssets] = useState<Asset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+
+  // ===== 加载数据 =====
+  const loadRssData = useCallback(async () => {
+    if (!researchConfig.sources.includes('rss')) return;
+    setRssLoading(true);
+    try {
+      const result = await rssSourcesApi.getItems({ limit: 5 });
+      setRssItems(result.items || []);
+    } catch (error) {
+      console.error('Failed to load RSS items:', error);
+    } finally {
+      setRssLoading(false);
+    }
+  }, [researchConfig.sources]);
+
+  const loadWebSearchData = useCallback(async () => {
+    if (!researchConfig.sources.includes('web')) return;
+    setWebSearchLoading(true);
+    try {
+      const result = await hotTopicsApi.getAll({ limit: 5 });
+      setWebSearchResults(result.items || []);
+    } catch (error) {
+      console.error('Failed to load web search results:', error);
+    } finally {
+      setWebSearchLoading(false);
+    }
+  }, [researchConfig.sources]);
+
+  const loadAssetsData = useCallback(async () => {
+    if (!researchConfig.sources.includes('asset')) return;
+    setAssetsLoading(true);
+    try {
+      const result = await assetsApi.getAll({ limit: 5 });
+      setPrivateAssets(result.items || []);
+    } catch (error) {
+      console.error('Failed to load assets:', error);
+    } finally {
+      setAssetsLoading(false);
+    }
+  }, [researchConfig.sources]);
+
+  // ===== 重试功能 =====
+  const handleRetryWebSearch = async () => {
+    await loadWebSearchData();
+  };
+
+  const handleRetryRss = async () => {
+    await loadRssData();
+  };
+
+  const handleRetryAssets = async () => {
+    await loadAssetsData();
+  };
+
+  // ===== 勾选功能 =====
+  const toggleRssSelection = (id: string) => {
+    setSelectedRssItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleWebSelection = (id: string) => {
+    setSelectedWebItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAssetSelection = (id: string) => {
+    setSelectedAssets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  // 初始加载
+  useEffect(() => {
+    loadRssData();
+    loadWebSearchData();
+    loadAssetsData();
+  }, [loadRssData, loadWebSearchData, loadAssetsData]);
 
   return (
     <div className="tab-panel research-panel animate-fade-in pb-32">
@@ -150,35 +265,173 @@ export function ResearchTab() {
 
           {/* Quick Config Overview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+             {/* Web Global Search Card */}
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group flex flex-col">
                 <div className="flex justify-between items-start mb-3">
                     <span className="material-symbols-outlined text-blue-500">language</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('web') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
-                        {researchConfig.sources.includes('web') ? 'Active' : 'Disabled'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('web') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                          {researchConfig.sources.includes('web') ? 'Active' : 'Disabled'}
+                      </span>
+                      <button 
+                        onClick={handleRetryWebSearch}
+                        disabled={webSearchLoading || !researchConfig.sources.includes('web')}
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                        title="重新加载 Web Search"
+                      >
+                        <span className={`material-symbols-outlined text-sm ${webSearchLoading ? 'animate-spin' : ''}`}>refresh</span>
+                      </button>
+                    </div>
                 </div>
                 <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Web Global Search</h3>
-                <p className="text-xs text-slate-500">Tavily & SERP integrated discovery engine...</p>
+                <p className="text-xs text-slate-500 mb-3">Tavily & SERP integrated discovery engine...</p>
+                
+                {/* Web Search Items with Checkboxes */}
+                <div className="flex-1 max-h-28 overflow-y-auto space-y-1 mb-2">
+                  {webSearchLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
+                    </div>
+                  ) : !researchConfig.sources.includes('web') ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">Web search disabled</p>
+                  ) : webSearchResults.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">No results available</p>
+                  ) : (
+                    webSearchResults.slice(0, 5).map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedWebItems.has(item.id)}
+                          onChange={() => toggleWebSelection(item.id)}
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-blue-600 transition-colors">{item.title}</p>
+                          <p className="text-[10px] text-slate-500">{item.source}</p>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                
+                {selectedWebItems.size > 0 && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] text-blue-600 font-medium">{selectedWebItems.size} selected</span>
+                  </div>
+                )}
              </div>
-             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+
+             {/* RSS Subscription Feeds Card */}
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group flex flex-col">
                 <div className="flex justify-between items-start mb-3">
                     <span className="material-symbols-outlined text-orange-500">rss_feed</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('rss') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
-                        {researchConfig.sources.includes('rss') ? 'Active' : 'Disabled'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('rss') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                          {researchConfig.sources.includes('rss') ? 'Active' : 'Disabled'}
+                      </span>
+                      <button 
+                        onClick={handleRetryRss}
+                        disabled={rssLoading || !researchConfig.sources.includes('rss')}
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                        title="重新加载 RSS"
+                      >
+                        <span className={`material-symbols-outlined text-sm ${rssLoading ? 'animate-spin' : ''}`}>refresh</span>
+                      </button>
+                    </div>
                 </div>
                 <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">RSS Subscription Feeds</h3>
-                <p className="text-xs text-slate-500">Real-time updates on targeted tech news...</p>
+                <p className="text-xs text-slate-500 mb-3">Real-time updates on targeted tech news...</p>
+                
+                {/* RSS Items with Checkboxes */}
+                <div className="flex-1 max-h-28 overflow-y-auto space-y-1 mb-2">
+                  {rssLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
+                    </div>
+                  ) : !researchConfig.sources.includes('rss') ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">RSS feeds disabled</p>
+                  ) : rssItems.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">No RSS items available</p>
+                  ) : (
+                    rssItems.slice(0, 5).map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedRssItems.has(item.id)}
+                          onChange={() => toggleRssSelection(item.id)}
+                          className="mt-0.5 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-orange-600 transition-colors">{item.title}</p>
+                          <p className="text-[10px] text-slate-500">{item.source_name}</p>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                
+                {selectedRssItems.size > 0 && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] text-orange-600 font-medium">{selectedRssItems.size} selected</span>
+                  </div>
+                )}
              </div>
-             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+
+             {/* Private Vector Assets Card */}
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group flex flex-col">
                 <div className="flex justify-between items-start mb-3">
                     <span className="material-symbols-outlined text-indigo-500">picture_as_pdf</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('asset') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
-                        {researchConfig.sources.includes('asset') ? 'Active' : 'Disabled'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('asset') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                          {researchConfig.sources.includes('asset') ? 'Active' : 'Disabled'}
+                      </span>
+                      <button 
+                        onClick={handleRetryAssets}
+                        disabled={assetsLoading || !researchConfig.sources.includes('asset')}
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                        title="重新加载 Assets"
+                      >
+                        <span className={`material-symbols-outlined text-sm ${assetsLoading ? 'animate-spin' : ''}`}>refresh</span>
+                      </button>
+                    </div>
                 </div>
                 <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Private Vector Assets</h3>
-                <p className="text-xs text-slate-500">Internal PDF, Docs and historical reports...</p>
+                <p className="text-xs text-slate-500 mb-3">Internal PDF, Docs and historical reports...</p>
+                
+                {/* Assets with Checkboxes */}
+                <div className="flex-1 max-h-28 overflow-y-auto space-y-1 mb-2">
+                  {assetsLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
+                    </div>
+                  ) : !researchConfig.sources.includes('asset') ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">Assets source disabled</p>
+                  ) : privateAssets.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-2">No assets available</p>
+                  ) : (
+                    privateAssets.slice(0, 5).map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedAssets.has(item.id)}
+                          onChange={() => toggleAssetSelection(item.id)}
+                          className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-indigo-600 transition-colors">{item.title}</p>
+                          <p className="text-[10px] text-slate-500">{item.source || 'Internal'}</p>
+                        </div>
+                      </label>
+                    ))
+                  )
+                }
+                </div>
+                
+                {selectedAssets.size > 0 && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] text-indigo-600 font-medium">{selectedAssets.size} selected</span>
+                  </div>
+                )}
              </div>
           </div>
           {researchConfig.keywords.length > 0 && (

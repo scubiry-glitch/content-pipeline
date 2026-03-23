@@ -160,9 +160,39 @@ export function TaskDetailLayout() {
     try {
       const reviewsData = await blueTeamApi.getReviews(taskId);
       // API returns { taskId, status, summary, experts, rawReviews }
-      // Convert rawReviews to BlueTeamReview[] format
-      const rawReviews = (reviewsData as any).rawReviews || [];
       const apiSummary = (reviewsData as any).summary || {};
+      
+      // Try rawReviews first, then experts array
+      let rawReviews = (reviewsData as any).rawReviews || [];
+      const experts = (reviewsData as any).experts || [];
+      
+      // If no rawReviews but has experts, convert from experts format
+      if (rawReviews.length === 0 && experts.length > 0) {
+        // Convert from experts/issues format to BlueTeamReview format
+        let reviewId = 1;
+        experts.forEach((expert: any) => {
+          const issues = expert.issues || [];
+          issues.forEach((issue: any) => {
+            rawReviews.push({
+              id: issue.id || `review_${reviewId++}`,
+              task_id: taskId,
+              round: issue.round || 1,
+              expert_role: issue.expert || expert.role || 'domain_expert',
+              questions: [{
+                id: issue.id || `q_${reviewId}`,
+                question: issue.question || '',
+                severity: issue.severity || 'medium',
+                suggestion: issue.suggestion || '',
+                location: issue.location || ''
+              }],
+              status: issue.status || 'pending',
+              user_decision: issue.userDecision || null,
+              decision_note: issue.decisionNote || null,
+              decided_at: issue.decidedAt || null
+            });
+          });
+        });
+      }
       
       // Convert to BlueTeamReview format
       const items: BlueTeamReview[] = rawReviews.map((row: any) => ({
@@ -179,17 +209,18 @@ export function TaskDetailLayout() {
         created_at: row.created_at
       }));
       
+      console.log('[TaskDetailLayout] Loaded reviews:', items.length);
       setReviews(items);
 
       // Use API summary or calculate from items
       const summary = { 
-        total: apiSummary.total || 0, 
+        total: apiSummary.total || items.length, 
         critical: apiSummary.critical || 0, 
         warning: apiSummary.warning || 0, 
         praise: apiSummary.praise || 0, 
         accepted: apiSummary.accepted || 0, 
         ignored: apiSummary.ignored || 0, 
-        pending: apiSummary.pending || 0 
+        pending: apiSummary.pending || items.length 
       };
 
       setReviewSummary(summary);
@@ -207,14 +238,28 @@ export function TaskDetailLayout() {
     try {
       setLoading(true);
       const data = await tasksApi.getById(id);
-      setTask(data);
+      
+      // 加载 draft versions
+      let versions: any[] = [];
+      try {
+        const versionsRes = await fetch(`/api/v1/production/${id}/versions`, {
+          headers: { 'x-api-key': 'dev-api-key' }
+        });
+        if (versionsRes.ok) {
+          versions = await versionsRes.json();
+        }
+      } catch (e) {
+        console.log('[TaskDetailLayout] No versions loaded');
+      }
+      
+      // 合并 versions 到 task
+      const taskWithVersions = { ...data, versions };
+      setTask(taskWithVersions);
 
       let loadedReviews: BlueTeamReview[] = [];
       
-      // 加载蓝军评审
-      if (['reviewing', 'completed', 'awaiting_approval'].includes(data.status)) {
-        loadedReviews = await loadReviews(id);
-      }
+      // 加载蓝军评审 (所有状态都可能需要显示评审意见)
+      loadedReviews = await loadReviews(id);
 
       // 加载热点话题
       try {
@@ -566,19 +611,14 @@ export function TaskDetailLayout() {
     onReviewDecision: handleReviewDecision,
     onBatchDecision: handleBatchDecision,
     onReReview: handleReReview,
-    onRedoReview: () => handleRedoStage('review'),
+    onRedoReview: (config?: any) => handleRedoStage('review', config ? { config } : undefined),
   };
 
   return (
     <div className="task-detail-layout">
       {/* 左侧边栏 - 复用新版 HTML 样式架构 */}
       <aside className="task-sidebar-new">
-        <div className="sidebar-brand">
-          <h2 className="brand-title">Content Pipeline</h2>
-          <p className="brand-subtitle">Active Production</p>
-        </div>
-
-        <div className="task-header-info mb-6 px-2">
+        <div className="task-header-info mb-6 px-2 pt-4">
           <h1 className="task-topic-preview" title={task.topic}>{task.topic || 'Untitled Task'}</h1>
         </div>
 

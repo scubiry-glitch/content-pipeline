@@ -4,8 +4,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import { VersionTimeline } from '../../components/content';
-import { tasksApi } from '../../api/client';
+import { tasksApi, rssSourcesApi, hotTopicsApi } from '../../api/client';
 import type { Task, OutlineComment, OutlineVersion } from '../../types';
+import type { RSSItem, HotTopic } from '../../api/client';
 
 interface TaskContext {
   task: Task;
@@ -86,6 +87,22 @@ export function PlanningTab() {
   const [showRedoDialog, setShowRedoDialog] = useState(false);
   const [redoComment, setRedoComment] = useState('');
   const [isRedoing, setIsRedoing] = useState(false);
+
+  // ===== Multi-source Discovery 状态 =====
+  // RSS 数据
+  const [rssItems, setRssItems] = useState<RSSItem[]>([]);
+  const [rssLoading, setRssLoading] = useState(false);
+  const [selectedRssItems, setSelectedRssItems] = useState<Set<string>>(new Set());
+
+  // Web Search 数据
+  const [webSearchResults, setWebSearchResults] = useState<HotTopic[]>([]);
+  const [webSearchLoading, setWebSearchLoading] = useState(false);
+  const [selectedWebItems, setSelectedWebItems] = useState<Set<string>>(new Set());
+
+  // Community Topics 数据
+  const [communityTopics, setCommunityTopics] = useState<HotTopic[]>([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [selectedCommunityItems, setSelectedCommunityItems] = useState<Set<string>>(new Set());
 
   // 平滑滚动到指定区域
   const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
@@ -215,11 +232,103 @@ export function PlanningTab() {
     setComments([]);
   };
 
+  // ===== 加载 RSS 数据 =====
+  const loadRssData = useCallback(async () => {
+    setRssLoading(true);
+    try {
+      const result = await rssSourcesApi.getItems({ limit: 5 });
+      setRssItems(result.items || []);
+    } catch (error) {
+      console.error('Failed to load RSS items:', error);
+    } finally {
+      setRssLoading(false);
+    }
+  }, []);
+
+  // ===== 加载 Web Search 数据 =====
+  const loadWebSearchData = useCallback(async () => {
+    setWebSearchLoading(true);
+    try {
+      const result = await hotTopicsApi.getAll({ limit: 5 });
+      setWebSearchResults(result.items || []);
+    } catch (error) {
+      console.error('Failed to load web search results:', error);
+    } finally {
+      setWebSearchLoading(false);
+    }
+  }, []);
+
+  // ===== 加载 Community Topics 数据 =====
+  const loadCommunityData = useCallback(async () => {
+    setCommunityLoading(true);
+    try {
+      const result = await hotTopicsApi.getAll({ limit: 5, trend: 'up' });
+      setCommunityTopics(result.items || []);
+    } catch (error) {
+      console.error('Failed to load community topics:', error);
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, []);
+
+  // ===== 重试功能 =====
+  const handleRetryRss = async () => {
+    await loadRssData();
+  };
+
+  const handleRetryWebSearch = async () => {
+    await loadWebSearchData();
+  };
+
+  const handleRetryCommunity = async () => {
+    await loadCommunityData();
+  };
+
+  // ===== 勾选功能 =====
+  const toggleRssSelection = (id: string) => {
+    setSelectedRssItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleWebSelection = (id: string) => {
+    setSelectedWebItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleCommunitySelection = (id: string) => {
+    setSelectedCommunityItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
   // 初始加载
   useEffect(() => {
     loadComments();
     loadVersions();
-  }, [loadComments, loadVersions]);
+    loadRssData();
+    loadWebSearchData();
+    loadCommunityData();
+  }, [loadComments, loadVersions, loadRssData, loadWebSearchData, loadCommunityData]);
 
   // 将大纲转换为 Markdown 格式
   const outlineToMarkdown = (ol: any = outline) => {
@@ -288,46 +397,172 @@ export function PlanningTab() {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* RSS Source */}
-            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <span className="material-symbols-outlined text-tertiary" data-icon="rss_feed">rss_feed</span>
-                <span className="text-[10px] font-bold uppercase text-tertiary px-2 py-0.5 bg-tertiary-container/10 rounded">Live</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase text-tertiary px-2 py-0.5 bg-tertiary-container/10 rounded">Live</span>
+                  <button 
+                    onClick={handleRetryRss}
+                    disabled={rssLoading}
+                    className="p-1 hover:bg-surface-container rounded transition-colors"
+                    title="重新加载"
+                  >
+                    <span className={`material-symbols-outlined text-sm ${rssLoading ? 'animate-spin' : ''}`}>refresh</span>
+                  </button>
+                </div>
               </div>
-              <h4 className="font-bold text-sm mb-2 text-on-surface">RSS Aggregation</h4>
-              <p className="text-xs text-on-surface-variant leading-relaxed">TechCrunch, Wired, and 12 other industry signals active.</p>
-              <div className="mt-4 pt-4 border-t border-outline-variant/10 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-tertiary-fixed animate-pulse"></span>
-                <span className="text-[10px] text-on-surface-variant font-medium">{task.research_data?.insights?.length || 0} new signals detected</span>
+              <h4 className="font-bold text-sm mb-2 text-on-surface">RSS Subscription Feeds</h4>
+              <p className="text-xs text-on-surface-variant leading-relaxed mb-3">TechCrunch, Wired, and 12 other industry signals active.</p>
+              
+              {/* RSS Items List with Checkboxes */}
+              <div className="flex-1 max-h-32 overflow-y-auto space-y-2 mb-3">
+                {rssLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <span className="material-symbols-outlined animate-spin text-on-surface-variant">sync</span>
+                  </div>
+                ) : rssItems.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant italic text-center py-2">No RSS items available</p>
+                ) : (
+                  rssItems.slice(0, 5).map((item) => (
+                    <label key={item.id} className="flex items-start gap-2 p-2 hover:bg-surface-container rounded cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedRssItems.has(item.id)}
+                        onChange={() => toggleRssSelection(item.id)}
+                        className="mt-0.5 rounded border-outline-variant text-tertiary focus:ring-tertiary"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-on-surface truncate group-hover:text-tertiary transition-colors">{item.title}</p>
+                        <p className="text-[10px] text-on-surface-variant">{item.source_name}</p>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              
+              <div className="mt-auto pt-3 border-t border-outline-variant/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-tertiary-fixed animate-pulse"></span>
+                  <span className="text-[10px] text-on-surface-variant font-medium">{rssItems.length} items loaded</span>
+                </div>
+                {selectedRssItems.size > 0 && (
+                  <span className="text-[10px] text-tertiary font-medium">{selectedRssItems.size} selected</span>
+                )}
               </div>
             </div>
 
             {/* Web Search Source */}
-            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <span className="material-symbols-outlined text-primary" data-icon="travel_explore">travel_explore</span>
-                <span className="text-[10px] font-bold uppercase text-primary px-2 py-0.5 bg-primary-container/10 rounded">Tavily AI</span>
-              </div>
-              <h4 className="font-bold text-sm mb-2 text-on-surface">Web Search Results</h4>
-              <p className="text-xs text-on-surface-variant leading-relaxed">Deep-crawling global context and technical documentation.</p>
-              <div className="mt-4 pt-4 border-t border-outline-variant/10">
-                <div className="w-full bg-surface-container h-1 rounded-full overflow-hidden">
-                  <div className="bg-primary h-full w-full"></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase text-primary px-2 py-0.5 bg-primary-container/10 rounded">Tavily AI</span>
+                  <button 
+                    onClick={handleRetryWebSearch}
+                    disabled={webSearchLoading}
+                    className="p-1 hover:bg-surface-container rounded transition-colors"
+                    title="重新加载"
+                  >
+                    <span className={`material-symbols-outlined text-sm ${webSearchLoading ? 'animate-spin' : ''}`}>refresh</span>
+                  </button>
                 </div>
-                <span className="text-[10px] text-on-surface-variant font-medium mt-1 inline-block">{task.research_data?.sources?.length || 0} sources indexed</span>
+              </div>
+              <h4 className="font-bold text-sm mb-2 text-on-surface">Web Global Search</h4>
+              <p className="text-xs text-on-surface-variant leading-relaxed mb-3">Deep-crawling global context and technical documentation.</p>
+              
+              {/* Web Search Items List with Checkboxes */}
+              <div className="flex-1 max-h-32 overflow-y-auto space-y-2 mb-3">
+                {webSearchLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <span className="material-symbols-outlined animate-spin text-on-surface-variant">sync</span>
+                  </div>
+                ) : webSearchResults.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant italic text-center py-2">No search results available</p>
+                ) : (
+                  webSearchResults.slice(0, 5).map((item) => (
+                    <label key={item.id} className="flex items-start gap-2 p-2 hover:bg-surface-container rounded cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedWebItems.has(item.id)}
+                        onChange={() => toggleWebSelection(item.id)}
+                        className="mt-0.5 rounded border-outline-variant text-primary focus:ring-primary"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-on-surface truncate group-hover:text-primary transition-colors">{item.title}</p>
+                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {item.hotScore?.toFixed(0) || 'N/A'}</p>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              
+              <div className="mt-auto pt-3 border-t border-outline-variant/10 flex items-center justify-between">
+                <span className="text-[10px] text-on-surface-variant font-medium">{webSearchResults.length} sources indexed</span>
+                {selectedWebItems.size > 0 && (
+                  <span className="text-[10px] text-primary font-medium">{selectedWebItems.size} selected</span>
+                )}
               </div>
             </div>
 
             {/* Community Source */}
-            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow">
+            <div className="bg-surface-container-lowest p-5 rounded-xl border border-transparent hover:shadow-md transition-shadow flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <span className="material-symbols-outlined text-error" data-icon="groups">groups</span>
-                <span className="text-[10px] font-bold uppercase text-error px-2 py-0.5 bg-error-container/10 rounded">Social</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase text-error px-2 py-0.5 bg-error-container/10 rounded">Social</span>
+                  <button 
+                    onClick={handleRetryCommunity}
+                    disabled={communityLoading}
+                    className="p-1 hover:bg-surface-container rounded transition-colors"
+                    title="重新加载"
+                  >
+                    <span className={`material-symbols-outlined text-sm ${communityLoading ? 'animate-spin' : ''}`}>refresh</span>
+                  </button>
+                </div>
               </div>
               <h4 className="font-bold text-sm mb-2 text-on-surface">Community Topics</h4>
-              <p className="text-xs text-on-surface-variant leading-relaxed">Sentiment tracking on XHS, Weibo, and Reddit developer subs.</p>
-              <div className="mt-4 pt-4 border-t border-outline-variant/10 flex gap-2">
-                <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#AI_ethics</span>
-                <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#GPT-5</span>
+              <p className="text-xs text-on-surface-variant leading-relaxed mb-3">Sentiment tracking on XHS, Weibo, and Reddit developer subs.</p>
+              
+              {/* Community Topics List with Checkboxes */}
+              <div className="flex-1 max-h-32 overflow-y-auto space-y-2 mb-3">
+                {communityLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <span className="material-symbols-outlined animate-spin text-on-surface-variant">sync</span>
+                  </div>
+                ) : communityTopics.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant italic text-center py-2">No community topics available</p>
+                ) : (
+                  communityTopics.slice(0, 5).map((item) => (
+                    <label key={item.id} className="flex items-start gap-2 p-2 hover:bg-surface-container rounded cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedCommunityItems.has(item.id)}
+                        onChange={() => toggleCommunitySelection(item.id)}
+                        className="mt-0.5 rounded border-outline-variant text-error focus:ring-error"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-on-surface truncate group-hover:text-error transition-colors">{item.title}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`text-[10px] px-1 rounded ${item.trend === 'up' ? 'bg-green-100 text-green-700' : item.trend === 'down' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {item.trend === 'up' ? '↑' : item.trend === 'down' ? '↓' : '→'}
+                          </span>
+                          <span className="text-[10px] text-on-surface-variant">{item.source}</span>
+                        </div>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              
+              <div className="mt-auto pt-3 border-t border-outline-variant/10 flex items-center justify-between">
+                <div className="flex gap-2">
+                  <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#AI_ethics</span>
+                  <span className="px-2 py-0.5 bg-surface-container text-[10px] rounded font-medium text-on-surface">#GPT-5</span>
+                </div>
+                {selectedCommunityItems.size > 0 && (
+                  <span className="text-[10px] text-error font-medium">{selectedCommunityItems.size} selected</span>
+                )}
               </div>
             </div>
           </div>

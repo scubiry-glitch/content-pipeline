@@ -586,3 +586,18 @@ export interface OutlineVersion {
   created_by: string;
   created_at: string;
 }
+
+
+// ===== 蓝军评审配置 =====
+export interface ReviewConfig {
+  mode: 'parallel' | 'serial';
+  aiExperts: Array<{ role: string; enabled: boolean }>;
+  humanExperts: string[]; // Expert IDs
+  autoRevise: 'per-round' | 'final';
+  maxRounds?: number;
+  // 读者测试配置 - 从专家库选择读者
+  readerTest?: {
+    enabled: boolean;
+    selectedReaders: string[]; // 选中的读者专家ID列表
+  };
+}
