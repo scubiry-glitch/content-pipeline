@@ -547,7 +547,7 @@ export function TaskDetail() {
     }
     setCheckingCompliance(true);
     try {
-      const result = await complianceApi.checkContent(draft.content);
+      const result = await complianceApi.checkContent(task?.id || 'temp', draft.content);
       setComplianceResult(result);
       if (result.overallScore >= 80) {
         alert(`✅ 合规检查通过！得分: ${result.overallScore}`);

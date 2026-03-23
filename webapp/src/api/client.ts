@@ -69,6 +69,10 @@ export const tasksApi = {
   getReviews: (id: string) =>
     client.get(`/production/${id}/reviews`) as Promise<BlueTeamReview[]>,
 
+  // 最终确认任务 - Finalize
+  finalize: (id: string) =>
+    client.post(`/production/${id}/finalize`, {}) as Promise<{ success: boolean; finalDraftId?: string; outputPath?: string; error?: string }>,
+
   // 确认大纲并继续 (FR-005)
   confirmOutline: (id: string) =>
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,
@@ -320,10 +324,11 @@ export const blueTeamApi = {
     client.get(`/production/${taskId}/reviews`) as Promise<{ items: BlueTeamReview[] }>,
 
   // 提交单个评审意见决策 (FR-021)
+  // 支持 question 级别决策，通过 questionIndex 参数
   submitDecision: (taskId: string, reviewId: string, data: {
-    questionId: string;
     decision: 'accept' | 'ignore' | 'manual_resolved';
     note?: string;
+    questionIndex?: number;
   }) =>
     client.post(`/production/${taskId}/review-items/${reviewId}/decide`, data) as Promise<void>,
 
@@ -607,8 +612,8 @@ export interface ComplianceCheckResult {
 
 // 合规检测 API (v4.0)
 export const complianceApi = {
-  checkContent: (content: string) =>
-    client.post('/compliance/check', { content }) as Promise<ComplianceCheckResult>,
+  checkContent: (contentId: string, content: string) =>
+    client.post('/compliance/check', { contentId, content }) as Promise<ComplianceCheckResult>,
 
   getRules: (params?: { category?: string; level?: string }) =>
     client.get('/compliance/rules', { params }) as Promise<{ items: ComplianceRule[]; total: number }>,

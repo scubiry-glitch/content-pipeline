@@ -89,20 +89,23 @@ export async function getReviewItems(taskId: string): Promise<ReviewItem[]> {
 }
 
 /**
- * 提交单个评审项的决策
+ * 提交单个评审项或单个 question 的决策
  * FR-021: 用户可逐条选择：接受修改 / 忽略 / 标记为已手动处理
  * 
  * 当 decision = 'accept' 时，会自动根据评审意见修订稿件
+ * 
+ * @param questionIndex - 可选，指定 questions 数组中的索引，如果不提供则处理整个 review
  */
 export async function submitDecision(
   taskId: string,
   reviewId: string,
   decision: DecisionType,
-  note?: string
+  note?: string,
+  questionIndex?: number
 ): Promise<{ success: boolean; reviewItem?: ReviewItem; revisionResult?: any }> {
   // 验证评审项存在且属于该任务
   const checkResult = await query(
-    `SELECT id FROM blue_team_reviews WHERE id = $1 AND task_id = $2`,
+    `SELECT id, questions FROM blue_team_reviews WHERE id = $1 AND task_id = $2`,
     [reviewId, taskId]
   );
 
@@ -110,27 +113,88 @@ export async function submitDecision(
     throw new Error('Review item not found');
   }
 
-  // 更新决策状态
-  await query(
-    `UPDATE blue_team_reviews
-     SET status = $1,
-         user_decision = $2,
-         decision_note = $3,
-         decided_at = NOW()
-     WHERE id = $4`,
-    [decision, decision, note || null, reviewId]
-  );
+  const review = checkResult.rows[0];
+  const questions = typeof review.questions === 'string' 
+    ? JSON.parse(review.questions) 
+    : review.questions;
 
-  // 记录操作日志
-  await query(
-    `INSERT INTO task_logs (task_id, action, details, created_at)
-     VALUES ($1, $2, $3, NOW())`,
-    [
-      taskId,
-      'review_decision',
-      JSON.stringify({ reviewId, decision, note })
-    ]
-  );
+  // 如果指定了 questionIndex，记录 question 级别的决策
+  if (questionIndex !== undefined && questionIndex >= 0) {
+    // 验证 questionIndex 有效
+    if (!Array.isArray(questions) || questionIndex >= questions.length) {
+      throw new Error('Invalid question index');
+    }
+
+    // 插入或更新 question_decisions 表
+    await query(
+      `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       ON CONFLICT (review_id, question_index)
+       DO UPDATE SET decision = $4, note = $5, updated_at = NOW()`,
+      [taskId, reviewId, questionIndex, decision, note || null]
+    );
+
+    // 记录操作日志
+    await query(
+      `INSERT INTO task_logs (task_id, action, details, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [
+        taskId,
+        'question_decision',
+        JSON.stringify({ reviewId, questionIndex, decision, note })
+      ]
+    );
+
+    // 检查是否所有 questions 都已决策，如果是则更新 review 状态
+    const decisionStats = await query(
+      `SELECT 
+        COUNT(*) as total_questions,
+        COUNT(qd.decision) as decided_count
+       FROM blue_team_reviews btr
+       LEFT JOIN LATERAL jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(elem, idx) ON true
+       LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (idx::int - 1)
+       WHERE btr.id = $1
+       GROUP BY btr.id`,
+      [reviewId]
+    );
+
+    if (decisionStats.rows.length > 0) {
+      const { total_questions, decided_count } = decisionStats.rows[0];
+      if (parseInt(decided_count) === parseInt(total_questions)) {
+        // 所有 questions 都已决策，更新 review 状态
+        await query(
+          `UPDATE blue_team_reviews
+           SET status = $1,
+               user_decision = $1,
+               decided_at = NOW()
+           WHERE id = $2`,
+          [decision, reviewId]
+        );
+      }
+    }
+  } else {
+    // 原来的逻辑：处理整个 review
+    await query(
+      `UPDATE blue_team_reviews
+       SET status = $1,
+           user_decision = $2,
+           decision_note = $3,
+           decided_at = NOW()
+       WHERE id = $4`,
+      [decision, decision, note || null, reviewId]
+    );
+
+    // 记录操作日志
+    await query(
+      `INSERT INTO task_logs (task_id, action, details, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [
+        taskId,
+        'review_decision',
+        JSON.stringify({ reviewId, decision, note })
+      ]
+    );
+  }
 
   let revisionResult: any = null;
 

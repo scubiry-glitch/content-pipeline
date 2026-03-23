@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS compliance_rules (
 -- 2. 检测日志表
 CREATE TABLE IF NOT EXISTS compliance_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  content_id UUID NOT NULL,
+  content_id VARCHAR(100) NOT NULL, -- 支持任意内容ID（任务ID、资产ID等）
   content_type VARCHAR(50) DEFAULT 'draft', -- draft, report, asset
   check_type VARCHAR(50) NOT NULL, -- sensitive, ad_law, copyright, privacy
   result JSONB NOT NULL,

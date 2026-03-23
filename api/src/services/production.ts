@@ -346,6 +346,24 @@ ${JSON.stringify(outline, null, 2)}
       [taskId]
     );
 
+    // Get question-level decisions
+    const questionDecisionsResult = await query(
+      'SELECT review_id, question_index, decision, note FROM question_decisions WHERE task_id = $1',
+      [taskId]
+    );
+    
+    // Build a map of question decisions for quick lookup
+    const questionDecisionsMap = new Map<string, Map<number, { decision: string; note?: string }>>();
+    for (const qd of questionDecisionsResult.rows) {
+      if (!questionDecisionsMap.has(qd.review_id)) {
+        questionDecisionsMap.set(qd.review_id, new Map());
+      }
+      questionDecisionsMap.get(qd.review_id)!.set(qd.question_index, {
+        decision: qd.decision,
+        note: qd.note
+      });
+    }
+
     // Group by expert/angle with severity classification
     const experts = {
       factChecker: { name: '事实核查员', role: 'challenger', icon: '🔍', issues: [] as any[] },
@@ -364,18 +382,36 @@ ${JSON.stringify(outline, null, 2)}
       ignored: 0
     };
 
-    for (const row of reviewsResult.rows) {
-      // Parse questions array
+    // Process reviews with question-level decisions
+    const processedReviews = reviewsResult.rows.map(row => {
       const questions = typeof row.questions === 'string'
         ? JSON.parse(row.questions)
         : row.questions;
-      
-      // Ensure it's an array
       const questionsArray = Array.isArray(questions) ? questions : [questions];
       
-      const status = row.status || 'pending';
+      // Merge question decisions into questions
+      const reviewDecisions = questionDecisionsMap.get(row.id);
+      const processedQuestions = questionsArray.map((q: any, idx: number) => {
+        const qd = reviewDecisions?.get(idx);
+        return {
+          ...q,
+          decision: qd?.decision || null,
+          decisionNote: qd?.note || null
+        };
+      });
+      
+      return {
+        ...row,
+        questions: processedQuestions
+      };
+    });
 
-      for (const question of questionsArray) {
+    for (const row of processedReviews) {
+      const questionsArray = row.questions;
+      const reviewStatus = row.status || 'pending';
+
+      for (let idx = 0; idx < questionsArray.length; idx++) {
+        const question = questionsArray[idx];
         const severity = question.severity === 'high' ? 'critical'
           : question.severity === 'medium' ? 'warning'
           : 'praise';
@@ -383,8 +419,11 @@ ${JSON.stringify(outline, null, 2)}
         summary.total++;
         summary[severity]++;
 
+        // Use question-level decision if available, otherwise fall back to review status
+        const questionStatus = question.decision || reviewStatus;
+
         const issue = {
-          id: `${row.id}-${question.id || Math.random().toString(36).substr(2, 9)}`,
+          id: `${row.id}-${question.id || idx}`,
           round: row.round,
           expert: row.expert_role,
           severity,
@@ -392,19 +431,21 @@ ${JSON.stringify(outline, null, 2)}
           question: question.question,
           suggestion: question.suggestion,
           rationale: question.rationale,
-          status,
+          status: questionStatus,
           userDecision: row.user_decision,
           decisionNote: row.decision_note,
-          decidedAt: row.decided_at
+          decidedAt: row.decided_at,
+          questionDecision: question.decision,
+          questionDecisionNote: question.decisionNote
         };
 
-        // Count by decision status
-        if (status === 'accepted' || status === 'manual_resolved') {
+        // Count by decision status (question-level or review-level)
+        if (questionStatus === 'accept' || questionStatus === 'accepted' || questionStatus === 'manual_resolved') {
           summary.accepted++;
-        } else if (status === 'pending') {
-          summary.pending++;
-        } else if (status === 'ignored') {
+        } else if (questionStatus === 'ignore' || questionStatus === 'ignored') {
           summary.ignored++;
+        } else {
+          summary.pending++;
         }
 
         // Categorize by expert role
@@ -425,7 +466,7 @@ ${JSON.stringify(outline, null, 2)}
       status: task.status,
       summary,
       experts: Object.values(experts).filter(e => e.issues.length > 0),
-      rawReviews: reviewsResult.rows
+      rawReviews: processedReviews
     };
   }
 

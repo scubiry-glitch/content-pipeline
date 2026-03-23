@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ProdPipeline - Dashboard Overview</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-bright": "#f8f9fa",
+                        "inverse-on-surface": "#9b9d9e",
+                        "on-error-container": "#6e0a12",
+                        "inverse-surface": "#0c0f10",
+                        "secondary-container": "#dfe3e8",
+                        "primary-dim": "#0050aa",
+                        "background": "#f8f9fa",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#5b5f64",
+                        "secondary-dim": "#4f5358",
+                        "on-error": "#fff7f6",
+                        "error": "#a83836",
+                        "surface-container-high": "#e5e9eb",
+                        "primary-fixed": "#3d89ff",
+                        "on-secondary-container": "#4e5257",
+                        "tertiary-container": "#fa7e1d",
+                        "on-secondary-fixed": "#3c4044",
+                        "tertiary-dim": "#873e00",
+                        "on-surface": "#2d3335",
+                        "on-primary-fixed": "#000000",
+                        "error-container": "#fa746f",
+                        "on-tertiary-fixed-variant": "#4b2000",
+                        "on-primary-container": "#000410",
+                        "outline-variant": "#adb3b5",
+                        "on-tertiary-fixed": "#000000",
+                        "tertiary-fixed": "#fa7e1d",
+                        "primary": "#005bc1",
+                        "on-primary": "#f9f8ff",
+                        "on-background": "#2d3335",
+                        "surface-container-low": "#f1f4f5",
+                        "on-tertiary": "#fff7f5",
+                        "surface-tint": "#005bc1",
+                        "secondary-fixed-dim": "#d1d5da",
+                        "surface-container": "#ebeef0",
+                        "surface-dim": "#d5dbdd",
+                        "primary-fixed-dim": "#2a7bf1",
+                        "on-secondary-fixed-variant": "#585c61",
+                        "surface": "#f8f9fa",
+                        "error-dim": "#67040d",
+                        "on-tertiary-container": "#3d1800",
+                        "surface-container-highest": "#dee3e6",
+                        "primary-container": "#3d89ff",
+                        "surface-variant": "#dee3e6",
+                        "inverse-primary": "#4a8eff",
+                        "tertiary-fixed-dim": "#e9720b",
+                        "outline": "#767c7e",
+                        "on-primary-fixed-variant": "#001434",
+                        "on-secondary": "#f6f9ff",
+                        "tertiary": "#9a4800",
+                        "secondary-fixed": "#dfe3e8",
+                        "on-surface-variant": "#5a6062"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .step-line {
+            background-image: linear-gradient(to bottom, #005bc1 50%, transparent 50%);
+            background-size: 2px 8px;
+            background-repeat: repeat-y;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-background font-body text-on-background min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-white dark:bg-gray-900 shadow-sm dark:shadow-none border-b border-gray-200 dark:border-gray-800 flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-blue-600 dark:text-blue-400 font-headline">ProdPipeline</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="font-manrope text-sm font-medium text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1" href="#">Dashboard</a>
+<a class="font-manrope text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors px-2 py-1 rounded" href="#">Analytics</a>
+<a class="font-manrope text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors px-2 py-1 rounded" href="#">Team</a>
+<a class="font-manrope text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors px-2 py-1 rounded" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-all">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant ml-2">
+<img alt="User profile" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDTWvYrL2DDaJs3uG4InsbYoZ4D6LBMsewlU7N8f1pFye-laBWz4kFz90YbGQoVfGhrlDMJ6LwbzaecZ996ZaR6bwYCDzltCDup3IduGJoQoeHXjUUKIfeKccWix64zv7zwZI34c-gIJ1g0HMr3ipqrfOGv_1yMwGF_oRvT7X6eGqsia6a0ox7DvbVybUBj9yvAOAJn-QV6w17iRlIYyl6RnAoZyEIvX50SX7bEuJwDefrwWPzldgPb9DsEyFPECzWIiR7IhPH2EzE"/>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Left Sidebar: Journey Progress & Navigation -->
+<aside class="bg-white border-r border-gray-200 flex flex-col h-[calc(100vh-64px)] sticky top-16 w-72 shrink-0 overflow-y-auto scrollbar-hide">
+<div class="p-6 pb-2">
+<h3 class="font-headline text-xs font-bold uppercase tracking-wider text-secondary mb-4">Pipeline Progress</h3>
+<!-- Vertical Stepper -->
+<div class="relative pl-2 mb-8">
+<div class="absolute left-5 top-4 bottom-4 w-0.5 step-line"></div>
+<div class="space-y-8 relative">
+<!-- Step 1 -->
+<div class="flex gap-4 items-start relative">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px] text-white" data-icon="check">check</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-sm text-on-surface">Planning</h4>
+<p class="text-[11px] text-on-surface-variant">Scope defined for "E-commerce 2024"</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex gap-4 items-start relative">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px] text-white" data-icon="check">check</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-sm text-on-surface">Research</h4>
+<p class="text-[11px] text-on-surface-variant">Deep research completed (14 sources)</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex gap-4 items-start relative">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px] text-white" data-icon="check">check</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-sm text-on-surface">Drafting</h4>
+<p class="text-[11px] text-on-surface-variant">Full draft generated via AI pipeline</p>
+</div>
+</div>
+<!-- Step 4 (Current) -->
+<div class="flex gap-4 items-start relative">
+<div class="w-6 h-6 rounded-full bg-primary-container text-primary flex items-center justify-center shrink-0 z-10 ring-4 ring-primary-container/30">
+<span class="material-symbols-outlined text-[14px] font-bold" data-icon="hourglass_top">hourglass_top</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-sm text-primary">Publishing</h4>
+<p class="text-[11px] text-on-surface-variant">Final review and deployment</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="px-6 py-4 border-t border-gray-100">
+<h3 class="font-headline text-xs font-bold uppercase tracking-wider text-secondary mb-4">Version History</h3>
+<div class="space-y-4">
+<div class="p-3 bg-surface-container-low rounded-lg border border-outline-variant/30 hover:bg-surface-container transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-bold text-on-surface">v2.4 (Current)</span>
+<span class="text-[10px] text-on-surface-variant">10:45 AM</span>
+</div>
+<p class="text-[10px] text-on-surface-variant">Final polish and SEO tweaks</p>
+</div>
+<div class="p-3 rounded-lg border border-transparent hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-on-surface">v2.3</span>
+<span class="text-[10px] text-on-surface-variant">Yesterday</span>
+</div>
+<p class="text-[10px] text-on-surface-variant">Reviewer feedback integrated</p>
+</div>
+<div class="p-3 rounded-lg border border-transparent hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-on-surface">v2.0</span>
+<span class="text-[10px] text-on-surface-variant">2 days ago</span>
+</div>
+<p class="text-[10px] text-on-surface-variant">Initial AI draft complete</p>
+</div>
+</div>
+</div>
+<div class="mt-auto p-6 bg-blue-50/50">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-2 h-2 rounded-full bg-green-500"></div>
+<span class="text-xs font-bold text-on-surface">Task ID-8829-EC</span>
+</div>
+<div class="h-1.5 w-full bg-white rounded-full overflow-hidden">
+<div class="h-full bg-primary w-full"></div>
+</div>
+<p class="text-[10px] mt-2 text-on-surface-variant">Pipeline at 100% capacity.</p>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-surface-container-low p-8">
+<div class="max-w-6xl mx-auto space-y-8">
+<!-- Header -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div>
+<h1 class="text-2xl font-extrabold font-headline tracking-tight text-on-surface">Pipeline Overview</h1>
+<nav class="flex text-xs text-on-surface-variant mt-1 gap-2">
+<span>E-commerce Trends 2024</span>
+<span>/</span>
+<span class="font-mono bg-surface-container-high px-1 rounded">ID-8829-EC</span>
+</nav>
+</div>
+<div class="flex gap-3">
+<button class="bg-white text-on-surface px-4 py-2 rounded-lg font-label text-sm flex items-center gap-2 border border-outline-variant hover:bg-surface-container-low transition-colors shadow-sm">
+<span class="material-symbols-outlined text-lg" data-icon="history">history</span>
+                            History
+                        </button>
+<button class="bg-primary text-white px-4 py-2 rounded-lg font-label text-sm flex items-center gap-2 hover:bg-primary-dim transition-colors shadow-md">
+<span class="material-symbols-outlined text-lg" data-icon="download">download</span>
+                            Export Report
+                        </button>
+</div>
+</div>
+<!-- Top: Content Preview Card -->
+<div class="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+<div class="border-b border-outline-variant p-4 flex justify-between items-center bg-surface-bright">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="article">article</span>
+<span class="font-headline font-bold text-sm">Draft Preview: Market Shift Report</span>
+</div>
+<div class="flex gap-2">
+<span class="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Ready</span>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3">
+<div class="lg:col-span-2 p-6 border-r border-outline-variant/30">
+<div class="aspect-[16/6] rounded-lg overflow-hidden relative mb-6">
+<img alt="Market data" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDM4OqU6JVBndsBXrMyAsYFznjCFnGKlqe-spfI7E-pVJ4nDyhkmRBUzTuv-6HZwirnVOiapbQn8KaggXgMNP8CkM_QaKJnDrmRy_T45nOL6_DAZO4RJ8lcHp-BHr2aJPTxIzImAhqBYXFAtlFhVft-RVp8q2XZ130DiSbVLQgWnQ0mXi2_rs8WTdUPy6UYXBF0CGnLOtWSE9l7PdZd9ihOOfDLlSOBH2v4aU7lidd_g6-0grFtvUGbxcBvR6THGUa-6b305sVCBIQ"/>
+<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 p-3">
+<p class="text-white text-[11px]">Primary Asset: AI-Generated Retail Visualization</p>
+</div>
+</div>
+<div class="prose prose-sm max-w-none text-on-surface-variant">
+<p class="line-clamp-3">The landscape of e-commerce is undergoing a seismic shift as we move into 2024. Consumers are no longer satisfied with transactional relationships; they demand hyper-personalization and immersive shopping experiences that bridge the gap between digital convenience and physical sensory engagement...</p>
+</div>
+</div>
+<div class="p-6 space-y-4 bg-surface-container-lowest/50">
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-white border border-outline-variant/30 rounded-lg">
+<div class="text-[9px] uppercase font-bold text-on-surface-variant mb-1">Words</div>
+<div class="text-lg font-headline font-bold">2,450</div>
+</div>
+<div class="p-3 bg-white border border-outline-variant/30 rounded-lg">
+<div class="text-[9px] uppercase font-bold text-on-surface-variant mb-1">SEO</div>
+<div class="text-lg font-headline font-bold text-primary">94/100</div>
+</div>
+</div>
+<div class="space-y-2 pt-2">
+<div class="text-[10px] font-bold text-on-surface-variant uppercase">Key Contributors</div>
+<div class="flex -space-x-2">
+<div class="w-7 h-7 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold">JD</div>
+<div class="w-7 h-7 rounded-full border-2 border-white bg-green-100 flex items-center justify-center text-[10px] font-bold">MS</div>
+<div class="w-7 h-7 rounded-full border-2 border-white bg-amber-100 flex items-center justify-center text-[10px] font-bold">AI</div>
+</div>
+</div>
+<button class="w-full mt-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dim transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="edit">edit</span>
+                                Open Editor
+                            </button>
+</div>
+</div>
+</div>
+<!-- Middle: Outline & Insights -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Outline Preview (Macro, Meso, Micro) -->
+<div class="bg-white border border-outline-variant rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline font-bold text-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="account_tree">account_tree</span>
+                                Content Structure
+                            </h3>
+<button class="text-xs text-primary font-medium hover:underline">View Map</button>
+</div>
+<div class="space-y-4">
+<!-- Macro -->
+<div class="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+<div class="flex items-center gap-2 mb-2">
+<span class="text-[9px] font-bold bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded">MACRO</span>
+<span class="text-xs font-bold text-on-surface">The 2024 Retail Evolution</span>
+</div>
+<p class="text-[10px] text-on-surface-variant">Global overview of e-commerce saturation and the shift to high-fidelity experience models.</p>
+</div>
+<!-- Meso -->
+<div class="pl-4 border-l-2 border-outline-variant space-y-3">
+<div class="p-3 bg-surface-container-low rounded-lg border border-outline-variant/30">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-[9px] font-bold bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">MESO</span>
+<span class="text-xs font-semibold">Direct-to-Consumer 2.0</span>
+</div>
+<div class="pl-4 mt-2 space-y-1">
+<div class="flex items-center gap-2 text-[10px] text-on-surface-variant">
+<span class="w-1 h-1 rounded-full bg-primary"></span>
+<span>Sub-pillar: Micro-fulfillment centers</span>
+</div>
+<div class="flex items-center gap-2 text-[10px] text-on-surface-variant">
+<span class="w-1 h-1 rounded-full bg-primary"></span>
+<span>Sub-pillar: Hyper-local delivery UX</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Micro -->
+<div class="pl-8 border-l-2 border-outline-variant/30">
+<div class="p-3 bg-surface-container-lowest border border-outline-variant/30 rounded-lg">
+<div class="flex items-center gap-2">
+<span class="text-[9px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">MICRO</span>
+<span class="text-xs font-medium italic">Case Study: Shopify's New API</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Market Intelligence Insights -->
+<div class="bg-white border border-outline-variant rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline font-bold text-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="query_stats">query_stats</span>
+                                Market Intelligence
+                            </h3>
+<span class="text-[10px] text-on-surface-variant">Source: Deep Search</span>
+</div>
+<div class="space-y-6">
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<div class="text-[10px] uppercase font-bold text-on-surface-variant">Industry Growth</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold font-headline text-green-600">+12.4%</span>
+<span class="material-symbols-outlined text-green-600 text-sm" data-icon="trending_up">trending_up</span>
+</div>
+</div>
+<div class="space-y-1">
+<div class="text-[10px] uppercase font-bold text-on-surface-variant">Sentiment Score</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold font-headline text-primary">Positive</span>
+<span class="text-xs font-medium text-on-surface-variant">(0.78)</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/30">
+<h4 class="text-xs font-bold text-on-surface mb-3">Core Research Insights</h4>
+<ul class="space-y-3">
+<li class="flex gap-3 items-start">
+<span class="material-symbols-outlined text-primary text-sm mt-0.5" data-icon="auto_awesome">auto_awesome</span>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+<span class="font-bold text-on-surface">Privacy-First Data:</span> Emerging shift towards Zero-Party data collection as cookie deprecation accelerates.
+                                        </p>
+</li>
+<li class="flex gap-3 items-start">
+<span class="material-symbols-outlined text-primary text-sm mt-0.5" data-icon="auto_awesome">auto_awesome</span>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+<span class="font-bold text-on-surface">AR Integration:</span> 64% of respondents cite "virtual try-on" as a critical purchase driver in 2024.
+                                        </p>
+</li>
+</ul>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant" data-icon="hub">hub</span>
+<span class="text-[10px] text-on-surface-variant font-medium">Verified by 14 Sources</span>
+</div>
+<button class="text-[10px] bg-secondary-container text-on-secondary-container px-2 py-1 rounded font-bold hover:bg-secondary-dim hover:text-white transition-colors">
+                                    EXPLORE GRAPH
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Bottom Action Bar -->
+<footer class="bg-white border-t border-outline-variant px-8 py-4 flex justify-between items-center z-40 sticky bottom-0">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wide">Ready for Content Hub Deployment</span>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-lg font-label text-sm text-on-surface-variant hover:bg-surface-container-low border border-transparent transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="replay">replay</span>
+                Re-run Intelligence
+            </button>
+<button class="px-8 py-2.5 rounded-lg font-label text-sm bg-inverse-surface text-white hover:bg-black shadow-lg transition-all active:scale-95 flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="publish">publish</span>
+                Publish Final Version
+            </button>
+</div>
+</footer>
+</body></html>

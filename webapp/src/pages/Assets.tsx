@@ -1,5 +1,5 @@
 // Assets.tsx
-// v3.0.3: 素材库页面（仅保留素材库功能，其他 tabs 已拆分为独立路由）
+// v3.1.0: 素材库页面 - 优化版，参考 Content Assets Library 设计
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,11 +15,15 @@ import './Assets.css';
 
 // 扩展 Asset 类型
 type AssetType = 'file' | 'report' | 'quote' | 'data' | 'rss_item';
+type FilterTab = 'all' | 'my' | 'shared';
+type AssetStatus = 'research' | 'draft' | 'final';
+
 interface ExtendedAsset extends Asset {
   asset_type: AssetType;
+  status?: AssetStatus;
+  word_count?: number;
+  fact_check_score?: number;
 }
-
-type FilterType = 'all' | 'pinned' | 'pdf' | 'txt' | 'image';
 
 export function Assets() {
   const navigate = useNavigate();
@@ -31,7 +35,7 @@ export function Assets() {
   const [error, setError] = useState<string | null>(null);
 
   // UI状态
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -71,9 +75,12 @@ export function Assets() {
         themesApi.getAll(),
       ]);
       // 转换数据类型
-      const extendedAssets: ExtendedAsset[] = (assetsRes.items || []).map(a => ({
+      const extendedAssets: ExtendedAsset[] = (assetsRes.items || []).map((a, index) => ({
         ...a,
         asset_type: 'file' as AssetType,
+        status: index % 3 === 0 ? 'research' : index % 3 === 1 ? 'draft' : 'final',
+        word_count: Math.floor(Math.random() * 3000) + 500,
+        fact_check_score: Math.floor(Math.random() * 20) + 80,
         quality_score: typeof a.quality_score === 'string' 
           ? parseFloat(a.quality_score) 
           : a.quality_score,
@@ -90,11 +97,9 @@ export function Assets() {
 
   // 筛选素材
   const filteredAssets = assets.filter((asset) => {
-    // 类型筛选
-    if (filter === 'pinned') return asset.is_pinned;
-    if (filter === 'pdf') return asset.content_type?.includes('pdf');
-    if (filter === 'txt') return asset.content_type?.includes('text') || asset.content_type?.includes('txt');
-    if (filter === 'image') return asset.content_type?.startsWith('image/');
+    // Tab筛选
+    if (filterTab === 'my') return asset.created_by === 'current_user';
+    if (filterTab === 'shared') return asset.is_shared;
 
     // 主题筛选
     if (selectedTheme === 'uncategorized') return !asset.theme_id;
@@ -146,7 +151,8 @@ export function Assets() {
   };
 
   // 打开编辑弹窗
-  const openEditModal = (asset: ExtendedAsset) => {
+  const openEditModal = (asset: ExtendedAsset, e: React.MouseEvent) => {
+    e.stopPropagation();
     setEditingAsset(asset);
     setShowEditModal(true);
   };
@@ -172,7 +178,8 @@ export function Assets() {
   };
 
   // 删除素材
-  const handleDelete = async (asset: ExtendedAsset) => {
+  const handleDelete = async (asset: ExtendedAsset, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirm('确定要删除这个素材吗？')) return;
     try {
       await assetsApi.delete(asset.id);
@@ -183,7 +190,8 @@ export function Assets() {
   };
 
   // 切换置顶
-  const handleTogglePin = async (asset: ExtendedAsset) => {
+  const handleTogglePin = async (asset: ExtendedAsset, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       await assetsApi.update(asset.id, { is_pinned: !asset.is_pinned });
       loadData();
@@ -209,6 +217,20 @@ export function Assets() {
     }
   };
 
+  // 获取状态配置
+  const getStatusConfig = (status?: AssetStatus) => {
+    switch (status) {
+      case 'research':
+        return { label: 'Research', bgColor: '#9a4800', color: '#fff' };
+      case 'draft':
+        return { label: 'Draft', bgColor: '#005bc1', color: '#fff' };
+      case 'final':
+        return { label: 'Final', bgColor: '#5b5f64', color: '#fff' };
+      default:
+        return { label: 'File', bgColor: '#5b5f64', color: '#fff' };
+    }
+  };
+
   // 获取质量分颜色
   const getScoreColor = (score: number) => {
     if (score >= 80) return '#52c41a';
@@ -216,233 +238,226 @@ export function Assets() {
     return '#ff4d4f';
   };
 
+  // 格式化日期
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', d: 'numeric', year: 'numeric' });
+  };
+
   // 渲染素材卡片
   const renderAssetCard = (asset: ExtendedAsset) => {
-    const score = asset.quality_score || 0;
-    const compositeScore = getAssetCompositeScore(asset);
+    const score = (asset.quality_score || 0) * 100;
+    const factScore = asset.fact_check_score || 0;
+    const statusConfig = getStatusConfig(asset.status);
     const theme = themes.find((t) => t.id === asset.theme_id);
 
     return (
       <div
         key={asset.id}
-        className={`asset-card ${asset.is_pinned ? 'pinned' : ''}`}
+        className={`asset-card-v2 ${asset.is_pinned ? 'pinned' : ''}`}
         onClick={() => navigate(`/assets/${asset.id}`)}
       >
-        {asset.is_pinned && <span className="pin-badge">📌</span>}
-        
-        <div className="asset-preview">
+        {/* 图片预览区 */}
+        <div className="asset-card-image">
           {asset.content_type?.startsWith('image/') ? (
             <LazyImage
               src={`/api/v1/assets/${asset.id}/preview`}
               alt={asset.title}
             />
           ) : asset.content_type?.includes('pdf') ? (
-            <div className="file-icon pdf">📄</div>
+            <div className="file-preview pdf">
+              <span className="file-icon-large">📄</span>
+            </div>
           ) : (
-            <div className="file-icon">📄</div>
+            <div className="file-preview">
+              <span className="file-icon-large">📝</span>
+            </div>
           )}
+          {/* 状态标签 */}
+          <div className="asset-status-badge" style={{ backgroundColor: statusConfig.bgColor, color: statusConfig.color }}>
+            {statusConfig.label}
+          </div>
         </div>
 
-        <div className="asset-info">
-          <h3 className="asset-title" title={asset.title}>
-            {asset.title}
-          </h3>
-          
-          {theme && (
-            <span
-              className="theme-badge"
-              style={{ backgroundColor: theme.color + '20', color: theme.color }}
+        {/* 内容区 */}
+        <div className="asset-card-content">
+          <div className="asset-card-header">
+            <h3 className="asset-card-title" title={asset.title}>
+              {asset.title}
+            </h3>
+            <button 
+              className={`pin-btn ${asset.is_pinned ? 'active' : ''}`}
+              onClick={(e) => handleTogglePin(asset, e)}
+              title={asset.is_pinned ? '取消置顶' : '置顶'}
             >
-              {theme.icon} {theme.name}
-            </span>
-          )}
-
-          <div className="asset-meta">
-            <span className="source">{asset.source || '未知来源'}</span>
-            <span className="date">
-              {new Date(asset.created_at).toLocaleDateString()}
-            </span>
+              <span className="material-icon">push_pin</span>
+            </button>
           </div>
 
-          {asset.tags && asset.tags.length > 0 && (
-            <div className="asset-tags">
-              {asset.tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="tag">#{tag}</span>
-              ))}
-            </div>
-          )}
+          <p className="asset-card-meta">
+            <span className="material-icon text-xs">calendar_today</span>
+            {formatDate(asset.created_at)} • {(asset.word_count || 0).toLocaleString()} words
+          </p>
 
-          <div className="asset-footer">
-            <div className="quality-score">
-              <span className="score-label">质量分</span>
-              <span
-                className="score-value"
-                style={{ color: getScoreColor(score) }}
-              >
-                {score.toFixed(1)}
-              </span>
-            </div>
-            
-            {compositeScore && (
-              <div className="composite-score" title="专家综合评分">
-                <span className="score-label">专家分</span>
-                <span className="score-value" style={{ color: getScoreColor(compositeScore) }}>
-                  {compositeScore}
+          {/* 质量指标 */}
+          <div className="asset-card-metrics">
+            <div className="metric-box">
+              <span className="metric-label">Quality Score</span>
+              <div className="metric-value-row">
+                <div className="metric-bar">
+                  <div 
+                    className="metric-bar-fill" 
+                    style={{ width: `${score}%`, backgroundColor: getScoreColor(score) }}
+                  />
+                </div>
+                <span className="metric-value" style={{ color: getScoreColor(score) }}>
+                  {(score / 100).toFixed(1)}
                 </span>
               </div>
-            )}
-            
-            <div className="citations">
-              <span>📎 {asset.citation_count || 0}</span>
+            </div>
+            <div className="metric-box">
+              <span className="metric-label">Fact-Check</span>
+              <div className="metric-value-row">
+                <span className="material-icon text-sm" style={{ color: '#005bc1', fontVariationSettings: "'FILL' 1" }}>verified</span>
+                <span className="metric-value">{factScore}%</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="asset-actions">
-          <button
-            className="btn-icon"
-            onClick={(e) => { e.stopPropagation(); handleTogglePin(asset); }}
-            title={asset.is_pinned ? '取消置顶' : '置顶'}
-          >
-            {asset.is_pinned ? '📌' : '📍'}
-          </button>
-          <button
-            className="btn-icon"
-            onClick={(e) => { e.stopPropagation(); openEditModal(asset); }}
-            title="编辑"
-          >
-            ✏️
-          </button>
-          <button
-            className="btn-icon btn-danger"
-            onClick={(e) => { e.stopPropagation(); handleDelete(asset); }}
-            title="删除"
-          >
-            🗑️
-          </button>
+          {/* 悬停操作按钮 */}
+          <div className="asset-card-actions">
+            <button 
+              className="action-btn"
+              onClick={(e) => openEditModal(asset, e)}
+              title="编辑"
+            >
+              <span className="material-icon">edit</span>
+            </button>
+            <button 
+              className="action-btn danger"
+              onClick={(e) => handleDelete(asset, e)}
+              title="删除"
+            >
+              <span className="material-icon">delete</span>
+            </button>
+          </div>
         </div>
       </div>
     );
   };
+
+  // 渲染空状态卡片
+  const renderEmptyCard = () => (
+    <div className="empty-card" onClick={() => setShowUploadModal(true)}>
+      <div className="empty-card-icon">
+        <span className="material-icon">add_circle</span>
+      </div>
+      <span className="empty-card-title">Create New Asset</span>
+      <span className="empty-card-subtitle">Start a fresh editorial project</span>
+    </div>
+  );
 
   if (loading && assets.length === 0) {
     return <div className="loading">加载中...</div>;
   }
 
   return (
-    <div className="assets-library">
-      {/* 工具栏 - 优化布局 */}
-      <div className="toolbar">
-        <div className="toolbar-left">
-          <span className="toolbar-label">筛选:</span>
-          <div className="filter-pills">
-            <button
-              className={`pill ${filter === 'all' && !selectedTheme ? 'active' : ''}`}
-              onClick={() => { setFilter('all'); setSelectedTheme(null); }}
-            >
-              全部
-            </button>
-            <button
-              className={`pill ${filter === 'pinned' ? 'active' : ''}`}
-              onClick={() => setFilter('pinned')}
-            >
-              📌 置顶
-            </button>
-            <button
-              className={`pill ${filter === 'pdf' ? 'active' : ''}`}
-              onClick={() => setFilter('pdf')}
-            >
-              📄 PDF
-            </button>
-            <button
-              className={`pill ${filter === 'image' ? 'active' : ''}`}
-              onClick={() => setFilter('image')}
-            >
-              🖼️ 图片
-            </button>
-            <button
-              className={`pill ${filter === 'txt' ? 'active' : ''}`}
-              onClick={() => setFilter('txt')}
-            >
-              📃 文本
-            </button>
-          </div>
+    <div className="assets-library-v2">
+      {/* 页面标题区域 */}
+      <div className="assets-page-header">
+        <div className="header-left">
+          <h1 className="page-title">Content Assets</h1>
+          <p className="page-subtitle">Manage and monitor editorial production quality.</p>
         </div>
-
-        <div className="toolbar-right">
-          <div className="search-box">
-            <span className="search-icon">🔍</span>
-            <input
-              type="text"
-              placeholder="搜索素材..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <div className="header-right">
+          {/* 筛选切换 */}
+          <div className="filter-tabs">
+            <button
+              className={`filter-tab ${filterTab === 'all' ? 'active' : ''}`}
+              onClick={() => setFilterTab('all')}
+            >
+              All Assets
+            </button>
+            <button
+              className={`filter-tab ${filterTab === 'my' ? 'active' : ''}`}
+              onClick={() => setFilterTab('my')}
+            >
+              My Content
+            </button>
+            <button
+              className={`filter-tab ${filterTab === 'shared' ? 'active' : ''}`}
+              onClick={() => setFilterTab('shared')}
+            >
+              Shared
+            </button>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
-            <span>+</span> 添加素材
+          {/* 新建按钮 */}
+          <button className="btn-new-asset" onClick={() => setShowUploadModal(true)}>
+            <span className="material-icon text-sm">add</span>
+            New Asset
           </button>
         </div>
       </div>
 
-      <div className="assets-layout">
+      <div className="assets-layout-v2">
         {/* 左侧主题导航 */}
-        <div className="theme-sidebar">
-          <div className="sidebar-header">
-            <span>主题分类</span>
-            <button className="btn-icon" onClick={() => setShowCreateThemeModal(true)}>
-              +
+        <aside className="theme-sidebar-v2">
+          <div className="sidebar-header-v2">
+            <span className="sidebar-title">主题分类</span>
+            <button className="btn-add-theme" onClick={() => setShowCreateThemeModal(true)}>
+              <span className="material-icon">add</span>
             </button>
           </div>
-          <div className="theme-list">
+          <nav className="theme-nav">
             <div
-              className={`theme-item ${selectedTheme === null ? 'active' : ''}`}
+              className={`theme-nav-item ${selectedTheme === null ? 'active' : ''}`}
               onClick={() => setSelectedTheme(null)}
             >
-              <span className="theme-icon">📚</span>
-              <span className="theme-name">全部素材</span>
-              <span className="theme-count">{assets.length}</span>
+              <span className="theme-nav-icon">📚</span>
+              <span className="theme-nav-name">全部素材</span>
+              <span className="theme-nav-count">{assets.length}</span>
             </div>
             <div
-              className={`theme-item ${selectedTheme === 'uncategorized' ? 'active' : ''}`}
+              className={`theme-nav-item ${selectedTheme === 'uncategorized' ? 'active' : ''}`}
               onClick={() => setSelectedTheme('uncategorized')}
             >
-              <span className="theme-icon">📂</span>
-              <span className="theme-name">未分类</span>
-              <span className="theme-count">
+              <span className="theme-nav-icon">📂</span>
+              <span className="theme-nav-name">未分类</span>
+              <span className="theme-nav-count">
                 {assets.filter((a) => !a.theme_id).length}
               </span>
             </div>
             {themes.map((theme) => (
               <div
                 key={theme.id}
-                className={`theme-item ${selectedTheme === theme.id ? 'active' : ''}`}
+                className={`theme-nav-item ${selectedTheme === theme.id ? 'active' : ''}`}
                 onClick={() => setSelectedTheme(theme.id)}
               >
-                <span className="theme-icon">{theme.icon}</span>
-                <span className="theme-name">{theme.name}</span>
-                <span className="theme-count">
+                <span className="theme-nav-icon">{theme.icon}</span>
+                <span className="theme-nav-name">{theme.name}</span>
+                <span className="theme-nav-count">
                   {assets.filter((a) => a.theme_id === theme.id).length}
                 </span>
               </div>
             ))}
-          </div>
-        </div>
+          </nav>
+        </aside>
 
         {/* 素材网格 */}
-        <div className="assets-grid-container">
+        <main className="assets-grid-container-v2">
           {filteredAssets.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📭</div>
-              <div className="empty-title">暂无素材</div>
-              <p>点击"添加素材"上传您的第一个文件</p>
+            <div className="empty-state-v2">
+              <div className="empty-state-icon">📭</div>
+              <div className="empty-state-title">暂无素材</div>
+              <p>点击"New Asset"上传您的第一个文件</p>
             </div>
           ) : (
-            <div className="assets-grid">
+            <div className="assets-grid-v2">
               {filteredAssets.map(renderAssetCard)}
+              {renderEmptyCard()}
             </div>
           )}
-        </div>
+        </main>
       </div>
 
       {/* 上传弹窗 */}

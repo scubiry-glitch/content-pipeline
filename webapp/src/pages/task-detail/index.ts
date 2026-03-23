@@ -5,3 +5,4 @@ export { ResearchTab } from './ResearchTab';
 export { WritingTab } from './WritingTab';
 export { ReviewsTab } from './ReviewsTab';
 export { QualityTab } from './QualityTab';
+export { PortalTab } from './PortalTab';

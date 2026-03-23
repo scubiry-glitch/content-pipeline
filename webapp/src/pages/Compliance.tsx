@@ -40,7 +40,7 @@ export function Compliance() {
     if (!content.trim()) return;
     try {
       setChecking(true);
-      const res = await complianceApi.checkContent(content);
+      const res = await complianceApi.checkContent('standalone', content);
       setResult(res);
     } catch (error) {
       console.error('Check failed:', error);

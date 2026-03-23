@@ -192,10 +192,10 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return { items };
   });
 
-  // 提交单个评审项决策
+  // 提交单个评审项决策（支持 question 级别）
   fastify.post('/:taskId/review-items/:reviewId/decide', { preHandler: authenticate }, async (request, reply) => {
     const { taskId, reviewId } = request.params as any;
-    const { decision, note } = request.body as any;
+    const { decision, note, questionIndex } = request.body as any;
 
     if (!decision || !['accept', 'ignore', 'manual_resolved'].includes(decision)) {
       reply.status(400);
@@ -203,7 +203,7 @@ export async function productionRoutes(fastify: FastifyInstance) {
     }
 
     const { submitDecision } = await import('../services/reviewDecision.js');
-    const result = await submitDecision(taskId, reviewId, decision, note);
+    const result = await submitDecision(taskId, reviewId, decision, note, questionIndex);
     return result;
   });
 
@@ -236,6 +236,26 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { canProceedToConfirmation } = await import('../services/reviewDecision.js');
     const result = await canProceedToConfirmation(taskId);
     return result;
+  });
+
+  // 最终确认任务 - Finalize
+  fastify.post('/:taskId/finalize', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    
+    try {
+      const { finalizeTask } = await import('../services/finalizeTask.js');
+      const result = await finalizeTask(taskId);
+      
+      if (!result.success) {
+        reply.status(400);
+        return { error: result.error };
+      }
+      
+      return result;
+    } catch (error) {
+      reply.status(500);
+      return { error: (error as Error).message };
+    }
   });
 
   // 申请重新评审 (FR-023)

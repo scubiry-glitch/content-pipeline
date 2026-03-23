@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pipeline Pro - Editor Comparison</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-primary": "#4a8eff",
+              "surface-container-highest": "#dee3e6",
+              "on-secondary-fixed": "#3c4044",
+              "error": "#a83836",
+              "outline-variant": "#adb3b5",
+              "on-primary": "#f9f8ff",
+              "error-dim": "#67040d",
+              "tertiary-fixed-dim": "#e9720b",
+              "on-surface": "#2d3335",
+              "surface": "#f8f9fa",
+              "error-container": "#fa746f",
+              "on-surface-variant": "#5a6062",
+              "tertiary": "#9a4800",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-fixed": "#fa7e1d",
+              "secondary-dim": "#4f5358",
+              "outline": "#767c7e",
+              "on-tertiary-fixed-variant": "#4b2000",
+              "secondary-container": "#dfe3e8",
+              "tertiary-fixed": "#fa7e1d",
+              "primary-dim": "#0050aa",
+              "primary-fixed": "#3d89ff",
+              "surface-tint": "#005bc1",
+              "primary": "#005bc1",
+              "on-tertiary-fixed": "#000000",
+              "on-tertiary-container": "#3d1800",
+              "on-error": "#fff7f6",
+              "on-surface": "#2d3335",
+              "surface-dim": "#d5dbdd",
+              "primary-container": "#3d89ff",
+              "inverse-surface": "#0c0f10",
+              "surface-container-low": "#f1f4f5",
+              "secondary-fixed": "#dfe3e8",
+              "tertiary-dim": "#873e00",
+              "on-secondary-fixed-variant": "#585c61",
+              "surface-bright": "#f8f9fa",
+              "secondary-fixed-dim": "#d1d5da",
+              "secondary": "#5b5f64",
+              "on-tertiary": "#fff7f5",
+              "on-background": "#2d3335",
+              "inverse-on-surface": "#9b9d9e",
+              "background": "#f8f9fa",
+              "surface-container": "#ebeef0",
+              "on-secondary-container": "#4e5257",
+              "on-primary-container": "#000410",
+              "surface-variant": "#dee3e6",
+              "surface-container-high": "#e5e9eb",
+              "on-primary-fixed-variant": "#001434",
+              "primary-fixed-dim": "#2a7bf1",
+              "on-primary-fixed": "#000000",
+              "on-error-container": "#6e0a12"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #dee3e6;
+        border-radius: 10px;
+      }
+      .diff-add {
+        background-color: #d1fae5;
+        border-bottom: 2px solid #10b981;
+      }
+      .diff-del {
+        background-color: #fee2e2;
+        text-decoration: line-through;
+        color: #b91c1c;
+      }
+    </style>
+</head>
+<body class="bg-background font-body text-on-background min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-50 flex justify-between items-center w-full px-6 h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm font-['Manrope'] antialiased">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-blue-600 dark:text-blue-400">Pipeline Pro</span>
+<nav class="hidden md:flex items-center space-x-6 text-sm font-medium">
+<a class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 duration-200 ease-in-out" href="#">Dashboard</a>
+<a class="text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-2 duration-200 ease-in-out" href="#">Editor</a>
+<a class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 duration-200 ease-in-out" href="#">Versions</a>
+<a class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 duration-200 ease-in-out" href="#">Assets</a>
+<a class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 duration-200 ease-in-out" href="#">Collaborators</a>
+</nav>
+</div>
+<div class="flex items-center space-x-4">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container border-none rounded-lg text-sm focus:ring-2 focus:ring-primary w-64" placeholder="Search project..." type="text"/>
+</div>
+<button class="p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-gray-500 hover:bg-gray-50 rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User profile avatar" class="w-8 h-8 rounded-full border border-gray-200" data-alt="Professional headshot of a creative director in a minimalist studio setting with soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCt6G1g4aevHEw0Lofeb9HCuHTL9Dm3NQXKlJFGPJtitt7Fk-U1pxxka3FynI0WpREpwU_Ieq0pLFeKKQMZPGwxkg64flNr7GMcz06VD96Hky8b838M_WNxjXqduXQbCTk7630ksTZYY48ClGpaEHof-78jZCxrFIo1oWtdlDiuhwaguX2975fG8m-BvfdBaq_7BPHMThHYuSbQTB5BzyHGs7YGQ7-ECXHXAY9EVuAgtAGIQOFpKd7gLVcHj5mBL2EsEkLcWCV0x6U"/>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 flex flex-col p-4 space-y-2 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 font-['Inter'] text-sm z-40">
+<div class="px-3 py-4 mb-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+</div>
+<div>
+<p class="font-semibold text-gray-900 dark:text-gray-100">Editorial Studio</p>
+<p class="text-xs text-gray-500">V3.4 Active</p>
+</div>
+</div>
+</div>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all active:scale-95" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span>Drafts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all active:scale-95" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Archive</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all active:scale-95" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all active:scale-95" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Team</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all active:scale-95" href="#">
+<span class="material-symbols-outlined">tune</span>
+<span>Settings</span>
+</a>
+<div class="mt-auto pt-4">
+<button class="w-full flex items-center justify-center gap-2 py-3 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg hover:transition-all duration-150 active:scale-95">
+<span class="material-symbols-outlined text-sm">compare_arrows</span>
+                    Compare Versions
+                </button>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 flex-1 flex flex-col bg-surface overflow-hidden pb-14">
+<!-- Metadata Bar -->
+<div class="h-14 bg-white border-b border-outline-variant flex items-center justify-between px-6 shrink-0">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold uppercase tracking-widest text-secondary">Current</span>
+<span class="px-2 py-0.5 bg-primary-container text-on-primary-container text-xs font-bold rounded">Version 3.4</span>
+</div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-2 text-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">history_toggle_off</span>
+<span>Comparing to <span class="font-bold text-on-surface">V3.0 (Baseline)</span></span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="flex h-2 w-2 rounded-full bg-error"></span>
+<span class="text-sm font-semibold text-on-surface">42 changes detected</span>
+</div>
+<div class="flex items-center -space-x-2">
+<img alt="Avatar" class="w-7 h-7 rounded-full border-2 border-white" data-alt="Portrait of a female editor with glasses in a bright workspace with minimalist decor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6wpBDoCd6LffHQpzFfdJ_3Y5ENpFlLaHv1X-LmWP6NUZeV85rgHv4Ve12fSR_WdzM2s9Q91IJwQxVlIxEUNLA3-CuAI8WiwxE2oTC-GiV9XEohRVaayw7Yu3pIdlBTvWsCvlO5aBqlep5douiffoox4P2j3coICF8qG89ez5qAWFK6LMjt-TDuiqPZJDW-lgz2E5UYgBUt4-Ba4GnBdorkdn_ReOj5-2vsyQgsXRKO3pGXW2wzJnhgaOnDxbqTcHYV9tZiBZppNQ"/>
+<img alt="Avatar" class="w-7 h-7 rounded-full border-2 border-white" data-alt="Close-up of a smiling male designer in a creative office environment with warm lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD36UA_zTVcLOJoCeJMePVaZgOJpc1tzKwaT5wGD_uEo2DylC1i5GU544PigPQS_3hOZ6iNa5f2AKDe__qTXf2SYghq0E5GPBbXvTL70_nhyGY4Op8vy605a8GlDoPOyJv83RRJgfCd9nq6ZCmfOAxEblSC-hRNpWYYh6hyMWzaHhUt2ehggTKGtrwXQUHoSjUtLr_5onez16BOFnFTRE4b8oH07rUtMG8ufQ-inCWQCF0jDl-R6kYt3w6yBk6ISz55jfevWeIHy8s"/>
+<div class="w-7 h-7 rounded-full bg-surface-container-highest border-2 border-white flex items-center justify-center text-[10px] font-bold">+3</div>
+</div>
+</div>
+</div>
+<!-- Comparison Grid -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Pane: V3.0 -->
+<section class="flex-1 flex flex-col border-r border-outline-variant overflow-hidden">
+<header class="p-4 bg-surface-container-low flex justify-between items-center shrink-0">
+<div>
+<h3 class="font-headline font-bold text-secondary tracking-tight">V3.0 Archive Draft</h3>
+<p class="text-[10px] text-on-surface-variant uppercase font-bold tracking-tighter">Last edited Jan 12, 2024</p>
+</div>
+<div class="flex gap-4">
+<div class="text-right">
+<p class="text-[10px] text-on-surface-variant font-bold uppercase">Readability</p>
+<p class="text-sm font-bold text-secondary">78%</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-on-surface-variant font-bold uppercase">Fact-Check</p>
+<p class="text-sm font-bold text-secondary">82%</p>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-8 custom-scrollbar bg-white font-body leading-relaxed text-on-surface">
+<article class="max-w-prose mx-auto">
+<h1 class="text-3xl font-headline font-extrabold mb-6">2024 E-commerce Evolution Report</h1>
+<p class="mb-4">The retail landscape is undergoing a massive shift. In 2023, we saw <span class="diff-del">moderate growth</span> in the digital sector. Traditional retailers are struggling to keep up with the fast-paced nature of mobile commerce.</p>
+<p class="mb-4">The core focus of this report is to analyze how platforms <span class="diff-del">like Amazon and eBay</span> dominate the current market landscape. We believe that by 2025, over 60% of all sales will be initiated through social media discovery engines.</p>
+<p class="mb-4">Logistics remains the biggest hurdle for smaller players. Shipping times have increased by <span class="diff-del">15% year-over-year</span>, causing significant friction in the customer journey. Brands must focus on local fulfillment centers to reduce carbon footprints and delivery times.</p>
+</article>
+</div>
+</section>
+<!-- Right Pane: V3.4 -->
+<section class="flex-1 flex flex-col overflow-hidden bg-white/50">
+<header class="p-4 bg-primary-container/10 flex justify-between items-center shrink-0">
+<div>
+<h3 class="font-headline font-bold text-primary tracking-tight">V3.4 Active Version</h3>
+<p class="text-[10px] text-primary font-bold uppercase tracking-tighter">Current Revision • Just now</p>
+</div>
+<div class="flex gap-4">
+<div class="text-right">
+<p class="text-[10px] text-primary/60 font-bold uppercase">Readability</p>
+<p class="text-sm font-bold text-primary">84%</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-primary/60 font-bold uppercase">Fact-Check</p>
+<p class="text-sm font-bold text-primary">91%</p>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-8 custom-scrollbar bg-white font-body leading-relaxed text-on-surface relative">
+<!-- Connecting Line for Comment -->
+<div class="absolute right-0 top-[220px] w-8 h-px bg-primary/20"></div>
+<article class="max-w-prose mx-auto">
+<h1 class="text-3xl font-headline font-extrabold mb-6">2024 E-commerce Evolution Report</h1>
+<p class="mb-4">The retail landscape is undergoing a massive shift. In 2023, we saw <span class="diff-add">exponential acceleration</span> in the digital sector. Traditional retailers are struggling to keep up with the fast-paced nature of mobile commerce.</p>
+<p class="mb-4">The core focus of this report is to analyze how <span class="diff-add">hyper-localized AI-driven</span> platforms dominate the current market landscape. We believe that by 2025, over 60% of all sales will be initiated through social media discovery engines.</p>
+<p class="mb-4">Logistics remains the biggest hurdle for smaller players. Shipping times have increased by <span class="diff-add">24% across Tier 2 cities</span>, causing significant friction in the customer journey. Brands must focus on local fulfillment centers to reduce carbon footprints and delivery times.</p>
+<div class="mt-8 p-4 bg-surface-container rounded-lg border border-outline-variant">
+<p class="text-sm font-semibold mb-2">Key Executive Insight:</p>
+<p class="text-sm text-on-surface-variant italic">"The transition to frictionless checkout is no longer an advantage; it is a baseline requirement for survival in the 2024 ecosystem."</p>
+</div>
+</article>
+</div>
+</section>
+<!-- Right Sidebar: Annotations -->
+<aside class="w-80 border-l border-outline-variant bg-surface-container-low flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
+<h4 class="text-xs font-bold uppercase tracking-widest text-secondary flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-sm">comment</span>
+                        Expert Annotations
+                    </h4>
+<!-- Comment 1 -->
+<div class="bg-white p-3 rounded-xl shadow-sm border border-primary/20 relative">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-white" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<span class="text-xs font-bold">AI Challenger</span>
+<span class="text-[10px] text-on-surface-variant ml-auto">2m ago</span>
+</div>
+<p class="text-xs leading-snug">Updated "moderate growth" to "exponential acceleration" based on the latest Q4 data points from the Global Retail Index.</p>
+<div class="mt-2 flex gap-2">
+<button class="text-[10px] font-bold text-primary hover:underline">Accept</button>
+<button class="text-[10px] font-bold text-secondary hover:underline">Ignore</button>
+</div>
+</div>
+<!-- Comment 2 -->
+<div class="bg-white p-3 rounded-xl shadow-sm border border-tertiary/20">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-white" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<span class="text-xs font-bold">Fact Checker</span>
+<span class="text-[10px] text-on-surface-variant ml-auto">1h ago</span>
+</div>
+<p class="text-xs leading-snug">The 24% increase specifically targets Tier 2 cities. General shipping across Tier 1 remains stable at 12%. Precision matters here.</p>
+</div>
+<!-- Comment 3 -->
+<div class="bg-white p-3 rounded-xl shadow-sm border border-outline-variant opacity-60">
+<div class="flex items-center gap-2 mb-2">
+<img alt="Sarah" class="w-6 h-6 rounded-full" data-alt="Portrait of a male marketing specialist in a minimalist office with focus and determination" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2ngtADcAm-L1hxBHo8oDNUxRZXdS2Ct1u_PPxKsDnUnJVnm1ctW2gY28VsbIFa9o_A3UiBwp-rKA33NPb8ce1i3Ma36XVz6_BBrn0c-ZN0pbmyVSoeQi9ysAYDFs8giZuBNhi4G1chqKYc2oz933cc67vB8YhnAjzHyq7uaeSn9_7eAensW32OxU-5ZfHqF06tnv2UfA5JW97HUH6XkznTrB88wiiS20opiw9ylKCiGHFN_eAh4GNSGIJbfZjG-MfRCUGZbRkqc4"/>
+<span class="text-xs font-bold">Sarah (Editor)</span>
+<span class="text-[10px] text-on-surface-variant ml-auto">4h ago</span>
+</div>
+<p class="text-xs leading-snug">Resolved: Removed Amazon/eBay mentions to keep the report platform-agnostic for the white-label version.</p>
+<div class="mt-2 text-[10px] font-bold text-success uppercase">Resolved</div>
+</div>
+<div class="mt-auto pt-4">
+<button class="w-full py-2 border-2 border-dashed border-outline-variant rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-colors">
+                            + Add New Comment
+                        </button>
+</div>
+</aside>
+</div>
+</main>
+</div>
+<!-- Footer -->
+<footer class="fixed bottom-0 left-64 right-0 h-14 flex justify-between items-center px-8 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-[0_-1px_3px_0_rgba(0,0,0,0.05)] font-['Inter'] text-xs uppercase tracking-wider">
+<span class="text-gray-400">© 2024 Pipeline Pro Editorial Systems</span>
+<div class="flex items-center gap-4">
+<a class="text-gray-500 dark:text-gray-400 hover:underline hover:text-blue-700 dark:hover:text-blue-300 transition-transform active:translate-y-0.5" href="#">Revert to V3.0</a>
+<a class="text-gray-500 dark:text-gray-400 hover:underline hover:text-blue-700 dark:hover:text-blue-300 transition-transform active:translate-y-0.5" href="#">Export Diff Report</a>
+<button class="bg-blue-600 text-white px-6 py-2 rounded-md font-bold hover:bg-blue-700 transition-transform active:translate-y-0.5">Approve V3.4</button>
+</div>
+</footer>
+</body></html>

@@ -14,7 +14,7 @@ import { Dashboard } from './pages/Dashboard';
 import { QualityDashboard } from './pages/QualityDashboard';
 import { Tasks } from './pages/Tasks';
 import { TaskDetailLayout } from './pages/TaskDetailLayout';
-import { OverviewTab, PlanningTab, ResearchTab, WritingTab, ReviewsTab, QualityTab } from './pages/task-detail';
+import { OverviewTab, PlanningTab, ResearchTab, WritingTab, ReviewsTab, QualityTab, PortalTab } from './pages/task-detail';
 import { AssetsLayout } from './pages/AssetsLayout';
 import { Assets } from './pages/Assets';
 import { AssetDetail } from './pages/AssetDetail';
@@ -72,6 +72,7 @@ function App() {
                 <Route path="writing" element={<WritingTab />} />
                 <Route path="reviews" element={<ReviewsTab />} />
                 <Route path="quality" element={<QualityTab />} />
+                <Route path="portal" element={<PortalTab />} />
               </Route>
               <Route path="tasks/:id/edit" element={<Stage3Editor />} />
               {/* 内容资产模块 - 嵌套路由 */}

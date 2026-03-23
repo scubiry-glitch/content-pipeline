@@ -28,6 +28,7 @@ const TABS = [
   { id: 'writing', label: '文稿生成', materialIcon: 'edit_note', path: 'writing' },
   { id: 'reviews', label: '蓝军评审', materialIcon: 'fact_check', path: 'reviews' },
   { id: 'quality', label: '质量分析', materialIcon: 'analytics', path: 'quality' },
+  { id: 'portal', label: '门户', materialIcon: 'door_front', path: 'portal' },
 ];
 
 export function TaskDetailLayout() {
@@ -212,15 +213,35 @@ export function TaskDetailLayout() {
       console.log('[TaskDetailLayout] Loaded reviews:', items.length);
       setReviews(items);
 
-      // Use API summary or calculate from items
+      // Calculate accepted/ignored/pending from comments (questions) data
+      let accepted = 0, ignored = 0, pending = 0;
+      items.forEach(review => {
+        const questions = Array.isArray(review.questions) ? review.questions : [];
+        questions.forEach((q: any) => {
+          // 每个 question 可能有独立的状态，或者继承 review 的状态
+          const questionStatus = q.status || review.user_decision || review.status;
+          if (questionStatus === 'accept' || questionStatus === 'accepted' || questionStatus === 'completed') {
+            accepted++;
+          } else if (questionStatus === 'ignore' || questionStatus === 'ignored') {
+            ignored++;
+          } else {
+            pending++;
+          }
+        });
+      });
+
+      // Total should be sum of accepted + ignored + pending
+      const calculatedTotal = accepted + ignored + pending;
+
+      // Use API summary for severity counts, but calculated counts for status
       const summary = { 
-        total: apiSummary.total || items.length, 
+        total: calculatedTotal, 
         critical: apiSummary.critical || 0, 
         warning: apiSummary.warning || 0, 
         praise: apiSummary.praise || 0, 
-        accepted: apiSummary.accepted || 0, 
-        ignored: apiSummary.ignored || 0, 
-        pending: apiSummary.pending || items.length 
+        accepted,
+        ignored,
+        pending
       };
 
       setReviewSummary(summary);
@@ -471,7 +492,7 @@ export function TaskDetailLayout() {
     }
     setCheckingCompliance(true);
     try {
-      const result = await complianceApi.checkContent(draft.content);
+      const result = await complianceApi.checkContent(task?.id || 'temp', draft.content);
       setComplianceResult(result);
       if (result.overallScore >= 80) {
         alert(`✅ 合规检查通过！得分: ${result.overallScore}`);

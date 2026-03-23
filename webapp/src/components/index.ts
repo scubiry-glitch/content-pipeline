@@ -28,7 +28,6 @@ export type { VersionTimelineProps, Version } from './content/VersionTimeline';
 export { MarkdownRenderer } from './MarkdownRenderer';
 
 // 其他
-export { SequentialReviewChain } from './SequentialReviewChain';
 export { SequentialReviewStatus, SequentialReviewQueueDetail } from './SequentialReviewStatus';
 export { ReviewConfigPanel } from './ReviewConfigPanel';
 export type { ReviewConfigPanelProps } from './ReviewConfigPanel';

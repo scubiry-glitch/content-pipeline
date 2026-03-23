@@ -4,6 +4,7 @@ import { useState } from 'react';
 // Tab 类型
 type EditorTab = 'preview' | 'export';
 type AssetTab = 'outline' | 'insights' | 'assets' | null;
+type SidebarView = 'timeline' | 'compare';
 
 // Tab 按钮组件
 function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
@@ -25,6 +26,7 @@ import { useOutletContext } from 'react-router-dom';
 import { ExportPanel } from '../../components/ExportPanel';
 import { DraftGenerationProgress } from '../../components/DraftGenerationProgress';
 import { LivePreviewMarkdown, VersionTimeline } from '../../components/content';
+import { VersionComparePanel } from '../../components/VersionComparePanel';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -55,6 +57,8 @@ export function WritingTab() {
   // 编辑器 Tab 状态
   const [editorTab, setEditorTab] = useState<EditorTab>('preview');
   const [expandedAsset, setExpandedAsset] = useState<AssetTab>(null);
+  const [sidebarView, setSidebarView] = useState<SidebarView>('timeline');
+  const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>(undefined);
   
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
   // 规范化版本数据，确保字段与 VersionTimeline 组件兼容
@@ -321,27 +325,46 @@ export function WritingTab() {
           </div>
         </div>
 
-        {/* Version History Sidebar */}
-        <div className="w-full lg:w-72 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col shrink-0">
-          <div className="p-4 border-b border-surface-container">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">history</span>
-              Version History
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto p-0">
-             {versions.length === 0 && !draftContent?.content ? (
-                <div className="p-6 text-center text-sm text-on-surface-variant italic">No versions recorded yet.</div>
-             ) : (
-                <VersionTimeline
-                   versions={versions}
-                   currentVersion={draftContent?.version}
-                   onRollback={(version) => console.log('Rollback to:', version)}
-                   maxHeight="100%"
-                   enableCompare={true}
-                 />
-             )}
-          </div>
+        {/* Version History / Compare Sidebar */}
+        <div className="w-full lg:w-80 bg-surface-container-lowest rounded-lg border border-outline-variant/40 shadow-sm flex flex-col shrink-0">
+          {sidebarView === 'compare' ? (
+            <VersionComparePanel
+              versions={versions}
+              currentVersion={draftContent?.version}
+              onRollback={(versionId) => console.log('Rollback to:', versionId)}
+              onApprove={() => setSidebarView('timeline')}
+              initialCompareVersions={compareVersions}
+            />
+          ) : (
+            <>
+              <div className="p-4 border-b border-surface-container">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">history</span>
+                    Version History
+                  </h3>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-0">
+                 {versions.length === 0 && !draftContent?.content ? (
+                    <div className="p-6 text-center text-sm text-on-surface-variant italic">No versions recorded yet.</div>
+                 ) : (
+                    <VersionTimeline
+                       versions={versions}
+                       currentVersion={draftContent?.version}
+                       onRollback={(version) => console.log('Rollback to:', version)}
+                       maxHeight="100%"
+                       enableCompare={true}
+                       onCompare={(selectedVersions) => {
+                         // 切换到对比视图
+                         setCompareVersions(selectedVersions);
+                         setSidebarView('compare');
+                       }}
+                     />
+                 )}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
