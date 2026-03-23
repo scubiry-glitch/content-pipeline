@@ -478,19 +478,47 @@ async function generateRevisedDraft(
   round: number,
   expertRole: string
 ): Promise<{ id: string; content: string }> {
-  // 只取前5个最重要的问题，避免prompt过长
+  // 只取前5个最重要的问题（排除 praise）
   const topQuestions = reviewResult.questions
+    .filter(q => q.severity !== 'praise')
     .sort((a, b) => {
-      const severityOrder = { high: 0, medium: 1, low: 2, praise: 3 };
-      return severityOrder[a.severity as keyof typeof severityOrder] - severityOrder[b.severity as keyof typeof severityOrder];
+      const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      return (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3);
     })
     .slice(0, 5);
-  
-  const prompt = `你是一位专业的文稿修订专家。请根据专家评审意见，对文稿进行修订。
 
-## 当前文稿
+  // 如果没有需要修改的问题，直接复用原稿
+  if (topQuestions.length === 0) {
+    console.log(`[GenerateDraft] Round ${round}: no actionable issues, reusing original draft`);
+    const newDraftId = uuidv4();
+    await query(
+      `INSERT INTO draft_versions (
+        id, task_id, version, content, change_summary,
+        source_review_id, previous_version_id, round, expert_role, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+      [newDraftId, taskId, round, currentContent,
+       `第${round}轮${expertRole}评审：无需修改`, null, currentDraftId, round, expertRole]
+    );
+    return { id: newDraftId, content: currentContent };
+  }
 
-${currentContent.substring(0, 2000)}
+  // 上下文管理：完整传入文稿（截取上限 15000 字符，保留结构完整性）
+  const MAX_CONTENT_CHARS = 15000;
+  const contentForPrompt = currentContent.length > MAX_CONTENT_CHARS
+    ? currentContent.substring(0, MAX_CONTENT_CHARS) + '\n\n[... 后续内容省略，请保持原文后续部分不变 ...]'
+    : currentContent;
+
+  const prompt = `你是一位专业的文稿修订专家。请根据专家评审意见，对完整文稿进行**针对性修订**。
+
+## 重要规则
+- 你必须输出**完整的修订后文稿**，不能只输出摘要或部分内容
+- 修订后文稿的总字数应与原文相当（原文约 ${currentContent.length} 字符）
+- 只修改评审意见指出的具体问题，**保留所有未被评审指出的段落和章节**
+- 保持原文的 Markdown 标题层级结构（# ## ### 等）
+
+## 当前文稿（完整）
+
+${contentForPrompt}
 
 ## 专家评审意见
 
@@ -498,51 +526,67 @@ ${currentContent.substring(0, 2000)}
 综合评分：${reviewResult.score}/100
 总体评价：${reviewResult.summary}
 
-核心问题与建议（优先处理）：
-${topQuestions.map((q, i) => `${i + 1}. [${q.severity}] ${q.question.substring(0, 200)}${q.question.length > 200 ? '...' : ''}
-   建议：${q.suggestion.substring(0, 150)}${q.suggestion.length > 150 ? '...' : ''}`).join('\n')}
+需要修改的问题：
+${topQuestions.map((q, i) => `${i + 1}. [${q.severity}] ${q.question.substring(0, 300)}
+   建议：${q.suggestion.substring(0, 200)}`).join('\n')}
 
 ## 修订要求
 
-1. 针对上述优先问题进行修改
-2. 保持文稿整体结构、风格和专业性
-3. 生成完整的修订后文稿（Markdown格式）
+1. **只修改上述问题涉及的段落**，其余部分原样保留
+2. 修订后文稿字数应≥原文字数的 80%
+3. 保持所有 Markdown 标题（#/##/###）不变
+4. 输出完整的修订后文稿（Markdown格式）
 
-请输出完整的修订后文稿：`;
+请输出完整修订后文稿：`;
 
   try {
-    console.log(`[GenerateDraft] Starting for round ${round}, task ${taskId}, prompt length: ${prompt.length}`);
+    console.log(`[GenerateDraft] Starting for round ${round}, task ${taskId}, original content: ${currentContent.length} chars, prompt length: ${prompt.length}`);
     const llm = getLLMRouter();
-    console.log(`[GenerateDraft] Calling LLM...`);
     const response = await llm.generate(prompt, 'blue_team_review', {
-      maxTokens: 4000,
-      temperature: 0.7,
+      maxTokens: 16000,
+      temperature: 0.5,
     });
-    console.log(`[GenerateDraft] LLM response received, length: ${response.content.length}`);
-    
+
+    const revisedContent = response.content;
+    console.log(`[GenerateDraft] LLM response: ${revisedContent.length} chars (original: ${currentContent.length} chars, ratio: ${(revisedContent.length / currentContent.length * 100).toFixed(1)}%)`);
+
+    // 质量守卫：修订稿不能严重缩水
+    const lengthRatio = revisedContent.length / currentContent.length;
+    let finalContent = revisedContent;
+
+    if (lengthRatio < 0.6) {
+      console.warn(`[GenerateDraft] Quality guard: revised content too short (${(lengthRatio * 100).toFixed(1)}% of original). Falling back to original.`);
+      finalContent = currentContent;
+    } else if (revisedContent.trim().length < 100) {
+      console.warn(`[GenerateDraft] Quality guard: revised content is empty/trivial. Falling back to original.`);
+      finalContent = currentContent;
+    }
+
+    // 检查 Markdown 标题保留情况
+    const originalHeadings = (currentContent.match(/^#{1,3}\s+.+$/gm) || []).length;
+    const revisedHeadings = (finalContent.match(/^#{1,3}\s+.+$/gm) || []).length;
+    if (originalHeadings > 0 && revisedHeadings < originalHeadings * 0.5) {
+      console.warn(`[GenerateDraft] Quality guard: headings lost (original: ${originalHeadings}, revised: ${revisedHeadings}). Falling back to original.`);
+      finalContent = currentContent;
+    }
+
     // 保存新版本
     const newDraftId = uuidv4();
-    console.log(`[GenerateDraft] Inserting new draft: ${newDraftId}`);
+    const changeSummary = finalContent === currentContent
+      ? `第${round}轮${expertRole}评审：修订未通过质量检查，保留原稿`
+      : `第${round}轮${expertRole}评审后修订`;
+
     await query(
       `INSERT INTO draft_versions (
         id, task_id, version, content, change_summary,
         source_review_id, previous_version_id, round, expert_role, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
-      [
-        newDraftId,
-        taskId,
-        round,
-        response.content,
-        `第${round}轮${expertRole}评审后修订`,
-        null, // source_review_id 会在后面更新
-        currentDraftId,
-        round,
-        expertRole,
-      ]
+      [newDraftId, taskId, round, finalContent, changeSummary,
+       null, currentDraftId, round, expertRole]
     );
-    console.log(`[GenerateDraft] Draft inserted successfully: ${newDraftId}`);
-    
-    return { id: newDraftId, content: response.content };
+    console.log(`[GenerateDraft] Draft saved: ${newDraftId}, final length: ${finalContent.length} chars`);
+
+    return { id: newDraftId, content: finalContent };
   } catch (error) {
     console.error('[GenerateDraft] Failed:', error);
     // 返回原稿
@@ -636,6 +680,9 @@ async function finalizeSequentialReview(taskId: string): Promise<void> {
     [taskId]
   );
   
+  // 4. 同步评审意见到 blue_team_reviews (统一对外接口)
+  await syncToBlueTeamReviews(taskId, reviews);
+  
   console.log(`[SequentialReview] Task ${taskId} completed with ${reviews.length} rounds`);
 }
 
@@ -720,4 +767,50 @@ export async function getDraftVersions(taskId: string) {
       expert_role: review?.expert_role || dv.expert_role,
     };
   });
+}
+
+
+/**
+ * 将串行评审结果同步到 blue_team_reviews
+ * 统一对外接口，避免数据冗余和前端兼容性问题
+ */
+async function syncToBlueTeamReviews(taskId: string, expertReviews: any[]): Promise<void> {
+  console.log(`[SequentialReview] Syncing ${expertReviews.length} reviews to blue_team_reviews for task ${taskId}`);
+  
+  // 1. 清理该任务在 blue_team_reviews 中的旧数据（如果有）
+  await query(
+    `DELETE FROM blue_team_reviews WHERE task_id = $1`,
+    [taskId]
+  );
+  
+  // 2. 将 expert_reviews 转换为 blue_team_reviews 格式
+  for (const review of expertReviews) {
+    const questions = Array.isArray(review.questions) ? review.questions : [];
+    
+    // 只同步 AI 专家评审（真人专家评审通过 expert_review_tasks 处理）
+    if (review.expert_type === 'ai') {
+      await query(
+        `INSERT INTO blue_team_reviews (
+          id, task_id, round, expert_role, questions,
+          status, user_decision, decision_note, decided_at, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          review.id,  // 保持相同ID便于追溯
+          taskId,
+          review.round,
+          review.expert_role,
+          JSON.stringify(questions),
+          'completed',  // 串行评审已完成
+          'completed',  // 系统自动处理
+          `串行评审第${review.round}轮自动处理完成，生成修订版本`,
+          review.completed_at || new Date(),
+          review.created_at || new Date()
+        ]
+      );
+      
+      console.log(`[SequentialReview] Synced AI review: ${review.expert_name} (${review.expert_role})`);
+    }
+  }
+  
+  console.log(`[SequentialReview] Sync completed for task ${taskId}`);
 }

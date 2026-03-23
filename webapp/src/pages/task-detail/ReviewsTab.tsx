@@ -1,8 +1,10 @@
 // 任务详情 - 蓝军评审 Tab
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ExpertReviewPanel } from '../../components/ExpertReviewPanel';
 import { SequentialReviewChain } from '../../components/SequentialReviewChain';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import type { Task, BlueTeamReview } from '../../types';
 
 interface TaskContext {
@@ -46,6 +48,35 @@ export function ReviewsTab() {
     onRedoReview,
   } = useOutletContext<TaskContext>();
 
+  // 版本查看弹窗状态
+  const [selectedVersion, setSelectedVersion] = useState<{ id: string; content: string; round?: number } | null>(null);
+  const [versionLoading, setVersionLoading] = useState(false);
+
+  // 加载版本内容
+  const loadVersionContent = async (versionId: string) => {
+    setVersionLoading(true);
+    try {
+      const res = await fetch(`/api/v1/production/${task!.id}/drafts/${versionId}`, {
+        headers: { 'x-api-key': 'dev-api-key' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedVersion({
+          id: versionId,
+          content: data.content || data.draft?.content || '无内容',
+          round: data.round
+        });
+      } else {
+        alert('加载版本内容失败');
+      }
+    } catch (err) {
+      console.error('加载版本失败:', err);
+      alert('加载版本内容失败');
+    } finally {
+      setVersionLoading(false);
+    }
+  };
+
   const groupedReviews = {
     critical: [] as any[],
     warning: [] as any[],
@@ -54,13 +85,17 @@ export function ReviewsTab() {
 
   reviews.forEach(review => {
     const expertInfo = EXPERT_ROLES[review.expert_role] || { name: '专家', icon: '👤', color: '#666' };
+    // 将 review 级别的状态映射到 question 级别
+    // user_decision 优先于 status（如果用户已做出决策）
+    const reviewStatus = review.user_decision || review.status;
     review.questions?.forEach((q: any) => {
       const item = { 
         ...q, 
         reviewId: review.id,
         expertRole: review.expert_role,
         expertName: expertInfo.name,
-        expertIcon: expertInfo.icon
+        expertIcon: expertInfo.icon,
+        status: reviewStatus  // 添加 review 的状态到 question
       };
       if (q.severity === 'high') groupedReviews.critical.push(item);
       else if (q.severity === 'medium') groupedReviews.warning.push(item);
@@ -74,10 +109,14 @@ export function ReviewsTab() {
     const statusLabels: Record<string, { text: string; class: string }> = {
       pending: { text: '⏳ 待处理', class: 'pending' },
       accepted: { text: '✓ 已接受', class: 'accepted' },
+      accept: { text: '✓ 已接受', class: 'accepted' },
       ignored: { text: '⊘ 已忽略', class: 'ignored' },
-      manual_resolved: { text: '✓ 已手动处理', class: 'manual' }
+      manual_resolved: { text: '✓ 已手动处理', class: 'manual' },
+      completed: { text: '✓ 已完成', class: 'accepted' },
+      reject: { text: '✗ 已拒绝', class: 'ignored' },
+      revise: { text: '↻ 需修改', class: 'warning' }
     };
-    const status = statusLabels[item.status || 'pending'];
+    const status = statusLabels[item.status || 'pending'] || statusLabels['pending'];
 
     return (
       <div
@@ -232,12 +271,96 @@ export function ReviewsTab() {
         <div className="info-card full-width input-card">
           <SequentialReviewChain 
             taskId={task!.id}
-            onVersionSelect={(versionId) => {
-              console.log('Selected version:', versionId);
-              // 可以在这里添加查看版本的逻辑
-            }}
+            onVersionSelect={loadVersionContent}
           />
         </div>
+
+        {/* 版本内容查看弹窗 */}
+        {selectedVersion && (
+          <div 
+            className="version-modal"
+            style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+            onClick={() => setSelectedVersion(null)}
+          >
+            <div 
+              className="version-modal-content"
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                width: '90%',
+                maxWidth: '900px',
+                maxHeight: '80vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div 
+                className="version-modal-header"
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: '1px solid #e5e7eb',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <h3 style={{ margin: 0, fontSize: '18px' }}>
+                  📝 版本内容 
+                  {selectedVersion.round ? `(第 ${selectedVersion.round} 轮)` : ''}
+                  <span style={{ 
+                    fontSize: '12px', 
+                    color: '#6b7280', 
+                    marginLeft: '8px',
+                    fontFamily: 'monospace'
+                  }}>
+                    {selectedVersion.id.slice(-8)}
+                  </span>
+                </h3>
+                <button 
+                  className="btn btn-close"
+                  onClick={() => setSelectedVersion(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    padding: '4px 8px'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div 
+                className="version-modal-body"
+                style={{
+                  padding: '20px',
+                  overflow: 'auto',
+                  maxHeight: 'calc(80vh - 70px)',
+                  minHeight: '400px'
+                }}
+              >
+                {versionLoading ? (
+                  <div style={{ textAlign: 'center', padding: '40px' }}>
+                    ⏳ 加载中...
+                  </div>
+                ) : (
+                  <MarkdownRenderer content={selectedVersion.content} />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 专家库深度评审 */}
         {(task?.outline || (task as any)?.writing_data?.draft) && (

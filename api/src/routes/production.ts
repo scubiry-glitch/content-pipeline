@@ -1043,4 +1043,33 @@ export async function productionRoutes(fastify: FastifyInstance) {
       })),
     };
   });
+
+  // 获取单个 draft 版本内容
+  fastify.get('/:taskId/drafts/:draftId', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId, draftId } = request.params as any;
+    
+    const draftResult = await query(
+      `SELECT id, task_id, version, content, change_summary, round, expert_role, created_at 
+       FROM draft_versions 
+       WHERE id = $1 AND task_id = $2`,
+      [draftId, taskId]
+    );
+    
+    if (draftResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Draft version not found' };
+    }
+    
+    const draft = draftResult.rows[0];
+    return {
+      id: draft.id,
+      taskId: draft.task_id,
+      version: draft.version,
+      round: draft.round,
+      expertRole: draft.expert_role,
+      content: draft.content,
+      changeSummary: draft.change_summary,
+      createdAt: draft.created_at,
+    };
+  });
 }

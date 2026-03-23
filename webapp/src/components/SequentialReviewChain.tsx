@@ -63,7 +63,9 @@ export function SequentialReviewChain({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadChain();
+    if (taskId) {
+      loadChain();
+    }
   }, [taskId]);
 
   const loadChain = async () => {
@@ -75,7 +77,7 @@ export function SequentialReviewChain({
       
       // 获取评审链
       const chainRes = await fetch(`/api/v1/production/${taskId}/sequential-review/chain`, {
-        headers: { 'x-api-key': 'dev-api-key' }
+        headers: { 'X-API-Key': 'dev-api-key' }
       });
       
       console.log('[SequentialReviewChain] Chain response:', chainRes.status, chainRes.ok);
@@ -93,7 +95,7 @@ export function SequentialReviewChain({
       
       // 获取版本列表
       const versionsRes = await fetch(`/api/v1/production/${taskId}/sequential-review/versions`, {
-        headers: { 'x-api-key': 'dev-api-key' }
+        headers: { 'X-API-Key': 'dev-api-key' }
       });
       
       console.log('[SequentialReviewChain] Versions response:', versionsRes.status, versionsRes.ok);

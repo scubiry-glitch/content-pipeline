@@ -219,6 +219,9 @@ export function TaskDetailLayout() {
         questions: Array.isArray(row.questions) ? row.questions : 
                    typeof row.questions === 'string' ? JSON.parse(row.questions) : [],
         status: row.status,
+        user_decision: row.user_decision,
+        decision_note: row.decision_note,
+        decided_at: row.decided_at,
         created_at: row.created_at
       }));
       
