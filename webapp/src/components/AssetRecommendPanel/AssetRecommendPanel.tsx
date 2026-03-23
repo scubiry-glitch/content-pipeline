@@ -66,7 +66,7 @@ export function AssetRecommendPanel({
 
         const allAssets = await assetsApi.getAll();
 
-        const scoredAssets = allAssets.map(asset => ({
+        const scoredAssets = allAssets.items.map((asset: any) => ({
           asset,
           score: calculateRelevance(asset, keywords),
         }));
@@ -114,7 +114,7 @@ export function AssetRecommendPanel({
         {recommendations.map(asset => (
           <li key={asset.id} className="recommend-item">
             <div className="item-content">
-              <span className="item-type">{getAssetTypeIcon(asset.type)}</span>
+              <span className="item-type">{getAssetTypeIcon(asset.asset_type)}</span>
               <div className="item-info">
                 <span className="item-title" title={asset.title}>
                   {truncate(asset.title, 30)}

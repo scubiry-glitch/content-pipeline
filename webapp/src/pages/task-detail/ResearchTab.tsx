@@ -40,355 +40,377 @@ export function ResearchTab() {
   const researchData = task.research_data as any;
 
   return (
-    <div className="tab-panel research-panel animate-fade-in">
-      {/* ========== 1. 输入 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">
-          <span className="icon">📥</span> 输入
-        </h3>
-        <span className="section-desc">定义数据源配置与深度研究的采集参数</span>
-      </div>
+    <div className="tab-panel research-panel animate-fade-in pb-32">
+      {/* ========== Header ========== */}
+      <header className="mb-12">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stage 2</span>
+          <span className="material-symbols-outlined text-sm">chevron_right</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Deep Research & Synthesis</span>
+        </div>
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white mb-2">Deep Research Stage</h1>
+            <p className="text-slate-500 dark:text-slate-400 max-w-2xl">Advanced contextual synthesis and data validation. Processing massive datasets into high-fidelity narratives.</p>
+          </div>
+          <div className="flex gap-3">
+             <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" onClick={() => onShowResearchConfigChange(!showResearchConfig)}>
+                <span className="material-symbols-outlined text-[18px]">tune</span> {showResearchConfig ? 'Hide Strategy' : 'Refine Strategy'}
+             </button>
+             <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" onClick={onAddExternalLink}>
+                <span className="material-symbols-outlined text-[18px]">add_link</span> Add Source
+             </button>
+          </div>
+        </div>
+      </header>
 
-      <div className="input-grid">
-        {/* 数据源配置 */}
-        <div className="info-card input-card glass-card">
-          <h3 className="card-title">
-            <span className="icon">📊</span> 数据源配置
-          </h3>
-          <div className="data-source-list">
-            <div className={`source-item ${researchConfig.sources.includes('web') ? 'active' : ''}`}>
-              <span className="source-icon">🌐</span>
-              <span className="source-name">网页搜索</span>
-              <span className="source-status">{researchConfig.sources.includes('web') ? '✓' : '○'}</span>
-            </div>
-            <div className={`source-item ${researchConfig.sources.includes('rss') ? 'active' : ''}`}>
-              <span className="source-icon">📡</span>
-              <span className="source-name">RSS订阅</span>
-              <span className="source-status">{researchConfig.sources.includes('rss') ? '✓' : '○'}</span>
-            </div>
-            <div className={`source-item ${researchConfig.sources.includes('asset') ? 'active' : ''}`}>
-              <span className="source-icon">📁</span>
-              <span className="source-name">素材库</span>
-              <span className="source-status">{researchConfig.sources.includes('asset') ? '✓' : '○'}</span>
+      {/* ========== Stepper Container ========== */}
+      <div className="space-y-16">
+        {/* ========== Section 1: Input ========== */}
+        <section className="relative step-line step-line-active pl-12">
+          <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined">link</span>
+          </div>
+          <div className="flex items-baseline justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Input: Multi-Source Engine Configuration</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                {task.research_data?.searchStats ? `${(task.research_data.searchStats.webSources || 0) + (task.research_data.searchStats.assetSources || 0)} Sources Linked` : 'Sources Standby'}
+              </span>
             </div>
           </div>
-          {task.research_data?.searchStats && (
-            <div className="search-stats-summary">
-              <span>📊 网页来源: {task.research_data.searchStats.webSources || 0}</span>
-              <span>📁 素材来源: {task.research_data.searchStats.assetSources || 0}</span>
+
+          {/* Configuration Form if showResearchConfig is true */}
+          {showResearchConfig && (
+            <div className="info-card glass-card mb-6">
+              <h3 className="card-title text-sm border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">⚙️ 配置研究参数</h3>
+              <div className="research-config-form text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="space-y-4">
+                    <label className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <input type="checkbox" checked={researchConfig.autoCollect} onChange={(e) => onResearchConfigChange({ ...researchConfig, autoCollect: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                      <span className="font-bold">自动采集 (Auto Collect)</span>
+                    </label>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">最大结果数 (Max Results)</label>
+                      <input type="number" min={5} max={50} value={researchConfig.maxResults} onChange={(e) => onResearchConfigChange({ ...researchConfig, maxResults: parseInt(e.target.value) || 20 })} className="w-full p-2 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">最低可信度 (Min Credibility)</label>
+                      <input type="number" step={0.1} min={0} max={1} value={researchConfig.minCredibility} onChange={(e) => onResearchConfigChange({ ...researchConfig, minCredibility: parseFloat(e.target.value) || 0.5 })} className="w-full p-2 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">时间范围 (Time Range)</label>
+                      <select value={researchConfig.timeRange} onChange={(e) => onResearchConfigChange({ ...researchConfig, timeRange: e.target.value })} className="w-full p-2 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700">
+                        <option value="7d">最近7天 (7 Days)</option>
+                        <option value="30d">最近30天 (30 Days)</option>
+                        <option value="90d">最近3个月 (90 Days)</option>
+                        <option value="1y">最近1年 (1 Year)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">数据源 (Data Sources)</label>
+                  <div className="flex gap-4">
+                    {['web', 'rss', 'asset'].map((source) => (
+                      <label key={source} className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={researchConfig.sources.includes(source)} onChange={(e) => {
+                            const newSources = e.target.checked ? [...researchConfig.sources, source] : researchConfig.sources.filter((s) => s !== source);
+                            onResearchConfigChange({ ...researchConfig, sources: newSources });
+                          }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="text-slate-700 dark:text-slate-300">{source === 'web' ? '网页网络 / Web' : source === 'rss' ? '资讯源 / RSS' : '私有素材 / Assets'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                   <div className="flex flex-col gap-1">
+                     <label className="text-xs font-bold text-slate-500 uppercase">关键词 (Include Keywords csv)</label>
+                     <input type="text" value={researchConfig.keywords.join(', ')} onChange={(e) => onResearchConfigChange({ ...researchConfig, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="Enter keywords..." className="w-full p-2 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" />
+                   </div>
+                   <div className="flex flex-col gap-1">
+                     <label className="text-xs font-bold text-slate-500 uppercase">排除词 (Exclude Keywords csv)</label>
+                     <input type="text" value={researchConfig.excludeKeywords.join(', ')} onChange={(e) => onResearchConfigChange({ ...researchConfig, excludeKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="Enter excludes..." className="w-full p-2 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" />
+                   </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button className="px-5 py-2 bg-slate-900 border border-slate-900 text-white dark:bg-slate-700 font-bold rounded-lg text-sm hover:shadow-lg transition-all" onClick={onSaveResearchConfig} disabled={actionLoading === 'save-research-config'}>
+                    {actionLoading === 'save-research-config' ? 'Saving...' : 'Save Configuration'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-        </div>
 
-        {/* 采集参数配置 */}
-        <div className="info-card input-card glass-card">
-          <h3 className="card-title">
-            <span className="icon">⚙️</span> 采集参数
-          </h3>
-          <div className="param-list">
-            <div className="param-item">
-              <span className="param-label">最大结果数</span>
-              <span className="param-value">{researchConfig.maxResults}</span>
-            </div>
-            <div className="param-item">
-              <span className="param-label">最低可信度</span>
-              <span className="param-value">{researchConfig.minCredibility}</span>
-            </div>
-            <div className="param-item">
-              <span className="param-label">时间范围</span>
-              <span className="param-value">{researchConfig.timeRange === '7d' ? '最近7天' : researchConfig.timeRange === '30d' ? '最近30天' : researchConfig.timeRange === '90d' ? '最近3个月' : '最近1年'}</span>
-            </div>
-            <div className="param-item">
-              <span className="param-label">自动采集</span>
-              <span className="param-value">{researchConfig.autoCollect ? '✓ 开启' : '○ 关闭'}</span>
-            </div>
+          {/* Quick Config Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+                <div className="flex justify-between items-start mb-3">
+                    <span className="material-symbols-outlined text-blue-500">language</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('web') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                        {researchConfig.sources.includes('web') ? 'Active' : 'Disabled'}
+                    </span>
+                </div>
+                <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Web Global Search</h3>
+                <p className="text-xs text-slate-500">Tavily & SERP integrated discovery engine...</p>
+             </div>
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+                <div className="flex justify-between items-start mb-3">
+                    <span className="material-symbols-outlined text-orange-500">rss_feed</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('rss') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                        {researchConfig.sources.includes('rss') ? 'Active' : 'Disabled'}
+                    </span>
+                </div>
+                <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">RSS Subscription Feeds</h3>
+                <p className="text-xs text-slate-500">Real-time updates on targeted tech news...</p>
+             </div>
+             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-800 group">
+                <div className="flex justify-between items-start mb-3">
+                    <span className="material-symbols-outlined text-indigo-500">picture_as_pdf</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('asset') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                        {researchConfig.sources.includes('asset') ? 'Active' : 'Disabled'}
+                    </span>
+                </div>
+                <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Private Vector Assets</h3>
+                <p className="text-xs text-slate-500">Internal PDF, Docs and historical reports...</p>
+             </div>
           </div>
           {researchConfig.keywords.length > 0 && (
-            <div className="keywords-list">
-              <span className="keywords-label">关键词:</span>
-              {researchConfig.keywords.map((k, i) => (
-                <span key={i} className="keyword-tag">{k}</span>
-              ))}
-            </div>
+             <div className="mt-4 flex gap-2 flex-wrap items-center">
+                 <span className="text-xs font-bold text-slate-500 uppercase">Tags:</span>
+                 {researchConfig.keywords.map((k, i) => (
+                    <span key={i} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs rounded shadow-sm text-slate-600 dark:text-slate-300">{k}</span>
+                 ))}
+             </div>
           )}
-        </div>
-      </div>
+        </section>
 
-      {/* 研究配置面板（可展开） */}
-      {showResearchConfig && (
-        <div className="info-card full-width config-panel">
-          <h3 className="card-title">⚙️ 配置研究参数</h3>
-          <div className="research-config-form">
-            <div className="form-row">
-              <div className="form-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={researchConfig.autoCollect}
-                    onChange={(e) => onResearchConfigChange({ ...researchConfig, autoCollect: e.target.checked })}
-                  />
-                  自动采集
-                </label>
-              </div>
-              <div className="form-group">
-                <label>最大结果数</label>
-                <input
-                  type="number"
-                  min={5}
-                  max={50}
-                  value={researchConfig.maxResults}
-                  onChange={(e) => onResearchConfigChange({ ...researchConfig, maxResults: parseInt(e.target.value) || 20 })}
-                />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>最低可信度 (0-1)</label>
-                <input
-                  type="number"
-                  step={0.1}
-                  min={0}
-                  max={1}
-                  value={researchConfig.minCredibility}
-                  onChange={(e) => onResearchConfigChange({ ...researchConfig, minCredibility: parseFloat(e.target.value) || 0.5 })}
-                />
-              </div>
-              <div className="form-group">
-                <label>时间范围</label>
-                <select
-                  value={researchConfig.timeRange}
-                  onChange={(e) => onResearchConfigChange({ ...researchConfig, timeRange: e.target.value })}
-                >
-                  <option value="7d">最近7天</option>
-                  <option value="30d">最近30天</option>
-                  <option value="90d">最近3个月</option>
-                  <option value="1y">最近1年</option>
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label>数据源</label>
-              <div className="checkbox-group">
-                {['web', 'rss', 'asset'].map((source) => (
-                  <label key={source} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={researchConfig.sources.includes(source)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          onResearchConfigChange({ ...researchConfig, sources: [...researchConfig.sources, source] });
-                        } else {
-                          onResearchConfigChange({ ...researchConfig, sources: researchConfig.sources.filter((s) => s !== source) });
-                        }
-                      }}
-                    />
-                    {source === 'web' ? '网页搜索' : source === 'rss' ? 'RSS源' : '素材库'}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="form-group">
-              <label>关键词 (用逗号分隔)</label>
-              <input
-                type="text"
-                value={researchConfig.keywords.join(', ')}
-                onChange={(e) => onResearchConfigChange({ ...researchConfig, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
-                placeholder="输入关键词以精确搜索..."
-              />
-            </div>
-            <div className="form-group">
-              <label>排除关键词 (用逗号分隔)</label>
-              <input
-                type="text"
-                value={researchConfig.excludeKeywords.join(', ')}
-                onChange={(e) => onResearchConfigChange({ ...researchConfig, excludeKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
-                placeholder="输入要排除的关键词..."
-              />
-            </div>
-            <div className="form-actions">
-              <button
-                className="btn btn-primary"
-                onClick={onSaveResearchConfig}
-                disabled={actionLoading === 'save-research-config'}
-              >
-                {actionLoading === 'save-research-config' ? '保存中...' : '保存配置'}
-              </button>
-            </div>
+        {/* ========== Section 2: Process ========== */}
+        <section className={`relative step-line pl-12 ${hasResearchData ? 'step-line-active' : ''}`}>
+          <div className={`absolute left-0 top-0 w-10 h-10 rounded-full flex items-center justify-center z-10 shadow-lg ${hasResearchData ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+            <span className="material-symbols-outlined">psychology</span>
           </div>
-        </div>
-      )}
-
-      {hasResearchData ? (
-        <>
-          {/* ========== 2. 加工 ========== */}
-          <div className="section-header">
-            <h3 className="section-title">
-              <span className="icon">⚙️</span> 加工
-            </h3>
-            <span className="section-desc">对采集到的数据进行多维度审核、清洗与交叉验证</span>
-          </div>
-
-          <div className="process-grid">
-            {/* 数据审核表格 */}
-            {task.research_data.annotations && task.research_data.annotations.length > 0 && (
-              <div className="info-card full-width process-card">
-                <h3 className="card-title">📋 数据审核</h3>
-                <DataReviewTable
-                  annotations={task.research_data.annotations}
-                  onSelectionChange={(ids) => console.log('Selected:', ids)}
-                  onConfirm={(ids) => alert(`确认选择 ${ids.length} 条数据`)}
-                />
-              </div>
-            )}
-
-            {/* 数据清洗面板 */}
-            {task.research_data.annotations && task.research_data.annotations.length > 0 && (
-              <div className="info-card process-card">
-                <h3 className="card-title">🧹 数据清洗</h3>
-                <DataCleaningPanel
-                  annotations={task.research_data.annotations}
-                  onClean={(cleaned) => console.log('Cleaned annotations:', cleaned)}
-                />
-              </div>
-            )}
-
-            {/* 交叉验证面板 */}
-            <div className="info-card process-card">
-              <h3 className="card-title">🔍 交叉验证</h3>
-              <CrossValidationPanel
-                results={task.research_data.validation_results || []}
-                onResolve={(id, source) => console.log('Resolved:', id, source)}
-              />
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-xl font-bold font-headline">Process: AI Synthesis & Validation</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Multi-dimensional synthesis processing unstructured data flows...</p>
             </div>
-
-            {/* 外部链接与素材引用 */}
-            {task.research_data.annotations && (
-              <div className="references-grid">
-                <div className="info-card process-card">
-                  <h3 className="card-title">🔗 外部链接</h3>
-                  <ExternalLinksList annotations={task.research_data.annotations} />
+            {hasResearchData ? (
+                <div className="text-right">
+                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">100%</span>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Progress</p>
                 </div>
-                <div className="info-card process-card">
-                  <h3 className="card-title">📁 素材引用</h3>
-                  <AssetLinksList annotations={task.research_data.annotations} />
+            ) : actionLoading === 'collect-research' ? (
+                <div className="text-right">
+                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 animate-pulse">45%</span>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Processing...</p>
                 </div>
-              </div>
-            )}
+            ) : null}
           </div>
 
-          {/* ========== 3. 输出 ========== */}
-          <div className="section-header">
-            <h3 className="section-title">
-              <span className="icon">📤</span> 输出
-            </h3>
-            <span className="section-desc">基于核心数据的研究洞察与权威引用来源</span>
-          </div>
-
-          <div className="output-grid">
-            {/* 研究洞察 */}
-            {task.research_data.insights?.length > 0 && (
-              <div className="info-card output-card">
-                <h3 className="card-title">💡 研究洞察</h3>
-                <div className="insights-list">
-                  {task.research_data.insights.map((insight: any, idx: number) => (
-                    <div key={insight.id || idx} className="insight-item">
-                      <div className="insight-header">
-                        <span className={`insight-type type-${insight.type}`}>
-                          {insight.type === 'data' ? '数据' :
-                           insight.type === 'trend' ? '趋势' :
-                           insight.type === 'case' ? '案例' : '专家'}
-                        </span>
-                        <span className="insight-source">来源: {insight.source}</span>
-                      </div>
-                      <p className="insight-content">{insight.content}</p>
-                      <div className="insight-confidence">置信度: {(insight.confidence * 100).toFixed(0)}%</div>
+          {!hasResearchData ? (
+             <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {/* Dummy Module 1 */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold">Data Aggregation</span>
+                      <span className={`text-xs font-bold ${actionLoading === 'collect-research' ? 'text-indigo-600' : 'text-slate-400'}`}>{actionLoading === 'collect-research' ? 'Processing...' : 'Waiting'}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                       <div className={`h-full bg-indigo-500 rounded-full transition-all duration-[3000ms] ${actionLoading === 'collect-research' ? 'w-[75%]' : 'w-0'}`}></div>
+                    </div>
+                  </div>
+                  {/* Dummy Module 2 */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold">Fact-Checking & Validation</span>
+                      <span className={`text-xs font-bold ${actionLoading === 'collect-research' ? 'text-indigo-600' : 'text-slate-400'}`}>{actionLoading === 'collect-research' ? 'Queued' : 'Waiting'}</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                       <div className={`h-full bg-indigo-500 rounded-full transition-all duration-1000 ${actionLoading === 'collect-research' ? 'w-[10%]' : 'w-0'}`}></div>
+                    </div>
+                  </div>
+                  {/* Dummy Module 3 */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold">Insight Generation</span>
+                      <span className="text-xs font-bold text-slate-400">Waiting</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+                  </div>
+               </div>
+             </div>
+          ) : (
+             <div className="process-grid space-y-8">
+                {/* 数据审核表格 */}
+                {task.research_data.annotations && task.research_data.annotations.length > 0 && (
+                  <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                        <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-indigo-500">checklist</span> 数据审核面板 (Annotation Review)</h3>
+                    </div>
+                    <DataReviewTable
+                      annotations={task.research_data.annotations}
+                      onSelectionChange={(ids) => console.log('Selected:', ids)}
+                      onConfirm={(ids) => alert(`确认选择 ${ids.length} 条数据`)}
+                    />
+                  </div>
+                )}
 
-            {/* 引用来源 */}
-            {task.research_data.sources?.length > 0 && (
-              <div className="info-card output-card">
-                <h3 className="card-title">📚 引用来源</h3>
-                <div className="sources-list">
-                  {task.research_data.sources.map((source: any, idx: number) => {
-                    const reliability = source.reliability || 0.6;
-                    const level = reliability >= 0.9 ? 'A' : reliability >= 0.7 ? 'B' : reliability >= 0.5 ? 'C' : 'D';
-                    const levelColors: Record<string, { bg: string; color: string }> = {
-                      A: { bg: 'rgba(16,185,129,0.1)', color: '#10b981' },
-                      B: { bg: 'rgba(59,130,246,0.1)', color: '#3b82f6' },
-                      C: { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b' },
-                      D: { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' }
-                    };
-                    const style = levelColors[level];
-
-                    return (
-                      <div key={idx} className="source-item">
-                        <div className="source-info">
-                          <span className="source-name">{source.name}</span>
-                          <span
-                            className="source-level"
-                            style={{ background: style.bg, color: style.color }}
-                          >
-                            {level}级 · {(reliability * 100).toFixed(0)}%
-                          </span>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    {/* 数据清洗面板 */}
+                    {task.research_data.annotations && task.research_data.annotations.length > 0 && (
+                      <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                            <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-orange-500">cleaning_services</span> 数据清洗 (Data Scrubber)</h3>
                         </div>
-                        <a href={source.url} target="_blank" rel="noopener noreferrer" className="source-link">
-                          查看原文 →
-                        </a>
+                        <DataCleaningPanel
+                          annotations={task.research_data.annotations}
+                          onClean={(cleaned) => console.log('Cleaned annotations:', cleaned)}
+                        />
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="empty-state animate-fade-in">
-          <div className="empty-icon">🔍</div>
-          <div className="empty-title">暂无研究数据</div>
-          <p>任务进入深度研究阶段后将自动采集并为您提炼核心内容</p>
-        </div>
-      )}
+                    )}
 
-      {/* ========== 4. 辅助工具 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">🛠️ 辅助工具</h3>
-        <span className="section-desc">研究采集与阶段重做</span>
+                    {/* 交叉验证面板 */}
+                    <div className="info-card process-card bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+                      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                        <h3 className="card-title text-base font-bold flex items-center gap-2 m-0 border-none pb-0"><span className="material-symbols-outlined text-blue-500">done_all</span> 多维交叉验证 (Cross Validation)</h3>
+                      </div>
+                      <CrossValidationPanel
+                        results={task.research_data.validation_results || []}
+                        onResolve={(id, source) => console.log('Resolved:', id, source)}
+                      />
+                    </div>
+                </div>
+
+                {/* 外部链接与素材引用 */}
+                {task.research_data.annotations && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="info-card process-card bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+                      <h3 className="card-title text-sm border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">🔗 External Reference Discovery</h3>
+                      <ExternalLinksList annotations={task.research_data.annotations} />
+                    </div>
+                    <div className="info-card process-card bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+                      <h3 className="card-title text-sm border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">📁 Internal Asset Matched</h3>
+                      <AssetLinksList annotations={task.research_data.annotations} />
+                    </div>
+                  </div>
+                )}
+             </div>
+          )}
+        </section>
+
+        {/* ========== Section 3: Output ========== */}
+        <section className="relative pl-12">
+          <div className={`absolute left-0 top-0 w-10 h-10 rounded-full flex items-center justify-center z-10 shadow-lg ${hasResearchData ? 'bg-orange-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+            <span className="material-symbols-outlined">auto_stories</span>
+          </div>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Output: Synthesized Research Report</h3>
+          </div>
+
+          {!hasResearchData ? (
+             <div className="empty-state py-20 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+               <div className="empty-icon text-6xl mb-4 opacity-50">🔍</div>
+               <div className="empty-title text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Awaiting Intelligence Processing</div>
+               <p className="text-slate-500">Initiate global search from the bottom control bar to generate the synthesis report.</p>
+             </div>
+          ) : (
+             <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 lg:p-10 shadow-xl shadow-black/[0.03] border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 mb-10 pb-6 border-b border-slate-200 dark:border-slate-800">
+                  <span className="material-symbols-outlined text-orange-600 dark:text-orange-500 text-3xl">collections_bookmark</span>
+                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Research Final Brief</h2>
+                </div>
+                
+                <div className="max-w-4xl space-y-12">
+                     {/* 动态渲染 Insights */}
+                     {task.research_data.insights?.length > 0 && task.research_data.insights.map((insight: any, idx: number) => {
+                         const confColor = insight.confidence >= 0.8 ? 'green' : insight.confidence >= 0.6 ? 'orange' : 'red';
+                         return (
+                            <div key={insight.id || idx} className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                   <span className="px-3 py-1 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-full">Insight {String(idx + 1).padStart(2, '0')}</span>
+                                   <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                       {insight.type === 'data' ? <span className="material-symbols-outlined text-sm text-blue-500">bar_chart</span> :
+                                        insight.type === 'trend' ? <span className="material-symbols-outlined text-sm text-orange-500">trending_up</span> :
+                                        insight.type === 'case' ? <span className="material-symbols-outlined text-sm text-purple-500">menu_book</span> : 
+                                        <span className="material-symbols-outlined text-sm text-amber-500">person</span>}
+                                       {insight.type.toUpperCase()} THEME
+                                   </h3>
+                                </div>
+                                <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
+                                    {insight.content}
+                                </p>
+                                <div className="bg-slate-50 dark:bg-slate-800/50 border-l-4 border-indigo-200 dark:border-indigo-800 p-4 rounded-r-xl italic text-sm text-slate-600 dark:text-slate-400 flex justify-between items-center">
+                                    <span>Source: {insight.source}</span>
+                                    <span className={`font-bold text-${confColor}-600 dark:text-${confColor}-400`}>Confidence: {(insight.confidence * 100).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                         );
+                     })}
+
+                     {/* 引用来源汇总 (Citation Bento) */}
+                     {task.research_data.sources?.length > 0 && (
+                         <div className="pt-8 border-t border-slate-200 dark:border-slate-800 mt-12">
+                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Citations & Top References</h4>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               {task.research_data.sources.slice(0, 6).map((source: any, idx: number) => {
+                                 const reliability = source.reliability || 0.6;
+                                 const level = reliability >= 0.9 ? 'A' : reliability >= 0.7 ? 'B' : reliability >= 0.5 ? 'C' : 'D';
+                                 
+                                 return (
+                                   <div key={idx} className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl flex items-start gap-3 border border-slate-100 dark:border-slate-700">
+                                      <span className="material-symbols-outlined text-blue-500 text-xl flex-shrink-0 mt-0.5">description</span>
+                                      <div className="flex-1 overflow-hidden">
+                                         <div className="flex items-center gap-2 mb-1">
+                                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${level === 'A' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>Level {level}</span>
+                                            <span className="text-xs text-slate-500">Reliability {(reliability * 100).toFixed(0)}%</span>
+                                         </div>
+                                         <h5 className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{source.name}</h5>
+                                         <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">View Source &rarr;</a>
+                                      </div>
+                                   </div>
+                                 );
+                               })}
+                             </div>
+                         </div>
+                     )}
+                </div>
+             </div>
+          )}
+        </section>
       </div>
 
-      <div className="info-card tools-card">
-        <h3 className="card-title">⚡ 研究操作</h3>
-        <div className="tools-actions">
-          <button
-            className="btn btn-primary"
-            onClick={onCollectResearch}
-            disabled={actionLoading === 'collect-research'}
-          >
-            {actionLoading === 'collect-research' ? '采集中...' : '🔄 启动研究采集'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => onRedoStage('research')}
-            disabled={actionLoading === 'redo-research'}
-          >
-            {actionLoading === 'redo-research' ? '重启中...' : '🔄 重做深度研究'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={onAddExternalLink}
-          >
-            ➕ 添加外部链接
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => onShowResearchConfigChange(!showResearchConfig)}
-          >
-            ⚙️ {showResearchConfig ? '隐藏' : '配置'}采集参数
-          </button>
+      {/* ========== Bottom Global Action Bar ========== */}
+      <div className="fixed bottom-0 left-[256px] right-0 h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-40 flex items-center justify-center px-8 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+        <div className="max-w-5xl w-full flex items-center justify-between">
+          <div className="flex items-center gap-4">
+             <span className="text-sm font-medium text-slate-500">
+               Status: <span className={`uppercase font-bold ${task.status === 'researching' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-300'}`}>{task.status.replace('_', ' ')}</span>
+             </span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2" 
+               onClick={() => onRedoStage('research')}
+               disabled={actionLoading === 'redo-research'}>
+                <span className="material-symbols-outlined text-lg">sync</span>
+                {actionLoading === 'redo-research' ? 'Restarting...' : 'Redo Full Research'}
+            </button>
+            <button className="px-6 py-2.5 bg-indigo-600 text-white font-bold text-sm rounded-lg shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2"
+                onClick={onCollectResearch}
+                disabled={actionLoading === 'collect-research'}>
+                {actionLoading === 'collect-research' ? 
+                  <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span> Connecting Engine...</> : 
+                  <>{hasResearchData ? 'Update Intelligence' : 'Start Research Engine'} <span className="material-symbols-outlined text-lg">play_arrow</span></>}
+            </button>
+          </div>
         </div>
       </div>
     </div>

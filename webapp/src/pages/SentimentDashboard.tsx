@@ -27,8 +27,8 @@ export function SentimentDashboard() {
         sentimentApi.getMSI(),
         sentimentApi.getAlerts()
       ]);
-      setMsi(msiData);
-      setAlerts(alertsData.items || []);
+      setMsi(msiData.data);
+      setAlerts(alertsData.data || []);
     } catch (error) {
       console.error('加载情感数据失败:', error);
     } finally {

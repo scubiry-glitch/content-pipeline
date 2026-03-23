@@ -25,7 +25,7 @@ export function HotTopicDetail() {
         hotTopicsApi.getTrends(id!, 7),
       ]);
       setTopic(topicRes);
-      setTrendData(trendRes.items || []);
+      setTrendData('items' in trendRes ? (trendRes.items as any[]) || [] : []);
     } catch (error) {
       console.error('Failed to load topic detail:', error);
     } finally {

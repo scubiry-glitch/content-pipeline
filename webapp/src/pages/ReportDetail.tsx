@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { reportsApi, tasksApi, type Report, type ReportMatch, type Task } from '../api/client';
+import { reportsApi, tasksApi } from '../api/client';
+import type { Report, ReportMatch, Task } from '../types';
 import { PDFPreview } from '../components/PDFPreview';
 import './ReportDetail.css';
 
@@ -81,8 +82,8 @@ export function ReportDetail() {
       // 获取所有任务并筛选引用了该研报的任务
       const response = await tasksApi.getAll({ limit: 100 });
       const tasksWithReport = response.items.filter((task: Task) =>
-        task.report_ids?.includes(id) ||
-        task.references?.some((ref: any) => ref.reportId === id)
+        task.asset_ids?.includes(id) ||
+        task.source_materials?.some((ref: any) => ref.asset_id === id)
       );
       setCitations(tasksWithReport);
     } catch (error) {
@@ -294,9 +295,9 @@ export function ReportDetail() {
                 <div key={dim} className="dimension-row">
                   <span className="dim-name">{dim}</span>
                   <div className="dim-bar">
-                    <div className="dim-fill" style={{ width: `${score}%`, background: getQualityColor(score) }} />
+                    <div className="dim-fill" style={{ width: `${score}%`, background: getQualityColor(score as number) }} />
                   </div>
-                  <span className="dim-score">{score}</span>
+                  <span className="dim-score">{score as number}</span>
                 </div>
               ))}
             </div>
@@ -462,7 +463,7 @@ export function ReportDetail() {
                         <div className="citation-meta">
                           <span>阶段: {task.current_stage || '-'}</span>
                           <span>进度: {task.progress}%</span>
-                          <span>创建: {new Date(task.createdAt).toLocaleDateString()}</span>
+                          <span>创建: {new Date(task.created_at).toLocaleDateString()}</span>
                         </div>
                         <div className="citation-actions">
                           <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-link">

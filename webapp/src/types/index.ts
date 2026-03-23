@@ -76,6 +76,7 @@ export interface KnowledgeInsight {
   content: string;
   source: string;
   relevance: number;
+  type?: 'trend' | 'gap' | 'evolution';
 }
 
 export interface NovelAngle {
@@ -190,6 +191,8 @@ export interface Asset {
   is_pinned: boolean;
   pinned_at?: string;
   theme_id?: string;
+  view_count?: number;
+  influence_score?: number;
   asset_type: AssetType; // 资产类型区分
   created_at: string;
   updated_at: string;
@@ -249,6 +252,7 @@ export interface BlueTeamReview {
   round: number;
   expert_role: string;
   expert_name?: string;
+  expertId?: string;
   questions: ReviewQuestion[];
   status: 'pending' | 'completed';
   user_decision?: 'accept' | 'revise' | 'reject';
@@ -284,6 +288,10 @@ export interface Report {
   pageCount: number;
   fileUrl?: string;
   content?: string;
+  summary?: string;
+  rating?: string;
+  targetPrice?: number;
+  riskFactors?: string[];
   keyPoints: string[];
   tags: string[];
   qualityScore: number;
@@ -301,11 +309,13 @@ export interface Report {
 export interface ReportMatch {
   id: string;
   reportId: string;
-  matchType: 'rss' | 'asset' | 'topic';
+  matchType: 'rss' | 'asset' | 'topic' | 'report';
   matchId: string;
   matchScore: number;
   matchReason: string;
+  matchedAt?: string;
   matchedItem?: {
+    id?: string;
     title: string;
     source?: string;
     publishedAt?: string;

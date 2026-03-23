@@ -80,7 +80,7 @@ export function useAssetRecommendation(
 
       const allAssets = await assetsApi.getAll();
 
-      const scoredAssets = allAssets.map(asset => ({
+      const scoredAssets = allAssets.items.map(asset => ({
         asset,
         score: calculateRelevance(asset, keywords),
       }));

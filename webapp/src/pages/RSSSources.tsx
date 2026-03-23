@@ -21,7 +21,7 @@ export function RSSSources() {
   const [jobStatus, setJobStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [progress, setProgress] = useState<RSSCollectionProgress | null>(null);
   const [showProgress, setShowProgress] = useState(false);
-  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+  const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // 统计
   const [stats, setStats] = useState({
@@ -249,7 +249,7 @@ export function RSSSources() {
               </div>
 
               {/* 各源详情 */}
-              {progress.sourceProgress && progress.sourceProgress.size > 0 && (
+              {progress.sourceProgress && progress.sourceProgress.length > 0 && (
                 <div className="source-list">
                   <h4>各源进度</h4>
                   <div className="source-items">

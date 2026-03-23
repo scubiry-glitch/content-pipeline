@@ -568,7 +568,7 @@ export function TaskDetail() {
   const handleDelete = async () => {
     if (!confirm('确定要删除此任务吗？删除后将进入回收站。')) return;
     try {
-      await tasksApi.deleteTask(id!);
+      await tasksApi.delete(id!);
       alert('任务已删除');
       navigate('/tasks');
     } catch (error) {
@@ -701,7 +701,7 @@ export function TaskDetail() {
   const renderPlanningTab = () => {
     if (!task) return null;
 
-    const outline = task.outline || {};
+    const outline: any = task.outline || {};
     const evaluation = task.evaluation;
     const competitorAnalysis = task.competitor_analysis || {};
 

@@ -2,7 +2,7 @@
 
 .task-detail-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 256px 1fr;
   gap: 0;
   min-height: calc(100vh - 64px);
   background: var(--background);
@@ -315,6 +315,125 @@
   margin: 0 auto;
 }
 
+/* New Sidebar mapped from Design Proposal */
+.task-sidebar-new {
+  background-color: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: calc(100vh - 64px);
+  position: sticky;
+  top: 64px;
+  overflow-y: auto;
+  font-family: 'Inter', sans-serif;
+  color: #0f172a;
+  z-index: 10;
+}
+
+body[data-theme='dark'] .task-sidebar-new {
+  background-color: #020617;
+  border-right-color: #0f172a;
+  color: #f8fafc;
+}
+
+.sidebar-brand {
+  margin-bottom: 24px;
+  padding: 0 8px;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1d4ed8; /* blue-700 */
+  margin: 0;
+  font-family: 'Manrope', sans-serif;
+}
+body[data-theme='dark'] .brand-title { color: #60a5fa; /* blue-400 */ }
+
+.brand-subtitle {
+  font-size: 12px;
+  color: #64748b; /* slate-500 */
+  margin: 4px 0 0 0;
+}
+
+.task-topic-preview {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: #475569; /* slate-600 */
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+body[data-theme='dark'] .sidebar-nav-item { color: #94a3b8; /* slate-400 */ }
+
+.sidebar-nav-item:hover {
+  background-color: #e2e8f0; /* slate-200 */
+}
+body[data-theme='dark'] .sidebar-nav-item:hover { background-color: #1e293b; /* slate-800 */ }
+
+.sidebar-nav-item.active {
+  background-color: #ffffff;
+  color: #1d4ed8; /* blue-700 */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+body[data-theme='dark'] .sidebar-nav-item.active {
+  background-color: #0f172a; /* slate-900 */
+  color: #60a5fa; /* blue-400 */
+}
+
+.nav-item-icon {
+  font-size: 20px;
+}
+
+.nav-item-badge {
+  background-color: #ef4444; /* red-500 */
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+/* New Main Content Area */
+.task-main-content-new {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background: var(--background);
+  min-height: calc(100vh - 64px);
+}
+
+.tab-content-wrapper-new {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 /* Detail Tabs - Minimalist Underline Style */
 .detail-tabs {
   display: flex;
@@ -547,6 +666,31 @@
 .comment-author {
   font-weight: 600;
   color: var(--terracotta, #d66853);
+}
+
+/* ==========================================================================
+   PIPELINE STEP LINES (Vertical input-processing-output flow)
+   ========================================================================== */
+.step-line::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 40px;
+  bottom: -20px;
+  width: 2px;
+  background: var(--slate-200, #e2e8f0);
+}
+
+.dark .step-line::before {
+  background: var(--slate-700, #334155);
+}
+
+.step-line-active::before {
+  background: linear-gradient(to bottom, var(--blue-600, #2563eb), var(--slate-200, #e2e8f0));
+}
+
+.dark .step-line-active::before {
+  background: linear-gradient(to bottom, var(--blue-500, #3b82f6), var(--slate-700, #334155));
 }
 
 .comment-time {

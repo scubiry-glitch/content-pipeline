@@ -94,38 +94,37 @@ export function Layout() {
         currentTheme={currentTheme}
         onThemeChange={setTheme}
       />
-      <header className="app-header glass-effect">
-        <div className="header-content">
-          <div className="header-left">
-            <h1 className="header-title">内容生产流水线</h1>
+      <header className="sticky top-0 z-50 flex justify-between items-center w-full px-6 h-16 bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between w-full mx-auto max-w-[1600px]">
+          <div className="flex items-center gap-8">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50 tracking-tight font-headline" style={{ margin: 0 }}>Editorial Pipeline</h1>
           </div>
 
-          <nav className="header-nav">
+          <nav className="header-nav hidden md:flex gap-6 items-center">
             {mainNavItems.map((item) => (
-              <div key={item.to} className="nav-item-wrapper">
+              <div key={item.to} className="nav-item-wrapper relative group">
                 <NavLink
                   to={item.to}
                   className={({ isActive }) => 
-                    `nav-link ${isActivePath(location.pathname, item) ? 'active' : ''}`
+                    `nav-link font-['Manrope'] font-semibold text-sm transition-colors ${isActivePath(location.pathname, item) ? 'text-primary' : 'text-slate-500 hover:text-blue-500'}`
                   }
                   end={item.to === '/'}
+                  style={{ textDecoration: 'none', background: 'transparent', border: 'none' }}
                 >
-                  <span className="nav-icon">{item.icon}</span>
                   <span className="nav-label">{item.label}</span>
                 </NavLink>
                 {/* 子导航菜单 */}
                 {item.children && isActivePath(location.pathname, item) && (
-                  <div className="sub-nav glass-effect">
+                  <div className="sub-nav absolute top-full left-0 mt-2 bg-white shadow-lg rounded-lg border border-slate-100 p-2 z-50 min-w-max hidden group-hover:block">
                     {item.children.map((child) => (
                       <NavLink
                         key={child.to}
                         to={child.to}
                         className={({ isActive }) => 
-                          `sub-nav-link ${isActive ? 'active' : ''}`
+                          `sub-nav-link block px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-primary rounded ${isActive ? 'bg-slate-50 text-primary font-bold' : ''}`
                         }
                         end={child.to === item.to}
                       >
-                        <span className="sub-nav-icon">{child.icon}</span>
                         <span className="sub-nav-label">{child.label}</span>
                       </NavLink>
                     ))}
@@ -133,20 +132,34 @@ export function Layout() {
                 )}
               </div>
             ))}
+          </nav>
+
+          <div className="header-right flex items-center gap-4">
+            <div className="relative hidden sm:block">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔍</span>
+              <input 
+                className="pl-10 pr-4 py-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-1 focus:ring-primary w-64 transition-all" 
+                placeholder="Search topics... (⌘K)" 
+                type="text"
+                onClick={() => setIsSearchOpen(true)}
+              />
+            </div>
             
-            {/* 系统管理下拉菜单 */}
-            <div className="nav-dropdown">
+            <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
+            <NotificationBell />
+            
+            {/* 系统管理下拉菜单 (移至右上角) */}
+            <div className="nav-dropdown relative">
               <button 
-                className={`nav-link dropdown-trigger ${systemNavItems.some(item => location.pathname.startsWith(item.to)) ? 'active' : ''}`}
+                className={`p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all flex items-center justify-center`}
                 onClick={() => setIsSystemMenuOpen(!isSystemMenuOpen)}
                 onBlur={() => setTimeout(() => setIsSystemMenuOpen(false), 200)}
+                title="系统管理"
               >
-                <span className="nav-icon">⚙️</span>
-                <span className="nav-label">管理</span>
-                <span className="dropdown-arrow">{isSystemMenuOpen ? '▲' : '▼'}</span>
+                <span className="text-xl" style={{ margin: 0 }}>⚙️</span>
               </button>
               {isSystemMenuOpen && (
-                <div className="dropdown-menu glass-effect">
+                <div className="dropdown-menu absolute right-0 mt-2 bg-white shadow-lg rounded-lg border border-slate-100 p-2 z-50 min-w-[180px]">
                   {systemNavItems.map((item) => (
                     <NavLink
                       key={item.to}
@@ -163,19 +176,6 @@ export function Layout() {
                 </div>
               )}
             </div>
-          </nav>
-
-          <div className="header-right">
-            <button
-              className="search-trigger"
-              onClick={() => setIsSearchOpen(true)}
-              title="搜索 (⌘K / Ctrl+K)"
-            >
-              🔍 搜索
-              <span className="shortcut">⌘K</span>
-            </button>
-            <ThemeSwitcherMini currentTheme={currentTheme} onThemeChange={setTheme} />
-            <NotificationBell />
           </div>
         </div>
       </header>

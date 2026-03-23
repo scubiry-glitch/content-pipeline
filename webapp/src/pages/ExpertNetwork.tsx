@@ -7,8 +7,8 @@ import ReactECharts from 'echarts-for-react';
 import {
   getAllExperts,
   getExpertFeedbackStats,
-  type Expert,
 } from '../services/expertService';
+import type { Expert } from '../types';
 import { ExpertTabs } from './ExpertLibrary';
 import './ExpertNetwork.css';
 

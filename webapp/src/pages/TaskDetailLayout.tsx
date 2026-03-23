@@ -61,14 +61,14 @@ const STAGE_PIPELINES = {
   }
 };
 
-// Tab 配置
+// Tab 配置 (映射为左侧边导航)
 const TABS = [
-  { id: 'overview', label: '概览', icon: '📋', path: 'overview' },
-  { id: 'planning', label: '选题策划', icon: '💡', path: 'planning' },
-  { id: 'research', label: '深度研究', icon: '🔍', path: 'research' },
-  { id: 'writing', label: '文稿生成', icon: '✍️', path: 'writing' },
-  { id: 'reviews', label: '蓝军评审', icon: '👥', path: 'reviews' },
-  { id: 'quality', label: '质量分析', icon: '📊', path: 'quality' },
+  { id: 'overview', label: '概览', materialIcon: 'dashboard', path: 'overview' },
+  { id: 'planning', label: '选题策划', materialIcon: 'lightbulb', path: 'planning' },
+  { id: 'research', label: '深度研究', materialIcon: 'search', path: 'research' },
+  { id: 'writing', label: '文稿生成', materialIcon: 'edit_note', path: 'writing' },
+  { id: 'reviews', label: '蓝军评审', materialIcon: 'fact_check', path: 'reviews' },
+  { id: 'quality', label: '质量分析', materialIcon: 'analytics', path: 'quality' },
 ];
 
 export function TaskDetailLayout() {
@@ -638,13 +638,58 @@ export function TaskDetailLayout() {
 
   return (
     <div className="task-detail-layout">
-      {/* 左侧边栏 */}
-      <aside className="task-sidebar">
-        {/* 返回按钮 */}
-        <div className="sidebar-header">
-          <NavLink to="/tasks" className="back-link">
-            ← 返回任务列表
-          </NavLink>
+      {/* 左侧边栏 - 复用新版 HTML 样式架构 */}
+      <aside className="task-sidebar-new">
+        <div className="sidebar-brand">
+          <h2 className="brand-title">Content Pipeline</h2>
+          <p className="brand-subtitle">Active Production</p>
+        </div>
+
+        <div className="task-header-info mb-6 px-2">
+          <h1 className="task-topic-preview" title={task.topic}>{task.topic || 'Untitled Task'}</h1>
+        </div>
+
+        <nav className="sidebar-nav-menu">
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.id}
+              to={`/tasks/${id}/${tab.path}`}
+              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+              end={tab.id === 'overview'}
+            >
+              <span className="material-symbols-outlined nav-item-icon" style={{ fontVariationSettings: "'FILL' 1" }}>
+                {tab.materialIcon}
+              </span>
+              <span>{tab.label}</span>
+              {tab.id === 'reviews' && reviewSummary.total > 0 && (
+                <span className="nav-item-badge">{reviewSummary.total}</span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* 快捷操作 (移到底部) */}
+        <div className="sidebar-bottom-actions mt-auto p-2 border-t border-slate-200 dark:border-slate-800 pt-4 flex flex-col gap-2">
+          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-300 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-semibold shadow-sm hover:bg-slate-50 transition-all text-sm" onClick={() => setShowAssetModal(true)}>
+            <span className="material-symbols-outlined text-sm">attach_file</span>
+            <span>关联素材</span>
+          </button>
+          
+          {(task.status === 'planning' || task.status === 'outline_pending') && (
+            <button
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg font-semibold shadow-md hover:bg-blue-700 transition-all text-sm"
+              onClick={handleConfirmOutline}
+              disabled={actionLoading === 'confirm-outline'}
+            >
+              <span className="material-symbols-outlined text-sm">play_arrow</span>
+              <span>{actionLoading === 'confirm-outline' ? '处理中...' : '确认大纲'}</span>
+            </button>
+          )}
+
+          <button className="w-full flex items-center justify-center gap-2 py-2 bg-transparent text-slate-400 hover:text-red-500 rounded-lg font-semibold transition-all text-xs mt-2" onClick={handleDelete}>
+            <span className="material-symbols-outlined text-sm">delete</span>
+            <span>删除任务</span>
+          </button>
         </div>
 
         {/* 任务标题 */}
@@ -764,29 +809,10 @@ export function TaskDetailLayout() {
           </div>
         </div>
       </aside>
-
       {/* 右侧主内容区 */}
-      <main className="task-main-content">
-        {/* Tab 导航 */}
-        <div className="detail-tabs">
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.id}
-              to={`/tasks/${id}/${tab.path}`}
-              className={({ isActive }) => `tab-btn ${isActive ? 'active' : ''}`}
-              end={tab.id === 'overview'}
-            >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-label">{tab.label}</span>
-              {tab.id === 'reviews' && reviewSummary.total > 0 && (
-                <span className="tab-badge">{reviewSummary.total}</span>
-              )}
-            </NavLink>
-          ))}
-        </div>
-
-        {/* Tab 内容 - 通过 Outlet 渲染 */}
-        <div className="tab-content-wrapper">
+      <main className="task-main-content-new">
+        {/* Tab 内容 - 通过 Outlet 渲染，各 Tab 自身维护 Input/Process/Output 的 UI 结构 */}
+        <div className="tab-content-wrapper-new">
           <Outlet context={taskContext} />
         </div>
       </main>

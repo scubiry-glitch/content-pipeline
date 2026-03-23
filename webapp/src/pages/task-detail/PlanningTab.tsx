@@ -239,496 +239,393 @@ export function PlanningTab() {
   const displayOutline = versionOutline || outline;
 
   return (
-    <div className="tab-panel planning-panel animate-fade-in">
-      {/* ========== Sticky 导航栏 ========== */}
-      <nav className="planning-nav-pill glass-card">
-        <div className="nav-pill-items">
-          <button 
-            className="nav-pill-item active" 
-            onClick={() => scrollToSection(outputRef)}
-          >
-            <span className="icon">📤</span> 大纲
-          </button>
-          <button 
-            className="nav-pill-item" 
-            onClick={() => scrollToSection(inputRef)}
-          >
-            <span className="icon">📥</span> 评估
-          </button>
-          {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
-            <button 
-              className="nav-pill-item" 
-              onClick={() => scrollToSection(processRef)}
-            >
-              <span className="icon">⚙️</span> 洞见
-            </button>
-          )}
-          {versions.length > 0 && (
-            <button 
-              className="nav-pill-item" 
-              onClick={() => scrollToSection(versionRef)}
-            >
-              <span className="icon">📜</span> 历史
-            </button>
-          )}
+    <div className="tab-panel planning-panel animate-fade-in pb-32">
+      {/* ========== Header ========== */}
+      <header className="mb-12">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stage 1</span>
+          <span className="material-symbols-outlined text-sm">chevron_right</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Ideation & Topic Planning</span>
         </div>
-      </nav>
+        <h1 className="text-4xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white">Topic Discovery & Analysis</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-2xl">Leveraging multi-source intelligence to identify high-potential content angles and structured outlines.</p>
+      </header>
 
-      {/* ========== 版本选择器 ========== */}
-      {versions.length > 0 && (
-        <div className="version-selector-bar">
-          <label>版本：</label>
-          <select 
-            value={selectedVersion || ''} 
-            onChange={(e) => handleVersionChange(e.target.value ? parseInt(e.target.value) : null)}
-            className="version-select"
-          >
-            <option value="">当前版本</option>
-            {versions.map((v) => (
-              <option key={v.version} value={v.version}>
-                版本 {v.version} ({new Date(v.created_at).toLocaleDateString()})
-                {v.comment ? ` - ${v.comment.substring(0, 20)}...` : ''}
-              </option>
-            ))}
-          </select>
-          {selectedVersion && (
-            <button 
-              className="btn btn-sm btn-secondary"
-              onClick={() => handleVersionChange(null)}
-            >
-              返回当前
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ========== 1. 输出 (置顶) ========== */}
-      <div ref={outputRef} className="section-header">
-        <h3 className="section-title">
-          <span className="icon">📤</span> 输出
-        </h3>
-        <span className="section-desc">根据生产流水线生成的文章大纲</span>
-      </div>
-
-      <div className="info-card full-width output-card">
-        <div className="card-header-with-actions">
-          <h3 className="card-title">
-            <span className="icon">📝</span> 文章大纲
-            {selectedVersion && <span className="version-badge highlight">历史版本 {selectedVersion}</span>}
-          </h3>
-          <div className="header-actions">
-            {/* 编辑器模式切换 */}
-            {!editingOutline && displayOutline.sections && displayOutline.sections.length > 0 && !selectedVersion && (
-              <div className="editor-mode-toggle">
-                <button 
-                  className={`btn-mode ${editorMode === 'edit' ? 'active' : ''}`}
-                  onClick={() => setEditorMode('edit')}
-                  title="仅编辑"
-                >
-                  ✏️ 编辑
-                </button>
-                <button 
-                  className={`btn-mode ${editorMode === 'preview' ? 'active' : ''}`}
-                  onClick={() => setEditorMode('preview')}
-                  title="仅预览"
-                >
-                  👁️ 预览
-                </button>
-                <button 
-                  className={`btn-mode ${editorMode === 'split' ? 'active' : ''}`}
-                  onClick={() => setEditorMode('split')}
-                  title="分屏模式"
-                >
-                  ⬌ 分屏
-                </button>
-              </div>
-            )}
-            {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
-              <button
-                className="btn btn-success"
-                onClick={onConfirmOutline}
-                disabled={actionLoading === 'confirm-outline'}
-              >
-                {actionLoading === 'confirm-outline' ? '确认中...' : '✓ 确认大纲并继续'}
-              </button>
-            )}
+      {/* ========== Stepper Container ========== */}
+      <div className="space-y-16">
+        {/* ========== Section 1: Input ========== */}
+        <section ref={inputRef} className="relative step-line step-line-active pl-12">
+          <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined">input</span>
           </div>
-        </div>
-
-        {editingOutline ? (
-          <div className={`outline-container mode-${editorMode}`}>
-            {(editorMode === 'edit' || editorMode === 'split') && (
-              <div className="outline-editor-panel">
-                <textarea
-                  value={outlineDraft}
-                  onChange={(e) => onOutlineChange(e.target.value)}
-                  className="outline-textarea"
-                  rows={editorMode === 'split' ? 25 : 20}
-                />
-                <div className="editor-actions">
-                  <button className="btn btn-secondary" onClick={handleCancelClick}>
-                    取消
-                  </button>
-                  <button className="btn btn-primary" onClick={handleSaveClick}>
-                    保存
-                  </button>
-                </div>
-              </div>
-            )}
-            {(editorMode === 'preview' || editorMode === 'split') && (
-              <div className="outline-preview-panel">
-                <MarkdownRenderer content={outlineToMarkdown()} />
-              </div>
-            )}
-          </div>
-        ) : displayOutline.sections && displayOutline.sections.length > 0 ? (
-          <div className={`outline-container mode-${editorMode}`}>
-            {editorMode === 'edit' ? (
-              <div className="outline-editor-panel">
-                <pre className="outline-source">
-                  <code>{outlineToMarkdown(displayOutline)}</code>
-                </pre>
-              </div>
-            ) : editorMode === 'preview' ? (
-              <div className="outline-preview-panel">
-                <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
-              </div>
-            ) : (
-              <>
-                <div className="outline-editor-panel">
-                  <pre className="outline-source">
-                    <code>{outlineToMarkdown(displayOutline)}</code>
-                  </pre>
-                </div>
-                <div className="outline-preview-panel">
-                  <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-icon">📝</div>
-            <div className="empty-title">暂无大纲</div>
-            <p>任务进入选题策划阶段后将自动生成文章大纲</p>
-          </div>
-        )}
-      </div>
-
-      {/* ========== 2. 输入 ========== */}
-      <div ref={inputRef} className="section-header">
-        <h3 className="section-title">
-          <span className="icon">📥</span> 输入
-        </h3>
-        <span className="section-desc">初期的评价指标与相关竞品分析</span>
-      </div>
-
-      <div className="input-grid">
-        {/* 选题质量评估 */}
-        {evaluation && (
-          <div className="info-card input-card glass-card">
-            <h3 className="card-title">
-              <span className="icon">📊</span> 选题质量评估
-            </h3>
-            <div className="evaluation-content">
-              <div className="score-circle-container">
-                <div
-                  className="score-circle"
-                  style={{
-                    background: `conic-gradient(
-                      ${evaluation.score >= 80 ? '#10b981' : evaluation.score >= 60 ? '#f59e0b' : '#ef4444'} ${evaluation.score * 3.6}deg,
-                      #e5e7eb 0deg
-                    )`
-                  }}
-                >
-                  <div className="score-circle-inner">
-                    <span className="score-value">{evaluation.score}</span>
-                    <span className="score-label">分</span>
-                  </div>
-                </div>
-                <div className={`score-verdict ${evaluation.score >= 60 ? 'pass' : 'fail'}`}>
-                  {evaluation.score >= 80 ? '✅ 强烈推荐' :
-                   evaluation.score >= 60 ? '⚠️ 可以写' :
-                   evaluation.score >= 40 ? '❌ 有风险' : '❌ 不建议'}
-                </div>
-              </div>
-
-              <div className="dimension-scores">
-                {Object.entries(evaluation.dimensions || {}).map(([key, value]: [string, any]) => {
-                  const labels: Record<string, string> = {
-                    dataAvailability: '数据可得性 (40%)',
-                    topicHeat: '话题热度 (25%)',
-                    differentiation: '差异化 (20%)',
-                    timeliness: '时效性 (15%)'
-                  };
-                  const colors: Record<string, string> = {
-                    dataAvailability: '#6366f1',
-                    topicHeat: '#f59e0b',
-                    differentiation: '#06b6d4',
-                    timeliness: '#10b981'
-                  };
-
-                  return (
-                    <div key={key} className="dimension-item">
-                      <div className="dimension-header">
-                        <span className="dimension-label">{labels[key] || key}</span>
-                        <span className="dimension-value">{value}分</span>
-                      </div>
-                      <div className="dimension-bar-bg">
-                        <div
-                          className="dimension-bar-fill"
-                          style={{ width: `${value}%`, background: colors[key] || '#6366f1' }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <div className="flex items-baseline justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Input: Multi-source Discovery</h3>
+            <div className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-xs font-bold rounded-full flex items-center gap-2">
+              <span className="material-symbols-outlined text-xs">hub</span>
+              Quality Evaluation & Competitors
             </div>
-
-            {evaluation?.analysis && (
-              <div className="evaluation-analysis">
-                <strong>分析：</strong>{evaluation.analysis}
-              </div>
-            )}
-
-            {evaluation?.suggestions?.length > 0 && (
-              <div className={`evaluation-suggestions ${evaluation.score >= 60 ? 'positive' : 'warning'}`}>
-                <div className="suggestions-title">💡 建议</div>
-                {evaluation.suggestions.map((s: string, i: number) => (
-                  <div key={i} className="suggestion-item">• {s}</div>
-                ))}
-              </div>
-            )}
           </div>
-        )}
-
-        {/* 竞品分析 */}
-        {competitorAnalysis.reports?.length > 0 && (
-          <div className="info-card input-card glass-card">
-            <h3 className="card-title">
-              <span className="icon">⚔️</span> 竞品分析
-            </h3>
-            <p className="competitor-summary">
-              找到 {competitorAnalysis.summary?.totalFound || competitorAnalysis.reports.length} 篇相关研报
-            </p>
-
-            {competitorAnalysis.differentiationSuggestions?.length > 0 && (
-              <div className="differentiation-suggestions">
-                {competitorAnalysis.differentiationSuggestions.slice(0, 2).map((s: any, i: number) => (
-                  <div key={i} className="diff-suggestion-card">
-                    <div className="diff-header">
-                      <span className="diff-angle">{s.angle}</span>
-                      <span className={`diff-value ${s.potentialValue}`}>
-                        {s.potentialValue === 'high' ? '高价值' : s.potentialValue === 'medium' ? '中价值' : '低价值'}
-                      </span>
-                    </div>
-                    <p className="diff-rationale">{s.rationale}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {competitorAnalysis.summary?.gaps?.length > 0 && (
-              <div className="market-gaps">
-                <h4>🎯 市场空白点</h4>
-                {competitorAnalysis.summary.gaps.slice(0, 3).map((g: string, i: number) => (
-                  <div key={i} className="gap-item">• {g}</div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ========== 3. 加工 ========== */}
-      {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
-        <>
-          <div ref={processRef} className="section-header">
-            <h3 className="section-title">⚙️ 加工</h3>
-            <span className="section-desc">知识库洞见与新观点</span>
-          </div>
-
-          <div className="info-card full-width process-card glass-card">
-            <h3 className="card-title">
-              <span className="icon">💡</span> 知识库洞见与新观点
-            </h3>
-
-            <div className="insights-grid">
-              {outline.knowledgeInsights?.length > 0 && (
-                <div className="insights-column">
-                  <h4 className="column-subtitle">📚 基于历史研究的发现</h4>
-                  <div className="insight-list">
-                    {outline.knowledgeInsights.map((insight: any, i: number) => (
-                      <div
-                        key={i}
-                        className="insight-card-premium"
-                        data-type={insight.type}
-                      >
-                        <div className="insight-header">
-                          <span className="insight-type-badge">
-                            {insight.type === 'trend' ? '📈 趋势延续' : insight.type === 'gap' ? '🔍 研究空白' : '📖 观点演变'}
-                          </span>
-                          <span className="insight-relevance">相关度 {(insight.relevance * 100).toFixed(0)}%</span>
-                        </div>
-                        <p className="insight-content">{insight.content}</p>
-                        {insight.source && <p className="insight-source">来源: {insight.source}</p>}
+          
+          <div className="input-grid">
+            {/* 选题质量评估 */}
+            {evaluation && (
+              <div className="info-card input-card glass-card">
+                <h3 className="card-title">
+                  <span className="icon">📊</span> 选题综合评估
+                </h3>
+                <div className="evaluation-content">
+                  <div className="score-circle-container">
+                    <div
+                      className="score-circle"
+                      style={{
+                        background: `conic-gradient(
+                          ${evaluation.score >= 80 ? '#10b981' : evaluation.score >= 60 ? '#f59e0b' : '#ef4444'} ${evaluation.score * 3.6}deg,
+                          #e5e7eb 0deg
+                        )`
+                      }}
+                    >
+                      <div className="score-circle-inner">
+                        <span className="score-value">{evaluation.score}</span>
+                        <span className="score-label" style={{color:'black'}}>分</span>
                       </div>
-                    ))}
+                    </div>
+                    <div className={`score-verdict ${evaluation.score >= 60 ? 'pass' : 'fail'}`}>
+                      {evaluation.score >= 80 ? '✅ 强烈推荐' :
+                       evaluation.score >= 60 ? '⚠️ 可以写' :
+                       evaluation.score >= 40 ? '❌ 有风险' : '❌ 不建议'}
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {outline.novelAngles?.length > 0 && (
-                <div className="insights-column">
-                  <h4 className="column-subtitle">✨ 建议的新研究角度</h4>
-                  <div className="angle-list">
-                    {outline.novelAngles.map((angle: any, i: number) => {
-                      const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : angle.differentiation_score >= 5 ? 'medium' : 'low');
+                  <div className="dimension-scores">
+                    {Object.entries(evaluation.dimensions || {}).map(([key, value]: [string, any]) => {
+                      const labels: Record<string, string> = {
+                        dataAvailability: '数据可得性 (40%)',
+                        topicHeat: '话题热度 (25%)',
+                        differentiation: '差异化 (20%)',
+                        timeliness: '时效性 (15%)'
+                      };
+                      const colors: Record<string, string> = {
+                        dataAvailability: '#6366f1',
+                        topicHeat: '#f59e0b',
+                        differentiation: '#06b6d4',
+                        timeliness: '#10b981'
+                      };
+
                       return (
-                        <div key={i} className="angle-card-premium" data-impact={impact}>
-                          <div className="angle-header">
-                            <strong className="angle-title">{angle.angle}</strong>
-                            <span className={`impact-badge ${impact}`}>
-                              {impact === 'high' ? '高' : impact === 'medium' ? '中' : '低'}
-                            </span>
+                        <div key={key} className="dimension-item">
+                          <div className="dimension-header">
+                            <span className="dimension-label">{labels[key] || key}</span>
+                            <span className="dimension-value">{value}分</span>
                           </div>
-                          <p className="angle-desc"><strong>理由:</strong> {angle.description || angle.rationale}</p>
-                          <div className="angle-footer">
-                            <span className="diff-score">差异化: <strong>{angle.differentiation_score || 0}/10</strong></span>
+                          <div className="dimension-bar-bg">
+                            <div
+                              className="dimension-bar-fill"
+                              style={{ width: `${value}%`, background: colors[key] || '#6366f1' }}
+                            />
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
-      {/* ========== 4. 评论区域 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">💬 评论</h3>
-        <span className="section-desc">对大纲的意见和建议</span>
-      </div>
-
-      <div className="info-card full-width comments-card">
-        <h3 className="card-title">大纲评论 ({comments.length})</h3>
-        
-        {/* 评论输入 */}
-        <div className="comment-input-area">
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="输入对大纲的意见或建议..."
-            className="comment-textarea"
-            rows={3}
-          />
-          <button 
-            className="btn btn-primary"
-            onClick={handleAddComment}
-            disabled={!newComment.trim()}
-          >
-            添加评论
-          </button>
-        </div>
-
-        {/* 评论列表 */}
-        <div className="comments-list">
-          {loadingComments ? (
-            <div className="loading">加载中...</div>
-          ) : comments.length === 0 ? (
-            <div className="empty-comments">暂无评论，添加评论后可在重做选题策划时作为参考</div>
-          ) : (
-            comments.map((comment) => (
-              <div key={comment.id} className="comment-item">
-                <div className="comment-header">
-                  <span className="comment-author">{comment.created_by}</span>
-                  <span className="comment-time">
-                    {new Date(comment.created_at).toLocaleString()}
-                  </span>
-                  <button 
-                    className="comment-delete"
-                    onClick={() => handleDeleteComment(comment.id)}
-                    title="删除"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="comment-content">{comment.content}</div>
+                {evaluation?.analysis && (
+                  <div className="evaluation-analysis mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <strong>AI 分析建议：</strong>{evaluation.analysis}
+                  </div>
+                )}
               </div>
-            ))
-          )}
-        </div>
+            )}
+
+            {/* 竞品分析 */}
+            {competitorAnalysis.reports?.length > 0 && (
+              <div className="info-card input-card glass-card">
+                <h3 className="card-title">
+                  <span className="icon">⚔️</span> 竞品分析与情报接入
+                </h3>
+                <p className="competitor-summary text-sm text-slate-500 mb-4">
+                  成功挖掘到 {competitorAnalysis.summary?.totalFound || competitorAnalysis.reports.length} 篇结构化相关研报与资讯。
+                </p>
+
+                {competitorAnalysis.differentiationSuggestions?.length > 0 && (
+                  <div className="differentiation-suggestions">
+                    {competitorAnalysis.differentiationSuggestions.slice(0, 3).map((s: any, i: number) => (
+                      <div key={i} className="diff-suggestion-card mb-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                        <div className="diff-header flex justify-between items-center mb-1">
+                          <span className="diff-angle font-bold text-slate-700 dark:text-slate-300">{s.angle}</span>
+                          <span className={`diff-value text-xs px-2 py-0.5 rounded ${s.potentialValue === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {s.potentialValue === 'high' ? '高价值角度' : '中低价值'}
+                          </span>
+                        </div>
+                        <p className="diff-rationale text-xs text-slate-500">{s.rationale}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ========== Section 2: Process ========== */}
+        {(outline?.knowledgeInsights?.length > 0 || outline?.novelAngles?.length > 0) && (
+          <section ref={processRef} className="relative step-line step-line-active pl-12">
+            <div className="absolute left-0 top-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+              <span className="material-symbols-outlined">memory</span>
+            </div>
+            <h3 className="text-xl font-bold font-headline mb-6">Process: AI Synthesis & Ranking</h3>
+
+            <div className="info-card full-width process-card glass-card">
+              <div className="insights-grid">
+                {outline.knowledgeInsights?.length > 0 && (
+                  <div className="insights-column">
+                    <h4 className="column-subtitle font-bold text-slate-700 dark:text-slate-300 mb-4">📚 基于历史研究的观点聚类</h4>
+                    <div className="insight-list space-y-3">
+                      {outline.knowledgeInsights.map((insight: any, i: number) => (
+                        <div key={i} className="insight-card-premium p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+                          <div className="insight-header flex justify-between items-center mb-2">
+                            <span className="insight-type-badge text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
+                              {insight.type === 'trend' ? '📈 趋势延续' : insight.type === 'gap' ? '🔍 研究空白' : '📖 观点演变'}
+                            </span>
+                            <span className="insight-relevance text-xs text-slate-400">相似度 {(insight.relevance * 100).toFixed(0)}%</span>
+                          </div>
+                          <p className="insight-content text-sm text-slate-600 dark:text-slate-400">{insight.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {outline.novelAngles?.length > 0 && (
+                  <div className="insights-column mt-6 md:mt-0">
+                    <h4 className="column-subtitle font-bold text-slate-700 dark:text-slate-300 mb-4">✨ 推荐新维度挖掘</h4>
+                    <div className="angle-list space-y-3">
+                      {outline.novelAngles.map((angle: any, i: number) => {
+                        const impact = angle.potentialImpact || (angle.differentiation_score >= 8 ? 'high' : 'medium');
+                        return (
+                          <div key={i} className="angle-card-premium p-4 border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-900/10 rounded-lg">
+                            <div className="angle-header flex justify-between items-center mb-2">
+                              <strong className="angle-title text-sm">{angle.angle}</strong>
+                              <span className={`impact-badge text-xs px-2 py-0.5 rounded ${impact === 'high' ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                {impact === 'high' ? '高潜' : '中潜'}
+                              </span>
+                            </div>
+                            <p className="angle-desc text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">{angle.description || angle.rationale}</p>
+                            <div className="angle-footer pt-3 border-t border-orange-200/50 dark:border-orange-800/50">
+                              <span className="diff-score text-xs text-orange-700 dark:text-orange-400 font-bold">差异化评分: {angle.differentiation_score || 0}/10</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ========== Section 3: Output ========== */}
+        <section ref={outputRef} className="relative pl-12">
+          <div className="absolute left-0 top-0 w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined">auto_awesome</span>
+          </div>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Output: Streaming Outline Generation</h3>
+            {actionLoading === 'confirm-outline' ? (
+              <div className="flex items-center gap-2 px-3 py-1 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+                <span className="text-xs font-bold text-orange-600 dark:text-orange-400">Streaming Generation...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {versions.length > 0 && (
+                  <select 
+                    value={selectedVersion || ''} 
+                    onChange={(e) => handleVersionChange(e.target.value ? parseInt(e.target.value) : null)}
+                    className="version-select border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm rounded-lg px-2 py-1"
+                  >
+                    <option value="">当前最新版本</option>
+                    {versions.map((v) => (
+                      <option key={v.version} value={v.version}>
+                        V{v.version} - {new Date(v.created_at).toLocaleDateString()}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="info-card full-width output-card border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-800">
+            <div className="card-header-with-actions flex justify-between items-center mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="card-title text-lg font-bold flex items-center m-0 border-none pb-0">
+                <span className="icon mr-2 text-xl">📝</span> 文章分层大纲 (Macro/Meso/Micro)
+                {selectedVersion && <span className="version-badge highlight ml-3 text-xs bg-orange-500 text-white px-2 py-1 rounded">历史版本 {selectedVersion}</span>}
+              </h3>
+              <div className="header-actions flex gap-2">
+                {!editingOutline && displayOutline.sections && displayOutline.sections.length > 0 && !selectedVersion && (
+                  <div className="editor-mode-toggle flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'edit' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('edit')}>✏️ Edit</button>
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'preview' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('preview')}>👁️ Preview</button>
+                    <button className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${editorMode === 'split' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`} onClick={() => setEditorMode('split')}>⬌ Split</button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {editingOutline ? (
+              <div className={`outline-container mode-${editorMode}`}>
+                {(editorMode === 'edit' || editorMode === 'split') && (
+                  <div className="outline-editor-panel">
+                    <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Markdown Editor</div>
+                    <textarea
+                      value={outlineDraft}
+                      onChange={(e) => onOutlineChange(e.target.value)}
+                      className="outline-textarea w-full p-4 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      rows={editorMode === 'split' ? 25 : 20}
+                    />
+                    <div className="editor-actions mt-4 flex justify-end gap-3">
+                      <button className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-bold" onClick={handleCancelClick}>Cancel</button>
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold shadow-md" onClick={handleSaveClick}>Save Draft</button>
+                    </div>
+                  </div>
+                )}
+                {(editorMode === 'preview' || editorMode === 'split') && (
+                  <div className="outline-preview-panel bg-white dark:bg-slate-900 p-6 border border-slate-200 dark:border-slate-800 rounded-lg prose dark:prose-invert max-w-none">
+                    <MarkdownRenderer content={outlineToMarkdown()} />
+                  </div>
+                )}
+              </div>
+            ) : displayOutline.sections && displayOutline.sections.length > 0 ? (
+               <div className={`outline-container mode-${editorMode}`}>
+                {editorMode === 'edit' ? (
+                  <div className="outline-editor-panel relative">
+                    <div className="absolute top-2 right-2 flex gap-2">
+                       <button className="p-2 bg-white shadow rounded text-slate-500 hover:text-blue-600" onClick={() => { onEditOutline(); setEditorMode('split'); }}>🔗 Start Editing</button>
+                    </div>
+                    <pre className="outline-source bg-slate-50 dark:bg-slate-900 p-6 rounded-lg overflow-auto max-h-[600px] border border-slate-200 dark:border-slate-800">
+                      <code className="text-sm font-mono text-slate-800 dark:text-slate-300">{outlineToMarkdown(displayOutline)}</code>
+                    </pre>
+                  </div>
+                ) : editorMode === 'preview' ? (
+                  <div className="outline-preview-panel bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 prose dark:prose-invert max-w-none">
+                    <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="outline-editor-panel relative group">
+                      <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button className="p-2 bg-white shadow rounded text-xs font-bold text-blue-600" onClick={() => { onEditOutline(); }}>Start Editing</button>
+                      </div>
+                      <pre className="outline-source bg-slate-50 dark:bg-slate-900 p-6 rounded-lg overflow-auto max-h-[800px] border border-slate-200 dark:border-slate-800">
+                        <code className="text-sm font-mono whitespace-pre-wrap">{outlineToMarkdown(displayOutline)}</code>
+                      </pre>
+                    </div>
+                    <div className="outline-preview-panel p-6 overflow-auto max-h-[800px] bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 prose dark:prose-invert max-w-none">
+                      <MarkdownRenderer content={outlineToMarkdown(displayOutline)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="empty-state py-20 text-center">
+                <div className="empty-icon text-6xl mb-4 opacity-50">📝</div>
+                <div className="empty-title text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Awaiting Generation</div>
+                <p className="text-slate-500">The outline generation process will commence automatically based on parameters.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ========== Section 4: Feedback & Versions Board ========== */}
+        <section className="pt-8 mt-16 border-t border-slate-200 dark:border-slate-800">
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+             {/* 评论交互区 */}
+             <div>
+                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-orange-500">chat</span> Feedback Interventions</h3>
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="comment-input-area mb-4">
+                    <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Drop expert critiques or manual overrides here..." className="w-full p-3 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 mb-2" rows={3} />
+                    <button className="px-4 py-2 bg-slate-800 dark:bg-slate-700 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-colors" onClick={handleAddComment} disabled={!newComment.trim()}>Push Feedback</button>
+                  </div>
+                  
+                  <div className="comments-list space-y-3 max-h-[400px] overflow-auto">
+                    {loadingComments ? (
+                      <div className="text-sm text-slate-400 p-4 text-center">Loading...</div>
+                    ) : comments.length === 0 ? (
+                      <div className="text-sm text-slate-400 p-4 text-center italic">No interventions tracked.</div>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className="comment-item bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                          <div className="comment-header flex justify-between items-center mb-2">
+                            <span className="comment-author text-xs font-bold text-orange-600 dark:text-orange-400">{comment.created_by}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="comment-time text-[10px] text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
+                              <button className="text-slate-400 hover:text-red-500 text-xs" onClick={() => handleDeleteComment(comment.id)}>✕</button>
+                            </div>
+                          </div>
+                          <div className="comment-content text-sm text-slate-700 dark:text-slate-300">{comment.content}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+             </div>
+
+             {/* 版本历史区 */}
+             <div>
+                <h3 className="text-lg font-bold font-headline mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-blue-500">history</span> Version Timeline</h3>
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 max-h-[600px] overflow-auto">
+                   {versions.length === 0 ? (
+                      <div className="text-sm text-slate-400 p-4 text-center italic">No snapshots recorded yet.</div>
+                   ) : (
+                      <div className="relative border-l-2 border-slate-200 dark:border-slate-700 ml-3 space-y-6">
+                        {versions.map((v) => (
+                          <div key={v.version} className="relative pl-6">
+                            <span className="absolute -left-[9px] top-1 w-4 h-4 bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-full"></span>
+                            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-start">
+                              <div>
+                                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded">v{v.version}</span>
+                                <p className="text-[10px] text-slate-400 mt-1">{new Date(v.created_at).toLocaleString()}</p>
+                                {v.comment && <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 italic">{v.comment}</p>}
+                              </div>
+                              <button className="text-xs text-blue-600 hover:underline font-bold" onClick={() => handleVersionChange(v.version)}>View</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                   )}
+                </div>
+             </div>
+           </div>
+        </section>
       </div>
 
-      {/* ========== 5. 版本历史 ========== */}
-      {versions.length > 0 && (
-        <>
-          <div ref={versionRef} className="section-header">
-            <h3 className="section-title">📜 版本历史</h3>
-            <span className="section-desc">大纲修改记录</span>
+      {/* ========== Bottom Global Action Bar ========== */}
+      <div className="fixed bottom-0 left-[256px] right-0 h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-40 flex items-center justify-center px-8 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+        <div className="max-w-5xl w-full flex items-center justify-between">
+          <div className="flex items-center gap-4">
+             <span className="text-sm font-medium text-slate-500">
+               Status: <span className={`uppercase font-bold ${task.status === 'planning' ? 'text-blue-600' : 'text-slate-700 dark:text-slate-300'}`}>{task.status.replace('_', ' ')}</span>
+             </span>
           </div>
-
-          <div className="info-card full-width versions-card">
-            <h3 className="card-title">历史版本 ({versions.length})</h3>
-            <div className="versions-list">
-              {versions.map((v) => (
-                <div key={v.version} className="version-item">
-                  <span className="version-num">版本 {v.version}</span>
-                  <span className="version-date">{new Date(v.created_at).toLocaleString()}</span>
-                  {v.comment && <span className="version-comment">{v.comment}</span>}
-                  <button 
-                    className="btn btn-sm"
-                    onClick={() => handleVersionChange(v.version)}
-                  >
-                    查看
-                  </button>
-                </div>
-              ))}
-            </div>
+          
+          <div className="flex items-center gap-4">
+            <button className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2" onClick={handleRedoClick}>
+                <span className="material-symbols-outlined text-lg">sync</span>
+                Regenerate Stage
+            </button>
+            {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
+            <button className="px-6 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg shadow-md hover:bg-blue-700 transition-all flex items-center gap-2"
+                onClick={onConfirmOutline}
+                disabled={actionLoading === 'confirm-outline'}>
+                {actionLoading === 'confirm-outline' ? 'Streaming...' : 'Proceed Details'}
+                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+            </button>
+            )}
           </div>
-        </>
-      )}
-
-      {/* ========== 悬浮操作按钮 ========== */}
-      <div className="floating-actions">
-        {!editingOutline ? (
-          <button 
-            className="fab-primary" 
-            onClick={handleEditClick}
-            title="编辑大纲"
-          >
-            ✏️ 编辑
-          </button>
-        ) : (
-          <>
-            <button 
-              className="fab-success" 
-              onClick={handleSaveClick}
-              title="保存大纲"
-            >
-              ✓ 保存
-            </button>
-            <button 
-              className="fab-secondary" 
-              onClick={handleCancelClick}
-              title="取消编辑"
-            >
-              ✕ 取消
-            </button>
-          </>
-        )}
-        <button
-          className="fab-warning"
-          onClick={handleRedoClick}
-          disabled={actionLoading === 'redo-planning'}
-          title="重做选题策划（将当前大纲保存到历史版本，并根据评论重新生成）"
-        >
-          {actionLoading === 'redo-planning' ? '⏳' : '🔄 重做'}
-        </button>
+        </div>
       </div>
 
       {/* ========== 重做对话框 ========== */}

@@ -1,7 +1,8 @@
 // Bindings.tsx - 目录绑定独立页面
 import { useState, useEffect } from 'react';
 import { bindingsApi, themesApi } from '../api/client';
-import type { DirectoryBinding, AssetTheme } from '../types';
+import type { AssetTheme } from '../types';
+import type { DirectoryBinding } from '../api/client';
 import './Bindings.css';
 
 export function Bindings() {

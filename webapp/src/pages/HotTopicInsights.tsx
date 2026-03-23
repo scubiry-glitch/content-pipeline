@@ -125,7 +125,7 @@ function convertToStorable(
           focusAreas: report.seniorExpertReview.focusAreas,
           suggestions: report.seniorExpertReview.suggestions,
           confidence: report.seniorExpertReview.confidence,
-          timestamp: report.seniorExpertReview.timestamp,
+          timestamp: report.seniorExpertReview.createdAt || new Date().toISOString(),
         }
       : undefined,
     domainExpertReviews: report.domainExpertReviews.map((r) => ({

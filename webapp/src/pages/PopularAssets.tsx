@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { assetUsageService, type PopularAsset } from '../services/assetUsageService';
+import { assetUsageService } from '../services/assetUsageService';
+import type { PopularAsset } from '../api/client';
 import './PopularAssets.css';
 
 export function PopularAssets() {
@@ -90,7 +91,7 @@ export function PopularAssets() {
               </div>
 
               <div className="asset-icon">
-                {getAssetTypeIcon(item.asset.type)}
+               <span className="item-type">{getAssetTypeIcon(item.asset.asset_type)}</span>
               </div>
 
               <div className="asset-info">

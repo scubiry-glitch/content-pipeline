@@ -107,397 +107,310 @@ export function ReviewsTab() {
 
   const renderReviewItem = (item: any, idx: number) => {
     const statusLabels: Record<string, { text: string; class: string }> = {
-      pending: { text: '⏳ 待处理', class: 'pending' },
-      accepted: { text: '✓ 已接受', class: 'accepted' },
-      accept: { text: '✓ 已接受', class: 'accepted' },
-      ignored: { text: '⊘ 已忽略', class: 'ignored' },
-      manual_resolved: { text: '✓ 已手动处理', class: 'manual' },
-      completed: { text: '✓ 已完成', class: 'accepted' },
-      reject: { text: '✗ 已拒绝', class: 'ignored' },
-      revise: { text: '↻ 需修改', class: 'warning' }
+      pending: { text: '⏳ Pending', class: 'bg-slate-100 text-slate-600' },
+      accepted: { text: '✓ Accepted', class: 'bg-green-100 text-green-700' },
+      accept: { text: '✓ Accepted', class: 'bg-green-100 text-green-700' },
+      ignored: { text: '⊘ Ignored', class: 'bg-slate-200 text-slate-500' },
+      manual_resolved: { text: '✓ Manual Res.', class: 'bg-blue-100 text-blue-700' },
+      completed: { text: '✓ Completed', class: 'bg-green-100 text-green-700' },
+      reject: { text: '✗ Rejected', class: 'bg-red-100 text-red-700' },
+      revise: { text: '↻ Revise', class: 'bg-orange-100 text-orange-700' }
     };
     const status = statusLabels[item.status || 'pending'] || statusLabels['pending'];
 
+    // Map severity to colors
+    const severityColor = item.severity === 'high' || item.severity === 'critical' ? 'bg-red-500 animate-pulse' : 
+                          item.severity === 'medium' || item.severity === 'warning' ? 'bg-orange-500' : 'bg-slate-300';
+
     return (
-      <div
-        key={`${item.reviewId}-${idx}`}
-        className={`review-question-item ${item.status || 'pending'}`}
-        style={{ opacity: item.status && item.status !== 'pending' ? 0.7 : 1 }}
-      >
-        <div className="review-question-header">
-          <div className="reviewer-badge">
-            <span className="reviewer-icon">{item.expertIcon || '👤'}</span>
-            <span style={{ fontWeight: 600, color: '#374151' }}>{item.expertName || '专家'}</span>
-            <span style={{ 
-              fontSize: '11px', 
-              padding: '2px 8px', 
-              background: item.expertRole === 'challenger' ? '#fee2e2' : 
-                         item.expertRole === 'expander' ? '#fef3c7' : 
-                         item.expertRole === 'synthesizer' ? '#e0f2fe' : '#f3f4f6',
-              color: item.expertRole === 'challenger' ? '#991b1b' : 
-                     item.expertRole === 'expander' ? '#92400e' : 
-                     item.expertRole === 'synthesizer' ? '#075985' : '#4b5563',
-              borderRadius: '4px',
-              marginLeft: '8px'
-            }}>
-              {item.expertRole === 'challenger' ? '批判者' : 
-               item.expertRole === 'expander' ? '拓展者' : 
-               item.expertRole === 'synthesizer' ? '提炼者' : item.expertRole}
-            </span>
-            {item.location && <span className="location">📍 {item.location}</span>}
-          </div>
-          <div className="review-badges">
-            <span className={`status-badge ${status.class}`}>{status.text}</span>
-            <span className={`severity-badge ${item.severity}`}>{item.severity}</span>
-          </div>
-        </div>
+      <div key={`${item.reviewId}-${idx}`} className="bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg relative group transition-all flex flex-col justify-between">
+         <div>
+            <div className="flex items-center gap-3 mb-4">
+               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.expertRole === 'challenger' ? 'bg-red-50 dark:bg-red-900/30 text-red-600' : item.expertRole === 'expander' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600' : item.expertRole === 'synthesizer' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600'}`}>
+                  <span className="material-symbols-outlined text-lg">{item.expertIcon || 'person'}</span>
+               </div>
+               <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.expertRole || 'EXPERT'}</div>
+                  <div className="font-headline font-bold text-slate-800 dark:text-slate-200">{item.expertName || 'Reviewer'}</div>
+               </div>
+               <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full ${status.class}`}>
+                  {status.text}
+               </span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">Q: {item.question}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50 italic">
+               "{item.suggestion}"
+            </p>
+         </div>
 
-        <div className="review-question-body">
-          <p><strong>问题：</strong>{item.question}</p>
-          <p className="suggestion"><strong>建议：</strong>{item.suggestion}</p>
-          {item.rationale && <p className="rationale">依据：{item.rationale}</p>}
-          {item.decisionNote && <p className="decision-note">备注：{item.decisionNote}</p>}
-        </div>
+         <div>
+             <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800 p-2 rounded mb-3">
+                <span className="text-[10px] font-bold text-slate-400">SEVERITY</span>
+                <span className={`w-2.5 h-2.5 rounded-full ${severityColor}`}></span>
+             </div>
 
-        {task?.status === 'awaiting_approval' && (!item.status || item.status === 'pending') && item.severity !== 'praise' && (
-          <div className="review-actions">
-            <button
-              className="btn btn-success btn-sm"
-              onClick={() => onReviewDecision(item.reviewId, item.id, 'accept')}
-            >
-              ✓ 接受修改
-            </button>
-            <button
-              className="btn btn-info btn-sm"
-              onClick={() => onReviewDecision(item.reviewId, item.id, 'manual_resolved')}
-            >
-              ✓ 已手动处理
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => onReviewDecision(item.reviewId, item.id, 'ignore')}
-            >
-              ⊘ 忽略
-            </button>
-          </div>
-        )}
+             {task?.status === 'awaiting_approval' && (!item.status || item.status === 'pending') && item.severity !== 'praise' && (
+               <div className="grid grid-cols-2 gap-2 mt-2">
+                 <button className="py-1.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-xs font-bold rounded flex items-center justify-center gap-1 transition-colors"
+                    onClick={() => onReviewDecision(item.reviewId, item.id, 'accept')}>
+                    <span className="material-symbols-outlined text-[14px]">check</span> Accept
+                 </button>
+                 <button className="py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold rounded flex items-center justify-center gap-1 transition-colors"
+                    onClick={() => onReviewDecision(item.reviewId, item.id, 'ignore')}>
+                    <span className="material-symbols-outlined text-[14px]">close</span> Ignore
+                 </button>
+                 <button className="col-span-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded flex items-center justify-center gap-1 transition-colors"
+                    onClick={() => onReviewDecision(item.reviewId, item.id, 'manual_resolved')}>
+                    <span className="material-symbols-outlined text-[14px]">edit</span> Manual Res.
+                 </button>
+               </div>
+             )}
+         </div>
       </div>
     );
   };
 
   return (
-    <div className="tab-panel reviews-panel animate-fade-in">
-      {/* ========== 1. 输入 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">
-          <span className="icon">📥</span> 输入
-        </h3>
-        <span className="section-desc">评审概览与专家分工</span>
-      </div>
-
-      <div className="input-grid">
-        {/* 评审统计概览 */}
-        <div className="info-card input-card glass-card">
-          <div className="card-header-with-actions">
-            <h3 className="card-title">
-              <span className="icon">🔥</span> 蓝军评审概览
-            </h3>
-          </div>
-
-          <div className="review-stats-grid">
-            <div className="stat-box critical">
-              <div className="stat-number">{reviewSummary.critical}</div>
-              <div className="stat-label">🔴 严重问题</div>
-            </div>
-            <div className="stat-box warning">
-              <div className="stat-number">{reviewSummary.warning}</div>
-              <div className="stat-label">🟡 改进建议</div>
-            </div>
-            <div className="stat-box praise">
-              <div className="stat-number">{reviewSummary.praise}</div>
-              <div className="stat-label">🟢 亮点</div>
-            </div>
-            <div className="stat-box total">
-              <div className="stat-number">{reviewSummary.total}</div>
-              <div className="stat-label">总评审数</div>
-            </div>
-          </div>
-
-          {/* 处理进度 */}
-          {reviewSummary.total > 0 && (
-            <div className="review-progress-section">
-              <div className="progress-header">
-                <span>处理进度</span>
-                <span className="progress-count">
-                  已处理: {reviewSummary.accepted + reviewSummary.ignored} / {reviewSummary.total}
-                </span>
-              </div>
-              <div className="review-progress-bar">
-                <div
-                  className="progress-segment accepted"
-                  style={{ width: `${(reviewSummary.accepted / reviewSummary.total) * 100}%` }}
-                />
-                <div
-                  className="progress-segment ignored"
-                  style={{ width: `${(reviewSummary.ignored / reviewSummary.total) * 100}%` }}
-                />
-                <div
-                  className="progress-segment pending"
-                  style={{ width: `${(reviewSummary.pending / reviewSummary.total) * 100}%` }}
-                />
-              </div>
-              <div className="progress-legend">
-                <span className="legend-item accepted">✓ 已接受 {reviewSummary.accepted}</span>
-                <span className="legend-item ignored">⊘ 已忽略 {reviewSummary.ignored}</span>
-                <span className="legend-item pending">⏳ 待处理 {reviewSummary.pending}</span>
-              </div>
-            </div>
-          )}
+    <div className="tab-panel reviews-panel animate-fade-in pb-32">
+      {/* ========== Header ========== */}
+      <header className="mb-12">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stage 4</span>
+          <span className="material-symbols-outlined text-sm">chevron_right</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Expert Review Process</span>
         </div>
-
-        {/* 专家评审分工 */}
-        <div className="info-card input-card glass-card">
-          <h3 className="card-title">
-            <span className="icon">👥</span> 专家评审分工
-          </h3>
-          <div className="experts-grid">
-            {Object.entries(EXPERT_ROLES).filter(([role]) => ['challenger', 'expander', 'synthesizer'].includes(role)).map(([role, info]) => (
-              <div key={role} className="expert-role-card" style={{ borderLeftColor: info.color }}>
-                <div className="expert-icon">{info.icon}</div>
-                <div className="expert-info">
-                  <div className="expert-name">{info.name}</div>
-                  <div className="expert-desc">{info.desc}</div>
-                </div>
-              </div>
-            ))}
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-extrabold font-headline tracking-tight text-slate-900 dark:text-white mb-2">Multi-Dimensional Review</h1>
+            <p className="text-slate-500 dark:text-slate-400 max-w-2xl">3x3x2 Red Team evaluation pipeline identifying logic gaps, expanding scope, and synthesizing final output.</p>
+          </div>
+          <div className="flex gap-3">
+             <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" onClick={onRedoReview}>
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span> Restart Review
+             </button>
           </div>
         </div>
+      </header>
 
-        {/* 串行评审版本链 */}
-        <div className="info-card full-width input-card glass-card">
-          <SequentialReviewChain 
-            taskId={task!.id}
-            onVersionSelect={loadVersionContent}
-          />
-        </div>
+      {/* ========== Content Container ========== */}
+      <div className="relative">
+         {/* Vertical Journey Line (Desktop only) */}
+         <div className="absolute left-[50%] top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-orange-400 to-indigo-600 opacity-20 hidden lg:block transform -translate-x-1/2"></div>
+         
+         <div className="space-y-16 relative z-10">
 
-        {/* 版本内容查看弹窗 */}
-        {selectedVersion && (
-          <div 
-            className="version-modal"
-            style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1000
-            }}
-            onClick={() => setSelectedVersion(null)}
-          >
-            <div 
-              className="version-modal-content"
-              style={{
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                width: '90%',
-                maxWidth: '900px',
-                maxHeight: '80vh',
-                display: 'flex',
-                flexDirection: 'column',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div 
-                className="version-modal-header"
-                style={{
-                  padding: '16px 20px',
-                  borderBottom: '1px solid #e5e7eb',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <h3 style={{ margin: 0, fontSize: '18px' }}>
-                  📝 版本内容 
-                  {selectedVersion.round ? `(第 ${selectedVersion.round} 轮)` : ''}
-                  <span style={{ 
-                    fontSize: '12px', 
-                    color: '#6b7280', 
-                    marginLeft: '8px',
-                    fontFamily: 'monospace'
-                  }}>
-                    {selectedVersion.id.slice(-8)}
-                  </span>
-                </h3>
-                <button 
-                  className="btn btn-close"
-                  onClick={() => setSelectedVersion(null)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    padding: '4px 8px'
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div 
-                className="version-modal-body"
-                style={{
-                  padding: '20px',
-                  overflow: 'auto',
-                  maxHeight: 'calc(80vh - 70px)',
-                  minHeight: '400px'
-                }}
-              >
-                {versionLoading ? (
-                  <div style={{ textAlign: 'center', padding: '40px' }}>
-                    ⏳ 加载中...
+            {/* ========== Section 1: Input (Draft & Checks) ========== */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch pt-4">
+               {/* Last Draft Summary */}
+               <div className="bg-white dark:bg-slate-900 p-6 shadow-sm border border-slate-200 dark:border-slate-800 rounded-2xl relative">
+                  <div className="flex items-center justify-between mb-6">
+                     <h2 className="font-headline font-bold text-xl flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                        <span className="material-symbols-outlined text-blue-600">article</span> Subject Draft
+                     </h2>
+                     <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1 rounded-full uppercase tracking-wider border border-slate-200 dark:border-slate-700">TID: {task.id.slice(0,8)}</span>
                   </div>
-                ) : (
-                  <MarkdownRenderer content={selectedVersion.content} />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                  <div className="space-y-4">
+                     <div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Topic</div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{task.topic}</p>
+                     </div>
+                     <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 italic font-mono truncate max-w-full">
+                           Subject content loaded into evaluation engine...
+                        </p>
+                     </div>
+                  </div>
+               </div>
 
-        {/* 专家库深度评审 */}
-        {(task?.outline || (task as any)?.writing_data?.draft) && (
-          <div className="info-card full-width input-card">
-            <h3 className="card-title">🔍 专家库深度评审</h3>
-            <ExpertReviewPanel
-              taskId={task!.id}
-              topic={task!.topic}
-              content={(task as any)?.writing_data?.draft || JSON.stringify(task?.outline) || ''}
-              contentType={(task as any)?.writing_data?.draft ? 'draft' : 'outline'}
-              importance={0.85}
-              onAccept={(expertId) => console.log('接受专家意见:', expertId)}
-              onIgnore={(expertId) => console.log('忽略专家意见:', expertId)}
-            />
-          </div>
-        )}
+               {/* Fact-Check Preview */}
+               <div className="bg-white dark:bg-slate-900 p-6 shadow-sm border border-slate-200 dark:border-slate-800 rounded-2xl relative flex flex-col justify-between">
+                  <h2 className="font-headline font-bold text-xl flex items-center gap-2 mb-6 text-slate-800 dark:text-slate-200">
+                     <span className="material-symbols-outlined text-orange-500">fact_check</span> Pre-Flight Status
+                  </h2>
+                  <div className="flex-1 grid grid-cols-3 gap-4 mb-4">
+                     <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-4 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-3xl font-black text-red-600 dark:text-red-400">{groupedReviews.critical.length}</span>
+                        <span className="text-[10px] uppercase font-bold text-red-800 dark:text-red-300 tracking-wider mt-1">Critical</span>
+                     </div>
+                     <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 p-4 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-3xl font-black text-orange-600 dark:text-orange-400">{groupedReviews.warning.length}</span>
+                        <span className="text-[10px] uppercase font-bold text-orange-800 dark:text-orange-300 tracking-wider mt-1">Warnings</span>
+                     </div>
+                     <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 p-4 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-3xl font-black text-green-600 dark:text-green-400">{groupedReviews.praise.length}</span>
+                        <span className="text-[10px] uppercase font-bold text-green-800 dark:text-green-300 tracking-wider mt-1">Praise</span>
+                     </div>
+                  </div>
+                  
+                  {/* 版本查看按钮 */}
+                  <div className="mt-2 text-center">
+                     <button className="text-xs font-bold text-blue-600 hover:text-blue-800 underline uppercase tracking-wider" onClick={() => loadVersionContent(task?.versions?.[task.versions.length-1]?.id || '')}>
+                        🔍 View Full Draft Source
+                     </button>
+                  </div>
+               </div>
+            </section>
+
+            {/* ========== Section 2: Process (Review Chain) ========== */}
+            <section className="space-y-8 py-8">
+               <div className="text-center relative mb-12">
+                  <span className="bg-surface dark:bg-[#0c0f10] px-6 font-headline font-extrabold text-2xl relative z-10 text-slate-700 dark:text-slate-300 inline-flex items-center gap-2">
+                     <span className="material-symbols-outlined absolute -left-6 text-slate-300 dark:text-slate-700">link</span>
+                     The Review Chain
+                     <span className="material-symbols-outlined absolute -right-6 text-slate-300 dark:text-slate-700">link</span>
+                  </span>
+               </div>
+
+               {reviewSummary.total === 0 ? (
+                  <div className="empty-state py-20 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl mx-auto shadow-sm">
+                     <div className="empty-icon text-6xl mb-4 opacity-50">👥</div>
+                     <div className="empty-title text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">No Active Reviews</div>
+                     <p className="text-slate-500 max-w-sm mx-auto">Expert review pipeline has not been initiated or contains no recorded feedback at this moment.</p>
+                  </div>
+               ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                     {/* Show mixed critical/warning unhandled up top? Or just map all. */}
+                     {groupedReviews.critical.concat(groupedReviews.warning, groupedReviews.praise).map((item: any, idx: number) => renderReviewItem(item, idx))}
+                  </div>
+               )}
+               
+               {/* Sequential Review Chain (Mini Timeline Version) */}
+               {reviewSummary.total > 0 && (
+                  <div className="mt-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                     <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-indigo-500">account_tree</span> Red Team Activity Log
+                     </h3>
+                     <SequentialReviewChain taskId={task!.id} onVersionSelect={loadVersionContent} />
+                  </div>
+               )}
+            </section>
+
+            {/* ========== Section 3: Output (Final Report) ========== */}
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
+               <div className="lg:col-span-2 bg-slate-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden flex flex-col justify-between">
+                  <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-500/20 blur-[80px] rounded-full transform translate-x-1/2 -translate-y-1/2"></div>
+                  
+                  <div>
+                     <h2 className="font-headline font-extrabold text-2xl mb-8 flex items-center gap-3 relative z-10">
+                        <span className="material-symbols-outlined text-blue-400">task_alt</span>
+                        Final Review Report
+                     </h2>
+                     <div className="space-y-8 relative z-10">
+                        <div className="grid grid-cols-3 gap-4">
+                           <div className="bg-white/5 p-5 rounded-2xl border border-white/10 flex flex-col justify-between">
+                              <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-2">Resolved</div>
+                              <div className="text-3xl font-black text-white">{reviewSummary.accepted + reviewSummary.ignored}</div>
+                           </div>
+                           <div className="bg-white/5 p-5 rounded-2xl border border-white/10 flex flex-col justify-between">
+                              <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-2">Pending</div>
+                              <div className="text-3xl font-black text-orange-400">{reviewSummary.pending}</div>
+                           </div>
+                           <div className="bg-white/5 p-5 rounded-2xl border border-white/10 flex flex-col justify-between">
+                              <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-2">Health</div>
+                              <div className="text-3xl font-black text-blue-400">
+                                 {reviewSummary.total > 0 ? Math.round(((reviewSummary.accepted + reviewSummary.ignored) / reviewSummary.total) * 100) : 100}%
+                              </div>
+                           </div>
+                        </div>
+
+                        {reviewSummary.pending > 0 && (
+                           <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
+                              <div className="flex items-start gap-3">
+                                 <span className="material-symbols-outlined text-orange-400 mt-0.5">warning</span>
+                                 <div>
+                                    <h4 className="text-sm font-bold text-orange-100">Action Required</h4>
+                                    <p className="text-xs text-orange-200/80 mt-1">There are {reviewSummary.pending} pending feedback items from the review chain. Address them to finalize the stage.</p>
+                                 </div>
+                              </div>
+                           </div>
+                        )}
+                        {reviewSummary.total > 0 && reviewSummary.pending === 0 && (
+                           <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                              <div className="flex items-start gap-3">
+                                 <span className="material-symbols-outlined text-green-400 mt-0.5">check_circle</span>
+                                 <div>
+                                    <h4 className="text-sm font-bold text-green-100">All Clear</h4>
+                                    <p className="text-xs text-green-200/80 mt-1">All feedback items have been resolved. The draft is ready for finalization.</p>
+                                 </div>
+                              </div>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               </div>
+
+               {/* Right Side Workflow Actions */}
+               <div className="flex flex-col gap-4">
+                  <div className="bg-white dark:bg-slate-900 p-8 border border-slate-200 dark:border-slate-800 rounded-3xl flex-1 flex flex-col justify-center gap-4 shadow-sm">
+                     <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4 text-center">Batch Decisions</h3>
+                     
+                     <button className="w-full py-4 bg-slate-900 dark:bg-blue-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-black/10 dark:shadow-blue-900/20"
+                        onClick={() => onBatchDecision('accept')}
+                        disabled={reviewSummary.pending === 0}>
+                        <span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 1"}}>check_circle</span>
+                        Accept All Outstanding
+                     </button>
+                     
+                     <button className="w-full py-4 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+                        onClick={() => onBatchDecision('ignore')}
+                        disabled={reviewSummary.pending === 0}>
+                        <span className="material-symbols-outlined">block</span>
+                        Ignore All Outstanding
+                     </button>
+                     
+                     <div className="my-4 flex items-center gap-4">
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800"></div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Expertise</span>
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800"></div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-2">
+                         {Object.entries(EXPERT_ROLES).slice(0, 3).map(([role, info]) => (
+                           <button key={role} className="col-span-1 py-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex flex-col items-center justify-center gap-1 transition-colors group"
+                              onClick={() => onReReview(role)}
+                              title={`Request Re-Review from ${info.name}`}>
+                              <span className="material-symbols-outlined text-lg opacity-50 group-hover:opacity-100 transition-opacity">{info.icon === '🔍' ? 'search' : info.icon === '⚖️' ? 'balance' : 'hub'}</span>
+                              Recall {info.name}
+                           </button>
+                         ))}
+                     </div>
+                  </div>
+               </div>
+            </section>
+         </div>
       </div>
 
-      {/* ========== 2. 加工 ========== */}
-      {task?.status === 'awaiting_approval' && reviewSummary.total > 0 && (
-        <>
-          <div className="section-header">
-            <h3 className="section-title">
-              <span className="icon">⚙️</span> 加工
-            </h3>
-            <span className="section-desc">评审处理与决策</span>
-          </div>
-
-          <div className="info-card full-width process-card glass-card">
-            <h3 className="card-title">
-              <span className="icon">📝</span> 评审处理
-            </h3>
-            
-            {!canProceed ? (
-              <div className="cannot-proceed-warning">
-                ⚠️ 有 {reviewSummary.critical - reviewSummary.accepted} 个严重问题未处理，处理后才能进入确认环节
-              </div>
-            ) : (
-              <div className="can-proceed-notice">
-                ✓ 所有严重问题已处理，可以进入确认环节
-              </div>
-            )}
-
-            {/* 批量操作 */}
-            <div className="batch-actions">
-              <button className="btn btn-success" onClick={() => onBatchDecision('accept')}>
-                ✓ 全部接受
-              </button>
-              <button className="btn btn-secondary" onClick={() => onBatchDecision('ignore')}>
-                ⊘ 全部忽略
-              </button>
+      {/* ========== Version Modal (Preserved) ========== */}
+      {selectedVersion && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setSelectedVersion(null)}>
+            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800" onClick={e => e.stopPropagation()}>
+               <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                  <div className="flex items-end gap-3">
+                     <h3 className="text-xl font-bold font-headline text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-blue-500">description</span> 
+                        Draft Snapshot {selectedVersion.round ? `(Round ${selectedVersion.round})` : ''}
+                     </h3>
+                     <span className="text-xs font-mono text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded tracking-widest">{selectedVersion.id.slice(-8)}</span>
+                  </div>
+                  <button onClick={() => setSelectedVersion(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+                     <span className="material-symbols-outlined">close</span>
+                  </button>
+               </div>
+               <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-[#0c0f10]">
+                  {versionLoading ? (
+                     <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4">
+                        <span className="material-symbols-outlined text-4xl animate-spin">refresh</span>
+                        <p className="text-sm font-bold tracking-widest uppercase">Fetching Snapshot...</p>
+                     </div>
+                  ) : (
+                     <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <MarkdownRenderer content={selectedVersion.content} />
+                     </div>
+                  )}
+               </div>
             </div>
-
-            {/* 单个评审处理 */}
-            <div className="review-processing-list">
-              <h4>待处理评审</h4>
-              {groupedReviews.critical.filter((i: any) => !i.status || i.status === 'pending').map((item, idx) => renderReviewItem(item, idx))}
-              {groupedReviews.warning.filter((i: any) => !i.status || i.status === 'pending').map((item, idx) => renderReviewItem(item, idx))}
-            </div>
-          </div>
-        </>
+         </div>
       )}
-
-      {/* ========== 3. 输出 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">📤 输出</h3>
-        <span className="section-desc">评审意见列表</span>
-      </div>
-
-      <div className="output-content">
-        {/* 严重问题 */}
-        {groupedReviews.critical.length > 0 && (
-          <div className="info-card full-width output-card critical-group">
-            <h3 className="card-title critical-title">🔴 严重问题（必须修改）</h3>
-            {groupedReviews.critical.map((item, idx) => renderReviewItem(item, idx))}
-          </div>
-        )}
-
-        {/* 改进建议 */}
-        {groupedReviews.warning.length > 0 && (
-          <div className="info-card full-width output-card warning-group">
-            <h3 className="card-title warning-title">🟡 改进建议</h3>
-            {groupedReviews.warning.map((item, idx) => renderReviewItem(item, idx))}
-          </div>
-        )}
-
-        {/* 亮点 */}
-        {groupedReviews.praise.length > 0 && (
-          <div className="info-card full-width output-card praise-group">
-            <h3 className="card-title praise-title">🟢 亮点</h3>
-            {groupedReviews.praise.map((item, idx) => renderReviewItem(item, idx))}
-          </div>
-        )}
-
-        {reviewSummary.total === 0 && (
-          <div className="empty-state">
-            <div className="empty-icon">👥</div>
-            <div className="empty-title">暂无评审记录</div>
-            <p>任务进入评审阶段后将显示蓝军评审意见</p>
-          </div>
-        )}
-      </div>
-
-      {/* ========== 4. 辅助工具 ========== */}
-      <div className="section-header">
-        <h3 className="section-title">🛠️ 辅助工具</h3>
-        <span className="section-desc">重新评审与专家调度</span>
-      </div>
-
-      <div className="tools-grid">
-        <div className="info-card tools-card">
-          <h3 className="card-title">⚡ 评审操作</h3>
-          <div className="tools-actions">
-            {task?.status === 'awaiting_approval' && (
-              <button className="btn btn-warning" onClick={onRedoReview}>
-                🔄 重做评审
-              </button>
-            )}
-            {Object.entries(EXPERT_ROLES).map(([role, info]) => (
-              <button
-                key={role}
-                className="btn btn-secondary"
-                onClick={() => onReReview(role)}
-                title={`申请${info.name}重新评审`}
-              >
-                🔄 {info.name}重审
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
