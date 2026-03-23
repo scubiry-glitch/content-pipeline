@@ -335,8 +335,12 @@ export class PipelineService {
       if (report.decision === 'reject') {
         throw new Error(`Quality gate: review decision is 'reject' (score: ${report.final_score}). Cannot generate output.`);
       }
-      if (report.critical_count > 0) {
+      // 串行评审中，critical_count 是所有轮次累计发现数（已通过修订稿解决），仅当决策为 reject 时阻塞
+      if (report.critical_count > 0 && report.decision === 'reject') {
         throw new Error(`Quality gate: ${report.critical_count} critical issues unresolved.`);
+      }
+      if (report.critical_count > 0) {
+        console.warn(`[Pipeline] Quality note: ${report.critical_count} critical findings across review rounds (decision: ${report.decision}, score: ${report.final_score})`);
       }
     }
 

@@ -4,6 +4,7 @@
 import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getLLMRouter } from '../providers/index.js';
+import { KimiProvider } from '../providers/kimi.js';
 
 // 专家评审配置
 interface ReviewConfig {
@@ -130,7 +131,13 @@ export async function startSequentialReview(
       await configureSequentialReview(taskId, topic);
     }
 
-    // 2. 更新任务状态
+    // 2. 清理旧评审数据（重新评审时避免 unique constraint 冲突）
+    await query(`DELETE FROM review_chains WHERE task_id = $1`, [taskId]);
+    await query(`DELETE FROM expert_reviews WHERE task_id = $1`, [taskId]);
+    await query(`DELETE FROM review_reports WHERE task_id = $1`, [taskId]);
+    console.log(`[SequentialReview] Cleaned old review data for task ${taskId}`);
+
+    // 3. 更新任务状态
     await query(
       `UPDATE tasks SET
         status = 'reviewing',
@@ -141,13 +148,13 @@ export async function startSequentialReview(
       [taskId]
     );
 
-    // 2.5 更新 draft 状态为 reviewing
+    // 3.5 更新 draft 状态为 reviewing
     await query(
       `UPDATE draft_versions SET status = 'reviewing' WHERE id = $1`,
       [initialDraftId]
     );
 
-    // 3. 初始化评审进度
+    // 4. 初始化评审进度
     await query(
       `UPDATE task_review_progress SET
         status = 'running',
@@ -160,7 +167,7 @@ export async function startSequentialReview(
       [taskId, initialDraftId]
     );
 
-    // 4. 异步开始第一轮评审
+    // 5. 异步开始第一轮评审
     setImmediate(async () => {
       try {
         await processNextRound(taskId);
@@ -184,13 +191,18 @@ export async function startSequentialReview(
  * 处理下一轮评审
  */
 async function processNextRound(taskId: string): Promise<void> {
+  console.log(`[processNextRound] Starting for task ${taskId}`);
+  
   // 1. 获取当前进度
   const progressResult = await query(
     `SELECT * FROM task_review_progress WHERE task_id = $1`,
     [taskId]
   );
   
-  if (progressResult.rows.length === 0) return;
+  if (progressResult.rows.length === 0) {
+    console.log(`[processNextRound] No progress found for task ${taskId}`);
+    return;
+  }
   
   const progress = progressResult.rows[0];
   const currentRound = progress.current_round || 0;
@@ -248,6 +260,7 @@ async function processNextRound(taskId: string): Promise<void> {
   );
   
   // 7. 执行专家评审
+  console.log(`[processNextRound] Conducting review for round ${currentRound + 1} with ${expertConfig.name}`);
   let reviewResult: ReviewResult;
   if (expertConfig.type === 'ai') {
     reviewResult = await conductAIExpertReview(draftContent, expertConfig);
@@ -405,7 +418,7 @@ async function conductAIExpertReview(
   };
 
   const template = promptTemplates[expertConfig.role || 'challenger'];
-  const prompt = template.replace('{{draftContent}}', draftContent.substring(0, 8000));
+  const prompt = template.replace('{{draftContent}}', draftContent.substring(0, 2000));
   
   try {
     const llm = getLLMRouter();
@@ -465,11 +478,19 @@ async function generateRevisedDraft(
   round: number,
   expertRole: string
 ): Promise<{ id: string; content: string }> {
+  // 只取前5个最重要的问题，避免prompt过长
+  const topQuestions = reviewResult.questions
+    .sort((a, b) => {
+      const severityOrder = { high: 0, medium: 1, low: 2, praise: 3 };
+      return severityOrder[a.severity as keyof typeof severityOrder] - severityOrder[b.severity as keyof typeof severityOrder];
+    })
+    .slice(0, 5);
+  
   const prompt = `你是一位专业的文稿修订专家。请根据专家评审意见，对文稿进行修订。
 
 ## 当前文稿
 
-${currentContent.substring(0, 6000)}
+${currentContent.substring(0, 2000)}
 
 ## 专家评审意见
 
@@ -477,25 +498,22 @@ ${currentContent.substring(0, 6000)}
 综合评分：${reviewResult.score}/100
 总体评价：${reviewResult.summary}
 
-具体问题与建议：
-${reviewResult.questions.map((q, i) => `${i + 1}. [${q.severity}] ${q.question}
-   建议：${q.suggestion}`).join('\n')}
+核心问题与建议（优先处理）：
+${topQuestions.map((q, i) => `${i + 1}. [${q.severity}] ${q.question.substring(0, 200)}${q.question.length > 200 ? '...' : ''}
+   建议：${q.suggestion.substring(0, 150)}${q.suggestion.length > 150 ? '...' : ''}`).join('\n')}
 
 ## 修订要求
 
-1. 针对专家提出的每个问题进行修改
-2. 优先处理 high 和 medium 级别的问题
-3. 保持文稿整体结构、风格和专业性
-4. 确保修订后的内容流畅自然
-5. 生成完整的修订后文稿（Markdown格式）
+1. 针对上述优先问题进行修改
+2. 保持文稿整体结构、风格和专业性
+3. 生成完整的修订后文稿（Markdown格式）
 
 请输出完整的修订后文稿：`;
 
   try {
-    console.log(`[GenerateDraft] Starting for round ${round}, task ${taskId}`);
+    console.log(`[GenerateDraft] Starting for round ${round}, task ${taskId}, prompt length: ${prompt.length}`);
     const llm = getLLMRouter();
     console.log(`[GenerateDraft] Calling LLM...`);
-    // 使用 blue_team_review 任务类型，它会路由到 dashboard-llm -> kimi
     const response = await llm.generate(prompt, 'blue_team_review', {
       maxTokens: 4000,
       temperature: 0.7,
@@ -676,14 +694,30 @@ export async function getReviewChain(taskId: string) {
  * 获取所有版本
  */
 export async function getDraftVersions(taskId: string) {
-  const result = await query(
-    `SELECT dv.*, er.expert_name, er.expert_role
-     FROM draft_versions dv
-     LEFT JOIN expert_reviews er ON dv.source_review_id = er.id
-     WHERE dv.task_id = $1
-     ORDER BY dv.round, dv.version`,
+  // 先获取 draft_versions
+  const draftsResult = await query(
+    `SELECT * FROM draft_versions 
+     WHERE task_id = $1
+     ORDER BY round, version`,
     [taskId]
   );
   
-  return result.rows;
+  // 再获取 expert_reviews 映射
+  const reviewsResult = await query(
+    `SELECT id, expert_name, expert_role FROM expert_reviews WHERE task_id = $1`,
+    [taskId]
+  );
+  
+  const reviewsMap = new Map(
+    reviewsResult.rows.map((r: any) => [r.id, r])
+  );
+  
+  return draftsResult.rows.map((dv: any) => {
+    const review = reviewsMap.get(dv.source_review_id);
+    return {
+      ...dv,
+      expert_name: review?.expert_name || null,
+      expert_role: review?.expert_role || dv.expert_role,
+    };
+  });
 }

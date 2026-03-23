@@ -367,7 +367,13 @@ export function TaskDetailLayout() {
   const handleBatchDecision = async (decision: 'accept' | 'ignore') => {
     if (!confirm(`确定要${decision === 'accept' ? '全部接受' : '全部忽略'}所有待处理的评审意见吗？`)) return;
     try {
-      await blueTeamApi.batchDecide(id!, { decision });
+      // 构建 decisions 数组，包含所有待处理的评审项
+      const pendingReviews = reviews.filter(r => r.status === 'pending');
+      const decisions = pendingReviews.map(r => ({
+        reviewId: r.id,
+        decision,
+      }));
+      await blueTeamApi.batchDecide(id!, { decisions });
       await loadReviews(id!);
     } catch (error) {
       console.error('批量决策失败:', error);

@@ -69,15 +69,26 @@ export function SequentialReviewChain({
   const loadChain = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('[SequentialReviewChain] Loading for task:', taskId);
       
       // 获取评审链
       const chainRes = await fetch(`/api/v1/production/${taskId}/sequential-review/chain`, {
         headers: { 'x-api-key': 'dev-api-key' }
       });
       
+      console.log('[SequentialReviewChain] Chain response:', chainRes.status, chainRes.ok);
+      
       if (chainRes.ok) {
         const chainData = await chainRes.json();
+        console.log('[SequentialReviewChain] Chain data:', chainData);
         setChain(chainData.chain || []);
+      } else {
+        const errorText = await chainRes.text();
+        console.error('[SequentialReviewChain] Chain error:', errorText);
+        setError(`获取评审链失败: ${chainRes.status}`);
+        return;
       }
       
       // 获取版本列表
@@ -85,12 +96,20 @@ export function SequentialReviewChain({
         headers: { 'x-api-key': 'dev-api-key' }
       });
       
+      console.log('[SequentialReviewChain] Versions response:', versionsRes.status, versionsRes.ok);
+      
       if (versionsRes.ok) {
         const versionsData = await versionsRes.json();
+        console.log('[SequentialReviewChain] Versions data:', versionsData);
         setVersions(versionsData.versions || []);
+      } else {
+        const errorText = await versionsRes.text();
+        console.error('[SequentialReviewChain] Versions error:', errorText);
+        // 不设置错误，versions 是可选的
       }
-    } catch (err) {
-      setError('加载评审链失败');
+    } catch (err: any) {
+      console.error('[SequentialReviewChain] Exception:', err);
+      setError(`加载评审链失败: ${err.message}`);
     } finally {
       setLoading(false);
     }

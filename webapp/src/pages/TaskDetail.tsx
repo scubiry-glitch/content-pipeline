@@ -384,7 +384,13 @@ export function TaskDetail() {
     }
 
     try {
-      await blueTeamApi.batchDecide(id!, { decision });
+      // 构建 decisions 数组，包含所有待处理的评审项
+      const pendingReviews = reviews.filter(r => r.status === 'pending');
+      const decisions = pendingReviews.map(r => ({
+        reviewId: r.id,
+        decision,
+      }));
+      await blueTeamApi.batchDecide(id!, { decisions });
       await loadReviews();
     } catch (error) {
       console.error('批量决策失败:', error);
