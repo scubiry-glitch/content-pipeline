@@ -113,6 +113,55 @@ export async function researchRoutes(fastify: FastifyInstance) {
     };
   });
 
+  // 实时 Tavily 搜索预览（不保存到数据库）
+  fastify.get('/:taskId/preview-search', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { limit = '5' } = request.query as any;
+
+    try {
+      // 获取任务主题
+      const { query } = await import('../db/connection.js');
+      const taskResult = await query(
+        `SELECT topic, outline FROM tasks WHERE id = $1`,
+        [taskId]
+      );
+
+      if (taskResult.rows.length === 0) {
+        reply.status(404);
+        return { error: 'Task not found' };
+      }
+
+      const task = taskResult.rows[0];
+      const searchQuery = task.topic || 'latest news';
+
+      // 调用 Tavily 搜索
+      const { getWebSearchService } = await import('../services/webSearch.js');
+      const webSearch = getWebSearchService();
+      const results = await webSearch.search({
+        query: searchQuery,
+        maxResults: parseInt(limit),
+        includeContent: false,
+      });
+
+      return {
+        items: results.map((r, idx) => ({
+          id: `web-${idx}`,
+          title: r.title,
+          source: r.source,
+          url: r.url,
+          relevance: r.relevance,
+          credibility: r.credibility,
+        })),
+        query: searchQuery,
+        total: results.length,
+      };
+    } catch (error: any) {
+      console.error('[Research] Preview search failed:', error);
+      reply.status(500);
+      return { error: 'Search failed', message: error.message };
+    }
+  });
+
   // 获取采集结果
   fastify.get('/:taskId/collected', { preHandler: authenticate }, async (request) => {
     const { taskId } = request.params as any;

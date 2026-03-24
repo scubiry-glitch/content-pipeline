@@ -526,6 +526,13 @@ export function TaskDetailLayout() {
       setActionLoading('collect-research');
       await researchApi.collect(id!);
       alert('研究采集已启动，请稍后刷新查看结果');
+      // 刷新任务数据以显示最新状态
+      loadTask();
+      // 轮询更新直到研究完成
+      const pollInterval = setInterval(() => {
+        loadTask();
+      }, 3000);
+      setTimeout(() => clearInterval(pollInterval), 60000); // 1分钟后停止轮询
     } catch (error) {
       alert('采集失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {

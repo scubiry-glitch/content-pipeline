@@ -7,7 +7,7 @@ import { ExternalLinksList } from '../../components/ExternalLinksList';
 import { AssetLinksList } from '../../components/AssetLinksList';
 import { DataCleaningPanel } from '../../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../../components/CrossValidationPanel';
-import { rssSourcesApi, hotTopicsApi, assetsApi } from '../../api/client';
+import { rssSourcesApi, hotTopicsApi, assetsApi, researchApi } from '../../api/client';
 import type { Task } from '../../types';
 import type { ResearchConfig, RSSItem, HotTopic, Asset } from '../../api/client';
 
@@ -75,14 +75,22 @@ export function ResearchTab() {
     if (!researchConfig.sources.includes('web')) return;
     setWebSearchLoading(true);
     try {
-      const result = await hotTopicsApi.getAll({ limit: 5 });
+      // 使用 Tavily 实时搜索预览
+      const result = await researchApi.previewSearch(task.id, { limit: 5 });
       setWebSearchResults(result.items || []);
     } catch (error) {
       console.error('Failed to load web search results:', error);
+      // 出错时回退到热点话题 API
+      try {
+        const result = await hotTopicsApi.getAll({ limit: 5 });
+        setWebSearchResults(result.items || []);
+      } catch {
+        setWebSearchResults([]);
+      }
     } finally {
       setWebSearchLoading(false);
     }
-  }, [researchConfig.sources]);
+  }, [researchConfig.sources, task.id]);
 
   const loadAssetsData = useCallback(async () => {
     if (!researchConfig.sources.includes('asset')) return;

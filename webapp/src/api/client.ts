@@ -298,6 +298,9 @@ export const researchApi = {
 
   getCollected: (taskId: string, params?: { limit?: number; offset?: number }) =>
     client.get(`/research/${taskId}/collected`, { params }) as Promise<{ items: CollectedResearch[]; total: number }>,
+
+  previewSearch: (taskId: string, params?: { limit?: number }) =>
+    client.get(`/research/${taskId}/preview-search`, { params }) as Promise<{ items: HotTopic[]; query: string; total: number }>,
 };
 
 // 专家相关 API
