@@ -48,15 +48,20 @@ const ROLE_ICONS: Record<string, string> = {
 export function SequentialReviewStatus({ taskId }: SequentialReviewStatusProps) {
   const [status, setStatus] = useState<SequentialStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notConfigured, setNotConfigured] = useState(false);
 
   useEffect(() => {
-    if (taskId) {
+    if (taskId && !notConfigured) {
       loadStatus();
-      // 每 5 秒刷新一次
-      const interval = setInterval(loadStatus, 5000);
+      // 每 5 秒刷新一次，如果未配置则停止轮询
+      const interval = setInterval(() => {
+        if (!notConfigured) {
+          loadStatus();
+        }
+      }, 5000);
       return () => clearInterval(interval);
     }
-  }, [taskId]);
+  }, [taskId, notConfigured]);
 
   const loadStatus = async () => {
     try {
@@ -66,6 +71,9 @@ export function SequentialReviewStatus({ taskId }: SequentialReviewStatusProps) 
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
+      } else if (res.status === 404) {
+        // 任务未配置串行评审，停止轮询
+        setNotConfigured(true);
       }
     } catch (err) {
       console.error('[SequentialReviewStatus] Failed to load:', err);
@@ -78,8 +86,9 @@ export function SequentialReviewStatus({ taskId }: SequentialReviewStatusProps) 
     return <span className="text-xs text-slate-400">Loading...</span>;
   }
 
-  if (!status || status.status === 'idle') {
-    return <span className="text-xs text-slate-400">Not configured</span>;
+  // 未配置串行评审（并行模式或尚未配置）
+  if (notConfigured || !status || status.status === 'idle') {
+    return null; // 不显示任何内容，避免干扰
   }
 
   const progress = status.totalRounds > 0 

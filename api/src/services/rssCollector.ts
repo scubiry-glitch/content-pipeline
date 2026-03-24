@@ -525,8 +525,7 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
       ON CONFLICT (id) DO UPDATE SET
         hot_score = EXCLUDED.hot_score,
         trend = EXCLUDED.trend,
-        sentiment = EXCLUDED.sentiment,
-        updated_at = NOW()`,
+        sentiment = EXCLUDED.sentiment`,
       [
         item.id,
         item.sourceId,
@@ -561,8 +560,8 @@ async function saveHotTopic(item: RSSItem): Promise<void> {
     await query(
       `INSERT INTO hot_topics (
         id, title, source, source_url, hot_score, trend, sentiment, 
-        published_at, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE SET
         hot_score = EXCLUDED.hot_score,
         trend = EXCLUDED.trend,
@@ -574,12 +573,12 @@ async function saveHotTopic(item: RSSItem): Promise<void> {
         item.link,
         item.hotScore,
         item.trend,
-        item.sentiment,
-        item.publishedAt
+        item.sentiment
       ]
     );
+    console.log(`[RSS] Hot topic saved: rss-${item.id.substring(0, 16)}...`);
   } catch (error) {
-    // 忽略热点保存错误
+    console.error(`[RSS] Hot topic save failed:`, error);
   }
 }
 
@@ -700,10 +699,10 @@ function generateSummary(content: string, maxLength: number = 300): string {
 async function updateSourceLastFetch(sourceId: string, itemCount: number): Promise<void> {
   try {
     await query(
-      `INSERT INTO rss_fetch_logs (source_id, fetched_at, fetched_date, status, items_fetched)
+      `INSERT INTO rss_fetch_logs (source_id, fetched_at, fetched_date, status, items_count)
        VALUES ($1, NOW(), CURRENT_DATE, 'success', $2)
        ON CONFLICT (source_id, fetched_date)
-       DO UPDATE SET fetched_at = NOW(), status = 'success', items_fetched = $2`,
+       DO UPDATE SET fetched_at = NOW(), status = 'success', items_count = $2`,
       [sourceId, itemCount]
     );
   } catch (error) {

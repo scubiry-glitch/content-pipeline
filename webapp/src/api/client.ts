@@ -70,8 +70,8 @@ export const tasksApi = {
     client.get(`/production/${id}/reviews`) as Promise<BlueTeamReview[]>,
 
   // 最终确认任务 - Finalize（异步版本）
-  finalize: (id: string, selectedReviewIds?: string[]) =>
-    client.post(`/production/${id}/finalize`, { selectedReviewIds }) as Promise<{ 
+  finalize: (id: string, selectedReviewIds?: string[], force?: boolean) =>
+    client.post(`/production/${id}/finalize`, { selectedReviewIds, force }) as Promise<{ 
       success: boolean; 
       jobId?: string;
       status?: 'doing' | 'completed' | 'failed';
@@ -98,7 +98,7 @@ export const tasksApi = {
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,
 
   // 重做某个阶段
-  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string; config?: any }) =>
+  redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string; config?: any; preserveHistory?: boolean }) =>
     client.post(`/production/${id}/redo/${stage}`, data) as Promise<void>,
 
   // ===== 大纲评论 API =====

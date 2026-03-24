@@ -79,9 +79,9 @@ export async function streamingBlueTeamRoutes(fastify: FastifyInstance) {
     const body = request.body as any;
     
     try {
-      // 获取任务信息
+      // 获取任务信息和最新草稿
       const taskResult = await query(
-        'SELECT draft_content, topic FROM tasks WHERE id = $1',
+        'SELECT final_draft, topic FROM tasks WHERE id = $1',
         [taskId]
       );
       
@@ -90,14 +90,27 @@ export async function streamingBlueTeamRoutes(fastify: FastifyInstance) {
       }
       
       const task = taskResult.rows[0];
-      if (!task.draft_content) {
+      
+      // 如果没有 final_draft，从 draft_versions 获取最新版本
+      let draftContent = task.final_draft;
+      if (!draftContent) {
+        const draftResult = await query(
+          'SELECT content FROM draft_versions WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1',
+          [taskId]
+        );
+        if (draftResult.rows.length > 0) {
+          draftContent = draftResult.rows[0].content;
+        }
+      }
+      
+      if (!draftContent) {
         return reply.status(400).send({ error: 'No draft content available' });
       }
       
       // 在后台启动流式评审（不阻塞响应）
       executeStreamingBlueTeamReview(
         taskId,
-        task.draft_content,
+        draftContent,
         task.topic,
         {
           mode: body.mode || 'parallel',

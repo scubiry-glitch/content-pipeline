@@ -334,15 +334,17 @@ ${JSON.stringify(outline, null, 2)}
   }
 
   // Get BlueTeam reviews formatted for display (FR-017 ~ FR-023)
-  async getBlueTeamReviews(taskId: string) {
+  async getBlueTeamReviews(taskId: string, includeHistorical: boolean = false) {
     const task = await this.getTask(taskId);
     if (!task) {
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    // Get parallel reviews (blue_team_reviews)
+    // Get parallel reviews (blue_team_reviews), 默认排除历史记录
     const reviewsResult = await query(
-      'SELECT * FROM blue_team_reviews WHERE task_id = $1 ORDER BY round, expert_role',
+      includeHistorical
+        ? 'SELECT * FROM blue_team_reviews WHERE task_id = $1 ORDER BY round, expert_role'
+        : 'SELECT * FROM blue_team_reviews WHERE task_id = $1 AND (is_historical IS NULL OR is_historical = false) ORDER BY round, expert_role',
       [taskId]
     );
 
@@ -676,13 +678,13 @@ ${JSON.stringify(outline, null, 2)}
   }
 
   // 4. 蓝军评审重做 - 重新执行评审（支持配置）
-  async redoReview(taskId: string, config?: any) {
+  async redoReview(taskId: string, config?: any, preserveHistory?: boolean) {
     const task = await this.getTask(taskId);
     if (!task) {
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    console.log(`[Redo] Restarting BlueTeam review for task ${taskId}`, config ? { config } : '(default config)');
+    console.log(`[Redo] Restarting BlueTeam review for task ${taskId}`, { config, preserveHistory });
 
     // 清空评审数据
     await query(
@@ -695,8 +697,23 @@ ${JSON.stringify(outline, null, 2)}
       [taskId]
     );
 
-    // 删除之前的评审
-    await query(`DELETE FROM blue_team_reviews WHERE task_id = $1`, [taskId]);
+    // 根据用户选择：保留历史记录 或 删除前一轮评论
+    if (preserveHistory) {
+      // 保留历史评审记录，仅标记为历史版本
+      await query(
+        `UPDATE blue_team_reviews 
+         SET is_historical = true, 
+             updated_at = NOW() 
+         WHERE task_id = $1 
+         AND (is_historical IS NULL OR is_historical = false)`,
+        [taskId]
+      );
+      console.log(`[Redo] Preserved historical reviews for task ${taskId}`);
+    } else {
+      // 删除前一轮评论
+      await query(`DELETE FROM blue_team_reviews WHERE task_id = $1`, [taskId]);
+      console.log(`[Redo] Deleted previous reviews for task ${taskId}`);
+    }
 
     // 保留最新版稿件，删除其他版本
     await query(

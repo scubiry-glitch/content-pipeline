@@ -7,6 +7,7 @@ import { generateFinalDraft } from './draftGenerator.js';
 export interface AsyncFinalizeRequest {
   taskId: string;
   selectedReviewIds?: string[]; // 批量勾选的评审意见ID，如果不传则处理所有已接受的
+  force?: boolean; // 强制模式：忽略未处理的严重问题
 }
 
 export interface AsyncFinalizeStatus {
@@ -29,8 +30,10 @@ const finalizeJobs = new Map<string, AsyncFinalizeStatus>();
  */
 export async function startAsyncFinalize(
   taskId: string,
-  selectedReviewIds?: string[]
+  selectedReviewIds?: string[],
+  force?: boolean
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  console.log(`[AsyncFinalize] Starting finalize for task ${taskId}`, { selectedReviewIds, force });
   console.log(`[AsyncFinalize] Starting finalize for task ${taskId}`, { selectedReviewIds });
 
   try {
@@ -58,7 +61,7 @@ export async function startAsyncFinalize(
 
     // 4. 异步执行 Finalize（不阻塞响应）
     process.nextTick(() => {
-      executeFinalize(taskId, selectedReviewIds).catch(err => {
+      executeFinalize(taskId, selectedReviewIds, force).catch(err => {
         console.error(`[AsyncFinalize] Error:`, err);
         finalizeJobs.set(taskId, {
           ...jobStatus,
@@ -80,40 +83,44 @@ export async function startAsyncFinalize(
 /**
  * 执行 Finalize（后台异步）
  */
-async function executeFinalize(taskId: string, selectedReviewIds?: string[]): Promise<void> {
+async function executeFinalize(taskId: string, selectedReviewIds?: string[], force?: boolean): Promise<void> {
   const job = finalizeJobs.get(taskId);
   if (!job) return;
 
   try {
-    // 1. 检查严重问题
+    // 1. 检查严重问题（非强制模式下）
     job.progress = 10;
-    job.message = '检查未处理的严重问题...';
+    job.message = force ? '强制模式：跳过严重问题检查...' : '检查未处理的严重问题...';
     
-    let criticalCheckQuery = `
-      SELECT COUNT(*) as count 
-      FROM blue_team_reviews 
-      WHERE task_id = $1 
-      AND user_decision IS NULL
-      AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(questions) as q
-        WHERE q->>'severity' = 'high' OR q->>'severity' = 'critical'
-      )
-    `;
-    
-    // 如果只处理选中的评审意见，只检查这些
-    if (selectedReviewIds && selectedReviewIds.length > 0) {
-      criticalCheckQuery += ` AND id = ANY($2)`;
-    }
-    
-    const criticalCheck = await query(criticalCheckQuery, 
-      selectedReviewIds && selectedReviewIds.length > 0 
-        ? [taskId, selectedReviewIds]
-        : [taskId]
-    );
+    if (!force) {
+      let criticalCheckQuery = `
+        SELECT COUNT(*) as count 
+        FROM blue_team_reviews 
+        WHERE task_id = $1 
+        AND user_decision IS NULL
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(questions) as q
+          WHERE q->>'severity' = 'high' OR q->>'severity' = 'critical'
+        )
+      `;
+      
+      // 如果只处理选中的评审意见，只检查这些
+      if (selectedReviewIds && selectedReviewIds.length > 0) {
+        criticalCheckQuery += ` AND id = ANY($2)`;
+      }
+      
+      const criticalCheck = await query(criticalCheckQuery, 
+        selectedReviewIds && selectedReviewIds.length > 0 
+          ? [taskId, selectedReviewIds]
+          : [taskId]
+      );
 
-    const criticalPending = parseInt(criticalCheck.rows[0].count);
-    if (criticalPending > 0) {
-      throw new Error(`还有 ${criticalPending} 个严重问题未处理`);
+      const criticalPending = parseInt(criticalCheck.rows[0].count);
+      if (criticalPending > 0) {
+        throw new Error(`还有 ${criticalPending} 个严重问题未处理`);
+      }
+    } else {
+      console.log(`[AsyncFinalize] Force mode: skipping critical check for task ${taskId}`);
     }
 
     // 2. 获取任务信息

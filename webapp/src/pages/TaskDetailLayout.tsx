@@ -452,7 +452,20 @@ export function TaskDetailLayout() {
     const stageNames: Record<string, string> = { planning: '选题策划', research: '深度研究', writing: '文稿生成', review: '蓝军评审' };
     
     // planning 阶段有特殊处理（通过对话框），不需要确认
-    if (stage !== 'planning' && !confirm(`确定要重做${stageNames[stage]}吗？`)) return;
+    if (stage !== 'planning') {
+      // review 阶段提供保留历史评论的选项（如果还没选择）
+      if (stage === 'review' && data?.preserveHistory === undefined) {
+        const preserveHistory = confirm(
+          `确定要重做${stageNames[stage]}吗？\n\n` +
+          `点击"确定" = 保留前一轮评论（作为历史记录查看）\n` +
+          `点击"取消" = 删除前一轮评论（重新开始）`
+        );
+        // 将用户选择传递到 data 中
+        data = { ...data, preserveHistory };
+      } else if (stage !== 'review') {
+        if (!confirm(`确定要重做${stageNames[stage]}吗？`)) return;
+      }
+    }
     
     setActionLoading(`redo-${stage}`);
     try {

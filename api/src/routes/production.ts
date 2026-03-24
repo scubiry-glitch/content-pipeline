@@ -241,11 +241,11 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // 最终确认任务 - Finalize（异步版本）
   fastify.post('/:taskId/finalize', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
-    const { selectedReviewIds } = request.body as { selectedReviewIds?: string[] };
+    const { selectedReviewIds, force } = request.body as { selectedReviewIds?: string[]; force?: boolean };
     
     try {
       const { startAsyncFinalize } = await import('../services/asyncFinalize.js');
-      const result = await startAsyncFinalize(taskId, selectedReviewIds);
+      const result = await startAsyncFinalize(taskId, selectedReviewIds, force);
       
       if (!result.success) {
         reply.status(400);
@@ -403,14 +403,14 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // 4. 蓝军评审重做（支持配置）
   fastify.post('/:taskId/redo/review', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
-    const { config } = request.body as { config?: any };
+    const { config, preserveHistory } = request.body as { config?: any; preserveHistory?: boolean };
 
     // 异步执行评审（带超时控制）
     setImmediate(async () => {
       try {
-        console.log(`[Redo] Starting review redo for task ${taskId}...`);
+        console.log(`[Redo] Starting review redo for task ${taskId}...`, { preserveHistory });
         await withTimeout(
-          productionService.redoReview(taskId, config),
+          productionService.redoReview(taskId, config, preserveHistory),
           15 * 60 * 1000,
           `Review redo for ${taskId}`
         );

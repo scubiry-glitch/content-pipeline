@@ -71,6 +71,13 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
           headers: { 'x-api-key': 'dev-api-key' }
         });
         
+        // 如果 404，说明没有配置串行评审，静默处理
+        if (statusRes.status === 404) {
+          setStatus(null);
+          setLoading(false);
+          return;
+        }
+        
         if (statusRes.ok) {
           const statusData = await statusRes.json();
           setStatus(statusData);
@@ -138,8 +145,6 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
     };
     
     fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
   }, [taskId]);
 
   const getStatusBadge = () => {

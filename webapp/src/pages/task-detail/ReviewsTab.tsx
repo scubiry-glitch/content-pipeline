@@ -133,14 +133,6 @@ export function ReviewsTab() {
     }
   });
   
-  // 根据任务状态自动启动 Streaming
-  useEffect(() => {
-    if (task?.status === 'reviewing' && task?.current_stage === 'blue_team_streaming') {
-      setIsStreamingActive(true);
-      blueTeamStreaming.connectSSE(task.id);
-    }
-  }, [task?.id, task?.status, task?.current_stage]);
-
   const {
     task,
     reviews = [],
@@ -149,6 +141,14 @@ export function ReviewsTab() {
     onReReview,
     onRedoReview,
   } = useOutletContext<TaskContext>();
+  
+  // 根据任务状态自动启动 Streaming
+  useEffect(() => {
+    if (task?.status === 'reviewing' && task?.current_stage === 'blue_team_streaming') {
+      setIsStreamingActive(true);
+      blueTeamStreaming.connectSSE(task.id);
+    }
+  }, [task?.id, task?.status, task?.current_stage]);
 
   // 处理单个评论接受
   const handleCommentAccept = async (commentId: string) => {
@@ -256,6 +256,67 @@ export function ReviewsTab() {
     }
   };
 
+  // 处理强制 Finalize（忽略未处理的严重问题）
+  const handleForceFinalize = async () => {
+    const selectedIds = Array.from(selectedComments);
+    const reviewIds = selectedIds.length > 0 
+      ? [...new Set(selectedIds.map(id => id.split('::')[0]))]
+      : undefined;
+    
+    const confirmMsg = selectedIds.length > 0 
+      ? `⚠️ 强制 Finalize 选中的 ${selectedIds.length} 条评审意见？\n\n这将忽略所有未处理的严重问题，可能导致报告质量不达标。`
+      : '⚠️ 强制 Finalize 所有评审意见？\n\n这将忽略所有未处理的严重问题，可能导致报告质量不达标。';
+    
+    if (!confirm(confirmMsg)) return;
+    
+    setDecisionLoading(true);
+    setFinalizeStatus({ status: 'doing', progress: 0, message: '启动强制 Finalize 任务...' });
+    
+    try {
+      // 1. 启动异步 Finalize（强制模式）
+      const result = await tasksApi.finalize(task.id, reviewIds, true); // force = true
+      
+      if (!result.success) {
+        setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: result.error });
+        alert(`❌ Finalize 失败: ${result.error || '未知错误'}`);
+        return;
+      }
+      
+      // 2. 轮询状态
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await tasksApi.getFinalizeStatus(task.id);
+          
+          setFinalizeStatus({
+            status: status.status === 'pending' ? 'idle' : status.status as FinalizeStatusType['status'],
+            progress: status.progress,
+            message: status.message,
+            error: status.error,
+          });
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            setDecisionStatus('accepted');
+            alert(`✅ 强制 Finalize 完成！\n最终稿件ID: ${status.finalDraftId || 'N/A'}\n\n即将跳转到任务列表...`);
+            setTimeout(() => navigate('/tasks'), 2000);
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            alert(`❌ Finalize 失败: ${status.error || '未知错误'}`);
+          }
+        } catch (e) {
+          console.error('Poll error:', e);
+        }
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Force finalize failed:', error);
+      setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: '操作失败' });
+      alert('操作失败，请重试');
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
   // 处理Manual Override (Ignore all)
   const handleOverride = async () => {
     if (!confirm('确定要忽略所有评审意见并手动覆盖吗？')) return;
@@ -274,11 +335,16 @@ export function ReviewsTab() {
   const handleConfigConfirm = async (config: ReviewConfig) => {
     setShowConfigPanel(false);
     
-    if (!confirm('确定要使用新配置重新运行评审吗？')) return;
+    // 提供保留历史评论的选项
+    const preserveHistory = confirm(
+      `确定要使用新配置重新运行评审吗？\n\n` +
+      `点击"确定" = 保留前一轮评论（作为历史记录查看）\n` +
+      `点击"取消" = 删除前一轮评论（重新开始）`
+    );
     
     setDecisionLoading(true);
     try {
-      await onRedoReview?.(config);
+      await onRedoReview?.({ ...config, preserveHistory });
       alert('评审已重新启动，请稍候刷新查看结果');
     } catch (error) {
       console.error('Redo review failed:', error);
@@ -619,6 +685,15 @@ export function ReviewsTab() {
               <span className="material-symbols-outlined text-sm">auto_fix_high</span>
               Finalize ({selectedComments.size})
             </button>
+            <button
+              onClick={handleForceFinalize}
+              disabled={decisionLoading || finalizeStatus.status === 'doing'}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="强制 Finalize：忽略未处理的严重问题"
+            >
+              <span className="material-symbols-outlined text-sm">warning</span>
+              强制 Finalize
+            </button>
           </div>
         )}
       </div>
@@ -705,6 +780,12 @@ export function ReviewsTab() {
               selectMode={selectMode}
               selectedComments={selectedComments}
               onToggleSelect={toggleSelectComment}
+              isStreaming={isStreamingActive || blueTeamStreaming.isStreaming || sequentialStreaming.isStreaming}
+              streamingProgress={{
+                currentRound: sequentialStreaming.currentRound || blueTeamStreaming.progress?.currentRound,
+                totalRounds: sequentialStreaming.totalRounds || blueTeamStreaming.progress?.totalRounds,
+                currentExpert: sequentialStreaming.currentExpert || blueTeamStreaming.progress?.currentExpert
+              }}
             />
           </div>
         </div>
@@ -853,6 +934,12 @@ interface RightPanelProps {
   selectMode?: boolean;
   selectedComments?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  isStreaming?: boolean;
+  streamingProgress?: {
+    currentRound?: number;
+    totalRounds?: number;
+    currentExpert?: string;
+  };
 }
 
 function RightPanel({
@@ -865,6 +952,8 @@ function RightPanel({
   selectMode,
   selectedComments = new Set(),
   onToggleSelect,
+  isStreaming = false,
+  streamingProgress,
 }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'tasks'>('comments');
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
@@ -966,8 +1055,41 @@ function RightPanel({
         {/* Comments Tab */}
         {activeTab === 'comments' && (
           <>
+            {/* Streaming Status Indicator */}
+            {isStreaming && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                  <span className="material-symbols-outlined animate-spin">refresh</span>
+                  <span className="text-sm font-medium">
+                    AI 评审中...
+                    {streamingProgress?.currentExpert && (
+                      <span className="ml-1">({streamingProgress.currentExpert})</span>
+                    )}
+                  </span>
+                </div>
+                {streamingProgress && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 mb-1">
+                      <span>第 {streamingProgress.currentRound} / {streamingProgress.totalRounds} 轮</span>
+                    </div>
+                    <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${((streamingProgress.currentRound || 0) / (streamingProgress.totalRounds || 1)) * 100}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                  新评论实时生成中，已显示 {pendingComments.length} 条
+                </p>
+              </div>
+            )}
+            
             {/* Pending Comments */}
-            {pendingComments.length === 0 ? (
+            {pendingComments.length === 0 && !isStreaming ? (
               <div className="text-center py-12 text-slate-400">
                 <span className="material-symbols-outlined text-4xl mb-2">check_circle</span>
                 <p className="text-sm">No pending comments</p>
