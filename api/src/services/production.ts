@@ -340,11 +340,47 @@ ${JSON.stringify(outline, null, 2)}
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    // Get reviews from database
+    // Get parallel reviews (blue_team_reviews)
     const reviewsResult = await query(
       'SELECT * FROM blue_team_reviews WHERE task_id = $1 ORDER BY round, expert_role',
       [taskId]
     );
+
+    // Get sequential reviews (expert_reviews) and convert to same format
+    const sequentialReviewsResult = await query(
+      `SELECT 
+        id,
+        task_id,
+        round,
+        expert_role,
+        expert_name,
+        questions,
+        status,
+        created_at,
+        completed_at as decided_at
+      FROM expert_reviews 
+      WHERE task_id = $1 
+      ORDER BY round`,
+      [taskId]
+    );
+
+    // Merge sequential reviews into the results
+    const allReviews = [...reviewsResult.rows];
+    for (const seqReview of sequentialReviewsResult.rows) {
+      // Only add if not already exists (avoid duplicates)
+      const exists = allReviews.some(r => 
+        r.round === seqReview.round && 
+        (r.expert_role === seqReview.expert_role || r.expert_name === seqReview.expert_name)
+      );
+      if (!exists) {
+        allReviews.push({
+          ...seqReview,
+          expert_role: seqReview.expert_role || 'domain_expert',
+          user_decision: null,
+          decision_note: null
+        });
+      }
+    }
 
     // Get question-level decisions
     const questionDecisionsResult = await query(
@@ -383,7 +419,7 @@ ${JSON.stringify(outline, null, 2)}
     };
 
     // Process reviews with question-level decisions
-    const processedReviews = reviewsResult.rows.map(row => {
+    const processedReviews = allReviews.map(row => {
       const questions = typeof row.questions === 'string'
         ? JSON.parse(row.questions)
         : row.questions;

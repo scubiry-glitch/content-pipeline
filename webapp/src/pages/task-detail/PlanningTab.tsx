@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import { VersionTimeline } from '../../components/content';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
-import { tasksApi, rssSourcesApi, hotTopicsApi } from '../../api/client';
+import { tasksApi, rssSourcesApi, hotTopicsApi, researchApi } from '../../api/client';
 import type { Task, OutlineComment, OutlineVersion } from '../../types';
 import type { RSSItem, HotTopic } from '../../api/client';
 
@@ -257,14 +257,22 @@ export function PlanningTab() {
   const loadWebSearchData = useCallback(async () => {
     setWebSearchLoading(true);
     try {
-      const result = await hotTopicsApi.getAll({ limit: 5 });
+      // 使用 Tavily 实时搜索预览（与 Research 页面对齐）
+      const result = await researchApi.previewSearch(task.id, { limit: 5 });
       setWebSearchResults(result.items || []);
     } catch (error) {
       console.error('Failed to load web search results:', error);
+      // 出错时回退到热点话题 API
+      try {
+        const result = await hotTopicsApi.getAll({ limit: 5 });
+        setWebSearchResults(result.items || []);
+      } catch {
+        setWebSearchResults([]);
+      }
     } finally {
       setWebSearchLoading(false);
     }
-  }, []);
+  }, [task.id]);
 
   // ===== 加载 Community Topics 数据 =====
   const loadCommunityData = useCallback(async () => {
@@ -510,7 +518,7 @@ export function PlanningTab() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-on-surface truncate group-hover:text-primary transition-colors">{item.title}</p>
-                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {item.hotScore?.toFixed(0) || 'N/A'}</p>
+                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {(item.relevance * 100)?.toFixed(0) || 'N/A'}</p>
                       </div>
                     </label>
                   ))
