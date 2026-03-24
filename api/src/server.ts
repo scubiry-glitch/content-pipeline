@@ -27,6 +27,8 @@ import { v44CopilotRoutes } from './routes/v44-copilot.js';
 import { v45I18nRoutes } from './routes/v45-i18n.js';
 import communityTopicRoutes from './routes/communityTopics.js';
 import streamingOutlineRoutes from './routes/streamingOutline.js';
+import { streamingBlueTeamRoutes } from './routes/streamingBlueTeam.js';
+import { streamingSequentialRoutes } from './routes/streamingSequential.js';
 import { expertRoutes } from './routes/experts.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
@@ -122,6 +124,12 @@ async function main() {
   
   // 流式大纲生成路由 (v5.1)
   await fastify.register(streamingOutlineRoutes, { prefix: '/api/v1/planning' });
+  
+  // 流式蓝军评审路由 (v5.2) - 实时 SSE 推送
+  await fastify.register(streamingBlueTeamRoutes, { prefix: '/api/v1/streaming/blue-team' });
+  
+  // 流式串行评审路由 (v5.2) - 实时 SSE 推送
+  await fastify.register(streamingSequentialRoutes, { prefix: '/api/v1/streaming/sequential' });
 
   // v4.0 智能审核与合规路由
   await fastify.register(v40ComplianceRoutes, { prefix: '/api/v1/compliance' });

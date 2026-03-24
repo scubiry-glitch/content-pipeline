@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { expertsApi } from '../api/client';
+import { getAllExperts } from '../services/expertService';
 import type { ReviewConfig, Expert } from '../types';
 
 interface ReviewConfigPanelProps {
@@ -53,6 +54,8 @@ const MOCK_READER_PERSONAS: Expert[] = [
 export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPanelProps) {
   const [config, setConfig] = useState<ReviewConfig>(DEFAULT_CONFIG);
   const [libraryExperts, setLibraryExperts] = useState<Expert[]>([]);
+  const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
+  const [expertSearchQuery, setExpertSearchQuery] = useState('');
   const [readerExperts, setReaderExperts] = useState<Expert[]>([]);
   const [loadingExperts, setLoadingExperts] = useState(false);
   const [loadingReaders, setLoadingReaders] = useState(false);
@@ -65,17 +68,52 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
     }
   }, [isOpen]);
 
+  // 搜索过滤专家列表
+  useEffect(() => {
+    if (!expertSearchQuery.trim()) {
+      setFilteredExperts(libraryExperts);
+      return;
+    }
+    const query = expertSearchQuery.toLowerCase();
+    const filtered = libraryExperts.filter(expert =>
+      expert.name.toLowerCase().includes(query) ||
+      expert.title?.toLowerCase().includes(query) ||
+      expert.domain?.toLowerCase().includes(query) ||
+      expert.bio?.toLowerCase().includes(query)
+    );
+    setFilteredExperts(filtered);
+  }, [expertSearchQuery, libraryExperts]);
+
   const loadLibraryExperts = async () => {
     setLoadingExperts(true);
     try {
-      const result = await expertsApi.getAll();
-      // 只显示活跃的专家，排除读者角色
-      const activeExperts = result.items.filter(e => 
+      // 优先使用本地 expertService 的完整专家库（包含75位专家）
+      const localExperts = getAllExperts();
+      if (localExperts.length > 0) {
+        // 只显示活跃的专家，排除读者角色
+        const activeExperts = localExperts.filter(e => 
+          e.status === 'active' && e.angle !== 'reader'
+        );
+        setLibraryExperts(activeExperts);
+        setFilteredExperts(activeExperts);
+      } else {
+        // 回退到 API 获取
+        const result = await expertsApi.getAll();
+        const activeExperts = result.items.filter(e => 
+          e.status === 'active' && e.angle !== 'reader'
+        );
+        setLibraryExperts(activeExperts);
+        setFilteredExperts(activeExperts);
+      }
+    } catch (error) {
+      console.error('Failed to load experts:', error);
+      // 出错时尝试本地获取
+      const localExperts = getAllExperts();
+      const activeExperts = localExperts.filter(e => 
         e.status === 'active' && e.angle !== 'reader'
       );
       setLibraryExperts(activeExperts);
-    } catch (error) {
-      console.error('Failed to load experts:', error);
+      setFilteredExperts(activeExperts);
     } finally {
       setLoadingExperts(false);
     }
@@ -256,16 +294,42 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
             <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-base">group</span>
               Expert Library ({config.humanExperts?.length || 0} selected)
+              {expertSearchQuery && (
+                <span className="text-xs font-normal text-slate-400">
+                  显示 {filteredExperts.length}/{libraryExperts.length}
+                </span>
+              )}
             </h4>
+            {/* 搜索框 */}
+            <div className="relative mb-3">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+              <input
+                type="text"
+                placeholder="搜索专家名称、职称、领域..."
+                value={expertSearchQuery}
+                onChange={(e) => setExpertSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              {expertSearchQuery && (
+                <button
+                  onClick={() => setExpertSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              )}
+            </div>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {loadingExperts ? (
                 <div className="flex items-center justify-center py-4">
                   <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
                 </div>
-              ) : libraryExperts.length === 0 ? (
-                <p className="text-xs text-slate-500 italic text-center py-2">No experts available in library</p>
+              ) : filteredExperts.length === 0 ? (
+                <p className="text-xs text-slate-500 italic text-center py-2">
+                  {expertSearchQuery ? '没有找到匹配的专家' : 'No experts available in library'}
+                </p>
               ) : (
-                libraryExperts.map(expert => {
+                filteredExperts.map(expert => {
                   const isSelected = config.humanExperts?.includes(expert.id) ?? false;
                   return (
                     <label 

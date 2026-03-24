@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { BlueTeamReview, DraftVersion } from '../../types';
 import { DocumentEditor, type CommentItem } from '../../components/DocumentEditor';
@@ -11,6 +11,8 @@ import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
 import { LivePreviewMarkdown } from '../../components/content';
 import { blueTeamApi, tasksApi } from '../../api/client';
 import type { ReviewConfig } from '../../types';
+import { useStreamingBlueTeam } from '../../hooks/useStreamingBlueTeam';
+import { useStreamingSequentialReview } from '../../hooks/useStreamingSequentialReview';
 
 // Icons definition
 const REVIEW_ICONS: Record<string, string> = {
@@ -90,6 +92,54 @@ export function ReviewsTab() {
   
   // 配置面板状态
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  
+  // Streaming 蓝军评审状态
+  const [streamingComments, setStreamingComments] = useState<any[]>([]);
+  const [isStreamingActive, setIsStreamingActive] = useState(false);
+  
+  // 蓝军 Streaming Hook
+  const blueTeamStreaming = useStreamingBlueTeam({
+    onComment: (comment) => {
+      setStreamingComments(prev => [...prev, comment]);
+    },
+    onComplete: () => {
+      setIsStreamingActive(false);
+      // 刷新页面获取完整数据
+      setTimeout(() => window.location.reload(), 1000);
+    }
+  });
+  
+  // 串行评审 Streaming Hook
+  const sequentialStreaming = useStreamingSequentialReview({
+    onComment: (comment) => {
+      // 将串行评论转换为 CommentItem 格式
+      const newComment: CommentItem = {
+        id: comment.id,
+        content: comment.question,
+        author: `${comment.expertName} (第${comment.round}轮)`,
+        authorType: 'ai',
+        authorRole: comment.expertRole,
+        severity: comment.severity === 'high' ? 'critical' : comment.severity === 'medium' ? 'warning' : 'info',
+        timestamp: new Date().toISOString(),
+        location: `R${comment.round}-Q${comment.index + 1}`,
+        suggestion: comment.suggestion,
+        status: 'pending'
+      };
+      setStreamingComments(prev => [...prev, newComment]);
+    },
+    onComplete: () => {
+      setIsStreamingActive(false);
+      setTimeout(() => window.location.reload(), 1000);
+    }
+  });
+  
+  // 根据任务状态自动启动 Streaming
+  useEffect(() => {
+    if (task?.status === 'reviewing' && task?.current_stage === 'blue_team_streaming') {
+      setIsStreamingActive(true);
+      blueTeamStreaming.connectSSE(task.id);
+    }
+  }, [task?.id, task?.status, task?.current_stage]);
 
   const {
     task,
@@ -320,8 +370,13 @@ export function ReviewsTab() {
         });
       });
     });
-    return items;
-  }, [reviews]);
+    
+    // 合并 Streaming 评论（去重）
+    const existingIds = new Set(items.map(i => i.id));
+    const uniqueStreaming = streamingComments.filter(c => !existingIds.has(c.id));
+    
+    return [...items, ...uniqueStreaming];
+  }, [reviews, streamingComments]);
 
   // 生成文档高亮数据 - 根据评论的严重程度和引用文本
   const highlights: HighlightItem[] = useMemo(() => {

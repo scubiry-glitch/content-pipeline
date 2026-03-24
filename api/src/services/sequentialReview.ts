@@ -5,6 +5,11 @@ import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getLLMRouter } from '../providers/index.js';
 import { KimiProvider } from '../providers/kimi.js';
+import { 
+  broadcastSequentialEvent,
+  broadcastDraftRevising,
+  broadcastReviewCompleted 
+} from './streamingSequentialReview.js';
 
 // 专家评审配置
 interface ReviewConfig {
@@ -259,11 +264,29 @@ async function processNextRound(taskId: string): Promise<void> {
     [taskId, reviewId]
   );
   
-  // 7. 执行专家评审
+  // 7. 执行专家评审（带流式推送）
   console.log(`[processNextRound] Conducting review for round ${currentRound + 1} with ${expertConfig.name}`);
+  
+  // 广播轮次开始
+  broadcastSequentialEvent(taskId, {
+    type: 'round_started',
+    round: currentRound + 1,
+    totalRounds,
+    expertName: expertConfig.name,
+    expertRole: expertConfig.role,
+    message: `第 ${currentRound + 1} 轮评审开始：${expertConfig.name}`
+  });
+  
   let reviewResult: ReviewResult;
   if (expertConfig.type === 'ai') {
-    reviewResult = await conductAIExpertReview(draftContent, expertConfig);
+    // AI 专家评审 - 逐条推送评论
+    reviewResult = await conductAIExpertReviewWithStreaming(
+      taskId, 
+      currentRound + 1, 
+      draftContent, 
+      expertConfig,
+      totalRounds
+    );
   } else {
     // 真人专家 - 创建任务等待反馈 (简化版直接模拟)
     reviewResult = await conductHumanExpertReview(draftContent, expertConfig);
@@ -281,7 +304,9 @@ async function processNextRound(taskId: string): Promise<void> {
     [reviewId, JSON.stringify(reviewResult.questions), reviewResult.score, reviewResult.summary]
   );
   
-  // 9. 生成修订稿
+  // 9. 生成修订稿（带流式推送）
+  broadcastDraftRevising(taskId, currentRound + 1, expertConfig.name);
+  
   const newDraft = await generateRevisedDraft(
     taskId,
     currentDraftId,
@@ -290,6 +315,15 @@ async function processNextRound(taskId: string): Promise<void> {
     currentRound + 1,
     expertConfig.role || 'expert'
   );
+  
+  // 广播修订稿生成完成
+  broadcastSequentialEvent(taskId, {
+    type: 'draft_revised',
+    round: currentRound + 1,
+    expertName: expertConfig.name,
+    draftId: newDraft.id,
+    message: `${expertConfig.name} 生成修订稿完成`
+  });
   
   // 10. 更新评审记录和进度
   await query(
@@ -683,6 +717,9 @@ async function finalizeSequentialReview(taskId: string): Promise<void> {
   // 4. 同步评审意见到 blue_team_reviews (统一对外接口)
   await syncToBlueTeamReviews(taskId, reviews);
   
+  // 5. 广播评审全部完成
+  broadcastReviewCompleted(taskId, reviews.length);
+  
   console.log(`[SequentialReview] Task ${taskId} completed with ${reviews.length} rounds`);
 }
 
@@ -813,4 +850,83 @@ async function syncToBlueTeamReviews(taskId: string, expertReviews: any[]): Prom
   }
   
   console.log(`[SequentialReview] Sync completed for task ${taskId}`);
+}
+
+
+/**
+ * AI 专家评审（带 Streaming 推送）
+ * 包装原有 conductAIExpertReview，逐条推送生成的评论
+ */
+async function conductAIExpertReviewWithStreaming(
+  taskId: string,
+  round: number,
+  draftContent: string,
+  expertConfig: ExpertConfig,
+  totalRounds: number
+): Promise<ReviewResult> {
+  // 广播专家开始评审
+  broadcastSequentialEvent(taskId, {
+    type: 'expert_reviewing',
+    round,
+    totalRounds,
+    expertName: expertConfig.name,
+    expertRole: expertConfig.role,
+    message: `${expertConfig.name} 正在分析文稿...`
+  });
+  
+  // 调用原有评审逻辑
+  const result = await conductAIExpertReview(draftContent, expertConfig);
+  
+  // 逐条推送生成的评论（模拟流式效果）
+  if (result.questions && result.questions.length > 0) {
+    for (let i = 0; i < result.questions.length; i++) {
+      const q = result.questions[i];
+      
+      // 广播单条评论生成
+      broadcastSequentialEvent(taskId, {
+        type: 'comment_generated',
+        round,
+        totalRounds,
+        expertName: expertConfig.name,
+        expertRole: expertConfig.role,
+        comment: {
+          index: i,
+          total: result.questions.length,
+          id: q.id || `${taskId}-${round}-${i}`,
+          question: q.question,
+          severity: q.severity,
+          suggestion: q.suggestion,
+          category: q.category,
+          location: q.location,
+          expertName: expertConfig.name,
+          expertRole: expertConfig.role,
+          round
+        },
+        progress: {
+          currentRound: round,
+          totalRounds,
+          currentExpert: expertConfig.name,
+          status: 'processing'
+        },
+        message: `${expertConfig.name} 发现问题 ${i + 1}/${result.questions.length}`
+      });
+      
+      // 添加延迟让用户感知流式效果（每条间隔 300ms）
+      if (i < result.questions.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+  }
+  
+  // 广播评审完成
+  broadcastSequentialEvent(taskId, {
+    type: 'round_completed',
+    round,
+    totalRounds,
+    expertName: expertConfig.name,
+    expertRole: expertConfig.role,
+    message: `${expertConfig.name} 完成评审，发现 ${result.questions?.length || 0} 个问题，评分 ${result.score}`
+  });
+  
+  return result;
 }

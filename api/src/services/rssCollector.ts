@@ -387,10 +387,14 @@ export async function collectSingleFeed(
       }
 
       // 保存到数据库
-      await saveRSSItem(rssItem);
-      await saveHotTopic(rssItem);
-      
-      imported++;
+      try {
+        await saveRSSItem(rssItem);
+        await saveHotTopic(rssItem);
+        imported++;
+      } catch (saveError) {
+        console.error(`[RSS] Save failed for item ${rssItem.title}:`, saveError);
+        throw saveError;
+      }
     } catch (error) {
       console.warn(`[RSS] Error processing item from ${source.name}:`, error);
     }
@@ -499,6 +503,7 @@ async function checkDuplicate(item: RSSItem): Promise<boolean> {
 }
 
 async function saveRSSItem(item: RSSItem): Promise<void> {
+  console.log(`[RSS] Saving item: ${item.title.substring(0, 50)}...`);
   try {
     // 生成 embedding
     let embedding: number[] | null = null;
@@ -507,8 +512,10 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
       embedding = await getEmbedding(textToEmbed);
     } catch (error) {
       // 忽略 embedding 错误
+      console.log(`[RSS] Embedding generation failed, continuing without embedding`);
     }
 
+    console.log(`[RSS] Inserting item with id=${item.id}, source=${item.sourceName}`);
     await query(
       `INSERT INTO rss_items (
         id, source_id, source_name, title, link, content, summary,
@@ -539,8 +546,10 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
         embedding ? JSON.stringify(embedding) : null,
       ]
     );
+    console.log(`[RSS] Item saved successfully: ${item.id}`);
   } catch (error) {
     console.error('[RSS] Error saving item:', error);
+    console.error('[RSS] Item data:', { id: item.id, title: item.title.substring(0, 50), source: item.sourceName });
     throw error;
   }
 }
