@@ -204,12 +204,12 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
     );
   }
 
-  if (!status || status.status === 'idle') {
+  if (!status) {
     return (
       <div className="p-8 text-center">
         <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">queue</span>
-        <p className="text-slate-500">串行评审队列未启动</p>
-        <p className="text-xs text-slate-400 mt-1">等待管理员配置评审流程</p>
+        <p className="text-slate-500">串行评审队列未配置</p>
+        <p className="text-xs text-slate-400 mt-1">请先配置评审流程</p>
       </div>
     );
   }

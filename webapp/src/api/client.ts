@@ -145,7 +145,7 @@ export const assetsApi = {
     client.post(`/assets/${id}/pin`, { is_pinned: isPinned }) as Promise<Asset>,
 
   search: (query: string) =>
-    client.get('/assets/search', { params: { q: query } }) as Promise<Asset[]>,
+    client.get('/assets/search', { params: { q: query } }) as Promise<{ items: Asset[]; total: number }>,
 
   quote: (id: string, taskId?: string) =>
     client.post(`/assets/${id}/quote`, { taskId }) as Promise<any>,

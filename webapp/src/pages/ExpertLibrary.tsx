@@ -60,6 +60,8 @@ export function ExpertLibrary() {
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
+  const [selectedExpertIds, setSelectedExpertIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedExpertStats, setSelectedExpertStats] = useState<{
     totalReviews: number;
     acceptedCount: number;
@@ -149,6 +151,33 @@ export function ExpertLibrary() {
     return colors[angle] || '#6b7280';
   };
 
+  // 切换专家选择
+  const toggleExpertSelection = (expertId: string) => {
+    setSelectedExpertIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(expertId)) {
+        newSet.delete(expertId);
+      } else {
+        newSet.add(expertId);
+      }
+      return newSet;
+    });
+  };
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedExpertIds.size === filteredExperts.length) {
+      setSelectedExpertIds(new Set());
+    } else {
+      setSelectedExpertIds(new Set(filteredExperts.map(e => e.id)));
+    }
+  };
+
+  // 清空选择
+  const clearSelection = () => {
+    setSelectedExpertIds(new Set());
+  };
+
   if (loading) {
     return (
       <div className="expert-library-page loading">
@@ -191,7 +220,7 @@ export function ExpertLibrary() {
 
       {/* 筛选栏 */}
       <div className="filter-section">
-        <div className="domain-filters">
+        <div className="domain-filters" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
             className={`domain-btn ${selectedDomain === 'all' ? 'active' : ''}`}
             onClick={() => setSelectedDomain('all')}
@@ -213,15 +242,62 @@ export function ExpertLibrary() {
             </button>
           ))}
         </div>
-        <div className="search-box">
+        <div className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <input
             type="text"
             placeholder="搜索专家姓名、职位、核心思想..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ flex: 1 }}
           />
+          <button
+            className={`domain-btn ${selectMode ? 'active' : ''}`}
+            onClick={() => {
+              setSelectMode(!selectMode);
+              if (selectMode) clearSelection();
+            }}
+            style={{ 
+              background: selectMode ? '#3b82f6' : '#f3f4f6',
+              color: selectMode ? 'white' : '#374151'
+            }}
+          >
+            {selectMode ? '退出选择' : '选择模式'}
+          </button>
         </div>
       </div>
+
+      {/* 选择操作栏 */}
+      {selectMode && (
+        <div className="selection-bar" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          background: '#f0f9ff',
+          borderRadius: '8px',
+          marginBottom: '16px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              className="domain-btn"
+              onClick={toggleSelectAll}
+              style={{ fontSize: '14px' }}
+            >
+              {selectedExpertIds.size === filteredExperts.length ? '取消全选' : '全选'}
+            </button>
+            <button
+              className="domain-btn"
+              onClick={clearSelection}
+              style={{ fontSize: '14px' }}
+            >
+              清空
+            </button>
+          </div>
+          <span style={{ fontSize: '14px', color: '#0369a1', fontWeight: 500 }}>
+            已选择 {selectedExpertIds.size} 位专家
+          </span>
+        </div>
+      )}
 
       {/* 专家列表 */}
       {filteredExperts.length === 0 ? (
@@ -239,10 +315,47 @@ export function ExpertLibrary() {
                 key={expert.id}
                 className={`expert-card ${expert.level}`}
                 onClick={() => {
-                  setSelectedExpert(expert);
-                  loadExpertStats(expert);
+                  if (selectMode) {
+                    toggleExpertSelection(expert.id);
+                  } else {
+                    setSelectedExpert(expert);
+                    loadExpertStats(expert);
+                  }
                 }}
+                style={{ position: 'relative' }}
               >
+                {/* 选择复选框 */}
+                {selectMode && (
+                  <div 
+                    style={{ 
+                      position: 'absolute', 
+                      top: '12px', 
+                      right: '12px',
+                      zIndex: 10
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpertSelection(expert.id);
+                    }}
+                  >
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '4px',
+                      border: '2px solid',
+                      borderColor: selectedExpertIds.has(expert.id) ? '#3b82f6' : '#d1d5db',
+                      background: selectedExpertIds.has(expert.id) ? '#3b82f6' : 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer'
+                    }}>
+                      {selectedExpertIds.has(expert.id) && (
+                        <span style={{ color: 'white', fontSize: '16px' }}>✓</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* 左侧头像 */}
                 <div
                   className="expert-avatar"

@@ -56,6 +56,8 @@ export function ResearchTab() {
   const [privateAssets, setPrivateAssets] = useState<Asset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [isSearchingAssets, setIsSearchingAssets] = useState(false);
 
   // ===== 加载数据 =====
   const loadRssData = useCallback(async () => {
@@ -116,6 +118,33 @@ export function ResearchTab() {
 
   const handleRetryAssets = async () => {
     await loadAssetsData();
+  };
+
+  // ===== 素材库关键词搜索 =====
+  const handleSearchAssets = async () => {
+    if (!assetSearchQuery.trim()) {
+      // 如果搜索词为空，恢复默认列表
+      await loadAssetsData();
+      return;
+    }
+    
+    setIsSearchingAssets(true);
+    try {
+      const response = await assetsApi.search(assetSearchQuery);
+      // API 返回 { total, items } 格式
+      const items = response.items || response || [];
+      setPrivateAssets(Array.isArray(items) ? items : []);
+    } catch (error) {
+      console.error('Failed to search assets:', error);
+      alert('搜索素材失败');
+    } finally {
+      setIsSearchingAssets(false);
+    }
+  };
+
+  const handleClearAssetSearch = () => {
+    setAssetSearchQuery('');
+    loadAssetsData();
   };
 
   // ===== 勾选功能 =====
@@ -423,18 +452,66 @@ export function ResearchTab() {
                 <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Private Vector Assets</h3>
                 <p className="text-xs text-slate-500 mb-3">Internal PDF, Docs and historical reports...</p>
                 
+                {/* 关键词搜索 */}
+                {researchConfig.sources.includes('asset') && (
+                  <div className="mb-3">
+                    <div className="flex gap-1.5">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={assetSearchQuery}
+                          onChange={(e) => setAssetSearchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearchAssets()}
+                          placeholder="输入关键词搜索素材..."
+                          className="w-full px-2.5 py-1.5 pr-7 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        {assetSearchQuery && (
+                          <button
+                            onClick={handleClearAssetSearch}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleSearchAssets}
+                        disabled={isSearchingAssets || !assetSearchQuery.trim()}
+                        className="px-2.5 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        <span className={`material-symbols-outlined text-sm ${isSearchingAssets ? 'animate-spin' : ''}`}>
+                          {isSearchingAssets ? 'sync' : 'search'}
+                        </span>
+                      </button>
+                    </div>
+                    {assetSearchQuery && privateAssets.length > 0 && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        找到 {privateAssets.length} 个结果
+                        <button 
+                          onClick={handleClearAssetSearch}
+                          className="ml-2 text-indigo-600 hover:underline"
+                        >
+                          清除搜索
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                )}
+                
                 {/* Assets with Checkboxes */}
                 <div className="flex-1 max-h-28 overflow-y-auto space-y-1 mb-2">
-                  {assetsLoading ? (
+                  {assetsLoading || isSearchingAssets ? (
                     <div className="flex items-center justify-center py-4">
                       <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
                     </div>
                   ) : !researchConfig.sources.includes('asset') ? (
                     <p className="text-xs text-slate-400 italic text-center py-2">Assets source disabled</p>
                   ) : privateAssets.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic text-center py-2">No assets available</p>
+                    <p className="text-xs text-slate-400 italic text-center py-2">
+                      {assetSearchQuery ? '未找到匹配的素材' : 'No assets available'}
+                    </p>
                   ) : (
-                    privateAssets.slice(0, 5).map((item) => (
+                    privateAssets.slice(0, 20).map((item) => (
                       <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
                         <input
                           type="checkbox"

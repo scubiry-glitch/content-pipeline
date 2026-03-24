@@ -4,6 +4,7 @@
 import { FastifyInstance } from 'fastify';
 import {
   collectResearchContent,
+  generateResearchReport,
   getResearchConfig,
   saveResearchConfig,
   ResearchConfig,
@@ -93,13 +94,28 @@ export async function researchRoutes(fastify: FastifyInstance) {
         const result = await collectResearchContent(taskId, outline, config);
         console.log(`[Research] Collection completed for ${taskId}:`, result);
 
+        // 生成研究报告
+        const report = await generateResearchReport(taskId, result.items);
+        console.log(`[Research] Report generated for ${taskId}:`, report);
+
         // 更新任务状态
         await query(
           `UPDATE tasks SET
             research_data = COALESCE(research_data, '{}'::jsonb) || $1::jsonb,
             updated_at = NOW()
           WHERE id = $2`,
-          [JSON.stringify({ collectedAt: new Date(), totalItems: result.totalCollected }), taskId]
+          [JSON.stringify({
+            collectedAt: new Date(),
+            totalItems: result.totalCollected,
+            insights: report.insights,
+            sources: report.sources,
+            searchStats: {
+              webSources: result.bySource['web'] || 0,
+              assetSources: result.bySource['asset'] || 0,
+              rssSources: result.bySource['rss'] || 0,
+              totalSources: result.totalCollected,
+            }
+          }), taskId]
         );
       } catch (error) {
         console.error(`[Research] Collection failed for ${taskId}:`, error);

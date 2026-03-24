@@ -303,10 +303,13 @@ export function ReviewsTab() {
                  : 'pending';
         }
         
+        // 优先使用专家名字，其次是 role 名称
+        const expertDisplayName = review.expert_name || review.expert_role?.replace('_', ' ') || 'Unknown';
+        
         items.push({
           id: `${review.id}::${idx}`,
           content: q.question || 'No question provided',
-          author: `${icon} ${review.expert_role?.replace('_', ' ')}`,
+          author: `${icon} ${expertDisplayName}`,
           authorType: 'ai',
           authorRole: review.expert_role,
           severity: severity,
