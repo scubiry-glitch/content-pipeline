@@ -9,6 +9,7 @@ interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (task: CreateTaskData) => void;
+  isCreating?: boolean;
 }
 
 export interface CreateTaskData {
@@ -65,7 +66,7 @@ const OUTPUT_FORMATS = [
   },
 ];
 
-export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalProps) {
+export function CreateTaskModal({ isOpen, onClose, onCreate, isCreating = false }: CreateTaskModalProps) {
   const [formData, setFormData] = useState<CreateTaskData>({
     topic: '',
     contentType: 'research',
@@ -550,9 +551,16 @@ export function CreateTaskModal({ isOpen, onClose, onCreate }: CreateTaskModalPr
           <button
             className="btn btn-primary"
             onClick={handleSubmit}
-            disabled={!isValid}
+            disabled={!isValid || isCreating}
           >
-            开始生产
+            {isCreating ? (
+              <>
+                <span className="material-symbols-outlined animate-spin" style={{ fontSize: '16px', verticalAlign: 'middle' }}>refresh</span>
+                创建中...
+              </>
+            ) : (
+              '开始生产'
+            )}
           </button>
         </div>
       </div>

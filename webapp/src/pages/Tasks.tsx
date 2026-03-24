@@ -63,6 +63,7 @@ function TasksTabs() {
 export function Tasks() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const { tasks, createTask } = useTasks();
   const location = useLocation();
 
@@ -82,6 +83,9 @@ export function Tasks() {
   }, [location]);
 
   const handleCreateTask = async (data: CreateTaskData) => {
+    if (isCreating) return; // 防止重复提交
+    
+    setIsCreating(true);
     try {
       const formats = Object.entries(data.outputFormats)
         .filter(([, checked]) => checked)
@@ -102,6 +106,8 @@ export function Tasks() {
       setShowCreateModal(false);
     } catch (err) {
       console.error('Failed to create task:', err);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -185,6 +191,7 @@ export function Tasks() {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreate={handleCreateTask}
+        isCreating={isCreating}
       />
     </div>
   );

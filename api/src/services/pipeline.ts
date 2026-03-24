@@ -134,7 +134,8 @@ export class PipelineService {
       context,
       targetAudience: '产业研究人员和投资者',
       desiredDepth: 'comprehensive',
-      comments
+      comments,
+      existingTaskId: taskId // 传递现有 taskId，避免创建新 task
     });
 
     if (!result.success) {

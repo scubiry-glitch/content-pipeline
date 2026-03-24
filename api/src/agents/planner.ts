@@ -12,6 +12,7 @@ export interface PlannerInput {
   targetAudience?: string;
   desiredDepth?: 'macro' | 'meso' | 'micro' | 'comprehensive';
   comments?: string[]; // 用户评论，用于指导大纲生成
+  existingTaskId?: string; // 如果提供，则更新现有task而不是创建新task
 }
 
 export interface PlannerOutput {
@@ -637,9 +638,26 @@ ${commentsSection}
       sections: outline,
       knowledgeInsights: knowledgeInsights || [],
       novelAngles: novelAngles || [],
+      dataRequirements: dataRequirements || [],
       generatedAt: new Date().toISOString(),
     };
 
+    // 如果提供了 existingTaskId，则更新现有 task
+    if (input.existingTaskId) {
+      await query(
+        `UPDATE tasks 
+         SET outline = $1, 
+             status = 'outline_pending', 
+             progress = 10,
+             current_stage = 'outline_pending',
+             updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(enrichedOutline), input.existingTaskId]
+      );
+      return input.existingTaskId;
+    }
+
+    // 否则创建新 task
     const result = await query(
       `INSERT INTO tasks (id, topic, outline, status, progress, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
