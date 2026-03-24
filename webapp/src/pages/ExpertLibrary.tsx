@@ -243,63 +243,52 @@ export function ExpertLibrary() {
                   loadExpertStats(expert);
                 }}
               >
-                <div className="card-header">
-                  <div
-                    className="expert-avatar"
-                    style={{
-                      background:
-                        expert.level === 'senior'
-                          ? 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)'
-                          : `linear-gradient(135deg, ${domain.color} 0%, ${domain.color}dd 100%)`,
-                    }}
-                  >
-                    {expert.name.charAt(0)}
+                {/* 左侧头像 */}
+                <div
+                  className="expert-avatar"
+                  style={{
+                    background:
+                      expert.level === 'senior'
+                        ? 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)'
+                        : `linear-gradient(135deg, ${domain.color} 0%, ${domain.color}dd 100%)`,
+                  }}
+                >
+                  {expert.name.charAt(0)}
+                </div>
+
+                {/* 中间内容 */}
+                <div className="expert-content">
+                  <div className="expert-header">
+                    <h3 className="expert-name">{expert.name}</h3>
+                    <span className="expert-title">{expert.profile.title}</span>
                   </div>
-                  <div className="expert-badges">
-                    <span
-                      className="level-badge"
-                      style={{
-                        background: `${getExpertLevelColor(expert.level)}20`,
-                        color: getExpertLevelColor(expert.level),
-                      }}
-                    >
-                      {getExpertLevelLabel(expert.level)}
-                    </span>
+                  
+                  <div className="expert-tags">
+                    <span className="tag level">{getExpertLevelLabel(expert.level)}</span>
+                    <span className="tag domain">{domain.icon} {expert.domainName}</span>
                     {expert.angle && (
-                      <span className="angle-badge" style={{ background: `${getAngleColor(expert.angle)}20`, color: getAngleColor(expert.angle) }}>
-                        {getAngleLabel(expert.angle)}
-                      </span>
+                      <span className="tag angle">{getAngleLabel(expert.angle)}</span>
                     )}
-                    <span className="domain-badge" style={{ background: `${domain.color}20`, color: domain.color }}>
-                      {domain.icon} {expert.domainName}
-                    </span>
                   </div>
-                </div>
 
-                <div className="expert-info">
-                  <h3 className="expert-name">{expert.name}</h3>
-                  <p className="expert-title">{expert.profile.title}</p>
-                  <p className="expert-personality">{expert.profile.personality}</p>
-                </div>
+                  <p className="expert-desc">{expert.profile.personality}</p>
 
-                <div className="expert-philosophy">
-                  <div className="philosophy-tags">
+                  <div className="expert-core">
                     {expert.philosophy.core.slice(0, 3).map((tag, idx) => (
-                      <span key={idx} className="philosophy-tag">
-                        {tag}
-                      </span>
+                      <span key={idx} className="core-tag">{tag}</span>
                     ))}
                   </div>
                 </div>
 
-                <div className="expert-stats">
-                  <div className="stat">
-                    <span className="stat-label">采纳率</span>
-                    <span className="stat-value">{(expert.acceptanceRate * 100).toFixed(0)}%</span>
+                {/* 右侧指标 */}
+                <div className="expert-metrics">
+                  <div className="metric">
+                    <span className="metric-value">{(expert.acceptanceRate * 100).toFixed(0)}%</span>
+                    <span className="metric-label">采纳率</span>
                   </div>
-                  <div className="stat">
-                    <span className="stat-label">评审次数</span>
-                    <span className="stat-value">{expert.totalReviews}</span>
+                  <div className="metric">
+                    <span className="metric-value">{expert.totalReviews}</span>
+                    <span className="metric-label">评审次数</span>
                   </div>
                 </div>
               </div>

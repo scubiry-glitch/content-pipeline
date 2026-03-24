@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: content-pipeline-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-author}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-author}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - content-pipeline-network
+
+  # API Server
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: content-pipeline-api
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-author}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-author}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - KIMI_API_KEY=${KIMI_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - api_uploads:/app/uploads
+      - api_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - content-pipeline-network
+
+  # Frontend (Nginx)
+  web:
+    build:
+      context: ../webapp
+      dockerfile: Dockerfile
+    container_name: content-pipeline-web
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - web_logs:/var/log/nginx
+    networks:
+      - content-pipeline-network
+
+  # Optional: Redis for caching
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: content-pipeline-redis
+  #   restart: always
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - content-pipeline-network
+
+volumes:
+  postgres_data:
+    driver: local
+  api_uploads:
+    driver: local
+  api_logs:
+    driver: local
+  web_logs:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  content-pipeline-network:
+    driver: bridge

@@ -145,6 +145,7 @@ export function ReviewsTab() {
 
   // 处理接受并Finalize（异步版本）
   const handleAccept = async () => {
+    console.log('[ReviewsTab] handleAccept called');
     const selectedIds = Array.from(selectedComments);
     // 从 commentId (格式: "reviewId::questionIndex") 提取 reviewIds
     const reviewIds = selectedIds.length > 0 

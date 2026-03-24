@@ -366,6 +366,7 @@ export const STATUS_MAP: Record<TaskStatus, { text: string; className: string; s
   writing: { text: '文稿生成中', className: 'badge-writing', stage: 3 },
   reviewing: { text: '评审中', className: 'badge-reviewing', stage: 3 },
   awaiting_approval: { text: '待正式发布', className: 'badge-reviewing', stage: 4 },
+  finalizing: { text: '最终确认中', className: 'badge-reviewing', stage: 4 },
   converting: { text: '多态转换中', className: 'badge-converting', stage: 4 },
   completed: { text: '已完成', className: 'badge-completed', stage: 4 },
   failed: { text: '失败', className: 'badge-failed', stage: -1 },
