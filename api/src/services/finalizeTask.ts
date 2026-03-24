@@ -22,15 +22,23 @@ export async function finalizeTask(taskId: string): Promise<FinalizeResult> {
   console.log(`[Finalize] Starting finalize for task ${taskId}`);
 
   try {
-    // 1. 检查是否还有未处理的 critical 问题
+    // 1. 检查是否还有未处理的 critical 问题（支持 questions 为 object 或 array 格式）
     const criticalCheck = await query(
       `SELECT COUNT(*) as count 
        FROM blue_team_reviews 
        WHERE task_id = $1 
        AND user_decision IS NULL
-       AND EXISTS (
-         SELECT 1 FROM jsonb_array_elements(questions) as q
-         WHERE q->>'severity' = 'high' OR q->>'severity' = 'critical'
+       AND (
+         -- 如果是数组格式
+         (jsonb_typeof(questions) = 'array' AND EXISTS (
+           SELECT 1 FROM jsonb_array_elements(questions) as q
+           WHERE q->>'severity' = 'high' OR q->>'severity' = 'critical'
+         ))
+         OR
+         -- 如果是 object 格式（单个问题）
+         (jsonb_typeof(questions) = 'object' AND (
+           questions->>'severity' = 'high' OR questions->>'severity' = 'critical'
+         ))
        )`,
       [taskId]
     );

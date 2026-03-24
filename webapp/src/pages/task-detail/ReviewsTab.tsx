@@ -142,11 +142,12 @@ export function ReviewsTab() {
     onRedoReview,
   } = useOutletContext<TaskContext>();
   
-  // 根据任务状态自动启动 Streaming
+  // 根据任务状态自动启动 Streaming（扩大 stage 匹配范围）
   useEffect(() => {
-    if (task?.status === 'reviewing' && task?.current_stage === 'blue_team_streaming') {
-      setIsStreamingActive(true);
-      blueTeamStreaming.connectSSE(task.id);
+    if (task?.status === 'reviewing' &&
+        (task?.current_stage === 'blue_team_streaming' || task?.current_stage === 'blue_team_review')) {
+      // 通过 fetchStatus 检查是否有活跃的 streaming，如有则自动连接
+      blueTeamStreaming.fetchStatus(task.id);
     }
   }, [task?.id, task?.status, task?.current_stage]);
 
@@ -334,20 +335,29 @@ export function ReviewsTab() {
   // 处理配置确认
   const handleConfigConfirm = async (config: ReviewConfig) => {
     setShowConfigPanel(false);
-    
+
     // 提供保留历史评论的选项
     const preserveHistory = confirm(
       `确定要使用新配置重新运行评审吗？\n\n` +
-      `点击"确定" = 保留前一轮评论（作为历史记录查看）\n` +
-      `点击"取消" = 删除前一轮评论（重新开始）`
+      `点击"确定" = 保留前一轮评论\n` +
+      `点击"取消" = 删除前一轮评论`
     );
-    
+
     setDecisionLoading(true);
     try {
       await onRedoReview?.({ ...config, preserveHistory });
-      alert('评审已重新启动，请稍候刷新查看结果');
+      // 立即激活 streaming，无需等待 loadTask 轮询
+      setIsStreamingActive(true);
+      setStreamingComments([]);
+      if (config.mode === 'sequential' || config.mode === 'serial') {
+        sequentialStreaming.reset();
+        sequentialStreaming.connect(task.id);
+      } else {
+        blueTeamStreaming.connectSSE(task.id);
+      }
     } catch (error) {
       console.error('Redo review failed:', error);
+      setIsStreamingActive(false);
       alert('重新启动评审失败');
     } finally {
       setDecisionLoading(false);
@@ -386,12 +396,17 @@ export function ReviewsTab() {
   // Convert BlueTeamReview[] to CommentItem[] for DocumentEditor
   // 优先从 question_decisions 获取状态，如果没有则使用 review 级别状态
   const comments: CommentItem[] = useMemo(() => {
+    console.log('[ReviewsTab] Building comments from reviews:', reviews.length, reviews);
     const items: CommentItem[] = [];
     reviews.forEach(review => {
       const icon = REVIEW_ICONS[review.expert_role] || '👤';
       const reviewStatus = review.user_decision || review.status;
       
-      review.questions?.forEach((q: any, idx: number) => {
+      // 兼容 questions 是数组或单个对象的情况
+      const questions = review.questions ? 
+        (Array.isArray(review.questions) ? review.questions : [review.questions]) : [];
+      
+      questions.forEach((q: any, idx: number) => {
         const severityMap: Record<string, 'critical' | 'warning' | 'info' | 'praise'> = {
           high: 'critical',
           medium: 'warning', 
@@ -447,35 +462,39 @@ export function ReviewsTab() {
   // 生成文档高亮数据 - 根据评论的严重程度和引用文本
   const highlights: HighlightItem[] = useMemo(() => {
     const items: HighlightItem[] = [];
-    
+
     comments.forEach(comment => {
       // 只高亮 pending 状态的评论
       if (comment.status !== 'pending') return;
-      
-      // 根据 severity 映射到高亮颜色
+
       const colorMap: Record<string, 'blue' | 'orange' | 'red'> = {
         info: 'blue',
         warning: 'orange',
         critical: 'red',
-        praise: 'blue', // praise 也使用蓝色
+        praise: 'blue',
       };
-      
+
       const color = colorMap[comment.severity] || 'blue';
-      
-      // 尝试从评论内容中提取可能的引用文本
-      // 策略：提取引号内的内容，或者使用 suggestion 中的关键词
       const content = comment.content;
       let highlightText = '';
-      
-      // 尝试匹配引号内的内容
-      const quoteMatch = content.match(/["""']([^"""']{5,100})["""']/);
+
+      // 策略1: 提取引号内文本（含中文引号 「」『』""''《》【】）
+      const quoteMatch = content.match(/["""'「『《【'"\u201c\u201d]([^"""'」』》】'"\u201c\u201d]{5,200})["""'」』》】'"\u201c\u201d]/);
       if (quoteMatch) {
-        highlightText = quoteMatch[1];
-      } else if (comment.suggestion && comment.suggestion.length > 5 && comment.suggestion.length < 100) {
-        // 使用 suggestion 作为高亮文本
-        highlightText = comment.suggestion;
+        highlightText = quoteMatch[1].slice(0, 100);
       }
-      
+      // 策略2: 使用 suggestion（去掉 100 字符上限，截取前 150 字符）
+      if (!highlightText && comment.suggestion && comment.suggestion.length > 5) {
+        highlightText = comment.suggestion.slice(0, 150);
+      }
+      // 策略3: 兜底 — 从评论正文提取首个完整中文句子
+      if (!highlightText && content.length > 10) {
+        const sentenceMatch = content.match(/[^。？！\n]{10,80}[。？！]/);
+        if (sentenceMatch) {
+          highlightText = sentenceMatch[0];
+        }
+      }
+
       if (highlightText && highlightText.length >= 5) {
         items.push({
           id: comment.id,
@@ -587,6 +606,11 @@ export function ReviewsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Debug Info */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+        <strong>调试信息:</strong> Reviews: {reviews.length} | Comments: {comments.length} | Pending: {comments.filter(c => c.status === 'pending').length} | Task: {task?.status}
+      </div>
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="font-headline font-bold text-2xl text-slate-900 dark:text-white">
@@ -780,7 +804,7 @@ export function ReviewsTab() {
               selectMode={selectMode}
               selectedComments={selectedComments}
               onToggleSelect={toggleSelectComment}
-              isStreaming={isStreamingActive || blueTeamStreaming.isStreaming || sequentialStreaming.isStreaming}
+              isStreaming={isStreamingActive || blueTeamStreaming.isStreaming || sequentialStreaming.isReviewing}
               streamingProgress={{
                 currentRound: sequentialStreaming.currentRound || blueTeamStreaming.progress?.currentRound,
                 totalRounds: sequentialStreaming.totalRounds || blueTeamStreaming.progress?.totalRounds,
@@ -955,6 +979,8 @@ function RightPanel({
   isStreaming = false,
   streamingProgress,
 }: RightPanelProps) {
+  console.log('[RightPanel] Received comments:', comments.length, 'isStreaming:', isStreaming, 'streamingProgress:', streamingProgress);
+  
   const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'tasks'>('comments');
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
 
@@ -1095,7 +1121,9 @@ function RightPanel({
                 <p className="text-sm">No pending comments</p>
               </div>
             ) : (
-              pendingComments.map((comment) => {
+              <>
+                <div className="text-xs text-slate-400 mb-2">Rendering {pendingComments.length} comments...</div>
+                {pendingComments.map((comment) => {
                 const config = severityConfig[comment.severity];
                 const isSelected = selectedCommentId === comment.id;
                 const icon = roleIcons[comment.authorRole || 'default'];
@@ -1189,7 +1217,8 @@ function RightPanel({
                     </div>
                   </div>
                 );
-              })
+              })}
+              </>
             )}
 
             {/* Resolved Comments - 已解决问题列表 */}

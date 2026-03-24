@@ -115,9 +115,18 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
               
               const detail = detailsMap.get(round)!;
               
-              // Count questions/comments
-              const questions = Array.isArray(review.questions) ? review.questions : 
-                               typeof review.questions === 'string' ? JSON.parse(review.questions) : [];
+              // Count questions/comments (兼容数组、单个对象或字符串)
+              let questions: any[] = [];
+              if (review.questions) {
+                if (Array.isArray(review.questions)) {
+                  questions = review.questions;
+                } else if (typeof review.questions === 'string') {
+                  try { questions = JSON.parse(review.questions); } catch { questions = []; }
+                } else {
+                  // 单个对象包装成数组
+                  questions = [review.questions];
+                }
+              }
               
               detail.commentsCount += questions.length;
               

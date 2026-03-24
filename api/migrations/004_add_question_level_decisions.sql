@@ -55,8 +55,16 @@ BEGIN
         COUNT(*) FILTER (WHERE qd.decision = 'ignore')::BIGINT as ignored_count,
         COUNT(*) FILTER (WHERE qd.decision IS NULL OR qd.decision = 'pending')::BIGINT as pending_count
     FROM blue_team_reviews btr
-    LEFT JOIN LATERAL jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(question, idx) ON true
-    LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (idx::int - 1)
+    LEFT JOIN LATERAL (
+        -- 如果是数组格式
+        SELECT question, idx FROM jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(question, idx)
+        WHERE jsonb_typeof(btr.questions) = 'array'
+        UNION ALL
+        -- 如果是 object 格式（单个问题），idx = 1
+        SELECT btr.questions as question, 1 as idx
+        WHERE jsonb_typeof(btr.questions) = 'object'
+    ) q ON true
+    LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (q.idx::int - 1)
     WHERE btr.task_id = p_task_id;
 END;
 $$ LANGUAGE plpgsql;

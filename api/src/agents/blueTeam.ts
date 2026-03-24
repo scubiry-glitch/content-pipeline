@@ -552,11 +552,12 @@ ${draft.substring(0, 6000)}...
   ): Promise<void> {
     for (const q of questions) {
       await query(
-        `INSERT INTO blue_team_reviews (task_id, round, expert_role, expert_type, questions)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO blue_team_reviews (task_id, round, expert_role, expert_type, questions, is_historical)
+         VALUES ($1, $2, $3, $4, $5, false)
          ON CONFLICT (task_id, round, expert_role) DO UPDATE SET
          questions = EXCLUDED.questions,
-         expert_type = EXCLUDED.expert_type`,
+         expert_type = EXCLUDED.expert_type,
+         is_historical = false`,
         [taskId, round, q.role, q.expertType, JSON.stringify(q)]
       );
     }

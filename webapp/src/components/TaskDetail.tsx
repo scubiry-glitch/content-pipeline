@@ -511,7 +511,7 @@ function ReviewTab({
               </div>
 
               <div className="review-questions">
-                {review.questions.map((q) => (
+                {(Array.isArray(review.questions) ? review.questions : review.questions ? [review.questions] : []).map((q: any) => (
                   <div key={q.id} className={`review-question-card severity-${q.severity}`}>
                     <div className="question-header">
                       <span className={`severity-badge ${q.severity}`}>

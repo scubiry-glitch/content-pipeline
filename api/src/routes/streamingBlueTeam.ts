@@ -165,7 +165,10 @@ export async function streamingBlueTeamRoutes(fastify: FastifyInstance) {
       );
       
       const comments = reviewsResult.rows.flatMap((r: any) => {
-        const questions = r.questions || [];
+        // 兼容 questions 是数组或单个对象的情况
+        const rawQuestions = r.questions;
+        const questions = rawQuestions ? 
+          (Array.isArray(rawQuestions) ? rawQuestions : [rawQuestions]) : [];
         return questions.map((q: any, idx: number) => ({
           id: `${r.id}::${idx}`,
           expertRole: r.expert_role,

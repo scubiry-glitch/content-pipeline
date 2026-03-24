@@ -120,8 +120,11 @@ export async function submitDecision(
 
   // 如果指定了 questionIndex，记录 question 级别的决策
   if (questionIndex !== undefined && questionIndex >= 0) {
-    // 验证 questionIndex 有效
-    if (!Array.isArray(questions) || questionIndex >= questions.length) {
+    // 验证 questionIndex 有效（支持 object 或 array 格式）
+    const isArray = Array.isArray(questions);
+    const maxIndex = isArray ? questions.length - 1 : 0; // object 格式只有 1 个问题，索引为 0
+    
+    if (questionIndex > maxIndex) {
       throw new Error('Invalid question index');
     }
 
@@ -146,13 +149,22 @@ export async function submitDecision(
     );
 
     // 检查是否所有 questions 都已决策，如果是则更新 review 状态
+    // 支持 questions 为 object 或 array 格式
     const decisionStats = await query(
       `SELECT 
         COUNT(*) as total_questions,
         COUNT(qd.decision) as decided_count
        FROM blue_team_reviews btr
-       LEFT JOIN LATERAL jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(elem, idx) ON true
-       LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (idx::int - 1)
+       LEFT JOIN LATERAL (
+         -- 如果是数组格式
+         SELECT elem, idx FROM jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(elem, idx)
+         WHERE jsonb_typeof(btr.questions) = 'array'
+         UNION ALL
+         -- 如果是 object 格式（单个问题），idx = 1
+         SELECT btr.questions as elem, 1 as idx
+         WHERE jsonb_typeof(btr.questions) = 'object'
+       ) q ON true
+       LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (q.idx::int - 1)
        WHERE btr.id = $1
        GROUP BY btr.id`,
       [reviewId]

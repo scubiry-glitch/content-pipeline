@@ -21,10 +21,18 @@ const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string }
   fact_checker: { name: '事实核查员', icon: 'fact_check', color: '#ef4444' },
   logic_checker: { name: '逻辑检察官', icon: 'rule', color: '#f59e0b' },
   domain_expert: { name: '行业专家', icon: 'school', color: '#06b6d4' },
-  reader_rep: { name: '读者代表', icon: 'visibility', color: '#10b981' }
+  reader_rep: { name: '读者代表', icon: 'visibility', color: '#10b981' },
+  // 添加可能的其他角色映射
+  factChecker: { name: '事实核查员', icon: 'fact_check', color: '#ef4444' },
+  logicChecker: { name: '逻辑检察官', icon: 'rule', color: '#f59e0b' },
+  domainExpert: { name: '行业专家', icon: 'school', color: '#06b6d4' },
+  readerRep: { name: '读者代表', icon: 'visibility', color: '#10b981' },
+  unknown: { name: '未知专家', icon: 'person', color: '#6b7280' }
 };
 
 export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
+  console.log('[BlueTeamPanel] Received reviews:', reviews.length, reviews);
+  
   // Group reviews by expert role
   const expertStats = new Map<string, { 
     role: string; 
@@ -40,7 +48,10 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
     }
     const stats = expertStats.get(role)!;
     stats.count++;
-    stats.questions += review.questions?.length || 0;
+    // 兼容 questions 是数组或单个对象的情况
+    const questions = review.questions ? 
+      (Array.isArray(review.questions) ? review.questions : [review.questions]) : [];
+    stats.questions += questions.length;
     if (review.status === 'completed') {
       stats.completed++;
     }
@@ -95,6 +106,11 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
         </div>
       </div>
 
+      {/* Debug */}
+      <div className="px-4 py-2 bg-yellow-50 text-xs text-yellow-800">
+        Debug: {reviews.length} reviews, {uniqueExperts.length} experts
+      </div>
+      
       {/* Expert Cards */}
       <div className="p-4">
         {uniqueExperts.length > 0 ? (

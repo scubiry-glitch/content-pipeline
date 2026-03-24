@@ -201,8 +201,9 @@ export function TaskDetailLayout() {
         task_id: row.task_id,
         round: row.round,
         expert_role: row.expert_role,
-        questions: Array.isArray(row.questions) ? row.questions : 
-                   typeof row.questions === 'string' ? JSON.parse(row.questions) : [],
+        questions: Array.isArray(row.questions) ? row.questions :
+                   typeof row.questions === 'string' ? JSON.parse(row.questions) :
+                   row.questions ? [row.questions] : [],
         status: row.status,
         user_decision: row.user_decision,
         decision_note: row.decision_note,
@@ -216,7 +217,10 @@ export function TaskDetailLayout() {
       // Calculate accepted/ignored/pending from comments (questions) data
       let accepted = 0, ignored = 0, pending = 0;
       items.forEach(review => {
-        const questions = Array.isArray(review.questions) ? review.questions : [];
+        // 兼容 questions 是数组或单个对象的情况
+        const rawQuestions = review.questions;
+        const questions = rawQuestions ? 
+          (Array.isArray(rawQuestions) ? rawQuestions : [rawQuestions]) : [];
         questions.forEach((q: any) => {
           // 每个 question 可能有独立的状态，或者继承 review 的状态
           const questionStatus = q.status || review.user_decision || review.status;
