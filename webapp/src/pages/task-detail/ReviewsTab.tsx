@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { BlueTeamReview, DraftVersion } from '../../types';
 import { DocumentEditor, type CommentItem } from '../../components/DocumentEditor';
+import type { HighlightItem } from '../../components/MarkdownRenderer';
 import { FinalDecisionSection } from '../../components/FinalDecisionSection';
 import { BlueTeamPanel } from '../../components/BlueTeamPanel';
 import { SequentialPanel } from '../../components/SequentialPanel';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
+import { LivePreviewMarkdown } from '../../components/content';
 import { blueTeamApi, tasksApi } from '../../api/client';
 import type { ReviewConfig } from '../../types';
 
@@ -82,6 +84,9 @@ export function ReviewsTab() {
   // Version comparison state
   const [sidebarView, setSidebarView] = useState<SidebarView>('timeline');
   const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>();
+  
+  // 文档查看模式：preview | source
+  const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
   
   // 配置面板状态
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -314,6 +319,50 @@ export function ReviewsTab() {
     return items;
   }, [reviews]);
 
+  // 生成文档高亮数据 - 根据评论的严重程度和引用文本
+  const highlights: HighlightItem[] = useMemo(() => {
+    const items: HighlightItem[] = [];
+    
+    comments.forEach(comment => {
+      // 只高亮 pending 状态的评论
+      if (comment.status !== 'pending') return;
+      
+      // 根据 severity 映射到高亮颜色
+      const colorMap: Record<string, 'blue' | 'orange' | 'red'> = {
+        info: 'blue',
+        warning: 'orange',
+        critical: 'red',
+        praise: 'blue', // praise 也使用蓝色
+      };
+      
+      const color = colorMap[comment.severity] || 'blue';
+      
+      // 尝试从评论内容中提取可能的引用文本
+      // 策略：提取引号内的内容，或者使用 suggestion 中的关键词
+      const content = comment.content;
+      let highlightText = '';
+      
+      // 尝试匹配引号内的内容
+      const quoteMatch = content.match(/["""']([^"""']{5,100})["""']/);
+      if (quoteMatch) {
+        highlightText = quoteMatch[1];
+      } else if (comment.suggestion && comment.suggestion.length > 5 && comment.suggestion.length < 100) {
+        // 使用 suggestion 作为高亮文本
+        highlightText = comment.suggestion;
+      }
+      
+      if (highlightText && highlightText.length >= 5) {
+        items.push({
+          id: comment.id,
+          text: highlightText,
+          color,
+        });
+      }
+    });
+    
+    return items;
+  }, [comments]);
+
   // 生成待办任务列表（从已接受的评审意见）
   const tasks = useMemo(() => {
     const items: Array<{
@@ -362,6 +411,8 @@ export function ReviewsTab() {
   // Get latest version content for the editor
   const currentVersion = versions[versions.length - 1];
   const documentContent = currentVersion?.content || task?.final_draft || '# Draft Title\n\nDraft content will appear here...';
+  
+  console.log('[ReviewsTab] Document content length:', documentContent?.length, 'Preview:', documentContent?.slice(0, 100));
   
   // Generate sub-versions (e.g., 1.1, 1.2) for versions with same major version number
   const versionGroups = new Map<number, number>();
@@ -525,19 +576,79 @@ export function ReviewsTab() {
           />
         </div>
       ) : (
-        <DocumentEditor 
-          content={documentContent}
-          comments={comments}
-          history={history}
-          tasks={tasks}
-          version={currentVersion ? `v${versionWithSubVersions[versionWithSubVersions.length - 1]?.displayVersion || currentVersion.version}` : undefined}
-          onCommentAccept={handleCommentAccept}
-          onCommentIgnore={handleCommentIgnore}
-          onHistorySelect={handleHistorySelect}
-          selectMode={selectMode}
-          selectedComments={selectedComments}
-          onToggleSelect={toggleSelectComment}
-        />
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12">
+            {/* Left: Document Content with Preview/Source Toggle */}
+            <div className="lg:col-span-8 border-r border-slate-200 dark:border-slate-800">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDocViewMode('preview')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      docViewMode === 'preview'
+                        ? 'bg-primary text-white'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">visibility</span>
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => setDocViewMode('source')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      docViewMode === 'source'
+                        ? 'bg-primary text-white'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">code</span>
+                    Source
+                  </button>
+                </div>
+                {currentVersion && (
+                  <span className="text-xs font-bold text-slate-500">
+                    v{versionWithSubVersions[versionWithSubVersions.length - 1]?.displayVersion || currentVersion.version}
+                  </span>
+                )}
+              </div>
+              
+              {/* Content */}
+              <div className="bg-white dark:bg-slate-900">
+                {docViewMode === 'preview' ? (
+                  <LivePreviewMarkdown
+                    content={documentContent}
+                    version={currentVersion?.version}
+                    minHeight="500px"
+                    showHeader={false}
+                    showFooter={false}
+                    className="border-none shadow-none rounded-none"
+                    highlights={highlights}
+                  />
+                ) : (
+                  <div className="p-6 bg-slate-50 dark:bg-slate-900">
+                    <pre className="w-full h-[500px] overflow-auto whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <code>{documentContent}</code>
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Comments/History/Tasks Panel */}
+            <RightPanel 
+              comments={comments}
+              history={history}
+              tasks={tasks}
+              onCommentAccept={handleCommentAccept}
+              onCommentIgnore={handleCommentIgnore}
+              onHistorySelect={handleHistorySelect}
+              selectMode={selectMode}
+              selectedComments={selectedComments}
+              onToggleSelect={toggleSelectComment}
+            />
+          </div>
+        </div>
       )}
 
       {/* 专家评审分工 & 配置 */}
@@ -668,6 +779,329 @@ export function ReviewsTab() {
         onClose={() => setShowConfigPanel(false)}
         onConfirm={handleConfigConfirm}
       />
+    </div>
+  );
+}
+
+// Right Panel Component - 右侧边栏组件
+interface RightPanelProps {
+  comments: CommentItem[];
+  history: { id: string; version: string; title: string; timestamp: string; author?: string }[];
+  tasks: { id: string; title: string; status: 'pending' | 'in_progress' | 'completed'; assignee?: string }[];
+  onCommentAccept?: (id: string) => void;
+  onCommentIgnore?: (id: string) => void;
+  onHistorySelect?: (item: { id: string; version: string; title: string; timestamp: string }) => void;
+  selectMode?: boolean;
+  selectedComments?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+}
+
+function RightPanel({
+  comments,
+  history,
+  tasks,
+  onCommentAccept,
+  onCommentIgnore,
+  onHistorySelect,
+  selectMode,
+  selectedComments = new Set(),
+  onToggleSelect,
+}: RightPanelProps) {
+  const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'tasks'>('comments');
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+
+  const pendingComments = comments.filter(c => c.status === 'pending');
+  const acceptedComments = comments.filter(c => c.status === 'accepted');
+  const ignoredComments = comments.filter(c => c.status === 'ignored');
+
+  const handleCommentClick = (comment: CommentItem) => {
+    if (!selectMode) {
+      setSelectedCommentId(comment.id);
+    }
+  };
+
+  // Severity 配置 - 与 DocumentEditor 保持一致，使用主题 CSS 变量
+  const severityConfig = {
+    critical: { 
+      label: 'Critical', 
+      icon: 'error', 
+      borderColor: 'border-l-error', 
+      bgColor: 'bg-error/5', 
+      iconColor: 'text-error' 
+    },
+    warning: { 
+      label: 'Warning', 
+      icon: 'warning', 
+      borderColor: 'border-l-tertiary', 
+      bgColor: 'bg-tertiary/5', 
+      iconColor: 'text-tertiary' 
+    },
+    info: { 
+      label: 'Info', 
+      icon: 'info', 
+      borderColor: 'border-l-primary', 
+      bgColor: 'bg-primary/5', 
+      iconColor: 'text-primary' 
+    },
+    praise: { 
+      label: 'Praise', 
+      icon: 'thumb_up', 
+      borderColor: 'border-l-green-500', 
+      bgColor: 'bg-green-50', 
+      iconColor: 'text-green-500' 
+    },
+  };
+
+  const roleIcons: Record<string, string> = {
+    challenger: 'bolt',
+    expander: 'search',
+    synthesizer: 'lightbulb',
+    fact_checker: 'fact_check',
+    logic_checker: 'extension',
+    domain_expert: 'school',
+    reader_rep: 'visibility',
+    default: 'person',
+  };
+
+  return (
+    <div className="lg:col-span-4 bg-slate-50/50 dark:bg-slate-900/30">
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <button
+          onClick={() => setActiveTab('comments')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'comments'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">forum</span>
+          Comments ({pendingComments.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'history'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">history</span>
+          History
+        </button>
+        <button
+          onClick={() => setActiveTab('tasks')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'tasks'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">check_circle</span>
+          Tasks ({tasks.length})
+        </button>
+      </div>
+
+      {/* Panel Content - 高度不限 */}
+      <div className="p-4 space-y-3">
+        {/* Comments Tab */}
+        {activeTab === 'comments' && (
+          <>
+            {/* Pending Comments */}
+            {pendingComments.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <span className="material-symbols-outlined text-4xl mb-2">check_circle</span>
+                <p className="text-sm">No pending comments</p>
+              </div>
+            ) : (
+              pendingComments.map((comment) => {
+                const config = severityConfig[comment.severity];
+                const isSelected = selectedCommentId === comment.id;
+                const icon = roleIcons[comment.authorRole || 'default'];
+
+                return (
+                  <div
+                    key={comment.id}
+                    onClick={() => !selectMode && handleCommentClick(comment)}
+                    className={`bg-white dark:bg-slate-900 p-4 rounded-xl border-l-4 ${config.borderColor} shadow-sm space-y-2 transition-all hover:shadow-md ${
+                      isSelected ? 'ring-2 ring-primary/20' : ''
+                    } ${selectMode ? '' : 'cursor-pointer'}`}
+                  >
+                    {/* Header with Checkbox */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {/* 批量选择复选框 */}
+                        {selectMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleSelect?.(comment.id);
+                            }}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                              selectedComments.has(comment.id)
+                                ? 'bg-primary border-primary'
+                                : 'border-slate-300 hover:border-primary'
+                            }`}
+                          >
+                            {selectedComments.has(comment.id) && (
+                              <span className="material-symbols-outlined text-white text-sm">check</span>
+                            )}
+                          </button>
+                        )}
+                        <div className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}>
+                          <span className={`material-symbols-outlined text-[14px] ${config.iconColor}`}>{icon}</span>
+                        </div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{comment.author}</span>
+                        {comment.authorRole && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded">
+                            {comment.authorRole}
+                          </span>
+                        )}
+                      </div>
+                      {comment.location && (
+                        <span className="text-[10px] text-slate-400 font-mono">{comment.location}</span>
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">"{comment.content}"</p>
+
+                    {/* Suggestion - 建议展示 */}
+                    {comment.suggestion && (
+                      <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded text-[11px] text-slate-500">
+                        <span className="font-medium">Suggestion:</span> {comment.suggestion}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const btn = e.currentTarget;
+                          btn.classList.add('scale-95', 'bg-green-500', 'text-white');
+                          btn.classList.remove('bg-primary/10', 'text-primary');
+                          setTimeout(() => {
+                            onCommentAccept?.(comment.id);
+                          }, 200);
+                        }}
+                        className="flex-1 py-1.5 text-[10px] font-bold bg-primary/10 text-primary rounded-md hover:bg-primary/20 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1 group"
+                      >
+                        <span className="material-symbols-outlined text-[12px] transition-transform group-hover:rotate-12">check</span>
+                        Accept
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const btn = e.currentTarget;
+                          btn.classList.add('scale-95', 'bg-slate-400', 'text-white');
+                          btn.classList.remove('border-slate-200', 'text-slate-500');
+                          setTimeout(() => {
+                            onCommentIgnore?.(comment.id);
+                          }, 200);
+                        }}
+                        className="flex-1 py-1.5 text-[10px] font-bold border border-slate-200 text-slate-500 rounded-md hover:bg-slate-50 hover:border-slate-300 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1 group"
+                      >
+                        <span className="material-symbols-outlined text-[12px] transition-transform group-hover:rotate-90">close</span>
+                        Ignore
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {/* Resolved Comments - 已解决问题列表 */}
+            {(acceptedComments.length > 0 || ignoredComments.length > 0) && (
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Resolved ({acceptedComments.length + ignoredComments.length})
+                </span>
+                <div className="mt-2 space-y-2">
+                  {acceptedComments.slice(0, 3).map((comment) => (
+                    <div key={comment.id} className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="material-symbols-outlined text-green-500 text-sm">check</span>
+                      <span className="line-through flex-1 truncate">{comment.content}</span>
+                    </div>
+                  ))}
+                  {ignoredComments.slice(0, 3).map((comment) => (
+                    <div key={comment.id} className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="material-symbols-outlined text-slate-400 text-sm">close</span>
+                      <span className="line-through flex-1 truncate text-slate-400">{comment.content}</span>
+                    </div>
+                  ))}
+                  {acceptedComments.length + ignoredComments.length > 3 && (
+                    <p className="text-[10px] text-slate-400 pl-6">
+                      +{acceptedComments.length + ignoredComments.length - 3} more
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <>
+            {history.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <span className="material-symbols-outlined text-4xl mb-2">history</span>
+                <p className="text-sm">No version history</p>
+              </div>
+            ) : (
+              history.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onHistorySelect?.(item)}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-white dark:hover:bg-slate-800 cursor-pointer transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">description</span>
+                    <div>
+                      <div className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.title}</div>
+                      <div className="text-[10px] text-slate-400">{new Date(item.timestamp).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono text-slate-400">{item.version}</span>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {/* Tasks Tab */}
+        {activeTab === 'tasks' && (
+          <>
+            {tasks.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <span className="material-symbols-outlined text-4xl mb-2">check_circle</span>
+                <p className="text-sm">No pending tasks</p>
+              </div>
+            ) : (
+              tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800"
+                >
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                    task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'
+                  }`}>
+                    {task.status === 'completed' && (
+                      <span className="material-symbols-outlined text-white text-sm">check</span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-sm ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                      {task.title}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

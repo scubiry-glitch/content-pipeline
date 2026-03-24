@@ -155,6 +155,9 @@ export function DocumentEditor({
 }: DocumentEditorProps) {
   const [activeTab, setActiveTab] = useState<CommentTab>(defaultTab);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+  
+  // Debug: log content
+  console.log('[DocumentEditor] Content length:', content?.length, 'Preview:', content?.slice(0, 100));
 
   // 处理带高亮的文本渲染
   const renderContent = useMemo(() => {
@@ -226,17 +229,29 @@ export function DocumentEditor({
         </div>
       )}
 
-      {/* Main Content Grid */}
+      {/* Main Content Grid - 无高度限制，根据内容自适应 */}
       <div className="grid grid-cols-1 lg:grid-cols-12">
         {/* Left: Document Content */}
-        <div className="lg:col-span-8 p-8 min-h-[500px] border-r border-slate-200 dark:border-slate-800">
-          <div className="prose prose-slate dark:prose-invert max-w-none font-body leading-relaxed">
-            <MarkdownRenderer content={renderContent} />
+        <div className="lg:col-span-8 p-8 border-r border-slate-200 dark:border-slate-800">
+          <div className="document-content" style={{ 
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+            fontSize: '15px',
+            lineHeight: '1.7',
+            color: '#1f2937',
+            minHeight: '400px'
+          }}>
+            {content ? (
+              <div style={{ whiteSpace: 'pre-wrap' }}>{content}</div>
+            ) : (
+              <div className="text-center text-slate-400 py-12">
+                <p>No content available</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right: Comments Panel */}
-        <div className="lg:col-span-4 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+        {/* Right: Comments Panel - 无高度限制 */}
+        <div className="lg:col-span-4 bg-slate-50/50 dark:bg-slate-900/30">
           {/* Tabs */}
           <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
             <button
@@ -274,8 +289,8 @@ export function DocumentEditor({
             </button>
           </div>
 
-          {/* Panel Content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Panel Content - 无高度限制 */}
+          <div className="p-4 space-y-3">
             {/* Comments Tab */}
             {activeTab === 'comments' && (
               <>

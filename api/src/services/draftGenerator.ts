@@ -1,7 +1,7 @@
 // draftGenerator.ts - 最终稿件生成服务
 
 import { query } from '../db/connection.js';
-import { LLMRouter } from '../llm/router.js';
+import { generate } from './llm.js';
 
 export interface DraftResult {
   success: boolean;
@@ -119,8 +119,6 @@ async function applyRevisionsWithLLM(
   suggestions: any[]
 ): Promise<string> {
   try {
-    const llm = LLMRouter.getInstance();
-
     const suggestionsText = suggestions
       .map((s, i) => `${i + 1}. ${s.question}\n   建议: ${s.suggestion}`)
       .join('\n\n');
@@ -135,11 +133,9 @@ ${suggestionsText}
 
 请输出修订后的完整文稿。保持原有结构和风格，只修改评审意见中指出的问题。直接输出修订后的内容，不需要解释。`;
 
-    const response = await llm.complete({
-      provider: 'kimi',
-      model: 'kimi-chat',
-      prompt,
-      temperature: 0.3
+    const response = await generate(prompt, 'blue_team', {
+      temperature: 0.3,
+      maxTokens: 8000
     });
 
     return response.content || originalContent;

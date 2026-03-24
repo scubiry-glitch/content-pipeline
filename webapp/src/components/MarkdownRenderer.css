@@ -6,6 +6,18 @@
   line-height: 1.7;
   color: var(--soil, #3d352e);
   word-wrap: break-word;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* 文档内容区域 */
+.document-content {
+  width: 100%;
+  max-width: 100%;
+}
+
+.document-content .markdown-body {
+  min-height: 200px;
 }
 
 /* 标题样式 */

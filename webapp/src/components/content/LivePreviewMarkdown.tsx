@@ -1,11 +1,11 @@
 /**
  * LivePreviewMarkdown - 内容直播预览舱
  * 
- * 用于 Markdown 内容的实时预览，支持预览/源码模式切换
+ * 用于 Markdown 内容的实时预览，支持预览/源码模式切换和文本高亮
  * 参考设计: Copy Generation Stepped Pipeline 的 Markdown 预览容器
  */
 import { useState } from 'react';
-import { MarkdownRenderer } from '../MarkdownRenderer';
+import { MarkdownRenderer, type HighlightItem } from '../MarkdownRenderer';
 
 export interface LivePreviewMarkdownProps {
   /** 内容标题 */
@@ -26,6 +26,8 @@ export interface LivePreviewMarkdownProps {
   showHeader?: boolean;
   /** 是否显示底部 */
   showFooter?: boolean;
+  /** 高亮文本列表 */
+  highlights?: HighlightItem[];
 }
 
 type ViewMode = 'rendered' | 'source';
@@ -40,6 +42,7 @@ export function LivePreviewMarkdown({
   minHeight = '600px',
   showHeader = true,
   showFooter = false,
+  highlights = [],
 }: LivePreviewMarkdownProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('rendered');
 
@@ -91,7 +94,10 @@ export function LivePreviewMarkdown({
       <div className="flex-1 p-8 overflow-y-auto bg-slate-50/30 dark:bg-slate-900/30 relative">
         {viewMode === 'rendered' ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <MarkdownRenderer content={content} />
+            <MarkdownRenderer 
+              content={content} 
+              highlights={highlights}
+            />
           </div>
         ) : (
           <pre className="w-full h-full whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-slate-300">
