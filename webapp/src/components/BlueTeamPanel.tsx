@@ -58,8 +58,23 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
   });
   
   const uniqueExperts = Array.from(expertStats.values());
-  const completionRate = reviewSummary.total > 0 
-    ? Math.round((reviewSummary.accepted + reviewSummary.ignored) / reviewSummary.total * 100)
+  
+  // 按轮次分组
+  const roundGroups = reviews.reduce((acc, review) => {
+    const round = review.round || 1;
+    if (!acc[round]) acc[round] = [];
+    acc[round].push(review);
+    return acc;
+  }, {} as Record<number, BlueTeamReview[]>);
+  
+  const rounds = Object.keys(roundGroups).map(Number).sort();
+  const totalRounds = rounds.length;
+  
+  // 计算完成率（基于已接受的评论数）
+  const totalComments = reviewSummary.total;
+  const completedComments = reviewSummary.accepted + reviewSummary.ignored;
+  const completionRate = totalComments > 0 
+    ? Math.round((completedComments / totalComments) * 100)
     : 0;
 
   return (
@@ -108,8 +123,24 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
 
       {/* Debug */}
       <div className="px-4 py-2 bg-yellow-50 text-xs text-yellow-800">
-        Debug: {reviews.length} reviews, {uniqueExperts.length} experts
+        Debug: {reviews.length} reviews, {uniqueExperts.length} experts, {totalRounds} rounds
       </div>
+      
+      {/* Round Tabs */}
+      {totalRounds > 1 && (
+        <div className="px-4">
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {rounds.map((round) => (
+              <div 
+                key={round}
+                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-medium"
+              >
+                第 {round} 轮 ({roundGroups[round].length} 条)
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* Expert Cards */}
       <div className="p-4">

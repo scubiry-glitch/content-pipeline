@@ -47,7 +47,7 @@ const STORAGE_KEY = 'favorite_reports';
 export async function getFavorites(): Promise<FavoriteReport[]> {
   try {
     const response = await client.get('/favorites');
-    return response.data;
+    return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
     console.warn('API unavailable, falling back to localStorage');
     return getFavoritesFromLocal();

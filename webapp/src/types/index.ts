@@ -259,6 +259,8 @@ export interface BlueTeamReview {
   user_decision?: 'accept' | 'revise' | 'reject';
   decision_note?: string;
   decided_at?: string;
+  created_at?: string;
+  is_historical?: boolean;
 }
 
 export interface ReviewQuestion {

@@ -20,7 +20,7 @@ interface ReviewConfig {
 
 interface ExpertConfig {
   type: 'ai' | 'human';
-  role?: 'challenger' | 'expander' | 'synthesizer';
+  role?: string;
   id?: string;
   name: string;
   profile?: string;
@@ -60,14 +60,36 @@ interface ReviewChainItem {
  */
 export async function configureSequentialReview(
   taskId: string,
-  topic: string
+  topic: string,
+  userExperts?: string[]  // 用户在配置面板选择的专家角色列表
 ): Promise<ReviewConfig> {
-  // 1. 固定 AI 专家 (按PRD: 挑战者 → 拓展者 → 提炼者)
-  const aiExperts: ExpertConfig[] = [
-    { type: 'ai', role: 'challenger', name: '批判者', profile: '挑战逻辑漏洞、数据可靠性、隐含假设' },
-    { type: 'ai', role: 'expander', name: '拓展者', profile: '扩展关联因素、国际对比、交叉学科视角' },
-    { type: 'ai', role: 'synthesizer', name: '提炼者', profile: '归纳核心论点、结构优化、金句提炼' },
-  ];
+  // 所有可用 AI 专家
+  const ALL_AI_EXPERTS: Record<string, ExpertConfig> = {
+    challenger: { type: 'ai', role: 'challenger', name: '批判者', profile: '挑战逻辑漏洞、数据可靠性、隐含假设' },
+    expander: { type: 'ai', role: 'expander', name: '拓展者', profile: '扩展关联因素、国际对比、交叉学科视角' },
+    synthesizer: { type: 'ai', role: 'synthesizer', name: '提炼者', profile: '归纳核心论点、结构优化、金句提炼' },
+    fact_checker: { type: 'ai', role: 'fact_checker', name: '事实核查员', profile: '数据准确性、来源可靠性验证' },
+    logic_checker: { type: 'ai', role: 'logic_checker', name: '逻辑检察官', profile: '论证严密性、逻辑链完整性' },
+    domain_expert: { type: 'ai', role: 'domain_expert', name: '行业专家', profile: '专业深度、行业洞察' },
+    reader_rep: { type: 'ai', role: 'reader_rep', name: '读者代表', profile: '可读性、受众适配度' },
+  };
+
+  // 1. 根据用户选择或默认配置构建 AI 专家队列
+  let aiExperts: ExpertConfig[];
+  if (userExperts && userExperts.length > 0) {
+    // 使用用户选择的专家
+    aiExperts = userExperts
+      .map(role => ALL_AI_EXPERTS[role])
+      .filter(Boolean);
+    console.log(`[SequentialReview] Using user-selected experts:`, userExperts);
+  } else {
+    // 默认: 挑战者 → 拓展者 → 提炼者
+    aiExperts = [
+      ALL_AI_EXPERTS.challenger,
+      ALL_AI_EXPERTS.expander,
+      ALL_AI_EXPERTS.synthesizer,
+    ];
+  }
 
   // 2. 从专家库抽取相关专家 (简化版本，实际应根据主题匹配)
   const humanExpertsResult = await query(
@@ -85,14 +107,21 @@ export async function configureSequentialReview(
     profile: e.bio || e.title || '领域专家',
   }));
 
-  // 3. 构建串行评审队列: 挑战者 → 真人专家1 → 拓展者 → 真人专家2 → 提炼者
-  const reviewQueue: ExpertConfig[] = [
-    aiExperts[0], // 挑战者先评审
-    ...(humanExperts[0] ? [humanExperts[0]] : []),
-    aiExperts[1], // 拓展者
-    ...(humanExperts[1] ? [humanExperts[1]] : humanExperts[0] ? [humanExperts[0]] : []),
-    aiExperts[2], // 提炼者最后
-  ].filter(Boolean);
+  // 3. 构建串行评审队列: AI专家与真人专家交替
+  let reviewQueue: ExpertConfig[];
+  if (userExperts && userExperts.length > 0) {
+    // 用户指定专家时，直接按选择顺序排列
+    reviewQueue = [...aiExperts];
+  } else {
+    // 默认: 挑战者 → 真人专家1 → 拓展者 → 真人专家2 → 提炼者
+    reviewQueue = [
+      aiExperts[0],
+      ...(humanExperts[0] ? [humanExperts[0]] : []),
+      aiExperts[1],
+      ...(humanExperts[1] ? [humanExperts[1]] : humanExperts[0] ? [humanExperts[0]] : []),
+      aiExperts[2],
+    ].filter(Boolean);
+  }
 
   // 4. 保存评审配置到进度表
   await query(

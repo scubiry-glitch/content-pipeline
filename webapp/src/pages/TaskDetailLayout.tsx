@@ -195,12 +195,13 @@ export function TaskDetailLayout() {
         });
       }
       
-      // Convert to BlueTeamReview format
+      // Convert to BlueTeamReview format（保留 is_historical 和 expert_name）
       const items: BlueTeamReview[] = rawReviews.map((row: any) => ({
         id: row.id,
         task_id: row.task_id,
         round: row.round,
         expert_role: row.expert_role,
+        expert_name: row.expert_name,
         questions: Array.isArray(row.questions) ? row.questions :
                    typeof row.questions === 'string' ? JSON.parse(row.questions) :
                    row.questions ? [row.questions] : [],
@@ -208,7 +209,8 @@ export function TaskDetailLayout() {
         user_decision: row.user_decision,
         decision_note: row.decision_note,
         decided_at: row.decided_at,
-        created_at: row.created_at
+        created_at: row.created_at,
+        is_historical: row.is_historical || false,
       }));
       
       console.log('[TaskDetailLayout] Loaded reviews:', items.length);
@@ -656,7 +658,11 @@ export function TaskDetailLayout() {
     onReviewDecision: handleReviewDecision,
     onBatchDecision: handleBatchDecision,
     onReReview: handleReReview,
-    onRedoReview: (config?: any) => handleRedoStage('review', { config }),
+    onRedoReview: (config?: any) => {
+      // 从 config 中提取 preserveHistory，其余作为 review config
+      const { preserveHistory, ...reviewConfig } = config || {};
+      return handleRedoStage('review', { config: reviewConfig, preserveHistory });
+    },
   };
 
   return (

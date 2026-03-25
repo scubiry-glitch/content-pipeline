@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { BlueTeamReview, DraftVersion } from '../../types';
 import { DocumentEditor, type CommentItem } from '../../components/DocumentEditor';
@@ -144,10 +144,17 @@ export function ReviewsTab() {
   
   // 根据任务状态自动启动 Streaming（扩大 stage 匹配范围）
   useEffect(() => {
-    if (task?.status === 'reviewing' &&
-        (task?.current_stage === 'blue_team_streaming' || task?.current_stage === 'blue_team_review')) {
-      // 通过 fetchStatus 检查是否有活跃的 streaming，如有则自动连接
-      blueTeamStreaming.fetchStatus(task.id);
+    if (task?.status === 'reviewing') {
+      const stage = task?.current_stage;
+      if (stage === 'sequential_review') {
+        // 串行评审：连接 sequential SSE
+        sequentialStreaming.fetchStatus(task.id);
+        setIsStreamingActive(true);
+      } else if (stage === 'blue_team_streaming' || stage === 'blue_team_review' || stage === 're_reviewing') {
+        // 并行评审：连接 blue team SSE
+        blueTeamStreaming.fetchStatus(task.id);
+        setIsStreamingActive(true);
+      }
     }
   }, [task?.id, task?.status, task?.current_stage]);
 
@@ -352,8 +359,11 @@ export function ReviewsTab() {
       if (config.mode === 'sequential' || config.mode === 'serial') {
         sequentialStreaming.reset();
         sequentialStreaming.connect(task.id);
+        // 自动切换到 Sequential Queue 标签页
+        setActiveTab('sequential');
       } else {
         blueTeamStreaming.connectSSE(task.id);
+        setActiveTab('blue-team');
       }
     } catch (error) {
       console.error('Redo review failed:', error);
@@ -393,12 +403,88 @@ export function ReviewsTab() {
     }
   };
 
+  // Ref for document container to track highlight positions
+  const docContainerRef = useRef<HTMLDivElement>(null);
+  const [highlightPositions, setHighlightPositions] = useState<Record<string, number>>({});
+
+  // Calculate highlight positions relative to the grid container
+  const updateHighlightPositions = useCallback(() => {
+    const container = docContainerRef.current;
+    if (!container) return;
+    const gridParent = container.closest('.grid');
+    if (!gridParent) return;
+    const gridRect = gridParent.getBoundingClientRect();
+    const positions: Record<string, number> = {};
+    const hlElements = container.querySelectorAll('[data-highlight-id]');
+    hlElements.forEach(el => {
+      const id = el.getAttribute('data-highlight-id');
+      if (id) {
+        const rect = el.getBoundingClientRect();
+        positions[id] = rect.top - gridRect.top;
+      }
+    });
+    if (Object.keys(positions).length > 0) {
+      setHighlightPositions(positions);
+    }
+  }, []);
+
+  // Observe DOM changes to recalculate highlight positions
+  useEffect(() => {
+    const container = docContainerRef.current;
+    if (!container) return;
+    // Initial calculation after render
+    const timer = setTimeout(updateHighlightPositions, 500);
+    // Watch for DOM mutations (highlights being added)
+    const observer = new MutationObserver(() => {
+      setTimeout(updateHighlightPositions, 100);
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    // Also recalculate on scroll/resize
+    const scrollContainer = container.querySelector('.overflow-y-auto') || container;
+    scrollContainer.addEventListener('scroll', updateHighlightPositions);
+    window.addEventListener('resize', updateHighlightPositions);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+      scrollContainer.removeEventListener('scroll', updateHighlightPositions);
+      window.removeEventListener('resize', updateHighlightPositions);
+    };
+  }, [updateHighlightPositions, highlights]);
+
+  // Debug: log task data
+  console.log('[ReviewsTab] task:', task?.id, 'draft_versions:', task?.draft_versions?.length, 'versions:', task?.versions?.length);
+
+  // Get versions from task and deduplicate by content（提前到 highlights 之前）
+  const rawVersions: DraftVersion[] = task?.draft_versions || task?.versions || [];
+
+  // Deduplicate: use content hash (first 500 chars + length) to identify unique versions
+  const seenContents = new Set<string>();
+  const versions = rawVersions.filter((v) => {
+    const content = v.content || '';
+    const contentHash = `${content.slice(0, 500)}_${content.length}`;
+    if (seenContents.has(contentHash)) {
+      return false;
+    }
+    seenContents.add(contentHash);
+    return true;
+  });
+
+  console.log('[ReviewsTab] Deduplication:', rawVersions.length, '->', versions.length, 'versions');
+
+  // Get latest version content for the editor
+  const currentVersion = versions[versions.length - 1];
+  const documentContent = currentVersion?.content || task?.final_draft || '# Draft Title\n\nDraft content will appear here...';
+
+  // 分离当前评审和历史评审
+  const activeReviews = useMemo(() => reviews.filter(r => !(r as any).is_historical), [reviews]);
+  const historicalReviews = useMemo(() => reviews.filter(r => (r as any).is_historical), [reviews]);
+
   // Convert BlueTeamReview[] to CommentItem[] for DocumentEditor
-  // 优先从 question_decisions 获取状态，如果没有则使用 review 级别状态
+  // 只使用当前（非历史）评审构建评论
   const comments: CommentItem[] = useMemo(() => {
-    console.log('[ReviewsTab] Building comments from reviews:', reviews.length, reviews);
+    console.log('[ReviewsTab] Building comments from reviews:', activeReviews.length, '(historical:', historicalReviews.length, ')');
     const items: CommentItem[] = [];
-    reviews.forEach(review => {
+    activeReviews.forEach(review => {
       const icon = REVIEW_ICONS[review.expert_role] || '👤';
       const reviewStatus = review.user_decision || review.status;
       
@@ -457,11 +543,35 @@ export function ReviewsTab() {
     const uniqueStreaming = streamingComments.filter(c => !existingIds.has(c.id));
     
     return [...items, ...uniqueStreaming];
-  }, [reviews, streamingComments]);
+  }, [activeReviews, historicalReviews.length, streamingComments]);
 
-  // 生成文档高亮数据 - 根据评论的严重程度和引用文本
+  // 生成文档高亮数据 - 要求 100% 评论都对应高亮
   const highlights: HighlightItem[] = useMemo(() => {
     const items: HighlightItem[] = [];
+
+    // 预提取文档中所有标题，用于兜底匹配
+    const docContent = currentVersion?.content || task?.final_draft || '';
+    const headings: string[] = [];
+    const headingRegex = /^#{1,3}\s+(.+)$/gm;
+    let hMatch;
+    while ((hMatch = headingRegex.exec(docContent)) !== null) {
+      headings.push(hMatch[1].trim());
+    }
+
+    // 辅助函数：检查文本是否存在于文档中
+    const existsInDoc = (text: string) => text.length >= 3 && docContent.includes(text);
+
+    // 辅助函数：从文本中提取能在文档中找到的片段（滑动窗口）
+    const findMatchInDoc = (text: string, minLen = 8, maxLen = 60): string => {
+      // 先尝试较长片段，逐步缩短
+      for (let len = Math.min(maxLen, text.length); len >= minLen; len -= 5) {
+        for (let start = 0; start + len <= text.length; start += 3) {
+          const slice = text.slice(start, start + len);
+          if (existsInDoc(slice)) return slice;
+        }
+      }
+      return '';
+    };
 
     comments.forEach(comment => {
       // 只高亮 pending 状态的评论
@@ -478,24 +588,49 @@ export function ReviewsTab() {
       const content = comment.content;
       let highlightText = '';
 
-      // 策略1: 提取引号内文本（含中文引号 「」『』""''《》【】）
-      const quoteMatch = content.match(/["""'「『《【'"\u201c\u201d]([^"""'」』》】'"\u201c\u201d]{5,200})["""'」』》】'"\u201c\u201d]/);
-      if (quoteMatch) {
-        highlightText = quoteMatch[1].slice(0, 100);
-      }
-      // 策略2: 使用 suggestion（去掉 100 字符上限，截取前 150 字符）
-      if (!highlightText && comment.suggestion && comment.suggestion.length > 5) {
-        highlightText = comment.suggestion.slice(0, 150);
-      }
-      // 策略3: 兜底 — 从评论正文提取首个完整中文句子
-      if (!highlightText && content.length > 10) {
-        const sentenceMatch = content.match(/[^。？！\n]{10,80}[。？！]/);
-        if (sentenceMatch) {
-          highlightText = sentenceMatch[0];
+      // 策略1: 提取引号内文本，验证它存在于文档中
+      const quoteRegex = /["""'「『《【'"\u201c\u201d]([^"""'」』》】'"\u201c\u201d]{5,200})["""'」』》】'"\u201c\u201d]/g;
+      let quoteMatch;
+      while ((quoteMatch = quoteRegex.exec(content)) !== null) {
+        const quoted = quoteMatch[1].slice(0, 100);
+        if (existsInDoc(quoted)) {
+          highlightText = quoted;
+          break;
         }
       }
 
-      if (highlightText && highlightText.length >= 5) {
+      // 策略2: 从 suggestion 中滑动窗口找文档中存在的片段
+      if (!highlightText && comment.suggestion && comment.suggestion.length > 5) {
+        highlightText = findMatchInDoc(comment.suggestion);
+      }
+
+      // 策略3: 从评论正文中滑动窗口找文档中存在的片段
+      if (!highlightText && content.length > 10) {
+        highlightText = findMatchInDoc(content);
+      }
+
+      // 策略4: 匹配最相关的文档标题（标题一定存在于文档中）
+      if (!highlightText && headings.length > 0) {
+        let bestHeading = '';
+        let bestScore = 0;
+        for (const heading of headings) {
+          const words = heading.replace(/[^\u4e00-\u9fff\w]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+          const score = words.filter(w => content.includes(w)).length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestHeading = heading;
+          }
+        }
+        highlightText = bestHeading || headings[0];
+      }
+
+      // 策略5: 最终兜底 — 文档的第一个标题
+      if (!highlightText && headings.length > 0) {
+        highlightText = headings[0];
+      }
+
+      console.log('[Highlights]', comment.id.substring(0, 8), 'text:', highlightText?.substring(0, 40), 'inDoc:', highlightText ? existsInDoc(highlightText) : false);
+      if (highlightText && highlightText.length >= 2) {
         items.push({
           id: comment.id,
           text: highlightText,
@@ -503,9 +638,9 @@ export function ReviewsTab() {
         });
       }
     });
-    
+
     return items;
-  }, [comments]);
+  }, [comments, currentVersion, task?.final_draft]);
 
   // 生成待办任务列表（从已接受的评审意见）
   const tasks = useMemo(() => {
@@ -515,10 +650,9 @@ export function ReviewsTab() {
       status: 'pending' | 'in_progress' | 'completed';
       assignee?: string;
     }> = [];
-    
+
     comments.forEach(comment => {
       if (comment.status === 'accepted') {
-        // 为每个接受的评审意见生成一个待办任务
         items.push({
           id: `task-${comment.id}`,
           title: comment.suggestion || `处理: ${comment.content.slice(0, 50)}...`,
@@ -527,34 +661,9 @@ export function ReviewsTab() {
         });
       }
     });
-    
+
     return items;
   }, [comments]);
-
-  // Debug: log task data
-  console.log('[ReviewsTab] task:', task?.id, 'draft_versions:', task?.draft_versions?.length, 'versions:', task?.versions?.length);
-  
-  // Get versions from task and deduplicate by content
-  const rawVersions: DraftVersion[] = task?.draft_versions || task?.versions || [];
-  
-  // Deduplicate: use content hash (first 500 chars + length) to identify unique versions
-  const seenContents = new Set<string>();
-  const versions = rawVersions.filter((v) => {
-    const content = v.content || '';
-    // Use first 500 chars + total length as unique identifier
-    const contentHash = `${content.slice(0, 500)}_${content.length}`;
-    if (seenContents.has(contentHash)) {
-      return false;
-    }
-    seenContents.add(contentHash);
-    return true;
-  });
-  
-  console.log('[ReviewsTab] Deduplication:', rawVersions.length, '->', versions.length, 'versions');
-  
-  // Get latest version content for the editor
-  const currentVersion = versions[versions.length - 1];
-  const documentContent = currentVersion?.content || task?.final_draft || '# Draft Title\n\nDraft content will appear here...';
   
   console.log('[ReviewsTab] Document content length:', documentContent?.length, 'Preview:', documentContent?.slice(0, 100));
   
@@ -737,7 +846,7 @@ export function ReviewsTab() {
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
           <div className="grid grid-cols-1 lg:grid-cols-12">
             {/* Left: Document Content with Preview/Source Toggle */}
-            <div className="lg:col-span-8 border-r border-slate-200 dark:border-slate-800">
+            <div ref={docContainerRef} className="lg:col-span-8 border-r border-slate-200 dark:border-slate-800">
               {/* Toolbar */}
               <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
                 <div className="flex items-center gap-2">
@@ -794,7 +903,7 @@ export function ReviewsTab() {
             </div>
 
             {/* Right: Comments/History/Tasks Panel */}
-            <RightPanel 
+            <RightPanel
               comments={comments}
               history={history}
               tasks={tasks}
@@ -810,6 +919,7 @@ export function ReviewsTab() {
                 totalRounds: sequentialStreaming.totalRounds || blueTeamStreaming.progress?.totalRounds,
                 currentExpert: sequentialStreaming.currentExpert || blueTeamStreaming.progress?.currentExpert
               }}
+              highlightPositions={highlightPositions}
             />
           </div>
         </div>
@@ -964,6 +1074,7 @@ interface RightPanelProps {
     totalRounds?: number;
     currentExpert?: string;
   };
+  highlightPositions?: Record<string, number>;
 }
 
 function RightPanel({
@@ -978,6 +1089,7 @@ function RightPanel({
   onToggleSelect,
   isStreaming = false,
   streamingProgress,
+  highlightPositions = {},
 }: RightPanelProps) {
   console.log('[RightPanel] Received comments:', comments.length, 'isStreaming:', isStreaming, 'streamingProgress:', streamingProgress);
   
@@ -1099,10 +1211,10 @@ function RightPanel({
                       <span>第 {streamingProgress.currentRound} / {streamingProgress.totalRounds} 轮</span>
                     </div>
                     <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${((streamingProgress.currentRound || 0) / (streamingProgress.totalRounds || 1)) * 100}%` 
+                        style={{
+                          width: `${((streamingProgress.currentRound || 0) / (streamingProgress.totalRounds || 1)) * 100}%`
                         }}
                       />
                     </div>
@@ -1113,8 +1225,8 @@ function RightPanel({
                 </p>
               </div>
             )}
-            
-            {/* Pending Comments */}
+
+            {/* Pending Comments - aligned to highlights */}
             {pendingComments.length === 0 && !isStreaming ? (
               <div className="text-center py-12 text-slate-400">
                 <span className="material-symbols-outlined text-4xl mb-2">check_circle</span>
@@ -1123,19 +1235,43 @@ function RightPanel({
             ) : (
               <>
                 <div className="text-xs text-slate-400 mb-2">Rendering {pendingComments.length} comments...</div>
-                {pendingComments.map((comment) => {
+                {(() => {
+                  const hasPositions = Object.keys(highlightPositions).length > 0;
+                  // Sort comments by highlight Y position if available
+                  const sortedComments = hasPositions
+                    ? [...pendingComments].sort((a, b) => (highlightPositions[a.id] ?? Infinity) - (highlightPositions[b.id] ?? Infinity))
+                    : pendingComments;
+                  return sortedComments;
+                })().map((comment) => {
                 const config = severityConfig[comment.severity];
                 const isSelected = selectedCommentId === comment.id;
                 const icon = roleIcons[comment.authorRole || 'default'];
+                const hasHighlight = highlightPositions[comment.id] !== undefined;
 
                 return (
                   <div
                     key={comment.id}
-                    onClick={() => !selectMode && handleCommentClick(comment)}
+                    data-comment-id={comment.id}
+                    onClick={() => {
+                      if (!selectMode) {
+                        handleCommentClick(comment);
+                        // Scroll to highlight in document
+                        const hlEl = document.querySelector(`[data-highlight-id="${comment.id}"]`);
+                        if (hlEl) {
+                          hlEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          hlEl.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
+                          setTimeout(() => hlEl.classList.remove('ring-2', 'ring-primary', 'ring-offset-1'), 2000);
+                        }
+                      }
+                    }}
                     className={`bg-white dark:bg-slate-900 p-4 rounded-xl border-l-4 ${config.borderColor} shadow-sm space-y-2 transition-all hover:shadow-md ${
                       isSelected ? 'ring-2 ring-primary/20' : ''
-                    } ${selectMode ? '' : 'cursor-pointer'}`}
+                    } ${selectMode ? '' : 'cursor-pointer'} ${hasHighlight ? 'relative' : ''}`}
                   >
+                    {/* Connector arrow to highlight */}
+                    {hasHighlight && (
+                      <div className="absolute -left-6 top-4 w-4 h-0.5 bg-slate-300 dark:bg-slate-600" />
+                    )}
                     {/* Header with Checkbox */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

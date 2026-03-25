@@ -171,7 +171,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // Get BlueTeam reviews (FR-017 ~ FR-023)
   fastify.get('/:taskId/reviews', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
-    const reviews = await productionService.getBlueTeamReviews(taskId);
+    const { includeHistorical } = request.query as { includeHistorical?: string };
+    // 默认包含历史评审记录，前端可按 is_historical 标识区分显示
+    const reviews = await productionService.getBlueTeamReviews(taskId, includeHistorical !== 'false');
     return reviews;
   });
 
@@ -405,12 +407,15 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { taskId } = request.params as any;
     const { config, preserveHistory } = request.body as { config?: any; preserveHistory?: boolean };
 
-    // 异步执行评审（带超时控制）
+    // 同步准备阶段：更新状态、配置评审队列（让前端能立即连接 SSE）
+    const prepResult = await productionService.prepareRedoReview(taskId, config, preserveHistory);
+
+    // 异步执行评审（长时间运行，带超时控制）
     setImmediate(async () => {
       try {
-        console.log(`[Redo] Starting review redo for task ${taskId}...`, { preserveHistory });
+        console.log(`[Redo] Starting review execution for task ${taskId}...`);
         await withTimeout(
-          productionService.redoReview(taskId, config, preserveHistory),
+          productionService.executeRedoReview(taskId, config, prepResult.isSequential),
           15 * 60 * 1000,
           `Review redo for ${taskId}`
         );
@@ -420,14 +425,14 @@ export async function productionRoutes(fastify: FastifyInstance) {
         const errorStack = error instanceof Error ? error.stack : '';
         console.error(`[Redo] Review failed/timed out for task ${taskId}:`, errorMsg);
         console.error(`[Redo] Error stack:`, errorStack);
-        
+
         // 记录错误到任务日志
         await query(
           `INSERT INTO task_logs (task_id, action, details, created_at)
            VALUES ($1, $2, $3, NOW())`,
           [taskId, 'review_redo_failed', JSON.stringify({ error: errorMsg, stack: errorStack })]
         );
-        
+
         await query(
           `UPDATE tasks SET status = 'failed', current_stage = 'review_failed', updated_at = NOW() WHERE id = $1`,
           [taskId]
@@ -436,8 +441,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
     });
 
     return {
-      message: '蓝军评审重做已启动',
+      message: prepResult.isSequential ? '串行评审已启动' : '蓝军评审重做已启动',
       taskId,
+      mode: prepResult.isSequential ? 'sequential' : 'parallel',
       status: 'reviewing'
     };
   });

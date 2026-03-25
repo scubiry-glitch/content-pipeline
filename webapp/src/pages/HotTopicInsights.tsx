@@ -92,13 +92,13 @@ function convertToStorable(
           expertId: report.seniorExpertReview.expert.id,
           expertName: report.seniorExpertReview.expert.name,
           opinion: report.seniorExpertReview.opinion,
-          focusAreas: report.seniorExpertReview.focusAreas,
-          suggestions: report.seniorExpertReview.suggestions,
+          focusAreas: report.seniorExpertReview.focusAreas || [],
+          suggestions: report.seniorExpertReview.suggestions || [],
           confidence: report.seniorExpertReview.confidence,
           timestamp: report.seniorExpertReview.createdAt || new Date().toISOString(),
         }
       : undefined,
-    domainExpertReviews: report.domainExpertReviews.map((r) => ({
+    domainExpertReviews: (report.domainExpertReviews || []).map((r) => ({
       expertId: r.expert.id,
       expertName: r.expert.name,
       expertTitle: r.expert.profile.title,
@@ -263,7 +263,12 @@ export function HotTopicInsights() {
         topicId: favReport.reportData.topicId,
         topicTitle: favReport.reportData.topicTitle,
         generatedAt: favReport.reportData.generatedAt,
-        synthesis: favReport.reportData.synthesis,
+        synthesis: {
+          keyInsights: favReport.reportData.synthesis?.keyInsights || [],
+          riskWarnings: favReport.reportData.synthesis?.riskWarnings || [],
+          opportunities: favReport.reportData.synthesis?.opportunities || [],
+          recommendations: favReport.reportData.synthesis?.recommendations || [],
+        },
         domainExpertReviews: [], // 简化处理，从收藏加载时不需要完整专家对象
       };
       setReport(restoredReport);
@@ -288,7 +293,7 @@ export function HotTopicInsights() {
     setIsLoadingFavorites(true);
     try {
       const favorites = await getFavorites();
-      setFavoriteReports(favorites);
+      setFavoriteReports(Array.isArray(favorites) ? favorites : []);
     } catch (error) {
       console.error('Failed to load favorites:', error);
     } finally {
@@ -427,7 +432,7 @@ export function HotTopicInsights() {
                 <div className="review-content">
                   <p className="opinion">{report.seniorExpertReview.opinion}</p>
                   <div className="focus-areas">
-                    {report.seniorExpertReview.focusAreas.map((area, idx) => (
+                    {(report.seniorExpertReview.focusAreas || []).map((area, idx) => (
                       <span key={idx} className="focus-tag">
                         {area}
                       </span>
@@ -436,7 +441,7 @@ export function HotTopicInsights() {
                   <div className="suggestions">
                     <h4>💡 建议</h4>
                     <ul>
-                      {report.seniorExpertReview.suggestions.map((s, idx) => (
+                      {(report.seniorExpertReview.suggestions || []).map((s, idx) => (
                         <li key={idx}>{s}</li>
                       ))}
                     </ul>
@@ -453,7 +458,7 @@ export function HotTopicInsights() {
               <h3>领域专家联合分析</h3>
             </div>
             <div className="domain-experts-grid">
-              {report.domainExpertReviews.map((review) => (
+              {(report.domainExpertReviews || []).map((review) => (
                 <div key={review.expert.id} className="expert-card domain">
                   <div className="expert-header">
                     <div className="expert-avatar">
@@ -494,7 +499,7 @@ export function HotTopicInsights() {
               <div className="synthesis-card insights">
                 <h4>🔍 核心洞察</h4>
                 <ul>
-                  {report.synthesis.keyInsights.map((item, idx) => (
+                  {(report.synthesis.keyInsights || []).map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>
@@ -502,7 +507,7 @@ export function HotTopicInsights() {
               <div className="synthesis-card risks">
                 <h4>⚠️ 风险提示</h4>
                 <ul>
-                  {report.synthesis.riskWarnings.map((item, idx) => (
+                  {(report.synthesis.riskWarnings || []).map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>
@@ -510,7 +515,7 @@ export function HotTopicInsights() {
               <div className="synthesis-card opportunities">
                 <h4>💎 机会识别</h4>
                 <ul>
-                  {report.synthesis.opportunities.map((item, idx) => (
+                  {(report.synthesis.opportunities || []).map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>
@@ -518,7 +523,7 @@ export function HotTopicInsights() {
               <div className="synthesis-card recommendations">
                 <h4>📋 行动建议</h4>
                 <ul>
-                  {report.synthesis.recommendations.map((item, idx) => (
+                  {(report.synthesis.recommendations || []).map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>

@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import './MarkdownRenderer.css';
 
 export interface HighlightItem {
@@ -27,32 +28,77 @@ const highlightColorClasses: Record<string, string> = {
 /**
  * 处理带高亮的内容
  * 将高亮文本替换为带有样式的 span 标签
+ * 使用非重叠匹配，避免重复嵌套
  */
 function processHighlights(content: string, highlights: HighlightItem[]): string {
   if (!highlights.length) return content;
   
-  let processedContent = content;
+  // 去重并按文本长度降序排序（长的优先）
+  const uniqueHighlights = highlights.filter((h, i, arr) => 
+    arr.findIndex(t => t.text === h.text) === i
+  );
+  const sortedHighlights = uniqueHighlights.sort((a, b) => b.text.length - a.text.length);
   
-  // 按文本长度降序排序，先替换长的文本，避免短文本匹配到长文本的一部分
-  const sortedHighlights = [...highlights].sort((a, b) => b.text.length - a.text.length);
+  // 构建匹配模式：优先匹配长文本
+  const patterns = sortedHighlights.map(h => ({
+    ...h,
+    escaped: h.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }));
   
-  sortedHighlights.forEach(h => {
-    const colorClass = highlightColorClasses[h.color];
-    if (!colorClass) return;
-    
-    // 转义正则表达式特殊字符
-    const escapedText = h.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    // 使用正则表达式全局替换，但避免在 HTML 标签内替换
-    const regex = new RegExp(`(${escapedText})(?![^<]*>)`, 'g');
-    
-    processedContent = processedContent.replace(
-      regex,
-      `<span class="${colorClass} px-1 rounded cursor-help transition-colors hover:brightness-95" data-highlight-id="${h.id}">$1</span>`
-    );
-  });
+  // 使用分段处理，避免重叠匹配
+  let result = '';
+  let lastIndex = 0;
   
-  return processedContent;
+  // 找到所有匹配位置（非重叠）
+  type Match = { start: number; end: number; highlight: typeof patterns[0] };
+  const matches: Match[] = [];
+  
+  // 扫描内容，找到第一个匹配的 pattern
+  let i = 0;
+  while (i < content.length) {
+    let matched = false;
+    
+    for (const pattern of patterns) {
+      const regex = new RegExp(`^${pattern.escaped}`);
+      const substr = content.slice(i);
+      const match = substr.match(regex);
+      
+      if (match) {
+        // 检查这个位置是否已经被覆盖
+        const start = i;
+        const end = i + match[0].length;
+        
+        // 检查是否与已有匹配重叠
+        const overlaps = matches.some(m => !(end <= m.start || start >= m.end));
+        
+        if (!overlaps) {
+          matches.push({ start, end, highlight: pattern });
+          i = end;
+          matched = true;
+          break;
+        }
+      }
+    }
+    
+    if (!matched) {
+      i++;
+    }
+  }
+  
+  // 按位置排序
+  matches.sort((a, b) => a.start - b.start);
+  
+  // 构建结果
+  lastIndex = 0;
+  for (const match of matches) {
+    result += content.slice(lastIndex, match.start);
+    const colorClass = highlightColorClasses[match.highlight.color];
+    result += `<span class="${colorClass} px-1 rounded cursor-help transition-colors hover:brightness-95" data-highlight-id="${match.highlight.id}">${content.slice(match.start, match.end)}</span>`;
+    lastIndex = match.end;
+  }
+  result += content.slice(lastIndex);
+  
+  return result;
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ 
@@ -69,6 +115,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     <div className={`markdown-body ${className}`}>
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // 自定义代码块渲染
           code({ node, inline, className, children, ...props }: any) {

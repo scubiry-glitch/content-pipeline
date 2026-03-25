@@ -677,65 +677,90 @@ ${JSON.stringify(outline, null, 2)}
     };
   }
 
-  // 4. 蓝军评审重做 - 重新执行评审（支持配置）
-  async redoReview(taskId: string, config?: any, preserveHistory?: boolean) {
+  // 4a. 蓝军评审重做 - 准备阶段（同步，更新状态+配置）
+  async prepareRedoReview(taskId: string, config?: any, preserveHistory?: boolean) {
     const task = await this.getTask(taskId);
     if (!task) {
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    console.log(`[Redo] Restarting BlueTeam review for task ${taskId}`, { config, preserveHistory });
+    const mode = config?.mode || 'parallel';
+    const isSequential = mode === 'sequential' || mode === 'serial';
+    console.log(`[Redo] Preparing review for task ${taskId}`, { config, preserveHistory, mode, isSequential });
 
-    // 清空评审数据
+    // 设置正确的 current_stage，便于前端 SSE 自动连接
+    const currentStage = isSequential ? 'sequential_review' : 'blue_team_review';
     await query(
       `UPDATE tasks SET
         status = 'reviewing',
         progress = 70,
-        current_stage = 're_reviewing',
+        current_stage = $2,
         updated_at = NOW()
       WHERE id = $1`,
-      [taskId]
+      [taskId, currentStage]
     );
+    // review_mode 列可能不存在（migration 有 bug），安全更新
+    try {
+      await query(`UPDATE tasks SET review_mode = $2 WHERE id = $1`, [taskId, isSequential ? 'sequential' : 'parallel']);
+    } catch { /* ignore if column doesn't exist */ }
 
-    // 根据用户选择：保留历史记录 或 删除前一轮评论
-    if (preserveHistory) {
-      // 保留历史评审记录，仅标记为历史版本
-      await query(
-        `UPDATE blue_team_reviews 
-         SET is_historical = true, 
-             updated_at = NOW() 
-         WHERE task_id = $1 
-         AND (is_historical IS NULL OR is_historical = false)`,
-        [taskId]
-      );
-      console.log(`[Redo] Preserved historical reviews for task ${taskId}`);
-    } else {
-      // 删除前一轮评论
+    // 根据用户选择：保留所有轮次评论 或 仅保留最新轮次
+    if (!preserveHistory) {
+      // 删除所有历史评论（重新开始）
       await query(`DELETE FROM blue_team_reviews WHERE task_id = $1`, [taskId]);
-      console.log(`[Redo] Deleted previous reviews for task ${taskId}`);
+      console.log(`[Redo] Deleted all previous reviews for task ${taskId}`);
+    } else {
+      // 保留所有轮次评论，新评论将作为新轮次插入
+      console.log(`[Redo] Preserving all previous rounds for task ${taskId}`);
     }
 
-    // 保留最新版稿件，删除其他版本
-    await query(
-      `DELETE FROM draft_versions
-       WHERE task_id = $1
-       AND id NOT IN (
-         SELECT id FROM draft_versions
+    // 只有不保留历史时才删除旧版本稿件
+    if (!preserveHistory) {
+      await query(
+        `DELETE FROM draft_versions
          WHERE task_id = $1
-         ORDER BY version DESC
-         LIMIT 1
-       )`,
-      [taskId]
-    );
+         AND id NOT IN (
+           SELECT id FROM draft_versions
+           WHERE task_id = $1
+           ORDER BY version DESC
+           LIMIT 1
+         )`,
+        [taskId]
+      );
+      console.log(`[Redo] Kept only latest draft version for task ${taskId}`);
+    }
 
-    // 重新执行评审（传递配置）
-    await this.pipelineService.review(taskId, config);
+    // 串行评审：同步配置评审队列（创建 task_review_progress 记录）
+    if (isSequential) {
+      const { configureSequentialReview } = await import('./sequentialReview.js');
+      await configureSequentialReview(taskId, task.topic, config?.experts);
+      console.log(`[Redo] Sequential review configured for task ${taskId}`);
+    }
 
-    return {
-      id: taskId,
-      status: 'awaiting_approval',
-      message: '蓝军评审已重做，评审结果已更新'
-    };
+    return { taskId, isSequential, topic: task.topic };
+  }
+
+  // 4b. 蓝军评审重做 - 执行阶段（异步，实际执行评审）
+  async executeRedoReview(taskId: string, config?: any, isSequential?: boolean) {
+    console.log(`[Redo] Executing review for task ${taskId}`, { isSequential });
+
+    if (isSequential) {
+      const { startSequentialReview } = await import('./sequentialReview.js');
+
+      // 获取最新稿件
+      const draftResult = await query(
+        `SELECT id, content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+        [taskId]
+      );
+      const latestDraft = draftResult.rows[0];
+      if (!latestDraft) throw new Error('No draft found for sequential review');
+
+      // 启动串行评审
+      await startSequentialReview(taskId, latestDraft.id, latestDraft.content);
+    } else {
+      // 并行评审：使用 BlueTeam Agent
+      await this.pipelineService.review(taskId, config);
+    }
   }
 
   // 从指定环节重新开始完整流程
@@ -747,8 +772,11 @@ ${JSON.stringify(outline, null, 2)}
         return this.redoResearch(taskId);
       case 'writing':
         return this.redoWriting(taskId);
-      case 'review':
-        return this.redoReview(taskId);
+      case 'review': {
+        const prep = await this.prepareRedoReview(taskId);
+        await this.executeRedoReview(taskId, undefined, prep.isSequential);
+        return { id: taskId, status: 'reviewing' };
+      }
       default:
         throw Object.assign(new Error('Invalid stage'), { name: 'APIError', statusCode: 400 });
     }

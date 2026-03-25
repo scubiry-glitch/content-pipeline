@@ -385,8 +385,8 @@ export function generateExpertOpinion(
 
   // 原有逻辑（兼容模式）
   const opinion = generateOpinionByExpertStyle(expert, content, contentType);
-  const focusAreas = expert.reviewDimensions;
-  const suggestions = generateSuggestionsByExpert(expert, content);
+  const focusAreas = expert.reviewDimensions || [];
+  const suggestions = generateSuggestionsByExpert(expert, content) || [];
 
   return {
     id: `review_${Date.now()}`,
@@ -452,7 +452,7 @@ function generatePersonalizedExpertOpinion(
 
   return {
     opinion,
-    focusAreas: expert.reviewDimensions.slice(0, 3),
+    focusAreas: (expert.reviewDimensions || []).slice(0, 3),
     suggestions,
     confidence: calculateExpertConfidence(expert, importance),
     personalizationMeta: {
