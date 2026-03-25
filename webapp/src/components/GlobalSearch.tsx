@@ -36,36 +36,36 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // 模拟搜索结果
-    const mockResults: SearchResult[] = [
+    const mockResults = ([
       {
         id: '1',
         title: `任务: "${searchQuery}" 相关研究`,
-        type: 'task',
+        type: 'task' as const,
         subtitle: '状态: 进行中',
         path: '/tasks',
       },
       {
         id: '2',
         title: `素材: ${searchQuery} 数据`,
-        type: 'asset',
+        type: 'asset' as const,
         subtitle: 'PDF · 高质量',
         path: '/assets',
       },
       {
         id: '3',
         title: `研报: ${searchQuery} 分析报告`,
-        type: 'report',
+        type: 'report' as const,
         subtitle: '平安证券 · 2026',
         path: '/assets/reports',
       },
       {
         id: '4',
         title: `热点: ${searchQuery} 最新动态`,
-        type: 'topic',
+        type: 'topic' as const,
         subtitle: '热度: 85 · 上升',
         path: '/hot-topics',
       },
-    ].filter((_, index) => searchQuery.length > 2 || index < 2);
+    ].filter((_, index) => searchQuery.length > 2 || index < 2)) as SearchResult[];
 
     setResults(mockResults);
     setSelectedIndex(0);

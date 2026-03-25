@@ -236,16 +236,7 @@ export interface AssetTheme {
   pinned_at?: string;
 }
 
-export interface Expert {
-  id: string;
-  name: string;
-  title: string;
-  company: string;
-  angle?: 'challenger' | 'expander' | 'synthesizer';
-  domain: string;
-  bio?: string;
-  status: 'active' | 'inactive';
-}
+// Expert interface moved below (line ~482)
 
 export interface BlueTeamReview {
   id: string;
@@ -495,6 +486,10 @@ export interface Expert {
   acceptanceRate: number;
   avgResponseTime: number;
   angle?: 'challenger' | 'expander' | 'synthesizer'; // 评审风格角度
+  // 兼容旧版属性
+  title?: string;
+  company?: string;
+  domain?: string;
 }
 
 export interface ExpertReview {

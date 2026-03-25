@@ -266,6 +266,9 @@ function getUniversalExpert(role: string): Expert {
       level: 'domain',
       domainCode: 'UNI',
       domainName: '通用',
+      title: '事实核查专家',
+      company: '',
+      domain: '通用',
       profile: {
         title: '事实核查专家',
         background: '专注数据准确性和来源可靠性验证',
@@ -289,6 +292,9 @@ function getUniversalExpert(role: string): Expert {
       level: 'domain',
       domainCode: 'UNI',
       domainName: '通用',
+      title: '逻辑分析专家',
+      company: '',
+      domain: '通用',
       profile: {
         title: '逻辑分析专家',
         background: '专注论证严密性和逻辑自洽性',
@@ -312,6 +318,9 @@ function getUniversalExpert(role: string): Expert {
       level: 'domain',
       domainCode: 'UNI',
       domainName: '通用',
+      title: '可读性专家',
+      company: '',
+      domain: '通用',
       profile: {
         title: '可读性专家',
         background: '专注内容可读性和受众匹配度',

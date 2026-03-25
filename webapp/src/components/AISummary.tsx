@@ -25,8 +25,8 @@ export function AISummary() {
       const pendingTasks = tasks.filter(t => t.status === 'pending').length;
       const overdueTasks = tasks.filter(t => {
         if (t.status === 'completed') return false;
-        if (!t.due_date) return false;
-        return new Date(t.due_date) < new Date();
+        if (!t.updated_at) return false;
+        return new Date(t.updated_at) < new Date();
       }).length;
 
       const inProgressTasks = tasks.filter(t =>
@@ -172,8 +172,8 @@ ${inProgress.length > 0
         <div className="stat-item">
           <span className="stat-value">
             {tasks.filter(t => {
-              if (!t.due_date || t.status === 'completed') return false;
-              return new Date(t.due_date) < new Date();
+              if (!t.updated_at || t.status === 'completed') return false;
+              return new Date(t.updated_at) < new Date();
             }).length}
           </span>
           <span className="stat-label">已逾期</span>

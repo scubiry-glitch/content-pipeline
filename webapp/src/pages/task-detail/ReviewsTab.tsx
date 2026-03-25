@@ -449,7 +449,7 @@ export function ReviewsTab() {
       scrollContainer.removeEventListener('scroll', updateHighlightPositions);
       window.removeEventListener('resize', updateHighlightPositions);
     };
-  }, [updateHighlightPositions, highlights]);
+  }, [updateHighlightPositions]);
 
   // Debug: log task data
   console.log('[ReviewsTab] task:', task?.id, 'draft_versions:', task?.draft_versions?.length, 'versions:', task?.versions?.length);
@@ -1235,23 +1235,60 @@ function RightPanel({
             ) : (
               <>
                 <div className="text-xs text-slate-400 mb-2">Rendering {pendingComments.length} comments...</div>
+                {/* Comments container with relative positioning for absolute alignment */}
+                <div className="relative" style={{ minHeight: '400px' }}>
                 {(() => {
                   const hasPositions = Object.keys(highlightPositions).length > 0;
                   // Sort comments by highlight Y position if available
                   const sortedComments = hasPositions
                     ? [...pendingComments].sort((a, b) => (highlightPositions[a.id] ?? Infinity) - (highlightPositions[b.id] ?? Infinity))
                     : pendingComments;
-                  return sortedComments;
-                })().map((comment) => {
-                const config = severityConfig[comment.severity];
-                const isSelected = selectedCommentId === comment.id;
-                const icon = roleIcons[comment.authorRole || 'default'];
-                const hasHighlight = highlightPositions[comment.id] !== undefined;
+                  
+                  // Anti-overlap logic: track occupied positions
+                  const minGap = 16; // minimum gap between cards in pixels
+                  const cardHeight = 120; // estimated card height
+                  const occupiedRanges: { start: number; end: number }[] = [];
+                  
+                  return sortedComments.map((comment, index) => {
+                    const config = severityConfig[comment.severity] || severityConfig.info;
+                    const isSelected = selectedCommentId === comment.id;
+                    const icon = roleIcons[comment.authorRole || 'default'];
+                    const hasHighlight = highlightPositions[comment.id] !== undefined;
+                    
+                    // Calculate vertical position with anti-overlap
+                    let topPosition = hasPositions 
+                      ? (highlightPositions[comment.id] ?? index * (cardHeight + minGap))
+                      : index * (cardHeight + minGap);
+                    
+                    // Ensure non-negative position
+                    topPosition = Math.max(0, topPosition);
+                    
+                    // Anti-overlap: adjust if overlapping with previous cards
+                    for (const range of occupiedRanges) {
+                      if (topPosition < range.end && topPosition + cardHeight > range.start) {
+                        // Overlap detected, move down
+                        topPosition = range.end + minGap;
+                      }
+                    }
+                    
+                    // Register this card's occupied range
+                    occupiedRanges.push({ start: topPosition, end: topPosition + cardHeight });
+                    
+                    // Sort ranges for next iteration
+                    occupiedRanges.sort((a, b) => a.start - b.start);
 
                 return (
                   <div
                     key={comment.id}
                     data-comment-id={comment.id}
+                    style={{ 
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      transform: `translateY(${topPosition}px)`,
+                      zIndex: isSelected ? 10 : 1,
+                    }}
                     onClick={() => {
                       if (!selectMode) {
                         handleCommentClick(comment);
@@ -1266,11 +1303,11 @@ function RightPanel({
                     }}
                     className={`bg-white dark:bg-slate-900 p-4 rounded-xl border-l-4 ${config.borderColor} shadow-sm space-y-2 transition-all hover:shadow-md ${
                       isSelected ? 'ring-2 ring-primary/20' : ''
-                    } ${selectMode ? '' : 'cursor-pointer'} ${hasHighlight ? 'relative' : ''}`}
+                    } ${selectMode ? '' : 'cursor-pointer'}`}
                   >
-                    {/* Connector arrow to highlight */}
+                    {/* Connector line to highlight - only show when highlighted */}
                     {hasHighlight && (
-                      <div className="absolute -left-6 top-4 w-4 h-0.5 bg-slate-300 dark:bg-slate-600" />
+                      <div className="absolute -left-4 top-6 w-4 h-0.5 bg-primary/50" />
                     )}
                     {/* Header with Checkbox */}
                     <div className="flex items-center justify-between">
