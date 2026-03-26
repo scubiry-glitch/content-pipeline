@@ -1391,6 +1391,8 @@ function RightPanel({
                   </div>
                 );
               })}
+              )()}
+              </div>
               </>
             )}
 
