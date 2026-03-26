@@ -165,6 +165,44 @@ export class HotTopicService {
     return data;
   }
 
+  // 从 RSS 数据获取热点话题
+  async getHotTopicsFromRss(limit: number = 10): Promise<any[]> {
+    const result = await query(
+      `SELECT 
+        id,
+        title,
+        source_name as source,
+        link as source_url,
+        hot_score,
+        trend,
+        sentiment,
+        summary,
+        tags,
+        published_at,
+        created_at
+      FROM rss_items
+      WHERE (is_deleted = false OR is_deleted IS NULL)
+        AND hot_score > 0
+      ORDER BY hot_score DESC, published_at DESC
+      LIMIT $1`,
+      [limit]
+    );
+
+    return result.rows.map(row => ({
+      id: `rss-${row.id}`,
+      title: row.title,
+      source: row.source,
+      sourceUrl: row.source_url,
+      hotScore: row.hot_score,
+      trend: row.trend || 'stable',
+      sentiment: row.sentiment || 'neutral',
+      summary: row.summary || '',
+      tags: Array.isArray(row.tags) ? row.tags : (row.tags ? JSON.parse(row.tags) : []),
+      publishedAt: row.published_at,
+      createdAt: row.created_at
+    }));
+  }
+
   // 格式化热点数据
   private formatHotTopic(row: any): HotTopic {
     return {

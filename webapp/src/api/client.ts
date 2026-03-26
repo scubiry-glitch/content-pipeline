@@ -415,6 +415,10 @@ export const hotTopicsApi = {
 
   unfollow: (id: string) =>
     client.post(`/quality/hot-topics/${id}/unfollow`) as Promise<void>,
+
+  // 从 RSS 数据获取热点话题
+  getFromRss: (limit?: number) =>
+    client.get('/quality/hot-topics/from-rss', { params: { limit } }) as Promise<{ items: HotTopic[]; total: number }>,
 };
 
 // RSS文章类型

@@ -1,13 +1,13 @@
 // 热点话题专家解读 - Hot Topic Expert Insights
-// Phase 3: 自动生成热点话题的完整专家解读报告
+// Phase 3: 基于真实 RSS 数据自动生成热点话题的完整专家解读报告
 
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { hotTopicsApi } from '../api/client';
 import {
   matchExperts,
   generateExpertOpinion,
   getExpertWorkload,
-  getTopExpertsByAcceptanceRate,
 } from '../services/expertService';
 import {
   getFavorites,
@@ -15,52 +15,8 @@ import {
   removeFavorite,
   type FavoriteReport,
 } from '../services/favoritesService';
-import type { Expert, ExpertReview } from '../types';
+import type { Expert, ExpertReview, HotTopic } from '../types';
 import './HotTopicInsights.css';
-
-// 热点话题数据
-const HOT_TOPICS = [
-  {
-    id: 'topic-1',
-    title: '央行降准对房地产市场的影响分析',
-    category: '宏观经济',
-    heat: 95,
-    summary: '央行宣布降准0.5个百分点，释放流动性约1万亿元，对房地产市场将产生深远影响。',
-    keywords: ['降准', '房地产', '货币政策', '流动性'],
-  },
-  {
-    id: 'topic-2',
-    title: '新能源车企出海战略与本地化挑战',
-    category: '新能源',
-    heat: 88,
-    summary: '中国新能源车企加速出海，但面临本地化生产、品牌认知、政策合规等多重挑战。',
-    keywords: ['新能源', '出海', '本地化', '电动车'],
-  },
-  {
-    id: 'topic-3',
-    title: 'AI大模型在金融科技中的应用前景',
-    category: '人工智能',
-    heat: 92,
-    summary: 'AI大模型技术正在重塑金融科技行业，从智能投顾到风控反欺诈，应用场景不断拓展。',
-    keywords: ['AI', '大模型', '金融科技', '智能投顾'],
-  },
-  {
-    id: 'topic-4',
-    title: '消费降级还是消费分级？零售行业新趋势',
-    category: '消费零售',
-    heat: 85,
-    summary: '消费市场出现分化，高端消费与性价比消费并存，零售企业如何应对？',
-    keywords: ['消费', '零售', '性价比', '品牌'],
-  },
-  {
-    id: 'topic-5',
-    title: '半导体产业链重构与国产替代加速',
-    category: '半导体',
-    heat: 90,
-    summary: '全球半导体产业链加速重构，国产替代进入深水区，设备材料环节成关键。',
-    keywords: ['半导体', '国产替代', '产业链', '芯片'],
-  },
-];
 
 // 解读报告接口
 interface ExpertInsightReport {
@@ -112,11 +68,13 @@ function convertToStorable(
 export function HotTopicInsights() {
   const navigate = useNavigate();
   const { topicId } = useParams();
-  const [selectedTopic, setSelectedTopic] = useState(
-    topicId ? HOT_TOPICS.find((t) => t.id === topicId) || HOT_TOPICS[0] : HOT_TOPICS[0]
-  );
+  
+  // 从 RSS 获取的热点话题
+  const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState<HotTopic | null>(null);
   const [report, setReport] = useState<ExpertInsightReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(true);
   const [savedReports, setSavedReports] = useState<string[]>([]);
   // 报告缓存
   const [reportCache, setReportCache] = useState<Record<string, ExpertInsightReport>>({});
@@ -125,8 +83,67 @@ export function HotTopicInsights() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
 
+  // 加载热点话题（从 RSS 数据）
+  const loadHotTopics = async () => {
+    setTopicsLoading(true);
+    try {
+      const response = await hotTopicsApi.getFromRss(10);
+      const topics = response.items || [];
+      
+      // 为每个话题添加 category 字段（从 source 派生）
+      const topicsWithCategory = topics.map(t => ({
+        ...t,
+        category: inferCategory(t.source),
+        summary: (t as any).summary || '',
+        keywords: (t as any).tags || [],
+        heat: Math.round((t.hotScore || 0) * 100),
+      }));
+      
+      setHotTopics(topicsWithCategory);
+      
+      // 如果有 topicId，选择对应的话题；否则选择第一个
+      if (topicId) {
+        const found = topicsWithCategory.find((t) => t.id === topicId);
+        if (found) {
+          setSelectedTopic(found);
+        } else if (topicsWithCategory.length > 0) {
+          setSelectedTopic(topicsWithCategory[0]);
+        }
+      } else if (topicsWithCategory.length > 0) {
+        setSelectedTopic(topicsWithCategory[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load hot topics from RSS:', error);
+    } finally {
+      setTopicsLoading(false);
+    }
+  };
+
+  // 根据 source 推断分类
+  const inferCategory = (source: string): string => {
+    const categoryMap: Record<string, string> = {
+      '36kr': '科技',
+      '机器之心': 'AI',
+      '虎嗅': '商业',
+      '雷锋网': '科技',
+      '极客公园': '科技',
+      'Solidot': '开源',
+      'InfoQ中文': '技术',
+      'Nature News': '科学',
+      'TechCrunch': '创业',
+      'The Verge': '科技',
+      'MIT Technology Review': '科技',
+      'Ars Technica': '科技',
+      '财新': '财经',
+      '第一财经': '财经',
+      '华尔街见闻': '财经',
+      '雪球': '投资',
+    };
+    return categoryMap[source] || '综合';
+  };
+
   // 切换话题时优先使用缓存
-  const handleTopicChange = (topic: typeof HOT_TOPICS[0]) => {
+  const handleTopicChange = (topic: HotTopic) => {
     setSelectedTopic(topic);
     if (reportCache[topic.id]) {
       setReport(reportCache[topic.id]);
@@ -136,7 +153,7 @@ export function HotTopicInsights() {
   };
 
   // 生成解读报告
-  const generateReport = async (topic: typeof HOT_TOPICS[0]) => {
+  const generateReport = async (topic: HotTopic) => {
     setLoading(true);
 
     // 模拟API延迟
@@ -153,7 +170,7 @@ export function HotTopicInsights() {
     if (matchResult.seniorExpert) {
       const review = generateExpertOpinion(
         matchResult.seniorExpert,
-        topic.summary,
+        (topic as any).summary || topic.title,
         'draft'
       );
       seniorExpertReview = { ...review, expert: matchResult.seniorExpert };
@@ -161,33 +178,13 @@ export function HotTopicInsights() {
 
     // 生成领域专家解读
     const domainExpertReviews = matchResult.domainExperts.slice(0, 3).map((expert) => {
-      const review = generateExpertOpinion(expert, topic.summary, 'draft');
+      const review = generateExpertOpinion(expert, (topic as any).summary || topic.title, 'draft');
       return { ...review, expert };
     });
 
-    // 生成综合洞察
-    const synthesis = {
-      keyInsights: [
-        `${topic.category}领域正处于关键转折点，政策支持与市场需求双重驱动`,
-        '技术创新是核心竞争力，头部企业领先优势明显',
-        '产业链协同效应增强，上下游整合加速',
-      ],
-      riskWarnings: [
-        '政策变化可能带来不确定性',
-        '竞争加剧导致利润空间压缩',
-        '技术迭代风险需要持续关注',
-      ],
-      opportunities: [
-        '下沉市场仍有较大增长空间',
-        '出海战略打开第二增长曲线',
-        '数字化转型带来效率提升机会',
-      ],
-      recommendations: [
-        '建议持续关注政策动向，及时调整策略',
-        '加大研发投入，构建技术护城河',
-        '优化成本结构，提升抗风险能力',
-      ],
-    };
+    // 基于话题分类生成相关的综合洞察
+    const category = (topic as any).category || '综合';
+    const synthesis = generateSynthesis(category, topic.title);
 
     const newReport: ExpertInsightReport = {
       id: `report-${Date.now()}`,
@@ -205,6 +202,102 @@ export function HotTopicInsights() {
     setLoading(false);
   };
 
+  // 根据分类生成相关的综合洞察
+  const generateSynthesis = (category: string, title: string) => {
+    const categoryInsights: Record<string, any> = {
+      '科技': {
+        keyInsights: [
+          '技术创新持续加速，头部企业竞争优势明显',
+          '产业链协同效应增强，生态整合成为关键',
+          'AI技术渗透加速，智能化转型势不可挡',
+        ],
+        riskWarnings: [
+          '技术迭代风险需要持续关注',
+          '竞争加剧可能导致利润空间压缩',
+          '数据安全和隐私合规压力增大',
+        ],
+        opportunities: [
+          '下沉市场仍有较大增长空间',
+          'B端企业服务市场潜力巨大',
+          '出海战略打开第二增长曲线',
+        ],
+        recommendations: [
+          '加大研发投入，构建技术护城河',
+          '关注政策动向，及时调整合规策略',
+          '优化人才结构，吸引顶尖技术人才',
+        ],
+      },
+      'AI': {
+        keyInsights: [
+          '大模型技术突破带来应用场景爆发',
+          '算力成本下降推动AI民主化进程',
+          '多模态融合成为新的技术趋势',
+        ],
+        riskWarnings: [
+          'AI伦理和监管政策不确定性',
+          '模型幻觉和可靠性问题待解决',
+          '人才竞争激烈，成本持续上升',
+        ],
+        opportunities: [
+          '垂直行业AI应用空间广阔',
+          'AI Agent开启新的交互范式',
+          '边缘AI和端侧部署需求增长',
+        ],
+        recommendations: [
+          '聚焦垂直场景，打造差异化优势',
+          '建立数据飞轮，持续优化模型',
+          '重视AI安全，建立可信体系',
+        ],
+      },
+      '财经': {
+        keyInsights: [
+          '宏观经济政策持续发力，市场信心逐步恢复',
+          '结构性机会凸显，优质资产受到追捧',
+          '跨境资本流动活跃，国际化进程加速',
+        ],
+        riskWarnings: [
+          '全球经济不确定性因素增多',
+          '地缘政治风险影响市场情绪',
+          '通胀压力和利率变动带来波动',
+        ],
+        opportunities: [
+          '新兴产业投资价值凸显',
+          'ESG投资理念深入人心',
+          '数字金融创新发展迅猛',
+        ],
+        recommendations: [
+          '保持理性投资，做好风险管理',
+          '关注长期价值，避免短期投机',
+          '分散投资组合，降低单一风险',
+        ],
+      },
+      '默认': {
+        keyInsights: [
+          `${category}领域正处于关键发展阶段，机遇与挑战并存`,
+          '市场需求持续增长，行业前景广阔',
+          '政策支持与技术创新双轮驱动',
+        ],
+        riskWarnings: [
+          '政策变化可能带来不确定性',
+          '竞争加剧导致行业洗牌',
+          '技术迭代风险需要持续关注',
+        ],
+        opportunities: [
+          '下沉市场仍有较大增长空间',
+          '出海战略打开第二增长曲线',
+          '数字化转型带来效率提升机会',
+        ],
+        recommendations: [
+          '持续关注政策动向，及时调整策略',
+          '加大创新投入，构建核心竞争力',
+          '优化成本结构，提升抗风险能力',
+        ],
+      },
+    };
+
+    return categoryInsights[category] || categoryInsights['默认'];
+  };
+
   // 保存报告
   const saveReport = () => {
     if (report && !savedReports.includes(report.id)) {
@@ -215,7 +308,7 @@ export function HotTopicInsights() {
 
   // 分享报告
   const shareReport = () => {
-    if (report) {
+    if (report && selectedTopic) {
       const shareUrl = `${window.location.origin}/hot-topics/${selectedTopic.id}`;
       navigator.clipboard.writeText(shareUrl);
       alert('链接已复制到剪贴板');
@@ -254,7 +347,7 @@ export function HotTopicInsights() {
 
   // 加载收藏的报告
   const loadFavoriteReport = (favReport: FavoriteReport) => {
-    const topic = HOT_TOPICS.find((t) => t.id === favReport.topicId);
+    const topic = hotTopics.find((t) => t.id === favReport.topicId);
     if (topic) {
       setSelectedTopic(topic);
       // 从收藏数据恢复报告
@@ -301,29 +394,48 @@ export function HotTopicInsights() {
     }
   };
 
+  // 初始加载
   useEffect(() => {
-    generateReport(selectedTopic);
+    loadHotTopics();
     loadFavorites();
   }, []);
+
+  // 当选中话题变化时，生成报告
+  useEffect(() => {
+    if (selectedTopic && !reportCache[selectedTopic.id]) {
+      generateReport(selectedTopic);
+    } else if (selectedTopic && reportCache[selectedTopic.id]) {
+      setReport(reportCache[selectedTopic.id]);
+    }
+  }, [selectedTopic?.id]);
 
   return (
     <div className="hot-topic-insights-page">
       {/* 页面头部 */}
       <div className="page-header">
         <h1>🔥 热点话题专家解读</h1>
-        <p className="subtitle">AI驱动的多专家联合深度分析</p>
+        <p className="subtitle">基于真实 RSS 数据的 AI 驱动多专家联合深度分析</p>
       </div>
 
       {/* 话题选择器 */}
       <div className="topic-selector">
         <div className="selector-header">
-          <h3>选择话题</h3>
-          <button
-            className={`btn-favorites-toggle ${showFavorites ? 'active' : ''}`}
-            onClick={() => setShowFavorites(!showFavorites)}
-          >
-            ❤️ 我的收藏 ({favoriteReports.length})
-          </button>
+          <h3>热点话题（来自 RSS 实时数据）</h3>
+          <div className="header-actions">
+            <button
+              className="btn-refresh"
+              onClick={loadHotTopics}
+              disabled={topicsLoading}
+            >
+              {topicsLoading ? '⏳ 刷新中...' : '🔄 刷新'}
+            </button>
+            <button
+              className={`btn-favorites-toggle ${showFavorites ? 'active' : ''}`}
+              onClick={() => setShowFavorites(!showFavorites)}
+            >
+              ❤️ 我的收藏 ({favoriteReports.length})
+            </button>
+          </div>
         </div>
 
         {showFavorites ? (
@@ -363,18 +475,28 @@ export function HotTopicInsights() {
               </div>
             )}
           </div>
+        ) : topicsLoading ? (
+          <div className="loading-topics">
+            <div className="loading-spinner"></div>
+            <p>正在加载热点话题...</p>
+          </div>
+        ) : hotTopics.length === 0 ? (
+          <div className="empty-topics">
+            <p>暂无热点话题</p>
+            <span>请检查 RSS 采集是否正常运行</span>
+          </div>
         ) : (
           <div className="topic-list">
-            {HOT_TOPICS.map((topic) => (
+            {hotTopics.map((topic) => (
               <button
                 key={topic.id}
-                className={`topic-btn ${selectedTopic.id === topic.id ? 'active' : ''}`}
+                className={`topic-btn ${selectedTopic?.id === topic.id ? 'active' : ''}`}
                 onClick={() => handleTopicChange(topic)}
                 disabled={loading}
               >
-                <span className="topic-heat">🔥 {topic.heat}</span>
+                <span className="topic-heat">🔥 {topic.hotScore}</span>
                 <span className="topic-title">{topic.title}</span>
-                <span className="topic-category">{topic.category}</span>
+                <span className="topic-category">{(topic as any).category}</span>
               </button>
             ))}
           </div>
@@ -391,12 +513,13 @@ export function HotTopicInsights() {
       )}
 
       {/* 解读报告 */}
-      {!loading && report && (
+      {!loading && report && selectedTopic && (
         <div className="insight-report">
           {/* 报告头部 */}
           <div className="report-header">
             <div className="report-title">
               <h2>{report.topicTitle}</h2>
+              <span className="report-source">来源: {(selectedTopic as any).source}</span>
               <span className="report-time">
                 生成时间: {new Date(report.generatedAt).toLocaleString()}
               </span>
@@ -540,14 +663,14 @@ export function HotTopicInsights() {
             <div className="related-assets-list">
               <div className="asset-item">
                 <span className="asset-type">研报</span>
-                <span className="asset-title">{selectedTopic.category}行业深度报告2024</span>
+                <span className="asset-title">{(selectedTopic as any).category}行业深度报告2024</span>
                 <button className="btn-view" onClick={() => navigate('/assets')}>
                   查看 →
                 </button>
               </div>
               <div className="asset-item">
                 <span className="asset-type">数据</span>
-                <span className="asset-title">{selectedTopic.category}市场数据季度更新</span>
+                <span className="asset-title">{(selectedTopic as any).category}市场数据季度更新</span>
                 <button className="btn-view" onClick={() => navigate('/assets')}>
                   查看 →
                 </button>

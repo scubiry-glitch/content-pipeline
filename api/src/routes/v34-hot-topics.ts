@@ -19,6 +19,15 @@ export async function v34HotTopicRoutes(fastify: FastifyInstance) {
     return { items: hotTopics };
   });
 
+  // 从 RSS 数据获取热点话题
+  fastify.get('/from-rss', { preHandler: authenticate }, async (request) => {
+    const { limit } = request.query as any;
+    const hotTopics = await hotTopicService.getHotTopicsFromRss(
+      limit ? parseInt(limit) : 10
+    );
+    return { items: hotTopics, total: hotTopics.length };
+  });
+
   // 获取热点详情
   fastify.get('/:id', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.params as any;
