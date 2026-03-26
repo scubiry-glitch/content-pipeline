@@ -196,63 +196,177 @@ function parseRevisionOutput(content: string): { revisedContent: string; changes
 }
 
 /**
- * 批量应用多个评审意见的修订
+ * 批量应用所有已接受的评审意见（合并为一次 LLM 调用）
+ * 避免逐条改稿导致的版本爆炸问题
  */
-export async function applyBatchRevisions(
-  taskId: string,
-  reviewIds: string[]
-): Promise<RevisionResult[]> {
-  const results: RevisionResult[] = [];
+export async function applyAllAcceptedRevisions(
+  taskId: string
+): Promise<RevisionResult & { appliedCount: number }> {
+  console.log(`[RevisionAgent] Batch revision for task ${taskId}`);
 
-  for (const reviewId of reviewIds) {
-    // 获取评审详情
-    const reviewResult = await query(
-      `SELECT 
-        btr.id as review_id,
-        btr.task_id,
-        btr.expert_role,
-        btr.questions,
-        btr.status,
-        dv.content as current_content
-       FROM blue_team_reviews btr
-       LEFT JOIN draft_versions dv ON dv.task_id = btr.task_id
-       WHERE btr.id = $1 
-       AND btr.task_id = $2
-       ORDER BY dv.version DESC
-       LIMIT 1`,
-      [reviewId, taskId]
+  try {
+    // 1. 收集所有 accepted 的评审意见
+    const acceptedResult = await query(
+      `SELECT id, expert_role, questions
+       FROM blue_team_reviews
+       WHERE task_id = $1
+         AND (user_decision = 'accept' OR status = 'accepted')
+       ORDER BY round, created_at`,
+      [taskId]
     );
 
-    if (reviewResult.rows.length === 0) {
-      results.push({ success: false, error: `Review ${reviewId} not found` });
-      continue;
+    if (acceptedResult.rows.length === 0) {
+      return { success: false, error: '没有已接受的评审意见', appliedCount: 0 };
     }
 
-    const row = reviewResult.rows[0];
-    const questions = typeof row.questions === 'string' 
-      ? JSON.parse(row.questions) 
-      : row.questions;
-
-    // 对每个 question 应用修订（简化版：只处理第一个）
-    const firstQuestion = Array.isArray(questions) ? questions[0] : questions;
-    
-    if (!firstQuestion) {
-      results.push({ success: false, error: `No questions found in review ${reviewId}` });
-      continue;
+    // 2. 获取最新稿件
+    const draftResult = await query(
+      `SELECT id, content, version FROM draft_versions
+       WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+      [taskId]
+    );
+    const latestDraft = draftResult.rows[0];
+    if (!latestDraft?.content) {
+      return { success: false, error: '未找到稿件内容', appliedCount: 0 };
     }
 
-    const result = await applyReviewRevision({
-      taskId,
-      reviewId,
-      originalContent: row.current_content || '',
-      question: firstQuestion.question,
-      suggestion: firstQuestion.suggestion,
-      location: firstQuestion.location,
-      expertRole: row.expert_role
+    // 3. 合并所有评审意见为一个列表
+    const allIssues: Array<{ expertRole: string; question: string; suggestion: string; location?: string }> = [];
+    const appliedReviewIds: string[] = [];
+
+    for (const row of acceptedResult.rows) {
+      const questions = typeof row.questions === 'string'
+        ? JSON.parse(row.questions)
+        : row.questions;
+
+      const qList = Array.isArray(questions) ? questions : [questions];
+      for (const q of qList) {
+        if (q.question && q.severity !== 'praise') {
+          allIssues.push({
+            expertRole: row.expert_role,
+            question: q.question,
+            suggestion: q.suggestion || '',
+            location: q.location,
+          });
+        }
+      }
+      appliedReviewIds.push(row.id);
+    }
+
+    if (allIssues.length === 0) {
+      return { success: false, error: '已接受的评审中无可操作的修改建议', appliedCount: 0 };
+    }
+
+    // 4. 构建合并 prompt
+    const MAX_CONTENT_CHARS = 15000;
+    const contentForPrompt = latestDraft.content.length > MAX_CONTENT_CHARS
+      ? latestDraft.content.substring(0, MAX_CONTENT_CHARS) + '\n\n[... 后续内容省略，请保持原文后续部分不变 ...]'
+      : latestDraft.content;
+
+    const issuesText = allIssues.map((issue, i) =>
+      `${i + 1}. [${issue.expertRole}] ${issue.question.substring(0, 300)}\n   建议：${issue.suggestion.substring(0, 200)}${issue.location ? `\n   位置：${issue.location}` : ''}`
+    ).join('\n');
+
+    const prompt = `你是一位专业的文稿修订专家。请根据以下 ${allIssues.length} 条评审意见，对文稿进行**一次性修订**。
+
+## 重要规则
+- 输出**完整的修订后文稿**，不能只输出摘要或部分内容
+- 修订后文稿的总字数应与原文相当（原文约 ${latestDraft.content.length} 字符）
+- 只修改评审意见指出的具体问题，**保留所有未被评审指出的段落和章节**
+- 保持原文的 Markdown 标题层级结构
+
+## 当前文稿（完整）
+
+${contentForPrompt}
+
+## 评审意见（共 ${allIssues.length} 条，已全部接受）
+
+${issuesText}
+
+## 修订要求
+
+1. **逐条处理**上述评审意见，将所有修改合并到一份稿件中
+2. 修订后文稿字数应≥原文字数的 80%
+3. 保持所有 Markdown 标题（#/##/###）不变
+4. 输出完整的修订后文稿（Markdown格式）
+
+## 输出格式
+
+<修订说明>
+简要列出对每条评审意见的处理方式（1行1条）
+</修订说明>
+
+<修订后稿件>
+完整的修订后稿件内容
+</修订后稿件>`;
+
+    // 5. 调用 LLM
+    console.log(`[RevisionAgent] Batch revision: ${allIssues.length} issues, prompt ${prompt.length} chars`);
+    const llmResult = await generate(prompt, 'writing', {
+      temperature: 0.3,
+      maxTokens: 16000,
     });
 
-    results.push(result);
-  }
+    const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
+    if (!revisedContent || revisedContent.trim().length === 0) {
+      throw new Error('LLM returned empty content');
+    }
 
-  return results;
+    // 6. 质量守卫
+    const lengthRatio = revisedContent.length / latestDraft.content.length;
+    let finalContent = revisedContent;
+    if (lengthRatio < 0.6 || revisedContent.trim().length < 100) {
+      console.warn(`[RevisionAgent] Quality guard: ratio=${(lengthRatio * 100).toFixed(1)}%, using original`);
+      finalContent = latestDraft.content;
+    }
+
+    // 7. 保存新版本
+    const newVersion = (latestDraft.version || 0) + 1;
+    const newDraftId = uuidv4();
+    await query(
+      `INSERT INTO draft_versions (
+        id, task_id, version, content,
+        status, revision_notes, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [
+        newDraftId, taskId, newVersion, finalContent,
+        'revised',
+        JSON.stringify({
+          type: 'batch_revision',
+          appliedReviewIds,
+          issueCount: allIssues.length,
+          changes,
+          appliedAt: new Date().toISOString(),
+        }),
+      ]
+    );
+
+    // 8. 记录日志
+    await query(
+      `INSERT INTO task_logs (task_id, action, details, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [
+        taskId, 'batch_revision',
+        JSON.stringify({ draftId: newDraftId, version: newVersion, appliedReviewIds, issueCount: allIssues.length }),
+      ]
+    );
+
+    console.log(`[RevisionAgent] Batch revision completed: ${newDraftId} (v${newVersion}), ${allIssues.length} issues applied`);
+
+    return {
+      success: true,
+      newDraftId,
+      newVersion,
+      revisedContent: finalContent,
+      changes,
+      appliedCount: allIssues.length,
+    };
+  } catch (error) {
+    console.error(`[RevisionAgent] Batch revision failed:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      appliedCount: 0,
+    };
+  }
 }

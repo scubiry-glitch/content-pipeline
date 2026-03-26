@@ -93,7 +93,7 @@ function processHighlights(content: string, highlights: HighlightItem[]): string
   for (const match of matches) {
     result += content.slice(lastIndex, match.start);
     const colorClass = highlightColorClasses[match.highlight.color];
-    result += `<span class="${colorClass} px-1 rounded cursor-help transition-colors hover:brightness-95" data-highlight-id="${match.highlight.id}">${content.slice(match.start, match.end)}</span>`;
+    result += `<span id="hl-${match.highlight.id}" class="${colorClass} px-1 rounded cursor-help transition-colors hover:brightness-95" data-highlight-id="${match.highlight.id}">${content.slice(match.start, match.end)}</span>`;
     lastIndex = match.end;
   }
   result += content.slice(lastIndex);

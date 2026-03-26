@@ -519,7 +519,7 @@ export function PlanningTab() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-on-surface truncate group-hover:text-primary transition-colors">{item.title}</p>
-                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {(item.relevance ? item.relevance * 100 : item.hotScore)?.toFixed(0) || 'N/A'}</p>
+                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {((item as any).relevance ? (item as any).relevance * 100 : item.hotScore)?.toFixed(0) || 'N/A'}</p>
                       </div>
                     </label>
                   ))

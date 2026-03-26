@@ -299,15 +299,15 @@ function ExpertReviewCard({
               disabled={isGenerating}
             >{isGenerating ? '🔄' : '↻'} 重新生成</button>
             <button
-              className={`btn-action accept ${action === 'accepted' ? 'active' : ''}`}
+              className={`btn-action accept ${action === 'accept' ? 'active' : ''}`}
               onClick={handleAccept}
               disabled={action !== null}
-            >{action === 'accepted' ? '✓ 已接受' : '✓ 接受'}</button>
+            >{action === 'accept' ? '✓ 已接受' : '✓ 接受'}</button>
             <button
-              className={`btn-action ignore ${action === 'rejected' ? 'active' : ''}`}
+              className={`btn-action ignore ${action === 'ignore' ? 'active' : ''}`}
               onClick={handleIgnore}
               disabled={action !== null}
-            >{action === 'rejected' ? '✗ 已忽略' : '✗ 忽略'}</button>
+            >{action === 'ignore' ? '✗ 已忽略' : '✗ 忽略'}</button>
           </div>
         </div>
       </div>

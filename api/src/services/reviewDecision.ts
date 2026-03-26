@@ -4,7 +4,7 @@
 
 import { query } from '../db/connection.js';
 import { BlueTeamAgent } from '../agents/blueTeam.js';
-import { applyReviewRevision } from './revisionAgent.js';
+// applyReviewRevision moved to batch endpoint (POST /:taskId/apply-revisions)
 
 export type DecisionType = 'accept' | 'ignore' | 'manual_resolved';
 
@@ -102,7 +102,7 @@ export async function submitDecision(
   decision: DecisionType,
   note?: string,
   questionIndex?: number
-): Promise<{ success: boolean; reviewItem?: ReviewItem; revisionResult?: any }> {
+): Promise<{ success: boolean; reviewItem?: ReviewItem }> {
   // 验证评审项存在且属于该任务
   const checkResult = await query(
     `SELECT id, questions FROM blue_team_reviews WHERE id = $1 AND task_id = $2`,
@@ -208,66 +208,8 @@ export async function submitDecision(
     );
   }
 
-  let revisionResult: any = null;
-
-  // ===== 接受后自动修订稿件 =====
-  if (decision === 'accept') {
-    console.log(`[ReviewDecision] Auto-revision triggered for review ${reviewId}`);
-    
-    try {
-      // 获取评审详情和当前稿件
-      const reviewDetail = await query(
-        `SELECT 
-          btr.id,
-          btr.task_id,
-          btr.expert_role,
-          btr.questions,
-          dv.content as current_content
-         FROM blue_team_reviews btr
-         LEFT JOIN LATERAL (
-           SELECT content FROM draft_versions 
-           WHERE task_id = btr.task_id 
-           ORDER BY version DESC 
-           LIMIT 1
-         ) dv ON true
-         WHERE btr.id = $1`,
-        [reviewId]
-      );
-
-      if (reviewDetail.rows.length > 0) {
-        const row = reviewDetail.rows[0];
-        const questions = typeof row.questions === 'string' 
-          ? JSON.parse(row.questions) 
-          : row.questions;
-        
-        // 获取第一个问题（简化处理）
-        const firstQuestion = Array.isArray(questions) ? questions[0] : questions;
-        
-        if (firstQuestion && row.current_content) {
-          // 异步执行修订（不阻塞响应）
-          revisionResult = await applyReviewRevision({
-            taskId,
-            reviewId,
-            originalContent: row.current_content,
-            question: firstQuestion.question,
-            suggestion: firstQuestion.suggestion,
-            location: firstQuestion.location,
-            expertRole: row.expert_role
-          });
-
-          console.log(`[ReviewDecision] Revision result:`, {
-            success: revisionResult.success,
-            newVersion: revisionResult.newVersion,
-            draftId: revisionResult.newDraftId
-          });
-        }
-      }
-    } catch (error) {
-      console.error(`[ReviewDecision] Auto-revision failed:`, error);
-      // 修订失败不影响决策提交，只记录错误
-      revisionResult = { success: false, error: (error as Error).message };
-    }
-  }
+  // Accept 不再自动触发逐条改稿（避免版本爆炸）
+  // 改稿统一通过 POST /:taskId/apply-revisions 批量执行
 
   // 返回更新后的评审项
   const items = await getReviewItems(taskId);
@@ -276,7 +218,6 @@ export async function submitDecision(
   return {
     success: true,
     reviewItem: updatedItem,
-    revisionResult
   };
 }
 

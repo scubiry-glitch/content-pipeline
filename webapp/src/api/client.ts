@@ -367,6 +367,17 @@ export const blueTeamApi = {
   // 检查是否可以进入确认环节 (FR-022)
   canProceed: (taskId: string) =>
     client.get(`/production/${taskId}/can-proceed`) as Promise<{ canProceed: boolean; pendingCritical: number }>,
+
+  // 批量应用已接受的评审意见（一次性改稿）
+  applyRevisions: (taskId: string) =>
+    client.post(`/production/${taskId}/apply-revisions`) as Promise<{
+      success: boolean;
+      newDraftId?: string;
+      newVersion?: number;
+      appliedCount?: number;
+      message?: string;
+      error?: string;
+    }>,
 };
 
 // 健康检查

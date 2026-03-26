@@ -19,17 +19,19 @@ export interface DraftResult {
  */
 export async function generateFinalDraft(
   taskId: string,
-  selectedReviewIds?: string[]
+  selectedReviewIds?: string[],
+  force?: boolean,
+  mode: 'full' | 'polish' = 'full'
 ): Promise<DraftResult> {
-  console.log(`[DraftGenerator] Generating final draft for task ${taskId}`, { selectedReviewIds });
+  console.log(`[DraftGenerator] Generating final draft for task ${taskId}`, { selectedReviewIds, mode });
 
   try {
     // 1. 获取最新稿件版本
     const draftResult = await query(
-      `SELECT id, content, version 
-       FROM draft_versions 
-       WHERE task_id = $1 
-       ORDER BY version DESC 
+      `SELECT id, content, version
+       FROM draft_versions
+       WHERE task_id = $1
+       ORDER BY version DESC
        LIMIT 1`,
       [taskId]
     );
@@ -41,39 +43,44 @@ export async function generateFinalDraft(
     const latestDraft = draftResult.rows[0];
     let finalContent = latestDraft.content;
 
-    // 2. 获取已接受的评审意见（如果指定了 selectedReviewIds，只获取这些）
-    let acceptedReviewsQuery = `
-      SELECT id, expert_role, questions, decision_note
-      FROM blue_team_reviews
-      WHERE task_id = $1 AND user_decision = 'accept'
-    `;
-    const queryParams: any[] = [taskId];
-    
-    if (selectedReviewIds && selectedReviewIds.length > 0) {
-      acceptedReviewsQuery += ` AND id = ANY($2)`;
-      queryParams.push(selectedReviewIds);
-    }
-    
-    const acceptedReviews = await query(acceptedReviewsQuery, queryParams);
+    if (mode === 'polish') {
+      // 轻量润色模式：稿件已经过批量改稿，只做最终润色
+      console.log(`[DraftGenerator] Polish mode: light editing on already-revised draft`);
+      finalContent = await polishDraft(latestDraft.content);
+    } else {
+      // 完整模式：基于原稿 + 评审意见重新生成
+      // 2. 获取已接受的评审意见
+      let acceptedReviewsQuery = `
+        SELECT id, expert_role, questions, decision_note
+        FROM blue_team_reviews
+        WHERE task_id = $1 AND user_decision = 'accept'
+      `;
+      const queryParams: any[] = [taskId];
 
-    // 3. 如果有接受的评审，应用修订
-    if (acceptedReviews.rows.length > 0) {
-      console.log(`[DraftGenerator] Applying ${acceptedReviews.rows.length} accepted reviews`);
-      
-      // 收集所有接受的建议
-      const acceptedSuggestions = acceptedReviews.rows.flatMap(row => {
-        const questions = typeof row.questions === 'string' 
-          ? JSON.parse(row.questions) 
-          : row.questions;
-        return Array.isArray(questions) ? questions : [questions];
-      }).filter((q: any) => q && q.suggestion);
+      if (selectedReviewIds && selectedReviewIds.length > 0) {
+        acceptedReviewsQuery += ` AND id = ANY($2)`;
+        queryParams.push(selectedReviewIds);
+      }
 
-      // 使用 LLM 整合所有修订生成最终稿
-      if (acceptedSuggestions.length > 0) {
-        finalContent = await applyRevisionsWithLLM(
-          latestDraft.content,
-          acceptedSuggestions
-        );
+      const acceptedReviews = await query(acceptedReviewsQuery, queryParams);
+
+      // 3. 如果有接受的评审，应用修订
+      if (acceptedReviews.rows.length > 0) {
+        console.log(`[DraftGenerator] Applying ${acceptedReviews.rows.length} accepted reviews`);
+
+        const acceptedSuggestions = acceptedReviews.rows.flatMap(row => {
+          const questions = typeof row.questions === 'string'
+            ? JSON.parse(row.questions)
+            : row.questions;
+          return Array.isArray(questions) ? questions : [questions];
+        }).filter((q: any) => q && q.suggestion);
+
+        if (acceptedSuggestions.length > 0) {
+          finalContent = await applyRevisionsWithLLM(
+            latestDraft.content,
+            acceptedSuggestions
+          );
+        }
       }
     }
 
@@ -142,7 +149,41 @@ ${suggestionsText}
 
   } catch (error) {
     console.error('[DraftGenerator] LLM revision failed:', error);
-    // LLM 失败时返回原文
     return originalContent;
+  }
+}
+
+/**
+ * 轻量润色模式：稿件已经过批量改稿，只做语言和格式润色
+ */
+async function polishDraft(content: string): Promise<string> {
+  try {
+    const prompt = `你是一位专业的文稿编辑。以下稿件已经过内容修订，请做最终润色：
+
+1. 检查语言流畅度，修正不通顺的表述
+2. 统一术语和格式
+3. 修正标点符号和排版问题
+4. **不要**改变内容实质、删除段落或调整结构
+
+原文稿：
+${content}
+
+请直接输出润色后的完整文稿，不需要解释。`;
+
+    const response = await generate(prompt, 'blue_team', {
+      temperature: 0.2,
+      maxTokens: 16000,
+    });
+
+    const polished = response.content;
+    // 质量守卫
+    if (!polished || polished.length < content.length * 0.7) {
+      console.warn('[DraftGenerator] Polish output too short, using original');
+      return content;
+    }
+    return polished;
+  } catch (error) {
+    console.error('[DraftGenerator] Polish failed:', error);
+    return content;
   }
 }

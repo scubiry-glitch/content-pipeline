@@ -92,6 +92,9 @@ export function ReviewsTab() {
   
   // 配置面板状态
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+
+  // 批量改稿状态
+  const [batchRevisionLoading, setBatchRevisionLoading] = useState(false);
   
   // Streaming 蓝军评审状态
   const [streamingComments, setStreamingComments] = useState<any[]>([]);
@@ -339,6 +342,26 @@ export function ReviewsTab() {
     }
   };
 
+  // 批量改稿：合并所有已接受的评审意见，一次性生成新版本
+  const handleBatchRevision = async () => {
+    if (!confirm(`确定要应用所有已接受的评审意见进行一键改稿吗？\n\n这将合并所有修改建议，一次性生成新版本。`)) return;
+    setBatchRevisionLoading(true);
+    try {
+      const result = await blueTeamApi.applyRevisions(task.id);
+      if (result.success) {
+        alert(`改稿完成！\n${result.message}\n\n新版本: v${result.newVersion}`);
+        window.location.reload();
+      } else {
+        alert(`改稿失败: ${result.error || '未知错误'}`);
+      }
+    } catch (error: any) {
+      console.error('Batch revision failed:', error);
+      alert(`改稿失败: ${error?.response?.data?.error || error?.message || '未知错误'}`);
+    } finally {
+      setBatchRevisionLoading(false);
+    }
+  };
+
   // 处理配置确认
   const handleConfigConfirm = async (config: ReviewConfig) => {
     setShowConfigPanel(false);
@@ -407,20 +430,22 @@ export function ReviewsTab() {
   const docContainerRef = useRef<HTMLDivElement>(null);
   const [highlightPositions, setHighlightPositions] = useState<Record<string, number>>({});
 
-  // Calculate highlight positions relative to the grid container
+  // Calculate highlight positions relative to the comments container
   const updateHighlightPositions = useCallback(() => {
     const container = docContainerRef.current;
     if (!container) return;
-    const gridParent = container.closest('.grid');
-    if (!gridParent) return;
-    const gridRect = gridParent.getBoundingClientRect();
+    // Find the comments absolute container in the right panel
+    const commentsContainer = document.querySelector('[data-comments-container]');
+    const refElement = commentsContainer || container.closest('.grid');
+    if (!refElement) return;
+    const refRect = refElement.getBoundingClientRect();
     const positions: Record<string, number> = {};
     const hlElements = container.querySelectorAll('[data-highlight-id]');
     hlElements.forEach(el => {
       const id = el.getAttribute('data-highlight-id');
       if (id) {
         const rect = el.getBoundingClientRect();
-        positions[id] = rect.top - gridRect.top;
+        positions[id] = rect.top - refRect.top;
       }
     });
     if (Object.keys(positions).length > 0) {
@@ -1041,6 +1066,27 @@ export function ReviewsTab() {
         </div>
       </div>
 
+      {/* Batch Revision Button */}
+      {reviewSummary.accepted > 0 && (
+        <div className="mx-6 mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+              一键改稿
+            </h4>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+              已接受 {reviewSummary.accepted} 条评审意见，合并后一次性生成新版本
+            </p>
+          </div>
+          <button
+            onClick={handleBatchRevision}
+            disabled={batchRevisionLoading}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {batchRevisionLoading ? '改稿中...' : `应用 ${reviewSummary.accepted} 条修改`}
+          </button>
+        </div>
+      )}
+
       {/* Final Decision Section */}
       <FinalDecisionSection
         taskId={task?.id}
@@ -1242,7 +1288,7 @@ function RightPanel({
               <>
                 <div className="text-xs text-slate-400 mb-2">Rendering {pendingComments.length} comments...</div>
                 {/* Comments container with relative positioning for absolute alignment */}
-                <div className="relative" style={{ minHeight: '400px' }}>
+                <div className="relative" data-comments-container style={{ minHeight: '400px' }}>
                 {(() => {
                   const hasPositions = Object.keys(highlightPositions).length > 0;
                   // Sort comments by highlight Y position if available

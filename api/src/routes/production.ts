@@ -309,6 +309,32 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return { stats };
   });
 
+  // 批量应用已接受的评审意见（一次 LLM 调用生成一个新版本）
+  fastify.post('/:taskId/apply-revisions', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+
+    try {
+      const { applyAllAcceptedRevisions } = await import('../services/revisionAgent.js');
+      const result = await applyAllAcceptedRevisions(taskId);
+
+      if (!result.success) {
+        reply.status(400);
+        return { error: result.error };
+      }
+
+      return {
+        success: true,
+        newDraftId: result.newDraftId,
+        newVersion: result.newVersion,
+        appliedCount: result.appliedCount,
+        message: `已应用 ${result.appliedCount} 条评审意见，生成版本 v${result.newVersion}`,
+      };
+    } catch (error) {
+      reply.status(500);
+      return { error: (error as Error).message };
+    }
+  });
+
   // ===== 环节重做 API =====
 
   // 1. 选题策划重做

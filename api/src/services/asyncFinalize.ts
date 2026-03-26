@@ -132,18 +132,18 @@ async function executeFinalize(taskId: string, selectedReviewIds?: string[], for
       console.log(`[AsyncFinalize] Force mode: skipping critical check for task ${taskId}`);
     }
 
-    // 2. 获取任务信息
+    // 2. 获取任务信息和最新稿件
     job.progress = 30;
     job.message = '获取任务信息和最新稿件...';
-    
+
     const taskResult = await query(
-      `SELECT t.*, dv.id as latest_draft_id, dv.content as latest_content
+      `SELECT t.*, dv.id as latest_draft_id, dv.content as latest_content, dv.status as draft_status
        FROM tasks t
        LEFT JOIN LATERAL (
-         SELECT id, content 
-         FROM draft_versions 
-         WHERE task_id = t.id 
-         ORDER BY version DESC 
+         SELECT id, content, status
+         FROM draft_versions
+         WHERE task_id = t.id
+         ORDER BY version DESC
          LIMIT 1
        ) dv ON true
        WHERE t.id = $1`,
@@ -155,10 +155,16 @@ async function executeFinalize(taskId: string, selectedReviewIds?: string[], for
     }
 
     // 3. 生成最终稿件
+    // 如果最新版本已经是 revised 状态（经过批量改稿），使用轻量润色模式
+    const latestDraftStatus = taskResult.rows[0].draft_status;
+    const finalizeMode = latestDraftStatus === 'revised' ? 'polish' : 'full';
+
     job.progress = 50;
-    job.message = '使用 LLM 生成最终稿件（这可能需要几分钟）...';
-    
-    const finalDraftResult = await generateFinalDraft(taskId, selectedReviewIds);
+    job.message = finalizeMode === 'polish'
+      ? '基于已修订稿件进行最终润色...'
+      : '使用 LLM 生成最终稿件（这可能需要几分钟）...';
+
+    const finalDraftResult = await generateFinalDraft(taskId, selectedReviewIds, force, finalizeMode);
 
     if (!finalDraftResult.success) {
       throw new Error(`生成最终稿件失败: ${finalDraftResult.error}`);

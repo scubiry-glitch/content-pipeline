@@ -571,6 +571,24 @@ async function generateRevisedDraft(
     ? currentContent.substring(0, MAX_CONTENT_CHARS) + '\n\n[... 后续内容省略，请保持原文后续部分不变 ...]'
     : currentContent;
 
+  // 获取前轮修改记录，防止 LLM 回退前轮修改
+  let priorChangesSection = '';
+  if (round > 1) {
+    const priorDrafts = await query(
+      `SELECT round, expert_role, change_summary
+       FROM draft_versions
+       WHERE task_id = $1 AND round < $2 AND change_summary IS NOT NULL
+       ORDER BY round ASC`,
+      [taskId, round]
+    );
+    if (priorDrafts.rows.length > 0) {
+      const changesList = priorDrafts.rows
+        .map(r => `- 第${r.round}轮(${r.expert_role}): ${r.change_summary}`)
+        .join('\n');
+      priorChangesSection = `\n## 前轮已完成的修改（必须保留）\n\n${changesList}\n\n**重要：以上修改已经应用到当前文稿中，不得回退或覆盖。**\n`;
+    }
+  }
+
   const prompt = `你是一位专业的文稿修订专家。请根据专家评审意见，对完整文稿进行**针对性修订**。
 
 ## 重要规则
@@ -578,7 +596,7 @@ async function generateRevisedDraft(
 - 修订后文稿的总字数应与原文相当（原文约 ${currentContent.length} 字符）
 - 只修改评审意见指出的具体问题，**保留所有未被评审指出的段落和章节**
 - 保持原文的 Markdown 标题层级结构（# ## ### 等）
-
+${priorChangesSection}
 ## 当前文稿（完整）
 
 ${contentForPrompt}
@@ -598,7 +616,7 @@ ${topQuestions.map((q, i) => `${i + 1}. [${q.severity}] ${q.question.substring(0
 1. **只修改上述问题涉及的段落**，其余部分原样保留
 2. 修订后文稿字数应≥原文字数的 80%
 3. 保持所有 Markdown 标题（#/##/###）不变
-4. 输出完整的修订后文稿（Markdown格式）
+4. 输出完整的修订后文稿（Markdown格式）${round > 1 ? '\n5. **不得回退前轮已完成的修改**' : ''}
 
 请输出完整修订后文稿：`;
 

@@ -124,7 +124,7 @@ export function StreamingCommentsPanel({
             {progress.currentExpert && (
               <>
                 <span className="text-gray-400">·</span>
-                <ExpertBadge role={progress.currentExpert} size="sm" />
+                <LocalExpertBadge role={progress.currentExpert} size="sm" />
               </>
             )}
           </div>
@@ -216,7 +216,7 @@ function StreamingCommentCard({ comment, isNew, onAction }: StreamingCommentCard
       }`}
     >
       <div className="flex items-start gap-2">
-        <ExpertBadge role={comment.expertRole} size="sm" />
+        <LocalExpertBadge role={comment.expertRole} size="sm" />
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -288,7 +288,7 @@ function StreamingCommentCard({ comment, isNew, onAction }: StreamingCommentCard
 }
 
 // 简单的 ExpertBadge 组件
-function ExpertBadge({ role, size = 'md' }: { role: string; size?: 'sm' | 'md' | 'lg' }) {
+function LocalExpertBadge({ role, size = 'md' }: { role: string; size?: 'sm' | 'md' | 'lg' }) {
   const config: Record<string, { name: string; color: string }> = {
     challenger: { name: '批判者', color: 'bg-red-100 text-red-700' },
     expander: { name: '拓展者', color: 'bg-blue-100 text-blue-700' },
