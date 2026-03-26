@@ -186,4 +186,30 @@ export async function v34HotTopicRoutes(fastify: FastifyInstance) {
       };
     }
   });
+
+  // 手动触发热度分数更新
+  fastify.post('/recalculate-scores', { preHandler: authenticate }, async () => {
+    const { triggerHotScoreUpdate, getSchedulerStatus } = await import('../services/hotScoreScheduler.js');
+    
+    const status = getSchedulerStatus();
+    const startTime = Date.now();
+    
+    await triggerHotScoreUpdate();
+    
+    return {
+      success: true,
+      message: '热度分数更新完成',
+      schedulerStatus: status,
+      duration: Date.now() - startTime,
+    };
+  });
+
+  // 获取定时任务状态
+  fastify.get('/scheduler-status', { preHandler: authenticate }, async () => {
+    const { getSchedulerStatus } = await import('../services/hotScoreScheduler.js');
+    return {
+      status: getSchedulerStatus(),
+      nextUpdate: '每30分钟自动更新',
+    };
+  });
 }

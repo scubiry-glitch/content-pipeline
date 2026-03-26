@@ -191,6 +191,12 @@ async function main() {
     const watcherService = getDirectoryWatcherService();
     await watcherService.initialize();
 
+    // 启动热度分数定时更新任务（每30分钟）
+    const { startHotScoreScheduler } = await import('./services/hotScoreScheduler.js');
+    startHotScoreScheduler('*/30 * * * *'); // 每30分钟更新一次
+    
+    console.log('⏰ 热度分数定时更新已启动（每30分钟）');
+
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
     // 或配置定时任务调用 collectAllFeeds()
   } catch (err) {

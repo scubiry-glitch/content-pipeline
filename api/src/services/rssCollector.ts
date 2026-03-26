@@ -426,11 +426,15 @@ async function parseRSSItem(
   // 计算相关度分数
   const relevanceScore = calculateRelevance(title, content, source.keywords, tags);
 
-  // 计算热点追踪数据
-  const hoursAgo = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60);
-  const hotScore = Math.max(0, 100 - hoursAgo * 2);
-  const trend = hotScore > 80 ? 'up' : hotScore > 50 ? 'stable' : 'down';
-  const sentiment = analyzeSentiment(title + ' ' + (item.contentSnippet || content.slice(0, 500)));
+  // 计算优化的热度分数
+  const hotScoreResult = await calculateOptimizedHotScore({
+    title,
+    content,
+    publishedAt,
+    sourceName: source.name,
+    relevanceScore,
+    tags
+  });
 
   return {
     id,
@@ -446,9 +450,9 @@ async function parseRSSItem(
     tags,
     relevanceScore,
     isDuplicate: false,
-    hotScore: Math.round(hotScore),
-    trend,
-    sentiment
+    hotScore: hotScoreResult.score,
+    trend: hotScoreResult.trend,
+    sentiment: hotScoreResult.sentiment
   };
 }
 
@@ -546,6 +550,10 @@ async function saveRSSItem(item: RSSItem): Promise<void> {
       ]
     );
     console.log(`[RSS] Item saved successfully: ${item.id}`);
+    
+    // 更新关键词统计
+    await updateKeywordStats(item.tags, item.id);
+    
   } catch (error) {
     console.error('[RSS] Error saving item:', error);
     console.error('[RSS] Item data:', { id: item.id, title: item.title.substring(0, 50), source: item.sourceName });
@@ -791,4 +799,212 @@ export async function getRecentHotTopics(limit: number = 20): Promise<any[]> {
 async function getEmbedding(text: string): Promise<number[]> {
   // 返回随机向量作为占位符
   return new Array(1536).fill(0).map(() => Math.random() * 2 - 1);
+}
+
+// ========== 优化的热度计算 ==========
+
+interface HotScoreInput {
+  title: string;
+  content: string;
+  publishedAt: Date;
+  sourceName: string;
+  relevanceScore: number;
+  tags: string[];
+}
+
+interface HotScoreResult {
+  score: number;
+  trend: 'up' | 'stable' | 'down';
+  sentiment: 'positive' | 'neutral' | 'negative';
+}
+
+/**
+ * 优化的热度计算算法
+ * 
+ * 权重分配:
+ * - 时间衰减: 40% (指数衰减，24小时半衰期)
+ * - 内容相关度: 25% (基于关键词匹配)
+ * - 关键词热度: 20% (基于全局关键词频率)
+ * - 来源权威性: 15% (基于来源可信度)
+ */
+async function calculateOptimizedHotScore(input: HotScoreInput): Promise<HotScoreResult> {
+  const { title, content, publishedAt, sourceName, relevanceScore, tags } = input;
+  
+  // 1. 时间衰减分数 (40%) - 指数衰减，24小时半衰期
+  const hoursAgo = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60);
+  const timeScore = 100 * Math.exp(-hoursAgo / 24); // 24小时半衰期
+  
+  // 2. 内容相关度分数 (25%) - 已经是 0-1 范围，转为 0-100
+  const relevanceScoreNormalized = relevanceScore * 100;
+  
+  // 3. 来源权威性分数 (15%)
+  const sourceAuthorityScore = await getSourceAuthorityScore(sourceName);
+  
+  // 4. 关键词热度分数 (20%)
+  const keywordHotScore = await calculateKeywordHotScore(tags, title, content);
+  
+  // 计算综合热度分数 (加权平均)
+  const finalScore = Math.round(
+    timeScore * 0.40 +
+    relevanceScoreNormalized * 0.25 +
+    keywordHotScore * 0.20 +
+    sourceAuthorityScore * 0.15
+  );
+  
+  // 限制在 0-100 范围内
+  const clampedScore = Math.max(0, Math.min(100, finalScore));
+  
+  // 计算趋势 (基于时间衰减速度 + 热度分数)
+  const trend = calculateTrend(clampedScore, hoursAgo);
+  
+  // 计算情感
+  const sentiment = analyzeSentiment(title + ' ' + content.slice(0, 500));
+  
+  return {
+    score: clampedScore,
+    trend,
+    sentiment
+  };
+}
+
+/**
+ * 获取来源权威性分数
+ */
+async function getSourceAuthorityScore(sourceName: string): Promise<number> {
+  try {
+    const result = await query(
+      `SELECT authority_score FROM source_authority WHERE source_name = $1`,
+      [sourceName]
+    );
+    
+    if (result.rows.length > 0) {
+      return result.rows[0].authority_score * 100; // 转为 0-100
+    }
+    
+    // 默认分数
+    return 50;
+  } catch (error) {
+    console.warn('[RSS] Error getting source authority:', error);
+    return 50;
+  }
+}
+
+/**
+ * 计算关键词热度分数
+ * 
+ * 基于:
+ * 1. 全局关键词频率 (关键词出现次数越多，热度越高)
+ * 2. 关键词匹配数量 (匹配的关键词越多，分数越高)
+ * 3. 标题关键词加权 (标题中的关键词权重更高)
+ */
+async function calculateKeywordHotScore(
+  tags: string[],
+  title: string,
+  content: string
+): Promise<number> {
+  if (!tags || tags.length === 0) {
+    return 30; // 无关键词时默认分数
+  }
+  
+  try {
+    // 获取这些关键词的全局频率
+    const keywordList = tags.map(t => t.toLowerCase());
+    const result = await query(
+      `SELECT keyword, count FROM keyword_stats 
+       WHERE keyword = ANY($1)
+       ORDER BY count DESC`,
+      [keywordList]
+    );
+    
+    const keywordCounts = new Map(result.rows.map(r => [r.keyword, r.count]));
+    
+    // 计算关键词分数
+    let totalScore = 0;
+    let matchedCount = 0;
+    
+    for (const tag of tags) {
+      const tagLower = tag.toLowerCase();
+      const count = keywordCounts.get(tagLower) || 1;
+      
+      // 标题中的关键词权重更高
+      const isInTitle = title.toLowerCase().includes(tagLower);
+      const weight = isInTitle ? 1.5 : 1.0;
+      
+      // 频率分数 (使用对数防止大数主导)
+      const frequencyScore = Math.min(100, 20 * Math.log10(count + 1));
+      totalScore += frequencyScore * weight;
+      matchedCount++;
+    }
+    
+    // 平均分数 + 匹配数量加成
+    const avgScore = matchedCount > 0 ? totalScore / matchedCount : 0;
+    const matchBonus = Math.min(20, matchedCount * 2); // 最多20分加成
+    
+    return Math.min(100, avgScore + matchBonus);
+  } catch (error) {
+    console.warn('[RSS] Error calculating keyword hot score:', error);
+    return 30;
+  }
+}
+
+/**
+ * 计算趋势
+ * 
+ * 考虑:
+ * - 热度分数高低
+ * - 发布时间（新内容天然有上升趋势）
+ */
+function calculateTrend(score: number, hoursAgo: number): 'up' | 'stable' | 'down' {
+  // 新内容（< 6小时）且热度高 -> 上升
+  if (hoursAgo < 6 && score > 70) {
+    return 'up';
+  }
+  
+  // 热度很高 -> 上升
+  if (score > 80) {
+    return 'up';
+  }
+  
+  // 热度中等 -> 稳定
+  if (score > 40) {
+    return 'stable';
+  }
+  
+  // 热度低 -> 下降
+  return 'down';
+}
+
+/**
+ * 更新关键词统计
+ * 在保存 RSS 文章时调用
+ */
+export async function updateKeywordStats(tags: string[], contentId: string): Promise<void> {
+  if (!tags || tags.length === 0) return;
+  
+  try {
+    for (const tag of tags) {
+      const tagLower = tag.toLowerCase();
+      
+      // 更新关键词统计
+      await query(
+        `INSERT INTO keyword_stats (keyword, count, last_seen_at)
+         VALUES ($1, 1, NOW())
+         ON CONFLICT (keyword) 
+         DO UPDATE SET 
+           count = keyword_stats.count + 1,
+           last_seen_at = NOW()`,
+        [tagLower]
+      );
+      
+      // 添加内容关联
+      await query(
+        `INSERT INTO content_keyword_relations (content_type, content_id, keyword, weight)
+         VALUES ('rss_item', $1, $2, 1.0)
+         ON CONFLICT (content_type, content_id, keyword) DO NOTHING`,
+        [contentId, tagLower]
+      );
+    }
+  } catch (error) {
+    console.warn('[RSS] Error updating keyword stats:', error);
+  }
 }
