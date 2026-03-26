@@ -433,8 +433,8 @@ ${JSON.stringify(outline, null, 2)}
         const qd = reviewDecisions?.get(idx);
         return {
           ...q,
-          decision: qd?.decision || null,
-          decisionNote: qd?.note || null
+          decision: qd?.decision || q.decision || null,
+          decisionNote: qd?.note || q.decisionNote || null
         };
       });
       
@@ -733,7 +733,20 @@ ${JSON.stringify(outline, null, 2)}
     // 串行评审：同步配置评审队列（创建 task_review_progress 记录）
     if (isSequential) {
       const { configureSequentialReview } = await import('./sequentialReview.js');
-      await configureSequentialReview(taskId, task.topic, config?.experts);
+      // 从前端 config 提取专家角色列表
+      // 前端发送 aiExperts: [{role, enabled}, ...] 或 experts: string[]
+      let expertRoles: string[] | undefined;
+      if (config?.experts && Array.isArray(config.experts)) {
+        // 兼容直接传 string[] 的情况
+        expertRoles = config.experts;
+      } else if (config?.aiExperts && Array.isArray(config.aiExperts)) {
+        // 前端 ReviewConfigPanel 格式: [{role: 'challenger', enabled: true}, ...]
+        expertRoles = config.aiExperts
+          .filter((e: any) => e.enabled !== false)
+          .map((e: any) => e.role);
+      }
+      console.log(`[Redo] Sequential review experts:`, expertRoles);
+      await configureSequentialReview(taskId, task.topic, expertRoles);
       console.log(`[Redo] Sequential review configured for task ${taskId}`);
     }
 
@@ -767,7 +780,24 @@ ${JSON.stringify(outline, null, 2)}
       const draftContent = draftResult.rows[0]?.content;
       if (!draftContent) throw new Error('No draft found for parallel review');
       const task = await this.getTask(taskId);
-      await executeStreamingBlueTeamReview(taskId, draftContent, task?.topic || '', config);
+      // 将前端 config 转换为 executeStreamingBlueTeamReview 期望的格式
+      let normalizedConfig: any = undefined;
+      if (config) {
+        let expertRoles: string[] | undefined;
+        if (config.experts && Array.isArray(config.experts)) {
+          expertRoles = config.experts;
+        } else if (config.aiExperts && Array.isArray(config.aiExperts)) {
+          expertRoles = config.aiExperts
+            .filter((e: any) => e.enabled !== false)
+            .map((e: any) => e.role);
+        }
+        normalizedConfig = {
+          mode: config.mode,
+          rounds: config.maxRounds,
+          experts: expertRoles,
+        };
+      }
+      await executeStreamingBlueTeamReview(taskId, draftContent, task?.topic || '', normalizedConfig);
     }
   }
 

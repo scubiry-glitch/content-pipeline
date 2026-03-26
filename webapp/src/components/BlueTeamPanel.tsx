@@ -53,7 +53,6 @@ const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string }
 };
 
 export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingComments, streamingProgress }: BlueTeamPanelProps) {
-  console.log('[BlueTeamPanel] Received reviews:', reviews.length, 'streaming:', streamingComments?.length || 0);
 
   // Group reviews by expert role (from DB)
   const expertStats = new Map<string, {

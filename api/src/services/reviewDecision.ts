@@ -44,7 +44,8 @@ export interface DecisionSummary {
  * 获取评审项列表（带用户决策状态）
  */
 export async function getReviewItems(taskId: string): Promise<ReviewItem[]> {
-  const result = await query(
+  // 查询 blue_team_reviews
+  const btResult = await query(
     `SELECT
       id,
       task_id as "taskId",
@@ -61,7 +62,32 @@ export async function getReviewItems(taskId: string): Promise<ReviewItem[]> {
     [taskId]
   );
 
-  return result.rows.map(row => {
+  // 也查询 expert_reviews（串行评审），排除已存在于 blue_team_reviews 的
+  const erResult = await query(
+    `SELECT
+      id,
+      task_id as "taskId",
+      round,
+      expert_role as "expertRole",
+      questions,
+      status,
+      NULL as "userDecision",
+      NULL as "decisionNote",
+      completed_at as "decidedAt"
+     FROM expert_reviews
+     WHERE task_id = $1
+     ORDER BY round, expert_role, created_at`,
+    [taskId]
+  );
+
+  // 合并，去重（根据 round + expertRole）
+  const btIds = new Set(btResult.rows.map(r => `${r.round}-${r.expertRole}`));
+  const allRows = [
+    ...btResult.rows,
+    ...erResult.rows.filter(r => !btIds.has(`${r.round}-${r.expertRole}`))
+  ];
+
+  return allRows.map(row => {
     const questions = typeof row.questions === 'string'
       ? JSON.parse(row.questions)
       : row.questions;
@@ -103,19 +129,29 @@ export async function submitDecision(
   note?: string,
   questionIndex?: number
 ): Promise<{ success: boolean; reviewItem?: ReviewItem }> {
-  // 验证评审项存在且属于该任务
-  const checkResult = await query(
-    `SELECT id, questions FROM blue_team_reviews WHERE id = $1 AND task_id = $2`,
+  // 验证评审项存在且属于该任务（支持 blue_team_reviews 和 expert_reviews 两张表）
+  let checkResult = await query(
+    `SELECT id, questions, 'blue_team' as source FROM blue_team_reviews WHERE id = $1 AND task_id = $2`,
     [reviewId, taskId]
   );
+
+  let reviewSource: 'blue_team' | 'expert' = 'blue_team';
+  if (checkResult.rows.length === 0) {
+    // 也检查 expert_reviews 表（串行评审）
+    checkResult = await query(
+      `SELECT id, questions, 'expert' as source FROM expert_reviews WHERE id = $1 AND task_id = $2`,
+      [reviewId, taskId]
+    );
+    reviewSource = 'expert';
+  }
 
   if (checkResult.rows.length === 0) {
     throw new Error('Review item not found');
   }
 
   const review = checkResult.rows[0];
-  const questions = typeof review.questions === 'string' 
-    ? JSON.parse(review.questions) 
+  const questions = typeof review.questions === 'string'
+    ? JSON.parse(review.questions)
     : review.questions;
 
   // 如果指定了 questionIndex，记录 question 级别的决策
@@ -123,19 +159,68 @@ export async function submitDecision(
     // 验证 questionIndex 有效（支持 object 或 array 格式）
     const isArray = Array.isArray(questions);
     const maxIndex = isArray ? questions.length - 1 : 0; // object 格式只有 1 个问题，索引为 0
-    
+
     if (questionIndex > maxIndex) {
       throw new Error('Invalid question index');
     }
 
-    // 插入或更新 question_decisions 表
-    await query(
-      `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-       ON CONFLICT (review_id, question_index)
-       DO UPDATE SET decision = $4, note = $5, updated_at = NOW()`,
-      [taskId, reviewId, questionIndex, decision, note || null]
-    );
+    if (reviewSource === 'blue_team') {
+      // blue_team_reviews: 使用 question_decisions 表记录 question 级别决策
+      await query(
+        `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         ON CONFLICT (review_id, question_index)
+         DO UPDATE SET decision = $4, note = $5, updated_at = NOW()`,
+        [taskId, reviewId, questionIndex, decision, note || null]
+      );
+
+      // 检查是否所有 questions 都已决策，如果是则更新 review 状态
+      const decisionStats = await query(
+        `SELECT
+          COUNT(*) as total_questions,
+          COUNT(qd.decision) as decided_count
+         FROM blue_team_reviews btr
+         LEFT JOIN LATERAL (
+           SELECT elem, idx FROM jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(elem, idx)
+           WHERE jsonb_typeof(btr.questions) = 'array'
+           UNION ALL
+           SELECT btr.questions as elem, 1 as idx
+           WHERE jsonb_typeof(btr.questions) = 'object'
+         ) q ON true
+         LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (q.idx::int - 1)
+         WHERE btr.id = $1
+         GROUP BY btr.id`,
+        [reviewId]
+      );
+
+      if (decisionStats.rows.length > 0) {
+        const { total_questions, decided_count } = decisionStats.rows[0];
+        if (parseInt(decided_count) === parseInt(total_questions)) {
+          await query(
+            `UPDATE blue_team_reviews
+             SET status = $1,
+                 user_decision = $1,
+                 decided_at = NOW()
+             WHERE id = $2`,
+            [decision, reviewId]
+          );
+        }
+      }
+    } else {
+      // expert_reviews: question_decisions FK 不支持，直接在 questions JSONB 中记录决策
+      // 更新 questions JSONB 中对应 question 的 decision 字段
+      const questionsArray = isArray ? questions : [questions];
+      questionsArray[questionIndex] = { ...questionsArray[questionIndex], decision, decisionNote: note || null };
+      const updatedQuestions = isArray ? questionsArray : questionsArray[0];
+      await query(
+        `UPDATE expert_reviews
+         SET questions = $1::jsonb,
+             status = 'completed',
+             completed_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(updatedQuestions), reviewId]
+      );
+    }
 
     // 记录操作日志
     await query(
@@ -144,57 +229,32 @@ export async function submitDecision(
       [
         taskId,
         'question_decision',
-        JSON.stringify({ reviewId, questionIndex, decision, note })
+        JSON.stringify({ reviewId, questionIndex, decision, note, source: reviewSource })
       ]
     );
-
-    // 检查是否所有 questions 都已决策，如果是则更新 review 状态
-    // 支持 questions 为 object 或 array 格式
-    const decisionStats = await query(
-      `SELECT 
-        COUNT(*) as total_questions,
-        COUNT(qd.decision) as decided_count
-       FROM blue_team_reviews btr
-       LEFT JOIN LATERAL (
-         -- 如果是数组格式
-         SELECT elem, idx FROM jsonb_array_elements(btr.questions) WITH ORDINALITY AS q(elem, idx)
-         WHERE jsonb_typeof(btr.questions) = 'array'
-         UNION ALL
-         -- 如果是 object 格式（单个问题），idx = 1
-         SELECT btr.questions as elem, 1 as idx
-         WHERE jsonb_typeof(btr.questions) = 'object'
-       ) q ON true
-       LEFT JOIN question_decisions qd ON qd.review_id = btr.id AND qd.question_index = (q.idx::int - 1)
-       WHERE btr.id = $1
-       GROUP BY btr.id`,
-      [reviewId]
-    );
-
-    if (decisionStats.rows.length > 0) {
-      const { total_questions, decided_count } = decisionStats.rows[0];
-      if (parseInt(decided_count) === parseInt(total_questions)) {
-        // 所有 questions 都已决策，更新 review 状态
-        await query(
-          `UPDATE blue_team_reviews
-           SET status = $1,
-               user_decision = $1,
-               decided_at = NOW()
-           WHERE id = $2`,
-          [decision, reviewId]
-        );
-      }
-    }
   } else {
     // 原来的逻辑：处理整个 review
-    await query(
-      `UPDATE blue_team_reviews
-       SET status = $1,
-           user_decision = $2,
-           decision_note = $3,
-           decided_at = NOW()
-       WHERE id = $4`,
-      [decision, decision, note || null, reviewId]
-    );
+    if (reviewSource === 'blue_team') {
+      await query(
+        `UPDATE blue_team_reviews
+         SET status = $1,
+             user_decision = $2,
+             decision_note = $3,
+             decided_at = NOW()
+         WHERE id = $4`,
+        [decision, decision, note || null, reviewId]
+      );
+    } else {
+      // expert_reviews 的 status CHECK 约束只允许 pending/in_progress/completed/skipped
+      // 决策记录在 question_decisions 表中
+      await query(
+        `UPDATE expert_reviews
+         SET status = 'completed',
+             completed_at = NOW()
+         WHERE id = $1`,
+        [reviewId]
+      );
+    }
 
     // 记录操作日志
     await query(

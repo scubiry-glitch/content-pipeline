@@ -206,7 +206,6 @@ export function ReviewsTab() {
 
   // 处理接受并Finalize（异步版本）
   const handleAccept = async () => {
-    console.log('[ReviewsTab] handleAccept called');
     const selectedIds = Array.from(selectedComments);
     // 从 commentId (格式: "reviewId::questionIndex") 提取 reviewIds
     const reviewIds = selectedIds.length > 0 
@@ -431,6 +430,7 @@ export function ReviewsTab() {
   const [highlightPositions, setHighlightPositions] = useState<Record<string, number>>({});
 
   // Calculate highlight positions relative to the comments container
+  const highlightPositionsRef = useRef<Record<string, number>>({});
   const updateHighlightPositions = useCallback(() => {
     const container = docContainerRef.current;
     if (!container) return;
@@ -448,7 +448,14 @@ export function ReviewsTab() {
         positions[id] = rect.top - refRect.top;
       }
     });
-    if (Object.keys(positions).length > 0) {
+    if (Object.keys(positions).length === 0) return;
+    // Only update state if positions actually changed (prevents infinite re-render loop)
+    const prev = highlightPositionsRef.current;
+    const keys = Object.keys(positions);
+    const changed = keys.length !== Object.keys(prev).length ||
+      keys.some(k => Math.abs((positions[k] || 0) - (prev[k] || 0)) > 1);
+    if (changed) {
+      highlightPositionsRef.current = positions;
       setHighlightPositions(positions);
     }
   }, []);
@@ -476,8 +483,7 @@ export function ReviewsTab() {
     };
   }, [updateHighlightPositions]);
 
-  // Debug: log task data
-  console.log('[ReviewsTab] task:', task?.id, 'draft_versions:', task?.draft_versions?.length, 'versions:', task?.versions?.length);
+  // Debug logs removed to prevent re-render noise
 
   // Get versions from task and deduplicate by content（提前到 highlights 之前）
   const rawVersions: DraftVersion[] = task?.draft_versions || task?.versions || [];
@@ -494,7 +500,6 @@ export function ReviewsTab() {
     return true;
   });
 
-  console.log('[ReviewsTab] Deduplication:', rawVersions.length, '->', versions.length, 'versions');
 
   // Get latest version content for the editor
   const currentVersion = versions[versions.length - 1];
@@ -507,7 +512,6 @@ export function ReviewsTab() {
   // Convert BlueTeamReview[] to CommentItem[] for DocumentEditor
   // 只使用当前（非历史）评审构建评论
   const comments: CommentItem[] = useMemo(() => {
-    console.log('[ReviewsTab] Building comments from reviews:', activeReviews.length, '(historical:', historicalReviews.length, ')');
     const items: CommentItem[] = [];
     activeReviews.forEach(review => {
       const icon = REVIEW_ICONS[review.expert_role] || '👤';
@@ -654,7 +658,6 @@ export function ReviewsTab() {
         highlightText = headings[0];
       }
 
-      console.log('[Highlights]', comment.id.substring(0, 8), 'text:', highlightText?.substring(0, 40), 'inDoc:', highlightText ? existsInDoc(highlightText) : false);
       if (highlightText && highlightText.length >= 2) {
         items.push({
           id: comment.id,
@@ -690,7 +693,6 @@ export function ReviewsTab() {
     return items;
   }, [comments]);
   
-  console.log('[ReviewsTab] Document content length:', documentContent?.length, 'Preview:', documentContent?.slice(0, 100));
   
   // Generate sub-versions (e.g., 1.1, 1.2) for versions with same major version number
   const versionGroups = new Map<number, number>();
@@ -1143,7 +1145,6 @@ function RightPanel({
   streamingProgress,
   highlightPositions = {},
 }: RightPanelProps) {
-  console.log('[RightPanel] Received comments:', comments.length, 'isStreaming:', isStreaming, 'streamingProgress:', streamingProgress);
   
   const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'tasks'>('comments');
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);

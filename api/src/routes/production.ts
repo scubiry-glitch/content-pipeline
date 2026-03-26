@@ -204,9 +204,19 @@ export async function productionRoutes(fastify: FastifyInstance) {
       return { error: 'Invalid decision. Must be one of: accept, ignore, manual_resolved' };
     }
 
-    const { submitDecision } = await import('../services/reviewDecision.js');
-    const result = await submitDecision(taskId, reviewId, decision, note, questionIndex);
-    return result;
+    try {
+      const { submitDecision } = await import('../services/reviewDecision.js');
+      const result = await submitDecision(taskId, reviewId, decision, note, questionIndex);
+      return result;
+    } catch (error: any) {
+      const msg = error?.message || 'Unknown error';
+      if (msg.includes('not found')) {
+        reply.status(404);
+        return { error: msg };
+      }
+      reply.status(500);
+      return { error: msg };
+    }
   });
 
   // 批量提交评审决策
