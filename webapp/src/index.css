@@ -21,6 +21,36 @@
 
   --accent: hsl(18, 55%, 55%); /* Ochre */
   
+  /* Theme Aliases - for component consistency */
+  --terracotta: var(--primary);
+  --terracotta-dark: var(--primary-dark);
+  --terracotta-light: var(--primary-light);
+  --ochre: var(--accent);
+  --sage: var(--secondary);
+  --sage-light: var(--secondary-light);
+  --sage-dark: var(--secondary-dark);
+  --cream: var(--background);
+  --cream-dark: hsl(30, 20%, 90%);
+  --linen: hsl(30, 15%, 85%);
+  --pebble: var(--text-muted);
+  --earth: var(--text-secondary);
+  --soil: var(--text);
+  
+  /* Grayscale */
+  --gray-100: hsl(30, 10%, 96%);
+  --gray-200: hsl(30, 10%, 90%);
+  --gray-300: hsl(30, 10%, 80%);
+  --gray-400: hsl(30, 10%, 70%);
+  --gray-500: hsl(30, 10%, 60%);
+  --gray-600: hsl(30, 15%, 45%);
+  --gray-700: hsl(30, 20%, 35%);
+  --gray-800: hsl(30, 25%, 25%);
+  
+  /* Common aliases */
+  --shadow: var(--shadow-md);
+  --border: var(--linen);
+  --divider: var(--cream-dark);
+  
   /* Background & Surface */
   --background: hsl(30, 40%, 98%);
   --surface: hsl(0, 0%, 100%);
