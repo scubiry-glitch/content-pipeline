@@ -79,7 +79,7 @@ export function ExpertReviewPanel({
     const newReview = generateExpertOpinion(expert, content, contentType);
     newReview.taskId = taskId;
 
-    setReviews((prev) =
+    setReviews((prev) =>
       prev.map((r) => (r.expertId === expert.id ? newReview : r))
     );
     setGenerating(null);
@@ -212,12 +212,12 @@ function ExpertReviewCard({
   onRefresh,
   isGenerating,
 }: ExpertReviewCardProps) {
-  const [action, setAction] = useState<'accepted' | 'rejected' | null>(
+  const [action, setAction] = useState<'accept' | 'ignore' | 'partial' | null>(
     review.userAction || null
   );
 
   const handleAccept = () => {
-    setAction('accepted');
+    setAction('accept');
     // 记录用户反馈
     recordExpertFeedback(expert.id, review.taskId, 'accepted', {
       reviewId: review.id,
@@ -227,7 +227,7 @@ function ExpertReviewCard({
   };
 
   const handleIgnore = () => {
-    setAction('rejected');
+    setAction('ignore');
     // 记录用户反馈
     recordExpertFeedback(expert.id, review.taskId, 'rejected', {
       reviewId: review.id,

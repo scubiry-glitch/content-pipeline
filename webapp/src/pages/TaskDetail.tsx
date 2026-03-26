@@ -366,10 +366,10 @@ export function TaskDetail() {
   };
 
   // 评审决策处理
-  const handleReviewDecision = async (reviewId: string, questionId: string, decision: 'accept' | 'ignore' | 'manual_resolved', note?: string) => {
+  const handleReviewDecision = async (reviewId: string, questionIndex: number, decision: 'accept' | 'ignore' | 'manual_resolved', note?: string) => {
     try {
       await blueTeamApi.submitDecision(id!, reviewId, {
-        questionId, decision, note
+        questionIndex, decision, note
       });
       await loadReviews();
     } catch (error) {

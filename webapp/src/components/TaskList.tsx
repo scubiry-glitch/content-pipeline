@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTasks } from '../contexts/TasksContext';
-import { STATUS_MAP, type Task } from '../types';
+import { STATUS_MAP, type Task, type TaskStatus } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import './TaskList.css';
 import { PriorityBadge, PriorityFilter, PrioritySortButton } from './PriorityBadge';
@@ -247,7 +247,7 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
     }
   };
 
-  const handleBatchStageChange = async (newStatus: string) => {
+  const handleBatchStageChange = async (newStatus: TaskStatus) => {
     setBatchProcessing(true);
     try {
       for (const id of selectedTasks) {

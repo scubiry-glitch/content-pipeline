@@ -159,8 +159,8 @@ export function AssetDetail() {
           {asset.tags?.map((tag) => (
             <span key={tag} className="tag">{tag}</span>
           ))}
-          {asset.auto_tags?.map((tag) => (
-            <span key={tag} className="tag auto">🤖 {tag}</span>
+          {asset.auto_tags?.map((tag, i) => (
+            <span key={i} className="tag auto">🤖 {tag.tag}</span>
           ))}
         </div>
       </div>

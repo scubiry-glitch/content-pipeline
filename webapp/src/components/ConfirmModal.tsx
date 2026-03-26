@@ -9,6 +9,7 @@ interface ConfirmModalProps {
   confirmVariant?: 'danger' | 'primary' | 'warning';
   onConfirm: () => void;
   onCancel: () => void;
+  disabled?: boolean;
 }
 
 export function ConfirmModal({

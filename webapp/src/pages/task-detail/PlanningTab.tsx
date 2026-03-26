@@ -384,13 +384,14 @@ export function PlanningTab() {
   const outlineVersionsForCompare = useMemo(() => {
     return getVersionsWithCurrent().map(v => ({
       id: v.id || `v${v.version}`,
+      task_id: task.id,
       version: v.version,
       created_at: v.created_at,
       change_summary: v.comment || `Version ${v.version}`,
       created_by: v.created_by,
       content: outlineToMarkdown(v.outline),
     }));
-  }, [versions, task.outline, getVersionsWithCurrent]);
+  }, [versions, task.outline, getVersionsWithCurrent, task.id]);
 
   // 当前显示的大纲（可能是历史版本）
   const displayOutline = versionOutline || outline;
@@ -518,7 +519,7 @@ export function PlanningTab() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-on-surface truncate group-hover:text-primary transition-colors">{item.title}</p>
-                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {(item.relevance * 100)?.toFixed(0) || 'N/A'}</p>
+                        <p className="text-[10px] text-on-surface-variant">{item.source} · Score: {(item.relevance ? item.relevance * 100 : item.hotScore)?.toFixed(0) || 'N/A'}</p>
                       </div>
                     </label>
                   ))

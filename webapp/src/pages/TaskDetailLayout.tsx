@@ -370,9 +370,9 @@ export function TaskDetailLayout() {
   };
 
   // 各种处理函数
-  const handleReviewDecision = async (reviewId: string, questionId: string, decision: 'accept' | 'ignore' | 'manual_resolved', note?: string) => {
+  const handleReviewDecision = async (reviewId: string, questionIndex: number, decision: 'accept' | 'ignore' | 'manual_resolved', note?: string) => {
     try {
-      await blueTeamApi.submitDecision(id!, reviewId, { questionId, decision, note });
+      await blueTeamApi.submitDecision(id!, reviewId, { questionIndex, decision, note });
       await loadReviews(id!);
     } catch (error) {
       console.error('提交决策失败:', error);

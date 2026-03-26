@@ -356,7 +356,7 @@ export function ReviewsTab() {
       // 立即激活 streaming，无需等待 loadTask 轮询
       setIsStreamingActive(true);
       setStreamingComments([]);
-      if (config.mode === 'sequential' || config.mode === 'serial') {
+      if (config.mode === 'serial') {
         sequentialStreaming.reset();
         sequentialStreaming.connect(task.id);
         // 自动切换到 Sequential Queue 标签页

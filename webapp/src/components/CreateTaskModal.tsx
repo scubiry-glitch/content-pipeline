@@ -120,7 +120,7 @@ export function CreateTaskModal({ isOpen, onClose, onCreate, isCreating = false 
       for (const keyword of keywords.slice(0, 3)) {
         try {
           const results = await assetsApi.search(keyword);
-          allAssets.push(...results);
+          allAssets.push(...results.items);
         } catch (e) {
           // 忽略单个搜索失败
         }

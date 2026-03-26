@@ -110,16 +110,18 @@ const formatHotTopics = (items: HotTopic[]) => {
 // 转换为 Dashboard 格式的情感数据
 const formatSentiment = (stats: SentimentStats) => {
   const total = stats.positive + stats.negative + stats.neutral;
+  const level: 'extreme_fear' | 'fear' | 'neutral' | 'greed' | 'extreme_greed' = 
+    stats.msiIndex > 70 ? 'greed' : stats.msiIndex < 30 ? 'fear' : 'neutral';
   return {
     msi: stats.msiIndex || 50,
-    level: stats.msiIndex > 70 ? 'greed' : stats.msiIndex < 30 ? 'fear' : 'neutral' as const,
+    level,
     change24h: stats.trendDirection === 'up' ? 5 : stats.trendDirection === 'down' ? -5 : 0,
     distribution: {
       positive: total > 0 ? stats.positive / total : 0.33,
       neutral: total > 0 ? stats.neutral / total : 0.34,
       negative: total > 0 ? stats.negative / total : 0.33,
     },
-    alerts: [],
+    alerts: [] as string[],
   };
 };
 

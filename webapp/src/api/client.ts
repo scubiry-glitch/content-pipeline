@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion } from '../types';
-export type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion };
+import type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion, ResearchAnnotation } from '../types';
+export type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion, ResearchAnnotation };
 
 // 优先使用环境变量，否则使用相对路径（通过 Vite proxy 转发到后端）
 export const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';

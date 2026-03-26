@@ -28,6 +28,8 @@ export interface Task {
   asset_ids?: string[];
   external_links?: Array<{ title: string; url: string }>;
   versions?: DraftVersion[];
+  due_date?: string;
+  quality_score?: number;
   created_at: string;
   updated_at: string;
   completed_at?: string;
@@ -185,9 +187,11 @@ export interface Asset {
   content_type: string;
   filename?: string;
   source: string;
+  source_url?: string;
   tags: string[];
   auto_tags: AutoTag[];
   quality_score: number;
+  quality_dimensions?: Record<string, number>;
   citation_count: number;
   is_pinned: boolean;
   pinned_at?: string;
@@ -195,6 +199,9 @@ export interface Asset {
   view_count?: number;
   influence_score?: number;
   asset_type: AssetType; // 资产类型区分
+  summary?: string;
+  key_points?: string[];
+  embedding?: number[];
   created_at: string;
   updated_at: string;
 }
@@ -268,6 +275,8 @@ export interface DraftVersion {
   version: number;
   content: string;
   change_summary: string;
+  comment?: string;
+  created_by?: string;
   created_at: string;
 }
 
@@ -389,6 +398,31 @@ export interface AlertItem {
   suggestion: string;
 }
 
+// HotTopic 热点话题
+export interface HotTopic {
+  id: string;
+  title: string;
+  source: string;
+  sourceUrl?: string;
+  hotScore: number;
+  trend: 'up' | 'stable' | 'down';
+  sentiment: 'positive' | 'neutral' | 'negative';
+  publishedAt?: string;
+  createdAt: string;
+  isFollowed?: boolean;
+  relevance?: number;
+  category?: string;
+}
+
+export interface RSSSource {
+  id: string;
+  name: string;
+  url: string;
+  category?: string;
+  isActive: boolean;
+  lastCrawledAt?: string;
+}
+
 export interface RSSSourceStatus {
   name: string;
   status: 'active' | 'error';
@@ -485,11 +519,12 @@ export interface Expert {
   totalReviews: number;
   acceptanceRate: number;
   avgResponseTime: number;
-  angle?: 'challenger' | 'expander' | 'synthesizer'; // 评审风格角度
+  angle?: 'challenger' | 'expander' | 'synthesizer' | 'reader'; // 评审风格角度
   // 兼容旧版属性
   title?: string;
   company?: string;
   domain?: string;
+  bio?: string;
 }
 
 export interface ExpertReview {
@@ -598,5 +633,6 @@ export interface ReviewConfig {
   readerTest?: {
     enabled: boolean;
     selectedReaders: string[]; // 选中的读者专家ID列表
+    count?: number;
   };
 }
