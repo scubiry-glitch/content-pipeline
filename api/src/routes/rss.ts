@@ -228,6 +228,11 @@ export async function rssRoutes(fastify: FastifyInstance) {
       sourceId,
       tag,
       minRelevance = '0',
+      showDeleted = 'false',
+      minScore = '0',
+      maxScore = '1',
+      sortBy = 'published_at',
+      sortOrder = 'desc',
       limit = '20',
       offset = '0',
     } = request.query as any;
@@ -236,10 +241,16 @@ export async function rssRoutes(fastify: FastifyInstance) {
       SELECT
         id, source_name, title, link, summary,
         published_at, author, tags, relevance_score, 
-        hot_score, trend, sentiment, created_at
+        hot_score, trend, sentiment, manual_score, is_deleted,
+        created_at
       FROM rss_items
       WHERE 1=1
     `;
+    
+    // 默认不显示已删除的
+    if (showDeleted !== 'true') {
+      sql += ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+    }
     const params: any[] = [];
 
     if (sourceId) {
@@ -256,8 +267,23 @@ export async function rssRoutes(fastify: FastifyInstance) {
       sql += ` AND relevance_score >= $${params.length + 1}`;
       params.push(parseFloat(minRelevance));
     }
-
-    sql += ` ORDER BY published_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    
+    // 按分数范围筛选
+    if (parseFloat(minScore) > 0) {
+      sql += ` AND COALESCE(manual_score, relevance_score) >= $${params.length + 1}`;
+      params.push(parseFloat(minScore));
+    }
+    if (parseFloat(maxScore) < 1) {
+      sql += ` AND COALESCE(manual_score, relevance_score) <= $${params.length + 1}`;
+      params.push(parseFloat(maxScore));
+    }
+    
+    // 排序
+    const validSortColumns = ['published_at', 'relevance_score', 'manual_score', 'hot_score', 'created_at'];
+    const orderColumn = validSortColumns.includes(sortBy) ? sortBy : 'published_at';
+    const orderDir = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    
+    sql += ` ORDER BY ${orderColumn} ${orderDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit), parseInt(offset));
 
     const result = await query(sql, params);
@@ -302,7 +328,7 @@ export async function rssRoutes(fastify: FastifyInstance) {
     const { itemId } = request.params as any;
 
     const result = await query(
-      `SELECT * FROM rss_items WHERE id = $1`,
+      `SELECT * FROM rss_items WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       [itemId]
     );
 
@@ -350,6 +376,179 @@ export async function rssRoutes(fastify: FastifyInstance) {
     return {
       success: true,
       assetId: `rss-${itemId}`,
+    };
+  });
+
+  // ===== RSS 文章打分与删除管理 =====
+
+  // 为 RSS 文章打分手动评分
+  fastify.post('/items/:itemId/score', { preHandler: authenticate }, async (request, reply) => {
+    const { itemId } = request.params as any;
+    const { score } = request.body as { score: number };
+
+    // 验证分数范围
+    if (typeof score !== 'number' || score < 0 || score > 1) {
+      reply.status(400);
+      return { error: 'Score must be a number between 0 and 1' };
+    }
+
+    // 检查文章是否存在
+    const checkResult = await query(
+      `SELECT id FROM rss_items WHERE id = $1`,
+      [itemId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Item not found' };
+    }
+
+    // 更新手动评分
+    await query(
+      `UPDATE rss_items SET manual_score = $1 WHERE id = $2`,
+      [score, itemId]
+    );
+
+    return {
+      success: true,
+      itemId,
+      manualScore: score,
+    };
+  });
+
+  // 删除 RSS 文章（软删除）
+  fastify.delete('/items/:itemId', { preHandler: authenticate }, async (request, reply) => {
+    const { itemId } = request.params as any;
+    const { permanent = 'false' } = request.query as { permanent?: string };
+
+    // 检查文章是否存在
+    const checkResult = await query(
+      `SELECT id FROM rss_items WHERE id = $1`,
+      [itemId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      reply.status(404);
+      return { error: 'Item not found' };
+    }
+
+    if (permanent === 'true') {
+      // 永久删除
+      await query(`DELETE FROM rss_items WHERE id = $1`, [itemId]);
+      return {
+        success: true,
+        itemId,
+        permanent: true,
+        message: 'Item permanently deleted',
+      };
+    } else {
+      // 软删除
+      await query(
+        `UPDATE rss_items SET is_deleted = TRUE, deleted_at = NOW() WHERE id = $1`,
+        [itemId]
+      );
+      return {
+        success: true,
+        itemId,
+        permanent: false,
+        message: 'Item moved to trash',
+      };
+    }
+  });
+
+  // 批量删除 RSS 文章
+  fastify.post('/items/batch-delete', { preHandler: authenticate }, async (request, reply) => {
+    const { ids, permanent = false } = request.body as { ids: string[]; permanent?: boolean };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      reply.status(400);
+      return { error: 'ids must be a non-empty array' };
+    }
+
+    if (permanent) {
+      // 永久删除
+      const result = await query(
+        `DELETE FROM rss_items WHERE id = ANY($1)`,
+        [ids]
+      );
+      return {
+        success: true,
+        deletedCount: result.rowCount,
+        permanent: true,
+      };
+    } else {
+      // 软删除
+      const result = await query(
+        `UPDATE rss_items SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ANY($1)`,
+        [ids]
+      );
+      return {
+        success: true,
+        deletedCount: result.rowCount,
+        permanent: false,
+      };
+    }
+  });
+
+  // 恢复已删除的 RSS 文章
+  fastify.post('/items/:itemId/restore', { preHandler: authenticate }, async (request, reply) => {
+    const { itemId } = request.params as any;
+
+    const result = await query(
+      `UPDATE rss_items SET is_deleted = FALSE, deleted_at = NULL WHERE id = $1 AND is_deleted = TRUE`,
+      [itemId]
+    );
+
+    if (result.rowCount === 0) {
+      reply.status(404);
+      return { error: 'Item not found or not deleted' };
+    }
+
+    return {
+      success: true,
+      itemId,
+      message: 'Item restored',
+    };
+  });
+
+  // 获取已删除的文章列表
+  fastify.get('/items/trash', { preHandler: authenticate }, async (request) => {
+    const { limit = '20', offset = '0' } = request.query as any;
+
+    const result = await query(
+      `SELECT id, source_name, title, link, summary, published_at, 
+              relevance_score, manual_score, deleted_at
+       FROM rss_items
+       WHERE is_deleted = TRUE
+       ORDER BY deleted_at DESC
+       LIMIT $1 OFFSET $2`,
+      [parseInt(limit), parseInt(offset)]
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM rss_items WHERE is_deleted = TRUE`
+    );
+
+    return {
+      items: result.rows,
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: parseInt(countResult.rows[0].count),
+      },
+    };
+  });
+
+  // 清空回收站（永久删除所有已删除的文章）
+  fastify.post('/items/empty-trash', { preHandler: authenticate }, async () => {
+    const result = await query(
+      `DELETE FROM rss_items WHERE is_deleted = TRUE`
+    );
+
+    return {
+      success: true,
+      deletedCount: result.rowCount,
+      message: `Permanently deleted ${result.rowCount} items`,
     };
   });
 

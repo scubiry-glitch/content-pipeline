@@ -1,4 +1,4 @@
-// RSSAssets.tsx - RSS订阅独立页面
+// RSSAssets.tsx - RSS订阅独立页面 (支持打分和删除)
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -31,6 +31,11 @@ export function RSSAssets() {
   const [jobStatus, setJobStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [progress, setProgress] = useState<RSSCollectionProgress | null>(null);
   const [showProgress, setShowProgress] = useState(false);
+  
+  // 打分弹窗状态
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [scoringItem, setScoringItem] = useState<RSSItem | null>(null);
+  const [scoreValue, setScoreValue] = useState(0.5);
   
   // 分页
   const [pagination, setPagination] = useState({
@@ -75,6 +80,9 @@ export function RSSAssets() {
         relevance_score: typeof item.relevance_score === 'string' 
           ? parseFloat(item.relevance_score) 
           : item.relevance_score,
+        manual_score: typeof item.manual_score === 'string'
+          ? parseFloat(item.manual_score)
+          : item.manual_score,
       }));
       setItems(normalizedItems);
       setPagination(prev => ({ ...prev, total: itemsRes.pagination?.total || 0 }));
@@ -133,6 +141,40 @@ export function RSSAssets() {
     }
   };
 
+  // 删除文章
+  const handleDelete = async (itemId: string) => {
+    if (!confirm('确定要删除这篇文章吗？')) return;
+    try {
+      await rssSourcesApi.deleteItem(itemId, false);
+      await loadItems();
+      await loadData();
+    } catch (error) {
+      console.error('删除失败:', error);
+      alert('删除失败');
+    }
+  };
+
+  // 打分开门
+  const openScoreModal = (item: RSSItem) => {
+    setScoringItem(item);
+    setScoreValue(item.manual_score ?? item.relevance_score ?? 0.5);
+    setShowScoreModal(true);
+  };
+
+  // 提交打分
+  const handleScore = async () => {
+    if (!scoringItem) return;
+    try {
+      await rssSourcesApi.scoreItem(scoringItem.id, scoreValue);
+      setShowScoreModal(false);
+      setScoringItem(null);
+      await loadItems();
+    } catch (error) {
+      console.error('打分失败:', error);
+      alert('打分失败');
+    }
+  };
+
   // 格式化日期
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('zh-CN', {
@@ -162,6 +204,11 @@ export function RSSAssets() {
     if (score >= 0.7) return '#22c55e';
     if (score >= 0.4) return '#f59e0b';
     return '#6b7280';
+  };
+
+  // 获取有效分数
+  const getEffectiveScore = (item: RSSItem) => {
+    return item.manual_score ?? item.relevance_score ?? 0;
   };
 
   // 计算进度百分比
@@ -285,13 +332,31 @@ export function RSSAssets() {
                 {items.map((item) => (
                   <div key={item.id} className="rss-item-card">
                     <div className="rss-item-header">
-                      <span
-                        className="rss-item-source"
-                        style={{ background: getSourceColor(item.source_name) }}
-                      >
-                        {item.source_name}
-                      </span>
-                      <span className="rss-item-date">{formatDate(item.published_at)}</span>
+                      <div className="header-left">
+                        <span
+                          className="rss-item-source"
+                          style={{ background: getSourceColor(item.source_name) }}
+                        >
+                          {item.source_name}
+                        </span>
+                        <span className="rss-item-date">{formatDate(item.published_at)}</span>
+                      </div>
+                      <div className="header-actions">
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => openScoreModal(item)}
+                          title="打分"
+                        >
+                          ⭐ 打分
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDelete(item.id)}
+                          title="删除"
+                        >
+                          🗑️ 删除
+                        </button>
+                      </div>
                     </div>
                     <h3 className="rss-item-title">
                       <a href={item.link} target="_blank" rel="noopener noreferrer">
@@ -307,9 +372,11 @@ export function RSSAssets() {
                       </div>
                       <div
                         className="rss-item-score"
-                        style={{ color: getScoreColor(item.relevance_score) }}
+                        style={{ color: getScoreColor(getEffectiveScore(item)) }}
+                        title={item.manual_score !== undefined ? '人工评分' : '自动评分'}
                       >
-                        相关度: {(item.relevance_score * 100).toFixed(0)}%
+                        {item.manual_score !== undefined ? '👤 ' : '🤖 '}
+                        相关度: {(getEffectiveScore(item) * 100).toFixed(0)}%
                       </div>
                     </div>
                   </div>
@@ -377,6 +444,41 @@ export function RSSAssets() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 打分解模态框 */}
+      {showScoreModal && scoringItem && (
+        <div className="modal-overlay" onClick={() => setShowScoreModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>为文章打分</h3>
+            <p className="modal-item-title">{scoringItem.title}</p>
+            <div className="score-input">
+              <label>评分 (0-100):</label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(scoreValue * 100)}
+                onChange={(e) => setScoreValue(parseInt(e.target.value) / 100)}
+              />
+              <span className="score-value">{Math.round(scoreValue * 100)}%</span>
+            </div>
+            <div className="score-presets">
+              <button className="btn btn-sm btn-secondary" onClick={() => setScoreValue(0.2)}>低 (20%)</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setScoreValue(0.5)}>中 (50%)</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setScoreValue(0.8)}>高 (80%)</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setScoreValue(1.0)}>优 (100%)</button>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowScoreModal(false)}>
+                取消
+              </button>
+              <button className="btn btn-primary" onClick={handleScore}>
+                确认打分
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

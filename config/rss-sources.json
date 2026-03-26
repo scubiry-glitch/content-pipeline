@@ -94,6 +94,36 @@
           "status": "active",
           "keywords": ["科技", "产品", "互联网"],
           "language": "zh-CN"
+        },
+        {
+          "id": "solidot",
+          "name": "Solidot",
+          "url": "http://feeds.feedburner.com/solidot",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["科技", "开源", "Linux", "科学"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "aifront",
+          "name": "AI前线",
+          "url": "https://www.aifront.net/rss",
+          "priority": "P0",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["AI", "人工智能", "大模型", "机器学习"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "chinaz",
+          "name": "站长之家",
+          "url": "http://rss.chinaz.com/",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["互联网", "电商", "站长", "营销"],
+          "language": "zh-CN"
         }
       ]
     },
@@ -194,6 +224,56 @@
           "status": "active",
           "keywords": ["快讯", "股市", "公告", "研报"],
           "language": "zh-CN"
+        },
+        {
+          "id": "xueqiu",
+          "name": "雪球",
+          "url": "https://xueqiu.com/hots/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["股票", "投资", "基金", "理财"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "eastmoney",
+          "name": "东方财富",
+          "url": "https://rss.eastmoney.com/",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["股市", "财经", "基金", "宏观"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "chinaventure",
+          "name": "投中网",
+          "url": "http://www.chinaventure.com.cn/rss.html",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["投资", "VC", "PE", "创业"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "pedaily",
+          "name": "投资界",
+          "url": "https://www.pedaily.cn/rss/",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["投资", "VC", "PE", "融资"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "startup-partner",
+          "name": "创业邦",
+          "url": "https://www.cyzone.cn/rss/",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["创业", "投资", "融资", "商业模式"],
+          "language": "zh-CN"
         }
       ]
     },
@@ -238,6 +318,66 @@
           "fetchInterval": 30,
           "status": "active",
           "keywords": ["IT", "数码", "手机", "电脑", "Windows"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "juejin",
+          "name": "掘金",
+          "url": "https://juejin.cn/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["前端", "后端", "AI", "编程", "开源"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "sspai",
+          "name": "少数派",
+          "url": "https://sspai.com/feed",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["效率", "工具", "Apple", "数码", "生活方式"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "v2ex",
+          "name": "V2EX",
+          "url": "https://www.v2ex.com/feed/create/2.xml",
+          "priority": "P1",
+          "fetchInterval": 15,
+          "status": "active",
+          "keywords": ["技术", "程序员", "创业", "生活"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "csdn",
+          "name": "CSDN",
+          "url": "https://blog.csdn.net/rss.html",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["编程", "开发", "AI", "云计算"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "infoq-cn",
+          "name": "InfoQ中文",
+          "url": "https://www.infoq.cn/feed",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["架构", "云计算", "AI", "大模型", "后端"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "oschina",
+          "name": "开源中国",
+          "url": "https://www.oschina.net/news/rss",
+          "priority": "P1",
+          "fetchInterval": 30,
+          "status": "active",
+          "keywords": ["开源", "Linux", "AI", "编程语言"],
           "language": "zh-CN"
         }
       ]
@@ -308,6 +448,36 @@
           "fetchInterval": 30,
           "status": "active",
           "keywords": ["财经", "产业", "经济", "商业"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "yiou",
+          "name": "亿欧",
+          "url": "https://www.iyiou.com/rss",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["产业", "创新", "科技", "商业"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "tmtpost",
+          "name": "钛媒体",
+          "url": "https://www.tmtpost.com/rss",
+          "priority": "P1",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["科技", "TMT", "互联网", "媒体"],
+          "language": "zh-CN"
+        },
+        {
+          "id": "pmcaff",
+          "name": "PMCAFF",
+          "url": "https://www.pmcaff.com/rss",
+          "priority": "P2",
+          "fetchInterval": 60,
+          "status": "active",
+          "keywords": ["产品", "运营", "互联网", "设计"],
           "language": "zh-CN"
         }
       ]

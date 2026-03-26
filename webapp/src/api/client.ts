@@ -431,6 +431,9 @@ export interface RSSItem {
   hot_score?: number;
   trend?: string;
   sentiment?: string;
+  manual_score?: number;
+  is_deleted?: boolean;
+  deleted_at?: string;
   created_at: string;
 }
 
@@ -494,11 +497,44 @@ export const rssSourcesApi = {
     }> }>,
 
   // RSS文章列表
-  getItems: (params?: { limit?: number; offset?: number; sourceId?: string }) =>
+  getItems: (params?: { 
+    limit?: number; 
+    offset?: number; 
+    sourceId?: string;
+    showDeleted?: boolean;
+    minScore?: number;
+    maxScore?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) =>
     client.get('/quality/items', { params }) as Promise<{ items: RSSItem[]; pagination: { total: number; limit: number; offset: number } }>,
 
   getStats: () =>
     client.get('/quality/stats') as Promise<{ totalItems: number; todayItems: number; totalSources: number; activeSources: number; avgRelevance: number; hotTopicsCount: number; todayHotTopics: number }>,
+
+  // 为 RSS 文章打分
+  scoreItem: (itemId: string, score: number) =>
+    client.post(`/quality/items/${itemId}/score`, { score }) as Promise<{ success: boolean; itemId: string; manualScore: number }>,
+
+  // 删除 RSS 文章（软删除）
+  deleteItem: (itemId: string, permanent?: boolean) =>
+    client.delete(`/quality/items/${itemId}`, { params: { permanent } }) as Promise<{ success: boolean; itemId: string; permanent: boolean; message: string }>,
+
+  // 批量删除 RSS 文章
+  batchDeleteItems: (ids: string[], permanent?: boolean) =>
+    client.post('/quality/items/batch-delete', { ids, permanent }) as Promise<{ success: boolean; deletedCount: number; permanent: boolean }>,
+
+  // 恢复已删除的 RSS 文章
+  restoreItem: (itemId: string) =>
+    client.post(`/quality/items/${itemId}/restore`) as Promise<{ success: boolean; itemId: string; message: string }>,
+
+  // 获取回收站列表
+  getTrash: (params?: { limit?: number; offset?: number }) =>
+    client.get('/quality/items/trash', { params }) as Promise<{ items: RSSItem[]; pagination: { total: number; limit: number; offset: number } }>,
+
+  // 清空回收站
+  emptyTrash: () =>
+    client.post('/quality/items/empty-trash') as Promise<{ success: boolean; deletedCount: number; message: string }>,
 };
 
 // 情感分析相关类型 (v3.2)
