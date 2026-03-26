@@ -1244,10 +1244,10 @@ function RightPanel({
                     ? [...pendingComments].sort((a, b) => (highlightPositions[a.id] ?? Infinity) - (highlightPositions[b.id] ?? Infinity))
                     : pendingComments;
                   
-                  // Anti-overlap logic: track occupied positions
-                  const minGap = 16; // minimum gap between cards in pixels
-                  const cardHeight = 120; // estimated card height
-                  const occupiedRanges: { start: number; end: number }[] = [];
+                  // Anti-overlap logic: track occupied positions with dynamic heights
+                  const minGap = 20; // increased gap between cards
+                  const baseCardHeight = 200; // increased base height estimate
+                  const occupiedRanges: { start: number; end: number; id: string }[] = [];
                   
                   return sortedComments.map((comment, index) => {
                     const config = severityConfig[comment.severity] || severityConfig.info;
@@ -1255,32 +1255,54 @@ function RightPanel({
                     const icon = roleIcons[comment.authorRole || 'default'];
                     const hasHighlight = highlightPositions[comment.id] !== undefined;
                     
+                    // Estimate card height based on content length
+                    const contentLength = (comment.content?.length || 0) + (comment.suggestion?.length || 0);
+                    const estimatedHeight = Math.max(baseCardHeight, Math.min(350, 100 + contentLength * 0.5));
+                    
                     // Calculate vertical position with anti-overlap
                     let topPosition = hasPositions 
-                      ? (highlightPositions[comment.id] ?? index * (cardHeight + minGap))
-                      : index * (cardHeight + minGap);
+                      ? (highlightPositions[comment.id] ?? index * (baseCardHeight + minGap))
+                      : index * (baseCardHeight + minGap);
                     
                     // Ensure non-negative position
                     topPosition = Math.max(0, topPosition);
                     
                     // Anti-overlap: adjust if overlapping with previous cards
-                    for (const range of occupiedRanges) {
-                      if (topPosition < range.end && topPosition + cardHeight > range.start) {
-                        // Overlap detected, move down
-                        topPosition = range.end + minGap;
+                    // Use a while loop to ensure no overlap after adjustment
+                    let attempts = 0;
+                    let hasOverlap = true;
+                    while (hasOverlap && attempts < 10) {
+                      hasOverlap = false;
+                      for (const range of occupiedRanges) {
+                        if (topPosition < range.end && topPosition + estimatedHeight > range.start) {
+                          // Overlap detected, move down
+                          topPosition = range.end + minGap;
+                          hasOverlap = true;
+                          break; // Recheck from beginning after adjustment
+                        }
                       }
+                      attempts++;
                     }
                     
                     // Register this card's occupied range
-                    occupiedRanges.push({ start: topPosition, end: topPosition + cardHeight });
+                    occupiedRanges.push({ start: topPosition, end: topPosition + estimatedHeight, id: comment.id });
                     
                     // Sort ranges for next iteration
                     occupiedRanges.sort((a, b) => a.start - b.start);
+                    
+                    // Calculate total height needed for container
+                    const maxEnd = Math.max(...occupiedRanges.map(r => r.end), 400);
 
                 return (
                   <div
                     key={comment.id}
                     data-comment-id={comment.id}
+                    ref={(el) => {
+                      // Update container height dynamically
+                      if (el && el.parentElement) {
+                        el.parentElement.style.minHeight = `${maxEnd + 50}px`;
+                      }
+                    }}
                     style={{ 
                       position: 'absolute',
                       top: 0,
@@ -1288,6 +1310,7 @@ function RightPanel({
                       right: 0,
                       transform: `translateY(${topPosition}px)`,
                       zIndex: isSelected ? 10 : 1,
+                      minHeight: `${estimatedHeight}px`,
                     }}
                     onClick={() => {
                       if (!selectMode) {
