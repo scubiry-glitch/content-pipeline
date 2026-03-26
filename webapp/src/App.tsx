@@ -40,6 +40,7 @@ import { I18nManager } from './pages/I18nManager';
 import { RSSSources } from './pages/RSSSources';
 import { RSSItems } from './pages/RSSItems';
 import { RSSAssets } from './pages/RSSAssets';
+import { AITaskRecommendations } from './pages/AITaskRecommendations';
 import { Bindings } from './pages/Bindings';
 import { HiddenTasks } from './pages/HiddenTasks';
 import { RecycleBin } from './pages/RecycleBin';
@@ -113,6 +114,7 @@ function App() {
               <Route path="quality-dashboard" element={<QualityDashboard />} />
               <Route path="settings" element={<Settings />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="ai-task-recommendations" element={<AITaskRecommendations />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

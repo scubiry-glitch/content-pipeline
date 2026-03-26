@@ -1,0 +1,109 @@
+/* AI 质量分数徽章样式 */
+
+.ai-quality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ai-quality-badge:hover {
+  transform: scale(1.05);
+}
+
+/* 质量等级颜色 */
+.ai-quality-badge.excellent {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.ai-quality-badge.good {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.ai-quality-badge.average {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.ai-quality-badge.poor {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.ai-quality-badge.unanalyzed {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px dashed #d1d5db;
+}
+
+/* 图标 */
+.ai-quality-badge .icon {
+  font-size: 10px;
+}
+
+.ai-quality-badge .score {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分类标签 */
+.ai-category-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #e0e7ff;
+  color: #4338ca;
+  white-space: nowrap;
+}
+
+/* 情感标签 */
+.ai-sentiment-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ai-sentiment-tag.positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.ai-sentiment-tag.negative {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.ai-sentiment-tag.neutral {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ai-sentiment-tag.mixed {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* 综合信息行 */
+.ai-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-meta-row > * {
+  flex-shrink: 0;
+}

@@ -1,6 +1,7 @@
 // RSS文章列表页面 - 支持打分和删除
 import { useState, useEffect } from 'react';
 import { rssSourcesApi, type RSSItem } from '../api/client';
+import { AIQualityBadge, AICategoryTag, AISentimentTag } from '../components/AIQualityBadge';
 import './RSSItems.css';
 
 export function RSSItems() {
@@ -20,7 +21,7 @@ export function RSSItems() {
   });
   const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<'published_at' | 'relevance_score' | 'manual_score'>('published_at');
+  const [sortBy, setSortBy] = useState<'published_at' | 'relevance_score' | 'manual_score' | 'ai_quality_score'>('published_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [scoringItem, setScoringItem] = useState<RSSItem | null>(null);
@@ -266,6 +267,7 @@ export function RSSItems() {
             <option value="published_at">发布时间</option>
             <option value="relevance_score">自动评分</option>
             <option value="manual_score">人工评分</option>
+            <option value="ai_quality_score">AI质量分</option>
           </select>
           <button 
             className="btn btn-sm btn-secondary"
@@ -386,6 +388,15 @@ export function RSSItems() {
                       相关度: {(getEffectiveScore(item) * 100).toFixed(0)}%
                     </span>
                   </div>
+                </div>
+                {/* v6.1: AI 分析信息 */}
+                <div className="rss-item-ai-meta">
+                  <AIQualityBadge score={item.ai_quality_score} />
+                  <AICategoryTag category={item.ai_category} />
+                  <AISentimentTag sentiment={item.ai_sentiment} />
+                  {!item.ai_analyzed_at && (
+                    <span className="ai-pending-badge">🤖 待分析</span>
+                  )}
                 </div>
               </div>
             ))}

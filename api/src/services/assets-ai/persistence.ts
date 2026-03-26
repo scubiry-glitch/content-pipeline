@@ -1,0 +1,439 @@
+// ============================================
+// v6.2 Assets AI 批量处理 - 数据持久化服务
+// ============================================
+
+import { Asset, AssetAIAnalysisResult, DocumentChunk, SemanticSearchResult } from './types.js';
+import { query } from '../../db/connection.js';
+
+// ============================================
+// 持久化服务
+// ============================================
+export class PersistenceService {
+  /**
+   * 保存分析结果
+   */
+  async saveResult(result: AssetAIAnalysisResult): Promise<void> {
+    const {
+      assetId,
+      quality,
+      classification,
+      vectorization,
+      duplicate,
+      taskRecommendation,
+      processingTimeMs,
+      modelVersion,
+    } = result;
+
+    try {
+      // 1. 保存到 asset_ai_analysis 表
+      await query(
+        `INSERT INTO asset_ai_analysis (
+          asset_id,
+          quality_score, quality_dimensions, quality_summary, quality_strengths, quality_weaknesses,
+          quality_key_insights, quality_data_highlights, quality_recommendation,
+          structure_analysis,
+          primary_theme_id, primary_theme_confidence, secondary_themes, expert_library_mapping,
+          extracted_tags, extracted_entities,
+          embedding_status, document_embedding, chunk_count, embedding_model,
+          duplicate_detection_result, similarity_group_id,
+          has_recommendation,
+          processing_time_ms, model_version
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+        ON CONFLICT (asset_id) DO UPDATE SET
+          quality_score = EXCLUDED.quality_score,
+          quality_dimensions = EXCLUDED.quality_dimensions,
+          quality_summary = EXCLUDED.quality_summary,
+          quality_strengths = EXCLUDED.quality_strengths,
+          quality_weaknesses = EXCLUDED.quality_weaknesses,
+          quality_key_insights = EXCLUDED.quality_key_insights,
+          quality_data_highlights = EXCLUDED.quality_data_highlights,
+          quality_recommendation = EXCLUDED.quality_recommendation,
+          structure_analysis = EXCLUDED.structure_analysis,
+          primary_theme_id = EXCLUDED.primary_theme_id,
+          primary_theme_confidence = EXCLUDED.primary_theme_confidence,
+          secondary_themes = EXCLUDED.secondary_themes,
+          expert_library_mapping = EXCLUDED.expert_library_mapping,
+          extracted_tags = EXCLUDED.extracted_tags,
+          extracted_entities = EXCLUDED.extracted_entities,
+          embedding_status = EXCLUDED.embedding_status,
+          document_embedding = EXCLUDED.document_embedding,
+          chunk_count = EXCLUDED.chunk_count,
+          embedding_model = EXCLUDED.embedding_model,
+          duplicate_detection_result = EXCLUDED.duplicate_detection_result,
+          similarity_group_id = EXCLUDED.similarity_group_id,
+          has_recommendation = EXCLUDED.has_recommendation,
+          processing_time_ms = EXCLUDED.processing_time_ms,
+          model_version = EXCLUDED.model_version,
+          analyzed_at = NOW()`,
+        [
+          assetId,
+          quality.overall,
+          JSON.stringify(quality.dimensions),
+          quality.aiAssessment.summary,
+          quality.aiAssessment.strengths,
+          quality.aiAssessment.weaknesses,
+          quality.aiAssessment.keyInsights,
+          quality.aiAssessment.dataHighlights,
+          quality.aiAssessment.recommendation,
+          JSON.stringify(quality.structure),
+          classification.primaryTheme.themeId,
+          classification.primaryTheme.confidence,
+          JSON.stringify(classification.secondaryThemes),
+          JSON.stringify(classification.expertLibraryMapping),
+          JSON.stringify(classification.tags),
+          JSON.stringify(classification.entities),
+          vectorization ? 'completed' : 'pending',
+          vectorization?.documentEmbedding || null,
+          vectorization?.chunks.length || 0,
+          vectorization?.vectorModel || null,
+          JSON.stringify(duplicate || {}),
+          duplicate?.similarityGroupId || null,
+          !!taskRecommendation,
+          processingTimeMs,
+          modelVersion,
+        ]
+      );
+
+      // 2. 同步到 assets 表
+      await query(
+        `UPDATE assets SET
+          ai_quality_score = $2,
+          ai_theme_id = $3,
+          ai_theme_confidence = $4,
+          ai_tags = $5,
+          ai_analyzed_at = NOW(),
+          ai_processing_status = 'completed',
+          ai_duplicate_of = $6
+        WHERE id = $1`,
+        [
+          assetId,
+          quality.overall,
+          classification.primaryTheme.themeId,
+          classification.primaryTheme.confidence,
+          classification.tags.map((t) => t.tag),
+          duplicate?.duplicateOf || null,
+        ]
+      );
+
+      // 3. 如果有任务推荐，保存到 ai_task_recommendations
+      if (taskRecommendation) {
+        await query(
+          `INSERT INTO ai_task_recommendations (
+            source_type, source_asset_id, recommendation_data, status
+          ) VALUES ($1, $2, $3, $4)
+          ON CONFLICT (source_asset_id) WHERE source_type = 'asset' DO UPDATE SET
+            recommendation_data = EXCLUDED.recommendation_data,
+            status = 'pending',
+            updated_at = NOW()`,
+          ['asset', assetId, JSON.stringify(taskRecommendation), 'pending']
+        );
+      }
+
+      console.log(`[PersistenceService] Saved analysis for asset ${assetId}`);
+    } catch (error) {
+      console.error(`[PersistenceService] Failed to save result for ${assetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存文档分块
+   */
+  async saveChunks(assetId: string, chunks: DocumentChunk[]): Promise<void> {
+    try {
+      // 删除旧的分块
+      await query('DELETE FROM asset_content_chunks WHERE asset_id = $1', [assetId]);
+
+      // 插入新的分块
+      for (const chunk of chunks) {
+        await query(
+          `INSERT INTO asset_content_chunks (
+            asset_id, chunk_index, chunk_text, chunk_type, chapter_title, start_page, end_page, priority
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            assetId,
+            chunk.chunkIndex,
+            chunk.text,
+            chunk.type,
+            chunk.chapterTitle || null,
+            chunk.startPage || null,
+            chunk.endPage || null,
+            chunk.priority,
+          ]
+        );
+      }
+
+      console.log(`[PersistenceService] Saved ${chunks.length} chunks for asset ${assetId}`);
+    } catch (error) {
+      console.error(`[PersistenceService] Failed to save chunks for ${assetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取待处理的 Assets
+   */
+  async getUnprocessedAssets(options: {
+    limit?: number;
+    minQualityScore?: number;
+    maxAgeHours?: number;
+  } = {}): Promise<Asset[]> {
+    const { limit = 20, maxAgeHours = 168 } = options;
+
+    const result = await query(
+      `SELECT 
+        id, title, file_url as "fileUrl", file_type as "fileType", file_size as "fileSize",
+        source, author, published_at as "publishedAt", created_at as "createdAt",
+        metadata
+      FROM assets
+      WHERE (ai_processing_status = 'pending' OR ai_processing_status IS NULL)
+        AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'
+        AND (is_deleted = false OR is_deleted IS NULL)
+      ORDER BY created_at DESC
+      LIMIT $1`,
+      [limit]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      fileUrl: row.fileUrl,
+      fileType: row.fileType,
+      fileSize: row.fileSize,
+      source: row.source,
+      author: row.author,
+      publishedAt: row.publishedAt,
+      createdAt: row.createdAt,
+      metadata: row.metadata || {},
+    }));
+  }
+
+  /**
+   * 获取分析结果
+   */
+  async getAnalysisResult(assetId: string): Promise<AssetAIAnalysisResult | null> {
+    const result = await query(
+      `SELECT * FROM asset_ai_analysis WHERE asset_id = $1`,
+      [assetId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return this.parseAnalysisResult(row);
+  }
+
+  /**
+   * 获取处理统计
+   */
+  async getProcessingStats(): Promise<{
+    totalAnalyzed: number;
+    analyzedToday: number;
+    averageQualityScore: number;
+    pendingRecommendations: number;
+  }> {
+    const totalResult = await query(`SELECT COUNT(*) FROM asset_ai_analysis`);
+
+    const todayResult = await query(
+      `SELECT COUNT(*) FROM asset_ai_analysis WHERE analyzed_at > CURRENT_DATE`
+    );
+
+    const avgQualityResult = await query(
+      `SELECT AVG(quality_score) FROM asset_ai_analysis WHERE quality_score > 0`
+    );
+
+    const pendingRecResult = await query(
+      `SELECT COUNT(*) FROM ai_task_recommendations WHERE source_type = 'asset' AND status = 'pending'`
+    );
+
+    return {
+      totalAnalyzed: parseInt(totalResult.rows[0].count),
+      analyzedToday: parseInt(todayResult.rows[0].count),
+      averageQualityScore: Math.round(parseFloat(avgQualityResult.rows[0].avg || 0)),
+      pendingRecommendations: parseInt(pendingRecResult.rows[0].count),
+    };
+  }
+
+  /**
+   * 解析数据库结果为 AssetAIAnalysisResult
+   */
+  private parseAnalysisResult(row: any): AssetAIAnalysisResult {
+    return {
+      assetId: row.asset_id,
+      quality: {
+        overall: row.quality_score,
+        dimensions: row.quality_dimensions || {},
+        structure: row.structure_analysis || {},
+        aiAssessment: {
+          summary: row.quality_summary || '',
+          strengths: row.quality_strengths || [],
+          weaknesses: row.quality_weaknesses || [],
+          keyInsights: row.quality_key_insights || [],
+          dataHighlights: row.quality_data_highlights || [],
+          recommendation: row.quality_recommendation || 'normal',
+          confidence: 0.9, // 从数据库恢复时默认高置信度
+        },
+      },
+      classification: {
+        primaryTheme: {
+          themeId: row.primary_theme_id || '',
+          themeName: '', // 需要从 themes 表查询
+          confidence: row.primary_theme_confidence || 0,
+          reason: '',
+        },
+        secondaryThemes: row.secondary_themes || [],
+        expertLibraryMapping: row.expert_library_mapping || [],
+        tags: row.extracted_tags || [],
+        entities: row.extracted_entities || [],
+      },
+      processingTimeMs: row.processing_time_ms || 0,
+      modelVersion: row.model_version || 'v1.0',
+    };
+  }
+
+  /**
+   * 语义搜索
+   */
+  async semanticSearch(
+    queryText: string,
+    options: {
+      themeId?: string;
+      minQualityScore?: number;
+      limit?: number;
+      threshold?: number;
+    } = {}
+  ): Promise<SemanticSearchResult[]> {
+    const { themeId, minQualityScore = 0, limit = 10, threshold = 0.7 } = options;
+
+    try {
+      // 注意：这里需要先生成 query 的 embedding，简化处理
+      // 实际应该调用 embeddingService.embed(queryText)
+
+      let sql = `
+        SELECT 
+          a.id as asset_id,
+          a.title,
+          a.source,
+          a.ai_quality_score,
+          1 - (a.ai_document_embedding <=> $1::vector) AS similarity
+        FROM assets a
+        WHERE a.ai_document_embedding IS NOT NULL
+          AND 1 - (a.ai_document_embedding <=> $1::vector) > $2
+          AND (a.ai_quality_score IS NULL OR a.ai_quality_score >= $3)
+      `;
+      const params: any[] = [[], threshold, minQualityScore]; // 空向量作为占位符
+
+      if (themeId) {
+        sql += ` AND a.ai_theme_id = $${params.length + 1}`;
+        params.push(themeId);
+      }
+
+      sql += ` ORDER BY similarity DESC LIMIT $${params.length + 1}`;
+      params.push(limit);
+
+      const result = await query(sql, params);
+
+      return result.rows.map((row) => ({
+        assetId: row.asset_id,
+        title: row.title,
+        source: row.source,
+        qualityScore: row.ai_quality_score,
+        relevanceScore: parseFloat(row.similarity),
+        matchedChunks: [],
+      }));
+    } catch (error) {
+      console.error('[PersistenceService] Semantic search failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 查找相似 Assets
+   */
+  async findSimilarAssets(assetId: string, limit: number = 5): Promise<SemanticSearchResult[]> {
+    try {
+      // 获取源 asset 的 embedding
+      const sourceResult = await query(
+        'SELECT ai_document_embedding, title, source, ai_quality_score FROM assets WHERE id = $1',
+        [assetId]
+      );
+
+      if (sourceResult.rows.length === 0 || !sourceResult.rows[0].ai_document_embedding) {
+        return [];
+      }
+
+      const source = sourceResult.rows[0];
+      const embedding = source.ai_document_embedding;
+
+      // 搜索相似 assets
+      const result = await query(
+        `SELECT 
+          id as asset_id,
+          title,
+          source,
+          ai_quality_score,
+          1 - (ai_document_embedding <=> $1::vector) AS similarity
+        FROM assets
+        WHERE id != $2
+          AND ai_document_embedding IS NOT NULL
+          AND 1 - (ai_document_embedding <=> $1::vector) > 0.7
+        ORDER BY ai_document_embedding <=> $1::vector
+        LIMIT $3`,
+        [embedding, assetId, limit]
+      );
+
+      return result.rows.map((row) => ({
+        assetId: row.asset_id,
+        title: row.title,
+        source: row.source,
+        qualityScore: row.ai_quality_score,
+        relevanceScore: parseFloat(row.similarity),
+        matchedChunks: [],
+      }));
+    } catch (error) {
+      console.error('[PersistenceService] Find similar assets failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 获取去重结果
+   */
+  async getDuplicateResult(assetId: string): Promise<{
+    isDuplicate: boolean;
+    duplicateOf?: string;
+    similarAssets: Array<{
+      assetId: string;
+      title: string;
+      similarity: number;
+    }>;
+  } | null> {
+    try {
+      const result = await query(
+        `SELECT duplicate_detection_result FROM asset_ai_analysis WHERE asset_id = $1`,
+        [assetId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const data = result.rows[0].duplicate_detection_result;
+      return {
+        isDuplicate: data?.isDuplicate || false,
+        duplicateOf: data?.duplicateOf,
+        similarAssets: data?.similarAssets || [],
+      };
+    } catch (error) {
+      console.error('[PersistenceService] Get duplicate result failed:', error);
+      return null;
+    }
+  }
+}
+
+// ============================================
+// 导出单例
+// ============================================
+export const persistenceService = new PersistenceService();

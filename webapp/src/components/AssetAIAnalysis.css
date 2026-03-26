@@ -1,0 +1,694 @@
+/* AssetAIAnalysis.css */
+/* v6.2: Assets AI 批量处理 - AI 分析结果展示样式 */
+
+/* ==================== 紧凑模式徽章 ==================== */
+.ai-analysis-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-analysis-badge.loading {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.ai-analysis-badge.pending {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.ai-analysis-badge.pending:hover {
+  background: #bae7ff;
+}
+
+.ai-analysis-badge .ai-score {
+  font-weight: 600;
+}
+
+.ai-analysis-badge .ai-recommendation-icon {
+  font-size: 14px;
+}
+
+.ai-analysis-badge .ai-duplicate-warning {
+  color: #ff4d4f;
+  font-size: 14px;
+}
+
+/* ==================== 完整面板 ==================== */
+.ai-analysis-panel {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.ai-analysis-panel.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.analysis-loading {
+  text-align: center;
+  color: #666;
+}
+
+.analysis-loading .material-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #1890ff;
+}
+
+.analysis-loading .material-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ai-analysis-panel.error {
+  text-align: center;
+  color: #ff4d4f;
+  padding: 48px;
+}
+
+.ai-analysis-panel.empty {
+  text-align: center;
+  padding: 48px;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.btn-analyze {
+  margin-top: 16px;
+  padding: 12px 24px;
+  background: #1890ff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.btn-analyze:hover {
+  background: #40a9ff;
+}
+
+/* ==================== 头部概览 ==================== */
+.analysis-header {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 24px;
+}
+
+.quality-score-large {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.score-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: conic-gradient(#52c41a 0% 85%, #f0f0f0 85% 100%);
+}
+
+.score-circle::before {
+  content: '';
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+.score-value {
+  position: relative;
+  font-size: 32px;
+  font-weight: 700;
+  color: #333;
+}
+
+.score-label {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.analysis-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-label {
+  font-size: 13px;
+  color: #999;
+  min-width: 80px;
+}
+
+.meta-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+/* ==================== Tab 切换 ==================== */
+.analysis-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 12px;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.tab-btn.active {
+  background: #e6f7ff;
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.warning-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: #ff4d4f;
+  border-radius: 50%;
+}
+
+/* ==================== 质量评估 Tab ==================== */
+.dimensions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.dimension-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dimension-name {
+  font-size: 13px;
+  color: #666;
+  min-width: 80px;
+}
+
+.dimension-bar {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dimension-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.dimension-score {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* AI 评估摘要 */
+.ai-assessment {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.ai-assessment h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.assessment-summary {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.strengths, .weaknesses, .key-insights {
+  margin-top: 16px;
+}
+
+.strengths h5, .weaknesses h5, .key-insights h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.strengths ul, .weaknesses ul, .key-insights ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.strengths li, .weaknesses li, .key-insights li {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+/* ==================== 主题分类 Tab ==================== */
+.primary-theme {
+  margin-bottom: 24px;
+}
+
+.primary-theme h4, .extracted-tags h4, .extracted-entities h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.theme-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #e6f7ff;
+  border-radius: 20px;
+}
+
+.theme-name {
+  font-weight: 500;
+  color: #1890ff;
+}
+
+.theme-confidence {
+  font-size: 12px;
+  color: #666;
+}
+
+/* 标签云 */
+.tags-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-item {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  background: #f0f0f0;
+  color: #555;
+  cursor: default;
+  transition: all 0.2s;
+}
+
+.tag-item:hover {
+  background: #e0e0e0;
+}
+
+.tag-item.type-industry {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.tag-item.type-concept {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.tag-item.type-company {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.tag-item.type-technology {
+  background: #f9f0ff;
+  color: #722ed1;
+}
+
+/* 实体列表 */
+.entities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entity-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.entity-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.entity-type {
+  font-size: 12px;
+  color: #666;
+  background: #e8e8e8;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.entity-mentions {
+  margin-left: auto;
+  font-size: 12px;
+  color: #999;
+}
+
+/* ==================== 去重检测 Tab ==================== */
+.duplicate-tab {
+  text-align: center;
+  padding: 24px;
+}
+
+.duplicate-warning, .no-duplicate {
+  padding: 24px;
+}
+
+.warning-icon, .success-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.duplicate-warning h4, .no-duplicate h4 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.duplicate-warning p, .no-duplicate p {
+  color: #666;
+  margin: 0;
+}
+
+.duplicate-source {
+  margin-top: 16px;
+  padding: 12px;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  color: #ff4d4f;
+}
+
+.similar-assets {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.similar-assets h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+}
+
+.similar-asset-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.asset-title {
+  font-weight: 500;
+  color: #333;
+}
+
+.similarity-score {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ==================== 任务推荐 Tab ==================== */
+.recommendation-tab {
+  padding: 16px;
+}
+
+.recommendation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.recommendation-header h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.priority-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.priority-badge.priority-high {
+  background: #fff1f0;
+  color: #ff4d4f;
+}
+
+.priority-badge.priority-medium {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.priority-badge.priority-low {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.recommendation-reason {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.content-suggestion h5 {
+  margin: 16px 0 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.content-suggestion p {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.content-suggestion ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.content-suggestion li {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+/* ==================== 底部操作 ==================== */
+.analysis-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-refresh, .btn-retry {
+  padding: 8px 16px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #666;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-refresh:hover, .btn-retry:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+/* ==================== Assets 页面集成 ==================== */
+.ai-status-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.ai-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+
+.ai-status-badge.completed {
+  background: rgba(82, 196, 26, 0.9);
+  color: #fff;
+}
+
+.ai-status-badge.processing {
+  background: rgba(24, 144, 255, 0.9);
+  color: #fff;
+}
+
+.ai-status-badge.failed {
+  background: rgba(255, 77, 79, 0.9);
+  color: #fff;
+}
+
+.ai-status-badge.pending {
+  background: rgba(255, 255, 255, 0.9);
+  color: #666;
+  border: 1px solid #d9d9d9;
+}
+
+.ai-status-badge .ai-score {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ai-status-badge .material-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+/* AI 分析摘要 */
+.ai-summary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.ai-quality-bar {
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.ai-quality-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.ai-quality-text {
+  font-size: 11px;
+  color: #666;
+}
+
+/* 批量 AI 分析按钮 */
+.btn-batch-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #722ed1 0%, #1890ff 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-batch-ai:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(114, 46, 209, 0.3);
+}
+
+/* 侧边栏 AI 状态筛选 */
+.sidebar-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.sidebar-section-title {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding: 0 12px;
+}

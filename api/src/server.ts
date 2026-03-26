@@ -3,7 +3,11 @@
 
 // 首先加载环境变量，确保在所有模块导入前完成
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -34,6 +38,8 @@ import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { llmRoutes } from './routes/llm.js';
+import { aiProcessingRoutes } from './routes/ai-processing.js';
+import { assetsAIProcessingRoutes } from './routes/assets-ai-processing.js';
 import { setupAuth } from './middleware/auth.js';
 // RSS 自动采集已整合到 rssCollector.ts，不再使用 rssCrawler.js
 import { errorHandler } from './middleware/errorHandler.js';
@@ -164,6 +170,12 @@ async function main() {
 
   // Dashboard LLM 路由
   await fastify.register(llmRoutes, { prefix: '/api/llm' });
+  
+  // v6.1: AI 批量处理路由 (RSS)
+  await fastify.register(aiProcessingRoutes, { prefix: '/api/v1/ai' });
+  
+  // v6.2: Assets AI 批量处理路由
+  await fastify.register(assetsAIProcessingRoutes, { prefix: '/api/v1/ai/assets' });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
@@ -196,6 +208,16 @@ async function main() {
     startHotScoreScheduler('*/30 * * * *'); // 每30分钟更新一次
     
     console.log('⏰ 热度分数定时更新已启动（每30分钟）');
+
+    // v6.1: 启动 RSS AI 批量处理定时任务
+    const { aiScheduler } = await import('./services/ai/scheduler.js');
+    aiScheduler.start();
+    console.log('🤖 RSS AI 批量处理定时任务已启动（每15分钟）');
+    
+    // v6.2: 启动 Assets AI 批量处理定时任务
+    const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
+    assetsAIScheduler.start();
+    console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
 
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
     // 或配置定时任务调用 collectAllFeeds()

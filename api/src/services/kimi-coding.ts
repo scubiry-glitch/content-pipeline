@@ -82,6 +82,7 @@ export async function callKimiCodingText(
     model?: string;
     maxTokens?: number;
     endpointPath?: string;
+    timeoutMs?: number;
   },
 ): Promise<KimiCodingCallResult> {
   const provider = kimiCodingProvider['kimi-coding'];
@@ -104,6 +105,7 @@ export async function callKimiCodingText(
   const model = options?.model || provider.models[0]!.id;
   const maxTokens = options?.maxTokens || 1024;
   const endpointPath = options?.endpointPath || 'v1/messages';
+  const timeoutMs = options?.timeoutMs || 60000; // 默认60秒超时
   const url = joinUrl(provider.baseUrl, endpointPath);
 
   const body = {
@@ -117,51 +119,80 @@ export async function callKimiCodingText(
     ],
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': KIMI_CODING_USER_AGENT,
-      'x-api-key': apiKey,
-      Authorization: `Bearer ${apiKey}`,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
+  // 创建 AbortController 用于超时控制
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const rawText = await res.text();
-  let raw: unknown = rawText;
   try {
-    raw = JSON.parse(rawText);
-  } catch {
-    // keep raw as plain text
-  }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': KIMI_CODING_USER_AGENT,
+        'x-api-key': apiKey,
+        Authorization: `Bearer ${apiKey}`,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
+    clearTimeout(timeoutId);
+
+    const rawText = await res.text();
+    let raw: unknown = rawText;
+    try {
+      raw = JSON.parse(rawText);
+    } catch {
+      // keep raw as plain text
+    }
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        model,
+        text: '',
+        raw,
+        error: `请求失败: HTTP ${res.status}`,
+      };
+    }
+
+    const message = raw as AnthropicMessageResponse;
+    const text =
+      message.content
+        ?.filter((c) => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n')
+        .trim() || '';
+
     return {
-      ok: false,
+      ok: true,
       status: res.status,
       model,
-      text: '',
+      id: message.id,
+      text,
       raw,
-      error: `请求失败: HTTP ${res.status}`,
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        ok: false,
+        status: 0,
+        model,
+        text: '',
+        error: `请求超时: 超过 ${timeoutMs}ms 未响应`,
+      };
+    }
+    
+    return {
+      ok: false,
+      status: 0,
+      model,
+      text: '',
+      error: `请求异常: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-
-  const message = raw as AnthropicMessageResponse;
-  const text =
-    message.content
-      ?.filter((c) => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n')
-      .trim() || '';
-
-  return {
-    ok: true,
-    status: res.status,
-    model,
-    id: message.id,
-    text,
-    raw,
-  };
 }

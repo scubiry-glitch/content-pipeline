@@ -846,3 +846,135 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================== v6.2 AI 分析功能样式 ==================== */
+
+/* 批量 AI 分析按钮 */
+.btn-batch-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #722ed1 0%, #1890ff 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.btn-batch-ai:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(114, 46, 209, 0.3);
+}
+
+.btn-batch-ai .material-icon {
+  font-size: 18px;
+}
+
+/* AI 状态叠加层 */
+.ai-status-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.ai-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-status-badge.completed {
+  background: rgba(82, 196, 26, 0.95);
+  color: #fff;
+}
+
+.ai-status-badge.processing {
+  background: rgba(24, 144, 255, 0.95);
+  color: #fff;
+}
+
+.ai-status-badge.failed {
+  background: rgba(255, 77, 79, 0.95);
+  color: #fff;
+}
+
+.ai-status-badge.pending {
+  background: rgba(255, 255, 255, 0.95);
+  color: #666;
+  border: 1px solid #d9d9d9;
+}
+
+.ai-status-badge:hover {
+  transform: scale(1.05);
+}
+
+.ai-status-badge .material-icon {
+  font-size: 14px;
+}
+
+.ai-status-badge .material-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ai-status-badge .ai-score {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.ai-status-badge .ai-label {
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+/* 侧边栏分区 */
+.sidebar-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e9eb;
+}
+
+.sidebar-section-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f94;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding: 0 16px;
+}
+
+/* AI 分析弹窗 */
+.modal-large {
+  max-width: 720px;
+}
+
+.modal-body-ai {
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* 加载动画 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -49,6 +49,11 @@ const mainNavItems: NavItem[] = [
       { to: '/hot-topics/insights', label: '洞察分析', icon: '💡' },
     ]
   },
+  { 
+    to: '/ai-task-recommendations', 
+    label: 'AI推荐', 
+    icon: '🤖',
+  },
 ];
 
 const systemNavItems: NavItem[] = [

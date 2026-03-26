@@ -7,6 +7,7 @@ import {
   type RSSItem,
   type RSSCollectionProgress 
 } from '../api/client';
+import { AIQualityBadge, AICategoryTag, AISentimentTag } from '../components/AIQualityBadge';
 import './RSSAssets.css';
 
 export function RSSAssets() {
@@ -43,6 +44,10 @@ export function RSSAssets() {
     offset: 0,
     total: 0,
   });
+  
+  // 排序
+  const [sortBy, setSortBy] = useState<'published_at' | 'relevance_score' | 'manual_score' | 'ai_quality_score'>('published_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // 加载数据
   const loadData = async () => {
@@ -73,6 +78,8 @@ export function RSSAssets() {
       const itemsRes = await rssSourcesApi.getItems({
         limit: pagination.limit,
         offset: pagination.offset,
+        sortBy,
+        sortOrder,
       });
       // 转换数据类型
       const normalizedItems = (itemsRes.items || []).map(item => ({
@@ -91,7 +98,7 @@ export function RSSAssets() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.limit, pagination.offset]);
+  }, [pagination.limit, pagination.offset, sortBy, sortOrder]);
 
   // 加载进度
   const loadProgress = useCallback(async () => {
@@ -211,6 +218,15 @@ export function RSSAssets() {
     return item.manual_score ?? item.relevance_score ?? 0;
   };
 
+  // 获取趋势图标
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'up': return '📈';
+      case 'down': return '📉';
+      default: return '➡️';
+    }
+  };
+
   // 计算进度百分比
   const getProgressPercent = () => {
     if (!progress || progress.totalSources === 0) return 0;
@@ -318,6 +334,38 @@ export function RSSAssets() {
       {/* 内容区域 */}
       {activeSubTab === 'items' ? (
         <div className="items-section">
+          {/* 排序工具栏 */}
+          <div className="filter-bar">
+            <div className="filter-group">
+              <label>排序:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as typeof sortBy);
+                  setPagination(prev => ({ ...prev, offset: 0 }));
+                }}
+              >
+                <option value="published_at">发布时间</option>
+                <option value="relevance_score">AI相关度</option>
+                <option value="manual_score">人工评分</option>
+                <option value="ai_quality_score">AI质量分</option>
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>顺序:</label>
+              <select
+                value={sortOrder}
+                onChange={(e) => {
+                  setSortOrder(e.target.value as typeof sortOrder);
+                  setPagination(prev => ({ ...prev, offset: 0 }));
+                }}
+              >
+                <option value="desc">降序</option>
+                <option value="asc">升序</option>
+              </select>
+            </div>
+          </div>
+
           {loading ? (
             <div className="loading">加载中...</div>
           ) : items.length === 0 ? (
@@ -330,7 +378,7 @@ export function RSSAssets() {
             <>
               <div className="rss-items-list">
                 {items.map((item) => (
-                  <div key={item.id} className="rss-item-card">
+                  <div key={item.id} className={`rss-item-card ${item.ai_quality_score !== undefined ? 'ai-analyzed' : ''}`}>
                     <div className="rss-item-header">
                       <div className="header-left">
                         <span
@@ -342,6 +390,15 @@ export function RSSAssets() {
                         <span className="rss-item-date">{formatDate(item.published_at)}</span>
                       </div>
                       <div className="header-actions">
+                        {item.ai_quality_score !== undefined ? (
+                          <>
+                            <AIQualityBadge score={item.ai_quality_score} />
+                            <AICategoryTag category={item.ai_category} />
+                            <AISentimentTag sentiment={item.ai_sentiment} />
+                          </>
+                        ) : (
+                          <span className="ai-pending-badge">🤖 待分析</span>
+                        )}
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => openScoreModal(item)}
@@ -364,19 +421,22 @@ export function RSSAssets() {
                       </a>
                     </h3>
                     <p className="rss-item-summary">{item.summary}</p>
+                    
                     <div className="rss-item-footer">
                       <div className="rss-item-tags">
                         {item.tags?.slice(0, 5).map((tag, idx) => (
                           <span key={idx} className="rss-tag">{tag}</span>
                         ))}
                       </div>
-                      <div
-                        className="rss-item-score"
-                        style={{ color: getScoreColor(getEffectiveScore(item)) }}
-                        title={item.manual_score !== undefined ? '人工评分' : '自动评分'}
-                      >
-                        {item.manual_score !== undefined ? '👤 ' : '🤖 '}
-                        相关度: {(getEffectiveScore(item) * 100).toFixed(0)}%
+                      <div className="rss-item-scores">
+                        <span
+                          className="rss-item-score"
+                          style={{ color: getScoreColor(getEffectiveScore(item)) }}
+                          title={item.manual_score !== undefined ? '人工评分' : '自动评分'}
+                        >
+                          {item.manual_score !== undefined ? '👤 ' : '🤖 '}
+                          相关度: {(getEffectiveScore(item) * 100).toFixed(0)}%
+                        </span>
                       </div>
                     </div>
                   </div>

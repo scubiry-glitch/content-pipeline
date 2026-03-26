@@ -1,5 +1,5 @@
 // Assets.tsx
-// v3.1.0: 素材库页面 - 优化版，参考 Content Assets Library 设计
+// v3.2.0: 素材库页面 - 集成 v6.2 AI 分析功能
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,8 +9,9 @@ import {
   type Asset, 
   type AssetTheme,
 } from '../api/client';
+import { assetsAiApi } from '../api/assetsAi';
+import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
 import { LazyImage } from '../components/LazyImage';
-import { getAssetCompositeScore } from '../services/expertService';
 import './Assets.css';
 
 // 扩展 Asset 类型
@@ -23,6 +24,11 @@ interface ExtendedAsset extends Asset {
   status?: AssetStatus;
   word_count?: number;
   fact_check_score?: number;
+  ai_quality_score?: number;
+  ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  ai_analyzed_at?: string;
+  created_by?: string;
+  is_shared?: boolean;
 }
 
 export function Assets() {
@@ -44,6 +50,10 @@ export function Assets() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreateThemeModal, setShowCreateThemeModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<ExtendedAsset | null>(null);
+
+  // AI 分析弹窗状态
+  const [showAIAnalysisModal, setShowAIAnalysisModal] = useState(false);
+  const [selectedAssetForAI, setSelectedAssetForAI] = useState<ExtendedAsset | null>(null);
 
   // 表单状态
   const [uploadForm, setUploadForm] = useState({
@@ -100,6 +110,10 @@ export function Assets() {
     // Tab筛选
     if (filterTab === 'my') return asset.created_by === 'current_user';
     if (filterTab === 'shared') return asset.is_shared;
+
+    // AI 分析状态筛选
+    if (selectedTheme === 'ai-completed') return asset.ai_processing_status === 'completed';
+    if (selectedTheme === 'ai-pending') return !asset.ai_processing_status || asset.ai_processing_status === 'pending';
 
     // 主题筛选
     if (selectedTheme === 'uncategorized') return !asset.theme_id;
@@ -200,6 +214,86 @@ export function Assets() {
     }
   };
 
+  // AI 分析状态徽章
+  const getAIStatusBadge = (asset: ExtendedAsset) => {
+    const status = asset.ai_processing_status;
+    
+    if (status === 'completed' && asset.ai_quality_score) {
+      return (
+        <div 
+          className="ai-status-badge completed" 
+          title={`AI 评分: ${asset.ai_quality_score}`}
+          onClick={(e) => openAIAnalysisModal(asset, e)}
+        >
+          <span className="ai-score">{asset.ai_quality_score}</span>
+          <span className="ai-label">AI</span>
+        </div>
+      );
+    }
+    
+    if (status === 'processing') {
+      return (
+        <div className="ai-status-badge processing" title="AI 分析中...">
+          <span className="material-icon spinning">refresh</span>
+        </div>
+      );
+    }
+    
+    if (status === 'failed') {
+      return (
+        <div 
+          className="ai-status-badge failed" 
+          title="分析失败，点击查看详情"
+          onClick={(e) => openAIAnalysisModal(asset, e)}
+        >
+          <span className="material-icon">error</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div 
+        className="ai-status-badge pending" 
+        title="点击进行 AI 分析"
+        onClick={(e) => openAIAnalysisModal(asset, e)}
+      >
+        <span className="material-icon">auto_awesome</span>
+      </div>
+    );
+  };
+
+  // 打开 AI 分析弹窗
+  const openAIAnalysisModal = (asset: ExtendedAsset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedAssetForAI(asset);
+    setShowAIAnalysisModal(true);
+  };
+
+  // 批量触发 AI 分析
+  const handleBatchAI = async () => {
+    const unprocessedAssets = assets.filter(
+      a => !a.ai_processing_status || a.ai_processing_status === 'pending'
+    );
+    
+    if (unprocessedAssets.length === 0) {
+      alert('所有素材已完成 AI 分析');
+      return;
+    }
+    
+    if (!confirm(`确定要对 ${unprocessedAssets.length} 个素材进行 AI 分析吗？`)) {
+      return;
+    }
+    
+    try {
+      await assetsAiApi.triggerBatchProcess({
+        assetIds: unprocessedAssets.map(a => a.id),
+      });
+      alert('AI 分析已触发，请稍后刷新查看结果');
+    } catch (err) {
+      alert('触发失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  };
+
   // 创建主题
   const handleCreateTheme = async () => {
     try {
@@ -241,7 +335,7 @@ export function Assets() {
   // 格式化日期
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', d: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   // 渲染素材卡片
@@ -276,6 +370,10 @@ export function Assets() {
           {/* 状态标签 */}
           <div className="asset-status-badge" style={{ backgroundColor: statusConfig.bgColor, color: statusConfig.color }}>
             {statusConfig.label}
+          </div>
+          {/* AI 分析状态 */}
+          <div className="ai-status-overlay">
+            {getAIStatusBadge(asset)}
           </div>
         </div>
 
@@ -370,6 +468,11 @@ export function Assets() {
           <p className="page-subtitle">Manage and monitor editorial production quality.</p>
         </div>
         <div className="header-right">
+          {/* 批量 AI 分析按钮 */}
+          <button className="btn-batch-ai" onClick={handleBatchAI} title="批量 AI 分析">
+            <span className="material-icon">auto_awesome</span>
+            AI 分析
+          </button>
           {/* 筛选切换 */}
           <div className="filter-tabs">
             <button
@@ -427,6 +530,32 @@ export function Assets() {
                 {assets.filter((a) => !a.theme_id).length}
               </span>
             </div>
+
+            {/* AI 分析状态筛选 */}
+            <div className="sidebar-section">
+              <span className="sidebar-section-title">AI 分析</span>
+              <div
+                className={`theme-nav-item ${selectedTheme === 'ai-completed' ? 'active' : ''}`}
+                onClick={() => setSelectedTheme('ai-completed')}
+              >
+                <span className="theme-nav-icon">✅</span>
+                <span className="theme-nav-name">已完成</span>
+                <span className="theme-nav-count">
+                  {assets.filter(a => a.ai_processing_status === 'completed').length}
+                </span>
+              </div>
+              <div
+                className={`theme-nav-item ${selectedTheme === 'ai-pending' ? 'active' : ''}`}
+                onClick={() => setSelectedTheme('ai-pending')}
+              >
+                <span className="theme-nav-icon">⏳</span>
+                <span className="theme-nav-name">待分析</span>
+                <span className="theme-nav-count">
+                  {assets.filter(a => !a.ai_processing_status || a.ai_processing_status === 'pending').length}
+                </span>
+              </div>
+            </div>
+
             {themes.map((theme) => (
               <div
                 key={theme.id}
@@ -677,6 +806,26 @@ export function Assets() {
               >
                 创建
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 分析详情弹窗 */}
+      {showAIAnalysisModal && selectedAssetForAI && (
+        <div className="modal-overlay" onClick={() => setShowAIAnalysisModal(false)}>
+          <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>AI 分析详情</h3>
+              <button className="btn-close" onClick={() => setShowAIAnalysisModal(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body modal-body-ai">
+              <AssetAIAnalysis 
+                assetId={selectedAssetForAI.id} 
+                compact={false}
+              />
             </div>
           </div>
         </div>

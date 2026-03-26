@@ -279,7 +279,7 @@ export async function rssRoutes(fastify: FastifyInstance) {
     }
     
     // 排序
-    const validSortColumns = ['published_at', 'relevance_score', 'manual_score', 'hot_score', 'created_at'];
+    const validSortColumns = ['published_at', 'relevance_score', 'manual_score', 'hot_score', 'created_at', 'ai_quality_score'];
     const orderColumn = validSortColumns.includes(sortBy) ? sortBy : 'published_at';
     const orderDir = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
     

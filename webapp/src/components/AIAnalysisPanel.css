@@ -1,0 +1,510 @@
+/* AI 分析详情面板样式 */
+
+.ai-analysis-panel {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.ai-analysis-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ai-analysis-panel .panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-analysis-panel .panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-analysis-panel .btn-refresh {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-analysis-panel .btn-refresh:hover {
+  background: #2563eb;
+}
+
+.ai-analysis-panel .btn-refresh:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* 质量评分卡片 */
+.quality-score-card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.quality-score-card .score-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.quality-score-card .overall-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.quality-score-card .score-value {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.quality-score-card .score-value.excellent { color: #10b981; }
+.quality-score-card .score-value.good { color: #3b82f6; }
+.quality-score-card .score-value.average { color: #f59e0b; }
+.quality-score-card .score-value.poor { color: #ef4444; }
+
+.quality-score-card .score-max {
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+.quality-score-card .recommendation-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quality-score-card .recommendation-badge.promote {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.quality-score-card .recommendation-badge.normal {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.quality-score-card .recommendation-badge.demote {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.quality-score-card .recommendation-badge.filter {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.quality-score-card .score-summary {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+/* 维度分数 */
+.dimensions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dimension-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.dimension-item .dimension-name {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.dimension-item .dimension-score {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dimension-item .dimension-score.high { color: #10b981; }
+.dimension-item .dimension-score.medium { color: #f59e0b; }
+.dimension-item .dimension-score.low { color: #ef4444; }
+
+/* 优缺点 */
+.assessment-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.assessment-section .section {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.assessment-section .section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assessment-section ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.assessment-section li {
+  margin-bottom: 4px;
+}
+
+/* 分析区块 */
+.analysis-section {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.analysis-section .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.analysis-section .section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analysis-section .confidence-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #e0e7ff;
+  color: #4338ca;
+  border-radius: 4px;
+}
+
+/* 分类信息 */
+.category-info .primary-category {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.category-info .category-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.category-info .secondary-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.category-info .secondary-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: #f3f4f6;
+  color: #4b5563;
+  border-radius: 4px;
+}
+
+.category-info .extracted-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.category-info .extracted-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 4px;
+}
+
+/* 情感分析 */
+.sentiment-info .sentiment-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sentiment-info .sentiment-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.sentiment-info .sentiment-score-value {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.sentiment-info .sentiment-score-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.sentiment-info .sentiment-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sentiment-info .dimension-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sentiment-info .dimension-label {
+  font-size: 11px;
+  color: #6b7280;
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.sentiment-info .dimension-progress {
+  flex: 1;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sentiment-info .dimension-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.sentiment-info .dimension-progress-fill.positive {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.sentiment-info .dimension-progress-fill.negative {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.sentiment-info .opinions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sentiment-info .opinion-item {
+  padding: 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.sentiment-info .opinion-text {
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.sentiment-info .opinion-meta {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* 任务推荐 */
+.task-recommendation {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #3b82f6;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.task-recommendation .rec-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.task-recommendation .rec-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.task-recommendation .rec-priority {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.task-recommendation .rec-priority.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.task-recommendation .rec-priority.medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.task-recommendation .rec-priority.low {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.task-recommendation .rec-reason {
+  font-size: 13px;
+  color: #4b5563;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.task-recommendation .rec-content h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.task-recommendation .rec-angle {
+  font-size: 14px;
+  color: #1f2937;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.task-recommendation .rec-keypoints {
+  margin: 0 0 12px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.task-recommendation .rec-keypoints li {
+  margin-bottom: 4px;
+}
+
+.task-recommendation .rec-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.task-recommendation .btn-create-task {
+  flex: 1;
+  padding: 10px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.task-recommendation .btn-create-task:hover {
+  background: #2563eb;
+}
+
+.task-recommendation .btn-dismiss {
+  padding: 10px 16px;
+  background: white;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.task-recommendation .btn-dismiss:hover {
+  background: #f9fafb;
+}
+
+/* 空状态 */
+.ai-analysis-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+
+.ai-analysis-empty .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.ai-analysis-empty .empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4b5563;
+  margin-bottom: 8px;
+}
+
+.ai-analysis-empty .empty-desc {
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.ai-analysis-empty .btn-analyze {
+  padding: 10px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-analysis-empty .btn-analyze:hover {
+  background: #2563eb;
+}
+
+.ai-analysis-empty .btn-analyze:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}

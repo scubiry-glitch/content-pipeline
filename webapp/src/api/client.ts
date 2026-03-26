@@ -440,6 +440,12 @@ export interface RSSItem {
   is_deleted?: boolean;
   deleted_at?: string;
   created_at: string;
+  // v6.1: AI 分析字段
+  ai_quality_score?: number;
+  ai_category?: string;
+  ai_sentiment?: 'positive' | 'neutral' | 'negative' | 'mixed';
+  ai_analyzed_at?: string;
+  ai_task_recommended?: boolean;
 }
 
 // RSS源采集进度
@@ -1213,6 +1219,227 @@ export const archiveApi = {
 
   permanentDelete: (taskId: string) =>
     client.delete(`/archive/${taskId}/permanent`) as Promise<void>,
+};
+
+// ============================================
+// v6.1: AI 批量处理 - RSS 内容智能分析
+// ============================================
+
+// AI 质量评分
+export interface AIQualityScore {
+  overall: number;
+  dimensions: {
+    contentRichness: number;
+    sourceCredibility: number;
+    timeliness: number;
+    uniqueness: number;
+    readability: number;
+    dataSupport: number;
+  };
+  aiAssessment: {
+    summary: string;
+    strengths: string[];
+    weaknesses: string[];
+    recommendation: 'promote' | 'normal' | 'demote' | 'filter';
+    confidence: number;
+  };
+}
+
+// AI 领域分类
+export interface AICategoryAnalysis {
+  primaryCategory: {
+    domain: string;
+    confidence: number;
+    reason: string;
+  };
+  secondaryCategories: {
+    domain: string;
+    confidence: number;
+  }[];
+  tags: {
+    tag: string;
+    confidence: number;
+    type: string;
+  }[];
+  entities: {
+    name: string;
+    type: string;
+    mentions: number;
+  }[];
+  expertLibraryMatch: {
+    matchedDomains: string[];
+    suggestedExperts: string[];
+    confidence: number;
+  };
+}
+
+// AI 情感分析
+export interface AISentimentAnalysis {
+  overall: 'positive' | 'neutral' | 'negative' | 'mixed';
+  score: number;
+  dimensions: {
+    marketSentiment: number;
+    policySentiment: number;
+    industryOutlook: number;
+    investmentSentiment: number;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
+  keyOpinions: {
+    opinion: string;
+    sentiment: 'positive' | 'neutral' | 'negative';
+    confidence: number;
+    context?: string;
+  }[];
+  keyElements: {
+    opportunities: string[];
+    risks: string[];
+    uncertainties: string[];
+    catalysts: string[];
+  };
+  intensity: 'strong' | 'moderate' | 'weak';
+  stance: 'bullish' | 'bearish' | 'neutral' | 'mixed';
+}
+
+// AI 任务推荐
+export interface AITaskRecommendation {
+  title: string;
+  format: 'report' | 'article' | 'brief' | 'thread';
+  priority: 'high' | 'medium' | 'low';
+  reason: string;
+  content: {
+    angle: string;
+    keyPoints: string[];
+    targetAudience: string;
+    estimatedReadTime: number;
+    suggestedLength: string;
+  };
+  differentiation: {
+    uniqueAngle: string;
+    contentGap: string[];
+    competitiveAdvantage: string;
+  };
+  suggestedAssets: {
+    assetId: string;
+    relevanceScore: number;
+    usageSuggestion: string;
+  }[];
+  suggestedExperts: {
+    role: string;
+    domain: string;
+    reason: string;
+  }[];
+  timeline: {
+    suggestedPublishTime: string;
+    urgency: 'immediate' | 'today' | 'this_week' | 'flexible';
+    timeWindowReason: string;
+  };
+}
+
+// AI 分析完整结果
+export interface AIAnalysisResult {
+  rssItemId: string;
+  quality: AIQualityScore;
+  category: AICategoryAnalysis;
+  sentiment: AISentimentAnalysis;
+  taskRecommendation?: AITaskRecommendation;
+  processingTimeMs: number;
+  modelVersion: string;
+}
+
+// AI 处理统计
+export interface AIProcessingStats {
+  totalAnalyzed: number;
+  analyzedToday: number;
+  averageQualityScore: number;
+  pendingRecommendations: number;
+}
+
+// AI 批量处理 API
+export const aiProcessingApi = {
+  // 触发批量处理
+  batchProcess: (data?: {
+    itemIds?: string[];
+    priority?: 'high' | 'normal' | 'low';
+    force?: boolean;
+  }) =>
+    client.post('/ai/batch-process', data) as Promise<{
+      jobId: string;
+      status: string;
+      totalItems: number;
+      message: string;
+    }>,
+
+  // 获取单篇 AI 分析结果
+  getAnalysis: (rssItemId: string) =>
+    client.get(`/ai/rss-items/${rssItemId}/ai-analysis`) as Promise<AIAnalysisResult>,
+
+  // 查询分析结果列表
+  getAnalysisResults: (params?: {
+    minQualityScore?: number;
+    maxQualityScore?: number;
+    category?: string;
+    sentiment?: string;
+    hasTaskRecommendation?: boolean;
+    sortBy?: 'quality' | 'time' | 'hot_score';
+    limit?: number;
+    offset?: number;
+  }) =>
+    client.get('/ai/analysis-results', { params }) as Promise<{
+      items: Array<AIAnalysisResult & {
+        title: string;
+        source_name: string;
+        hot_score: number;
+        published_at: string;
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>,
+
+  // 获取任务推荐列表
+  getTaskRecommendations: (params?: {
+    status?: 'pending' | 'accepted' | 'rejected' | 'all';
+    priority?: 'high' | 'medium' | 'low';
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    client.get('/ai/task-recommendations', { params }) as Promise<{
+      items: Array<{
+        id: number;
+        rss_item_id: string;
+        recommendation_data: AITaskRecommendation;
+        status: string;
+        rss_title: string;
+        source_name: string;
+        hot_score: number;
+        quality_score: number;
+        primary_category: string;
+        sentiment_score: number;
+      }>;
+      limit: number;
+      offset: number;
+    }>,
+
+  // 接受任务推荐
+  acceptRecommendation: (id: number, data?: { taskId?: string; note?: string }) =>
+    client.post(`/ai/task-recommendations/${id}/accept`, data) as Promise<{ success: boolean; message: string }>,
+
+  // 拒绝任务推荐
+  rejectRecommendation: (id: number, reason: string) =>
+    client.post(`/ai/task-recommendations/${id}/reject`, { reason }) as Promise<{ success: boolean; message: string }>,
+
+  // 获取处理统计
+  getStats: () =>
+    client.get('/ai/stats') as Promise<AIProcessingStats>,
+
+  // 获取分类分布
+  getCategoryStats: () =>
+    client.get('/ai/stats/categories') as Promise<{ items: Array<{ category: string; count: number; avg_quality: number }> }>,
+
+  // 获取情感分布
+  getSentimentStats: () =>
+    client.get('/ai/stats/sentiments') as Promise<{ items: Array<{ sentiment: string; count: number; avg_score: number }> }>,
 };
 
 export default client;

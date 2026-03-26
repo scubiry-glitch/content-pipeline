@@ -363,7 +363,8 @@ export class AssetService {
 
     // 否则使用普通标签搜索
     let sql = `
-      SELECT id, title, content_type, content, tags, auto_tags, source, quality_score, created_at
+      SELECT id, title, content_type, content, tags, auto_tags, source, quality_score, 
+             ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, is_pinned, created_at
       FROM assets
       WHERE 1=1
     `;
@@ -390,6 +391,11 @@ export class AssetService {
         tags: row.tags,
         source: row.source,
         quality_score: row.quality_score,
+        theme_id: row.theme_id,
+        is_pinned: row.is_pinned,
+        ai_quality_score: row.ai_quality_score,
+        ai_processing_status: row.ai_processing_status,
+        ai_analyzed_at: row.ai_analyzed_at,
         created_at: row.created_at
       }))
     };
@@ -405,7 +411,8 @@ export class AssetService {
 
     let sql = `
       SELECT
-        id, title, content_type, content, tags, auto_tags, source, quality_score, created_at,
+        id, title, content_type, content, tags, auto_tags, source, quality_score, 
+        ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, is_pinned, created_at,
         1 - (embedding <=> $1::vector) as similarity
       FROM assets
       WHERE embedding IS NOT NULL
@@ -433,6 +440,11 @@ export class AssetService {
         tags: row.tags,
         source: row.source,
         quality_score: row.quality_score,
+        theme_id: row.theme_id,
+        is_pinned: row.is_pinned,
+        ai_quality_score: row.ai_quality_score,
+        ai_processing_status: row.ai_processing_status,
+        ai_analyzed_at: row.ai_analyzed_at,
         similarity: parseFloat(row.similarity || 0),
         created_at: row.created_at
       }))
@@ -457,6 +469,11 @@ export class AssetService {
       auto_tags: row.auto_tags,
       source: row.source,
       quality_score: row.quality_score,
+      theme_id: row.theme_id,
+      is_pinned: row.is_pinned,
+      ai_quality_score: row.ai_quality_score,
+      ai_processing_status: row.ai_processing_status,
+      ai_analyzed_at: row.ai_analyzed_at,
       created_at: row.created_at
     };
   }
