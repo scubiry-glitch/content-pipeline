@@ -155,12 +155,22 @@ export async function researchRoutes(fastify: FastifyInstance) {
       const webSearch = getWebSearchService();
       const results = await webSearch.search({
         query: searchQuery,
-        maxResults: parseInt(limit),
+        maxResults: parseInt(limit) * 2, // 获取更多结果用于去重
         includeContent: false,
       });
 
+      // 按标题去重：相同标题只保留相关性最高的一个
+      const seenTitles = new Map<string, typeof results[0]>();
+      for (const result of results) {
+        const normalizedTitle = result.title.trim().toLowerCase();
+        if (!seenTitles.has(normalizedTitle) || result.relevance > seenTitles.get(normalizedTitle)!.relevance) {
+          seenTitles.set(normalizedTitle, result);
+        }
+      }
+      const uniqueResults = Array.from(seenTitles.values()).slice(0, parseInt(limit));
+
       return {
-        items: results.map((r, idx) => ({
+        items: uniqueResults.map((r, idx) => ({
           id: `web-${idx}`,
           title: r.title,
           source: r.source,
@@ -169,7 +179,7 @@ export async function researchRoutes(fastify: FastifyInstance) {
           credibility: r.credibility,
         })),
         query: searchQuery,
-        total: results.length,
+        total: uniqueResults.length,
       };
     } catch (error: any) {
       console.error('[Research] Preview search failed:', error);

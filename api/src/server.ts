@@ -179,7 +179,7 @@ async function main() {
   });
 
   // Start server
-  const PORT = parseInt(process.env.PORT || '3000');
+  const PORT = parseInt(process.env.PORT || '3006');
   const HOST = process.env.HOST || '0.0.0.0';
 
   try {

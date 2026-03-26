@@ -758,8 +758,16 @@ ${JSON.stringify(outline, null, 2)}
       // 启动串行评审
       await startSequentialReview(taskId, latestDraft.id, latestDraft.content);
     } else {
-      // 并行评审：使用 BlueTeam Agent
-      await this.pipelineService.review(taskId, config);
+      // 并行评审：使用 Streaming BlueTeam（支持 SSE 实时推送）
+      const { executeStreamingBlueTeamReview } = await import('./streamingBlueTeam.js');
+      const draftResult = await query(
+        `SELECT content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+        [taskId]
+      );
+      const draftContent = draftResult.rows[0]?.content;
+      if (!draftContent) throw new Error('No draft found for parallel review');
+      const task = await this.getTask(taskId);
+      await executeStreamingBlueTeamReview(taskId, draftContent, task?.topic || '', config);
     }
   }
 

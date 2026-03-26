@@ -2,33 +2,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { matchExperts, generateExpertOpinion, getTopExpertsByAcceptanceRate } from '../services/expertService';
+import { hotTopicsApi } from '../api/client';
 import type { Expert, ExpertReview } from '../types';
+import type { HotTopic } from '../api/client';
 import './ExpertInsights.css';
-
-// 模拟热点话题数据
-const HOT_TOPICS = [
-  {
-    id: 'topic-1',
-    title: '央行降准对房地产市场的影响分析',
-    type: 'trending',
-    keyword: '房地产',
-    heat: 95,
-  },
-  {
-    id: 'topic-2',
-    title: '新能源车企出海战略与本地化挑战',
-    type: 'new',
-    keyword: '新能源',
-    heat: 88,
-  },
-  {
-    id: 'topic-3',
-    title: 'AI大模型在金融科技中的应用前景',
-    type: 'analysis',
-    keyword: '人工智能',
-    heat: 92,
-  },
-];
 
 interface TopicWithExperts {
   id: string;
@@ -36,6 +13,7 @@ interface TopicWithExperts {
   type: 'trending' | 'new' | 'analysis';
   keyword: string;
   heat: number;
+  source: string;
   experts: Expert[];
   previewReview?: ExpertReview;
 }
@@ -58,37 +36,64 @@ export function ExpertInsights() {
     const topExpertsList = getTopExpertsByAcceptanceRate(5);
     setTopExperts(topExpertsList);
 
-    // 为每个热点话题匹配专家
-    const topicsWithExperts: TopicWithExperts[] = HOT_TOPICS.map((topic) => {
-      const matchResult = matchExperts({
-        topic: topic.title,
-        importance: 0.8,
-      });
+    try {
+      // 从 RSS 数据获取实时热点话题
+      const response = await hotTopicsApi.getFromRss(3);
+      const hotTopics = response.items || [];
 
-      const experts = matchResult.seniorExpert
-        ? [matchResult.seniorExpert, ...matchResult.domainExperts.slice(0, 2)]
-        : matchResult.domainExperts.slice(0, 3);
-
-      // 生成预览观点
-      let previewReview: ExpertReview | undefined;
-      if (experts.length > 0) {
-        const primaryExpert = experts[0];
-        previewReview = generateExpertOpinion(
-          primaryExpert,
-          `关于${topic.title}的深度分析`,
-          'draft'
-        );
+      // 如果没有数据，使用默认空数组
+      if (hotTopics.length === 0) {
+        setTopics([]);
+        setLoading(false);
+        return;
       }
 
-      return {
-        ...topic,
-        experts,
-        previewReview,
-      };
-    });
+      // 为每个热点话题匹配专家
+      const topicsWithExperts: TopicWithExperts[] = hotTopics.map((topic: HotTopic, index: number) => {
+        const matchResult = matchExperts({
+          topic: topic.title,
+          importance: 0.8,
+        });
 
-    setTopics(topicsWithExperts);
-    setLoading(false);
+        const experts = matchResult.seniorExpert
+          ? [matchResult.seniorExpert, ...matchResult.domainExperts.slice(0, 2)]
+          : matchResult.domainExperts.slice(0, 3);
+
+        // 生成预览观点
+        let previewReview: ExpertReview | undefined;
+        if (experts.length > 0) {
+          const primaryExpert = experts[0];
+          previewReview = generateExpertOpinion(
+            primaryExpert,
+            `关于${topic.title}的深度分析`,
+            'draft'
+          );
+        }
+
+        // 根据热度分数确定类型
+        let type: 'trending' | 'new' | 'analysis' = 'analysis';
+        if (topic.hotScore >= 80) type = 'trending';
+        else if (topic.trend === 'up') type = 'new';
+
+        return {
+          id: topic.id || `topic-${index}`,
+          title: topic.title,
+          type,
+          keyword: topic.source || '热点',
+          heat: Math.round(topic.hotScore || 70),
+          source: topic.source || 'RSS',
+          experts,
+          previewReview,
+        };
+      });
+
+      setTopics(topicsWithExperts);
+    } catch (error) {
+      console.error('Failed to load hot topics:', error);
+      setTopics([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getTypeLabel = (type: string) => {
@@ -134,49 +139,59 @@ export function ExpertInsights() {
         </button>
       </div>
 
-      {topics.map((topic) => (
-        <div key={topic.id} className="hot-topic-item">
-          <div className="hot-topic-header">
-            <span className="hot-topic-title">{topic.title}</span>
-            <span className={`hot-topic-badge ${topic.type}`}>
-              {getTypeLabel(topic.type)}
-            </span>
-          </div>
-
-          <div className="matched-experts">
-            <span className="matched-experts-label">匹配专家:</span>
-            <div className="expert-avatars">
-              {topic.experts.map((expert, idx) => (
-                <div
-                  key={expert.id}
-                  className="expert-avatar-mini"
-                  style={{
-                    background: getExpertColor(expert.level),
-                    zIndex: topic.experts.length - idx,
-                  }}
-                  title={`${expert.name} - ${expert.profile.title}`}
-                  onClick={() => navigate(`/hot-topics/${topic.id}`)}
-                >
-                  {expert.name.charAt(0)}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {topic.previewReview && (
-            <div className="expert-insight-preview">
-              <span className="quote">"{topic.previewReview.opinion.slice(0, 80)}..."</span>
-              <span className="expert-name">
-                — {topic.experts[0]?.name} 观点
-              </span>
-            </div>
-          )}
+      {topics.length === 0 ? (
+        <div className="expert-insights-empty">
+          <div className="icon">📭</div>
+          <p>暂无热点话题数据</p>
         </div>
-      ))}
+      ) : (
+        topics.map((topic) => (
+          <div key={topic.id} className="hot-topic-item">
+            <div className="hot-topic-header">
+              <span className="hot-topic-title">{topic.title}</span>
+              <div className="hot-topic-meta">
+                <span className="hot-topic-source">{topic.source}</span>
+                <span className={`hot-topic-badge ${topic.type}`}>
+                  {getTypeLabel(topic.type)}
+                </span>
+              </div>
+            </div>
+
+            <div className="matched-experts">
+              <span className="matched-experts-label">匹配专家:</span>
+              <div className="expert-avatars">
+                {topic.experts.map((expert, idx) => (
+                  <div
+                    key={expert.id}
+                    className="expert-avatar-mini"
+                    style={{
+                      background: getExpertColor(expert.level),
+                      zIndex: topic.experts.length - idx,
+                    }}
+                    title={`${expert.name} - ${expert.profile.title}`}
+                    onClick={() => navigate(`/hot-topics`)}
+                  >
+                    {expert.name.charAt(0)}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {topic.previewReview && (
+              <div className="expert-insight-preview">
+                <span className="quote">"{topic.previewReview.opinion.slice(0, 80)}..."</span>
+                <span className="expert-name">
+                  — {topic.experts[0]?.name} 观点
+                </span>
+              </div>
+            )}
+          </div>
+        ))
+      )}
 
       <button
         className="view-all-experts"
-        onClick={() => navigate('/hot-topics')}
+        onClick={() => navigate('/assets/rss')}
       >
         查看全部热点话题解读 →
       </button>

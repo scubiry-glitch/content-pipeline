@@ -3,6 +3,11 @@ import { useEffect, useState } from 'react';
 
 interface SequentialPanelProps {
   taskId: string;
+  isStreaming?: boolean;
+  streamingCurrentRound?: number;
+  streamingTotalRounds?: number;
+  streamingCurrentExpert?: string;
+  streamingCommentCount?: number;
 }
 
 interface SequentialStatus {
@@ -58,7 +63,7 @@ const EXPERT_ROLE_INFO: Record<string, { name: string; icon: string; color: stri
   }
 };
 
-export function SequentialPanel({ taskId }: SequentialPanelProps) {
+export function SequentialPanel({ taskId, isStreaming, streamingCurrentRound, streamingTotalRounds, streamingCurrentExpert, streamingCommentCount }: SequentialPanelProps) {
   const [status, setStatus] = useState<SequentialStatus | null>(null);
   const [expertDetails, setExpertDetails] = useState<Map<number, ExpertReviewDetail>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -154,7 +159,13 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
     };
     
     fetchData();
-  }, [taskId]);
+
+    // Poll every 5s when streaming is active
+    if (isStreaming) {
+      const interval = setInterval(fetchData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [taskId, isStreaming]);
 
   const getStatusBadge = () => {
     if (!status) return null;
@@ -218,6 +229,43 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
     );
   }
 
+  // If status not loaded from API but streaming is active, show streaming-only view
+  if (!status && isStreaming) {
+    const currentRound = streamingCurrentRound || 1;
+    const totalRounds = streamingTotalRounds || 3;
+    return (
+      <div className="space-y-6">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-tertiary">playlist_add_check</span>
+            <h2 className="font-headline font-bold text-lg">串行评审队列</h2>
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+              运行中
+            </span>
+          </div>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-tertiary rounded-full transition-all duration-500"
+                style={{ width: `${(currentRound / totalRounds) * 100}%` }} />
+            </div>
+            <span className="text-sm font-medium text-slate-600">{currentRound}/{totalRounds}</span>
+          </div>
+          <div className="text-sm text-slate-600">
+            {streamingCurrentExpert && (
+              <span>当前专家: {EXPERT_ROLE_INFO[streamingCurrentExpert]?.name || streamingCurrentExpert}</span>
+            )}
+            {streamingCommentCount !== undefined && (
+              <span className="ml-3">已生成 {streamingCommentCount} 条评论</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!status) {
     return (
       <div className="p-8 text-center">
@@ -227,6 +275,10 @@ export function SequentialPanel({ taskId }: SequentialPanelProps) {
       </div>
     );
   }
+
+  // Override status with streaming data when available
+  const displayCurrentRound = isStreaming && streamingCurrentRound ? streamingCurrentRound : status.currentRound;
+  const displayTotalRounds = isStreaming && streamingTotalRounds ? streamingTotalRounds : status.totalRounds;
 
   return (
     <div className="space-y-6">

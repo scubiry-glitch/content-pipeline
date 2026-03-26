@@ -355,11 +355,8 @@ function Stage1Config({
     return (
       <div className="config-form">
         <div className="config-section">
-          <div className="config-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="config-section-title">
             <span>📊 内容质量输入 (v3.0)</span>
-            <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="dashboard-link">
-              打开仪表盘 →
-            </a>
           </div>
           <div className="form-group">
             <label className="form-checkbox">

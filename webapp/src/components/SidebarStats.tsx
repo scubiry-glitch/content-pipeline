@@ -102,11 +102,8 @@ export function SidebarStats() {
 
       {/* 内容质量输入 (v3.0) */}
       <div className="sidebar-section">
-        <div className="sidebar-title sidebar-title-with-link">
+        <div className="sidebar-title">
           <span>📊 内容质量输入 (v3.0)</span>
-          <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="sidebar-link">
-            打开 →
-          </a>
         </div>
         <div className="quick-info">
           <div className="quick-info-item clickable" onClick={loadHotTopics}>

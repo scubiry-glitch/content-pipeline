@@ -1,6 +1,25 @@
 // BlueTeamPanel - Blue Team Review 面板
 import type { BlueTeamReview } from '../types';
 
+interface StreamingComment {
+  id: string;
+  expertRole: string;
+  expertName: string;
+  question: string;
+  severity: string;
+  suggestion?: string;
+  round: number;
+}
+
+interface StreamingProgress {
+  status?: string;
+  currentRound?: number;
+  totalRounds?: number;
+  currentExpert?: string;
+  completedComments?: number;
+  totalComments?: number;
+}
+
 interface BlueTeamPanelProps {
   reviews: BlueTeamReview[];
   reviewSummary: {
@@ -12,6 +31,9 @@ interface BlueTeamPanelProps {
     ignored: number;
     pending: number;
   };
+  isStreaming?: boolean;
+  streamingComments?: StreamingComment[];
+  streamingProgress?: StreamingProgress | null;
 }
 
 const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string }> = {
@@ -30,32 +52,49 @@ const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string }
   unknown: { name: '未知专家', icon: 'person', color: '#6b7280' }
 };
 
-export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
-  console.log('[BlueTeamPanel] Received reviews:', reviews.length, reviews);
-  
-  // Group reviews by expert role
-  const expertStats = new Map<string, { 
-    role: string; 
-    count: number; 
+export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingComments, streamingProgress }: BlueTeamPanelProps) {
+  console.log('[BlueTeamPanel] Received reviews:', reviews.length, 'streaming:', streamingComments?.length || 0);
+
+  // Group reviews by expert role (from DB)
+  const expertStats = new Map<string, {
+    role: string;
+    count: number;
     completed: number;
     questions: number;
+    isActive: boolean;
   }>();
-  
+
   reviews.forEach(review => {
     const role = review.expert_role || 'unknown';
     if (!expertStats.has(role)) {
-      expertStats.set(role, { role, count: 0, completed: 0, questions: 0 });
+      expertStats.set(role, { role, count: 0, completed: 0, questions: 0, isActive: false });
     }
     const stats = expertStats.get(role)!;
     stats.count++;
-    // 兼容 questions 是数组或单个对象的情况
-    const questions = review.questions ? 
+    const questions = review.questions ?
       (Array.isArray(review.questions) ? review.questions : [review.questions]) : [];
     stats.questions += questions.length;
     if (review.status === 'completed') {
       stats.completed++;
     }
   });
+
+  // Merge streaming comments into expert stats (real-time during review)
+  if (isStreaming && streamingComments && streamingComments.length > 0) {
+    streamingComments.forEach(comment => {
+      const role = comment.expertRole || 'unknown';
+      if (!expertStats.has(role)) {
+        expertStats.set(role, { role, count: 0, completed: 0, questions: 0, isActive: false });
+      }
+      const stats = expertStats.get(role)!;
+      stats.questions++;
+    });
+    // Mark current expert as active
+    if (streamingProgress?.currentExpert) {
+      const activeStats = expertStats.get(streamingProgress.currentExpert);
+      if (activeStats) activeStats.isActive = true;
+    }
+  }
   
   const uniqueExperts = Array.from(expertStats.values());
   
@@ -107,23 +146,44 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
 
       {/* Progress Bar */}
       <div className="px-4">
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-slate-500 uppercase">Review Completion</span>
-          <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-primary to-tertiary rounded-full transition-all duration-500"
-              style={{ width: `${completionRate}%` }}
-            />
+        {isStreaming && streamingProgress ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-bold text-amber-600 uppercase flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                AI 评审进行中
+              </span>
+              <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-500"
+                  style={{ width: `${streamingProgress.totalComments ? Math.round(((streamingProgress.completedComments || 0) / streamingProgress.totalComments) * 100) : 0}%` }}
+                />
+              </div>
+              <span className="text-sm font-bold text-amber-600">
+                第{streamingProgress.currentRound || 1}/{streamingProgress.totalRounds || 2}轮
+              </span>
+            </div>
+            <div className="text-xs text-slate-500">
+              已生成 {streamingComments?.length || 0} 条评论
+              {streamingProgress.currentExpert && (
+                <span> · 当前专家: {EXPERT_ROLES[streamingProgress.currentExpert]?.name || streamingProgress.currentExpert}</span>
+              )}
+            </div>
           </div>
-          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-            {completionRate}%
-          </span>
-        </div>
-      </div>
-
-      {/* Debug */}
-      <div className="px-4 py-2 bg-yellow-50 text-xs text-yellow-800">
-        Debug: {reviews.length} reviews, {uniqueExperts.length} experts, {totalRounds} rounds
+        ) : (
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-bold text-slate-500 uppercase">Review Completion</span>
+            <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-primary to-tertiary rounded-full transition-all duration-500"
+                style={{ width: `${completionRate}%` }}
+              />
+            </div>
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              {completionRate}%
+            </span>
+          </div>
+        )}
       </div>
       
       {/* Round Tabs */}
@@ -148,17 +208,23 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {uniqueExperts.map((expert) => {
               const expertInfo = EXPERT_ROLES[expert.role] || { name: expert.role, icon: 'person', color: '#005bc1' };
-              const isCompleted = expert.completed === expert.count;
+              const isCompleted = !isStreaming && expert.completed === expert.count && expert.count > 0;
+              const isActive = expert.isActive || (isStreaming && streamingProgress?.currentExpert === expert.role);
               const isChallenger = expert.role === 'challenger';
               const isExpander = expert.role === 'expander';
-              
-              const borderColor = isChallenger ? 'border-error/30 hover:border-error' : 
-                                 isExpander ? 'border-tertiary/30 hover:border-tertiary' : 
+
+              const borderColor = isActive ? 'border-amber-400 shadow-amber-100/50 shadow-md' :
+                                 isChallenger ? 'border-error/30 hover:border-error' :
+                                 isExpander ? 'border-tertiary/30 hover:border-tertiary' :
                                  'border-primary/30 hover:border-primary';
-              const iconColor = isChallenger ? 'text-error bg-error/10' : 
-                               isExpander ? 'text-tertiary bg-tertiary/10' : 
+              const iconColor = isChallenger ? 'text-error bg-error/10' :
+                               isExpander ? 'text-tertiary bg-tertiary/10' :
                                'text-primary bg-primary/10';
-              
+
+              const statusText = isActive ? '评审中...' : isCompleted ? 'Completed' : isStreaming ? '等待中' : 'In Progress';
+              const statusColor = isActive ? 'text-amber-500' : isCompleted ? 'text-green-500' : 'text-slate-400';
+              const dotColor = isActive ? 'bg-amber-500 animate-pulse' : isCompleted ? 'bg-green-500' : 'bg-slate-300';
+
               return (
                 <div key={expert.role} className={`bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border ${borderColor} transition-all hover:shadow-md`}>
                   <div className="flex items-center gap-3 mb-3">
@@ -167,18 +233,17 @@ export function BlueTeamPanel({ reviews, reviewSummary }: BlueTeamPanelProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-sm text-slate-900 dark:text-white truncate">{expertInfo.name}</div>
-                      <div className={`text-xs ${isCompleted ? 'text-green-500' : 'text-amber-500'} flex items-center gap-1`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}></span>
-                        {isCompleted ? 'Completed' : 'In Progress'}
+                      <div className={`text-xs ${statusColor} flex items-center gap-1`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
+                        {statusText}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span>{expert.completed}/{expert.count} reviews</span>
-                    <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-xs">comment</span>
-                      {expert.questions} comments
-                    </span>
+                    <span>{expert.questions} comments</span>
+                    {expert.count > 0 && (
+                      <span>{expert.completed}/{expert.count} reviews</span>
+                    )}
                   </div>
                 </div>
               );

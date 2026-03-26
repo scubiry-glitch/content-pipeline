@@ -71,6 +71,21 @@
   margin-right: 12px;
 }
 
+.hot-topic-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hot-topic-source {
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
 .hot-topic-badge {
   font-size: 11px;
   padding: 4px 10px;

@@ -2,8 +2,9 @@ import axios from 'axios';
 import type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion } from '../types';
 export type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion };
 
+// 优先使用环境变量，否则使用相对路径（通过 Vite proxy 转发到后端）
 export const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
-export const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+export const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 const client = axios.create({
   baseURL: BASE_URL,

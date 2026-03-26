@@ -1027,7 +1027,13 @@ export function ReviewsTab() {
         {/* Tab Content */}
         <div className="min-h-[400px]">
           {activeTab === 'blue-team' && (
-            <BlueTeamPanel reviews={reviews} reviewSummary={reviewSummary} />
+            <BlueTeamPanel
+              reviews={reviews}
+              reviewSummary={reviewSummary}
+              isStreaming={isStreamingActive || blueTeamStreaming.isStreaming}
+              streamingComments={blueTeamStreaming.comments}
+              streamingProgress={blueTeamStreaming.progress}
+            />
           )}
           {activeTab === 'sequential' && (
             <SequentialPanel taskId={task?.id} />
