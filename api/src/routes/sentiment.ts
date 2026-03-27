@@ -57,11 +57,11 @@ export async function sentimentRoutes(fastify: FastifyInstance): Promise<void> {
     const msi = await sentimentAnalyzer.calculateMSI();
     const alerts = await sentimentAnalyzer.checkAnomalies();
     return {
-      msiIndex: msi.score || 50,
-      trendDirection: msi.trend || 'stable',
-      positive: msi.positiveCount || 0,
-      negative: msi.negativeCount || 0,
-      neutral: msi.neutralCount || 0,
+      msiIndex: msi.value || 50,
+      trendDirection: msi.change24h > 0 ? 'up' : msi.change24h < 0 ? 'down' : 'stable',
+      positive: 0,  // TODO: calculate from sentiment_analysis table
+      negative: 0,
+      neutral: 0,
       alerts: alerts.length
     };
   });

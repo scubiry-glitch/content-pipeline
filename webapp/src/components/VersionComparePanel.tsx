@@ -17,6 +17,8 @@ interface DiffLine {
   content: string;
 }
 
+type DiffOp = 'same' | 'added' | 'removed';
+
 export function VersionComparePanel({
   versions = [],
   currentVersion,
@@ -48,63 +50,84 @@ export function VersionComparePanel({
     setCompareSelection([]);
   };
 
-  // 计算差异
-  const getDiff = (oldText: string = '', newText: string = ''): DiffLine[] => {
-    const oldLines = oldText.split('\n').filter(l => l.trim());
-    const newLines = newText.split('\n').filter(l => l.trim());
-    const result: DiffLine[] = [];
+  const splitLines = (text: string = '') => text.split('\n').filter((l) => l.trim());
 
-    let i = 0, j = 0;
-    while (i < oldLines.length || j < newLines.length) {
-      if (i >= oldLines.length) {
-        result.push({ type: 'added', content: newLines[j] });
-        j++;
-      } else if (j >= newLines.length) {
-        result.push({ type: 'removed', content: oldLines[i] });
+  // 基于 LCS 的通用比对，避免中间插入导致后续整段误高亮
+  const buildLcsDiff = (oldItems: string[], newItems: string[]) => {
+    const m = oldItems.length;
+    const n = newItems.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        if (oldItems[i] === newItems[j]) {
+          dp[i][j] = dp[i + 1][j + 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+    }
+
+    const result: Array<{ type: DiffOp; value: string }> = [];
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (oldItems[i] === newItems[j]) {
+        result.push({ type: 'same', value: oldItems[i] });
         i++;
-      } else if (oldLines[i] === newLines[j]) {
-        result.push({ type: 'same', content: oldLines[i] });
-        i++;
         j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        result.push({ type: 'removed', value: oldItems[i] });
+        i++;
       } else {
-        // 简单差异：标记整行变化
-        result.push({ type: 'removed', content: oldLines[i] });
-        result.push({ type: 'added', content: newLines[j] });
-        i++;
+        result.push({ type: 'added', value: newItems[j] });
         j++;
       }
+    }
+    while (i < m) {
+      result.push({ type: 'removed', value: oldItems[i++] });
+    }
+    while (j < n) {
+      result.push({ type: 'added', value: newItems[j++] });
     }
     return result;
   };
 
+  // 计算行级差异
+  const getDiff = (oldText: string = '', newText: string = ''): DiffLine[] => {
+    return buildLcsDiff(splitLines(oldText), splitLines(newText)).map((item) => ({
+      type: item.type,
+      content: item.value,
+    }));
+  };
+
   // 高亮行内差异
   const highlightInlineDiff = (oldLine: string, newLine: string): { old: JSX.Element; new: JSX.Element } => {
-    const oldWords = oldLine.split(/(\s+)/);
-    const newWords = newLine.split(/(\s+)/);
-    
+    const oldWords = oldLine.split(/(\s+)/).filter((w) => w.length > 0);
+    const newWords = newLine.split(/(\s+)/).filter((w) => w.length > 0);
+    const tokenDiff = buildLcsDiff(oldWords, newWords);
+
     const oldResult: JSX.Element[] = [];
     const newResult: JSX.Element[] = [];
 
-    let i = 0, j = 0;
-    while (i < oldWords.length || j < newWords.length) {
-      if (i >= oldWords.length) {
-        newResult.push(<span key={`add-${j}`} className="diff-add-inline">{newWords[j]}</span>);
-        j++;
-      } else if (j >= newWords.length) {
-        oldResult.push(<span key={`del-${i}`} className="diff-del-inline">{oldWords[i]}</span>);
-        i++;
-      } else if (oldWords[i] === newWords[j]) {
-        oldResult.push(<span key={`same-${i}`}>{oldWords[i]}</span>);
-        newResult.push(<span key={`same-${j}`}>{newWords[j]}</span>);
-        i++;
-        j++;
+    tokenDiff.forEach((token, idx) => {
+      if (token.type === 'same') {
+        oldResult.push(<span key={`same-old-${idx}`}>{token.value}</span>);
+        newResult.push(<span key={`same-new-${idx}`}>{token.value}</span>);
+      } else if (token.type === 'removed') {
+        oldResult.push(
+          <span key={`del-${idx}`} className="diff-del-inline">
+            {token.value}
+          </span>
+        );
       } else {
-        oldResult.push(<span key={`del-${i}`} className="diff-del-inline">{oldWords[i]}</span>);
-        newResult.push(<span key={`add-${j}`} className="diff-add-inline">{newWords[j]}</span>);
-        i++;
-        j++;
+        newResult.push(
+          <span key={`add-${idx}`} className="diff-add-inline">
+            {token.value}
+          </span>
+        );
       }
-    }
+    });
 
     return { old: <>{oldResult}</>, new: <>{newResult}</> };
   };
@@ -135,31 +158,30 @@ export function VersionComparePanel({
   const inlineDiffContent = useMemo(() => {
     if (!diffResult) return null;
     
-    const oldLines = (diffResult.oldVersion.content || '').split('\n').filter(l => l.trim());
-    const newLines = (diffResult.newVersion.content || '').split('\n').filter(l => l.trim());
+    const oldLines = splitLines(diffResult.oldVersion.content || '');
+    const newLines = splitLines(diffResult.newVersion.content || '');
     const rows: Array<{ id: number; left?: JSX.Element; right?: JSX.Element; type: 'same' | 'changed' | 'added' | 'removed' }> = [];
-    
-    let i = 0, j = 0, id = 0;
-    while (i < oldLines.length || j < newLines.length) {
-      if (i >= oldLines.length) {
-        // 纯新增行
-        rows.push({ id: id++, right: <span className="diff-add-line">{newLines[j]}</span>, type: 'added' });
-        j++;
-      } else if (j >= newLines.length) {
-        // 纯删除行
-        rows.push({ id: id++, left: <span className="diff-del-line">{oldLines[i]}</span>, type: 'removed' });
-        i++;
-      } else if (oldLines[i] === newLines[j]) {
-        // 相同行
-        rows.push({ id: id++, left: <>{oldLines[i]}</>, right: <>{newLines[j]}</>, type: 'same' });
-        i++;
-        j++;
-      } else {
-        // 修改行 - 显示行内差异
-        const highlighted = highlightInlineDiff(oldLines[i], newLines[j]);
+
+    const lineDiff = buildLcsDiff(oldLines, newLines);
+    let id = 0;
+    for (let k = 0; k < lineDiff.length; k++) {
+      const current = lineDiff[k];
+      const next = lineDiff[k + 1];
+
+      // removed + added 视为“修改行”，只高亮局部 token
+      if (current?.type === 'removed' && next?.type === 'added') {
+        const highlighted = highlightInlineDiff(current.value, next.value);
         rows.push({ id: id++, left: highlighted.old, right: highlighted.new, type: 'changed' });
-        i++;
-        j++;
+        k++;
+        continue;
+      }
+
+      if (current.type === 'same') {
+        rows.push({ id: id++, left: <>{current.value}</>, right: <>{current.value}</>, type: 'same' });
+      } else if (current.type === 'removed') {
+        rows.push({ id: id++, left: <span className="diff-del-line">{current.value}</span>, type: 'removed' });
+      } else {
+        rows.push({ id: id++, right: <span className="diff-add-line">{current.value}</span>, type: 'added' });
       }
     }
     

@@ -399,14 +399,14 @@ export class TerminologyService {
 
   // 搜索术语
   async searchTerminology(
-    query: string,
+    searchQuery: string,
     language?: string,
     category?: string
   ): Promise<TerminologyEntry[]> {
     let sql = `SELECT * FROM terminology_entries
                WHERE (term ILIKE $1 OR definition ILIKE $1)
                AND status = 'active'`;
-    const params: any[] = [`%${query}%`];
+    const params: any[] = [`%${searchQuery}%`];
 
     if (language) {
       sql += ` AND language = $${params.length + 1}`;

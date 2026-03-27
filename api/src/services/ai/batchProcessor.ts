@@ -401,6 +401,7 @@ export class AIResultPersistenceService {
       trend: row.trend,
       sentiment: row.sentiment,
       createdAt: row.created_at,
+      isDuplicate: false,  // Default value for fetched items
     }));
   }
 

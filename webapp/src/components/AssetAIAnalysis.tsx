@@ -73,6 +73,8 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   useEffect(() => {
     loadAnalysis();
   }, [assetId]);
+  
+
 
   const loadAnalysis = async () => {
     setLoading(true);
@@ -80,8 +82,15 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
     try {
       const data = await assetsAiApi.getAnalysis(assetId);
       setAnalysis(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+    } catch (err: any) {
+      console.error('[AssetAIAnalysis] Error:', err);
+      // 404 表示尚未分析，显示"开始分析"按钮
+      if (err?.response?.status === 404 || err?.message?.includes('404')) {
+        setAnalysis(null);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : '加载失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -174,7 +183,10 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   // 完整模式
+  console.log('[AssetAIAnalysis] Render check - loading:', loading, 'error:', error, 'hasAnalysis:', !!analysis);
+  
   if (loading) {
+    console.log('[AssetAIAnalysis] Rendering: loading state');
     return (
       <div className="ai-analysis-panel loading">
         <div className="analysis-loading">
@@ -186,6 +198,7 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   if (error) {
+    console.log('[AssetAIAnalysis] Rendering: error state');
     return (
       <div className="ai-analysis-panel error">
         <p>❌ {error}</p>
@@ -195,6 +208,7 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   if (!analysis) {
+    console.log('[AssetAIAnalysis] Rendering: empty state with Start Analysis button');
     return (
       <div className="ai-analysis-panel empty">
         <span className="empty-icon">🤖</span>
@@ -206,6 +220,8 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
       </div>
     );
   }
+  
+  console.log('[AssetAIAnalysis] Rendering: full analysis view');
 
   const { quality, classification, duplicate, taskRecommendation } = analysis;
 

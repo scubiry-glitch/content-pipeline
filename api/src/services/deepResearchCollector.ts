@@ -202,7 +202,7 @@ async function collectFromAssets(
     source: row.source || '素材库',
     sourceType: 'asset',
     title: row.title,
-    url: null, // assets don't have URLs
+    url: undefined, // assets don't have URLs
     content: row.content?.slice(0, 1000),
     summary: row.content?.slice(0, 300) || '',
     credibility: parseFloat(row.quality_score) || 0.7,

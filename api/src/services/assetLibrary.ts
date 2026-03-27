@@ -92,8 +92,8 @@ export class AssetLibraryService {
     return results;
   }
 
-  async searchSimilar(query: string, limit: number = 10): Promise<AssetLibraryItem[]> {
-    const embedding = await this.llmRouter.embed(query);
+  async searchSimilar(searchQuery: string, limit: number = 10): Promise<AssetLibraryItem[]> {
+    const embedding = await this.llmRouter.embed(searchQuery);
 
     const result = await query(
       `SELECT id, content, content_type, auto_tags, quality_score,
@@ -110,13 +110,8 @@ export class AssetLibraryService {
       id: row.id,
       content: row.content,
       contentType: row.content_type,
-      autoTags: row.auto_tags,
+      tags: row.auto_tags || [],
       qualityScore: row.quality_score,
-      qualityFactors: {}, // Not returned in search
-      referenceWeight: row.reference_weight,
-      combinedWeight: row.combined_weight,
-      embedding: [], // Not returned
-      citationCount: 0,
       source: row.source,
       sourceUrl: row.source_url,
     }));
@@ -137,13 +132,8 @@ export class AssetLibraryService {
       id: row.id,
       content: row.content,
       contentType: row.content_type,
-      autoTags: row.auto_tags,
+      tags: row.auto_tags || [],
       qualityScore: row.quality_score,
-      qualityFactors: {},
-      referenceWeight: row.reference_weight,
-      combinedWeight: row.combined_weight,
-      embedding: [],
-      citationCount: 0,
       source: row.source,
       sourceUrl: row.source_url,
     }));
@@ -247,6 +237,9 @@ ${content.substring(0, 2000)}
       sourceCredibility: 0.5,
       completeness: 0.5,
       freshness: 0.5,
+      credibility: 0.5,
+      relevance: 0.5,
+      timeliness: 0.5,
     };
 
     // Source credibility scoring
@@ -294,9 +287,9 @@ ${content.substring(0, 2000)}
     };
 
     return (
-      factors.sourceCredibility * weights.sourceCredibility +
-      factors.completeness * weights.completeness +
-      factors.freshness * weights.freshness
+      (factors.sourceCredibility || 0.5) * weights.sourceCredibility +
+      (factors.completeness || 0.5) * weights.completeness +
+      (factors.freshness || 0.5) * weights.freshness
     );
   }
 

@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import * as mammoth from 'mammoth';
 import { createWorker } from 'tesseract.js';
 import { ParsedDocument } from './chunking.js';

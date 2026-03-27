@@ -42,6 +42,7 @@ export async function generateFinalDraft(
 
     const latestDraft = draftResult.rows[0];
     let finalContent = latestDraft.content;
+    let acceptedReviewCount = 0;
 
     if (mode === 'polish') {
       // 轻量润色模式：稿件已经过批量改稿，只做最终润色
@@ -63,6 +64,7 @@ export async function generateFinalDraft(
       }
 
       const acceptedReviews = await query(acceptedReviewsQuery, queryParams);
+      acceptedReviewCount = acceptedReviews.rows.length;
 
       // 3. 如果有接受的评审，应用修订
       if (acceptedReviews.rows.length > 0) {
@@ -94,7 +96,7 @@ export async function generateFinalDraft(
         taskId,
         newVersion,
         finalContent,
-        `Final draft (v${newVersion}) - Finalized with ${acceptedReviews.rows.length} accepted reviews`
+        `Final draft (v${newVersion}) - Finalized with ${acceptedReviewCount} accepted reviews`
       ]
     );
 

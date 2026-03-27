@@ -69,8 +69,35 @@ export async function closePool(): Promise<void> {
 }
 
 // Initialize database schema for MVP
-export async function initDatabase(): Promise<void> {
-  createPool();
+// In-memory mode flag
+let inMemoryMode = false;
+
+export function enableInMemoryMode(): void {
+  inMemoryMode = true;
+  console.log('[DB] In-memory mode enabled');
+}
+
+export function isInMemoryMode(): boolean {
+  return inMemoryMode;
+}
+
+export async function initDatabase(config?: DBConfig): Promise<void> {
+  if (config) {
+    // Use provided config
+    pool = new Pool({
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+      password: config.password,
+      ssl: config.ssl ? { rejectUnauthorized: false } : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+  } else {
+    createPool();
+  }
   await setupMVPSchema();
 }
 

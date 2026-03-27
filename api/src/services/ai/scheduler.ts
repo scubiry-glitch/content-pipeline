@@ -26,6 +26,13 @@ interface SchedulerConfig {
   hotItemsBatchSize: number;
 }
 
+interface SchedulerStats {
+  totalProcessed: number;
+  totalFailed: number;
+  lastRunTime: Date | null;
+  lastRunResults: any;
+}
+
 const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
   newItemsInterval: 15 * 60 * 1000,  // 15 分钟
   newItemsBatchSize: 10,
@@ -213,6 +220,7 @@ export class AIProcessingScheduler {
         trend: row.trend,
         sentiment: row.sentiment,
         createdAt: row.created_at,
+        isDuplicate: false,
       }));
 
       const results = await batchProcessor.processBatch(items);
@@ -258,6 +266,7 @@ export class AIProcessingScheduler {
         trend: row.trend,
         sentiment: row.sentiment,
         createdAt: row.created_at,
+        isDuplicate: false,
       }));
 
       if (items.length === 0) {
@@ -287,7 +296,7 @@ export class AIProcessingScheduler {
    */
   getStatus(): {
     isRunning: boolean;
-    stats: typeof this.stats;
+    stats: SchedulerStats;
     config: SchedulerConfig;
   } {
     return {

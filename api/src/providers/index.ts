@@ -27,16 +27,16 @@ export class LLMRouter {
   private providers: Map<string, LLMProvider> = new Map();
   private routingRules: ModelRoutingRule[] = [
     // 强制使用 SiliconFlow - 所有任务优先使用 SiliconFlow
-    { taskType: 'planning', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: null },
-    { taskType: 'analysis', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: null },
-    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: null },
+    { taskType: 'planning', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: undefined },
+    { taskType: 'analysis', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: undefined },
+    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: undefined },
     // Writing tasks
-    { taskType: 'writing', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: null },
-    { taskType: 'summarization', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: null },
+    { taskType: 'writing', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: undefined },
+    { taskType: 'summarization', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: undefined },
     // Fast tasks
-    { taskType: 'tagging', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: null },
+    { taskType: 'tagging', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: undefined },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'siliconflow' },
-    { taskType: 'health_check', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: null },
+    { taskType: 'health_check', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: undefined },
   ];
 
   // Model configs for different priorities
@@ -115,6 +115,19 @@ export class LLMRouter {
     };
 
     return provider.generate(prompt, params);
+  }
+
+  async complete(params: {
+    messages: Array<{ role: string; content: string }>;
+    temperature?: number;
+    max_tokens?: number;
+  }): Promise<GenerationResult> {
+    // Convert messages to a single prompt for providers that don't support chat
+    const prompt = params.messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    return this.generate(prompt, 'default', {
+      temperature: params.temperature,
+      maxTokens: params.max_tokens,
+    });
   }
 
   async embed(text: string, providerName: string = 'openai'): Promise<number[]> {

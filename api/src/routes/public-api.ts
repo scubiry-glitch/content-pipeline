@@ -42,7 +42,7 @@ export async function publicAPIRoutes(fastify: FastifyInstance) {
         category,
         categoryName: catConfig.name,
         priority: s.priority,
-        updateInterval: s.updateInterval,
+        updateInterval: s.fetchInterval,
       }))
     );
 

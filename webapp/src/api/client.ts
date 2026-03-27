@@ -78,6 +78,7 @@ export const tasksApi = {
       status?: 'doing' | 'completed' | 'failed';
       message?: string;
       error?: string;
+      errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
     }>,
 
   // 查询 Finalize 状态
@@ -90,6 +91,7 @@ export const tasksApi = {
       finalDraftId?: string;
       outputPath?: string;
       error?: string;
+      errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
       startedAt?: string;
       completedAt?: string;
     }>,
@@ -379,6 +381,7 @@ export const blueTeamApi = {
       appliedCount?: number;
       message?: string;
       error?: string;
+      errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
       async?: boolean;
     }>,
   // 保存评审配置（不启动评审）
@@ -389,12 +392,20 @@ export const blueTeamApi = {
     client.get(`/production/${taskId}/apply-revisions-status`) as Promise<{
       taskId: string;
       status: 'pending' | 'doing' | 'completed' | 'failed';
+      stage?: 'initializing' | 'collecting_reviews' | 'running_llm' | 'validating' | 'saving' | 'completed' | 'failed';
+      sectionIndex?: number;
+      totalSections?: number;
+      batchIndex?: number;
+      totalBatches?: number;
       progress: number;
       message: string;
       newDraftId?: string;
       newVersion?: number;
       appliedCount?: number;
       error?: string;
+      errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
+      attempt?: number;
+      lastHeartbeatAt?: string;
       startedAt?: string;
       completedAt?: string;
     }>,

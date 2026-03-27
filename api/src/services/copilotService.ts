@@ -233,7 +233,7 @@ export class CopilotMessageService {
         aiContent = response.content;
         metadata = {
           model: response.model,
-          tokens: response.usage?.total_tokens,
+          tokens: response.usage?.inputTokens || response.usage?.outputTokens,
           latency: Date.now() - startTime
         };
       } else {

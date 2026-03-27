@@ -86,7 +86,7 @@ export async function generateDraftStreaming(
 
   // 检查是否有可恢复的进度
   const existingProgress = await getDraftProgress(taskId);
-  if (existingProgress && existingProgress.status === 'running' && existingProgress.sections?.length > 0) {
+  if (existingProgress && existingProgress.status === 'processing' && existingProgress.sections?.length > 0) {
     const doneSections = existingProgress.sections.filter((s: any) => s.status === 'done');
     if (doneSections.length > 0) {
       startIndex = doneSections.length;

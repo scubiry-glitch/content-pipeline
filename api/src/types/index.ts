@@ -145,4 +145,6 @@ export interface QualityFactors {
   credibility: number;
   relevance: number;
   timeliness: number;
+  sourceCredibility?: number;
+  freshness?: number;
 }

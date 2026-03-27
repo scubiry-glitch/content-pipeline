@@ -52,6 +52,45 @@ function isLlmTimeoutError(message?: string): boolean {
   );
 }
 
+function getBatchRevisionDisplayError(error?: string, errorCode?: string): string {
+  if (errorCode === 'LLM_TIMEOUT' || isLlmTimeoutError(error)) {
+    return 'LLM超时，请重试';
+  }
+  return error || '未知错误';
+}
+
+function getBatchRevisionErrorCodeText(errorCode?: string): string {
+  if (!errorCode) return '';
+  const map: Record<string, string> = {
+    LLM_TIMEOUT: '章节改稿超时',
+    NETWORK_TIMEOUT: '网络请求超时',
+    VALIDATION_ERROR: '业务校验失败',
+    UNKNOWN_ERROR: '未知系统错误',
+  };
+  return map[errorCode] || '未知系统错误';
+}
+
+function getBatchRevisionToastTitle(errorCode?: string): string {
+  return errorCode ? `一键改稿失败 [${errorCode}]` : '一键改稿失败';
+}
+
+function getFinalizeToastTitle(errorCode?: string): string {
+  return errorCode ? `Finalize失败 [${errorCode}]` : 'Finalize失败';
+}
+
+function getBatchRevisionStageText(status: {
+  sectionIndex?: number;
+  totalSections?: number;
+  batchIndex?: number;
+  totalBatches?: number;
+}): string {
+  if (!status.sectionIndex || !status.totalSections) return '';
+  if (status.batchIndex && status.totalBatches) {
+    return `第 ${status.sectionIndex}/${status.totalSections} 章节，第 ${status.batchIndex}/${status.totalBatches} 组`;
+  }
+  return `第 ${status.sectionIndex}/${status.totalSections} 章节`;
+}
+
 // Define the context type expected from TaskDetailLayout
 interface TaskContext {
   task: {
@@ -112,6 +151,11 @@ export function ReviewsTab() {
     status: 'idle' | 'doing' | 'completed' | 'failed';
     progress: number;
     message: string;
+    sectionIndex?: number;
+    totalSections?: number;
+    batchIndex?: number;
+    totalBatches?: number;
+    errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
     error?: string;
   };
   const [batchRevisionStatus, setBatchRevisionStatus] = useState<BatchRevisionStatusType>({
@@ -264,7 +308,7 @@ export function ReviewsTab() {
       
       if (!result.success) {
         setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: result.error });
-        alert(`❌ Finalize 失败: ${result.error || '未知错误'}`);
+        showApiError(getFinalizeToastTitle(result.errorCode), result.error || '未知错误');
         return;
       }
       
@@ -287,7 +331,7 @@ export function ReviewsTab() {
             setTimeout(() => navigate('/tasks'), 2000);
           } else if (status.status === 'failed') {
             clearInterval(pollInterval);
-            alert(`❌ Finalize 失败: ${status.error || '未知错误'}`);
+            showApiError(getFinalizeToastTitle(status.errorCode), status.error || '未知错误');
           }
         } catch (e) {
           console.error('Poll error:', e);
@@ -297,7 +341,7 @@ export function ReviewsTab() {
     } catch (error) {
       console.error('Accept failed:', error);
       setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: '操作失败' });
-      alert('操作失败，请重试');
+      showApiError(getFinalizeToastTitle((error as any)?.response?.data?.errorCode), '操作失败，请重试');
     } finally {
       setDecisionLoading(false);
     }
@@ -325,7 +369,7 @@ export function ReviewsTab() {
       
       if (!result.success) {
         setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: result.error });
-        alert(`❌ Finalize 失败: ${result.error || '未知错误'}`);
+        showApiError(getFinalizeToastTitle(result.errorCode), result.error || '未知错误');
         return;
       }
       
@@ -348,7 +392,7 @@ export function ReviewsTab() {
             setTimeout(() => navigate('/tasks'), 2000);
           } else if (status.status === 'failed') {
             clearInterval(pollInterval);
-            alert(`❌ Finalize 失败: ${status.error || '未知错误'}`);
+            showApiError(getFinalizeToastTitle(status.errorCode), status.error || '未知错误');
           }
         } catch (e) {
           console.error('Poll error:', e);
@@ -358,7 +402,7 @@ export function ReviewsTab() {
     } catch (error) {
       console.error('Force finalize failed:', error);
       setFinalizeStatus({ status: 'failed', progress: 0, message: '', error: '操作失败' });
-      alert('操作失败，请重试');
+      showApiError(getFinalizeToastTitle((error as any)?.response?.data?.errorCode), '操作失败，请重试');
     } finally {
       setDecisionLoading(false);
     }
@@ -393,18 +437,24 @@ export function ReviewsTab() {
         const rawError = result.error || '未知错误';
         const displayError = isLlmTimeoutError(rawError) ? 'LLM超时，请重试' : rawError;
         setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: displayError });
-        showApiError('一键改稿失败', displayError);
+        showApiError(getBatchRevisionToastTitle(result.errorCode), displayError);
         return;
       }
 
       const pollInterval = setInterval(async () => {
         try {
           const status = await blueTeamApi.getApplyRevisionsStatus(task.id);
+          const displayError = getBatchRevisionDisplayError(status.error, status.errorCode);
           setBatchRevisionStatus({
             status: status.status === 'pending' ? 'idle' : (status.status as BatchRevisionStatusType['status']),
             progress: status.progress,
             message: status.message,
-            error: status.error,
+            sectionIndex: status.sectionIndex,
+            totalSections: status.totalSections,
+            batchIndex: status.batchIndex,
+            totalBatches: status.totalBatches,
+            errorCode: status.errorCode,
+            error: displayError,
           });
 
           if (status.status === 'completed') {
@@ -423,11 +473,16 @@ export function ReviewsTab() {
               status: 'failed',
               progress: status.progress || 0,
               message: status.message || '',
-              error: isLlmTimeoutError(status.error || '') ? 'LLM超时，请重试' : (status.error || '未知错误'),
+              sectionIndex: status.sectionIndex,
+              totalSections: status.totalSections,
+              batchIndex: status.batchIndex,
+              totalBatches: status.totalBatches,
+              errorCode: status.errorCode,
+              error: displayError,
             });
             showApiError(
-              '一键改稿失败',
-              isLlmTimeoutError(status.error || '') ? 'LLM超时，请重试' : (status.error || '未知错误')
+              getBatchRevisionToastTitle(status.errorCode),
+              displayError
             );
           }
         } catch {
@@ -439,7 +494,7 @@ export function ReviewsTab() {
         clearInterval(pollInterval);
         setBatchRevisionStatus((prev) => {
           if (prev.status === 'doing') {
-            return { ...prev, status: 'failed', error: '改稿任务超时，请稍后重试' };
+            return { ...prev, status: 'failed', message: prev.message || '改稿任务超时', error: '改稿任务超时，请稍后重试' };
           }
           return prev;
         });
@@ -449,7 +504,7 @@ export function ReviewsTab() {
       const errorMsg = error?.response?.data?.error || error?.message || '未知错误';
       const displayError = isLlmTimeoutError(errorMsg) ? 'LLM超时，请重试' : errorMsg;
       setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: displayError });
-      showApiError('一键改稿失败', displayError);
+      showApiError(getBatchRevisionToastTitle(error?.response?.data?.errorCode), displayError);
     }
   };
 
@@ -1229,6 +1284,11 @@ export function ReviewsTab() {
             />
           </div>
           <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{batchRevisionStatus.message}</p>
+          {getBatchRevisionStageText(batchRevisionStatus) && (
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+              {getBatchRevisionStageText(batchRevisionStatus)}
+            </p>
+          )}
         </div>
       )}
 
@@ -1238,6 +1298,11 @@ export function ReviewsTab() {
             <span className="material-symbols-outlined">error</span>
             <span className="font-medium">一键改稿失败</span>
           </div>
+          {batchRevisionStatus.errorCode && (
+            <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+              错误码: {batchRevisionStatus.errorCode}（{getBatchRevisionErrorCodeText(batchRevisionStatus.errorCode)}）
+            </p>
+          )}
           <p className="text-sm text-red-600 dark:text-red-400 mt-1">{batchRevisionStatus.error}</p>
         </div>
       )}

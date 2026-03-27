@@ -168,7 +168,7 @@ export class ReportService {
     qualityScore?: QualityScore;
     parsedContent?: string;
     sections?: any[];
-    status: 'parsed' | 'error';
+    status: 'pending' | 'parsing' | 'parsed' | 'error';
   }): Promise<Report | null> {
     const result = await query(
       `UPDATE reports SET

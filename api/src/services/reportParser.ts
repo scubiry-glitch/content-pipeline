@@ -2,7 +2,7 @@
 import pdfParse from 'pdf-parse';
 import fs from 'fs/promises';
 import { reportService } from './reportService.js';
-import { getLLMProvider } from '../providers/index.js';
+import { getLLMRouter } from '../providers/index.js';
 
 export interface ParsedReport {
   title: string;
@@ -63,9 +63,8 @@ export async function parseReportWithLLM(
     const prompt = buildParsePrompt(truncatedText);
 
     // 3. 调用LLM
-    const provider = getLLMProvider();
-    const response = await provider.complete({
-      prompt,
+    const router = getLLMRouter();
+    const response = await router.generate(prompt, 'analysis', {
       maxTokens: 2000,
       temperature: 0.3
     });

@@ -187,7 +187,7 @@ export function AITaskRecommendations() {
       {/* 推荐列表 */}
       {loading ? (
         <div className="loading-state">加载中...</div>
-      ) : recommendations.length === 0 ? (
+      ) : (recommendations || []).length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">💡</div>
           <div className="empty-title">暂无任务推荐</div>
@@ -234,7 +234,7 @@ export function AITaskRecommendations() {
                   建议角度: {item.recommendation_data.content.angle}
                 </div>
                 <ul className="rec-keypoints">
-                  {item.recommendation_data.content.keyPoints.slice(0, 3).map((point, i) => (
+                  {(item.recommendation_data.content.keyPoints || []).slice(0, 3).map((point, i) => (
                     <li key={i}>{point}</li>
                   ))}
                 </ul>

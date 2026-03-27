@@ -354,11 +354,12 @@ export class PersistenceService {
         tags: row.extracted_tags || [],
         entities: row.extracted_entities || [],
       },
-      duplicate: duplicateResult || {
+      duplicate: (duplicateResult || {
         isDuplicate: false,
         similarAssets: [],
-      },
-      taskRecommendation,
+        confidence: 0,
+      }) as any,
+      taskRecommendation: taskRecommendation as any,
       processingTimeMs: row.processing_time_ms || 0,
       modelVersion: row.model_version || 'v1.0',
     };

@@ -27,7 +27,17 @@ export interface RevisionResult {
 
 export interface BatchRevisionOptions {
   selectedReviewIds?: string[];
-  onProgress?: (progress: number, message: string) => void;
+  onProgress?: (
+    progress: number,
+    message: string,
+    meta?: {
+      stage?: 'collecting_reviews' | 'running_llm_section' | 'validating' | 'saving';
+      sectionIndex?: number;
+      totalSections?: number;
+      batchIndex?: number;
+      totalBatches?: number;
+    }
+  ) => void;
 }
 
 /**
@@ -251,6 +261,211 @@ type RevisionRow = {
   source: 'bt' | 'er';
 };
 
+type DraftSection = {
+  heading: string;
+  content: string;
+};
+
+type RevisionIssue = { expertRole: string; question: string; suggestion: string; location?: string };
+type RetryableError = Error & { retryable?: boolean };
+
+function splitMarkdownSections(content: string): DraftSection[] {
+  const text = String(content || '').trim();
+  if (!text) return [{ heading: '全文', content: '' }];
+
+  const lines = text.split('\n');
+  const sections: DraftSection[] = [];
+  let currentHeading = '导语';
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    if (/^#{1,3}\s+/.test(line)) {
+      if (currentLines.length > 0) {
+        sections.push({
+          heading: currentHeading,
+          content: currentLines.join('\n').trim(),
+        });
+      }
+      currentHeading = line.replace(/^#{1,3}\s+/, '').trim() || '未命名章节';
+      currentLines = [line];
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  if (currentLines.length > 0) {
+    sections.push({
+      heading: currentHeading,
+      content: currentLines.join('\n').trim(),
+    });
+  }
+
+  return sections.length > 0 ? sections : [{ heading: '全文', content: text }];
+}
+
+function toIssueBatches(issues: RevisionIssue[], batchSize = 4): RevisionIssue[][] {
+  const batches: RevisionIssue[][] = [];
+  for (let i = 0; i < issues.length; i += batchSize) {
+    batches.push(issues.slice(i, i + batchSize));
+  }
+  return batches;
+}
+
+function isIssueMatchedToSection(issue: RevisionIssue, section: DraftSection): boolean {
+  const heading = section.heading.toLowerCase();
+  const loc = String(issue.location || '').toLowerCase();
+  if (!loc) return false;
+  return heading.length > 0 && (loc.includes(heading) || heading.includes(loc));
+}
+
+function isRetryableLlmError(error: unknown): boolean {
+  const text = String((error as any)?.message || '').toLowerCase();
+  return (
+    text.includes('timeout') ||
+    text.includes('timed out') ||
+    text.includes('超时') ||
+    text.includes('network') ||
+    text.includes('socket') ||
+    text.includes('econn') ||
+    text.includes('fetch')
+  );
+}
+
+function assignIssuesToSections(
+  sections: DraftSection[],
+  issues: RevisionIssue[]
+): Array<{ sectionIndex: number; section: DraftSection; issues: RevisionIssue[] }> {
+  const pairs = sections.map((section, sectionIndex) => ({ sectionIndex, section, issues: [] as RevisionIssue[] }));
+  const unassigned: RevisionIssue[] = [];
+
+  for (const issue of issues) {
+    let matched = false;
+    for (const pair of pairs) {
+      if (isIssueMatchedToSection(issue, pair.section)) {
+        pair.issues.push(issue);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) unassigned.push(issue);
+  }
+
+  // 对无 location / 未匹配的建议做均匀分配，避免全部堆到一个调用
+  let cursor = 0;
+  const safePairs = pairs.length > 0 ? pairs : [{ sectionIndex: 0, section: { heading: '全文', content: '' }, issues: [] as RevisionIssue[] }];
+  for (const issue of unassigned) {
+    const pairIndex = cursor % safePairs.length;
+    safePairs[pairIndex].issues.push(issue);
+    cursor += 1;
+  }
+
+  return safePairs.filter((pair) => pair.issues.length > 0);
+}
+
+async function reviseSectionByBatches(params: {
+  taskId: string;
+  section: DraftSection;
+  issues: RevisionIssue[];
+  sectionIndex: number;
+  sectionCount: number;
+  reportProgress: (
+    progress: number,
+    message: string,
+    meta?: {
+      stage?: 'collecting_reviews' | 'running_llm_section' | 'validating' | 'saving';
+      sectionIndex?: number;
+      totalSections?: number;
+      batchIndex?: number;
+      totalBatches?: number;
+    }
+  ) => void;
+}): Promise<{ revisedContent: string; changes: string[] }> {
+  const { taskId, section, issues, sectionIndex, sectionCount, reportProgress } = params;
+  const batches = toIssueBatches(issues, 4);
+  let currentContent = section.content;
+  const sectionChanges: string[] = [];
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const issuesText = batch.map((issue, idx) =>
+      `${idx + 1}. [${issue.expertRole}] ${issue.question.substring(0, 260)}\n` +
+      `   建议：${issue.suggestion.substring(0, 180)}${issue.location ? `\n   位置：${issue.location}` : ''}`
+    ).join('\n');
+
+    const progressStart = 45;
+    const progressSpan = 40;
+    const doneUnits = (sectionIndex - 1) + (i / Math.max(batches.length, 1));
+    const totalUnits = Math.max(sectionCount, 1);
+    const progress = Math.min(85, Math.round(progressStart + (doneUnits / totalUnits) * progressSpan));
+    reportProgress(
+      progress,
+      `分段改稿：第 ${sectionIndex}/${sectionCount} 章节，第 ${i + 1}/${batches.length} 组...`,
+      {
+        stage: 'running_llm_section',
+        sectionIndex,
+        totalSections: sectionCount,
+        batchIndex: i + 1,
+        totalBatches: batches.length,
+      }
+    );
+
+    const prompt = `你是一位专业的文稿修订专家。请基于以下“章节内容”按建议进行精准修订。\n\n` +
+      `## 章节标题\n${section.heading}\n\n` +
+      `## 当前章节内容\n${currentContent}\n\n` +
+      `## 本组评审建议（共 ${batch.length} 条）\n${issuesText}\n\n` +
+      `## 修订要求\n` +
+      `1. 仅修改与建议直接相关的内容，保持章节整体结构和风格。\n` +
+      `2. 输出完整“修订后章节”，不要输出全文。\n` +
+      `3. 不要删除章节标题。\n\n` +
+      `## 输出格式\n` +
+      `<修订说明>简要列出处理方式</修订说明>\n` +
+      `<修订后稿件>完整修订后章节内容</修订后稿件>`;
+
+    const runSingleBatch = async () =>
+      withTimeout(
+        generate(prompt, 'writing', {
+          temperature: 0.3,
+          maxTokens: 6000,
+        }),
+        2 * 60 * 1000,
+        `Section revision LLM call for task ${taskId} (section ${sectionIndex}, batch ${i + 1})`
+      );
+
+    let llmResult;
+    try {
+      llmResult = await runSingleBatch();
+    } catch (error) {
+      if (!isRetryableLlmError(error)) {
+        throw error;
+      }
+      reportProgress(
+        Math.min(88, progress + 1),
+        `分段改稿：第 ${sectionIndex}/${sectionCount} 章节，第 ${i + 1}/${batches.length} 组重试中...`,
+        {
+          stage: 'running_llm_section',
+          sectionIndex,
+          totalSections: sectionCount,
+          batchIndex: i + 1,
+          totalBatches: batches.length,
+        }
+      );
+      // 仅重试当前批次，避免整稿重跑
+      llmResult = await runSingleBatch();
+    }
+
+    const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
+    if (!revisedContent || revisedContent.trim().length < 20) {
+      const err: RetryableError = new Error(`Section ${sectionIndex} batch ${i + 1} returned empty content`);
+      err.retryable = false;
+      throw err;
+    }
+    currentContent = revisedContent;
+    sectionChanges.push(`[${section.heading}] 第${i + 1}组: ${changes}`);
+  }
+
+  return { revisedContent: currentContent, changes: sectionChanges };
+}
+
 /**
  * 批量应用所有已接受的评审意见（合并为一次 LLM 调用）
  * 避免逐条改稿导致的版本爆炸问题
@@ -281,7 +496,7 @@ export async function applyAllAcceptedRevisions(
   }
 
   try {
-    reportProgress(10, '收集已接受的评审意见...');
+    reportProgress(10, '收集已接受的评审意见...', { stage: 'collecting_reviews' });
     const qdAcceptedMap = new Map<string, Set<number>>();
     let allAcceptedRows: RevisionRow[] = [];
 
@@ -429,69 +644,48 @@ export async function applyAllAcceptedRevisions(
       };
     }
 
-    // 4. 构建合并 prompt
-    reportProgress(40, '构建改稿指令...');
-    const MAX_CONTENT_CHARS = 15000;
-    const contentForPrompt = latestDraft.content.length > MAX_CONTENT_CHARS
-      ? latestDraft.content.substring(0, MAX_CONTENT_CHARS) + '\n\n[... 后续内容省略，请保持原文后续部分不变 ...]'
-      : latestDraft.content;
+    // 4. 分段分组改稿（核心优化）
+    reportProgress(40, '按章节拆分并分组建议...', { stage: 'running_llm_section' });
+    const sections = splitMarkdownSections(latestDraft.content);
+    const sectionPlans = assignIssuesToSections(sections, allIssues);
+    if (sectionPlans.length === 0) {
+      throw new Error('No section plans generated for batch revision');
+    }
 
-    const issuesText = allIssues.map((issue, i) =>
-      `${i + 1}. [${issue.expertRole}] ${issue.question.substring(0, 300)}\n   建议：${issue.suggestion.substring(0, 200)}${issue.location ? `\n   位置：${issue.location}` : ''}`
-    ).join('\n');
+    reportProgress(45, `分段改稿中：${sectionPlans.length} 个章节待处理...`, {
+      stage: 'running_llm_section',
+      sectionIndex: 1,
+      totalSections: sectionPlans.length,
+      batchIndex: 0,
+      totalBatches: 0,
+    });
+    const sectionChanges: string[] = [];
+    const revisedSectionMap = new Map<number, string>();
+    for (let idx = 0; idx < sectionPlans.length; idx++) {
+      const plan = sectionPlans[idx];
+      const sectionIndex = idx + 1;
+      const sectionResult = await reviseSectionByBatches({
+        taskId,
+        section: plan.section,
+        issues: plan.issues,
+        sectionIndex,
+        sectionCount: sectionPlans.length,
+        reportProgress,
+      });
+      revisedSectionMap.set(plan.sectionIndex, sectionResult.revisedContent);
+      sectionChanges.push(...sectionResult.changes);
+    }
 
-    const prompt = `你是一位专业的文稿修订专家。请根据以下 ${allIssues.length} 条评审意见，对文稿进行**一次性修订**。
-
-## 重要规则
-- 输出**完整的修订后文稿**，不能只输出摘要或部分内容
-- 修订后文稿的总字数应与原文相当（原文约 ${latestDraft.content.length} 字符）
-- 只修改评审意见指出的具体问题，**保留所有未被评审指出的段落和章节**
-- 保持原文的 Markdown 标题层级结构
-
-## 当前文稿（完整）
-
-${contentForPrompt}
-
-## 评审意见（共 ${allIssues.length} 条，已全部接受）
-
-${issuesText}
-
-## 修订要求
-
-1. **逐条处理**上述评审意见，将所有修改合并到一份稿件中
-2. 修订后文稿字数应≥原文字数的 80%
-3. 保持所有 Markdown 标题（#/##/###）不变
-4. 输出完整的修订后文稿（Markdown格式）
-
-## 输出格式
-
-<修订说明>
-简要列出对每条评审意见的处理方式（1行1条）
-</修订说明>
-
-<修订后稿件>
-完整的修订后稿件内容
-</修订后稿件>`;
-
-    // 5. 调用 LLM
-    reportProgress(70, '调用 LLM 执行改稿...');
-    console.log(`[RevisionAgent] Batch revision: ${allIssues.length} issues, prompt ${prompt.length} chars`);
-    const llmResult = await withTimeout(
-      generate(prompt, 'writing', {
-        temperature: 0.3,
-        maxTokens: 16000,
-      }),
-      5 * 60 * 1000,
-      `Batch revision LLM call for task ${taskId}`
-    );
-
-    const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
+    // 按原顺序合并章节
+    const revisedSections = sections.map((section, sectionIndex) => revisedSectionMap.get(sectionIndex) || section.content);
+    const revisedContent = revisedSections.join('\n\n').trim();
+    const changes = sectionChanges.join('\n');
     if (!revisedContent || revisedContent.trim().length === 0) {
       throw new Error('LLM returned empty content');
     }
 
     // 6. 质量守卫
-    reportProgress(85, '校验改稿质量...');
+    reportProgress(85, '校验改稿质量...', { stage: 'validating' });
     const lengthRatio = revisedContent.length / latestDraft.content.length;
     let finalContent = revisedContent;
     if (lengthRatio < 0.6 || revisedContent.trim().length < 100) {
@@ -500,7 +694,7 @@ ${issuesText}
     }
 
     // 7. 保存新版本
-    reportProgress(95, '保存新版本与日志...');
+    reportProgress(95, '保存新版本与日志...', { stage: 'saving' });
     const newVersion = (latestDraft.version || 0) + 1;
     const newDraftId = uuidv4();
     await query(

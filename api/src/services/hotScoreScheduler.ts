@@ -1,7 +1,7 @@
 // 热度分数定时更新服务
 // 定期重新计算所有文章的热度分数（实现时间衰减）
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { query } from '../db/connection.js';
 
 // 调度器状态
@@ -157,9 +157,6 @@ export function startHotScoreScheduler(cronExpression: string = '*/30 * * * *'):
   task = cron.schedule(cronExpression, () => {
     console.log('[HotScoreScheduler] 定时触发更新...');
     updateAllHotScores();
-  }, {
-    scheduled: true,
-    timezone: 'Asia/Shanghai'
   });
 
   console.log('[HotScoreScheduler] 定时任务已启动');

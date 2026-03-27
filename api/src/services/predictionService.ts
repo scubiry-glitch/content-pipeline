@@ -12,6 +12,7 @@ export interface ContentFeatures {
   contentDepth: number;
   originality: number;
   professionalism: number;
+  freshness: number;
 }
 
 export interface PerformancePrediction {
