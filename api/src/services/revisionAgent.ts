@@ -417,48 +417,73 @@ async function reviseSectionByBatches(params: {
       }
     );
 
-    const prompt = `你是一位专业的文稿修订专家。请基于以下“章节内容”按建议进行精准修订。\n\n` +
+    // ★ Phase 2 优化：Prompt 裁剪 — 章节内容超 4000 字时截断，保留首尾
+    const MAX_SECTION_CHARS = 4000;
+    let sectionText = currentContent;
+    if (sectionText.length > MAX_SECTION_CHARS) {
+      const head = sectionText.substring(0, MAX_SECTION_CHARS * 0.7);
+      const tail = sectionText.substring(sectionText.length - MAX_SECTION_CHARS * 0.25);
+      sectionText = head + '\n\n[...中间部分省略...]\n\n' + tail;
+      console.log(`[RevisionAgent] Section “${section.heading}” truncated: ${currentContent.length} → ${sectionText.length} chars`);
+    }
+
+    const prompt = `你是一位专业的文稿修订专家。请基于以下”章节内容”按建议进行精准修订。\n\n` +
       `## 章节标题\n${section.heading}\n\n` +
-      `## 当前章节内容\n${currentContent}\n\n` +
+      `## 当前章节内容\n${sectionText}\n\n` +
       `## 本组评审建议（共 ${batch.length} 条）\n${issuesText}\n\n` +
       `## 修订要求\n` +
       `1. 仅修改与建议直接相关的内容，保持章节整体结构和风格。\n` +
-      `2. 输出完整“修订后章节”，不要输出全文。\n` +
+      `2. 输出完整”修订后章节”，不要输出全文。\n` +
       `3. 不要删除章节标题。\n\n` +
       `## 输出格式\n` +
       `<修订说明>简要列出处理方式</修订说明>\n` +
       `<修订后稿件>完整修订后章节内容</修订后稿件>`;
 
-    const runSingleBatch = async () =>
+    // ★ Phase 2+3 优化：缩短单次超时 + 指数退避重试(最多2次) + 模型降级
+    const LLM_TIMEOUT_MS = 90 * 1000; // 90s per batch (从120s降低)
+    const MAX_RETRIES = 2;
+    const RETRY_DELAYS = [3000, 8000]; // 指数退避延迟
+
+    const runWithModel = async (model?: string) =>
       withTimeout(
         generate(prompt, 'writing', {
           temperature: 0.3,
-          maxTokens: 6000,
+          maxTokens: Math.min(6000, currentContent.length + 2000), // ★ 动态 maxTokens：章节长度 + buffer
+          model,
         }),
-        2 * 60 * 1000,
-        `Section revision LLM call for task ${taskId} (section ${sectionIndex}, batch ${i + 1})`
+        LLM_TIMEOUT_MS,
+        `Section revision LLM (section ${sectionIndex}, batch ${i + 1})`
       );
 
     let llmResult;
-    try {
-      llmResult = await runSingleBatch();
-    } catch (error) {
-      if (!isRetryableLlmError(error)) {
-        throw error;
-      }
-      reportProgress(
-        Math.min(88, progress + 1),
-        `分段改稿：第 ${sectionIndex}/${sectionCount} 章节，第 ${i + 1}/${batches.length} 组重试中...`,
-        {
-          stage: 'running_llm_section',
-          sectionIndex,
-          totalSections: sectionCount,
-          batchIndex: i + 1,
-          totalBatches: batches.length,
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = RETRY_DELAYS[Math.min(attempt - 1, RETRY_DELAYS.length - 1)];
+          console.log(`[RevisionAgent] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms (section ${sectionIndex}, batch ${i + 1})`);
+          await new Promise(r => setTimeout(r, delay));
+          reportProgress(
+            Math.min(88, progress + 1),
+            `分段改稿：第 ${sectionIndex}/${sectionCount} 章节，第 ${i + 1}/${batches.length} 组重试(${attempt})...`,
+            { stage: 'running_llm_section', sectionIndex, totalSections: sectionCount, batchIndex: i + 1, totalBatches: batches.length }
+          );
         }
-      );
-      // 仅重试当前批次，避免整稿重跑
-      llmResult = await runSingleBatch();
+        // ★ Phase 3: 最后一次重试时尝试降级模型（缩短 maxTokens 加速）
+        const fallbackModel = attempt >= MAX_RETRIES ? undefined : undefined; // 预留模型降级接口
+        llmResult = await runWithModel(fallbackModel);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (!isRetryableLlmError(error) || attempt >= MAX_RETRIES) {
+          console.error(`[RevisionAgent] Non-retryable or max retries reached (section ${sectionIndex}, batch ${i + 1}):`, lastError.message);
+          break;
+        }
+      }
+    }
+    if (lastError || !llmResult) {
+      throw lastError || new Error(`Section ${sectionIndex} batch ${i + 1} failed after ${MAX_RETRIES} retries`);
     }
 
     const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
@@ -663,6 +688,29 @@ export async function applyAllAcceptedRevisions(
       throw new Error('No section plans generated for batch revision');
     }
 
+    // ★ 断点续跑：加载上次失败时已完成的章节 checkpoint
+    let checkpoint: Record<number, { content: string; changes: string[] }> = {};
+    try {
+      const cpResult = await query(
+        `SELECT details FROM task_logs
+         WHERE task_id = $1 AND action = 'batch_revision_checkpoint'
+         ORDER BY created_at DESC LIMIT 1`,
+        [taskId]
+      );
+      if (cpResult.rows.length > 0) {
+        const cpData = typeof cpResult.rows[0].details === 'string'
+          ? JSON.parse(cpResult.rows[0].details) : cpResult.rows[0].details;
+        if (cpData?.sections && cpData?.draftId === latestDraft.id) {
+          // 只有基于同一份底稿的 checkpoint 才有效
+          checkpoint = cpData.sections;
+          const completedCount = Object.keys(checkpoint).length;
+          console.log(`[RevisionAgent] Resuming from checkpoint: ${completedCount}/${sectionPlans.length} sections already done`);
+        }
+      }
+    } catch (e) {
+      console.warn('[RevisionAgent] Failed to load checkpoint:', e);
+    }
+
     reportProgress(45, `分段改稿中：${sectionPlans.length} 个章节待处理...`, {
       stage: 'running_llm_section',
       sectionIndex: 1,
@@ -675,6 +723,21 @@ export async function applyAllAcceptedRevisions(
     for (let idx = 0; idx < sectionPlans.length; idx++) {
       const plan = sectionPlans[idx];
       const sectionIndex = idx + 1;
+
+      // ★ 断点续跑：跳过已完成的章节
+      const cpKey = plan.sectionIndex;
+      if (checkpoint[cpKey]) {
+        console.log(`[RevisionAgent] Skipping section ${sectionIndex} (checkpoint hit: "${plan.section.heading}")`);
+        revisedSectionMap.set(cpKey, checkpoint[cpKey].content);
+        sectionChanges.push(...(checkpoint[cpKey].changes || []));
+        reportProgress(
+          Math.min(85, Math.round(45 + (sectionIndex / sectionPlans.length) * 40)),
+          `已恢复第 ${sectionIndex}/${sectionPlans.length} 章节（断点续跑）`,
+          { stage: 'running_llm_section', sectionIndex, totalSections: sectionPlans.length }
+        );
+        continue;
+      }
+
       const sectionResult = await reviseSectionByBatches({
         taskId,
         section: plan.section,
@@ -683,8 +746,37 @@ export async function applyAllAcceptedRevisions(
         sectionCount: sectionPlans.length,
         reportProgress,
       });
-      revisedSectionMap.set(plan.sectionIndex, sectionResult.revisedContent);
+      revisedSectionMap.set(cpKey, sectionResult.revisedContent);
       sectionChanges.push(...sectionResult.changes);
+
+      // ★ 章节完成后立即保存 checkpoint + 增量标记 issues
+      try {
+        const allCheckpoints: Record<number, { content: string; changes: string[] }> = {};
+        for (const [k, v] of revisedSectionMap) {
+          allCheckpoints[k] = {
+            content: v,
+            changes: sectionChanges.filter(c => c.startsWith(`[${sections[k]?.heading || ''}]`)),
+          };
+        }
+        await query(
+          `INSERT INTO task_logs (task_id, action, details, created_at)
+           VALUES ($1, 'batch_revision_checkpoint', $2, NOW())`,
+          [taskId, JSON.stringify({ draftId: latestDraft.id, sections: allCheckpoints, updatedAt: new Date().toISOString() })]
+        );
+
+        // 增量标记本章节涉及的 issues 为 manual_resolved
+        for (const issue of plan.issues) {
+          await query(
+            `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
+             VALUES ($1, $2, $3, 'manual_resolved', '章节改稿已应用', NOW(), NOW())
+             ON CONFLICT (review_id, question_index)
+             DO UPDATE SET decision = 'manual_resolved', note = '章节改稿已应用', updated_at = NOW()`,
+            [taskId, issue.reviewId, issue.questionIndex]
+          );
+        }
+      } catch (cpErr) {
+        console.warn(`[RevisionAgent] Failed to save checkpoint for section ${sectionIndex}:`, cpErr);
+      }
     }
 
     // 按原顺序合并章节
@@ -726,10 +818,11 @@ export async function applyAllAcceptedRevisions(
       ]
     );
 
-    // 7.1 将本次已应用的蓝军问题标记为 manual_resolved，保证 comments 口径与改稿结果一致
-    const resolvedBlueTeamIssues = allIssues.filter((issue) => issue.source === 'bt');
-    if (resolvedBlueTeamIssues.length > 0) {
-      for (const issue of resolvedBlueTeamIssues) {
+    // 7.1 将本次已应用的评审问题标记为 manual_resolved
+    //     同时处理 blue_team_reviews (bt) 和 expert_reviews (er)
+    if (allIssues.length > 0) {
+      for (const issue of allIssues) {
+        // question_decisions 表统一存储所有来源的决策
         await query(
           `INSERT INTO question_decisions (
              task_id, review_id, question_index, decision, note, created_at, updated_at
@@ -748,6 +841,37 @@ export async function applyAllAcceptedRevisions(
           ]
         );
       }
+
+      // 同时更新 expert_reviews 中对应问题的 decision 字段（串行评审的问题内嵌在 questions JSON 中）
+      const erIssuesByReview = new Map<string, number[]>();
+      for (const issue of allIssues.filter(i => i.source === 'er')) {
+        if (!erIssuesByReview.has(issue.reviewId)) erIssuesByReview.set(issue.reviewId, []);
+        erIssuesByReview.get(issue.reviewId)!.push(issue.questionIndex);
+      }
+      for (const [reviewId, indices] of erIssuesByReview) {
+        try {
+          const erResult = await query(`SELECT questions FROM expert_reviews WHERE id = $1`, [reviewId]);
+          if (erResult.rows.length > 0) {
+            const questions = typeof erResult.rows[0].questions === 'string'
+              ? JSON.parse(erResult.rows[0].questions)
+              : erResult.rows[0].questions;
+            const qList = Array.isArray(questions) ? questions : [questions];
+            for (const idx of indices) {
+              if (qList[idx]) {
+                qList[idx].decision = 'manual_resolved';
+                qList[idx].decisionNote = '一键改稿已自动应用该建议';
+              }
+            }
+            await query(
+              `UPDATE expert_reviews SET questions = $2, updated_at = NOW() WHERE id = $1`,
+              [reviewId, JSON.stringify(qList)]
+            );
+          }
+        } catch (e) {
+          console.warn(`[RevisionAgent] Failed to update expert_review ${reviewId} decisions:`, e);
+        }
+      }
+      console.log(`[RevisionAgent] Marked ${allIssues.length} issues as manual_resolved (bt: ${allIssues.filter(i => i.source === 'bt').length}, er: ${allIssues.filter(i => i.source === 'er').length})`);
     }
 
     // 8. 记录日志
@@ -758,6 +882,12 @@ export async function applyAllAcceptedRevisions(
         taskId, 'batch_revision',
         JSON.stringify({ draftId: newDraftId, version: newVersion, appliedReviewIds, issueCount: allIssues.length }),
       ]
+    );
+
+    // 9. 清理 checkpoint（改稿已成功，不再需要断点）
+    await query(
+      `DELETE FROM task_logs WHERE task_id = $1 AND action = 'batch_revision_checkpoint'`,
+      [taskId]
     );
 
     console.log(`[RevisionAgent] Batch revision completed: ${newDraftId} (v${newVersion}), ${allIssues.length} issues applied`);

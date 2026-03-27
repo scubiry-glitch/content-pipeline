@@ -383,8 +383,28 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { getBatchRevisionStatus } = await import('../services/asyncBatchRevision.js');
     const status = getBatchRevisionStatus(taskId);
     if (!status) {
-      reply.status(404);
-      return { error: '未找到改稿任务' };
+      // ★ 内存中没有 job（可能 pm2 重启了），根据 task 状态推断
+      const taskResult = await query(`SELECT current_stage, status FROM tasks WHERE id = $1`, [taskId]);
+      const task = taskResult.rows[0];
+      if (task && (task.current_stage === 'awaiting_approval' || task.current_stage === 'completed' || task.status === 'completed')) {
+        // task 已经进入后续阶段，说明之前的改稿已完成或被跳过
+        return {
+          taskId,
+          status: 'completed',
+          stage: 'completed',
+          progress: 100,
+          message: '改稿任务已完成',
+        };
+      }
+      // 真的没有改稿任务
+      return {
+        taskId,
+        status: 'not_found',
+        stage: 'failed',
+        progress: 0,
+        message: '未找到改稿任务，可能服务已重启',
+        errorCode: 'UNKNOWN_ERROR',
+      };
     }
     return status;
   });

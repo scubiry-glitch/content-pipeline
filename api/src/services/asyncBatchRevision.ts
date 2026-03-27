@@ -192,10 +192,11 @@ async function executeBatchRevision(taskId: string, selectedReviewIds?: string[]
       revisionJobs.set(taskId, { ...currentC, stage: 'saving', lastHeartbeatAt: nowIso() });
     }
     report(96, '保存任务状态...');
+    // ★ 改稿完成后进入 awaiting_approval（用户审阅改稿结果），而非直接 completed
     await query(
       `UPDATE tasks
-       SET status = 'completed',
-           current_stage = 'completed',
+       SET status = 'awaiting_approval',
+           current_stage = 'awaiting_approval',
            updated_at = NOW()
        WHERE id = $1`,
       [taskId]

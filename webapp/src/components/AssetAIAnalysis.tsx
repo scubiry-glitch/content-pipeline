@@ -98,26 +98,54 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
 
   const triggerAnalysis = async () => {
     setLoading(true);
+    setError(null);
     try {
-      await assetsAiApi.triggerBatchProcess({ assetIds: [assetId] });
+      const batchResult = await assetsAiApi.triggerBatchProcess({ assetIds: [assetId] });
+      if (!batchResult?.totalAssets || batchResult.totalAssets <= 0) {
+        throw new Error(batchResult?.message || '未找到可分析的素材');
+      }
+
+      let stopped = false;
+      let consecutiveErrors = 0;
+
       // 轮询等待结果
       const interval = setInterval(async () => {
+        if (stopped) return;
         try {
           const data = await assetsAiApi.getAnalysis(assetId);
           if (data) {
             setAnalysis(data);
+            setError(null);
+            stopped = true;
             clearInterval(interval);
             setLoading(false);
           }
-        } catch {
-          // 继续轮询
+        } catch (err: any) {
+          const status = err?.response?.status;
+          // 分析结果未生成前，404 是预期状态，继续轮询
+          if (status === 404) {
+            return;
+          }
+
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= 2) {
+            stopped = true;
+            clearInterval(interval);
+            setLoading(false);
+            setError(err instanceof Error ? err.message : '分析失败，请重试');
+          }
         }
       }, 3000);
       
       // 30秒后停止轮询
       setTimeout(() => {
+        if (stopped) return;
+        stopped = true;
         clearInterval(interval);
         setLoading(false);
+        if (!analysis) {
+          setError('分析超时，请稍后重试');
+        }
       }, 30000);
     } catch (err) {
       setError(err instanceof Error ? err.message : '触发失败');

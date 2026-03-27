@@ -471,6 +471,16 @@ export function ReviewsTab() {
             };
           });
 
+          if (status.status === 'not_found') {
+            // 后端 job 丢失（pm2 重启），停止轮询
+            clearInterval(pollInterval);
+            setBatchRevisionStatus({
+              status: 'failed', progress: 0, message: '',
+              error: status.message || '改稿任务丢失，请重新发起',
+              errorCode: 'UNKNOWN_ERROR',
+            });
+            return;
+          }
           if (status.status === 'completed') {
             clearInterval(pollInterval);
             setBatchRevisionStatus({
@@ -499,8 +509,16 @@ export function ReviewsTab() {
               displayError
             );
           }
-        } catch {
-          // 忽略单次轮询错误，等待下次重试
+        } catch (pollErr: any) {
+          // 404 或连续错误：后端可能重启了，停止轮询
+          const httpStatus = pollErr?.response?.status;
+          if (httpStatus === 404) {
+            clearInterval(pollInterval);
+            setBatchRevisionStatus((prev) => prev.status === 'doing'
+              ? { ...prev, status: 'failed', message: '改稿任务丢失（服务可能已重启）', error: '请重新发起改稿' }
+              : prev
+            );
+          }
         }
       }, 2000);
 
@@ -1318,6 +1336,17 @@ export function ReviewsTab() {
             </p>
           )}
           <p className="text-sm text-red-600 dark:text-red-400 mt-1">{batchRevisionStatus.error}</p>
+          {(batchRevisionStatus.errorCode === 'LLM_TIMEOUT' || batchRevisionStatus.errorCode === 'NETWORK_TIMEOUT') && (
+            <button
+              className="mt-2 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800/40 transition-colors"
+              onClick={() => {
+                setBatchRevisionStatus({ status: 'idle', progress: 0, message: '' });
+                handleBatchRevision();
+              }}
+            >
+              重试改稿
+            </button>
+          )}
         </div>
       )}
 
