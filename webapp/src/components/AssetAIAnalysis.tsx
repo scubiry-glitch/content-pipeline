@@ -183,10 +183,7 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   // 完整模式
-  console.log('[AssetAIAnalysis] Render check - loading:', loading, 'error:', error, 'hasAnalysis:', !!analysis);
-  
   if (loading) {
-    console.log('[AssetAIAnalysis] Rendering: loading state');
     return (
       <div className="ai-analysis-panel loading">
         <div className="analysis-loading">
@@ -198,7 +195,6 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   if (error) {
-    console.log('[AssetAIAnalysis] Rendering: error state');
     return (
       <div className="ai-analysis-panel error">
         <p>❌ {error}</p>
@@ -208,20 +204,31 @@ export function AssetAIAnalysis({ assetId, compact = false }: AssetAIAnalysisPro
   }
 
   if (!analysis) {
-    console.log('[AssetAIAnalysis] Rendering: empty state with Start Analysis button');
     return (
-      <div className="ai-analysis-panel empty">
-        <span className="empty-icon">🤖</span>
-        <p>尚未进行 AI 分析</p>
-        <button className="btn-analyze" onClick={triggerAnalysis}>
-          <span className="material-icon">play_arrow</span>
+      <div className="ai-analysis-panel empty" style={{ textAlign: 'center', padding: '48px' }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>🤖</div>
+        <p style={{ color: '#666', marginBottom: '24px' }}>尚未进行 AI 分析</p>
+        <button 
+          onClick={triggerAnalysis}
+          style={{
+            padding: '12px 24px',
+            background: '#1890ff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>▶</span>
           开始分析
         </button>
       </div>
     );
   }
-  
-  console.log('[AssetAIAnalysis] Rendering: full analysis view');
 
   const { quality, classification, duplicate, taskRecommendation } = analysis;
 
