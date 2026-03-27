@@ -359,7 +359,7 @@ export const blueTeamApi = {
     client.post(`/production/${taskId}/review-items/${reviewId}/decide`, data) as Promise<void>,
 
   // 批量决策 (FR-021)
-  batchDecide: (taskId: string, data: { decisions: Array<{ reviewId: string; decision: 'accept' | 'ignore' | 'manual_resolved'; note?: string }> }) =>
+  batchDecide: (taskId: string, data: { decisions: Array<{ reviewId: string; decision: 'accept' | 'ignore' | 'manual_resolved'; note?: string; questionIndex?: number }> }) =>
     client.post(`/production/${taskId}/review-items/batch-decide`, data) as Promise<void>,
 
   // 申请重新评审 (FR-023)

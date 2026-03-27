@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
+// @ts-ignore - import.meta is available at runtime with tsx
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 尝试多个可能的 .env 文件路径

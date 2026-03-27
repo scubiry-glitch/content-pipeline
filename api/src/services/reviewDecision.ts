@@ -12,6 +12,7 @@ export interface ReviewDecision {
   reviewId: string;
   decision: DecisionType;
   note?: string;
+  questionIndex?: number;
 }
 
 export interface ReviewItem {
@@ -290,8 +291,8 @@ export async function batchSubmitDecisions(
 ): Promise<{ success: boolean; updated: number }> {
   let updated = 0;
 
-  for (const { reviewId, decision, note } of decisions) {
-    await submitDecision(taskId, reviewId, decision, note);
+  for (const { reviewId, decision, note, questionIndex } of decisions) {
+    await submitDecision(taskId, reviewId, decision, note, questionIndex);
     updated++;
   }
 

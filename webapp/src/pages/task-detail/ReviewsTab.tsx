@@ -83,8 +83,18 @@ function getBatchRevisionStageText(status: {
   totalSections?: number;
   batchIndex?: number;
   totalBatches?: number;
+  message?: string;
 }): string {
-  if (!status.sectionIndex || !status.totalSections) return '';
+  if (!status.sectionIndex || !status.totalSections) {
+    const text = String(status.message || '');
+    const match = text.match(/第\s*(\d+)\s*\/\s*(\d+)\s*章节(?:，\s*第\s*(\d+)\s*\/\s*(\d+)\s*组)?/);
+    if (!match) return '';
+    const [, sIdx, sTotal, bIdx, bTotal] = match;
+    if (bIdx && bTotal) {
+      return `第 ${sIdx}/${sTotal} 章节，第 ${bIdx}/${bTotal} 组`;
+    }
+    return `第 ${sIdx}/${sTotal} 章节`;
+  }
   if (status.batchIndex && status.totalBatches) {
     return `第 ${status.sectionIndex}/${status.totalSections} 章节，第 ${status.batchIndex}/${status.totalBatches} 组`;
   }
@@ -445,16 +455,20 @@ export function ReviewsTab() {
         try {
           const status = await blueTeamApi.getApplyRevisionsStatus(task.id);
           const displayError = getBatchRevisionDisplayError(status.error, status.errorCode);
-          setBatchRevisionStatus({
-            status: status.status === 'pending' ? 'idle' : (status.status as BatchRevisionStatusType['status']),
-            progress: status.progress,
-            message: status.message,
-            sectionIndex: status.sectionIndex,
-            totalSections: status.totalSections,
-            batchIndex: status.batchIndex,
-            totalBatches: status.totalBatches,
-            errorCode: status.errorCode,
-            error: displayError,
+          setBatchRevisionStatus((prev) => {
+            const nextStatus = status.status === 'pending' ? 'idle' : (status.status as BatchRevisionStatusType['status']);
+            const keepSectionMeta = nextStatus === 'doing';
+            return {
+              status: nextStatus,
+              progress: status.progress,
+              message: status.message,
+              sectionIndex: status.sectionIndex ?? (keepSectionMeta ? prev.sectionIndex : undefined),
+              totalSections: status.totalSections ?? (keepSectionMeta ? prev.totalSections : undefined),
+              batchIndex: status.batchIndex ?? (keepSectionMeta ? prev.batchIndex : undefined),
+              totalBatches: status.totalBatches ?? (keepSectionMeta ? prev.totalBatches : undefined),
+              errorCode: status.errorCode,
+              error: displayError,
+            };
           });
 
           if (status.status === 'completed') {
@@ -1121,9 +1135,9 @@ export function ReviewsTab() {
               onTaskBatchRevision={handleTaskBatchRevision}
               batchRevisionInProgress={batchRevisionStatus.status === 'doing'}
               streamingProgress={{
-                currentRound: sequentialStreaming.currentRound || blueTeamStreaming.progress?.currentRound,
-                totalRounds: sequentialStreaming.totalRounds || blueTeamStreaming.progress?.totalRounds,
-                currentExpert: sequentialStreaming.currentExpert || blueTeamStreaming.progress?.currentExpert
+                currentRound: sequentialStreaming.currentRound ?? blueTeamStreaming.progress?.currentRound,
+                totalRounds: sequentialStreaming.totalRounds ?? blueTeamStreaming.progress?.totalRounds,
+                currentExpert: sequentialStreaming.currentExpert ?? blueTeamStreaming.progress?.currentExpert
               }}
               highlightPositions={highlightPositions}
             />
@@ -1390,6 +1404,8 @@ function RightPanel({
   const pendingComments = comments.filter(c => c.status === 'pending');
   const acceptedComments = comments.filter(c => c.status === 'accepted');
   const ignoredComments = comments.filter(c => c.status === 'ignored');
+  const displayCurrentRound = streamingProgress?.currentRound ?? 0;
+  const displayTotalRounds = streamingProgress?.totalRounds ?? 0;
 
   const handleCommentClick = (comment: CommentItem) => {
     if (!selectMode) {
@@ -1499,13 +1515,13 @@ function RightPanel({
                 {streamingProgress && (
                   <div className="mt-2">
                     <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 mb-1">
-                      <span>第 {streamingProgress.currentRound} / {streamingProgress.totalRounds} 轮</span>
+                      <span>第 {displayCurrentRound} / {displayTotalRounds} 轮</span>
                     </div>
                     <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-blue-500 rounded-full transition-all duration-300"
                         style={{
-                          width: `${((streamingProgress.currentRound || 0) / (streamingProgress.totalRounds || 1)) * 100}%`
+                          width: `${(displayCurrentRound / Math.max(displayTotalRounds, 1)) * 100}%`
                         }}
                       />
                     </div>

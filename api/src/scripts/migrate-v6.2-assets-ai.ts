@@ -8,6 +8,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { query } from '../db/connection.js';
 
+// @ts-ignore - import.meta is available at runtime with tsx
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function runMigration() {

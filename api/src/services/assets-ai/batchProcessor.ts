@@ -399,9 +399,12 @@ export function getAssetsBatchProcessor(): AssetsAIBatchProcessor {
 }
 
 // 兼容旧代码的导出（延迟初始化）
+// @ts-ignore - Type compatibility handled at runtime
 export const assetsBatchProcessor: AssetsAIBatchProcessor = {
+  // @ts-ignore - Accessing private property via getter
   get config() { return getAssetsBatchProcessor().config; },
   processBatch(assets: Asset[]) { return getAssetsBatchProcessor().processBatch(assets); },
+  // @ts-ignore - Accessing private method
   processSingleAsset(asset: Asset, force?: boolean) { return getAssetsBatchProcessor().processSingleAsset(asset, force); },
   updateConfig(config: Partial<AssetsBatchProcessingConfig>) { return getAssetsBatchProcessor().updateConfig(config); },
-} as AssetsAIBatchProcessor;
+} as any;

@@ -266,7 +266,15 @@ type DraftSection = {
   content: string;
 };
 
-type RevisionIssue = { expertRole: string; question: string; suggestion: string; location?: string };
+type RevisionIssue = {
+  reviewId: string;
+  questionIndex: number;
+  source: 'bt' | 'er';
+  expertRole: string;
+  question: string;
+  suggestion: string;
+  location?: string;
+};
 type RetryableError = Error & { retryable?: boolean };
 
 function splitMarkdownSections(content: string): DraftSection[] {
@@ -591,7 +599,7 @@ export async function applyAllAcceptedRevisions(
     }
 
     // 3. 合并所有评审意见为一个列表
-    const allIssues: Array<{ expertRole: string; question: string; suggestion: string; location?: string }> = [];
+    const allIssues: RevisionIssue[] = [];
     const appliedReviewIds: string[] = [];
 
     for (const row of allAcceptedRows) {
@@ -624,6 +632,9 @@ export async function applyAllAcceptedRevisions(
         }
         if (q.question && q.severity !== 'praise') {
           allIssues.push({
+            reviewId: row.id,
+            questionIndex: idx,
+            source: row.source,
             expertRole: row.expert_role,
             question: q.question,
             suggestion: q.suggestion || '',
@@ -714,6 +725,30 @@ export async function applyAllAcceptedRevisions(
         }),
       ]
     );
+
+    // 7.1 将本次已应用的蓝军问题标记为 manual_resolved，保证 comments 口径与改稿结果一致
+    const resolvedBlueTeamIssues = allIssues.filter((issue) => issue.source === 'bt');
+    if (resolvedBlueTeamIssues.length > 0) {
+      for (const issue of resolvedBlueTeamIssues) {
+        await query(
+          `INSERT INTO question_decisions (
+             task_id, review_id, question_index, decision, note, created_at, updated_at
+           ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+           ON CONFLICT (review_id, question_index)
+           DO UPDATE SET
+             decision = EXCLUDED.decision,
+             note = EXCLUDED.note,
+             updated_at = NOW()`,
+          [
+            taskId,
+            issue.reviewId,
+            issue.questionIndex,
+            'manual_resolved',
+            '一键改稿已自动应用该建议',
+          ]
+        );
+      }
+    }
 
     // 8. 记录日志
     await query(
