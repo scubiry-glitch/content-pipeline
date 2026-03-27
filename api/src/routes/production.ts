@@ -409,6 +409,74 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return status;
   });
 
+  // 获取改稿过程 checkpoint（用于时间轴展示处理中快照）
+  fastify.get('/:taskId/revision-checkpoints', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await query(
+      `SELECT id, created_at, details
+       FROM task_logs
+       WHERE task_id = $1 AND action = 'batch_revision_checkpoint'
+       ORDER BY created_at DESC`,
+      [taskId]
+    );
+
+    const items = result.rows.map((row: any, index: number) => {
+      const details = typeof row.details === 'string' ? JSON.parse(row.details) : (row.details || {});
+      const sectionCount = details?.sections ? Object.keys(details.sections).length : 0;
+      return {
+        id: row.id,
+        draftId: details?.draftId || null,
+        sectionCount,
+        createdAt: row.created_at,
+        changeSummary: `处理中快照 #${result.rows.length - index}（已完成 ${sectionCount} 个章节）`,
+      };
+    });
+
+    return { items };
+  });
+
+  // 获取改稿历史轨迹（基于 task_logs 回推）
+  fastify.get('/:taskId/revision-timeline', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const result = await query(
+      `SELECT id, action, created_at, details
+       FROM task_logs
+       WHERE task_id = $1
+         AND action IN ('batch_revision_checkpoint', 'batch_revision')
+       ORDER BY created_at DESC`,
+      [taskId]
+    );
+
+    const items = result.rows.map((row: any, index: number) => {
+      const details = typeof row.details === 'string' ? JSON.parse(row.details) : (row.details || {});
+      if (row.action === 'batch_revision_checkpoint') {
+        const sectionCount = details?.sections ? Object.keys(details.sections).length : 0;
+        return {
+          id: row.id,
+          type: 'checkpoint',
+          createdAt: row.created_at,
+          changeSummary: `处理中快照 #${result.rows.length - index}（已完成 ${sectionCount} 个章节）`,
+          draftId: details?.draftId || null,
+          sectionCount,
+        };
+      }
+
+      const appliedCount = Number(details?.issueCount || 0);
+      const newVersion = details?.version;
+      return {
+        id: row.id,
+        type: 'batch_revision',
+        createdAt: row.created_at,
+        changeSummary: `批量改稿完成${newVersion ? `，生成 v${newVersion}` : ''}（应用 ${appliedCount} 条建议）`,
+        draftId: details?.draftId || null,
+        appliedCount,
+        version: newVersion || null,
+      };
+    });
+
+    return { items };
+  });
+
   // ===== 环节重做 API =====
 
   // 1. 选题策划重做

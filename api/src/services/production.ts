@@ -741,8 +741,9 @@ ${JSON.stringify(outline, null, 2)}
       console.log(`[Redo] Preserving all previous rounds for task ${taskId}`);
     }
 
-    // 只有不保留历史时才删除旧版本稿件
-    if (!preserveHistory) {
+    // 默认保留 draft 版本历史；仅在显式要求时才清理旧版本
+    const keepOnlyLatestDraft = config?.keepOnlyLatestDraft === true;
+    if (keepOnlyLatestDraft) {
       await query(
         `DELETE FROM draft_versions
          WHERE task_id = $1
@@ -754,7 +755,7 @@ ${JSON.stringify(outline, null, 2)}
          )`,
         [taskId]
       );
-      console.log(`[Redo] Kept only latest draft version for task ${taskId}`);
+      console.log(`[Redo] keepOnlyLatestDraft=true, kept only latest draft version for task ${taskId}`);
     }
 
     // 串行评审：同步配置评审队列（创建 task_review_progress 记录）

@@ -1,5 +1,5 @@
 // 任务详情 - 文稿生成 Tab (v5.0 - 流式分段设计整合版)
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // Tab 类型
 type EditorTab = 'preview' | 'export';
@@ -27,6 +27,7 @@ import { ExportPanel } from '../../components/ExportPanel';
 import { DraftGenerationProgress } from '../../components/DraftGenerationProgress';
 import { LivePreviewMarkdown, VersionTimeline } from '../../components/content';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
+import { blueTeamApi, tasksApi } from '../../api/client';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -59,28 +60,102 @@ export function WritingTab() {
   const [expandedAsset, setExpandedAsset] = useState<AssetTab>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>('timeline');
   const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>(undefined);
+  const [checkpointVersions, setCheckpointVersions] = useState<any[]>([]);
   
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
+  useEffect(() => {
+    let active = true;
+    if (!task?.id) return;
+
+    tasksApi.getRevisionTimeline(task.id)
+      .then((timeline) => {
+        if (!active) return;
+        const items = (timeline.items || []).map((item, idx) => ({
+          id: `timeline-${item.id}`,
+          // 用高位版本号确保轨迹项置顶，同时不与正式版本冲突
+          version: 2000000 - idx,
+          display_version: item.type === 'batch_revision' ? 'BR' : 'CP',
+          created_at: item.createdAt,
+          change_summary: item.changeSummary,
+          created_by: 'revision-agent',
+          is_transient: true,
+        }));
+        setCheckpointVersions(items);
+      })
+      .catch(() => {
+        // 兼容未发布新接口的后端：回退到 apply-revisions-status
+        blueTeamApi.getApplyRevisionsStatus(task.id).then((status) => {
+          if (!active) return;
+          if (status.status !== 'doing') {
+            setCheckpointVersions([]);
+            return;
+          }
+          const progressText = typeof status.progress === 'number' ? `${status.progress}%` : '';
+          const sectionText = status.totalSections
+            ? `，章节 ${status.sectionIndex || 0}/${status.totalSections}`
+            : '';
+          setCheckpointVersions([{
+            id: `checkpoint-${task.id}`,
+            version: 1000000,
+            display_version: 'CP',
+            created_at: status.lastHeartbeatAt || status.startedAt || new Date().toISOString(),
+            change_summary: `改稿进行中 ${progressText}${sectionText}：${status.message || '处理中'}`,
+            created_by: 'revision-agent',
+            is_transient: true,
+          }]);
+        }).catch(() => {
+          if (!active) return;
+          setCheckpointVersions([]);
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [task?.id, task?.updated_at]);
+
   // 规范化版本数据，确保字段与 VersionTimeline 组件兼容
   const rawVersions = task.versions || (task as any).draft_versions || [];
-  const versions = rawVersions
+  const normalizedFormalVersions = rawVersions
     .map((v: any) => ({
       ...v,
       created_at: v.created_at || v.createdAt || new Date().toISOString(),
       change_summary: v.change_summary || v.changeSummary || (v.expert_role ? `${v.expert_role} 修订 (R${v.round || 0})` : ''),
-    }))
-    // 按版本号去重，保留最新的记录
-    .reduce((acc: any[], curr: any) => {
-      const existing = acc.find(v => v.version === curr.version);
-      if (!existing) {
-        acc.push(curr);
-      } else if (new Date(curr.created_at) > new Date(existing.created_at)) {
-        // 如果已存在相同版本号，保留更新的记录
-        const idx = acc.findIndex(v => v.version === curr.version);
-        acc[idx] = curr;
+    }));
+
+  // 保留所有版本记录（不再按 version 去重），重复版本号使用子版本展示
+  const formalVersions = (() => {
+    const byVersion = new Map<number, any[]>();
+    normalizedFormalVersions.forEach((v: any) => {
+      const key = Number(v.version || 0);
+      if (!byVersion.has(key)) byVersion.set(key, []);
+      byVersion.get(key)!.push(v);
+    });
+
+    const result: any[] = [];
+    byVersion.forEach((list, majorVersion) => {
+      const sorted = [...list].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      if (sorted.length === 1) {
+        result.push({
+          ...sorted[0],
+          display_version: `v${majorVersion}`,
+        });
+        return;
       }
-      return acc;
-    }, []);
+      sorted.forEach((item, idx) => {
+        result.push({
+          ...item,
+          display_version: `v${majorVersion}.${idx + 1}`,
+        });
+      });
+    });
+
+    return result;
+  })();
+
+  const versions = [...checkpointVersions, ...formalVersions];
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto animate-fade-in pb-32">

@@ -306,13 +306,13 @@ export function SequentialPanel({ taskId, isStreaming, streamingCurrentRound, st
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-6">
           <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-tertiary rounded-full transition-all duration-500"
-              style={{ width: `${(status.currentRound / status.totalRounds) * 100}%` }}
+              style={{ width: `${status.status === 'completed' ? 100 : (status.currentRound / status.totalRounds) * 100}%` }}
             />
           </div>
           <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-            {status.currentRound}/{status.totalRounds}
+            {status.status === 'completed' ? status.totalRounds : status.currentRound}/{status.totalRounds}
           </span>
         </div>
         
@@ -320,8 +320,9 @@ export function SequentialPanel({ taskId, isStreaming, streamingCurrentRound, st
         <div className="space-y-3">
           {status.reviewQueue.map((expert: any, idx: number) => {
             const round = idx + 1;
-            const isDone = idx < status.currentRound - 1;
-            const isCurrent = idx === status.currentRound - 1;
+            // 当整体状态为 completed 时，所有专家都已完成
+            const isDone = status.status === 'completed' || idx < status.currentRound - 1;
+            const isCurrent = status.status !== 'completed' && idx === status.currentRound - 1;
             const expertInfo = EXPERT_ROLE_INFO[expert.id] || { name: expert.name, icon: '👤', color: '#666', description: '' };
             const detail = expertDetails.get(round);
             

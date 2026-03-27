@@ -123,6 +123,31 @@ export const tasksApi = {
 
   compareOutlineVersions: (id: string, version1: number, version2: number) =>
     client.post(`/production/${id}/outline/compare`, { version1, version2 }) as Promise<{ version1: any; version2: any; outline1: any; outline2: any }>,
+
+  getRevisionCheckpoints: (id: string) =>
+    client.get(`/production/${id}/revision-checkpoints`) as Promise<{
+      items: Array<{
+        id: string;
+        draftId: string | null;
+        sectionCount: number;
+        createdAt: string;
+        changeSummary: string;
+      }>;
+    }>,
+
+  getRevisionTimeline: (id: string) =>
+    client.get(`/production/${id}/revision-timeline`) as Promise<{
+      items: Array<{
+        id: string;
+        type: 'checkpoint' | 'batch_revision';
+        createdAt: string;
+        changeSummary: string;
+        draftId?: string | null;
+        sectionCount?: number;
+        appliedCount?: number;
+        version?: number | null;
+      }>;
+    }>,
 };
 
 // 素材相关 API

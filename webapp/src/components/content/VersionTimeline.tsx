@@ -9,6 +9,8 @@ import { useState } from 'react';
 export interface Version {
   id: string;
   version: number;
+  /** 展示用版本标签 */
+  display_version?: string;
   /** 创建时间 */
   created_at: string;
   /** 变更摘要 */
@@ -17,6 +19,8 @@ export interface Version {
   created_by?: string;
   /** 版本内容（可选，用于预览） */
   content?: string;
+  /** 是否为过程快照（只展示，不参与回滚/对比） */
+  is_transient?: boolean;
 }
 
 export interface VersionTimelineProps {
@@ -68,6 +72,9 @@ export function VersionTimeline({
   const sortedVersions = [...versions].sort((a, b) => b.version - a.version);
 
   const handleVersionClick = (version: number) => {
+    const target = sortedVersions.find((v) => v.version === version);
+    if (target?.is_transient) return;
+
     if (compareMode) {
       // 对比模式：选择/取消选择版本
       if (compareSelection.includes(version)) {
@@ -189,21 +196,26 @@ export function VersionTimeline({
                         ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-800 shadow-sm'
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
-                    onClick={() => !compareMode && onViewDetail?.(version)}
+                    onClick={() => !compareMode && !version.is_transient && onViewDetail?.(version)}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <span className={`text-xs font-bold ${
                           isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400'
                         }`}>
-                          v{version.version}
+                          {version.display_version || `v${version.version}`}
                         </span>
-                        {isCurrent && (
+                        {isCurrent && !version.is_transient && (
                           <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded font-medium">
                             当前
                           </span>
                         )}
-                        {index === 0 && !isCurrent && (
+                        {version.is_transient && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded font-medium">
+                            处理中
+                          </span>
+                        )}
+                        {index === 0 && !isCurrent && !version.is_transient && (
                           <span className="text-[10px] px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded font-medium">
                             最新
                           </span>
@@ -229,7 +241,7 @@ export function VersionTimeline({
                     )}
 
                     {/* Actions */}
-                    {!compareMode && (isHovered || isSelected) && onRollback && !isCurrent && (
+                    {!compareMode && (isHovered || isSelected) && onRollback && !isCurrent && !version.is_transient && (
                       <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                         <button
                           onClick={(e) => {
