@@ -76,12 +76,41 @@ export async function configureSequentialReview(
 
   // 1. 根据用户选择或默认配置构建 AI 专家队列
   let aiExperts: ExpertConfig[];
-  if (userExperts && userExperts.length > 0) {
+  let effectiveExperts = userExperts;
+
+  // ★ 从 tasks.sequential_review_config 读取持久化配置（包括 AI 专家和人类专家）
+  // ★ 始终读取持久化配置，获取 humanExperts 和 readerTest（不受 AI experts 是否已传入的影响）
+  let persistedHumanExpertIds: string[] = [];
+  try {
+    const configResult = await query(
+      `SELECT sequential_review_config FROM tasks WHERE id = $1`,
+      [taskId]
+    );
+    const persistedConfig = configResult.rows[0]?.sequential_review_config;
+    if (persistedConfig) {
+      const parsed = typeof persistedConfig === 'string' ? JSON.parse(persistedConfig) : persistedConfig;
+      // AI 专家：仅在未传入时从持久化配置恢复
+      if ((!effectiveExperts || effectiveExperts.length === 0) &&
+          parsed.experts && Array.isArray(parsed.experts) && parsed.experts.length > 0) {
+        effectiveExperts = parsed.experts;
+        console.log(`[SequentialReview] Loaded AI experts from persisted config:`, effectiveExperts);
+      }
+      // 人类专家：始终从持久化配置读取
+      if (parsed.humanExperts && Array.isArray(parsed.humanExperts) && parsed.humanExperts.length > 0) {
+        persistedHumanExpertIds = parsed.humanExperts;
+        console.log(`[SequentialReview] Loaded human experts from persisted config:`, persistedHumanExpertIds);
+      }
+    }
+  } catch (e) {
+    console.warn(`[SequentialReview] Failed to read persisted config:`, e);
+  }
+
+  if (effectiveExperts && effectiveExperts.length > 0) {
     // 使用用户选择的专家
-    aiExperts = userExperts
+    aiExperts = effectiveExperts
       .map(role => ALL_AI_EXPERTS[role])
       .filter(Boolean);
-    console.log(`[SequentialReview] Using user-selected experts:`, userExperts);
+    console.log(`[SequentialReview] Using user-selected AI experts:`, effectiveExperts);
   } else {
     // 默认: 挑战者 → 拓展者 → 提炼者
     aiExperts = [
@@ -91,37 +120,120 @@ export async function configureSequentialReview(
     ];
   }
 
-  // 2. 从专家库抽取相关专家 (简化版本，实际应根据主题匹配)
-  const humanExpertsResult = await query(
-    `SELECT id, name, bio, title, domain, angle
-     FROM experts
-     WHERE status = 'active' OR status IS NULL
-     ORDER BY created_at DESC
-     LIMIT 2`
-  );
+  // 2. 获取人类专家 — 前端专家库的专家（本地 ID 如 S-01）用 AI 模拟风格评审
+  //    本地专家库的完整画像存储在前端 expertService 中，后端只存 ID
+  //    这里构建 simulated human expert 的配置
+  const KNOWN_EXPERTS: Record<string, { name: string; profile: string }> = {
+    'S-01': { name: '张一鸣', profile: '字节跳动创始人，数据驱动思维，追求延迟满足，关注长期价值和执行效率' },
+    'S-02': { name: '雷军', profile: '小米创始人，极致性价比思维，关注用户体验、效率提升和口碑传播' },
+    'S-03': { name: '黄仁勋', profile: 'NVIDIA创始人，AI算力先驱，关注技术前沿、生态系统和长期技术赌注' },
+    'S-04': { name: '王兴', profile: '美团创始人，无边界扩张思维，关注本地生活和供给侧改革' },
+    'S-05': { name: '马斯克', profile: 'Tesla/SpaceX创始人，第一性原理思维，关注颠覆性创新和长期愿景' },
+    'S-06': { name: '任正非', profile: '华为创始人，狼性文化，关注技术自主、组织活力和战略定力' },
+    'S-07': { name: '张勇', profile: '阿里巴巴前CEO，组织架构大师，关注组织效能和商业模式创新' },
+    'S-08': { name: '宿华', profile: '快手创始人，普惠科技思维，关注下沉市场和社会价值' },
+    'S-09': { name: '王慧文', profile: '美团联合创始人，互联网老兵，关注竞争策略和执行力' },
+    'S-10': { name: '陆奇', profile: 'Y Combinator中国CEO，AI领域思想家，关注AI趋势和创业生态' },
+    'S-11': { name: '查理·芒格', profile: '伯克希尔副董事长，多元思维模型，关注理性决策和逆向思维' },
+    'S-12': { name: '段永平', profile: '步步高创始人，本分哲学，关注长期主义和商业本质' },
+    'S-13': { name: '刘强东', profile: '京东创始人，供应链思维，关注效率、用户体验和物流优化' },
+  };
 
-  const humanExperts: ExpertConfig[] = humanExpertsResult.rows.map((e: any) => ({
-    type: 'human' as const,
-    id: e.id,
-    name: e.name,
-    profile: e.bio || e.title || '领域专家',
-  }));
+  let humanExperts: ExpertConfig[] = [];
+  if (persistedHumanExpertIds.length > 0) {
+    // 分离本地专家（S-XX 格式）和数据库专家（UUID 格式）
+    const localIds = persistedHumanExpertIds.filter(id => KNOWN_EXPERTS[id]);
+    const dbIds = persistedHumanExpertIds.filter(id => !KNOWN_EXPERTS[id]);
 
-  // 3. 构建串行评审队列: AI专家与真人专家交替
-  let reviewQueue: ExpertConfig[];
-  if (userExperts && userExperts.length > 0) {
-    // 用户指定专家时，直接按选择顺序排列
-    reviewQueue = [...aiExperts];
-  } else {
-    // 默认: 挑战者 → 真人专家1 → 拓展者 → 真人专家2 → 提炼者
-    reviewQueue = [
-      aiExperts[0],
-      ...(humanExperts[0] ? [humanExperts[0]] : []),
-      aiExperts[1],
-      ...(humanExperts[1] ? [humanExperts[1]] : humanExperts[0] ? [humanExperts[0]] : []),
-      aiExperts[2],
-    ].filter(Boolean);
+    // 本地专家：使用预定义画像，标记为 AI 模拟类型
+    for (const id of localIds) {
+      const expert = KNOWN_EXPERTS[id];
+      humanExperts.push({
+        type: 'human' as const,
+        id,
+        role: id,
+        name: expert.name,
+        profile: expert.profile,
+      });
+    }
+
+    // 数据库专家：从 DB 查询
+    if (dbIds.length > 0) {
+      const placeholders = dbIds.map((_, i) => `$${i + 1}`).join(',');
+      const humanExpertsResult = await query(
+        `SELECT id, name, bio, title, domain, angle
+         FROM experts
+         WHERE id IN (${placeholders})`,
+        dbIds
+      );
+      for (const e of humanExpertsResult.rows) {
+        humanExperts.push({
+          type: 'human' as const,
+          id: e.id,
+          role: e.id,
+          name: e.name,
+          profile: e.bio || e.title || '领域专家',
+        });
+      }
+    }
+    console.log(`[SequentialReview] Using user-selected human experts:`, humanExperts.map(e => `${e.id}:${e.name}`));
   }
+
+  // 2b. 获取读者测试角色（从持久化配置的 readerTest 中读取）
+  let readerExperts: ExpertConfig[] = [];
+  try {
+    const configResult2 = await query(`SELECT sequential_review_config FROM tasks WHERE id = $1`, [taskId]);
+    const pc = configResult2.rows[0]?.sequential_review_config;
+    if (pc) {
+      const parsed2 = typeof pc === 'string' ? JSON.parse(pc) : pc;
+      if (parsed2.readerTest?.enabled && parsed2.readerTest?.selectedReaders?.length > 0) {
+        const readerIds: string[] = parsed2.readerTest.selectedReaders;
+        // 读者画像来自前端的 MOCK_READER_PERSONAS，用 role 映射
+        const READER_PROFILES: Record<string, { name: string; profile: string }> = {
+          reader_01: { name: '快速浏览者', profile: '上班族白领，注意力有限，需要快速获取信息' },
+          reader_02: { name: '深度思考者', profile: '研究者，注重内容的准确性和深度' },
+          reader_03: { name: '行业新人', profile: '应届毕业生，行业知识有限，需要更多背景信息' },
+          reader_04: { name: '实战派管理者', profile: '中层管理者，关注内容的实用性' },
+          reader_05: { name: '资深从业者', profile: '行业老兵，对内容质量要求高' },
+          reader_06: { name: '投资决策人', profile: '投资人，关注风险和回报，重视数据支撑' },
+          reader_07: { name: '跨界学习者', profile: '多领域关注者，需要通俗易懂的解释' },
+          reader_08: { name: '数据敏感者', profile: '数据分析师，重视统计和证据' },
+          reader_09: { name: '批判质疑者', profile: '审慎观察者，喜欢寻找漏洞' },
+          reader_10: { name: '故事爱好者', profile: '叙事偏好读者，喜欢有人情味的内容' },
+        };
+        readerExperts = readerIds.map(id => {
+          const rp = READER_PROFILES[id] || { name: id, profile: '读者' };
+          return {
+            type: 'ai' as const,
+            role: 'reader_rep',
+            id,
+            name: `读者测试-${rp.name}`,
+            profile: rp.profile,
+          };
+        });
+        console.log(`[SequentialReview] Loaded reader test experts:`, readerExperts.map(e => e.name));
+      }
+    }
+  } catch (e) {
+    console.warn(`[SequentialReview] Failed to load reader config:`, e);
+  }
+
+  // 3. 构建串行评审队列: AI 专家 → 人类专家(交替) → 读者测试(最后)
+  let reviewQueue: ExpertConfig[];
+  if (aiExperts.length > 0 && humanExperts.length > 0) {
+    // 交替排列: AI → Human → AI → Human → ...
+    reviewQueue = [];
+    const maxLen = Math.max(aiExperts.length, humanExperts.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < aiExperts.length) reviewQueue.push(aiExperts[i]);
+      if (i < humanExperts.length) reviewQueue.push(humanExperts[i]);
+    }
+  } else {
+    reviewQueue = [...aiExperts, ...humanExperts];
+  }
+  // 读者测试放在最后（在所有专家评审完成后进行）
+  reviewQueue.push(...readerExperts);
+  console.log(`[SequentialReview] Final review queue (${reviewQueue.length}):`, reviewQueue.map(e => `${e.type}:${e.name}`));
 
   // 4. 保存评审配置到进度表
   await query(
@@ -159,10 +271,20 @@ export async function startSequentialReview(
     );
 
     if (progressResult.rows.length === 0) {
-      // 自动配置评审
-      const taskResult = await query(`SELECT topic FROM tasks WHERE id = $1`, [taskId]);
+      // 自动配置评审 — configureSequentialReview 会自动从 tasks.sequential_review_config 读取持久化配置
+      const taskResult = await query(`SELECT topic, sequential_review_config FROM tasks WHERE id = $1`, [taskId]);
       const topic = taskResult.rows[0]?.topic || '未命名主题';
-      await configureSequentialReview(taskId, topic);
+      // 从持久化配置中提取专家列表作为参数传入
+      let persistedExperts: string[] | undefined;
+      const persistedConfig = taskResult.rows[0]?.sequential_review_config;
+      if (persistedConfig) {
+        const parsed = typeof persistedConfig === 'string' ? JSON.parse(persistedConfig) : persistedConfig;
+        if (parsed.experts && Array.isArray(parsed.experts) && parsed.experts.length > 0) {
+          persistedExperts = parsed.experts;
+          console.log(`[SequentialReview] startSequentialReview using persisted experts:`, persistedExperts);
+        }
+      }
+      await configureSequentialReview(taskId, topic, persistedExperts);
     }
 
     // 2. 清理旧评审数据（重新评审时避免 unique constraint 冲突）
@@ -478,9 +600,138 @@ async function conductAIExpertReview(
     }
   ]
 }`,
+    fact_checker: `你是一位严谨的事实核查员(Fact Checker)，负责验证文稿中的数据和事实准确性。
+
+当前文稿：
+{{draftContent}}
+
+请从以下角度进行评审：
+1. 数据准确性：引用的数据、数字、统计是否准确？
+2. 来源可靠性：信息来源是否权威可信？
+3. 时效性：数据是否过时？是否有更新的数据？
+4. 引用完整性：是否注明了数据出处？
+
+输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "总体评价",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述",
+      "severity": "high|medium|low|praise",
+      "suggestion": "修改建议",
+      "category": "数据准确性|来源可靠性|时效性|引用完整性"
+    }
+  ]
+}`,
+    logic_checker: `你是一位逻辑检察官(Logic Checker)，负责审查文稿的论证严密性和逻辑链完整性。
+
+当前文稿：
+{{draftContent}}
+
+请从以下角度进行评审：
+1. 因果关系：因果推断是否成立？
+2. 逻辑一致性：全文论点是否自相矛盾？
+3. 推理完整性：是否存在跳跃式推理？
+4. 反例考虑：是否忽略了重要的反面论据？
+
+输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "总体评价",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述",
+      "severity": "high|medium|low|praise",
+      "suggestion": "修改建议",
+      "category": "因果关系|逻辑一致性|推理完整性|反例考虑"
+    }
+  ]
+}`,
+    domain_expert: `你是一位行业专家(Domain Expert)，负责从专业深度和行业洞察角度评审文稿。
+
+当前文稿：
+{{draftContent}}
+
+请从以下角度进行评审：
+1. 专业深度：分析是否有足够深度？
+2. 行业洞察：是否反映了行业最新趋势？
+3. 术语准确性：专业术语使用是否恰当？
+4. 实操建议：给出的建议是否具有可操作性？
+
+输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "总体评价",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述",
+      "severity": "high|medium|low|praise",
+      "suggestion": "修改建议",
+      "category": "专业深度|行业洞察|术语准确性|实操建议"
+    }
+  ]
+}`,
+    reader_rep: `你是一位读者代表(Reader Representative)，站在目标读者的立场评审文稿的可读性和受众适配度。
+
+当前文稿：
+{{draftContent}}
+
+请从以下角度进行评审：
+1. 可读性：语言是否通俗易懂？
+2. 受众适配：内容深度是否匹配目标读者？
+3. 阅读体验：结构是否清晰、段落是否合理？
+4. 价值感知：读者能从中获得什么具体价值？
+
+输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "总体评价",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述",
+      "severity": "high|medium|low|praise",
+      "suggestion": "修改建议",
+      "category": "可读性|受众适配|阅读体验|价值感知"
+    }
+  ]
+}`,
   };
 
-  const template = promptTemplates[expertConfig.role || 'challenger'];
+  let template = promptTemplates[expertConfig.role || 'challenger'] || promptTemplates.challenger;
+  // 读者测试：注入具体的读者画像信息
+  if (expertConfig.role === 'reader_rep' && expertConfig.profile) {
+    template = `你是一位读者代表，你的读者画像是：${expertConfig.name}（${expertConfig.profile}）。
+请以这个特定读者的视角来评审文稿，关注该读者最在意的方面。
+
+当前文稿：
+{{draftContent}}
+
+请从以下角度进行评审：
+1. 可读性：以你的阅读习惯，这篇文章是否容易理解？
+2. 受众适配：内容深度是否匹配你的知识水平？
+3. 阅读体验：结构是否清晰、是否能吸引你读下去？
+4. 价值感知：你能从中获得什么具体价值？
+
+输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "总体评价（以读者身份）",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述",
+      "severity": "high|medium|low|praise",
+      "suggestion": "修改建议",
+      "category": "可读性|受众适配|阅读体验|价值感知"
+    }
+  ]
+}`;
+  }
   const prompt = template.replace('{{draftContent}}', draftContent.substring(0, 2000));
   
   try {
@@ -524,10 +775,62 @@ async function conductHumanExpertReview(
   draftContent: string,
   expertConfig: ExpertConfig
 ): Promise<ReviewResult> {
-  // 实际应该创建任务等待专家反馈
-  // 这里简化处理，使用 AI 代理
-  console.log(`[HumanReview] Simulating review for ${expertConfig.name}`);
-  return conductAIExpertReview(draftContent, { ...expertConfig, type: 'ai', role: 'challenger' });
+  // 使用 AI 模拟专家风格评审，注入专家画像
+  console.log(`[HumanReview] Simulating review for ${expertConfig.name} (${expertConfig.profile})`);
+
+  const prompt = `你现在模拟的是 ${expertConfig.name}。
+人物画像：${expertConfig.profile || '资深领域专家'}
+
+请以 ${expertConfig.name} 的思维方式和视角来评审以下文稿。
+评审风格应体现该人物的核心理念和关注点。
+
+当前文稿：
+${draftContent.substring(0, 2000)}
+
+请以 ${expertConfig.name} 的口吻和视角进行评审，输出JSON格式：
+{
+  "score": 0-100,
+  "summary": "以${expertConfig.name}的视角给出总体评价",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题描述（体现${expertConfig.name}的思维特点）",
+      "severity": "high|medium|low|praise",
+      "suggestion": "以${expertConfig.name}的风格给出修改建议",
+      "category": "战略视角|数据驱动|用户体验|执行效率|长期价值"
+    }
+  ]
+}`;
+
+  try {
+    const llm = getLLMRouter();
+    const response = await llm.generate(prompt, 'blue_team_review', {
+      maxTokens: 2000,
+      temperature: 0.7,
+    });
+
+    const content = response.content.replace(/```json\n?|\n?```/g, '').trim();
+    const result = JSON.parse(content);
+
+    return {
+      score: result.score || 80,
+      summary: result.summary || `${expertConfig.name}评审完成`,
+      questions: result.questions || [],
+    };
+  } catch (error) {
+    console.error(`[HumanReview] Failed for ${expertConfig.name}:`, error);
+    return {
+      score: 75,
+      summary: `${expertConfig.name}评审完成`,
+      questions: [{
+        id: 'q1',
+        question: `从${expertConfig.name}的视角看，文稿尚有优化空间`,
+        severity: 'medium',
+        suggestion: '建议进一步深化分析',
+        category: 'general',
+      }],
+    };
+  }
 }
 
 /**

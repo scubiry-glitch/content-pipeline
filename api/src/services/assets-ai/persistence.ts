@@ -25,6 +25,11 @@ export class PersistenceService {
     } = result;
 
     try {
+      // 准备 document_embedding（转换为 pgvector 格式）
+      const docEmbedding = vectorization?.documentEmbedding
+        ? '[' + vectorization.documentEmbedding.join(',') + ']'
+        : null;
+
       // 1. 保存到 asset_ai_analysis 表
       await query(
         `INSERT INTO asset_ai_analysis (
@@ -70,10 +75,10 @@ export class PersistenceService {
           quality.overall,
           JSON.stringify(quality.dimensions),
           quality.aiAssessment.summary,
-          quality.aiAssessment.strengths,
-          quality.aiAssessment.weaknesses,
-          quality.aiAssessment.keyInsights,
-          quality.aiAssessment.dataHighlights,
+          JSON.stringify(quality.aiAssessment.strengths),
+          JSON.stringify(quality.aiAssessment.weaknesses),
+          JSON.stringify(quality.aiAssessment.keyInsights),
+          JSON.stringify(quality.aiAssessment.dataHighlights),
           quality.aiAssessment.recommendation,
           JSON.stringify(quality.structure),
           classification.primaryTheme.themeId,
@@ -83,7 +88,7 @@ export class PersistenceService {
           JSON.stringify(classification.tags),
           JSON.stringify(classification.entities),
           vectorization ? 'completed' : 'pending',
-          vectorization?.documentEmbedding || null,
+          docEmbedding,
           vectorization?.chunks.length || 0,
           vectorization?.vectorModel || null,
           JSON.stringify(duplicate || {}),
@@ -110,7 +115,7 @@ export class PersistenceService {
           quality.overall,
           classification.primaryTheme.themeId,
           classification.primaryTheme.confidence,
-          classification.tags.map((t) => t.tag),
+          JSON.stringify(classification.tags.map((t) => t.tag)),
           duplicate?.duplicateOf || null,
         ]
       );
@@ -121,7 +126,7 @@ export class PersistenceService {
           `INSERT INTO ai_task_recommendations (
             source_type, source_asset_id, recommendation_data, status
           ) VALUES ($1, $2, $3, $4)
-          ON CONFLICT (source_asset_id) WHERE source_type = 'asset' DO UPDATE SET
+          ON CONFLICT (source_asset_id, source_type) DO UPDATE SET
             recommendation_data = EXCLUDED.recommendation_data,
             status = 'pending',
             updated_at = NOW()`,
@@ -323,7 +328,7 @@ export class PersistenceService {
           AND 1 - (a.ai_document_embedding <=> $1::vector) > $2
           AND (a.ai_quality_score IS NULL OR a.ai_quality_score >= $3)
       `;
-      const params: any[] = [[], threshold, minQualityScore]; // 空向量作为占位符
+      const params: any[] = ['[]', threshold, minQualityScore]; // 空向量作为占位符（pgvector格式）
 
       if (themeId) {
         sql += ` AND a.ai_theme_id = $${params.length + 1}`;
@@ -365,7 +370,10 @@ export class PersistenceService {
       }
 
       const source = sourceResult.rows[0];
-      const embedding = source.ai_document_embedding;
+      // 从数据库获取的 embedding 需要转换为 pgvector 字符串格式
+      const embedding = Array.isArray(source.ai_document_embedding)
+        ? '[' + source.ai_document_embedding.join(',') + ']'
+        : source.ai_document_embedding;
 
       // 搜索相似 assets
       const result = await query(

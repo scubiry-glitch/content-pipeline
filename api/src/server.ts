@@ -5,9 +5,31 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+// 尝试多个可能的 .env 文件路径
+const envPaths = [
+  path.join(__dirname, '..', '.env'),           // 开发环境 (src/../.env)
+  path.join(process.cwd(), '.env'),             // 生产环境 (工作目录)
+  path.join(__dirname, '..', '..', '.env'),     // 备用路径
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('[Server] Loaded environment from:', envPath);
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('[Server] Warning: .env file not found, using environment variables');
+  dotenv.config(); // 尝试默认路径
+}
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';

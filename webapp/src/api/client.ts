@@ -381,6 +381,10 @@ export const blueTeamApi = {
       error?: string;
       async?: boolean;
     }>,
+  // 保存评审配置（不启动评审）
+  saveReviewConfig: (taskId: string, config: any) =>
+    client.post(`/production/${taskId}/save-review-config`, { config }) as Promise<{ success: boolean }>,
+
   getApplyRevisionsStatus: (taskId: string) =>
     client.get(`/production/${taskId}/apply-revisions-status`) as Promise<{
       taskId: string;

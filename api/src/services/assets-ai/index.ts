@@ -48,6 +48,7 @@ export {
 export {
   EmbeddingService,
   embeddingService,
+  getEmbeddingService,
   type EmbeddingConfig,
 } from './embedding.js';
 

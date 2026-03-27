@@ -175,6 +175,22 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // Add missing columns to assets table for v6.2 AI processing
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS file_url TEXT`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS file_type VARCHAR(50)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS file_size BIGINT`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS author VARCHAR(200)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_processing_status VARCHAR(50) DEFAULT 'pending'`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_quality_score INTEGER`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_theme_id VARCHAR(50)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_theme_confidence DECIMAL(4,3)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_tags JSONB DEFAULT '[]'`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_analyzed_at TIMESTAMP WITH TIME ZONE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_duplicate_of VARCHAR(50)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`);
+
   // Research annotations - for deep research citations
   await query(`
     CREATE TABLE IF NOT EXISTS research_annotations (
@@ -771,6 +787,87 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_outline_comments_task ON outline_comments(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_parent ON draft_versions(parent_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_status ON draft_versions(status)`);
+
+  // ========== Pipeline v6.2: Assets AI 批量处理 ==========
+
+  // Asset AI 分析结果表
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_ai_analysis (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      asset_id VARCHAR(50) NOT NULL UNIQUE REFERENCES assets(id) ON DELETE CASCADE,
+      quality_score INTEGER,
+      quality_dimensions JSONB DEFAULT '{}',
+      quality_summary TEXT,
+      quality_strengths JSONB DEFAULT '[]',
+      quality_weaknesses JSONB DEFAULT '[]',
+      quality_key_insights JSONB DEFAULT '[]',
+      quality_data_highlights JSONB DEFAULT '[]',
+      quality_recommendation VARCHAR(50),
+      structure_analysis JSONB DEFAULT '{}',
+      primary_theme_id VARCHAR(50),
+      primary_theme_confidence DECIMAL(4,3),
+      secondary_themes JSONB DEFAULT '[]',
+      expert_library_mapping JSONB DEFAULT '[]',
+      extracted_tags JSONB DEFAULT '[]',
+      extracted_entities JSONB DEFAULT '[]',
+      embedding_status VARCHAR(50) DEFAULT 'pending',
+      document_embedding VECTOR(1536),
+      chunk_count INTEGER DEFAULT 0,
+      embedding_model VARCHAR(100),
+      duplicate_detection_result JSONB DEFAULT '{}',
+      similarity_group_id VARCHAR(50),
+      has_recommendation BOOLEAN DEFAULT FALSE,
+      processing_time_ms INTEGER,
+      model_version VARCHAR(50) DEFAULT 'v1.0',
+      analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Asset 内容分块表
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_content_chunks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      asset_id VARCHAR(50) NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      chunk_index INTEGER NOT NULL,
+      chunk_text TEXT NOT NULL,
+      chunk_type VARCHAR(50) DEFAULT 'body',
+      chapter_title VARCHAR(500),
+      start_page INTEGER,
+      end_page INTEGER,
+      priority INTEGER DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(asset_id, chunk_index)
+    )
+  `);
+
+  // AI 任务推荐表 (扩展 source_type 支持 asset)
+  await query(`
+    CREATE TABLE IF NOT EXISTS ai_task_recommendations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_type VARCHAR(50) DEFAULT 'asset',
+      source_asset_id VARCHAR(50) REFERENCES assets(id) ON DELETE CASCADE,
+      rss_item_id VARCHAR(50) REFERENCES rss_items(id) ON DELETE CASCADE,
+      recommendation_data JSONB NOT NULL,
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(source_asset_id, source_type)
+    )
+  `);
+
+  // 索引
+  await query(`CREATE INDEX IF NOT EXISTS idx_asset_ai_analysis_asset ON asset_ai_analysis(asset_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_asset_ai_analysis_score ON asset_ai_analysis(quality_score)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_asset_ai_analysis_theme ON asset_ai_analysis(primary_theme_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_asset_chunks_asset ON asset_content_chunks(asset_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ai_recommendations_asset ON ai_task_recommendations(source_asset_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ai_recommendations_status ON ai_task_recommendations(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ai_recommendations_type ON ai_task_recommendations(source_type)`);
+
+  // 为 assets 表添加 AI 向量索引
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_ai_embedding ON assets USING ivfflat (ai_document_embedding vector_cosine_ops)`).catch(() => {
+    console.log('[DB] Assets AI embedding index creation skipped');
+  });
 
   console.log('[DB] MVP Schema initialized successfully');
 }

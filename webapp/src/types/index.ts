@@ -30,6 +30,8 @@ export interface Task {
   versions?: DraftVersion[];
   due_date?: string;
   quality_score?: number;
+  sequential_review_config?: any;
+  review_mode?: string;
   created_at: string;
   updated_at: string;
   completed_at?: string;

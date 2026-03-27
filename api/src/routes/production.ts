@@ -319,14 +319,51 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return { stats };
   });
 
+  // 保存评审配置（不启动评审）
+  fastify.post('/:taskId/save-review-config', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { config } = (request.body || {}) as { config?: any };
+    if (!config) {
+      reply.status(400);
+      return { success: false, error: 'config is required' };
+    }
+    // 规范化专家列表
+    let expertRoles: string[] | undefined;
+    if (config.experts && Array.isArray(config.experts)) {
+      expertRoles = config.experts;
+    } else if (config.aiExperts && Array.isArray(config.aiExperts)) {
+      expertRoles = config.aiExperts
+        .filter((e: any) => e.enabled !== false)
+        .map((e: any) => e.role);
+    }
+    const persistedConfig = {
+      mode: config.mode,
+      experts: expertRoles,
+      aiExperts: config.aiExperts,
+      humanExperts: config.humanExperts,
+      autoRevise: config.autoRevise,
+      maxRounds: config.maxRounds,
+      readerTest: config.readerTest,
+    };
+    await query(
+      `UPDATE tasks SET sequential_review_config = $2, updated_at = NOW() WHERE id = $1`,
+      [taskId, JSON.stringify(persistedConfig)]
+    );
+    console.log(`[SaveConfig] Saved review config for task ${taskId}:`, persistedConfig);
+    return { success: true };
+  });
+
   // 批量应用已接受的评审意见（一次 LLM 调用生成一个新版本）
   // 异步处理：立即返回，后台执行 LLM 改稿，前端轮询状态
   fastify.post('/:taskId/apply-revisions', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
-    const { selectedReviewIds } = (request.body || {}) as { selectedReviewIds?: string[] };
+    const body = (request.body || {}) as { selectedReviewIds?: unknown };
+    const selectedReviewIds = Array.isArray(body.selectedReviewIds)
+      ? body.selectedReviewIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      : undefined;
 
     const { startAsyncBatchRevision } = await import('../services/asyncBatchRevision.js');
-    const result = await startAsyncBatchRevision(taskId, selectedReviewIds);
+    const result = await startAsyncBatchRevision(taskId, selectedReviewIds && selectedReviewIds.length > 0 ? selectedReviewIds : undefined);
     if (!result.success) {
       reply.status(400);
       return { success: false, error: result.error };

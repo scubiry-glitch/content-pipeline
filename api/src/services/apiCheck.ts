@@ -33,7 +33,10 @@ export function checkAPIConfig(): APICheckResult {
     },
   };
 
-  const embedding = !!(process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('your_'));
+  const embedding = !!(
+    (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('your_')) ||
+    (process.env.SILICONFLOW_API_KEY && !process.env.SILICONFLOW_API_KEY.includes('your_'))
+  );
 
   const result: APICheckResult = {
     llm: {
@@ -77,7 +80,15 @@ export function printAPICheckReport(): void {
 
   // Embedding
   console.log('║ Embedding API:                                             ║');
-  console.log(`║   状态: ${result.embedding ? '✅ OpenAI 已配置' : '⚪ 未配置(使用随机向量)'}                ║`);
+  const hasSiliconFlowEmbedding = !!(process.env.SILICONFLOW_API_KEY && !process.env.SILICONFLOW_API_KEY.includes('your_'));
+  const hasOpenAIEmbedding = !!(process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('your_'));
+  if (hasSiliconFlowEmbedding) {
+    console.log(`║   状态: ✅ SiliconFlow 已配置 (${process.env.embedding_model || '默认模型'})`);
+  } else if (hasOpenAIEmbedding) {
+    console.log(`║   状态: ✅ OpenAI 已配置                                   ║`);
+  } else {
+    console.log(`║   状态: ⚪ 未配置(使用随机向量)                ║`);
+  }
 
   console.log('╠════════════════════════════════════════════════════════════╣');
 

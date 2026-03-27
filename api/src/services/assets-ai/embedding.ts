@@ -515,12 +515,14 @@ ${text.slice(0, 2000)}
       await this.saveEmbeddings(vectorization);
 
       // 4. 更新 asset 表
+      // 将 embedding 数组转换为 pgvector 格式
+      const docEmbeddingStr = '[' + documentEmbedding.join(',') + ']';
       await query(
         `UPDATE assets SET 
           ai_document_embedding = $2::vector,
           ai_embedding_model = $3
         WHERE id = $1`,
-        [assetId, documentEmbedding, vectorization.vectorModel]
+        [assetId, docEmbeddingStr, vectorization.vectorModel]
       );
 
       console.log(
@@ -546,6 +548,9 @@ ${text.slice(0, 2000)}
 
       // 插入新的 embeddings
       for (const chunk of chunks) {
+        // 将 embedding 数组转换为 pgvector 格式: [0.1, 0.2, ...]
+        const embeddingStr = '[' + chunk.chunkEmbedding.join(',') + ']';
+        
         await query(
           `INSERT INTO asset_embeddings (
             asset_id, chunk_index, chunk_text, chunk_embedding, 
@@ -555,7 +560,7 @@ ${text.slice(0, 2000)}
             assetId,
             chunk.chunkIndex,
             chunk.chunkText,
-            chunk.chunkEmbedding,
+            embeddingStr,
             chunk.chunkType,
             chunk.chapterTitle,
             chunk.startPage,
@@ -601,6 +606,9 @@ ${text.slice(0, 2000)}
     limit: number = 10
   ): Promise<Array<{ assetId: string; similarity: number; chunkText: string }>> {
     try {
+      // 将 embedding 数组转换为 pgvector 格式字符串
+      const embeddingStr = '[' + queryEmbedding.join(',') + ']';
+      
       const result = await query(
         `SELECT 
           asset_id,
@@ -610,7 +618,7 @@ ${text.slice(0, 2000)}
         WHERE 1 - (chunk_embedding <=> $1::vector) > $2
         ORDER BY chunk_embedding <=> $1::vector
         LIMIT $3`,
-        [queryEmbedding, threshold, limit]
+        [embeddingStr, threshold, limit]
       );
 
       return result.rows.map((row) => ({
@@ -657,6 +665,24 @@ ${text.slice(0, 2000)}
 }
 
 // ============================================
-// 导出单例
+// 导出单例（延迟初始化，确保环境变量已加载）
 // ============================================
-export const embeddingService = new EmbeddingService();
+let _embeddingService: EmbeddingService | null = null;
+
+export function getEmbeddingService(): EmbeddingService {
+  if (!_embeddingService) {
+    _embeddingService = new EmbeddingService();
+  }
+  return _embeddingService;
+}
+
+// 兼容旧代码的导出（延迟初始化）
+export const embeddingService: EmbeddingService = {
+  get config() { return getEmbeddingService().config; },
+  embed(text: string) { return getEmbeddingService().embed(text); },
+  embedBatch(texts: string[]) { return getEmbeddingService().embedBatch(texts); },
+  vectorizeAsset(assetId: string, chunks: DocumentChunk[], metadata?: any) { return getEmbeddingService().vectorizeAsset(assetId, chunks, metadata); },
+  saveEmbeddings(vectorization: AssetVectorization) { return getEmbeddingService().saveEmbeddings(vectorization); },
+  searchSimilar(queryEmbedding: number[], threshold?: number, limit?: number) { return getEmbeddingService().searchSimilar(queryEmbedding, threshold, limit); },
+  getDocumentEmbedding(assetId: string) { return getEmbeddingService().getDocumentEmbedding(assetId); },
+} as EmbeddingService;

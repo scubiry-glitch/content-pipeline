@@ -688,6 +688,33 @@ ${JSON.stringify(outline, null, 2)}
     const isSequential = mode === 'sequential' || mode === 'serial';
     console.log(`[Redo] Preparing review for task ${taskId}`, { config, preserveHistory, mode, isSequential });
 
+    // ★ 持久化完整评审配置到 tasks 表，确保所有下游入口都能读取
+    if (config) {
+      // 规范化专家列表
+      let expertRoles: string[] | undefined;
+      if (config.experts && Array.isArray(config.experts)) {
+        expertRoles = config.experts;
+      } else if (config.aiExperts && Array.isArray(config.aiExperts)) {
+        expertRoles = config.aiExperts
+          .filter((e: any) => e.enabled !== false)
+          .map((e: any) => e.role);
+      }
+      const persistedConfig = {
+        mode: config.mode,
+        experts: expertRoles,
+        aiExperts: config.aiExperts,
+        humanExperts: config.humanExperts,
+        autoRevise: config.autoRevise,
+        maxRounds: config.maxRounds,
+        readerTest: config.readerTest,
+      };
+      await query(
+        `UPDATE tasks SET sequential_review_config = $2, updated_at = NOW() WHERE id = $1`,
+        [taskId, JSON.stringify(persistedConfig)]
+      );
+      console.log(`[Redo] Persisted review config to task ${taskId}:`, persistedConfig);
+    }
+
     // 设置正确的 current_stage，便于前端 SSE 自动连接
     const currentStage = isSequential ? 'sequential_review' : 'blue_team_review';
     await query(
@@ -782,18 +809,35 @@ ${JSON.stringify(outline, null, 2)}
       const task = await this.getTask(taskId);
       // 将前端 config 转换为 executeStreamingBlueTeamReview 期望的格式
       let normalizedConfig: any = undefined;
-      if (config) {
+      // ★ 优先使用传入的 config，否则从持久化配置读取
+      let effectiveConfig = config;
+      if (!effectiveConfig) {
+        try {
+          const configResult = await query(
+            `SELECT sequential_review_config FROM tasks WHERE id = $1`,
+            [taskId]
+          );
+          const persisted = configResult.rows[0]?.sequential_review_config;
+          if (persisted) {
+            effectiveConfig = typeof persisted === 'string' ? JSON.parse(persisted) : persisted;
+            console.log(`[Redo] Parallel review using persisted config:`, effectiveConfig);
+          }
+        } catch (e) {
+          console.warn(`[Redo] Failed to read persisted config for parallel review:`, e);
+        }
+      }
+      if (effectiveConfig) {
         let expertRoles: string[] | undefined;
-        if (config.experts && Array.isArray(config.experts)) {
-          expertRoles = config.experts;
-        } else if (config.aiExperts && Array.isArray(config.aiExperts)) {
-          expertRoles = config.aiExperts
+        if (effectiveConfig.experts && Array.isArray(effectiveConfig.experts)) {
+          expertRoles = effectiveConfig.experts;
+        } else if (effectiveConfig.aiExperts && Array.isArray(effectiveConfig.aiExperts)) {
+          expertRoles = effectiveConfig.aiExperts
             .filter((e: any) => e.enabled !== false)
             .map((e: any) => e.role);
         }
         normalizedConfig = {
-          mode: config.mode,
-          rounds: config.maxRounds,
+          mode: effectiveConfig.mode,
+          rounds: effectiveConfig.maxRounds,
           experts: expertRoles,
         };
       }

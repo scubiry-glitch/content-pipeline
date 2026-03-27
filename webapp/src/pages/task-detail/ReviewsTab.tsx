@@ -1240,6 +1240,18 @@ export function ReviewsTab() {
         isOpen={showConfigPanel}
         onClose={() => setShowConfigPanel(false)}
         onConfirm={handleConfigConfirm}
+        onSave={async (cfg) => {
+          try {
+            await blueTeamApi.saveReviewConfig(task.id, cfg);
+            alert('Configuration saved successfully');
+            if (onRefreshTask) await onRefreshTask();
+          } catch (e) {
+            console.error('Failed to save config:', e);
+            alert('Failed to save configuration');
+          }
+        }}
+        topic={task?.topic}
+        savedConfig={task?.sequential_review_config}
       />
     </div>
   );

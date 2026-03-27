@@ -200,6 +200,52 @@ function parseRevisionOutput(content: string): { revisedContent: string; changes
   };
 }
 
+/** 与前台 / getBlueTeamReviews 展示口径一致：可参与合并改稿的决策 */
+function isAppliedDecision(v: unknown): boolean {
+  const s = String(v || '').toLowerCase();
+  return s === 'accept' || s === 'accepted' || s === 'manual_resolved';
+}
+
+function isFullBlueTeamReviewAccept(row: { user_decision?: string | null; status?: string | null }): boolean {
+  const st = String(row.status || '').toLowerCase();
+  // 与 TaskDetailLayout.loadReviews 一致：review.status === 'completed' 时子问题会继承为已处理/已接受口径
+  if (st === 'completed') return true;
+  return isAppliedDecision(row.user_decision) || st === 'accepted' || st === 'accept';
+}
+
+/** 全量改稿：单题是否视为「已接受可合并」（对齐前端汇总 + getBlueTeamReviews 的 decision 合并） */
+function isQuestionIncludedInFullRevision(
+  source: 'bt' | 'er',
+  q: any,
+  row: RevisionRow,
+  questionIndex: number,
+  qdIndices: Set<number> | undefined
+): boolean {
+  if (source === 'er') {
+    const eff = q.decision || q.status;
+    const s = String(eff || '').toLowerCase();
+    if (s === 'completed') return true;
+    return isAppliedDecision(eff);
+  }
+  if (isFullBlueTeamReviewAccept(row)) return true;
+  if (qdIndices && qdIndices.size > 0) {
+    if (qdIndices.has(questionIndex) || qdIndices.has(questionIndex + 1)) return true;
+  }
+  const eff = q.decision || q.status;
+  const s = String(eff || '').toLowerCase();
+  if (s === 'completed') return true;
+  return isAppliedDecision(eff);
+}
+
+type RevisionRow = {
+  id: string;
+  expert_role: string;
+  questions: unknown;
+  user_decision?: string | null;
+  status?: string | null;
+  source: 'bt' | 'er';
+};
+
 /**
  * 批量应用所有已接受的评审意见（合并为一次 LLM 调用）
  * 避免逐条改稿导致的版本爆炸问题
@@ -211,10 +257,13 @@ export async function applyAllAcceptedRevisions(
   console.log(`[RevisionAgent] Batch revision for task ${taskId}`);
   const reportProgress = options.onProgress || (() => undefined);
 
+  const normalizedSelectedIds = Array.isArray(options.selectedReviewIds)
+    ? options.selectedReviewIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    : [];
   const selectedIssueMap = new Map<string, Set<number>>();
-  const hasSelection = Array.isArray(options.selectedReviewIds) && options.selectedReviewIds.length > 0;
+  const hasSelection = normalizedSelectedIds.length > 0;
   if (hasSelection) {
-    for (const selectedId of options.selectedReviewIds || []) {
+    for (const selectedId of normalizedSelectedIds) {
       const [reviewId, indexStr] = selectedId.split('::');
       const idx = Number.parseInt(indexStr, 10);
       if (!Number.isNaN(idx)) {
@@ -228,62 +277,85 @@ export async function applyAllAcceptedRevisions(
 
   try {
     reportProgress(10, '收集已接受的评审意见...');
-    // 1. 收集所有 accepted 的评审意见（同时查询 blue_team_reviews 和 expert_reviews）
-    const btResult = await query(
-      `SELECT id, expert_role, questions
-       FROM blue_team_reviews
-       WHERE task_id = $1
-         AND (user_decision = 'accept' OR status = 'accepted')
-       ORDER BY round, created_at`,
-      [taskId]
-    );
-
-    // 也查询 expert_reviews（串行评审）—— 用户决策记录在 questions JSONB 中
-    const erResult = await query(
-      `SELECT id, expert_role, questions
-       FROM expert_reviews
-       WHERE task_id = $1
-       ORDER BY round, created_at`,
-      [taskId]
-    );
-    // 过滤出 questions 中有 decision='accept' 的 expert_reviews
-    const acceptedExpertReviews = erResult.rows.filter(row => {
-      const qs = typeof row.questions === 'string' ? JSON.parse(row.questions) : row.questions;
-      const qList = Array.isArray(qs) ? qs : [qs];
-      return qList.some((q: any) => q.decision === 'accept');
-    });
-
-    // 也查询 question_decisions 表中的 accept 记录（blue_team_reviews 的 question 级别决策）
-    const qdResult = await query(
-      `SELECT qd.review_id, qd.question_index
-       FROM question_decisions qd
-       WHERE qd.task_id = $1 AND qd.decision = 'accept'`,
-      [taskId]
-    );
     const qdAcceptedMap = new Map<string, Set<number>>();
-    for (const qd of qdResult.rows) {
-      if (!qdAcceptedMap.has(qd.review_id)) qdAcceptedMap.set(qd.review_id, new Set());
-      qdAcceptedMap.get(qd.review_id)!.add(qd.question_index);
-    }
-    // 如果 blue_team_reviews 有 question_decisions accept，也包含它们
-    if (qdAcceptedMap.size > 0) {
-      const reviewIds = Array.from(qdAcceptedMap.keys());
-      const qdReviewsResult = await query(
-        `SELECT id, expert_role, questions FROM blue_team_reviews
-         WHERE id = ANY($1) AND task_id = $2`,
-        [reviewIds, taskId]
-      );
-      for (const row of qdReviewsResult.rows) {
-        if (!btResult.rows.some(r => r.id === row.id)) {
-          btResult.rows.push(row);
-        }
-      }
-    }
+    let allAcceptedRows: RevisionRow[] = [];
 
-    const allAcceptedRows = [...btResult.rows, ...acceptedExpertReviews];
+    // 选中项模式：按选中的 reviewId 精确拉取，避免受“accepted 判定口径”影响
+    if (hasSelection) {
+      const selectedReviewIds = Array.from(selectedIssueMap.keys());
+      const [btSelectedResult, erSelectedResult] = await Promise.all([
+        query(
+          `SELECT id, expert_role, questions, user_decision, status
+           FROM blue_team_reviews
+           WHERE task_id = $1 AND id = ANY($2)
+           ORDER BY round, created_at`,
+          [taskId, selectedReviewIds]
+        ),
+        query(
+          `SELECT id, expert_role, questions
+           FROM expert_reviews
+           WHERE task_id = $1 AND id = ANY($2)
+           ORDER BY round, created_at`,
+          [taskId, selectedReviewIds]
+        ),
+      ]);
+      allAcceptedRows = [
+        ...btSelectedResult.rows.map((r) => ({ ...r, source: 'bt' as const })),
+        ...erSelectedResult.rows.map((r) => ({ ...r, user_decision: null, status: null, source: 'er' as const })),
+      ];
+    } else {
+      // 题目级决策（与 production.getBlueTeamReviews / 前端展示口径对齐）
+      const qdWideResult = await query(
+        `SELECT qd.review_id, qd.question_index
+         FROM question_decisions qd
+         WHERE qd.task_id = $1
+           AND LOWER(TRIM(qd.decision::text)) IN ('accept', 'accepted', 'manual_resolved')`,
+        [taskId]
+      );
+      for (const qd of qdWideResult.rows) {
+        if (!qdAcceptedMap.has(qd.review_id)) qdAcceptedMap.set(qd.review_id, new Set());
+        qdAcceptedMap.get(qd.review_id)!.add(qd.question_index);
+      }
+
+      // 全量：拉取当前可见的蓝军记录，再在题目级过滤（与 TaskDetailLayout.loadReviews 中 completed/accept 口径一致）
+      let btResult = await query(
+        `SELECT id, expert_role, questions, user_decision, status
+         FROM blue_team_reviews btr
+         WHERE btr.task_id = $1
+           AND (btr.is_historical IS NULL OR btr.is_historical = false)
+         ORDER BY round, created_at`,
+        [taskId]
+      );
+      if (btResult.rows.length === 0) {
+        btResult = await query(
+          `SELECT id, expert_role, questions, user_decision, status
+           FROM blue_team_reviews btr
+           WHERE btr.task_id = $1
+           ORDER BY round, created_at`,
+          [taskId]
+        );
+      }
+
+      const erResult = await query(
+        `SELECT id, expert_role, questions
+         FROM expert_reviews
+         WHERE task_id = $1
+         ORDER BY round, created_at`,
+        [taskId]
+      );
+
+      allAcceptedRows = [
+        ...btResult.rows.map((r) => ({ ...r, source: 'bt' as const })),
+        ...erResult.rows.map((r) => ({ ...r, user_decision: null, status: null, source: 'er' as const })),
+      ];
+    }
 
     if (allAcceptedRows.length === 0) {
-      return { success: false, error: '没有已接受的评审意见', appliedCount: 0 };
+      return {
+        success: false,
+        error: hasSelection ? '未找到选中项对应的评审记录' : '没有已接受的评审意见',
+        appliedCount: 0,
+      };
     }
 
     // 2. 获取最新稿件
@@ -314,8 +386,21 @@ export async function applyAllAcceptedRevisions(
 
       const qList = Array.isArray(questions) ? questions : [questions];
       for (const [idx, q] of qList.entries()) {
-        if (hasSelection && selectedIndexes && selectedIndexes.size > 0 && !selectedIndexes.has(idx)) {
-          continue;
+        if (hasSelection) {
+          // 兼容前后端 index 基准差异（0-based / 1-based）
+          if (
+            selectedIndexes &&
+            selectedIndexes.size > 0 &&
+            !selectedIndexes.has(idx) &&
+            !selectedIndexes.has(idx + 1)
+          ) {
+            continue;
+          }
+        } else {
+          const qdIdx = qdAcceptedMap.get(row.id);
+          if (!isQuestionIncludedInFullRevision(row.source, q, row, idx, qdIdx)) {
+            continue;
+          }
         }
         if (q.question && q.severity !== 'praise') {
           allIssues.push({
@@ -332,7 +417,9 @@ export async function applyAllAcceptedRevisions(
     if (allIssues.length === 0) {
       return {
         success: false,
-        error: hasSelection ? '所选评审项中无可操作的修改建议' : '已接受的评审中无可操作的修改建议',
+        error: hasSelection
+          ? '所选评审项中无可操作的修改建议（可能为赞美项或未命中可改稿条目）'
+          : '已接受的评审中无可操作的修改建议',
         appliedCount: 0,
       };
     }

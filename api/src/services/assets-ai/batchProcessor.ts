@@ -387,6 +387,21 @@ export class AssetsAIBatchProcessor {
 }
 
 // ============================================
-// 导出单例
+// 导出单例（延迟初始化，确保环境变量已加载）
 // ============================================
-export const assetsBatchProcessor = new AssetsAIBatchProcessor();
+let _assetsBatchProcessor: AssetsAIBatchProcessor | null = null;
+
+export function getAssetsBatchProcessor(): AssetsAIBatchProcessor {
+  if (!_assetsBatchProcessor) {
+    _assetsBatchProcessor = new AssetsAIBatchProcessor();
+  }
+  return _assetsBatchProcessor;
+}
+
+// 兼容旧代码的导出（延迟初始化）
+export const assetsBatchProcessor: AssetsAIBatchProcessor = {
+  get config() { return getAssetsBatchProcessor().config; },
+  processBatch(assets: Asset[]) { return getAssetsBatchProcessor().processBatch(assets); },
+  processSingleAsset(asset: Asset, force?: boolean) { return getAssetsBatchProcessor().processSingleAsset(asset, force); },
+  updateConfig(config: Partial<AssetsBatchProcessingConfig>) { return getAssetsBatchProcessor().updateConfig(config); },
+} as AssetsAIBatchProcessor;

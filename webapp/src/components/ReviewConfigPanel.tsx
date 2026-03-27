@@ -3,13 +3,19 @@
 
 import { useState, useEffect } from 'react';
 import { expertsApi } from '../api/client';
-import { getAllExperts } from '../services/expertService';
+import { getAllExperts, matchExperts } from '../services/expertService';
 import type { ReviewConfig, Expert } from '../types';
 
 export interface ReviewConfigPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (config: ReviewConfig) => void;
+  /** 仅保存配置（不启动评审） */
+  onSave?: (config: ReviewConfig) => Promise<void> | void;
+  /** 任务主题，用于自动推荐专家 */
+  topic?: string;
+  /** 已持久化的评审配置，用于回显上次选择 */
+  savedConfig?: any;
 }
 
 // 默认配置
@@ -35,6 +41,9 @@ const AI_EXPERT_OPTIONS = [
   { role: 'expander' as const, name: '拓展者', icon: '⚖️', desc: '扩展关联因素与国际对比' },
   { role: 'synthesizer' as const, name: '提炼者', icon: '👔', desc: '归纳核心论点与结构优化' },
   { role: 'fact_checker' as const, name: '事实核查员', icon: '✓', desc: '专注数据准确性与来源验证' },
+  { role: 'logic_checker' as const, name: '逻辑检察官', icon: '🧩', desc: '论证严密性与逻辑链完整性' },
+  { role: 'domain_expert' as const, name: '行业专家', icon: '🏢', desc: '专业深度与行业趋势洞察' },
+  { role: 'reader_rep' as const, name: '读者代表', icon: '👤', desc: '可读性与受众适配度评估' },
 ];
 
 // 10种典型读者画像（模拟数据，实际应从API获取）
@@ -51,7 +60,48 @@ const MOCK_READER_PERSONAS: Expert[] = [
   { id: 'reader_10', name: '故事爱好者', code: 'reader_10', title: '叙事偏好读者', domain: '人文故事', domainCode: 'humanities', domainName: '人文故事', status: 'active', angle: 'reader', bio: '通过故事理解世界，喜欢有人情味的内容', level: 'domain', profile: { title: '叙事偏好读者', background: '人文故事', personality: '感性理解' }, philosophy: { core: [], quotes: [] }, achievements: [], reviewDimensions: [], totalReviews: 0, acceptanceRate: 0, avgResponseTime: 0 },
 ];
 
-export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPanelProps) {
+/**
+ * 根据任务主题/领域自动推荐 AI 专家组合
+ * 规则：
+ *  - 默认总是包含 challenger + synthesizer（基础组合）
+ *  - 涉及数据/统计/房产/金融 → 加 fact_checker
+ *  - 涉及投资/市场/策略 → 加 domain_expert
+ *  - 涉及科技/学术/研究 → 加 logic_checker
+ *  - 面向大众/科普 → 加 reader_rep
+ *  - 其他 → 加 expander
+ */
+function getRecommendedAIExperts(topic?: string): string[] {
+  const base = ['challenger', 'synthesizer'];
+  if (!topic) return [...base, 'expander']; // 无主题时用默认三件套
+
+  const t = topic.toLowerCase();
+
+  // 数据密集型领域
+  if (/数据|统计|房[产地]|金融|经济|财务|投资回报|收益|利率|价格|市场.*数[据字]/.test(t)) {
+    base.push('fact_checker');
+  }
+  // 行业深度领域
+  if (/投资|市场|战略|策略|产业|行业|商业|竞争|机会|趋势/.test(t)) {
+    base.push('domain_expert');
+  }
+  // 逻辑严谨型领域
+  if (/科技|技术|学术|研究|分析|论证|政策|法规|合规/.test(t)) {
+    base.push('logic_checker');
+  }
+  // 面向大众/可读性
+  if (/科普|入门|指南|教程|生活|消费|健康|文化|旅[行游]/.test(t)) {
+    base.push('reader_rep');
+  }
+
+  // 如果没有命中任何特殊领域，补充 expander
+  if (base.length === 2) {
+    base.push('expander');
+  }
+
+  return [...new Set(base)];
+}
+
+export function ReviewConfigPanel({ isOpen, onClose, onConfirm, onSave, topic, savedConfig }: ReviewConfigPanelProps) {
   const [config, setConfig] = useState<ReviewConfig>(DEFAULT_CONFIG);
   const [libraryExperts, setLibraryExperts] = useState<Expert[]>([]);
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
@@ -59,14 +109,51 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
   const [readerExperts, setReaderExperts] = useState<Expert[]>([]);
   const [loadingExperts, setLoadingExperts] = useState(false);
   const [loadingReaders, setLoadingReaders] = useState(false);
+  const [recommendedExpertIds, setRecommendedExpertIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  // 从专家库加载专家列表
+  // 从持久化配置恢复 & 基于主题推荐专家
   useEffect(() => {
     if (isOpen) {
+      // 1. 恢复持久化配置
+      if (savedConfig) {
+        // 从持久化的 experts (string[]) 或 aiExperts 恢复选中状态
+        // 始终基于完整 AI_EXPERT_OPTIONS 重建，确保新增角色也能正确显示
+        const enabledRoles = new Set<string>(
+          savedConfig.experts ||
+          (savedConfig.aiExperts || []).filter((e: any) => e.enabled !== false).map((e: any) => e.role) ||
+          []
+        );
+        const restored: ReviewConfig = {
+          mode: savedConfig.mode || DEFAULT_CONFIG.mode,
+          aiExperts: AI_EXPERT_OPTIONS.map(opt => ({
+            role: opt.role,
+            enabled: enabledRoles.has(opt.role),
+          })),
+          humanExperts: savedConfig.humanExperts || [],
+          autoRevise: savedConfig.autoRevise || DEFAULT_CONFIG.autoRevise,
+          maxRounds: savedConfig.maxRounds || DEFAULT_CONFIG.maxRounds,
+          readerTest: savedConfig.readerTest || DEFAULT_CONFIG.readerTest,
+        };
+        setConfig(restored);
+        console.log('[ReviewConfigPanel] Restored saved config:', restored);
+      } else {
+        // 没有 savedConfig 时，根据 topic 自动推荐 AI 专家
+        const recommended = getRecommendedAIExperts(topic);
+        setConfig({
+          ...DEFAULT_CONFIG,
+          aiExperts: AI_EXPERT_OPTIONS.map(opt => ({
+            role: opt.role,
+            enabled: recommended.includes(opt.role),
+          })),
+        });
+        console.log('[ReviewConfigPanel] Auto-recommended AI experts for topic:', topic, recommended);
+      }
+
       loadLibraryExperts();
       loadReaderExperts();
     }
-  }, [isOpen]);
+  }, [isOpen, savedConfig]);
 
   // 搜索过滤专家列表
   useEffect(() => {
@@ -89,27 +176,64 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
     try {
       // 优先使用本地 expertService 的完整专家库（包含75位专家）
       const localExperts = getAllExperts();
+      let activeExperts: Expert[];
       if (localExperts.length > 0) {
-        // 只显示活跃的专家，排除读者角色
-        const activeExperts = localExperts.filter(e => 
+        activeExperts = localExperts.filter(e =>
           e.status === 'active' && e.angle !== 'reader'
         );
-        setLibraryExperts(activeExperts);
-        setFilteredExperts(activeExperts);
       } else {
         // 回退到 API 获取
         const result = await expertsApi.getAll();
-        const activeExperts = result.items.filter(e => 
+        activeExperts = result.items.filter(e =>
           e.status === 'active' && e.angle !== 'reader'
         );
-        setLibraryExperts(activeExperts);
-        setFilteredExperts(activeExperts);
+      }
+
+      // 2. 基于 topic 智能推荐专家
+      let recommended: string[] = [];
+      if (topic && activeExperts.length > 0) {
+        try {
+          const matchResult = matchExperts(
+            { topic, importance: 0.7 },
+            { useSemanticMatch: true }
+          );
+          // 收集所有被推荐的专家ID
+          const recIds = new Set<string>();
+          if (matchResult.domainExperts) {
+            matchResult.domainExperts.forEach(e => recIds.add(e.id));
+          }
+          if (matchResult.seniorExpert) {
+            recIds.add(matchResult.seniorExpert.id);
+          }
+          recommended = Array.from(recIds);
+          console.log(`[ReviewConfigPanel] Topic "${topic}" recommended experts:`, recommended);
+        } catch (e) {
+          console.warn('[ReviewConfigPanel] Expert matching failed:', e);
+        }
+      }
+      setRecommendedExpertIds(recommended);
+
+      // 3. 排序：推荐的排前面
+      const recSet = new Set(recommended);
+      const sorted = [
+        ...activeExperts.filter(e => recSet.has(e.id)),
+        ...activeExperts.filter(e => !recSet.has(e.id)),
+      ];
+
+      setLibraryExperts(sorted);
+      setFilteredExperts(sorted);
+
+      // 4. 如果没有已保存配置且有推荐，自动预选推荐专家
+      if (!savedConfig && recommended.length > 0) {
+        setConfig(prev => ({
+          ...prev,
+          humanExperts: [...new Set([...(prev.humanExperts || []), ...recommended.slice(0, 3)])],
+        }));
       }
     } catch (error) {
       console.error('Failed to load experts:', error);
-      // 出错时尝试本地获取
       const localExperts = getAllExperts();
-      const activeExperts = localExperts.filter(e => 
+      const activeExperts = localExperts.filter(e =>
         e.status === 'active' && e.angle !== 'reader'
       );
       setLibraryExperts(activeExperts);
@@ -294,9 +418,14 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
             <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-base">group</span>
               Expert Library ({config.humanExperts?.length || 0} selected)
+              {recommendedExpertIds.length > 0 && !expertSearchQuery && (
+                <span className="text-xs font-normal text-amber-500">
+                  {recommendedExpertIds.length} recommended
+                </span>
+              )}
               {expertSearchQuery && (
                 <span className="text-xs font-normal text-slate-400">
-                  显示 {filteredExperts.length}/{libraryExperts.length}
+                  {filteredExperts.length}/{libraryExperts.length}
                 </span>
               )}
             </h4>
@@ -353,15 +482,22 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
                         <div className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">{expert.name}</div>
                         <div className="text-xs text-slate-500">{expert.title} · {expert.domain}</div>
                       </div>
-                      {expert.angle && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                          expert.angle === 'challenger' ? 'bg-red-100 text-red-700' :
-                          expert.angle === 'expander' ? 'bg-green-100 text-green-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                          {expert.angle}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {recommendedExpertIds.includes(expert.id) && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            recommended
+                          </span>
+                        )}
+                        {expert.angle && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                            expert.angle === 'challenger' ? 'bg-red-100 text-red-700' :
+                            expert.angle === 'expander' ? 'bg-green-100 text-green-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {expert.angle}
+                          </span>
+                        )}
+                      </div>
                     </label>
                   );
                 })
@@ -533,20 +669,41 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm }: ReviewConfigPa
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(config)}
-            disabled={enabledCount === 0}
-            className="px-6 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Start Review with Config
-          </button>
+        <div className="flex items-center justify-between p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50">
+          <div>
+            {onSave && (
+              <button
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    await onSave(config);
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-base">save</span>
+                {saving ? 'Saving...' : 'Save Config'}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm(config)}
+              disabled={enabledCount === 0}
+              className="px-6 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Start Review
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -538,6 +538,9 @@ export class AssetDuplicateDetectionProcessor {
     limit: number
   ): Promise<Array<{ assetId: string; title: string; similarity: number; matchedChunks: number }>> {
     try {
+      // 将 embedding 数组转换为 pgvector 格式
+      const embeddingStr = '[' + embedding.join(',') + ']';
+      
       const result = await query(
         `SELECT 
           asset_id,
@@ -547,7 +550,7 @@ export class AssetDuplicateDetectionProcessor {
           AND 1 - (chunk_embedding <=> $1::vector) > $3
         ORDER BY chunk_embedding <=> $1::vector
         LIMIT $4`,
-        [embedding, '', threshold, limit]
+        [embeddingStr, '', threshold, limit]
       );
 
       // 获取 asset 标题
