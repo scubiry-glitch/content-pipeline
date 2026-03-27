@@ -258,17 +258,40 @@ export async function getSequentialReviewStreamingStatus(taskId: string): Promis
       };
     }
     
-    const progress = progressResult.rows[0];
-    const reviewQueue = progress.review_queue || [];
-    
+    const p = progressResult.rows[0] as Record<string, unknown>;
+
+    // 013 实体表含 review_queue / current_expert_role 等
+    if ('review_queue' in p || 'current_expert_role' in p) {
+      const qc = p.review_queue;
+      const queueLen = Array.isArray(qc) ? qc.length : 0;
+      return {
+        status: String(p.status ?? 'idle'),
+        currentRound: Number(p.current_round ?? 0),
+        totalRounds: Number(p.total_rounds ?? queueLen ?? 0),
+        currentExpert: (p.current_expert_role as string | null) ?? null,
+        events: [],
+      };
+    }
+
+    // 003：task_review_progress 为按 expert_reviews 聚合的视图，无串行队列字段
+    const total = Number(p.total_reviews ?? 0);
+    const completed = Number(p.completed_reviews ?? 0);
+    let status = 'idle';
+    if (total <= 0) {
+      status = 'not_configured';
+    } else if (completed >= total) {
+      status = 'completed';
+    } else {
+      status = 'running';
+    }
+
     return {
-      status: progress.status,
-      currentRound: progress.current_round || 0,
-      totalRounds: progress.total_rounds,
-      currentExpert: progress.current_expert_role,
-      events: [] // 可以扩展为存储最近事件
+      status,
+      currentRound: Number(p.latest_round ?? p.current_review_round ?? 0),
+      totalRounds: total,
+      currentExpert: null,
+      events: [],
     };
-    
   } catch (error) {
     console.error('[StreamingSequential] Get status failed:', error);
     throw error;

@@ -227,7 +227,7 @@ export class PersistenceService {
     }
 
     const row = result.rows[0];
-    return this.parseAnalysisResult(row);
+    return await this.parseAnalysisResult(row);
   }
 
   /**
@@ -264,7 +264,68 @@ export class PersistenceService {
   /**
    * 解析数据库结果为 AssetAIAnalysisResult
    */
-  private parseAnalysisResult(row: any): AssetAIAnalysisResult {
+  private async parseAnalysisResult(row: any): Promise<AssetAIAnalysisResult> {
+    // 查询主题名称
+    let themeName = '';
+    if (row.primary_theme_id) {
+      try {
+        const themeResult = await query('SELECT name FROM themes WHERE id = $1', [row.primary_theme_id]);
+        if (themeResult.rows.length > 0) {
+          themeName = themeResult.rows[0].name;
+        }
+      } catch {
+        // 忽略主题查询错误
+      }
+    }
+
+    // 查询重复检测结果
+    let duplicateResult = null;
+    try {
+      const dupResult = await query(
+        'SELECT duplicate_asset_id, similarity_score FROM asset_duplicate_results WHERE source_asset_id = $1',
+        [row.asset_id]
+      );
+      if (dupResult.rows.length > 0) {
+        duplicateResult = {
+          isDuplicate: dupResult.rows[0].similarity_score > 0.9,
+          duplicateOf: dupResult.rows[0].duplicate_asset_id,
+          similarAssets: dupResult.rows.map((r: any) => ({
+            assetId: r.duplicate_asset_id,
+            assetTitle: '', // 简化处理
+            similarity: r.similarity_score,
+          })),
+        };
+      }
+    } catch {
+      // 忽略重复查询错误
+    }
+
+    // 查询任务推荐
+    let taskRecommendation = null;
+    try {
+      const taskResult = await query(
+        `SELECT recommendation_data, status FROM ai_task_recommendations 
+         WHERE source_asset_id = $1 AND source_type = 'asset' 
+         ORDER BY created_at DESC LIMIT 1`,
+        [row.asset_id]
+      );
+      if (taskResult.rows.length > 0) {
+        const recData = taskResult.rows[0].recommendation_data;
+        taskRecommendation = {
+          title: recData.title || '推荐任务',
+          format: recData.format || 'article',
+          priority: recData.priority || 'medium',
+          reason: recData.reason || '',
+          content: {
+            angle: recData.content?.angle || '',
+            keyPoints: recData.content?.keyPoints || [],
+          },
+        };
+      }
+    } catch {
+      // 忽略任务推荐查询错误
+    }
+
     return {
       assetId: row.asset_id,
       quality: {
@@ -284,8 +345,8 @@ export class PersistenceService {
       classification: {
         primaryTheme: {
           themeId: row.primary_theme_id || '',
-          themeName: '', // 需要从 themes 表查询
-          confidence: row.primary_theme_confidence || 0,
+          themeName: themeName,
+          confidence: parseFloat(row.primary_theme_confidence) || 0,
           reason: '',
         },
         secondaryThemes: row.secondary_themes || [],
@@ -293,6 +354,11 @@ export class PersistenceService {
         tags: row.extracted_tags || [],
         entities: row.extracted_entities || [],
       },
+      duplicate: duplicateResult || {
+        isDuplicate: false,
+        similarAssets: [],
+      },
+      taskRecommendation,
       processingTimeMs: row.processing_time_ms || 0,
       modelVersion: row.model_version || 'v1.0',
     };

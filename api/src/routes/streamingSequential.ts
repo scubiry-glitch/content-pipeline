@@ -9,6 +9,13 @@ import {
 } from '../services/streamingSequentialReview.js';
 import { query } from '../db/connection.js';
 
+function questionCountFromQuestions(questions: unknown): number {
+  if (questions == null) return 0;
+  if (Array.isArray(questions)) return questions.length;
+  if (typeof questions === 'object') return 1;
+  return 0;
+}
+
 export async function streamingSequentialRoutes(fastify: FastifyInstance) {
   
   /**
@@ -76,37 +83,46 @@ export async function streamingSequentialRoutes(fastify: FastifyInstance) {
     
     try {
       const status = await getSequentialReviewStreamingStatus(taskId);
-      
-      // 获取评审历史
-      const reviewsResult = await query(
-        `SELECT er.round, er.expert_name, er.expert_role, er.questions, er.status,
-                dv.id as draft_id
-         FROM expert_reviews er
-         LEFT JOIN draft_versions dv ON er.output_draft_id = dv.id
-         WHERE er.task_id = $1
-         ORDER BY er.round`,
-        [taskId]
-      );
-      
-      // 获取评审链
-      const chainResult = await query(
-        `SELECT * FROM review_chains WHERE task_id = $1 ORDER BY round`,
-        [taskId]
-      );
-      
+
+      // 不 JOIN draft_versions：output_draft_id 若为非 UUID 字符串会在 ON 比较时触发 PG 报错
+      let reviewRows: Record<string, unknown>[] = [];
+      try {
+        const reviewsResult = await query(
+          `SELECT er.round, er.expert_name, er.expert_role, er.questions, er.status,
+                  er.output_draft_id AS draft_id
+           FROM expert_reviews er
+           WHERE er.task_id = $1
+           ORDER BY er.round`,
+          [taskId]
+        );
+        reviewRows = reviewsResult.rows as Record<string, unknown>[];
+      } catch (e) {
+        console.error('[StreamingSequential] expert_reviews query failed:', e);
+      }
+
+      let chainRows: Record<string, unknown>[] = [];
+      try {
+        const chainResult = await query(
+          `SELECT * FROM review_chains WHERE task_id = $1 ORDER BY round`,
+          [taskId]
+        );
+        chainRows = chainResult.rows as Record<string, unknown>[];
+      } catch (e) {
+        console.error('[StreamingSequential] review_chains query failed:', e);
+      }
+
       return reply.send({
         ...status,
-        reviews: reviewsResult.rows.map(r => ({
+        reviews: reviewRows.map((r) => ({
           round: r.round,
           expertName: r.expert_name,
           expertRole: r.expert_role,
-          questionCount: r.questions ? r.questions.length : 0,
+          questionCount: questionCountFromQuestions(r.questions),
           status: r.status,
-          draftId: r.draft_id
+          draftId: r.draft_id ?? null,
         })),
-        chain: chainResult.rows
+        chain: chainRows,
       });
-      
     } catch (error) {
       console.error('[StreamingSequential] Get status failed:', error);
       return reply.status(500).send({ error: 'Failed to get status' });
