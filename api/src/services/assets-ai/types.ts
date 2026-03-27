@@ -8,6 +8,7 @@
 export interface Asset {
   id: string;
   title: string;
+  content?: string;
   fileUrl: string;
   fileType: string;
   fileSize: number;

@@ -62,6 +62,7 @@ interface TaskContext {
   onBatchDecision: (decision: 'accept' | 'ignore') => void;
   onReReview: (expertRole: string) => void;
   onRedoReview: (config?: any) => void;
+  onRefreshTask?: () => Promise<void> | void;
 }
 
 export function ReviewsTab() {
@@ -94,7 +95,18 @@ export function ReviewsTab() {
   const [showConfigPanel, setShowConfigPanel] = useState(false);
 
   // 批量改稿状态
-  const [batchRevisionLoading, setBatchRevisionLoading] = useState(false);
+  type BatchRevisionStatusType = {
+    status: 'idle' | 'doing' | 'completed' | 'failed';
+    progress: number;
+    message: string;
+    error?: string;
+  };
+  const [batchRevisionStatus, setBatchRevisionStatus] = useState<BatchRevisionStatusType>({
+    status: 'idle',
+    progress: 0,
+    message: '',
+  });
+  const [selectedTaskItems, setSelectedTaskItems] = useState<Set<string>>(new Set());
   
   // Streaming 蓝军评审状态
   const [streamingComments, setStreamingComments] = useState<any[]>([]);
@@ -107,8 +119,10 @@ export function ReviewsTab() {
     },
     onComplete: () => {
       setIsStreamingActive(false);
-      // 刷新页面获取完整数据
-      setTimeout(() => window.location.reload(), 1000);
+      // 局部刷新任务数据，避免整页 reload
+      setTimeout(() => {
+        void refreshTaskData();
+      }, 1000);
     }
   });
   
@@ -132,7 +146,9 @@ export function ReviewsTab() {
     },
     onComplete: () => {
       setIsStreamingActive(false);
-      setTimeout(() => window.location.reload(), 1000);
+      setTimeout(() => {
+        void refreshTaskData();
+      }, 1000);
     }
   });
   
@@ -143,7 +159,16 @@ export function ReviewsTab() {
     onBatchDecision,
     onReReview,
     onRedoReview,
+    onRefreshTask,
   } = useOutletContext<TaskContext>();
+
+  const refreshTaskData = useCallback(async () => {
+    if (onRefreshTask) {
+      await onRefreshTask();
+      return;
+    }
+    window.location.reload();
+  }, [onRefreshTask]);
   
   // 根据任务状态自动启动 Streaming（扩大 stage 匹配范围）
   useEffect(() => {
@@ -174,8 +199,7 @@ export function ReviewsTab() {
           decision: 'accept',
           questionIndex,
         });
-        // 刷新页面数据
-        window.location.reload();
+        await refreshTaskData();
       }
     } catch (error) {
       console.error('接受评论失败:', error);
@@ -196,7 +220,7 @@ export function ReviewsTab() {
           decision: 'ignore',
           questionIndex,
         });
-        window.location.reload();
+        await refreshTaskData();
       }
     } catch (error) {
       console.error('忽略评论失败:', error);
@@ -341,49 +365,99 @@ export function ReviewsTab() {
     }
   };
 
-  // 批量改稿：合并所有已接受的评审意见，一次性生成新版本
-  const handleBatchRevision = async () => {
-    if (!confirm(`确定要应用所有已接受的评审意见进行一键改稿吗？\n\n这将合并所有修改建议，一次性生成新版本。`)) return;
-    setBatchRevisionLoading(true);
+  const startBatchRevision = async (selectedReviewIds?: string[], source: 'all' | 'tasks' = 'all') => {
+    const selectedCount = selectedReviewIds?.length || 0;
+    const confirmText = source === 'tasks'
+      ? `确定要对选中的 ${selectedCount} 条任务启动一键改稿吗？\n\n这将合并这些修改建议，一次性生成新版本。`
+      : '确定要应用所有已接受的评审意见进行一键改稿吗？\n\n这将合并所有修改建议，一次性生成新版本。';
+
+    if (!confirm(confirmText)) return;
+    setBatchRevisionStatus({ status: 'doing', progress: 0, message: '启动改稿任务...' });
+
     try {
-      const result = await blueTeamApi.applyRevisions(task.id);
-      if (result.success) {
-        if (result.async) {
-          // 异步模式：后台执行，轮询等待完成
-          alert('改稿任务已启动，正在后台处理中...');
-          // 轮询检查任务状态
-          const pollInterval = setInterval(async () => {
-            try {
-              const taskData = await tasksApi.getById(task.id);
-              if (taskData.current_stage !== 'revising') {
-                clearInterval(pollInterval);
-                setBatchRevisionLoading(false);
-                alert('改稿完成！请查看新版本。');
-                window.location.reload();
-              }
-            } catch {
-              // ignore polling errors
-            }
-          }, 3000);
-          // 超时保护：5分钟后停止轮询
-          setTimeout(() => {
-            clearInterval(pollInterval);
-            setBatchRevisionLoading(false);
-          }, 300000);
-          return; // 不要在 finally 中 setBatchRevisionLoading(false)
-        } else {
-          alert(`改稿完成！\n${result.message}\n\n新版本: v${result.newVersion}`);
-          window.location.reload();
-        }
-      } else {
+      const result = await blueTeamApi.applyRevisions(task.id, selectedReviewIds);
+      if (!result.success) {
+        setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: result.error || '未知错误' });
         alert(`改稿失败: ${result.error || '未知错误'}`);
+        return;
       }
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await blueTeamApi.getApplyRevisionsStatus(task.id);
+          setBatchRevisionStatus({
+            status: status.status === 'pending' ? 'idle' : (status.status as BatchRevisionStatusType['status']),
+            progress: status.progress,
+            message: status.message,
+            error: status.error,
+          });
+
+          if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            setBatchRevisionStatus({
+              status: 'completed',
+              progress: 100,
+              message: status.message || '改稿完成',
+              error: undefined,
+            });
+            alert(`改稿完成！\n新版本: v${status.newVersion ?? 'N/A'}\n应用建议: ${status.appliedCount ?? 0} 条`);
+            await refreshTaskData();
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            setBatchRevisionStatus({
+              status: 'failed',
+              progress: status.progress || 0,
+              message: status.message || '',
+              error: status.error || '未知错误',
+            });
+            alert(`改稿失败: ${status.error || '未知错误'}`);
+          }
+        } catch {
+          // 忽略单次轮询错误，等待下次重试
+        }
+      }, 2000);
+
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setBatchRevisionStatus((prev) => {
+          if (prev.status === 'doing') {
+            return { ...prev, status: 'failed', error: '改稿任务超时，请稍后重试' };
+          }
+          return prev;
+        });
+      }, 300000);
     } catch (error: any) {
       console.error('Batch revision failed:', error);
-      alert(`改稿失败: ${error?.response?.data?.error || error?.message || '未知错误'}`);
-    } finally {
-      setBatchRevisionLoading(false);
+      const errorMsg = error?.response?.data?.error || error?.message || '未知错误';
+      setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: errorMsg });
+      alert(`改稿失败: ${errorMsg}`);
     }
+  };
+
+  // 批量改稿：合并所有已接受的评审意见，一次性生成新版本
+  const handleBatchRevision = async () => {
+    await startBatchRevision(undefined, 'all');
+  };
+
+  const handleTaskBatchRevision = async () => {
+    const selectedIds = Array.from(selectedTaskItems);
+    if (selectedIds.length === 0) {
+      alert('请先在 Task 区域选择至少一条改稿项');
+      return;
+    }
+    await startBatchRevision(selectedIds, 'tasks');
+  };
+
+  const toggleSelectTaskItem = (reviewItemId: string) => {
+    setSelectedTaskItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(reviewItemId)) {
+        next.delete(reviewItemId);
+      } else {
+        next.add(reviewItemId);
+      }
+      return next;
+    });
   };
 
   // 处理配置确认
@@ -699,6 +773,7 @@ export function ReviewsTab() {
   const tasks = useMemo(() => {
     const items: Array<{
       id: string;
+      reviewItemId: string;
       title: string;
       status: 'pending' | 'in_progress' | 'completed';
       assignee?: string;
@@ -708,6 +783,7 @@ export function ReviewsTab() {
       if (comment.status === 'accepted') {
         items.push({
           id: `task-${comment.id}`,
+          reviewItemId: comment.id,
           title: comment.suggestion || `处理: ${comment.content.slice(0, 50)}...`,
           status: 'pending',
           assignee: comment.author,
@@ -966,6 +1042,10 @@ export function ReviewsTab() {
               selectedComments={selectedComments}
               onToggleSelect={toggleSelectComment}
               isStreaming={isStreamingActive || blueTeamStreaming.isStreaming || sequentialStreaming.isReviewing}
+              selectedTaskItems={selectedTaskItems}
+              onToggleTaskItem={toggleSelectTaskItem}
+              onTaskBatchRevision={handleTaskBatchRevision}
+              batchRevisionInProgress={batchRevisionStatus.status === 'doing'}
               streamingProgress={{
                 currentRound: sequentialStreaming.currentRound || blueTeamStreaming.progress?.currentRound,
                 totalRounds: sequentialStreaming.totalRounds || blueTeamStreaming.progress?.totalRounds,
@@ -1106,11 +1186,40 @@ export function ReviewsTab() {
           </div>
           <button
             onClick={handleBatchRevision}
-            disabled={batchRevisionLoading}
+            disabled={batchRevisionStatus.status === 'doing'}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {batchRevisionLoading ? '改稿中...' : `应用 ${reviewSummary.accepted} 条修改`}
+            {batchRevisionStatus.status === 'doing' ? '改稿中...' : `应用 ${reviewSummary.accepted} 条修改`}
           </button>
+        </div>
+      )}
+
+      {batchRevisionStatus.status === 'doing' && (
+        <div className="mx-6 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+              <span className="material-symbols-outlined animate-spin">refresh</span>
+              一键改稿进行中...
+            </span>
+            <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{batchRevisionStatus.progress}%</span>
+          </div>
+          <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: `${batchRevisionStatus.progress}%` }}
+            />
+          </div>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{batchRevisionStatus.message}</p>
+        </div>
+      )}
+
+      {batchRevisionStatus.status === 'failed' && (
+        <div className="mx-6 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+            <span className="material-symbols-outlined">error</span>
+            <span className="font-medium">一键改稿失败</span>
+          </div>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-1">{batchRevisionStatus.error}</p>
         </div>
       )}
 
@@ -1140,7 +1249,7 @@ export function ReviewsTab() {
 interface RightPanelProps {
   comments: CommentItem[];
   history: { id: string; version: string; title: string; timestamp: string; author?: string }[];
-  tasks: { id: string; title: string; status: 'pending' | 'in_progress' | 'completed'; assignee?: string }[];
+  tasks: { id: string; reviewItemId: string; title: string; status: 'pending' | 'in_progress' | 'completed'; assignee?: string }[];
   onCommentAccept?: (id: string) => void;
   onCommentIgnore?: (id: string) => void;
   onHistorySelect?: (item: { id: string; version: string; title: string; timestamp: string }) => void;
@@ -1154,6 +1263,10 @@ interface RightPanelProps {
     currentExpert?: string;
   };
   highlightPositions?: Record<string, number>;
+  selectedTaskItems?: Set<string>;
+  onToggleTaskItem?: (reviewItemId: string) => void;
+  onTaskBatchRevision?: () => void;
+  batchRevisionInProgress?: boolean;
 }
 
 function RightPanel({
@@ -1169,6 +1282,10 @@ function RightPanel({
   isStreaming = false,
   streamingProgress,
   highlightPositions = {},
+  selectedTaskItems = new Set(),
+  onToggleTaskItem,
+  onTaskBatchRevision,
+  batchRevisionInProgress = false,
 }: RightPanelProps) {
   
   const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'tasks'>('comments');
@@ -1565,25 +1682,41 @@ function RightPanel({
                 <p className="text-sm">No pending tasks</p>
               </div>
             ) : (
-              tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800"
-                >
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                    task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'
-                  }`}>
-                    {task.status === 'completed' && (
-                      <span className="material-symbols-outlined text-white text-sm">check</span>
-                    )}
+              <>
+                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    已选择 {selectedTaskItems.size} / {tasks.length} 条
                   </div>
-                  <div className="flex-1">
-                    <div className={`text-sm ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                      {task.title}
-                    </div>
-                  </div>
+                  <button
+                    onClick={onTaskBatchRevision}
+                    disabled={selectedTaskItems.size === 0 || batchRevisionInProgress}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {batchRevisionInProgress ? '改稿中...' : '对选中项启动改稿'}
+                  </button>
                 </div>
-              ))
+                {tasks.map((task) => (
+                  <button
+                    type="button"
+                    key={task.id}
+                    onClick={() => onToggleTaskItem?.(task.reviewItemId)}
+                    className="w-full flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-left hover:border-primary/40 transition-colors"
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      selectedTaskItems.has(task.reviewItemId) ? 'bg-primary border-primary' : 'border-slate-300'
+                    }`}>
+                      {selectedTaskItems.has(task.reviewItemId) && (
+                        <span className="material-symbols-outlined text-white text-sm">check</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className={`text-sm ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {task.title}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </>
             )}
           </>
         )}

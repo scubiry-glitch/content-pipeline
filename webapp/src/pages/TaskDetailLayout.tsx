@@ -666,6 +666,7 @@ export function TaskDetailLayout() {
       console.log('[onRedoReview] preserveHistory:', preserveHistory);
       return handleRedoStage('review', { config: reviewConfig, preserveHistory });
     },
+    onRefreshTask: loadTask,
   };
 
   return (

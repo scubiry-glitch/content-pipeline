@@ -225,9 +225,16 @@ export class AssetsAIBatchProcessor {
    */
   private async parseAssetContent(asset: Asset): Promise<{ content: string; document: import('./chunking.js').ParsedDocument }> {
     try {
-      // 1. 检查文件 URL
+      // 1. 优先使用数据库中已存储的 content（如果存在且有效）
+      if (asset.content && asset.content.length > 100) {
+        console.log(`[AssetsAIBatchProcessor] Using stored content for asset ${asset.id}: ${asset.content.length} chars`);
+        const doc = this.parser.parseText(asset.content, asset.title);
+        return { content: asset.content, document: doc };
+      }
+
+      // 2. 检查文件 URL
       if (!asset.fileUrl) {
-        console.warn(`[AssetsAIBatchProcessor] Asset ${asset.id} has no fileUrl`);
+        console.warn(`[AssetsAIBatchProcessor] Asset ${asset.id} has no fileUrl and no content`);
         const fallbackDoc = this.parser.parseText(asset.metadata?.abstract || asset.title, asset.title);
         return { content: asset.metadata?.abstract || asset.title, document: fallbackDoc };
       }

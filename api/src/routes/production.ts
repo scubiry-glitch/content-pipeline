@@ -320,53 +320,36 @@ export async function productionRoutes(fastify: FastifyInstance) {
   });
 
   // 批量应用已接受的评审意见（一次 LLM 调用生成一个新版本）
-  // 改为异步处理：立即返回，后台执行 LLM 改稿，前端轮询状态
+  // 异步处理：立即返回，后台执行 LLM 改稿，前端轮询状态
   fastify.post('/:taskId/apply-revisions', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
+    const { selectedReviewIds } = (request.body || {}) as { selectedReviewIds?: string[] };
 
-    // 立即返回，后台执行
-    setImmediate(async () => {
-      try {
-        console.log(`[ApplyRevisions] Starting batch revision for task ${taskId}`);
-        await query(
-          `UPDATE tasks SET current_stage = 'revising', updated_at = NOW() WHERE id = $1`,
-          [taskId]
-        );
-
-        const { applyAllAcceptedRevisions } = await import('../services/revisionAgent.js');
-        const result = await applyAllAcceptedRevisions(taskId);
-
-        if (result.success) {
-          console.log(`[ApplyRevisions] Completed: v${result.newVersion}, ${result.appliedCount} issues`);
-          await query(
-            `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
-            [taskId]
-          );
-        } else {
-          console.error(`[ApplyRevisions] Failed:`, result.error);
-          await query(
-            `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
-            [taskId]
-          );
-          await query(
-            `INSERT INTO task_logs (task_id, action, details, created_at) VALUES ($1, $2, $3, NOW())`,
-            [taskId, 'batch_revision_failed', JSON.stringify({ error: result.error })]
-          );
-        }
-      } catch (error) {
-        console.error(`[ApplyRevisions] Error:`, error);
-        await query(
-          `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
-          [taskId]
-        );
-      }
-    });
+    const { startAsyncBatchRevision } = await import('../services/asyncBatchRevision.js');
+    const result = await startAsyncBatchRevision(taskId, selectedReviewIds);
+    if (!result.success) {
+      reply.status(400);
+      return { success: false, error: result.error };
+    }
 
     return {
       success: true,
-      message: '改稿任务已启动，请稍后刷新查看结果',
+      jobId: result.jobId,
+      status: 'doing',
+      message: '改稿任务已启动，请通过状态接口轮询进度',
       async: true,
     };
+  });
+
+  fastify.get('/:taskId/apply-revisions-status', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const { getBatchRevisionStatus } = await import('../services/asyncBatchRevision.js');
+    const status = getBatchRevisionStatus(taskId);
+    if (!status) {
+      reply.status(404);
+      return { error: '未找到改稿任务' };
+    }
+    return status;
   });
 
   // ===== 环节重做 API =====

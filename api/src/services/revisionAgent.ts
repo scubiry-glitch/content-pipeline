@@ -24,6 +24,11 @@ export interface RevisionResult {
   error?: string;
 }
 
+export interface BatchRevisionOptions {
+  selectedReviewIds?: string[];
+  onProgress?: (progress: number, message: string) => void;
+}
+
 /**
  * 根据评审意见自动修订稿件
  */
@@ -200,11 +205,29 @@ function parseRevisionOutput(content: string): { revisedContent: string; changes
  * 避免逐条改稿导致的版本爆炸问题
  */
 export async function applyAllAcceptedRevisions(
-  taskId: string
+  taskId: string,
+  options: BatchRevisionOptions = {}
 ): Promise<RevisionResult & { appliedCount: number }> {
   console.log(`[RevisionAgent] Batch revision for task ${taskId}`);
+  const reportProgress = options.onProgress || (() => undefined);
+
+  const selectedIssueMap = new Map<string, Set<number>>();
+  const hasSelection = Array.isArray(options.selectedReviewIds) && options.selectedReviewIds.length > 0;
+  if (hasSelection) {
+    for (const selectedId of options.selectedReviewIds || []) {
+      const [reviewId, indexStr] = selectedId.split('::');
+      const idx = Number.parseInt(indexStr, 10);
+      if (!Number.isNaN(idx)) {
+        if (!selectedIssueMap.has(reviewId)) selectedIssueMap.set(reviewId, new Set());
+        selectedIssueMap.get(reviewId)!.add(idx);
+      } else {
+        if (!selectedIssueMap.has(reviewId)) selectedIssueMap.set(reviewId, new Set());
+      }
+    }
+  }
 
   try {
+    reportProgress(10, '收集已接受的评审意见...');
     // 1. 收集所有 accepted 的评审意见（同时查询 blue_team_reviews 和 expert_reviews）
     const btResult = await query(
       `SELECT id, expert_role, questions
@@ -244,7 +267,7 @@ export async function applyAllAcceptedRevisions(
     }
     // 如果 blue_team_reviews 有 question_decisions accept，也包含它们
     if (qdAcceptedMap.size > 0) {
-      const reviewIds = [...qdAcceptedMap.keys()];
+      const reviewIds = Array.from(qdAcceptedMap.keys());
       const qdReviewsResult = await query(
         `SELECT id, expert_role, questions FROM blue_team_reviews
          WHERE id = ANY($1) AND task_id = $2`,
@@ -264,6 +287,7 @@ export async function applyAllAcceptedRevisions(
     }
 
     // 2. 获取最新稿件
+    reportProgress(25, '获取最新稿件...');
     const draftResult = await query(
       `SELECT id, content, version FROM draft_versions
        WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
@@ -279,12 +303,20 @@ export async function applyAllAcceptedRevisions(
     const appliedReviewIds: string[] = [];
 
     for (const row of allAcceptedRows) {
+      const selectedIndexes = selectedIssueMap.get(row.id);
+      if (hasSelection && !selectedIndexes) {
+        continue;
+      }
+
       const questions = typeof row.questions === 'string'
         ? JSON.parse(row.questions)
         : row.questions;
 
       const qList = Array.isArray(questions) ? questions : [questions];
-      for (const q of qList) {
+      for (const [idx, q] of qList.entries()) {
+        if (hasSelection && selectedIndexes && selectedIndexes.size > 0 && !selectedIndexes.has(idx)) {
+          continue;
+        }
         if (q.question && q.severity !== 'praise') {
           allIssues.push({
             expertRole: row.expert_role,
@@ -298,10 +330,15 @@ export async function applyAllAcceptedRevisions(
     }
 
     if (allIssues.length === 0) {
-      return { success: false, error: '已接受的评审中无可操作的修改建议', appliedCount: 0 };
+      return {
+        success: false,
+        error: hasSelection ? '所选评审项中无可操作的修改建议' : '已接受的评审中无可操作的修改建议',
+        appliedCount: 0,
+      };
     }
 
     // 4. 构建合并 prompt
+    reportProgress(40, '构建改稿指令...');
     const MAX_CONTENT_CHARS = 15000;
     const contentForPrompt = latestDraft.content.length > MAX_CONTENT_CHARS
       ? latestDraft.content.substring(0, MAX_CONTENT_CHARS) + '\n\n[... 后续内容省略，请保持原文后续部分不变 ...]'
@@ -345,6 +382,7 @@ ${issuesText}
 </修订后稿件>`;
 
     // 5. 调用 LLM
+    reportProgress(70, '调用 LLM 执行改稿...');
     console.log(`[RevisionAgent] Batch revision: ${allIssues.length} issues, prompt ${prompt.length} chars`);
     const llmResult = await generate(prompt, 'writing', {
       temperature: 0.3,
@@ -357,6 +395,7 @@ ${issuesText}
     }
 
     // 6. 质量守卫
+    reportProgress(85, '校验改稿质量...');
     const lengthRatio = revisedContent.length / latestDraft.content.length;
     let finalContent = revisedContent;
     if (lengthRatio < 0.6 || revisedContent.trim().length < 100) {
@@ -365,6 +404,7 @@ ${issuesText}
     }
 
     // 7. 保存新版本
+    reportProgress(95, '保存新版本与日志...');
     const newVersion = (latestDraft.version || 0) + 1;
     const newDraftId = uuidv4();
     await query(
@@ -396,6 +436,7 @@ ${issuesText}
     );
 
     console.log(`[RevisionAgent] Batch revision completed: ${newDraftId} (v${newVersion}), ${allIssues.length} issues applied`);
+    reportProgress(100, '改稿完成');
 
     return {
       success: true,
