@@ -645,3 +645,18 @@
     align-items: flex-start;
   }
 }
+
+
+/* AI 分析 Panel */
+.ai-analysis-panel-wrapper {
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 12px;
+  min-height: 400px;
+}
+
+.ai-analysis-panel-wrapper .ai-analysis-panel {
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}

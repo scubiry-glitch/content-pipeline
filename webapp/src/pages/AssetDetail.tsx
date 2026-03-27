@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { assetsApi, type Asset, type AssetUsage } from '../api/client';
+import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
 import './AssetDetail.css';
 
 export function AssetDetail() {
@@ -9,7 +10,7 @@ export function AssetDetail() {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'content' | 'meta' | 'citations'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'meta' | 'citations' | 'ai-analysis'>('content');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteResult, setQuoteResult] = useState<any>(null);
   const [usageStats, setUsageStats] = useState<AssetUsage | null>(null);
@@ -183,6 +184,12 @@ export function AssetDetail() {
           onClick={() => setActiveTab('citations')}
         >
           📚 引用统计
+        </button>
+        <button
+          className={`tab ${activeTab === 'ai-analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ai-analysis')}
+        >
+          🤖 AI 分析
         </button>
       </div>
 
@@ -398,6 +405,12 @@ export function AssetDetail() {
                 <li>可以通过"一键引用"功能快速生成标准引用格式</li>
               </ul>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'ai-analysis' && (
+          <div className="ai-analysis-panel-wrapper">
+            <AssetAIAnalysis assetId={id!} compact={false} />
           </div>
         )}
       </div>

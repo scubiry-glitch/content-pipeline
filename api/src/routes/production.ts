@@ -320,29 +320,53 @@ export async function productionRoutes(fastify: FastifyInstance) {
   });
 
   // 批量应用已接受的评审意见（一次 LLM 调用生成一个新版本）
+  // 改为异步处理：立即返回，后台执行 LLM 改稿，前端轮询状态
   fastify.post('/:taskId/apply-revisions', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
 
-    try {
-      const { applyAllAcceptedRevisions } = await import('../services/revisionAgent.js');
-      const result = await applyAllAcceptedRevisions(taskId);
+    // 立即返回，后台执行
+    setImmediate(async () => {
+      try {
+        console.log(`[ApplyRevisions] Starting batch revision for task ${taskId}`);
+        await query(
+          `UPDATE tasks SET current_stage = 'revising', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
 
-      if (!result.success) {
-        reply.status(400);
-        return { error: result.error };
+        const { applyAllAcceptedRevisions } = await import('../services/revisionAgent.js');
+        const result = await applyAllAcceptedRevisions(taskId);
+
+        if (result.success) {
+          console.log(`[ApplyRevisions] Completed: v${result.newVersion}, ${result.appliedCount} issues`);
+          await query(
+            `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
+            [taskId]
+          );
+        } else {
+          console.error(`[ApplyRevisions] Failed:`, result.error);
+          await query(
+            `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
+            [taskId]
+          );
+          await query(
+            `INSERT INTO task_logs (task_id, action, details, created_at) VALUES ($1, $2, $3, NOW())`,
+            [taskId, 'batch_revision_failed', JSON.stringify({ error: result.error })]
+          );
+        }
+      } catch (error) {
+        console.error(`[ApplyRevisions] Error:`, error);
+        await query(
+          `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
+          [taskId]
+        );
       }
+    });
 
-      return {
-        success: true,
-        newDraftId: result.newDraftId,
-        newVersion: result.newVersion,
-        appliedCount: result.appliedCount,
-        message: `已应用 ${result.appliedCount} 条评审意见，生成版本 v${result.newVersion}`,
-      };
-    } catch (error) {
-      reply.status(500);
-      return { error: (error as Error).message };
-    }
+    return {
+      success: true,
+      message: '改稿任务已启动，请稍后刷新查看结果',
+      async: true,
+    };
   });
 
   // ===== 环节重做 API =====
@@ -442,6 +466,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
   fastify.post('/:taskId/redo/review', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
     const { config, preserveHistory } = request.body as { config?: any; preserveHistory?: boolean };
+
+    console.log(`[Redo/Review] Received config:`, JSON.stringify(config, null, 2));
+    console.log(`[Redo/Review] preserveHistory:`, preserveHistory);
 
     // 同步准备阶段：更新状态、配置评审队列（让前端能立即连接 SSE）
     const prepResult = await productionService.prepareRedoReview(taskId, config, preserveHistory);

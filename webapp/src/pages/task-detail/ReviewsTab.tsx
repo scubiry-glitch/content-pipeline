@@ -348,8 +348,33 @@ export function ReviewsTab() {
     try {
       const result = await blueTeamApi.applyRevisions(task.id);
       if (result.success) {
-        alert(`改稿完成！\n${result.message}\n\n新版本: v${result.newVersion}`);
-        window.location.reload();
+        if (result.async) {
+          // 异步模式：后台执行，轮询等待完成
+          alert('改稿任务已启动，正在后台处理中...');
+          // 轮询检查任务状态
+          const pollInterval = setInterval(async () => {
+            try {
+              const taskData = await tasksApi.getById(task.id);
+              if (taskData.current_stage !== 'revising') {
+                clearInterval(pollInterval);
+                setBatchRevisionLoading(false);
+                alert('改稿完成！请查看新版本。');
+                window.location.reload();
+              }
+            } catch {
+              // ignore polling errors
+            }
+          }, 3000);
+          // 超时保护：5分钟后停止轮询
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            setBatchRevisionLoading(false);
+          }, 300000);
+          return; // 不要在 finally 中 setBatchRevisionLoading(false)
+        } else {
+          alert(`改稿完成！\n${result.message}\n\n新版本: v${result.newVersion}`);
+          window.location.reload();
+        }
       } else {
         alert(`改稿失败: ${result.error || '未知错误'}`);
       }

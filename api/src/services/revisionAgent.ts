@@ -205,8 +205,8 @@ export async function applyAllAcceptedRevisions(
   console.log(`[RevisionAgent] Batch revision for task ${taskId}`);
 
   try {
-    // 1. 收集所有 accepted 的评审意见
-    const acceptedResult = await query(
+    // 1. 收集所有 accepted 的评审意见（同时查询 blue_team_reviews 和 expert_reviews）
+    const btResult = await query(
       `SELECT id, expert_role, questions
        FROM blue_team_reviews
        WHERE task_id = $1
@@ -215,7 +215,51 @@ export async function applyAllAcceptedRevisions(
       [taskId]
     );
 
-    if (acceptedResult.rows.length === 0) {
+    // 也查询 expert_reviews（串行评审）—— 用户决策记录在 questions JSONB 中
+    const erResult = await query(
+      `SELECT id, expert_role, questions
+       FROM expert_reviews
+       WHERE task_id = $1
+       ORDER BY round, created_at`,
+      [taskId]
+    );
+    // 过滤出 questions 中有 decision='accept' 的 expert_reviews
+    const acceptedExpertReviews = erResult.rows.filter(row => {
+      const qs = typeof row.questions === 'string' ? JSON.parse(row.questions) : row.questions;
+      const qList = Array.isArray(qs) ? qs : [qs];
+      return qList.some((q: any) => q.decision === 'accept');
+    });
+
+    // 也查询 question_decisions 表中的 accept 记录（blue_team_reviews 的 question 级别决策）
+    const qdResult = await query(
+      `SELECT qd.review_id, qd.question_index
+       FROM question_decisions qd
+       WHERE qd.task_id = $1 AND qd.decision = 'accept'`,
+      [taskId]
+    );
+    const qdAcceptedMap = new Map<string, Set<number>>();
+    for (const qd of qdResult.rows) {
+      if (!qdAcceptedMap.has(qd.review_id)) qdAcceptedMap.set(qd.review_id, new Set());
+      qdAcceptedMap.get(qd.review_id)!.add(qd.question_index);
+    }
+    // 如果 blue_team_reviews 有 question_decisions accept，也包含它们
+    if (qdAcceptedMap.size > 0) {
+      const reviewIds = [...qdAcceptedMap.keys()];
+      const qdReviewsResult = await query(
+        `SELECT id, expert_role, questions FROM blue_team_reviews
+         WHERE id = ANY($1) AND task_id = $2`,
+        [reviewIds, taskId]
+      );
+      for (const row of qdReviewsResult.rows) {
+        if (!btResult.rows.some(r => r.id === row.id)) {
+          btResult.rows.push(row);
+        }
+      }
+    }
+
+    const allAcceptedRows = [...btResult.rows, ...acceptedExpertReviews];
+
+    if (allAcceptedRows.length === 0) {
       return { success: false, error: '没有已接受的评审意见', appliedCount: 0 };
     }
 
@@ -234,7 +278,7 @@ export async function applyAllAcceptedRevisions(
     const allIssues: Array<{ expertRole: string; question: string; suggestion: string; location?: string }> = [];
     const appliedReviewIds: string[] = [];
 
-    for (const row of acceptedResult.rows) {
+    for (const row of allAcceptedRows) {
       const questions = typeof row.questions === 'string'
         ? JSON.parse(row.questions)
         : row.questions;

@@ -661,6 +661,9 @@ export function TaskDetailLayout() {
     onRedoReview: (config?: any) => {
       // 从 config 中提取 preserveHistory，其余作为 review config
       const { preserveHistory, ...reviewConfig } = config || {};
+      console.log('[onRedoReview] Full config:', JSON.stringify(config));
+      console.log('[onRedoReview] reviewConfig:', JSON.stringify(reviewConfig));
+      console.log('[onRedoReview] preserveHistory:', preserveHistory);
       return handleRedoStage('review', { config: reviewConfig, preserveHistory });
     },
   };

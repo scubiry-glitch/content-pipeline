@@ -377,6 +377,7 @@ export const blueTeamApi = {
       appliedCount?: number;
       message?: string;
       error?: string;
+      async?: boolean;
     }>,
 };
 
