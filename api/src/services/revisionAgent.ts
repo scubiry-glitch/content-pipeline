@@ -4,6 +4,7 @@
 import { query } from '../db/connection.js';
 import { generate } from './llm.js';
 import { v4 as uuidv4 } from 'uuid';
+import { withTimeout } from '../utils/timeout.js';
 
 export interface RevisionInput {
   taskId: string;
@@ -52,10 +53,14 @@ export async function applyReviewRevision(input: RevisionInput): Promise<Revisio
     const revisionPrompt = buildRevisionPrompt(input);
     
     console.log(`[RevisionAgent] Calling LLM for revision...`);
-    const llmResult = await generate(revisionPrompt, 'writing', {
-      temperature: 0.3, // 较低温度保证稳定性
-      maxTokens: 8000
-    });
+    const llmResult = await withTimeout(
+      generate(revisionPrompt, 'writing', {
+        temperature: 0.3, // 较低温度保证稳定性
+        maxTokens: 8000
+      }),
+      3 * 60 * 1000,
+      `Single revision LLM call for task ${input.taskId}`
+    );
 
     // 3. 解析 LLM 输出
     const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
@@ -471,10 +476,14 @@ ${issuesText}
     // 5. 调用 LLM
     reportProgress(70, '调用 LLM 执行改稿...');
     console.log(`[RevisionAgent] Batch revision: ${allIssues.length} issues, prompt ${prompt.length} chars`);
-    const llmResult = await generate(prompt, 'writing', {
-      temperature: 0.3,
-      maxTokens: 16000,
-    });
+    const llmResult = await withTimeout(
+      generate(prompt, 'writing', {
+        temperature: 0.3,
+        maxTokens: 16000,
+      }),
+      5 * 60 * 1000,
+      `Batch revision LLM call for task ${taskId}`
+    );
 
     const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
     if (!revisedContent || revisedContent.trim().length === 0) {

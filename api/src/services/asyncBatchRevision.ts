@@ -16,6 +16,7 @@ export interface AsyncBatchRevisionStatus {
 type ProgressReporter = (progress: number, message: string) => void;
 
 const revisionJobs = new Map<string, AsyncBatchRevisionStatus>();
+const BATCH_REVISION_MAX_MS = 8 * 60 * 1000;
 
 export function getBatchRevisionStatus(taskId: string): AsyncBatchRevisionStatus | null {
   return revisionJobs.get(taskId) || null;
@@ -38,6 +39,7 @@ export async function startAsyncBatchRevision(
     startedAt: new Date().toISOString(),
   };
   revisionJobs.set(taskId, status);
+  const startedAtMs = Date.now();
 
   process.nextTick(() => {
     executeBatchRevision(taskId, selectedReviewIds).catch((error) => {
@@ -51,6 +53,20 @@ export async function startAsyncBatchRevision(
       });
     });
   });
+
+  // 兜底超时：避免卡在 doing 状态无法收敛
+  setTimeout(() => {
+    const current = revisionJobs.get(taskId);
+    if (!current || current.status !== 'doing') return;
+    if (Date.now() - startedAtMs < BATCH_REVISION_MAX_MS) return;
+    revisionJobs.set(taskId, {
+      ...current,
+      status: 'failed',
+      message: '改稿执行超时，请重试',
+      error: `Batch revision exceeded ${BATCH_REVISION_MAX_MS}ms`,
+      completedAt: new Date().toISOString(),
+    });
+  }, BATCH_REVISION_MAX_MS + 1000);
 
   return { success: true, jobId: taskId };
 }
@@ -109,14 +125,18 @@ async function executeBatchRevision(taskId: string, selectedReviewIds?: string[]
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
-    await query(
-      `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
-      [taskId]
-    );
-    await query(
-      `INSERT INTO task_logs (task_id, action, details, created_at) VALUES ($1, $2, $3, NOW())`,
-      [taskId, 'batch_revision_failed', JSON.stringify({ error: errMsg })]
-    );
+    try {
+      await query(
+        `UPDATE tasks SET current_stage = 'awaiting_approval', updated_at = NOW() WHERE id = $1`,
+        [taskId]
+      );
+      await query(
+        `INSERT INTO task_logs (task_id, action, details, created_at) VALUES ($1, $2, $3, NOW())`,
+        [taskId, 'batch_revision_failed', JSON.stringify({ error: errMsg })]
+      );
+    } catch (loggingError) {
+      console.error('[AsyncBatchRevision] Failed to persist failure state:', loggingError);
+    }
 
     const current = revisionJobs.get(taskId) || initialStatus;
     revisionJobs.set(taskId, {

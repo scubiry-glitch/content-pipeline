@@ -8,6 +8,7 @@ import { BlueTeamPanel } from '../../components/BlueTeamPanel';
 import { SequentialPanel } from '../../components/SequentialPanel';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
 import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
+import { showApiError } from '../../components/ApiErrorToast';
 import { LivePreviewMarkdown } from '../../components/content';
 import { blueTeamApi, tasksApi } from '../../api/client';
 import type { ReviewConfig } from '../../types';
@@ -38,6 +39,18 @@ const EXPERT_ROLES: Record<string, { name: string; icon: string; color: string; 
 
 type ReviewTab = 'blue-team' | 'sequential';
 type SidebarView = 'timeline' | 'compare';
+
+function isLlmTimeoutError(message?: string): boolean {
+  if (!message) return false;
+  const text = message.toLowerCase();
+  return (
+    text.includes('timeout') ||
+    text.includes('timed out') ||
+    text.includes('exceeded') ||
+    text.includes('超时') ||
+    text.includes('llm')
+  );
+}
 
 // Define the context type expected from TaskDetailLayout
 interface TaskContext {
@@ -377,8 +390,10 @@ export function ReviewsTab() {
     try {
       const result = await blueTeamApi.applyRevisions(task.id, selectedReviewIds);
       if (!result.success) {
-        setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: result.error || '未知错误' });
-        alert(`改稿失败: ${result.error || '未知错误'}`);
+        const rawError = result.error || '未知错误';
+        const displayError = isLlmTimeoutError(rawError) ? 'LLM超时，请重试' : rawError;
+        setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: displayError });
+        showApiError('一键改稿失败', displayError);
         return;
       }
 
@@ -408,9 +423,12 @@ export function ReviewsTab() {
               status: 'failed',
               progress: status.progress || 0,
               message: status.message || '',
-              error: status.error || '未知错误',
+              error: isLlmTimeoutError(status.error || '') ? 'LLM超时，请重试' : (status.error || '未知错误'),
             });
-            alert(`改稿失败: ${status.error || '未知错误'}`);
+            showApiError(
+              '一键改稿失败',
+              isLlmTimeoutError(status.error || '') ? 'LLM超时，请重试' : (status.error || '未知错误')
+            );
           }
         } catch {
           // 忽略单次轮询错误，等待下次重试
@@ -429,8 +447,9 @@ export function ReviewsTab() {
     } catch (error: any) {
       console.error('Batch revision failed:', error);
       const errorMsg = error?.response?.data?.error || error?.message || '未知错误';
-      setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: errorMsg });
-      alert(`改稿失败: ${errorMsg}`);
+      const displayError = isLlmTimeoutError(errorMsg) ? 'LLM超时，请重试' : errorMsg;
+      setBatchRevisionStatus({ status: 'failed', progress: 0, message: '', error: displayError });
+      showApiError('一键改稿失败', displayError);
     }
   };
 

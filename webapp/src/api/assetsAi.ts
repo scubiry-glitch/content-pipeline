@@ -134,24 +134,24 @@ export const assetsAiApi = {
    * 触发 Assets 批量处理
    */
   async triggerBatchProcess(params: AssetsBatchProcessRequest = {}): Promise<AssetsBatchProcessResponse> {
-    const response = await apiClient.post('/ai/assets/batch-process', params);
-    return response.data;
+    const data = await apiClient.post('/ai/assets/batch-process', params);
+    return data as AssetsBatchProcessResponse;
   },
 
   /**
    * 获取 Asset AI 分析结果
    */
   async getAnalysis(assetId: string): Promise<AssetAIAnalysisResponse> {
-    const response = await apiClient.get(`/ai/assets/assets/${assetId}/ai-analysis`);
-    return response.data;
+    const data = await apiClient.get(`/ai/assets/assets/${assetId}/ai-analysis`);
+    return data as AssetAIAnalysisResponse;
   },
 
   /**
    * 语义搜索
    */
   async semanticSearch(params: SemanticSearchRequest): Promise<SemanticSearchResponse> {
-    const response = await apiClient.post('/ai/assets/semantic-search', params);
-    return response.data;
+    const data = await apiClient.post('/ai/assets/semantic-search', params);
+    return data as SemanticSearchResponse;
   },
 
   /**
@@ -165,10 +165,10 @@ export const assetsAiApi = {
       similarity: number;
     }>;
   }> {
-    const response = await apiClient.get(`/ai/assets/assets/${assetId}/similar`, {
+    const data = await apiClient.get(`/ai/assets/assets/${assetId}/similar`, {
       params: { limit },
     });
-    return response.data;
+    return data as any;
   },
 
   /**
@@ -184,8 +184,8 @@ export const assetsAiApi = {
       similarity: number;
     }>;
   }> {
-    const response = await apiClient.get(`/ai/assets/assets/${assetId}/duplicates`);
-    return response.data;
+    const data = await apiClient.get(`/ai/assets/assets/${assetId}/duplicates`);
+    return data as any;
   },
 
   /**
@@ -206,8 +206,8 @@ export const assetsAiApi = {
     limit: number;
     offset: number;
   }> {
-    const response = await apiClient.get('/ai/assets/analysis-results', { params });
-    return response.data;
+    const data = await apiClient.get('/ai/assets/analysis-results', { params });
+    return data as any;
   },
 
   /**
@@ -231,8 +231,8 @@ export const assetsAiApi = {
     limit: number;
     offset: number;
   }> {
-    const response = await apiClient.get('/ai/assets/task-recommendations', { params });
-    return response.data;
+    const data = await apiClient.get('/ai/assets/task-recommendations', { params });
+    return data as any;
   },
 
   /**
@@ -244,8 +244,8 @@ export const assetsAiApi = {
     averageQualityScore: number;
     pendingRecommendations: number;
   }> {
-    const response = await apiClient.get('/ai/assets/stats');
-    return response.data;
+    const data = await apiClient.get('/ai/assets/stats');
+    return data as any;
   },
 
   /**
@@ -258,8 +258,8 @@ export const assetsAiApi = {
       avg_quality: number;
     }>;
   }> {
-    const response = await apiClient.get('/ai/assets/stats/themes');
-    return response.data;
+    const data = await apiClient.get('/ai/assets/stats/themes');
+    return data as any;
   },
 
   /**
@@ -271,7 +271,7 @@ export const assetsAiApi = {
       count: number;
     }>;
   }> {
-    const response = await apiClient.get('/ai/assets/stats/quality');
-    return response.data;
+    const data = await apiClient.get('/ai/assets/stats/quality');
+    return data as any;
   },
 };
