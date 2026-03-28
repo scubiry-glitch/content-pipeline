@@ -240,9 +240,6 @@ export function ReviewsTab() {
   // 页面加载时恢复改稿进度（刷新后不丢失进度条）
   useEffect(() => {
     if (!task?.id) return;
-    const stage = task?.current_stage;
-    // 仅在任务处于 revising 阶段时恢复轮询
-    if (stage !== 'revising') return;
 
     let cancelled = false;
     const restore = async () => {
@@ -264,6 +261,7 @@ export function ReviewsTab() {
             try {
               const s = await blueTeamApi.getApplyRevisionsStatus(task.id);
               if (cancelled) { clearInterval(pollInterval); return; }
+              const displayError = getBatchRevisionDisplayError(s.error, s.errorCode);
               setBatchRevisionStatus(prev => ({
                 status: s.status === 'pending' ? 'idle' : (s.status as BatchRevisionStatusType['status']),
                 progress: s.progress ?? prev.progress,
@@ -273,7 +271,7 @@ export function ReviewsTab() {
                 batchIndex: s.batchIndex ?? prev.batchIndex,
                 totalBatches: s.totalBatches ?? prev.totalBatches,
                 errorCode: s.errorCode,
-                error: s.error,
+                error: displayError,
               }));
               if (s.status === 'completed' || s.status === 'failed' || s.status === 'not_found') {
                 clearInterval(pollInterval);
@@ -283,6 +281,16 @@ export function ReviewsTab() {
               }
             } catch { clearInterval(pollInterval); }
           }, 2000);
+        } else if (status.status === 'failed') {
+          // 恢复失败状态（刷新后显示失败信息和重试按钮）
+          const displayError = getBatchRevisionDisplayError(status.error, status.errorCode);
+          setBatchRevisionStatus({
+            status: 'failed',
+            progress: status.progress ?? 0,
+            message: status.message ?? '改稿失败',
+            errorCode: status.errorCode,
+            error: displayError,
+          });
         }
       } catch {
         // ignore - no active revision
@@ -290,7 +298,7 @@ export function ReviewsTab() {
     };
     restore();
     return () => { cancelled = true; };
-  }, [task?.id, task?.current_stage]);
+  }, [task?.id]);
 
   // 根据任务状态自动启动 Streaming（扩大 stage 匹配范围）
   useEffect(() => {
@@ -1339,14 +1347,20 @@ export function ReviewsTab() {
       </div>
 
       {/* Batch Revision Button */}
-      {reviewSummary.accepted > 0 && (
+      {reviewSummary.accepted > 0 && (() => {
+        const revised = (reviewSummary as any).revised || 0;
+        const unrevisedCount = reviewSummary.accepted - revised;
+        const hasCheckpoint = revised > 0 && unrevisedCount > 0;
+        return (
         <div className="mx-6 mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
               一键改稿
             </h4>
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              已接受 {reviewSummary.accepted} 条评审意见，合并后一次性生成新版本
+              {hasCheckpoint
+                ? `已完成 ${revised} 条，剩余 ${unrevisedCount} 条待处理（支持断点续跑）`
+                : `已接受 ${reviewSummary.accepted} 条评审意见，合并后一次性生成新版本`}
             </p>
           </div>
           <button
@@ -1354,10 +1368,15 @@ export function ReviewsTab() {
             disabled={batchRevisionStatus.status === 'doing'}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {batchRevisionStatus.status === 'doing' ? '改稿中...' : `应用 ${reviewSummary.accepted} 条修改`}
+            {batchRevisionStatus.status === 'doing'
+              ? '改稿中...'
+              : hasCheckpoint
+                ? `继续改稿（${unrevisedCount} 条）`
+                : `应用 ${reviewSummary.accepted} 条修改`}
           </button>
         </div>
-      )}
+        );
+      })()}
 
       {batchRevisionStatus.status === 'doing' && (
         <div className="mx-6 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">

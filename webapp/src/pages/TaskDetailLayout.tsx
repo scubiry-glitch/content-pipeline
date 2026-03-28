@@ -240,12 +240,19 @@ export function TaskDetailLayout() {
       const calculatedTotal = accepted + ignored + pending;
 
       // Use API summary for severity counts, but calculated counts for status
-      const summary = { 
-        total: calculatedTotal, 
-        critical: apiSummary.critical || 0, 
-        warning: apiSummary.warning || 0, 
-        praise: apiSummary.praise || 0, 
+      // revised: 已通过一键改稿完成的数量（manual_resolved）
+      const revised = items.reduce((count, review) => {
+        const qs = Array.isArray(review.questions) ? review.questions : [review.questions].filter(Boolean);
+        return count + qs.filter((q: any) => (q.decision || q.status) === 'manual_resolved').length;
+      }, 0);
+
+      const summary = {
+        total: calculatedTotal,
+        critical: apiSummary.critical || 0,
+        warning: apiSummary.warning || 0,
+        praise: apiSummary.praise || 0,
         accepted,
+        revised,
         ignored,
         pending
       };

@@ -1,7 +1,9 @@
 // 任务详情 - 质量分析 Tab (v5.0 - Material Design 3)
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import type { Task } from '../../types';
+import type { Task, BlueTeamReview } from '../../types';
+import { DeepAnalysisPanel } from '../../components/DeepAnalysisPanel';
 
 interface TaskContext {
   task: Task;

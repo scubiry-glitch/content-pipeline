@@ -383,11 +383,33 @@ export async function productionRoutes(fastify: FastifyInstance) {
     const { getBatchRevisionStatus } = await import('../services/asyncBatchRevision.js');
     const status = getBatchRevisionStatus(taskId);
     if (!status) {
-      // ★ 内存中没有 job（可能 pm2 重启了），根据 task 状态推断
+      // ★ 内存中没有 job（可能 pm2 重启了），根据 task 状态 + checkpoint 推断
       const taskResult = await query(`SELECT current_stage, status FROM tasks WHERE id = $1`, [taskId]);
       const task = taskResult.rows[0];
+
+      // 检查是否存在未清理的 checkpoint（说明改稿中断，部分章节已完成）
+      const cpResult = await query(
+        `SELECT details FROM task_logs WHERE task_id = $1 AND action = 'batch_revision_checkpoint' ORDER BY created_at DESC LIMIT 1`,
+        [taskId]
+      );
+      const hasCheckpoint = cpResult.rows.length > 0;
+
+      if (hasCheckpoint) {
+        // 有 checkpoint 意味着改稿部分完成后中断（pm2 重启 / 进程崩溃）
+        const cpData = typeof cpResult.rows[0].details === 'string'
+          ? JSON.parse(cpResult.rows[0].details) : cpResult.rows[0].details;
+        const completedSections = cpData?.sections ? Object.keys(cpData.sections).length : 0;
+        return {
+          taskId,
+          status: 'failed',
+          stage: 'failed',
+          progress: Math.min(85, 45 + completedSections * 10),
+          message: `改稿中断（已完成 ${completedSections} 个章节），可断点续跑`,
+          errorCode: 'UNKNOWN_ERROR' as const,
+        };
+      }
+
       if (task && (task.current_stage === 'awaiting_approval' || task.current_stage === 'completed' || task.status === 'completed')) {
-        // task 已经进入后续阶段，说明之前的改稿已完成或被跳过
         return {
           taskId,
           status: 'completed',
@@ -400,10 +422,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
       return {
         taskId,
         status: 'not_found',
-        stage: 'failed',
+        stage: 'not_found',
         progress: 0,
-        message: '未找到改稿任务，可能服务已重启',
-        errorCode: 'UNKNOWN_ERROR',
+        message: '无进行中的改稿任务',
       };
     }
     return status;

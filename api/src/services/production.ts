@@ -416,6 +416,7 @@ ${JSON.stringify(outline, null, 2)}
       warning: 0,
       praise: 0,
       accepted: 0,
+      revised: 0,
       pending: 0,
       ignored: 0
     };
@@ -478,7 +479,10 @@ ${JSON.stringify(outline, null, 2)}
         };
 
         // Count by decision status (question-level or review-level)
-        if (questionStatus === 'accept' || questionStatus === 'accepted' || questionStatus === 'manual_resolved') {
+        if (questionStatus === 'manual_resolved') {
+          summary.accepted++;
+          summary.revised++;
+        } else if (questionStatus === 'accept' || questionStatus === 'accepted') {
           summary.accepted++;
         } else if (questionStatus === 'ignore' || questionStatus === 'ignored') {
           summary.ignored++;
