@@ -26,6 +26,7 @@ export interface CommentItem {
   location?: string;
   suggestion?: string;
   status: 'pending' | 'accepted' | 'ignored';
+  rawDecision?: string;
 }
 
 export interface HistoryItem {

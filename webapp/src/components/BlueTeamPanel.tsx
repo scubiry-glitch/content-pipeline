@@ -57,6 +57,7 @@ export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingCo
   // Group reviews by expert role (from DB)
   const expertStats = new Map<string, {
     role: string;
+    name?: string;
     count: number;
     completed: number;
     questions: number;
@@ -66,9 +67,10 @@ export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingCo
   reviews.forEach(review => {
     const role = review.expert_role || 'unknown';
     if (!expertStats.has(role)) {
-      expertStats.set(role, { role, count: 0, completed: 0, questions: 0, isActive: false });
+      expertStats.set(role, { role, name: review.expert_name, count: 0, completed: 0, questions: 0, isActive: false });
     }
     const stats = expertStats.get(role)!;
+    if (!stats.name && review.expert_name) stats.name = review.expert_name;
     stats.count++;
     const questions = review.questions ?
       (Array.isArray(review.questions) ? review.questions : [review.questions]) : [];
@@ -123,7 +125,7 @@ export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingCo
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-primary">groups</span>
             <h2 className="font-headline font-bold text-lg text-slate-900 dark:text-white">
-              Blue Team Review
+              并行评审
             </h2>
             <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-full">
               {reviewSummary.total} Comments
@@ -231,7 +233,7 @@ export function BlueTeamPanel({ reviews, reviewSummary, isStreaming, streamingCo
                       <span className="material-symbols-outlined text-sm">{expertInfo.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-sm text-slate-900 dark:text-white truncate">{expertInfo.name}</div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white truncate">{expert.name || expertInfo.name}</div>
                       <div className={`text-xs ${statusColor} flex items-center gap-1`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
                         {statusText}

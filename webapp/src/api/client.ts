@@ -416,7 +416,7 @@ export const blueTeamApi = {
   getApplyRevisionsStatus: (taskId: string) =>
     client.get(`/production/${taskId}/apply-revisions-status`) as Promise<{
       taskId: string;
-      status: 'pending' | 'doing' | 'completed' | 'failed';
+      status: 'pending' | 'doing' | 'completed' | 'failed' | 'not_found';
       stage?: 'initializing' | 'collecting_reviews' | 'running_llm' | 'validating' | 'saving' | 'completed' | 'failed';
       sectionIndex?: number;
       totalSections?: number;

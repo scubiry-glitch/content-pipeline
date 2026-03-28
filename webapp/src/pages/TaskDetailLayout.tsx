@@ -225,8 +225,8 @@ export function TaskDetailLayout() {
           (Array.isArray(rawQuestions) ? rawQuestions : [rawQuestions]) : [];
         questions.forEach((q: any) => {
           // 每个 question 可能有独立的状态，或者继承 review 的状态
-          const questionStatus = q.status || review.user_decision || review.status;
-          if (questionStatus === 'accept' || questionStatus === 'accepted' || questionStatus === 'completed') {
+          const questionStatus = q.decision || q.status || review.user_decision || review.status;
+          if (questionStatus === 'accept' || questionStatus === 'accepted' || questionStatus === 'completed' || questionStatus === 'manual_resolved') {
             accepted++;
           } else if (questionStatus === 'ignore' || questionStatus === 'ignored') {
             ignored++;

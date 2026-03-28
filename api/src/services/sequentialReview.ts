@@ -81,6 +81,8 @@ export async function configureSequentialReview(
   // ★ 从 tasks.sequential_review_config 读取持久化配置（包括 AI 专家和人类专家）
   // ★ 始终读取持久化配置，获取 humanExperts 和 readerTest（不受 AI experts 是否已传入的影响）
   let persistedHumanExpertIds: string[] = [];
+  let persistedHumanExpertsDetail: Array<{ id: string; name: string; profile: string }> = [];
+  let persistedReaderExpertsDetail: Array<{ id: string; name: string; profile: string }> = [];
   try {
     const configResult = await query(
       `SELECT sequential_review_config FROM tasks WHERE id = $1`,
@@ -99,6 +101,15 @@ export async function configureSequentialReview(
       if (parsed.humanExperts && Array.isArray(parsed.humanExperts) && parsed.humanExperts.length > 0) {
         persistedHumanExpertIds = parsed.humanExperts;
         console.log(`[SequentialReview] Loaded human experts from persisted config:`, persistedHumanExpertIds);
+      }
+      // ★ 优先使用前端传来的专家详情（包含 name + profile）
+      if (parsed.humanExpertsDetail && Array.isArray(parsed.humanExpertsDetail)) {
+        persistedHumanExpertsDetail = parsed.humanExpertsDetail;
+        console.log(`[SequentialReview] Loaded human experts detail:`, persistedHumanExpertsDetail.map((d: any) => d.name));
+      }
+      if (parsed.readerExpertsDetail && Array.isArray(parsed.readerExpertsDetail)) {
+        persistedReaderExpertsDetail = parsed.readerExpertsDetail;
+        console.log(`[SequentialReview] Loaded reader experts detail:`, persistedReaderExpertsDetail.map((d: any) => d.name));
       }
     }
   } catch (e) {
@@ -136,28 +147,38 @@ export async function configureSequentialReview(
     'S-10': { name: '陆奇', profile: 'Y Combinator中国CEO，AI领域思想家，关注AI趋势和创业生态' },
     'S-11': { name: '查理·芒格', profile: '伯克希尔副董事长，多元思维模型，关注理性决策和逆向思维' },
     'S-12': { name: '段永平', profile: '步步高创始人，本分哲学，关注长期主义和商业本质' },
-    'S-13': { name: '刘强东', profile: '京东创始人，供应链思维，关注效率、用户体验和物流优化' },
+    'S-13': { name: '朱啸虎', profile: '金沙江创投主管合伙人，眼光毒辣出手果断，善于捕捉风口，关注商业模式和增长潜力' },
+    'S-14': { name: '徐新', profile: '今日资本创始人，独具慧眼长期持有，关注企业家精神和消费品品牌' },
+    'S-15': { name: '林毅夫', profile: '著名经济学家，原世界银行首席经济学家，关注宏观经济、产业政策和比较优势' },
+    'S-16': { name: '周其仁', profile: '北京大学经济学教授，关注产权制度、市场改革和经济转型' },
+    'S-17': { name: '刘强东', profile: '京东创始人，供应链思维，关注效率、用户体验和物流优化' },
   };
+
+  // ★ 构建专家详情查找表：优先使用前端传来的详情，再 fallback 到 KNOWN_EXPERTS
+  const expertDetailMap = new Map<string, { name: string; profile: string }>();
+  for (const d of persistedHumanExpertsDetail) {
+    expertDetailMap.set(d.id, { name: d.name, profile: d.profile });
+  }
 
   let humanExperts: ExpertConfig[] = [];
   if (persistedHumanExpertIds.length > 0) {
-    // 分离本地专家（S-XX 格式）和数据库专家（UUID 格式）
-    const localIds = persistedHumanExpertIds.filter(id => KNOWN_EXPERTS[id]);
-    const dbIds = persistedHumanExpertIds.filter(id => !KNOWN_EXPERTS[id]);
+    const isLocalExpertId = (id: string) => /^S-\d+$/.test(id);
+    const localIds = persistedHumanExpertIds.filter(isLocalExpertId);
+    const dbIds = persistedHumanExpertIds.filter(id => !isLocalExpertId(id));
 
-    // 本地专家：使用预定义画像，标记为 AI 模拟类型
+    // 本地专家：优先用前端传来的详情 → fallback KNOWN_EXPERTS → fallback 通用
     for (const id of localIds) {
-      const expert = KNOWN_EXPERTS[id];
+      const detail = expertDetailMap.get(id) || KNOWN_EXPERTS[id];
       humanExperts.push({
         type: 'human' as const,
         id,
         role: id,
-        name: expert.name,
-        profile: expert.profile,
+        name: detail?.name || `专家${id}`,
+        profile: detail?.profile || '资深领域专家，提供专业视角的深度审核',
       });
     }
 
-    // 数据库专家：从 DB 查询
+    // 数据库专家：从 DB 查询（UUID 格式，非 S-XX）
     if (dbIds.length > 0) {
       const placeholders = dbIds.map((_, i) => `$${i + 1}`).join(',');
       const humanExpertsResult = await query(
@@ -201,14 +222,19 @@ export async function configureSequentialReview(
           reader_09: { name: '批判质疑者', profile: '审慎观察者，喜欢寻找漏洞' },
           reader_10: { name: '故事爱好者', profile: '叙事偏好读者，喜欢有人情味的内容' },
         };
+        // ★ 优先用前端传来的详情，再 fallback 到 READER_PROFILES
+        const readerDetailMap = new Map<string, { name: string; profile: string }>();
+        for (const d of persistedReaderExpertsDetail) {
+          readerDetailMap.set(d.id, { name: d.name, profile: d.profile });
+        }
         readerExperts = readerIds.map(id => {
-          const rp = READER_PROFILES[id] || { name: id, profile: '读者' };
+          const detail = readerDetailMap.get(id) || READER_PROFILES[id] || { name: id, profile: '读者' };
           return {
             type: 'ai' as const,
             role: 'reader_rep',
             id,
-            name: `读者测试-${rp.name}`,
-            profile: rp.profile,
+            name: `读者测试-${detail.name}`,
+            profile: detail.profile,
           };
         });
         console.log(`[SequentialReview] Loaded reader test experts:`, readerExperts.map(e => e.name));

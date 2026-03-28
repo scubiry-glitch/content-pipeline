@@ -38,7 +38,7 @@ function classifyErrorCode(message?: string): AsyncBatchRevisionStatus['errorCod
   if (text.includes('network') || text.includes('econn') || text.includes('socket') || text.includes('fetch')) {
     return 'NETWORK_TIMEOUT';
   }
-  // 业务可预期失败：无可执行建议、参数/状态不满足等，归类为校验错误，避免前端误报“未知系统错误”
+  // 业务可预期失败：无可执行建议、参数/状态不满足等，归类为校验错误，避免前端误报”未知系统错误”
   if (
     text.includes('未找到') ||
     text.includes('没有') ||
@@ -46,7 +46,10 @@ function classifyErrorCode(message?: string): AsyncBatchRevisionStatus['errorCod
     text.includes('校验') ||
     text.includes('无可操作') ||
     text.includes('无可执行') ||
-    text.includes('修改建议')
+    text.includes('修改建议') ||
+    text.includes('empty content') ||
+    text.includes('empty') ||
+    text.includes('过短')
   ) {
     return 'VALIDATION_ERROR';
   }

@@ -277,6 +277,44 @@ type RevisionIssue = {
 };
 type RetryableError = Error & { retryable?: boolean };
 
+/** 标记 expert_reviews 单个问题的 decision（直接更新 JSONB） */
+async function markExpertReviewQuestion(reviewId: string, questionIndex: number, decision: string, note: string): Promise<void> {
+  const erResult = await query(`SELECT questions FROM expert_reviews WHERE id = $1`, [reviewId]);
+  if (erResult.rows.length === 0) return;
+  const questions = typeof erResult.rows[0].questions === 'string'
+    ? JSON.parse(erResult.rows[0].questions)
+    : erResult.rows[0].questions;
+  const qList = Array.isArray(questions) ? questions : [questions];
+  if (qList[questionIndex]) {
+    qList[questionIndex].decision = decision;
+    qList[questionIndex].decisionNote = note;
+  }
+  await query(
+    `UPDATE expert_reviews SET questions = $2, updated_at = NOW() WHERE id = $1`,
+    [reviewId, JSON.stringify(qList)]
+  );
+}
+
+/** 标记 expert_reviews 多个问题的 decision（批量） */
+async function markExpertReviewQuestions(reviewId: string, indices: number[], decision: string, note: string): Promise<void> {
+  const erResult = await query(`SELECT questions FROM expert_reviews WHERE id = $1`, [reviewId]);
+  if (erResult.rows.length === 0) return;
+  const questions = typeof erResult.rows[0].questions === 'string'
+    ? JSON.parse(erResult.rows[0].questions)
+    : erResult.rows[0].questions;
+  const qList = Array.isArray(questions) ? questions : [questions];
+  for (const idx of indices) {
+    if (qList[idx]) {
+      qList[idx].decision = decision;
+      qList[idx].decisionNote = note;
+    }
+  }
+  await query(
+    `UPDATE expert_reviews SET questions = $2, updated_at = NOW() WHERE id = $1`,
+    [reviewId, JSON.stringify(qList)]
+  );
+}
+
 function splitMarkdownSections(content: string): DraftSection[] {
   const text = String(content || '').trim();
   if (!text) return [{ heading: '全文', content: '' }];
@@ -488,9 +526,13 @@ async function reviseSectionByBatches(params: {
 
     const { revisedContent, changes } = parseRevisionOutput(llmResult.content);
     if (!revisedContent || revisedContent.trim().length < 20) {
-      const err: RetryableError = new Error(`Section ${sectionIndex} batch ${i + 1} returned empty content`);
-      err.retryable = false;
-      throw err;
+      // ★ 容错：LLM 返回空内容时保留原始章节内容，继续处理后续章节
+      console.warn(
+        `[RevisionAgent] Section ${sectionIndex} batch ${i + 1} returned empty/short content (${revisedContent?.length ?? 0} chars), keeping original section content`
+      );
+      sectionChanges.push(`[${section.heading}] 第${i + 1}组: ⚠️ LLM返回内容过短，保留原文`);
+      // 不更新 currentContent，继续下一个 batch
+      continue;
     }
     currentContent = revisedContent;
     sectionChanges.push(`[${section.heading}] 第${i + 1}组: ${changes}`);
@@ -766,13 +808,22 @@ export async function applyAllAcceptedRevisions(
 
         // 增量标记本章节涉及的 issues 为 manual_resolved
         for (const issue of plan.issues) {
-          await query(
-            `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
-             VALUES ($1, $2, $3, 'manual_resolved', '章节改稿已应用', NOW(), NOW())
-             ON CONFLICT (review_id, question_index)
-             DO UPDATE SET decision = 'manual_resolved', note = '章节改稿已应用', updated_at = NOW()`,
-            [taskId, issue.reviewId, issue.questionIndex]
-          );
+          try {
+            if (issue.source === 'er') {
+              // expert_reviews: question_decisions FK 不支持，直接更新 JSONB
+              await markExpertReviewQuestion(issue.reviewId, issue.questionIndex, 'manual_resolved', '章节改稿已应用');
+            } else {
+              await query(
+                `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
+                 VALUES ($1, $2, $3, 'manual_resolved', '章节改稿已应用', NOW(), NOW())
+                 ON CONFLICT (review_id, question_index)
+                 DO UPDATE SET decision = 'manual_resolved', note = '章节改稿已应用', updated_at = NOW()`,
+                [taskId, issue.reviewId, issue.questionIndex]
+              );
+            }
+          } catch (markErr) {
+            console.warn(`[RevisionAgent] Failed to mark issue ${issue.reviewId}:${issue.questionIndex}:`, markErr);
+          }
         }
       } catch (cpErr) {
         console.warn(`[RevisionAgent] Failed to save checkpoint for section ${sectionIndex}:`, cpErr);
@@ -819,30 +870,29 @@ export async function applyAllAcceptedRevisions(
     );
 
     // 7.1 将本次已应用的评审问题标记为 manual_resolved
-    //     同时处理 blue_team_reviews (bt) 和 expert_reviews (er)
+    //     bt (blue_team_reviews) → question_decisions 表
+    //     er (expert_reviews)    → questions JSONB 内嵌 decision 字段
     if (allIssues.length > 0) {
-      for (const issue of allIssues) {
-        // question_decisions 表统一存储所有来源的决策
-        await query(
-          `INSERT INTO question_decisions (
-             task_id, review_id, question_index, decision, note, created_at, updated_at
-           ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-           ON CONFLICT (review_id, question_index)
-           DO UPDATE SET
-             decision = EXCLUDED.decision,
-             note = EXCLUDED.note,
-             updated_at = NOW()`,
-          [
-            taskId,
-            issue.reviewId,
-            issue.questionIndex,
-            'manual_resolved',
-            '一键改稿已自动应用该建议',
-          ]
-        );
+      // bt issues → question_decisions 表
+      for (const issue of allIssues.filter(i => i.source === 'bt')) {
+        try {
+          await query(
+            `INSERT INTO question_decisions (
+               task_id, review_id, question_index, decision, note, created_at, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+             ON CONFLICT (review_id, question_index)
+             DO UPDATE SET
+               decision = EXCLUDED.decision,
+               note = EXCLUDED.note,
+               updated_at = NOW()`,
+            [taskId, issue.reviewId, issue.questionIndex, 'manual_resolved', '一键改稿已自动应用该建议']
+          );
+        } catch (e) {
+          console.warn(`[RevisionAgent] Failed to mark bt issue ${issue.reviewId}:${issue.questionIndex}:`, e);
+        }
       }
 
-      // 同时更新 expert_reviews 中对应问题的 decision 字段（串行评审的问题内嵌在 questions JSON 中）
+      // er issues → expert_reviews JSONB
       const erIssuesByReview = new Map<string, number[]>();
       for (const issue of allIssues.filter(i => i.source === 'er')) {
         if (!erIssuesByReview.has(issue.reviewId)) erIssuesByReview.set(issue.reviewId, []);
@@ -850,23 +900,7 @@ export async function applyAllAcceptedRevisions(
       }
       for (const [reviewId, indices] of erIssuesByReview) {
         try {
-          const erResult = await query(`SELECT questions FROM expert_reviews WHERE id = $1`, [reviewId]);
-          if (erResult.rows.length > 0) {
-            const questions = typeof erResult.rows[0].questions === 'string'
-              ? JSON.parse(erResult.rows[0].questions)
-              : erResult.rows[0].questions;
-            const qList = Array.isArray(questions) ? questions : [questions];
-            for (const idx of indices) {
-              if (qList[idx]) {
-                qList[idx].decision = 'manual_resolved';
-                qList[idx].decisionNote = '一键改稿已自动应用该建议';
-              }
-            }
-            await query(
-              `UPDATE expert_reviews SET questions = $2, updated_at = NOW() WHERE id = $1`,
-              [reviewId, JSON.stringify(qList)]
-            );
-          }
+          await markExpertReviewQuestions(reviewId, indices, 'manual_resolved', '一键改稿已自动应用该建议');
         } catch (e) {
           console.warn(`[RevisionAgent] Failed to update expert_review ${reviewId} decisions:`, e);
         }

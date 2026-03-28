@@ -135,7 +135,7 @@ export const assetsAiApi = {
    */
   async triggerBatchProcess(params: AssetsBatchProcessRequest = {}): Promise<AssetsBatchProcessResponse> {
     const data = await apiClient.post('/ai/assets/batch-process', params);
-    return data as AssetsBatchProcessResponse;
+    return data as unknown as AssetsBatchProcessResponse;
   },
 
   /**
@@ -143,7 +143,7 @@ export const assetsAiApi = {
    */
   async getAnalysis(assetId: string): Promise<AssetAIAnalysisResponse> {
     const data = await apiClient.get(`/ai/assets/assets/${assetId}/ai-analysis`);
-    return data as AssetAIAnalysisResponse;
+    return data as unknown as AssetAIAnalysisResponse;
   },
 
   /**
@@ -151,7 +151,7 @@ export const assetsAiApi = {
    */
   async semanticSearch(params: SemanticSearchRequest): Promise<SemanticSearchResponse> {
     const data = await apiClient.post('/ai/assets/semantic-search', params);
-    return data as SemanticSearchResponse;
+    return data as unknown as SemanticSearchResponse;
   },
 
   /**

@@ -272,6 +272,23 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm, onSave, topic, s
     }));
   };
 
+  // 为配置附带专家详情（name + profile），让后端不依赖硬编码映射
+  const enrichConfigWithDetails = (cfg: ReviewConfig) => {
+    const humanExpertsDetail = (cfg.humanExperts || []).map(id => {
+      const expert = libraryExperts.find(e => e.id === id);
+      return expert
+        ? { id, name: expert.name, profile: expert.profile?.background || expert.profile?.title || '领域专家' }
+        : { id, name: `专家${id}`, profile: '领域专家' };
+    });
+    const readerExpertsDetail = (cfg.readerTest?.selectedReaders || []).map(id => {
+      const reader = readerExperts.find(r => r.id === id);
+      return reader
+        ? { id, name: reader.name, profile: reader.profile?.background || reader.profile?.title || '读者代表' }
+        : { id, name: `读者${id}`, profile: '读者代表' };
+    });
+    return { ...cfg, humanExpertsDetail, readerExpertsDetail };
+  };
+
   // 切换读者专家选择
   const handleReaderToggle = (readerId: string, checked: boolean) => {
     setConfig(prev => ({
@@ -676,7 +693,7 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm, onSave, topic, s
                 onClick={async () => {
                   setSaving(true);
                   try {
-                    await onSave(config);
+                    await onSave(enrichConfigWithDetails(config));
                   } finally {
                     setSaving(false);
                   }
@@ -697,7 +714,7 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm, onSave, topic, s
               Cancel
             </button>
             <button
-              onClick={() => onConfirm(config)}
+              onClick={() => onConfirm(enrichConfigWithDetails(config))}
               disabled={enabledCount === 0}
               className="px-6 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >

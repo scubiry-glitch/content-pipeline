@@ -237,6 +237,61 @@ export function ReviewsTab() {
     window.location.reload();
   }, [onRefreshTask]);
   
+  // 页面加载时恢复改稿进度（刷新后不丢失进度条）
+  useEffect(() => {
+    if (!task?.id) return;
+    const stage = task?.current_stage;
+    // 仅在任务处于 revising 阶段时恢复轮询
+    if (stage !== 'revising') return;
+
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const status = await blueTeamApi.getApplyRevisionsStatus(task.id);
+        if (cancelled) return;
+        if (status.status === 'doing') {
+          setBatchRevisionStatus({
+            status: 'doing',
+            progress: status.progress ?? 0,
+            message: status.message ?? '改稿进行中...',
+            sectionIndex: status.sectionIndex,
+            totalSections: status.totalSections,
+            batchIndex: status.batchIndex,
+            totalBatches: status.totalBatches,
+          });
+          // 恢复轮询
+          const pollInterval = setInterval(async () => {
+            try {
+              const s = await blueTeamApi.getApplyRevisionsStatus(task.id);
+              if (cancelled) { clearInterval(pollInterval); return; }
+              setBatchRevisionStatus(prev => ({
+                status: s.status === 'pending' ? 'idle' : (s.status as BatchRevisionStatusType['status']),
+                progress: s.progress ?? prev.progress,
+                message: s.message ?? prev.message,
+                sectionIndex: s.sectionIndex ?? prev.sectionIndex,
+                totalSections: s.totalSections ?? prev.totalSections,
+                batchIndex: s.batchIndex ?? prev.batchIndex,
+                totalBatches: s.totalBatches ?? prev.totalBatches,
+                errorCode: s.errorCode,
+                error: s.error,
+              }));
+              if (s.status === 'completed' || s.status === 'failed' || s.status === 'not_found') {
+                clearInterval(pollInterval);
+                if (s.status === 'completed') {
+                  await refreshTaskData();
+                }
+              }
+            } catch { clearInterval(pollInterval); }
+          }, 2000);
+        }
+      } catch {
+        // ignore - no active revision
+      }
+    };
+    restore();
+    return () => { cancelled = true; };
+  }, [task?.id, task?.current_stage]);
+
   // 根据任务状态自动启动 Streaming（扩大 stage 匹配范围）
   useEffect(() => {
     if (task?.status === 'reviewing') {
@@ -741,7 +796,7 @@ export function ReviewsTab() {
         const questionDecision = q.decision || q.status;
         let status: 'pending' | 'accepted' | 'ignored';
         
-        if (questionDecision === 'accept' || questionDecision === 'accepted') {
+        if (questionDecision === 'accept' || questionDecision === 'accepted' || questionDecision === 'manual_resolved') {
           status = 'accepted';
         } else if (questionDecision === 'ignore' || questionDecision === 'ignored') {
           status = 'ignored';
@@ -768,6 +823,7 @@ export function ReviewsTab() {
           location: `Q${idx + 1}`,
           suggestion: q.suggestion,
           status,
+          rawDecision: questionDecision || undefined,
         });
       });
     });
@@ -887,11 +943,14 @@ export function ReviewsTab() {
 
     comments.forEach(comment => {
       if (comment.status === 'accepted') {
+        // 判断是否已通过改稿完成：rawDecision 为 manual_resolved 表示一键改稿已应用
+        const rawDecision = (comment as any).rawDecision;
+        const isRevised = rawDecision === 'manual_resolved';
         items.push({
           id: `task-${comment.id}`,
           reviewItemId: comment.id,
           title: comment.suggestion || `处理: ${comment.content.slice(0, 50)}...`,
-          status: 'pending',
+          status: isRevised ? 'completed' : 'pending',
           assignee: comment.author,
         });
       }
@@ -1226,7 +1285,7 @@ export function ReviewsTab() {
             }`}
           >
             <span className="material-symbols-outlined">groups</span>
-            Blue Team Review
+            并行评审
             <span className={`px-2 py-0.5 text-xs rounded-full ${
               activeTab === 'blue-team'
                 ? 'bg-primary text-white'
@@ -1248,7 +1307,7 @@ export function ReviewsTab() {
             }`}
           >
             <span className="material-symbols-outlined">playlist_add_check</span>
-            Sequential Queue
+            串行评审
             <span className={`px-2 py-0.5 text-xs rounded-full ${
               activeTab === 'sequential'
                 ? 'bg-tertiary text-white'
@@ -1336,17 +1395,15 @@ export function ReviewsTab() {
             </p>
           )}
           <p className="text-sm text-red-600 dark:text-red-400 mt-1">{batchRevisionStatus.error}</p>
-          {(batchRevisionStatus.errorCode === 'LLM_TIMEOUT' || batchRevisionStatus.errorCode === 'NETWORK_TIMEOUT') && (
-            <button
-              className="mt-2 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800/40 transition-colors"
-              onClick={() => {
-                setBatchRevisionStatus({ status: 'idle', progress: 0, message: '' });
-                handleBatchRevision();
-              }}
-            >
-              重试改稿
-            </button>
-          )}
+          <button
+            className="mt-2 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800/40 transition-colors"
+            onClick={() => {
+              setBatchRevisionStatus({ status: 'idle', progress: 0, message: '' });
+              handleBatchRevision();
+            }}
+          >
+            重试改稿（从断点继续）
+          </button>
         </div>
       )}
 

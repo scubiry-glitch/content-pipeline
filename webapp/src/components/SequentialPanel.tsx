@@ -60,6 +60,30 @@ const EXPERT_ROLE_INFO: Record<string, { name: string; icon: string; color: stri
     icon: '🎓',
     color: '#8b5cf6',
     description: '专业角度深度审核'
+  },
+  fact_checker: {
+    name: '事实核查员',
+    icon: '📊',
+    color: '#10b981',
+    description: '核实数据准确性、来源可靠性'
+  },
+  logic_checker: {
+    name: '逻辑审查员',
+    icon: '🧩',
+    color: '#6366f1',
+    description: '检查论证逻辑、因果关系'
+  },
+  domain_expert: {
+    name: '领域专家',
+    icon: '🎯',
+    color: '#8b5cf6',
+    description: '行业视角深度审核'
+  },
+  reader_rep: {
+    name: '读者代表',
+    icon: '👥',
+    color: '#ec4899',
+    description: '模拟目标读者阅读体验'
   }
 };
 
@@ -415,13 +439,13 @@ export function SequentialPanel({ taskId, isStreaming, streamingCurrentRound, st
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-slate-600 dark:text-slate-400">整体进度</span>
             <span className="text-sm font-bold text-slate-900 dark:text-white">
-              {Math.round((status.currentRound / status.totalRounds) * 100)}%
+              {status.status === 'completed' ? 100 : Math.round((status.currentRound / status.totalRounds) * 100)}%
             </span>
           </div>
           <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-tertiary to-accent rounded-full transition-all duration-500"
-              style={{ width: `${(status.currentRound / status.totalRounds) * 100}%` }}
+              style={{ width: `${status.status === 'completed' ? 100 : (status.currentRound / status.totalRounds) * 100}%` }}
             />
           </div>
         </div>

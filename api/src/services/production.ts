@@ -704,6 +704,8 @@ ${JSON.stringify(outline, null, 2)}
         experts: expertRoles,
         aiExperts: config.aiExperts,
         humanExperts: config.humanExperts,
+        humanExpertsDetail: config.humanExpertsDetail,  // [{id, name, profile}]
+        readerExpertsDetail: config.readerExpertsDetail, // [{id, name, profile}]
         autoRevise: config.autoRevise,
         maxRounds: config.maxRounds,
         readerTest: config.readerTest,

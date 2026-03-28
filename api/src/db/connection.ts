@@ -4,6 +4,9 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
 
 let pool: Pool | null = null;
+const SLOW_QUERY_THRESHOLD_MS = parseInt(process.env.DB_SLOW_QUERY_THRESHOLD_MS || '1000', 10);
+const QUERY_MAX_RETRIES = parseInt(process.env.DB_QUERY_MAX_RETRIES || '3', 10);
+const QUERY_BASE_BACKOFF_MS = parseInt(process.env.DB_QUERY_BASE_BACKOFF_MS || '100', 10);
 
 export interface DBConfig {
   host: string;
@@ -35,6 +38,8 @@ export function createPool(): Pool {
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     });
 
     pool.on('error', (err) => {
@@ -48,7 +53,7 @@ export async function getClient(): Promise<PoolClient> {
   if (!pool) {
     createPool();
   }
-  return pool!.connect();
+  return withConnectionRetry(() => pool!.connect(), 'pool.connect');
 }
 
 export async function query(
@@ -58,7 +63,22 @@ export async function query(
   if (!pool) {
     createPool();
   }
-  return pool!.query(text, params);
+  return withConnectionRetry(async () => {
+    const startedAt = Date.now();
+    const result = await pool!.query(text, params);
+    const elapsedMs = Date.now() - startedAt;
+
+    if (elapsedMs >= SLOW_QUERY_THRESHOLD_MS) {
+      console.warn('[DB][SLOW_QUERY]', {
+        elapsedMs,
+        thresholdMs: SLOW_QUERY_THRESHOLD_MS,
+        sql: summarizeSql(text),
+        paramsCount: params?.length || 0
+      });
+    }
+
+    return result;
+  }, 'pool.query');
 }
 
 export async function closePool(): Promise<void> {
@@ -94,11 +114,92 @@ export async function initDatabase(config?: DBConfig): Promise<void> {
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     });
   } else {
     createPool();
   }
   await setupMVPSchema();
+}
+
+async function withConnectionRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= QUERY_MAX_RETRIES; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isConnectionError(error) || attempt === QUERY_MAX_RETRIES) {
+        throw error;
+      }
+
+      const delayMs = backoffWithJitter(attempt);
+      console.warn('[DB][RETRY]', {
+        operation: operationName,
+        attempt: attempt + 1,
+        maxRetries: QUERY_MAX_RETRIES,
+        delayMs,
+        reason: getErrorMessage(error)
+      });
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Unknown database error');
+}
+
+function isConnectionError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  const code = err?.code || '';
+  const message = (err?.message || '').toLowerCase();
+  const transientCodes = new Set([
+    '57P01', // admin shutdown
+    '57P02', // crash shutdown
+    '57P03', // cannot connect now
+    '08000',
+    '08001',
+    '08003',
+    '08004',
+    '08006',
+    '08007',
+    '08P01',
+    '53300' // too many connections
+  ]);
+  if (transientCodes.has(code)) return true;
+
+  return (
+    message.includes('connection terminated unexpectedly') ||
+    message.includes('connection timeout') ||
+    message.includes('connect econnrefused') ||
+    message.includes('connect etimedout') ||
+    message.includes('connection reset') ||
+    message.includes('the database system is starting up')
+  );
+}
+
+function backoffWithJitter(attempt: number): number {
+  const cappedAttempt = Math.min(attempt, 6);
+  const baseDelay = QUERY_BASE_BACKOFF_MS * Math.pow(2, cappedAttempt);
+  const jitter = Math.floor(Math.random() * QUERY_BASE_BACKOFF_MS);
+  return baseDelay + jitter;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function summarizeSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').trim().slice(0, 220);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 async function setupMVPSchema(): Promise<void> {
