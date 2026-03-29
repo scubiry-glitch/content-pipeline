@@ -19,28 +19,44 @@ export interface DBConfig {
 
 export function createPool(): Pool {
   if (!pool) {
-    const config: DBConfig = {
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: process.env.DB_NAME || 'author',
-      user: process.env.DB_USER || 'scubiry',
-      password: process.env.DB_PASSWORD || '',
-      ssl: process.env.DB_SSL === 'true'
-    };
+    const databaseUrl = process.env.DATABASE_URL?.trim();
+    const sslFromEnv =
+      process.env.DB_SSL === 'true' || /\bsslmode=(require|verify-full|verify-ca)\b/i.test(databaseUrl || '');
 
-    pool = new Pool({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
-      password: config.password,
-      ssl: config.ssl ? { rejectUnauthorized: false } : false,
+    const poolBase = {
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
-    });
+    };
+
+    if (databaseUrl) {
+      pool = new Pool({
+        connectionString: databaseUrl,
+        ssl: sslFromEnv ? { rejectUnauthorized: false } : undefined,
+        ...poolBase,
+      });
+    } else {
+      const config: DBConfig = {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: process.env.DB_NAME || 'author',
+        user: process.env.DB_USER || 'scubiry',
+        password: process.env.DB_PASSWORD || '',
+        ssl: process.env.DB_SSL === 'true'
+      };
+
+      pool = new Pool({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        password: config.password,
+        ssl: config.ssl ? { rejectUnauthorized: false } : false,
+        ...poolBase,
+      });
+    }
 
     pool.on('error', (err) => {
       console.error('Unexpected database pool error:', err);

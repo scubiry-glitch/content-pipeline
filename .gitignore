@@ -8,10 +8,15 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment
-#.env
-#.env.local
-#.env.*.local
+# Environment（密钥勿提交；各目录可复制 .env.example）
+.env
+**/.env
+.env.local
+.env.*.local
+.env.production
+**/.env.production
+.env.development
+**/.env.development
 
 # Logs
 logs/
@@ -24,6 +29,8 @@ yarn-error.log*
 postgres_data/
 *.db
 *.sqlite
+# 本地 pg_dump 等大文件勿提交
+author_sync.sql
 
 # IDE
 .idea/
