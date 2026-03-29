@@ -89,6 +89,26 @@ const ROLE_LABELS: Record<string, string> = {
   challenger: '批判者',
   expander: '拓展者',
   synthesizer: '提炼者',
+  factChecker: '事实核查员',
+  logicChecker: '逻辑检察官',
+  domainExpert: '行业专家',
+  readerRep: '读者代表',
+  // Known expert IDs
+  'S-01': '张一鸣',
+  'S-02': '雷军',
+  'S-03': '黄仁勋',
+  'S-04': '王兴',
+  'S-05': '马化腾',
+  'S-06': '李彦宏',
+  'S-07': '张小龙',
+  'S-08': '王慧文',
+  'S-09': '陆奇',
+  'S-10': '林斌',
+  'S-11': '程维',
+  'S-12': '黄峥',
+  'S-13': '宿华',
+  'S-14': '张楠',
+  'S-15': '梁汝波',
 };
 
 const LEVEL_LABELS: Record<string, { label: string; color: string; icon: string }> = {
@@ -118,7 +138,9 @@ function extractRootProblems(reviews: BlueTeamReview[], content: string | null):
     const questions = Array.isArray(r.questions) ? r.questions : r.questions ? [r.questions] : [];
     questions.forEach((q: any) => {
       if (q.severity !== 'praise') {
-        allIssues.push({ ...q, expertRole: r.expert_role || r.expert_name || 'unknown', round: r.round });
+        // 优先用 expert_name，再用 expert_role 的中文标签
+        const expertLabel = r.expert_name || ROLE_LABELS[r.expert_role] || r.expert_role || 'unknown';
+        allIssues.push({ ...q, expertRole: expertLabel, round: r.round });
       }
     });
   });
@@ -131,7 +153,7 @@ function extractRootProblems(reviews: BlueTeamReview[], content: string | null):
   // 3. 对每组问题进行第一性原理追问
   const rootProblems: RootProblem[] = issueGroups.map((group, idx) => {
     const surfaceIssues = group.items.map(i => i.question);
-    const experts = [...new Set(group.items.map(i => ROLE_LABELS[i.expertRole] || i.expertRole))];
+    const experts = [...new Set(group.items.map(i => i.expertRole))];
     const maxSeverity = group.items.some(i => i.severity === 'high') ? 'high' :
       group.items.some(i => i.severity === 'medium') ? 'medium' : 'low';
 
@@ -150,35 +172,50 @@ function extractRootProblems(reviews: BlueTeamReview[], content: string | null):
     };
   });
 
+  // 4. 合并相同 rootCause 的问题
+  const mergedMap = new Map<string, RootProblem>();
+  rootProblems.forEach(p => {
+    const existing = mergedMap.get(p.rootCause);
+    if (existing) {
+      existing.surfaceIssues.push(...p.surfaceIssues);
+      existing.sourceExperts = [...new Set([...existing.sourceExperts, ...p.sourceExperts])];
+      existing.frequency += p.frequency;
+      if (p.severity === 'high') existing.severity = 'high';
+      else if (p.severity === 'medium' && existing.severity === 'low') existing.severity = 'medium';
+    } else {
+      mergedMap.set(p.rootCause, { ...p });
+    }
+  });
+
   // 按层级排序: structural > methodological > presentational, 同层按频次
+  const merged = [...mergedMap.values()];
   const levelOrder = { structural: 0, methodological: 1, presentational: 2 };
-  return rootProblems
+  return merged
     .sort((a, b) => levelOrder[a.level] - levelOrder[b.level] || b.frequency - a.frequency)
     .slice(0, 8);
 }
 
-/** 简单关键词聚类 */
+/** 关键词聚类 — 限制每组最大 keyword 数量，避免雪球效应 */
 function clusterIssues(issues: Array<ReviewQuestion & { expertRole: string; round: number }>) {
   const groups: Array<{ keywords: string[]; items: typeof issues }> = [];
 
-  // 关键词集合: 从 question + suggestion 中提取
-  const STOP_WORDS = new Set(['的', '了', '是', '在', '和', '与', '对', '有', '不', '这', '那', '可以', '需要', '可能', '应该', '建议', '问题', '内容', '文章', '分析']);
+  const STOP_WORDS = new Set(['的', '了', '是', '在', '和', '与', '对', '有', '不', '这', '那', '可以', '需要', '可能', '应该', '建议', '问题', '内容', '文章', '分析', '部分', '作者', '报告', '市场', '方面', '相关', '提供', '进行', '具体', '明确', '没有', '不够', '缺乏', '存在']);
   const extractKeywords = (text: string): string[] => {
     return text.replace(/[，。、；：""''！？【】《》（）\s]/g, ' ')
       .split(/\s+/)
       .filter(w => w.length >= 2 && !STOP_WORDS.has(w))
-      .slice(0, 8);
+      .slice(0, 6);
   };
 
   issues.forEach(issue => {
     const kw = extractKeywords(issue.question + ' ' + (issue.suggestion || ''));
-    // 找与现有组的交集 >= 2 的组
     let matched = false;
     for (const group of groups) {
-      const overlap = kw.filter(w => group.keywords.some(gw => gw.includes(w) || w.includes(gw)));
-      if (overlap.length >= 2) {
+      // 只用组的原始关键词(前6个)来匹配，避免雪球效应
+      const coreKeywords = group.keywords.slice(0, 6);
+      const overlap = kw.filter(w => coreKeywords.some(gw => gw === w || (gw.length >= 3 && w.length >= 3 && (gw.includes(w) || w.includes(gw)))));
+      if (overlap.length >= 2 && group.items.length < 4) { // 每组最多4个
         group.items.push(issue);
-        group.keywords.push(...kw.filter(w => !group.keywords.includes(w)));
         matched = true;
         break;
       }
@@ -191,49 +228,54 @@ function clusterIssues(issues: Array<ReviewQuestion & { expertRole: string; roun
   return groups.filter(g => g.items.length > 0);
 }
 
-/** 第一性原理推导: 从表面现象 → 方法 → 根因 */
+/** 第一性原理推导: 从表面现象 → 方法 → 根因, 每组生成不同的根因 */
 function deriveRootCause(
   keywords: string[],
   surfaces: string[],
   content: string | null,
 ): { whyChain: string[]; rootCause: string; level: RootProblem['level'] } {
   const joined = keywords.join(' ') + ' ' + surfaces.join(' ');
+  const surface0 = surfaces[0]?.slice(0, 50) || '(问题描述)';
 
-  // 判断问题层级并生成推理链
-  // 结构性: 论点/框架/视角/核心观点 相关
-  if (/论点|框架|视角|结构|立论|核心观点|主题|定位|方向|论证体系|整体/.test(joined)) {
-    return {
-      whyChain: [
-        `表面: ${surfaces[0]?.slice(0, 40)}...`,
-        '→ 为什么? 文章的论证框架本身存在缺陷',
-        '→ 根因: 立论阶段未从第一性原理出发，缺乏基本假设的验证',
-      ],
-      rootCause: '论证框架未从基本事实出发建立，核心假设缺乏验证',
-      level: 'structural',
-    };
+  // 细分多个模式，每个模式有独立的根因描述
+  const patterns: Array<{ test: RegExp; level: RootProblem['level']; rootCause: string; why2: string }> = [
+    { test: /论点|立论|核心观点|主旨|中心思想/, level: 'structural', rootCause: '核心论点不清晰，文章缺少一个可被验证或反驳的中心命题', why2: '文章在构思阶段未明确回答"读者读完应该得出什么结论"' },
+    { test: /框架|结构|层次|组织|章节|脉络/, level: 'structural', rootCause: '内容组织结构不合理，信息之间缺少逻辑递进关系', why2: '写作前未建立"前提→推理→结论"的骨架' },
+    { test: /视角|角度|维度|片面|单一|深度/, level: 'structural', rootCause: '分析维度单一，未能从多个利益相关方视角审视问题', why2: '调研阶段未做充分的利益相关方分析' },
+    { test: /数据|统计|数字|量化|指标/, level: 'methodological', rootCause: '关键论点缺少数据支撑，定性判断多于定量分析', why2: '论证过程依赖主观判断而非可验证的事实数据' },
+    { test: /来源|引用|出处|参考|文献|依据/, level: 'methodological', rootCause: '信息来源不透明，读者无法验证关键事实的可靠性', why2: '信息采集环节未建立来源追溯机制' },
+    { test: /因果|归因|逻辑|推理|论证|相关性/, level: 'methodological', rootCause: '存在逻辑跳跃，因果关系和相关关系混淆', why2: '推理链条缺少中间步骤的验证' },
+    { test: /时效|过时|更新|最新|时间|日期/, level: 'methodological', rootCause: '部分信息时效性不足，影响结论的当前适用性', why2: '未建立信息新鲜度的检查机制' },
+    { test: /读者|受众|理解|晦涩|专业术语|可读/, level: 'presentational', rootCause: '目标读者定位模糊，专业深度与可读性未取得平衡', why2: '写作前未明确"谁在读、为什么读、读完要做什么"' },
+    { test: /流畅|衔接|过渡|段落|冗长|重复/, level: 'presentational', rootCause: '段落间缺乏自然衔接，阅读体验断裂', why2: '内容组织以作者思路而非读者阅读路径为导向' },
+    { test: /案例|实例|举例|具体|场景|故事/, level: 'presentational', rootCause: '抽象论述过多，缺少具象化的案例和场景支撑', why2: '未遵循"观点→证据→案例"的三层表达原则' },
+    { test: /对比|竞争|差异|比较|参照|基准/, level: 'methodological', rootCause: '缺少参照系和对比基准，结论的相对意义不明', why2: '分析时未设定"与什么比、为什么这样比"的对比框架' },
+    { test: /风险|预测|假设|前提|不确定/, level: 'structural', rootCause: '未充分讨论核心假设的风险和不确定性', why2: '分析未遵循"假设 → 验证 → 边界条件"的完整路径' },
+  ];
+
+  for (const p of patterns) {
+    if (p.test.test(joined)) {
+      return {
+        whyChain: [
+          `表面: ${surface0}`,
+          `→ 为什么? ${p.why2}`,
+          `→ 根因: ${p.rootCause}`,
+        ],
+        rootCause: p.rootCause,
+        level: p.level,
+      };
+    }
   }
 
-  // 方法论: 数据/逻辑/因果/归因/样本 相关
-  if (/数据|统计|来源|因果|归因|逻辑|样本|证据|论据|引用|准确/.test(joined)) {
-    return {
-      whyChain: [
-        `表面: ${surfaces[0]?.slice(0, 40)}...`,
-        '→ 为什么? 论据选取和推理方法存在问题',
-        '→ 根因: 未遵循"先收集事实，再推导结论"的基本方法论',
-      ],
-      rootCause: '推理过程跳过了事实验证环节，先有结论再找证据',
-      level: 'methodological',
-    };
-  }
-
-  // 表达层 (默认)
+  // 默认: 基于表面问题的首个关键词生成
+  const topKeyword = keywords.filter(k => k.length >= 2)[0] || '内容质量';
   return {
     whyChain: [
-      `表面: ${surfaces[0]?.slice(0, 40)}...`,
-      '→ 为什么? 表达方式未能有效传达核心观点',
-      '→ 根因: 信息密度与读者认知负荷不匹配',
+      `表面: ${surface0}`,
+      `→ 为什么? "${topKeyword}"方面未达到专家预期标准`,
+      `→ 根因: 该维度在写作流程中缺少明确的质量检查节点`,
     ],
-    rootCause: '表达层面的信息组织未以读者理解路径为中心设计',
+    rootCause: `"${topKeyword}"维度缺少系统性的质量保证机制`,
     level: 'presentational',
   };
 }

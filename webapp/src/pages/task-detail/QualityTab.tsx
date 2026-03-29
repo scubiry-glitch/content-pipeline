@@ -7,6 +7,8 @@ import { DeepAnalysisPanel } from '../../components/DeepAnalysisPanel';
 
 interface TaskContext {
   task: Task;
+  reviews: BlueTeamReview[];
+  getDraftFromTask: () => { content: string; version?: number } | null;
   sentiment: {
     msiIndex: number;
     trendDirection: string;
@@ -30,7 +32,8 @@ interface TaskContext {
 }
 
 export function QualityTab() {
-  const { task, sentiment, hotTopics, suggestions, alerts } = useOutletContext<TaskContext>();
+  const { task, reviews, getDraftFromTask, sentiment, hotTopics, suggestions, alerts } = useOutletContext<TaskContext>();
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
 
   // Helper to get sentiment level color
   const getSentimentColor = (msi: number) => {
@@ -434,8 +437,8 @@ export function QualityTab() {
             </button>
 
             {task.evaluation && (
-              <button 
-                onClick={() => alert('Export feature coming soon')} 
+              <button
+                onClick={() => alert('Export feature coming soon')}
                 className="flex items-center gap-4 p-5 bg-surface-container-lowest rounded-2xl border border-outline-variant/30 hover:shadow-md transition-all text-left group"
               >
                 <div className="w-12 h-12 rounded-xl bg-green-100 text-green-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -447,7 +450,38 @@ export function QualityTab() {
                 </div>
               </button>
             )}
+
+            <button
+              onClick={() => setShowDeepAnalysis(prev => !prev)}
+              className={`flex items-center gap-4 p-5 rounded-2xl border hover:shadow-md transition-all text-left group ${
+                showDeepAnalysis
+                  ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-300 dark:border-violet-700 ring-2 ring-violet-200 dark:ring-violet-800'
+                  : 'bg-surface-container-lowest border-outline-variant/30'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${
+                showDeepAnalysis ? 'bg-violet-200 text-violet-700' : 'bg-violet-100 text-violet-600'
+              }`}>
+                <span className="material-symbols-outlined text-2xl">psychology</span>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-bold text-on-surface">深度问题分析</h4>
+                <p className="text-xs text-slate-500 mt-1">AI专家团队诊断文章核心问题</p>
+              </div>
+              <span className={`material-symbols-outlined text-slate-400 transition-transform ${showDeepAnalysis ? 'rotate-180' : ''}`}>
+                expand_more
+              </span>
+            </button>
           </div>
+
+          {/* Deep Analysis Panel */}
+          {showDeepAnalysis && (
+            <DeepAnalysisPanel
+              task={task}
+              reviews={reviews || []}
+              draftContent={getDraftFromTask?.()?.content || null}
+            />
+          )}
         </section>
       </div>
 

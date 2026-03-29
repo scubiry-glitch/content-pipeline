@@ -5,7 +5,7 @@
       "name": "webapp",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "webapp"],
-      "port": 5173
+      "port": 5174
     }
   ]
 }
