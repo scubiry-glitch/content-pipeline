@@ -357,13 +357,20 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // 异步处理：立即返回，后台执行 LLM 改稿，前端轮询状态
   fastify.post('/:taskId/apply-revisions', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
-    const body = (request.body || {}) as { selectedReviewIds?: unknown };
+    const body = (request.body || {}) as { selectedReviewIds?: unknown; teamConclusion?: unknown };
     const selectedReviewIds = Array.isArray(body.selectedReviewIds)
       ? body.selectedReviewIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
       : undefined;
+    const teamConclusion = typeof body.teamConclusion === 'string' && body.teamConclusion.trim()
+      ? body.teamConclusion.trim()
+      : undefined;
 
     const { startAsyncBatchRevision } = await import('../services/asyncBatchRevision.js');
-    const result = await startAsyncBatchRevision(taskId, selectedReviewIds && selectedReviewIds.length > 0 ? selectedReviewIds : undefined);
+    const result = await startAsyncBatchRevision(
+      taskId,
+      selectedReviewIds && selectedReviewIds.length > 0 ? selectedReviewIds : undefined,
+      teamConclusion
+    );
     if (!result.success) {
       reply.status(400);
       return { success: false, error: result.error };

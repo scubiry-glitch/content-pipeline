@@ -27,6 +27,8 @@ export interface RevisionResult {
 
 export interface BatchRevisionOptions {
   selectedReviewIds?: string[];
+  /** 来自 Quality 深度分析面板的团队结论，注入 LLM 改稿提示词作为优先方向 */
+  teamConclusion?: string;
   onProgress?: (
     progress: number,
     message: string,
@@ -319,20 +321,21 @@ function splitMarkdownSections(content: string): DraftSection[] {
   const text = String(content || '').trim();
   if (!text) return [{ heading: '全文', content: '' }];
 
+  // ★ 只按一级和二级标题 (# / ##) 拆分，避免 ### 产生过多碎片章节
   const lines = text.split('\n');
-  const sections: DraftSection[] = [];
+  const rawSections: DraftSection[] = [];
   let currentHeading = '导语';
   let currentLines: string[] = [];
 
   for (const line of lines) {
-    if (/^#{1,3}\s+/.test(line)) {
+    if (/^#{1,2}\s+/.test(line)) {
       if (currentLines.length > 0) {
-        sections.push({
+        rawSections.push({
           heading: currentHeading,
           content: currentLines.join('\n').trim(),
         });
       }
-      currentHeading = line.replace(/^#{1,3}\s+/, '').trim() || '未命名章节';
+      currentHeading = line.replace(/^#{1,2}\s+/, '').trim() || '未命名章节';
       currentLines = [line];
     } else {
       currentLines.push(line);
@@ -340,13 +343,28 @@ function splitMarkdownSections(content: string): DraftSection[] {
   }
 
   if (currentLines.length > 0) {
-    sections.push({
+    rawSections.push({
       heading: currentHeading,
       content: currentLines.join('\n').trim(),
     });
   }
 
-  return sections.length > 0 ? sections : [{ heading: '全文', content: text }];
+  if (rawSections.length === 0) return [{ heading: '全文', content: text }];
+
+  // ★ 合并过短章节（< 200 字）到前一个章节，减少 LLM 调用次数
+  const MIN_SECTION_CHARS = 200;
+  const merged: DraftSection[] = [];
+  for (const section of rawSections) {
+    if (merged.length > 0 && section.content.length < MIN_SECTION_CHARS) {
+      const prev = merged[merged.length - 1];
+      prev.content += '\n\n' + section.content;
+      prev.heading += ' / ' + section.heading;
+    } else {
+      merged.push({ ...section });
+    }
+  }
+
+  return merged;
 }
 
 function toIssueBatches(issues: RevisionIssue[], batchSize = 4): RevisionIssue[][] {
@@ -414,6 +432,7 @@ async function reviseSectionByBatches(params: {
   issues: RevisionIssue[];
   sectionIndex: number;
   sectionCount: number;
+  teamConclusion?: string;
   reportProgress: (
     progress: number,
     message: string,
@@ -426,7 +445,7 @@ async function reviseSectionByBatches(params: {
     }
   ) => void;
 }): Promise<{ revisedContent: string; changes: string[] }> {
-  const { taskId, section, issues, sectionIndex, sectionCount, reportProgress } = params;
+  const { taskId, section, issues, sectionIndex, sectionCount, teamConclusion, reportProgress } = params;
   const batches = toIssueBatches(issues, 4);
   let currentContent = section.content;
   const sectionChanges: string[] = [];
@@ -465,15 +484,21 @@ async function reviseSectionByBatches(params: {
       console.log(`[RevisionAgent] Section “${section.heading}” truncated: ${currentContent.length} → ${sectionText.length} chars`);
     }
 
+    const teamConclusionSection = teamConclusion
+      ? `## 团队改稿方向（优先遵循）\n${teamConclusion}\n\n`
+      : '';
+
     const prompt = `你是一位专业的文稿修订专家。请基于以下”章节内容”按建议进行精准修订。\n\n` +
       `## 章节标题\n${section.heading}\n\n` +
       `## 当前章节内容\n${sectionText}\n\n` +
+      teamConclusionSection +
       `## 本组评审建议（共 ${batch.length} 条）\n${issuesText}\n\n` +
       `## 修订要求\n` +
       `1. 仅修改与建议直接相关的内容，保持章节整体结构和风格。\n` +
       `2. 输出完整”修订后章节”，不要输出全文。\n` +
-      `3. 不要删除章节标题。\n\n` +
-      `## 输出格式\n` +
+      `3. 不要删除章节标题。\n` +
+      (teamConclusion ? `4. 修订方向需与”团队改稿方向”保持一致，优先修复该核心问题。\n` : '') +
+      `\n## 输出格式\n` +
       `<修订说明>简要列出处理方式</修订说明>\n` +
       `<修订后稿件>完整修订后章节内容</修订后稿件>`;
 
@@ -786,6 +811,7 @@ export async function applyAllAcceptedRevisions(
         issues: plan.issues,
         sectionIndex,
         sectionCount: sectionPlans.length,
+        teamConclusion: options.teamConclusion,
         reportProgress,
       });
       revisedSectionMap.set(cpKey, sectionResult.revisedContent);

@@ -62,7 +62,8 @@ export function getBatchRevisionStatus(taskId: string): AsyncBatchRevisionStatus
 
 export async function startAsyncBatchRevision(
   taskId: string,
-  selectedReviewIds?: string[]
+  selectedReviewIds?: string[],
+  teamConclusion?: string
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   const existingJob = revisionJobs.get(taskId);
   if (existingJob?.status === 'doing') {
@@ -83,7 +84,7 @@ export async function startAsyncBatchRevision(
   const startedAtMs = Date.now();
 
   process.nextTick(() => {
-    executeBatchRevision(taskId, selectedReviewIds).catch((error) => {
+    executeBatchRevision(taskId, selectedReviewIds, teamConclusion).catch((error) => {
       revisionJobs.set(taskId, {
         ...status,
         status: 'failed',
@@ -140,7 +141,7 @@ export async function startAsyncBatchRevision(
   return { success: true, jobId: taskId };
 }
 
-async function executeBatchRevision(taskId: string, selectedReviewIds?: string[]): Promise<void> {
+async function executeBatchRevision(taskId: string, selectedReviewIds?: string[], teamConclusion?: string): Promise<void> {
   const initialStatus = revisionJobs.get(taskId);
   if (!initialStatus) return;
 
@@ -192,6 +193,7 @@ async function executeBatchRevision(taskId: string, selectedReviewIds?: string[]
     }
     const result = await applyAllAcceptedRevisions(taskId, {
       selectedReviewIds,
+      teamConclusion,
       onProgress: report,
     });
 

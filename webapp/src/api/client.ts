@@ -396,8 +396,8 @@ export const blueTeamApi = {
     client.get(`/production/${taskId}/can-proceed`) as Promise<{ canProceed: boolean; pendingCritical: number }>,
 
   // 批量应用已接受的评审意见（一次性改稿）
-  applyRevisions: (taskId: string, selectedReviewIds?: string[]) =>
-    client.post(`/production/${taskId}/apply-revisions`, { selectedReviewIds }) as Promise<{
+  applyRevisions: (taskId: string, selectedReviewIds?: string[], teamConclusion?: string) =>
+    client.post(`/production/${taskId}/apply-revisions`, { selectedReviewIds, teamConclusion }) as Promise<{
       success: boolean;
       jobId?: string;
       status?: 'doing' | 'completed' | 'failed';

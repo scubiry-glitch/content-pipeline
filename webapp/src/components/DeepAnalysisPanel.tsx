@@ -536,6 +536,7 @@ function analyzeDifferentiation(task: Task, reviews: BlueTeamReview[], content: 
 export function DeepAnalysisPanel({ task, reviews, draftContent }: DeepAnalysisPanelProps) {
   const [phase, setPhase] = useState(0); // 0=loading, 1=problems, 2=discussion, 3=diff
   const [expandedProblem, setExpandedProblem] = useState<string | null>(null);
+  const [conclusionSaved, setConclusionSaved] = useState(false);
 
   // Compute analysis data
   const problems = useMemo(() => extractRootProblems(reviews, draftContent), [reviews, draftContent]);
@@ -798,10 +799,34 @@ export function DeepAnalysisPanel({ task, reviews, draftContent }: DeepAnalysisP
                 <div className="bg-violet-50 dark:bg-violet-950/30 rounded-xl p-4 border border-violet-200 dark:border-violet-800">
                   <div className="flex items-start gap-2">
                     <span className="material-symbols-outlined text-violet-600 text-lg mt-0.5">lightbulb</span>
-                    <div>
+                    <div className="flex-1">
                       <p className="text-xs font-bold text-violet-700 dark:text-violet-300 mb-1">团队结论</p>
                       <p className="text-sm text-violet-800 dark:text-violet-200 leading-relaxed">{discussion.conclusion}</p>
                     </div>
+                  </div>
+                  {/* Export to revision button */}
+                  <div className="mt-3 pt-3 border-t border-violet-200 dark:border-violet-700 flex items-center justify-between">
+                    <p className="text-xs text-violet-600 dark:text-violet-400">
+                      可将团队结论作为改稿优先方向，引导一键改稿
+                    </p>
+                    <button
+                      onClick={() => {
+                        const key = `deepAnalysisConclusion_${task.id}`;
+                        localStorage.setItem(key, discussion.conclusion);
+                        setConclusionSaved(true);
+                        setTimeout(() => setConclusionSaved(false), 3000);
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        conclusionSaved
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-violet-600 text-white hover:bg-violet-700'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {conclusionSaved ? 'check_circle' : 'send'}
+                      </span>
+                      {conclusionSaved ? '已导入改稿方向' : '导入改稿方向'}
+                    </button>
                   </div>
                 </div>
               </div>

@@ -22,6 +22,7 @@ export default defineConfig({
     force: true
   },
   server: {
+    allowedHosts: ['pipeline.meizu.life'],
     hmr: {
       overlay: false
     },

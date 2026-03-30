@@ -167,12 +167,18 @@ export function ReviewsTab() {
     totalBatches?: number;
     errorCode?: 'LLM_TIMEOUT' | 'NETWORK_TIMEOUT' | 'VALIDATION_ERROR' | 'UNKNOWN_ERROR';
     error?: string;
+    newVersion?: number;
   };
   const [batchRevisionStatus, setBatchRevisionStatus] = useState<BatchRevisionStatusType>({
     status: 'idle',
     progress: 0,
     message: '',
   });
+  // 一键改稿确认弹窗
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [revisionModalSource, setRevisionModalSource] = useState<'all' | 'tasks'>('all');
+  const [revisionModalSelectedIds, setRevisionModalSelectedIds] = useState<string[] | undefined>();
+  const [useTeamConclusion, setUseTeamConclusion] = useState(true);
   const [selectedTaskItems, setSelectedTaskItems] = useState<Set<string>>(new Set());
   
   // Streaming 蓝军评审状态
@@ -228,6 +234,9 @@ export function ReviewsTab() {
     onRedoReview,
     onRefreshTask,
   } = useOutletContext<TaskContext>();
+
+  // 从 localStorage 读取 Quality 团队结论（在 task 声明后才能访问 task.id）
+  const savedTeamConclusion = localStorage.getItem(`deepAnalysisConclusion_${task?.id}`) || null;
 
   const refreshTaskData = useCallback(async () => {
     if (onRefreshTask) {
@@ -495,17 +504,12 @@ export function ReviewsTab() {
     }
   };
 
-  const startBatchRevision = async (selectedReviewIds?: string[], source: 'all' | 'tasks' = 'all') => {
-    const selectedCount = selectedReviewIds?.length || 0;
-    const confirmText = source === 'tasks'
-      ? `确定要对选中的 ${selectedCount} 条任务启动一键改稿吗？\n\n这将合并这些修改建议，一次性生成新版本。`
-      : '确定要应用所有已接受的评审意见进行一键改稿吗？\n\n这将合并所有修改建议，一次性生成新版本。';
-
-    if (!confirm(confirmText)) return;
+  const startBatchRevision = async (selectedReviewIds?: string[], teamConclusion?: string) => {
+    setShowRevisionModal(false);
     setBatchRevisionStatus({ status: 'doing', progress: 0, message: '启动改稿任务...' });
 
     try {
-      const result = await blueTeamApi.applyRevisions(task.id, selectedReviewIds);
+      const result = await blueTeamApi.applyRevisions(task.id, selectedReviewIds, teamConclusion);
       if (!result.success) {
         const rawError = result.error || '未知错误';
         const displayError = isLlmTimeoutError(rawError) ? 'LLM超时，请重试' : rawError;
@@ -551,8 +555,8 @@ export function ReviewsTab() {
               progress: 100,
               message: status.message || '改稿完成',
               error: undefined,
+              newVersion: status.newVersion,
             });
-            alert(`改稿完成！\n新版本: v${status.newVersion ?? 'N/A'}\n应用建议: ${status.appliedCount ?? 0} 条`);
             await refreshTaskData();
           } else if (status.status === 'failed') {
             clearInterval(pollInterval);
@@ -603,18 +607,24 @@ export function ReviewsTab() {
     }
   };
 
-  // 批量改稿：合并所有已接受的评审意见，一次性生成新版本
-  const handleBatchRevision = async () => {
-    await startBatchRevision(undefined, 'all');
+  // 批量改稿：显示确认弹窗
+  const handleBatchRevision = () => {
+    setRevisionModalSource('all');
+    setRevisionModalSelectedIds(undefined);
+    setUseTeamConclusion(!!savedTeamConclusion);
+    setShowRevisionModal(true);
   };
 
-  const handleTaskBatchRevision = async () => {
+  const handleTaskBatchRevision = () => {
     const selectedIds = Array.from(selectedTaskItems);
     if (selectedIds.length === 0) {
       alert('请先在 Task 区域选择至少一条改稿项');
       return;
     }
-    await startBatchRevision(selectedIds, 'tasks');
+    setRevisionModalSource('tasks');
+    setRevisionModalSelectedIds(selectedIds);
+    setUseTeamConclusion(!!savedTeamConclusion);
+    setShowRevisionModal(true);
   };
 
   const toggleSelectTaskItem = (reviewItemId: string) => {
@@ -1352,28 +1362,38 @@ export function ReviewsTab() {
         const unrevisedCount = reviewSummary.accepted - revised;
         const hasCheckpoint = revised > 0 && unrevisedCount > 0;
         return (
-        <div className="mx-6 mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              一键改稿
-            </h4>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              {hasCheckpoint
-                ? `已完成 ${revised} 条，剩余 ${unrevisedCount} 条待处理（支持断点续跑）`
-                : `已接受 ${reviewSummary.accepted} 条评审意见，合并后一次性生成新版本`}
-            </p>
+        <div className="mx-6 mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600 text-lg">edit_note</span>
+                <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">一键改稿</h4>
+                {savedTeamConclusion && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-medium rounded-full border border-violet-200 dark:border-violet-700">
+                    <span className="material-symbols-outlined text-xs">psychology</span>
+                    团队结论已导入
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 ml-6">
+                {hasCheckpoint
+                  ? `已完成 ${revised} 条，剩余 ${unrevisedCount} 条待处理（支持断点续跑）`
+                  : `已接受 ${reviewSummary.accepted} 条评审意见，合并后一次性生成新版本`}
+              </p>
+            </div>
+            <button
+              onClick={handleBatchRevision}
+              disabled={batchRevisionStatus.status === 'doing'}
+              className="ml-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+              {batchRevisionStatus.status === 'doing'
+                ? '改稿中...'
+                : hasCheckpoint
+                  ? `继续改稿（${unrevisedCount} 条）`
+                  : `应用 ${reviewSummary.accepted} 条修改`}
+            </button>
           </div>
-          <button
-            onClick={handleBatchRevision}
-            disabled={batchRevisionStatus.status === 'doing'}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {batchRevisionStatus.status === 'doing'
-              ? '改稿中...'
-              : hasCheckpoint
-                ? `继续改稿（${unrevisedCount} 条）`
-                : `应用 ${reviewSummary.accepted} 条修改`}
-          </button>
         </div>
         );
       })()}
@@ -1381,24 +1401,53 @@ export function ReviewsTab() {
       {batchRevisionStatus.status === 'doing' && (
         <div className="mx-6 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
-              <span className="material-symbols-outlined animate-spin">refresh</span>
-              一键改稿进行中...
+            <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-2">
+              <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+              改稿进行中
             </span>
-            <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{batchRevisionStatus.progress}%</span>
+            <span className="text-sm font-bold text-blue-600 dark:text-blue-300 tabular-nums">{batchRevisionStatus.progress}%</span>
           </div>
-          <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-700"
               style={{ width: `${batchRevisionStatus.progress}%` }}
             />
           </div>
-          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{batchRevisionStatus.message}</p>
-          {getBatchRevisionStageText(batchRevisionStatus) && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              {getBatchRevisionStageText(batchRevisionStatus)}
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-blue-600 dark:text-blue-400">{batchRevisionStatus.message}</p>
+            {getBatchRevisionStageText(batchRevisionStatus) && (
+              <span className="text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">
+                {getBatchRevisionStageText(batchRevisionStatus)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {batchRevisionStatus.status === 'completed' && (
+        <div className="mx-6 mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 text-green-600 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-xl">check_circle</span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-green-800 dark:text-green-200">改稿完成</p>
+            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+              {batchRevisionStatus.newVersion ? `已生成 v${batchRevisionStatus.newVersion}` : '新版本已生成'} · {batchRevisionStatus.message}
             </p>
-          )}
+          </div>
+          <button
+            onClick={() => setSidebarView('timeline')}
+            className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">history</span>
+            查看新版本
+          </button>
+          <button
+            onClick={() => setBatchRevisionStatus({ status: 'idle', progress: 0, message: '' })}
+            className="text-green-500 hover:text-green-700 transition-colors"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
         </div>
       )}
 
@@ -1423,6 +1472,93 @@ export function ReviewsTab() {
           >
             重试改稿（从断点继续）
           </button>
+        </div>
+      )}
+
+      {/* 一键改稿确认弹窗 */}
+      {showRevisionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-outline-variant/30">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-outline-variant/20">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-xl">auto_fix_high</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-on-surface text-base">启动一键改稿</h3>
+                <p className="text-xs text-slate-500">
+                  {revisionModalSource === 'tasks'
+                    ? `对选中的 ${revisionModalSelectedIds?.length || 0} 条改稿项`
+                    : `合并所有 ${reviewSummary.accepted} 条已接受评审意见`}
+                </p>
+              </div>
+              <button onClick={() => setShowRevisionModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-4 space-y-3">
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: '高优先级', count: reviewSummary.critical, color: 'text-red-600 bg-red-50 border-red-200' },
+                  { label: '中等', count: reviewSummary.warning, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                  { label: '已接受', count: reviewSummary.accepted, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                ].map(({ label, count, color }) => (
+                  <div key={label} className={`rounded-xl border p-2.5 text-center ${color}`}>
+                    <p className="text-lg font-bold">{count}</p>
+                    <p className="text-xs mt-0.5 opacity-80">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Team conclusion toggle */}
+              {savedTeamConclusion && (
+                <div className={`rounded-xl border p-3 transition-colors ${useTeamConclusion ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-700' : 'bg-surface-container-low border-outline-variant/30'}`}>
+                  <div className="flex items-start gap-2">
+                    <button
+                      onClick={() => setUseTeamConclusion(v => !v)}
+                      className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${useTeamConclusion ? 'bg-violet-600 border-violet-600' : 'border-slate-400'}`}
+                    >
+                      {useTeamConclusion && <span className="material-symbols-outlined text-white text-xs">check</span>}
+                    </button>
+                    <div className="flex-1 cursor-pointer" onClick={() => setUseTeamConclusion(v => !v)}>
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">psychology</span>
+                        引入 Quality 团队结论作为改稿方向
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                        {savedTeamConclusion}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-slate-400">LLM 将按章节逐批处理，支持断点续跑。</p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-6 py-4 border-t border-outline-variant/20">
+              <button
+                onClick={() => setShowRevisionModal(false)}
+                className="flex-1 px-4 py-2 bg-surface-container text-on-surface text-sm font-medium rounded-lg hover:bg-surface-container-high transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => startBatchRevision(
+                  revisionModalSelectedIds,
+                  useTeamConclusion && savedTeamConclusion ? savedTeamConclusion : undefined
+                )}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+                开始改稿
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
