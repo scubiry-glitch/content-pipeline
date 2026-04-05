@@ -414,12 +414,13 @@ function assignIssuesToSections(
     if (!matched) unassigned.push(issue);
   }
 
-  // 对无 location / 未匹配的建议做均匀分配，避免全部堆到一个调用
-  let cursor = 0;
+  // 对无 location / 未匹配的建议：分配到已有 issues 的章节（优先），避免产生额外 LLM 调用
   const safePairs = pairs.length > 0 ? pairs : [{ sectionIndex: 0, section: { heading: '全文', content: '' }, issues: [] as RevisionIssue[] }];
+  const pairsWithIssues = safePairs.filter(p => p.issues.length > 0);
+  const targets = pairsWithIssues.length > 0 ? pairsWithIssues : [safePairs[0]];
+  let cursor = 0;
   for (const issue of unassigned) {
-    const pairIndex = cursor % safePairs.length;
-    safePairs[pairIndex].issues.push(issue);
+    targets[cursor % targets.length].issues.push(issue);
     cursor += 1;
   }
 
@@ -451,6 +452,10 @@ async function reviseSectionByBatches(params: {
   const sectionChanges: string[] = [];
 
   for (let i = 0; i < batches.length; i++) {
+    // ★ 批次间冷却：避免连续请求压垮 Kimi API
+    if (i > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
     const batch = batches[i];
     const issuesText = batch.map((issue, idx) =>
       `${idx + 1}. [${issue.expertRole}] ${issue.question.substring(0, 260)}\n` +
@@ -502,10 +507,10 @@ async function reviseSectionByBatches(params: {
       `<修订说明>简要列出处理方式</修订说明>\n` +
       `<修订后稿件>完整修订后章节内容</修订后稿件>`;
 
-    // ★ Phase 2+3 优化：缩短单次超时 + 指数退避重试(最多2次) + 模型降级
-    const LLM_TIMEOUT_MS = 90 * 1000; // 90s per batch (从120s降低)
+    // ★ Phase 2+3 优化：超时 + 指数退避重试(最多2次) + 模型降级
+    const LLM_TIMEOUT_MS = 150 * 1000; // 150s per batch（Kimi 大 prompt 需要足够时间）
     const MAX_RETRIES = 2;
-    const RETRY_DELAYS = [3000, 8000]; // 指数退避延迟
+    const RETRY_DELAYS = [5000, 15000]; // 指数退避延迟（给 Kimi 恢复时间）
 
     const runWithModel = async (model?: string) =>
       withTimeout(
@@ -778,33 +783,43 @@ export async function applyAllAcceptedRevisions(
       console.warn('[RevisionAgent] Failed to load checkpoint:', e);
     }
 
-    reportProgress(45, `分段改稿中：${sectionPlans.length} 个章节待处理...`, {
+    // ★ 过滤掉 checkpoint 已完成的章节
+    const sectionChanges: string[] = [];
+    const revisedSectionMap = new Map<number, string>();
+    const pendingPlans: typeof sectionPlans = [];
+    for (const plan of sectionPlans) {
+      const cpKey = plan.sectionIndex;
+      if (checkpoint[cpKey]) {
+        revisedSectionMap.set(cpKey, checkpoint[cpKey].content);
+        sectionChanges.push(...(checkpoint[cpKey].changes || []));
+      } else {
+        pendingPlans.push(plan);
+      }
+    }
+
+    const checkpointCount = sectionPlans.length - pendingPlans.length;
+    if (checkpointCount > 0) {
+      console.log(`[RevisionAgent] Restored ${checkpointCount} sections from checkpoint, ${pendingPlans.length} remaining`);
+    }
+
+    reportProgress(45, `分段改稿中：${pendingPlans.length} 个章节待处理${checkpointCount > 0 ? `（已恢复 ${checkpointCount} 个）` : ''}...`, {
       stage: 'running_llm_section',
-      sectionIndex: 1,
+      sectionIndex: checkpointCount + 1,
       totalSections: sectionPlans.length,
       batchIndex: 0,
       totalBatches: 0,
     });
-    const sectionChanges: string[] = [];
-    const revisedSectionMap = new Map<number, string>();
-    for (let idx = 0; idx < sectionPlans.length; idx++) {
-      const plan = sectionPlans[idx];
-      const sectionIndex = idx + 1;
 
-      // ★ 断点续跑：跳过已完成的章节
-      const cpKey = plan.sectionIndex;
-      if (checkpoint[cpKey]) {
-        console.log(`[RevisionAgent] Skipping section ${sectionIndex} (checkpoint hit: "${plan.section.heading}")`);
-        revisedSectionMap.set(cpKey, checkpoint[cpKey].content);
-        sectionChanges.push(...(checkpoint[cpKey].changes || []));
-        reportProgress(
-          Math.min(85, Math.round(45 + (sectionIndex / sectionPlans.length) * 40)),
-          `已恢复第 ${sectionIndex}/${sectionPlans.length} 章节（断点续跑）`,
-          { stage: 'running_llm_section', sectionIndex, totalSections: sectionPlans.length }
-        );
-        continue;
-      }
+    // ★ 并发处理章节（最多 CONCURRENCY 个同时进行），减少总耗时
+    // 降到 2 并发：Kimi API 在 3 并发时频繁超时
+    const CONCURRENCY = 2;
+    const STAGGER_DELAY_MS = 2000; // 并发启动间隔，避免同时打到 Kimi
+    let completedCount = checkpointCount;
 
+    const processSection = async (plan: typeof sectionPlans[0], idx: number, staggerMs: number) => {
+      // 错开并发启动时间，减轻 Kimi API 瞬时压力
+      if (staggerMs > 0) await new Promise(r => setTimeout(r, staggerMs));
+      const sectionIndex = checkpointCount + idx + 1;
       const sectionResult = await reviseSectionByBatches({
         taskId,
         section: plan.section,
@@ -814,45 +829,59 @@ export async function applyAllAcceptedRevisions(
         teamConclusion: options.teamConclusion,
         reportProgress,
       });
-      revisedSectionMap.set(cpKey, sectionResult.revisedContent);
-      sectionChanges.push(...sectionResult.changes);
+      return { plan, sectionResult, sectionIndex };
+    };
 
-      // ★ 章节完成后立即保存 checkpoint + 增量标记 issues
-      try {
-        const allCheckpoints: Record<number, { content: string; changes: string[] }> = {};
-        for (const [k, v] of revisedSectionMap) {
-          allCheckpoints[k] = {
-            content: v,
-            changes: sectionChanges.filter(c => c.startsWith(`[${sections[k]?.heading || ''}]`)),
-          };
-        }
-        await query(
-          `INSERT INTO task_logs (task_id, action, details, created_at)
-           VALUES ($1, 'batch_revision_checkpoint', $2, NOW())`,
-          [taskId, JSON.stringify({ draftId: latestDraft.id, sections: allCheckpoints, updatedAt: new Date().toISOString() })]
-        );
+    // 按 CONCURRENCY 分批并发
+    for (let batchStart = 0; batchStart < pendingPlans.length; batchStart += CONCURRENCY) {
+      const batch = pendingPlans.slice(batchStart, batchStart + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map((plan, i) => processSection(plan, batchStart + i, i * STAGGER_DELAY_MS))
+      );
 
-        // 增量标记本章节涉及的 issues 为 manual_resolved
-        for (const issue of plan.issues) {
-          try {
-            if (issue.source === 'er') {
-              // expert_reviews: question_decisions FK 不支持，直接更新 JSONB
-              await markExpertReviewQuestion(issue.reviewId, issue.questionIndex, 'manual_resolved', '章节改稿已应用');
-            } else {
-              await query(
-                `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
-                 VALUES ($1, $2, $3, 'manual_resolved', '章节改稿已应用', NOW(), NOW())
-                 ON CONFLICT (review_id, question_index)
-                 DO UPDATE SET decision = 'manual_resolved', note = '章节改稿已应用', updated_at = NOW()`,
-                [taskId, issue.reviewId, issue.questionIndex]
-              );
-            }
-          } catch (markErr) {
-            console.warn(`[RevisionAgent] Failed to mark issue ${issue.reviewId}:${issue.questionIndex}:`, markErr);
+      // 按顺序处理结果
+      for (const { plan, sectionResult } of results) {
+        const cpKey = plan.sectionIndex;
+        revisedSectionMap.set(cpKey, sectionResult.revisedContent);
+        sectionChanges.push(...sectionResult.changes);
+        completedCount++;
+
+        // ★ 章节完成后立即保存 checkpoint + 增量标记 issues
+        try {
+          const allCheckpoints: Record<number, { content: string; changes: string[] }> = {};
+          for (const [k, v] of revisedSectionMap) {
+            allCheckpoints[k] = {
+              content: v,
+              changes: sectionChanges.filter(c => c.startsWith(`[${sections[k]?.heading || ''}]`)),
+            };
           }
+          await query(
+            `INSERT INTO task_logs (task_id, action, details, created_at)
+             VALUES ($1, 'batch_revision_checkpoint', $2, NOW())`,
+            [taskId, JSON.stringify({ draftId: latestDraft.id, sections: allCheckpoints, updatedAt: new Date().toISOString() })]
+          );
+
+          // 增量标记本章节涉及的 issues 为 manual_resolved
+          for (const issue of plan.issues) {
+            try {
+              if (issue.source === 'er') {
+                await markExpertReviewQuestion(issue.reviewId, issue.questionIndex, 'manual_resolved', '章节改稿已应用');
+              } else {
+                await query(
+                  `INSERT INTO question_decisions (task_id, review_id, question_index, decision, note, created_at, updated_at)
+                   VALUES ($1, $2, $3, 'manual_resolved', '章节改稿已应用', NOW(), NOW())
+                   ON CONFLICT (review_id, question_index)
+                   DO UPDATE SET decision = 'manual_resolved', note = '章节改稿已应用', updated_at = NOW()`,
+                  [taskId, issue.reviewId, issue.questionIndex]
+                );
+              }
+            } catch (markErr) {
+              console.warn(`[RevisionAgent] Failed to mark issue ${issue.reviewId}:${issue.questionIndex}:`, markErr);
+            }
+          }
+        } catch (cpErr) {
+          console.warn(`[RevisionAgent] Failed to save checkpoint for section ${completedCount}:`, cpErr);
         }
-      } catch (cpErr) {
-        console.warn(`[RevisionAgent] Failed to save checkpoint for section ${sectionIndex}:`, cpErr);
       }
     }
 

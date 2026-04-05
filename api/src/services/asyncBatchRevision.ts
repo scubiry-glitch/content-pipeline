@@ -22,8 +22,8 @@ export interface AsyncBatchRevisionStatus {
 }
 
 const revisionJobs = new Map<string, AsyncBatchRevisionStatus>();
-const BATCH_REVISION_MAX_MS = 8 * 60 * 1000;
-const STALL_TIMEOUT_MS = 90 * 1000;
+const BATCH_REVISION_MAX_MS = 12 * 60 * 1000; // 12分钟总超时（单次LLM最多150s + 重试 + 多章节）
+const STALL_TIMEOUT_MS = 180 * 1000; // 3分钟无心跳才判定卡死（匹配 LLM 150s 超时 + 重试间隔）
 const WATCHDOG_INTERVAL_MS = 15 * 1000;
 
 function nowIso(): string {

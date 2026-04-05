@@ -67,7 +67,7 @@ async function kimiRequest(path: string, body: any, apiKey: string, baseURL: str
       'X-Client-Version': '1.24.0',
     },
     family: 4, // 强制使用 IPv4，解决 Node.js fetch 超时问题
-    timeout: 120000, // 2分钟超时（配合外层 withTimeout 使用）
+    timeout: 180000, // 3分钟 socket 超时（外层 withTimeout 会更早终止，此处作为兜底）
   };
 
   return new Promise((resolve, reject) => {

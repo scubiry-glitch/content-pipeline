@@ -3,9 +3,12 @@
   "configurations": [
     {
       "name": "webapp",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "webapp"],
-      "port": 5174
+      "runtimeExecutable": "/Users/scubiry/.nvm/versions/node/v22.22.1/bin/node",
+      "runtimeArgs": ["/Users/scubiry/.nvm/versions/node/v22.22.1/bin/npm", "run", "dev", "--prefix", "webapp"],
+      "autoPort": true,
+      "env": {
+        "PATH": "/Users/scubiry/.nvm/versions/node/v22.22.1/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      }
     }
   ]
 }
