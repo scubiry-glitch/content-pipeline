@@ -5,7 +5,7 @@
       "name": "webapp",
       "runtimeExecutable": "/Users/scubiry/.nvm/versions/node/v22.22.1/bin/node",
       "runtimeArgs": ["/Users/scubiry/.nvm/versions/node/v22.22.1/bin/npm", "run", "dev", "--prefix", "webapp"],
-      "autoPort": true,
+      "port": 5174,
       "env": {
         "PATH": "/Users/scubiry/.nvm/versions/node/v22.22.1/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
       }

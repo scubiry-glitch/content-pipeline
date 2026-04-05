@@ -24,7 +24,7 @@ const DOMAINS = [
 ];
 
 const TABS = [
-  { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览75位专家的详细信息' },
+  { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览专家的详细信息' },
   { id: 'comparison', label: '⚖️ 专家对比', path: '/expert-comparison', description: '并排对比不同专家的观点' },
   { id: 'network', label: '🕸️ 协作网络', path: '/expert-network', description: '可视化专家协作关系' },
   { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
@@ -193,7 +193,7 @@ export function ExpertLibrary() {
       <div className="page-header">
         <div className="header-title">
           <h1>专家库 v5.2</h1>
-          <span className="version-badge">75位专家</span>
+          <span className="version-badge">{stats.total}位专家</span>
         </div>
         <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
       </div>
