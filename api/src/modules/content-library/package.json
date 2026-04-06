@@ -1,0 +1,33 @@
+{
+  "name": "@content-pipeline/content-library",
+  "version": "7.0.0",
+  "description": "内容库模块 — 结构化记忆与层级检索 (Hindsight/OpenViking/RetainDB inspired)",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./adapters/postgres-text-search": "./adapters/postgres-text-search.ts",
+    "./adapters/local-event-bus": "./adapters/local-event-bus.ts",
+    "./adapters/redis-event-bus": "./adapters/redis-event-bus.ts"
+  },
+  "keywords": [
+    "content-library",
+    "knowledge-base",
+    "hybrid-search",
+    "tiered-loading",
+    "fact-extraction",
+    "hindsight",
+    "openviking",
+    "retaindb"
+  ],
+  "peerDependencies": {
+    "fastify": ">=4.0.0",
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": { "optional": true },
+    "pg": { "optional": true },
+    "@fastify/cors": { "optional": true }
+  }
+}

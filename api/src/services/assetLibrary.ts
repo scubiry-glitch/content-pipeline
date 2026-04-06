@@ -1,9 +1,10 @@
 // Smart Asset Library Service
-// 负责: 文档导入 → 自动标签 → 向量化 → 质量评分
+// 负责: 文档导入 → 自动标签 → 向量化 → 质量评分 → 事实提取(v7.0)
 
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { AssetLibraryItem, AutoTag, QualityFactors } from '../types/index.js';
+import { isContentLibraryInitialized, getContentLibraryEngine } from '../modules/content-library/singleton.js';
 
 export interface ImportAssetInput {
   content: string;
@@ -18,6 +19,9 @@ export interface ImportResult {
   tags: AutoTag[];
   qualityScore: number;
   embeddingStored: boolean;
+  /** v7.0: 事实提取结果 */
+  factsExtracted?: number;
+  entitiesRegistered?: number;
 }
 
 export class AssetLibraryService {
@@ -71,11 +75,31 @@ export class AssetLibraryService {
 
     console.log(`[AssetLibrary] Asset ${assetId} imported with quality ${qualityScore.toFixed(3)}`);
 
+    // v7.0: 异步触发事实提取 (如果 Content Library 已初始化)
+    let factsExtracted = 0;
+    let entitiesRegistered = 0;
+    if (isContentLibraryInitialized()) {
+      try {
+        const clEngine = getContentLibraryEngine();
+        const extraction = await clEngine.extractFacts({
+          content: input.content.substring(0, 8000),
+          assetId,
+        });
+        factsExtracted = extraction.facts.length;
+        entitiesRegistered = extraction.entities.length;
+        console.log(`[AssetLibrary] v7.0: Extracted ${factsExtracted} facts, ${entitiesRegistered} entities`);
+      } catch (err) {
+        console.warn('[AssetLibrary] v7.0: Fact extraction failed (non-blocking):', err);
+      }
+    }
+
     return {
       assetId,
       tags,
       qualityScore,
       embeddingStored: !!embedding,
+      factsExtracted,
+      entitiesRegistered,
     };
   }
 

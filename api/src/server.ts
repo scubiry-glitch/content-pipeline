@@ -60,6 +60,9 @@ import { expertRoutes } from './routes/experts.js';
 import { createExpertEngine, createRouter as createExpertLibraryRouter } from './modules/expert-library/index.js';
 import { createPipelineDeps } from './modules/expert-library/adapters/pipeline.js';
 import { initExpertEngineSingleton } from './modules/expert-library/singleton.js';
+import { createContentLibraryEngine, createRouter as createContentLibraryRouter } from './modules/content-library/index.js';
+import { createContentLibraryPipelineDeps } from './modules/content-library/adapters/pipeline.js';
+import { initContentLibraryEngineSingleton } from './modules/content-library/singleton.js';
 import { query } from './db/connection.js';
 import { generate, generateEmbedding } from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
@@ -191,6 +194,13 @@ async function main() {
   initExpertEngineSingleton(expertEngine);
   await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
 
+  // Content Library 独立模块 (v7.0) — 结构化记忆与层级检索
+  const contentLibraryEngine = createContentLibraryEngine(
+    createContentLibraryPipelineDeps(query, generate, generateEmbedding)
+  );
+  initContentLibraryEngineSingleton(contentLibraryEngine);
+  await fastify.register(createContentLibraryRouter(contentLibraryEngine), { prefix: '/api/v1/content-library' });
+
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });
 
@@ -251,6 +261,15 @@ async function main() {
     const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
     assetsAIScheduler.start();
     console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
+
+    // v7.0: 启动内容库定时任务（信息增量报告 + 保鲜度检查）
+    const { startContentLibraryScheduler } = await import('./modules/content-library/scheduler.js');
+    startContentLibraryScheduler(contentLibraryEngine, undefined, {
+      deltaReportInterval: 6 * 60 * 60 * 1000,     // 每6小时生成增量报告
+      freshnessCheckInterval: 24 * 60 * 60 * 1000,  // 每24小时检查保鲜度
+      factMaxAgeDays: 90,
+    });
+    console.log('📚 内容库定时任务已启动（增量报告每6h，保鲜度每24h）');
 
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
     // 或配置定时任务调用 collectAllFeeds()
