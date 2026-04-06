@@ -9,6 +9,7 @@ import type {
   DebateRound,
   DebateResult,
 } from './types.js';
+import { expertProfileToDbParams } from './expertProfileDb.js';
 
 /** 从 LLM 输出中提取 JSON 对象，兼容代码块和裸 JSON */
 function extractJSON(raw: string): any {
@@ -164,12 +165,66 @@ export class DebateEngine {
       participantSummary,
     };
 
-    // 持久化辩论记录
-    this.saveDebate(result).catch(err =>
-      console.warn('[DebateEngine] Failed to save debate:', err)
-    );
+    // 持久化：expert_invocations.expert_id 外键要求行必须存在于 expert_profiles；
+    // 仅用内存 register 的专家未入库时 INSERT 会失败，故先补齐 profiles。
+    await this.persistDebate(experts, result);
 
     return result;
+  }
+
+  /**
+   * 将参与辩论的专家写入 expert_profiles（已存在则跳过），再保存 invocation。
+   */
+  private async persistDebate(
+    experts: ExpertProfile[],
+    result: DebateResult
+  ): Promise<void> {
+    try {
+      await this.ensureExpertsInDb(experts);
+      const primaryExpertId = experts[0]?.expert_id;
+      if (!primaryExpertId) {
+        console.warn('[DebateEngine] persistDebate: empty experts');
+        return;
+      }
+      await this.saveDebate(result, primaryExpertId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : '';
+      console.warn('[DebateEngine] Failed to persist debate:', msg, stack || '');
+    }
+  }
+
+  /** 保证外键：仅缓存、未落库的专家先 INSERT（不覆盖已有行） */
+  private async ensureExpertsInDb(experts: ExpertProfile[]): Promise<void> {
+    const sql = `
+      INSERT INTO expert_profiles (
+        expert_id, name, domain, persona, method, emm, constraints_config, output_schema, anti_patterns, signature_phrases, is_active
+      ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, true)
+      ON CONFLICT (expert_id) DO NOTHING
+    `;
+    for (const ex of experts) {
+      try {
+        const row = expertProfileToDbParams(ex);
+        await this.deps.db.query(sql, [
+          row.expert_id,
+          row.name,
+          row.domain,
+          JSON.stringify(row.persona),
+          JSON.stringify(row.method),
+          row.emm ? JSON.stringify(row.emm) : null,
+          JSON.stringify(row.constraints_config),
+          JSON.stringify(row.output_schema),
+          row.anti_patterns,
+          row.signature_phrases,
+        ]);
+      } catch (e) {
+        console.warn(
+          '[DebateEngine] ensureExpertsInDb failed for',
+          ex.expert_id,
+          e instanceof Error ? e.message : e
+        );
+      }
+    }
   }
 
   /**
@@ -425,18 +480,13 @@ ${allContent}
   }
 
   /**
-   * 保存辩论记录到数据库
+   * 保存辩论记录到数据库（primaryExpertId 须已在 expert_profiles 中存在）
    */
-  private async saveDebate(result: DebateResult): Promise<void> {
+  private async saveDebate(
+    result: DebateResult,
+    primaryExpertId: string
+  ): Promise<void> {
     const { randomUUID } = await import('crypto');
-    const primaryExpertId =
-      result.participantSummary.find(p => p.expertId)?.expertId ||
-      result.rounds.flatMap(r => r.opinions).find(o => o.expertId)?.expertId ||
-      null;
-    if (!primaryExpertId) {
-      console.warn('[DebateEngine] saveDebate skipped: no expert_id');
-      return;
-    }
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'debate', 'text', $3, $4, $5)`,
@@ -446,7 +496,7 @@ ${allContent}
         result.topic.substring(0, 500),
         JSON.stringify(result),
         JSON.stringify({
-          expertIds: result.participantSummary.map(p => p.expertId),
+          expertIds: result.participantSummary.map(p => p.expertId).filter(Boolean),
           roundCount: result.rounds.length,
         }),
       ]
