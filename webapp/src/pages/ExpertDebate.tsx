@@ -23,6 +23,8 @@ export function ExpertDebate() {
   const [selectedExperts, setSelectedExperts] = useState<string[]>([]);
   const [topic, setTopic] = useState('');
   const [content, setContent] = useState('');
+  const [rounds, setRounds] = useState(3);
+  const [temperature, setTemperature] = useState(0.7);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DebateResult | null>(null);
 
@@ -68,7 +70,7 @@ export function ExpertDebate() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await expertLibraryApi.debate(topic, content, selectedExperts, 3);
+      const res = await expertLibraryApi.debate(topic, content, selectedExperts, rounds, temperature);
       setResult(res);
       loadHistory(); // 刷新历史列表
     } catch (error) {
@@ -185,6 +187,55 @@ export function ExpertDebate() {
               </div>
             </div>
 
+            {/* 辩论参数 */}
+            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6">
+              <h2 className="font-bold text-on-surface mb-4">辩论参数</h2>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="text-sm font-medium text-on-surface-variant mb-2 block">
+                    辩论轮数
+                  </label>
+                  <div className="flex items-center gap-3">
+                    {[2, 3, 4, 5].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setRounds(r)}
+                        className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                          rounds === r
+                            ? 'bg-primary text-on-primary'
+                            : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                    <span className="text-xs text-on-surface-variant ml-1">
+                      {rounds === 2 ? '快速对比' : rounds === 3 ? '标准辩论' : rounds === 4 ? '深度讨论' : '全面博弈'}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-on-surface-variant mb-2 block">
+                    创造性 ({temperature.toFixed(1)})
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.1"
+                    value={temperature}
+                    onChange={e => setTemperature(parseFloat(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                  <div className="flex justify-between text-xs text-on-surface-variant mt-1">
+                    <span>保守</span>
+                    <span>平衡</span>
+                    <span>激进</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={startDebate}
               disabled={loading || selectedExperts.length < 2 || !topic.trim() || !content.trim()}
@@ -193,7 +244,7 @@ export function ExpertDebate() {
               {loading ? (
                 <><span className="material-symbols-outlined animate-spin">sync</span>辩论进行中...</>
               ) : (
-                <><span className="material-symbols-outlined">forum</span>开始辩论 (3轮)</>
+                <><span className="material-symbols-outlined">forum</span>开始辩论 ({rounds}轮)</>
               )}
             </button>
           </div>

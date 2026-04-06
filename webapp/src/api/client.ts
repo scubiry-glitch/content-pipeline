@@ -1526,6 +1526,10 @@ export const expertLibraryApi = {
     client.post('/expert-library/scheduling/complete', { expertId, taskId }) as Promise<any>,
   getAvailableExperts: (domain?: string) =>
     client.get('/expert-library/scheduling/available', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
+  updateAvailability: (expertId: string, status: 'available' | 'busy' | 'unavailable') =>
+    client.put(`/expert-library/scheduling/availability/${expertId}`, { status }) as Promise<any>,
+  recommendExperts: (topic: string, limit?: number) =>
+    client.post('/expert-library/scheduling/recommend', { topic, limit }) as Promise<{ total: number; recommendations: any[] }>,
 
   // 热点专家观点
   generateHotTopicPerspectives: (topicId: string, topicTitle: string, topicContent?: string, expertIds?: string[]) =>
@@ -1542,8 +1546,8 @@ export const expertLibraryApi = {
     client.post('/expert-library/asset-credibility', { assetId, assetTitle, assetContent, expertIds }) as Promise<any>,
 
   // 辩论
-  debate: (topic: string, content: string, expertIds: string[], rounds?: number, context?: string) =>
-    client.post('/expert-library/debate', { topic, content, expertIds, rounds, context }) as Promise<any>,
+  debate: (topic: string, content: string, expertIds: string[], rounds?: number, temperature?: number, context?: string) =>
+    client.post('/expert-library/debate', { topic, content, expertIds, rounds, temperature, context }) as Promise<any>,
   listDebates: (limit?: number) =>
     client.get('/expert-library/debates', { params: { limit } }) as Promise<{ total: number; debates: any[] }>,
   getDebate: (id: string) =>
