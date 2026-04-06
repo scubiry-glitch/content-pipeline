@@ -264,12 +264,28 @@ export function PlanningTab() {
     }
   };
 
-  // 采纳专家修订版大纲
+  // 采纳专家修订版大纲：合并进当前大纲结构并提交（outline_pending 则会进入研究；否则仅保存大纲）
   const handleAcceptRevisedOutline = async () => {
     if (!expertReviewResult?.revisedOutline || !task.id) return;
+    const revised = expertReviewResult.revisedOutline as { sections?: unknown[] };
+    if (!revised.sections?.length) return;
+
+    const base = (task.outline || {}) as Record<string, unknown>;
+    const merged: Record<string, unknown> = { ...base, sections: revised.sections };
+    const layers = base.layers as unknown[] | undefined;
+    if (Array.isArray(layers) && layers.length > 0) {
+      merged.layers = layers.map((layer, i) =>
+        i === 0 && layer && typeof layer === 'object'
+          ? { ...(layer as object), sections: revised.sections }
+          : layer
+      );
+    }
+
     try {
-      await tasksApi.confirmOutline(task.id);
-      // 刷新页面数据
+      const res = await tasksApi.confirmOutline(task.id, { outline: merged });
+      if (res?.outlineUpdatedOnly && res.message) {
+        alert(res.message);
+      }
       window.location.reload();
     } catch (error) {
       console.error('Failed to apply revised outline:', error);

@@ -111,6 +111,8 @@ export interface GenerateOptions {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
+  /** OpenAI/Kimi 兼容：强制 JSON 对象输出（能减少解说性废话） */
+  responseFormat?: 'json' | 'text';
 }
 
 export interface GenerateResult {
@@ -183,6 +185,7 @@ export async function generateWithOpenAI(
         ...(options.systemPrompt ? [{ role: 'system' as const, content: options.systemPrompt }] : []),
         { role: 'user' as const, content: prompt },
       ],
+      ...(options.responseFormat === 'json' ? { response_format: { type: 'json_object' as const } } : {}),
     });
 
     return {
@@ -223,17 +226,17 @@ export async function generateWithKimi(
     }
     messages.push({ role: 'user', content: prompt });
 
-    const response = await kimiRequest(
-      '/chat/completions',
-      {
-        model,
-        messages,
-        max_tokens: options.maxTokens || 4000,
-        temperature: options.temperature ?? 0.7,
-      },
-      apiKey,
-      baseURL
-    );
+    const body: Record<string, unknown> = {
+      model,
+      messages,
+      max_tokens: options.maxTokens || 4000,
+      temperature: options.temperature ?? 0.7,
+    };
+    if (options.responseFormat === 'json') {
+      body.response_format = { type: 'json_object' };
+    }
+
+    const response = await kimiRequest('/chat/completions', body, apiKey, baseURL);
 
     // Kimi for Coding 模型可能返回 reasoning_content 而非 content
     const message = response.choices?.[0]?.message || {};
@@ -367,6 +370,7 @@ export async function generate(
     blue_team: { model: 'kimi-for-coding', temperature: 0.9 },
     analysis: { model: 'kimi-for-coding', temperature: 0.5 },
     tagging: { model: 'kimi-for-coding', temperature: 0.3 },
+    content_library: { model: 'kimi-for-coding', temperature: 0.15 },
     default: { model: 'kimi-for-coding', temperature: 0.7 },
   };
 
@@ -383,6 +387,7 @@ export async function generate(
         ...options,
         model: options.model || config.model,
         temperature: options.temperature ?? config.temperature,
+        responseFormat: options.responseFormat,
       });
     } catch (error: any) {
       const msg = `Kimi failed: ${error.message}`;

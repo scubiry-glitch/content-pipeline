@@ -11,6 +11,15 @@ import type {
 import { PostgresTextSearch } from './postgres-text-search.js';
 import { LocalEventBus } from './local-event-bus.js';
 
+/** 内容库表为 vector(768)；主站 embedding 多为 1536，需对齐维度 */
+function coerceVec768(v: number[]): number[] {
+  if (v.length === 768) return v;
+  if (v.length > 768) return v.slice(0, 768);
+  const out = v.slice();
+  while (out.length < 768) out.push(0);
+  return out;
+}
+
 /**
  * 一键创建 pipeline 环境的全部依赖
  *
@@ -33,15 +42,17 @@ export function createContentLibraryPipelineDeps(
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
         model: options?.model,
+        responseFormat: options?.responseFormat === 'json' ? 'json' : undefined,
       });
       return result.content;
     },
     async completeWithSystem(systemPrompt: string, userPrompt: string, options?: LLMOptions): Promise<string> {
-      const combinedPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-      const result = await generateFn(combinedPrompt, 'content_library', {
+      const result = await generateFn(userPrompt, 'content_library', {
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
         model: options?.model,
+        systemPrompt,
+        responseFormat: options?.responseFormat === 'json' ? 'json' : undefined,
       });
       return result.content;
     },
@@ -49,12 +60,13 @@ export function createContentLibraryPipelineDeps(
 
   const embedding: EmbeddingAdapter = {
     async embed(text: string): Promise<number[]> {
-      if (embedFn) return embedFn(text);
-      return new Array(768).fill(0);
+      if (!embedFn) return new Array(768).fill(0);
+      return coerceVec768(await embedFn(text));
     },
     async embedBatch(texts: string[]): Promise<number[][]> {
-      if (embedFn) return Promise.all(texts.map(t => embedFn(t)));
-      return texts.map(() => new Array(768).fill(0));
+      if (!embedFn) return texts.map(() => new Array(768).fill(0));
+      const rows = await Promise.all(texts.map((t) => embedFn(t)));
+      return rows.map(coerceVec768);
     },
   };
 

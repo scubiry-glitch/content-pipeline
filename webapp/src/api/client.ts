@@ -100,9 +100,14 @@ export const tasksApi = {
   expertReviewOutline: (id: string, options?: { expertIds?: string[]; autoRevise?: boolean }) =>
     client.post(`/production/${id}/outline/expert-review`, options) as Promise<any>,
 
-  // 确认大纲并继续 (FR-005)
-  confirmOutline: (id: string) =>
-    client.post(`/production/${id}/outline/confirm`) as Promise<void>,
+  // 确认大纲并继续 (FR-005)；可传 outline（如采纳专家修订版）
+  confirmOutline: (id: string, body?: { outline?: unknown; confirmed?: boolean }) =>
+    client.post(`/production/${id}/outline/confirm`, body ?? {}) as Promise<{
+      id?: string;
+      status?: string;
+      message?: string;
+      outlineUpdatedOnly?: boolean;
+    }>,
 
   // 重做某个阶段
   redoStage: (id: string, stage: 'planning' | 'research' | 'writing' | 'review', data?: { comments?: string[]; comment?: string; topic?: string; context?: string; config?: any; preserveHistory?: boolean }) =>

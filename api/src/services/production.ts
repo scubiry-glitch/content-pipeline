@@ -309,12 +309,11 @@ ${JSON.stringify(outline, null, 2)}
       throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
     }
 
-    if (task.status !== 'outline_pending') {
-      throw Object.assign(new Error('Task is not waiting for outline confirmation'), { name: 'APIError', statusCode: 400 });
-    }
-
-    // If user rejected, mark as cancelled
+    // 拒绝大纲仅在「待确认」态允许
     if (updates?.confirmed === false) {
+      if (task.status !== 'outline_pending') {
+        throw Object.assign(new Error('当前状态无法拒绝大纲'), { name: 'APIError', statusCode: 400 });
+      }
       await query(
         `UPDATE tasks SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
         [taskId]
@@ -322,17 +321,32 @@ ${JSON.stringify(outline, null, 2)}
       return { id: taskId, status: 'cancelled', message: '大纲已拒绝，任务取消' };
     }
 
-    // Update outline if modified by user
+    if (task.status === 'outline_pending') {
+      if (updates?.outline) {
+        await query(
+          `UPDATE tasks SET outline = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(updates.outline), taskId]
+        );
+      }
+      return await this.pipelineService.confirmOutline(taskId);
+    }
+
+    // 已过策划确认：仍可写入专家评审的修订版大纲，但不重复触发「进入研究」
     if (updates?.outline) {
       await query(
         `UPDATE tasks SET outline = $1, updated_at = NOW() WHERE id = $2`,
         [JSON.stringify(updates.outline), taskId]
       );
+      return {
+        id: taskId,
+        status: task.status,
+        outlineUpdatedOnly: true,
+        message:
+          '任务已不在「待确认大纲」阶段，修订内容已保存到大纲。若需从研究重新跑一遍，请使用「重做」策划/研究。',
+      };
     }
 
-    // Call pipeline service to confirm and start research
-    const result = await this.pipelineService.confirmOutline(taskId);
-    return result;
+    throw Object.assign(new Error('Task is not waiting for outline confirmation'), { name: 'APIError', statusCode: 400 });
   }
 
   // Expert review outline — 专家评审大纲 (在确认前触发)
@@ -360,7 +374,10 @@ ${JSON.stringify(outline, null, 2)}
       autoRevise: options?.autoRevise ?? true,
     });
 
-    // 将评审结果保存到任务
+    // 将评审结果保存到任务（旧库可能从未跑过 init 补列，这里先自愈）
+    await query(
+      `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb`
+    );
     await query(
       `UPDATE tasks SET
         metadata = jsonb_set(COALESCE(metadata, '{}'), '{expertOutlineReview}', $1::jsonb),

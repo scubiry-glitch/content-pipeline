@@ -462,7 +462,7 @@ export class ContentLibraryEngine {
         cf1.object as object_a, cf1.context as context_a, cf1.confidence as conf_a, cf1.created_at as created_a,
         cf2.id as fact_b_id, cf2.object as object_b, cf2.context as context_b, cf2.confidence as conf_b, cf2.created_at as created_b
       FROM content_facts cf1
-      JOIN content_facts cf2 ON cf1.subject = cf1.subject AND cf1.predicate = cf2.predicate
+      JOIN content_facts cf2 ON cf1.subject = cf2.subject AND cf1.predicate = cf2.predicate
       WHERE cf1.is_current = true AND cf2.is_current = true
       AND cf1.id < cf2.id
       AND cf1.object != cf2.object

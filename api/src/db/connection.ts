@@ -229,6 +229,16 @@ async function setupMVPSchema(): Promise<void> {
     console.log('[DB] pg_trgm extension may not be available, continuing...');
   });
 
+  const vectorType = await query(
+    `SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') AS ok`
+  ).catch(() => ({ rows: [{ ok: false }] as { ok: boolean }[] }));
+  if (!vectorType.rows[0]?.ok) {
+    throw new Error(
+      'PostgreSQL 未提供 vector 类型（pgvector 未安装或未启用）。请先安装扩展并以有权限的用户执行：CREATE EXTENSION vector;\n' +
+        '常见做法：Docker 使用 pgvector/pgvector 镜像；macOS 可用 brew install pgvector 并确保与当前 Postgres 主版本匹配。'
+    );
+  }
+
   // Tasks table - production pipeline tasks
   await query(`
     CREATE TABLE IF NOT EXISTS tasks (
@@ -240,6 +250,7 @@ async function setupMVPSchema(): Promise<void> {
       progress INTEGER DEFAULT 0,
       current_stage VARCHAR(100),
       outline JSONB,
+      search_config JSONB DEFAULT '{}',
       research_data JSONB,
       approval_feedback TEXT,
       output_ids JSONB DEFAULT '[]',
@@ -257,8 +268,31 @@ async function setupMVPSchema(): Promise<void> {
       deleted_by VARCHAR(100),
       delete_reason TEXT,
       will_be_purged_at TIMESTAMP WITH TIME ZONE,
-      hidden_by VARCHAR(100)
+      hidden_by VARCHAR(100),
+      metadata JSONB DEFAULT '{}'
     )
+  `);
+
+  // 旧库升级：CREATE TABLE IF NOT EXISTS 不会补列，此处与 pipeline / listTasks / 专家评审 等路径对齐
+  await query(`
+    ALTER TABLE tasks
+    ADD COLUMN IF NOT EXISTS search_config JSONB DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS source_materials JSONB DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS target_formats JSONB DEFAULT '["markdown"]',
+    ADD COLUMN IF NOT EXISTS output_ids JSONB DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS asset_ids JSONB DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS evaluation JSONB,
+    ADD COLUMN IF NOT EXISTS competitor_analysis JSONB,
+    ADD COLUMN IF NOT EXISTS created_by VARCHAR(100) DEFAULT 'user',
+    ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS delete_reason TEXT,
+    ADD COLUMN IF NOT EXISTS will_be_purged_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS hidden_by VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'
   `);
 
   // Blue team reviews
@@ -293,6 +327,12 @@ async function setupMVPSchema(): Promise<void> {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  // 旧库仅存在早期 draft_versions 结构时补列（否则 idx_draft_versions_round 会因缺列失败）
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS source_review_id VARCHAR(50)`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS previous_version_id UUID`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS round INTEGER DEFAULT 0`);
+  await query(`ALTER TABLE draft_versions ADD COLUMN IF NOT EXISTS expert_role VARCHAR(20)`);
   
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_task ON draft_versions(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_round ON draft_versions(round)`);
@@ -1013,5 +1053,153 @@ async function setupMVPSchema(): Promise<void> {
     console.log('[DB] Assets AI embedding index creation skipped');
   });
 
+  await setupContentLibrarySchema();
+
   console.log('[DB] MVP Schema initialized successfully');
+}
+
+/** v7.0 内容库表与索引（与 modules/content-library/migrations 对齐） */
+async function setupContentLibrarySchema(): Promise<void> {
+  await query(`
+    CREATE TABLE IF NOT EXISTS content_facts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      asset_id VARCHAR(50),
+      subject TEXT NOT NULL,
+      predicate TEXT NOT NULL,
+      object TEXT NOT NULL,
+      context JSONB DEFAULT '{}',
+      confidence DECIMAL(3,2) DEFAULT 0.5,
+      is_current BOOLEAN DEFAULT true,
+      superseded_by UUID REFERENCES content_facts(id),
+      source_chunk_index INTEGER,
+      embedding vector(768),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch((e) => console.warn('[DB] content_facts table skipped:', getErrorMessage(e)));
+
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_facts_subject ON content_facts(subject)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_facts_predicate ON content_facts(predicate)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_facts_current ON content_facts(is_current) WHERE is_current = true`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_facts_asset ON content_facts(asset_id)`).catch(() => {});
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_content_facts_context_domain ON content_facts USING GIN ((context->'domain'))`
+  ).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_facts_created ON content_facts(created_at DESC)`).catch(() => {});
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_content_facts_contradiction ON content_facts(subject, predicate) WHERE is_current = true`
+  ).catch(() => {});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS content_entities (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      canonical_name TEXT NOT NULL UNIQUE,
+      aliases TEXT[] DEFAULT '{}',
+      entity_type VARCHAR(50) DEFAULT 'concept',
+      taxonomy_domain_id VARCHAR(10),
+      metadata JSONB DEFAULT '{}',
+      embedding vector(768),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch((e) => console.warn('[DB] content_entities table skipped:', getErrorMessage(e)));
+
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_type ON content_entities(entity_type)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_domain ON content_entities(taxonomy_domain_id)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_aliases ON content_entities USING GIN(aliases)`).catch(() => {});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS content_beliefs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      proposition TEXT NOT NULL,
+      current_stance VARCHAR(20) DEFAULT 'evolving',
+      confidence DECIMAL(3,2) DEFAULT 0.5,
+      supporting_facts UUID[] DEFAULT '{}',
+      contradicting_facts UUID[] DEFAULT '{}',
+      taxonomy_domain_id VARCHAR(10),
+      last_updated TIMESTAMPTZ DEFAULT NOW(),
+      history JSONB DEFAULT '[]'
+    )
+  `).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_beliefs_stance ON content_beliefs(current_stance)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_content_beliefs_domain ON content_beliefs(taxonomy_domain_id)`).catch(() => {});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS content_production_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id VARCHAR(50),
+      asset_ids TEXT[] DEFAULT '{}',
+      expert_ids TEXT[] DEFAULT '{}',
+      output_quality_score DECIMAL(3,2),
+      human_feedback_score SMALLINT,
+      combination_insight TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_production_log_quality ON content_production_log(output_quality_score DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_production_log_task ON content_production_log(task_id)`).catch(() => {});
+
+  await query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'asset_ai_analysis') THEN
+        ALTER TABLE asset_ai_analysis ADD COLUMN IF NOT EXISTS l0_summary TEXT;
+        ALTER TABLE asset_ai_analysis ADD COLUMN IF NOT EXISTS l1_key_points TEXT[];
+        ALTER TABLE asset_ai_analysis ADD COLUMN IF NOT EXISTS l1_token_count INTEGER;
+      END IF;
+    END $$
+  `).catch(() => {});
+
+  // 可选：assets 全文检索与 content_facts / content_entities 向量索引（失败时跳过）
+  await query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'assets') THEN
+        ALTER TABLE assets ADD COLUMN IF NOT EXISTS content_tsv tsvector;
+      END IF;
+    END $$
+  `).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_content_tsv ON assets USING GIN(content_tsv)`).catch(() => {
+    console.log('[DB] idx_assets_content_tsv skipped (assets.content_tsv 可能不存在)');
+  });
+  await query(`
+    CREATE OR REPLACE FUNCTION assets_tsv_trigger_fn()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.content_tsv := to_tsvector('simple',
+        COALESCE(NEW.title, '') || ' ' || COALESCE(NEW.content, '')
+      );
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `).catch(() => {});
+  await query(`DROP TRIGGER IF EXISTS trg_assets_tsv_update ON assets`).catch(() => {});
+  await query(`
+    CREATE TRIGGER trg_assets_tsv_update
+      BEFORE INSERT OR UPDATE OF title, content ON assets
+      FOR EACH ROW EXECUTE FUNCTION assets_tsv_trigger_fn()
+  `).catch(() => {
+    console.log('[DB] assets tsvector trigger skipped (需 PG14+ 且存在 assets 表)');
+  });
+  await query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'assets' AND column_name = 'content_tsv') THEN
+        UPDATE assets
+        SET content_tsv = to_tsvector('simple', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+        WHERE content_tsv IS NULL;
+      END IF;
+    END $$
+  `).catch(() => {});
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_content_facts_embedding ON content_facts
+      USING ivfflat (embedding vector_cosine_ops)
+      WITH (lists = 50)
+  `).catch(() => console.log('[DB] content_facts ivfflat index skipped'));
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_content_entities_embedding ON content_entities
+      USING ivfflat (embedding vector_cosine_ops)
+      WITH (lists = 50)
+  `).catch(() => console.log('[DB] content_entities ivfflat index skipped'));
 }
