@@ -9,6 +9,9 @@ import { addKnowledgeSource, listKnowledgeSources, deleteKnowledgeSource } from 
 import { OutlineExpertReviewer } from './outlineReviewer.js';
 import { DebateEngine } from './debateEngine.js';
 import { ExpertMatcher } from './expertMatcher.js';
+import { SchedulingService } from './schedulingService.js';
+import { HotTopicExpertService } from './hotTopicExpertService.js';
+import { AssetExpertService } from './assetExpertService.js';
 
 export function createRouter(engine: ExpertEngine) {
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
@@ -293,6 +296,160 @@ export function createRouter(engine: ExpertEngine) {
         return reply.send(result);
       } catch (error: any) {
         console.error('[ExpertLibrary] Calibration error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 调度接口 =====
+
+    /** GET /scheduling/workloads — 获取全部专家工作量 */
+    fastify.get('/scheduling/workloads', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        const workloads = await scheduler.getAllWorkloads();
+        return reply.send({ total: workloads.length, workloads });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /scheduling/workload/:id — 获取单个专家工作量 */
+    fastify.get('/scheduling/workload/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        const workload = await scheduler.getWorkload(id);
+        if (!workload) return reply.status(404).send({ error: 'Expert not found' });
+        return reply.send(workload);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /scheduling/assign — 分配任务给专家 */
+    fastify.post('/scheduling/assign', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { expertId, taskId, role, deadline } = request.body as any;
+        if (!expertId || !taskId) {
+          return reply.status(400).send({ error: 'Missing required fields: expertId, taskId' });
+        }
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        const result = await scheduler.assignTask(expertId, taskId, role || 'reviewer', deadline);
+        return reply.send(result);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /scheduling/complete — 标记任务完成 */
+    fastify.post('/scheduling/complete', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { expertId, taskId } = request.body as any;
+        if (!expertId || !taskId) {
+          return reply.status(400).send({ error: 'Missing required fields: expertId, taskId' });
+        }
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        await scheduler.completeTask(expertId, taskId);
+        return reply.send({ status: 'completed' });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /scheduling/available — 获取可用专家 */
+    fastify.get('/scheduling/available', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { domain } = request.query as any;
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        const available = await scheduler.getAvailableExperts(domain);
+        return reply.send({
+          total: available.length,
+          experts: available.map(a => ({
+            expert_id: a.expert.expert_id,
+            name: a.expert.name,
+            domain: a.expert.domain,
+            activeTaskCount: a.workload.activeTaskCount,
+            availability: a.workload.availability,
+          })),
+        });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 热点话题专家观点接口 =====
+
+    /** POST /hot-topic-perspectives — 为热点生成专家观点 */
+    fastify.post('/hot-topic-perspectives', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { topicId, topicTitle, topicContent, expertIds } = request.body as any;
+        if (!topicId || !topicTitle) {
+          return reply.status(400).send({ error: 'Missing required fields: topicId, topicTitle' });
+        }
+        const service = new HotTopicExpertService(engine, engine['deps']);
+        const result = await service.generatePerspectives(topicId, topicTitle, topicContent, expertIds);
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Hot topic perspectives error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /hot-topic-perspectives/:topicId — 获取热点的专家观点 */
+    fastify.get('/hot-topic-perspectives/:topicId', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { topicId } = request.params as any;
+        const service = new HotTopicExpertService(engine, engine['deps']);
+        const result = await service.getPerspectives(topicId);
+        if (!result) return reply.status(404).send({ error: 'No perspectives found' });
+        return reply.send(result);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 素材专家标注接口 =====
+
+    /** POST /asset-annotations — 生成素材专家标注 */
+    fastify.post('/asset-annotations', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { assetId, assetTitle, assetContent, assetTags, expertIds } = request.body as any;
+        if (!assetId || !assetTitle || !assetContent) {
+          return reply.status(400).send({ error: 'Missing required fields: assetId, assetTitle, assetContent' });
+        }
+        const service = new AssetExpertService(engine, engine['deps']);
+        const result = await service.annotateAsset(assetId, assetTitle, assetContent, assetTags, expertIds);
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Asset annotation error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /asset-annotations/:assetId — 获取素材标注 */
+    fastify.get('/asset-annotations/:assetId', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { assetId } = request.params as any;
+        const service = new AssetExpertService(engine, engine['deps']);
+        const result = await service.getAnnotations(assetId);
+        if (!result) return reply.status(404).send({ error: 'No annotations found' });
+        return reply.send(result);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /asset-credibility — 素材可信度评估 */
+    fastify.post('/asset-credibility', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { assetId, assetTitle, assetContent, expertIds } = request.body as any;
+        if (!assetId || !assetTitle || !assetContent) {
+          return reply.status(400).send({ error: 'Missing required fields: assetId, assetTitle, assetContent' });
+        }
+        const service = new AssetExpertService(engine, engine['deps']);
+        const result = await service.assessCredibility(assetId, assetTitle, assetContent, expertIds);
+        return reply.send(result);
+      } catch (error: any) {
         return reply.status(500).send({ error: error.message });
       }
     });

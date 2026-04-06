@@ -32,6 +32,8 @@ import { ExpertAdmin } from './pages/ExpertAdmin';
 import { ExpertComparison } from './pages/ExpertComparison';
 import { ExpertNetwork } from './pages/ExpertNetwork';
 import { ExpertKnowledgeGraph } from './pages/ExpertKnowledgeGraph';
+import { ExpertScheduling } from './pages/ExpertScheduling';
+import { ExpertDebate } from './pages/ExpertDebate';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -105,6 +107,8 @@ function App() {
               <Route path="expert-comparison" element={<ExpertComparison />} />
               <Route path="expert-network" element={<ExpertNetwork />} />
 <Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />
+              <Route path="expert-scheduling" element={<ExpertScheduling />} />
+              <Route path="expert-debate" element={<ExpertDebate />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

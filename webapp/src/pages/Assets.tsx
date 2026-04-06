@@ -3,10 +3,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  assetsApi, 
-  themesApi, 
-  type Asset, 
+import {
+  assetsApi,
+  themesApi,
+  expertLibraryApi,
+  type Asset,
   type AssetTheme,
 } from '../api/client';
 import { assetsAiApi } from '../api/assetsAi';
@@ -54,6 +55,29 @@ export function Assets() {
   // AI 分析弹窗状态
   const [showAIAnalysisModal, setShowAIAnalysisModal] = useState(false);
   const [selectedAssetForAI, setSelectedAssetForAI] = useState<ExtendedAsset | null>(null);
+
+  // 专家标注状态
+  const [showExpertAnnotation, setShowExpertAnnotation] = useState(false);
+  const [annotationResult, setAnnotationResult] = useState<any>(null);
+  const [annotationLoading, setAnnotationLoading] = useState(false);
+  const [annotatingAsset, setAnnotatingAsset] = useState<ExtendedAsset | null>(null);
+
+  const requestExpertAnnotation = async (asset: ExtendedAsset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAnnotatingAsset(asset);
+    setAnnotationLoading(true);
+    setShowExpertAnnotation(true);
+    try {
+      const result = await expertLibraryApi.annotateAsset(
+        asset.id, asset.title || '', asset.content || '', (asset as any).tags || []
+      );
+      setAnnotationResult(result);
+    } catch {
+      setAnnotationResult(null);
+    } finally {
+      setAnnotationLoading(false);
+    }
+  };
 
   // 表单状态
   const [uploadForm, setUploadForm] = useState({
@@ -433,14 +457,21 @@ export function Assets() {
 
           {/* 悬停操作按钮 */}
           <div className="asset-card-actions">
-            <button 
+            <button
+              className="action-btn"
+              onClick={(e) => requestExpertAnnotation(asset, e)}
+              title="专家解读"
+            >
+              <span className="material-icon">psychology</span>
+            </button>
+            <button
               className="action-btn"
               onClick={(e) => openEditModal(asset, e)}
               title="编辑"
             >
               <span className="material-icon">edit</span>
             </button>
-            <button 
+            <button
               className="action-btn danger"
               onClick={(e) => handleDelete(asset, e)}
               title="删除"
@@ -835,6 +866,52 @@ export function Assets() {
                 assetId={selectedAssetForAI.id} 
                 compact={false}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 专家标注弹窗 */}
+      {showExpertAnnotation && (
+        <div className="modal-overlay" onClick={() => setShowExpertAnnotation(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+            <div className="modal-header">
+              <h3>专家解读 — {annotatingAsset?.title}</h3>
+              <button className="btn-close" onClick={() => setShowExpertAnnotation(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              {annotationLoading ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>专家解读生成中...</div>
+              ) : annotationResult?.annotations?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {annotationResult.overallCredibility > 0 && (
+                    <div style={{ padding: '12px', background: '#f0f7ff', borderRadius: '8px', fontSize: '13px' }}>
+                      综合可信度: <strong>{annotationResult.overallCredibility.toFixed(1)}/10</strong>
+                    </div>
+                  )}
+                  {annotationResult.annotations.map((ann: any) => (
+                    <div key={ann.expertId} style={{ padding: '14px', background: '#fafafa', borderRadius: '10px', border: '1px solid #eee' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#6750a4', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+                          {ann.expertName?.charAt(0)}
+                        </div>
+                        <strong style={{ fontSize: '13px' }}>{ann.expertName}</strong>
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#888' }}>
+                          可信度 {ann.credibilityScore}/10
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '13px', lineHeight: 1.6, margin: '0 0 8px 0' }}>{ann.content}</p>
+                      {ann.takeaways?.length > 0 && (
+                        <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#555' }}>
+                          {ann.takeaways.map((t: string, i: number) => <li key={i}>{t}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>暂无专家解读</div>
+              )}
             </div>
           </div>
         </div>

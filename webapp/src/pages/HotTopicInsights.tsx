@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { hotTopicsApi } from '../api/client';
+import { hotTopicsApi, expertLibraryApi } from '../api/client';
 import {
   matchExperts,
   generateExpertOpinion,
@@ -83,6 +83,27 @@ export function HotTopicInsights() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
 
+  // CDT 专家观点 (基于认知数字孪生)
+  const [cdtPerspectives, setCdtPerspectives] = useState<any>(null);
+  const [cdtLoading, setCdtLoading] = useState(false);
+
+  const loadCdtPerspectives = async (topic: HotTopic) => {
+    setCdtLoading(true);
+    try {
+      // 先尝试获取缓存
+      let result = await expertLibraryApi.getHotTopicPerspectives(topic.id).catch(() => null);
+      if (!result) {
+        // 未缓存，实时生成
+        result = await expertLibraryApi.generateHotTopicPerspectives(topic.id, topic.title);
+      }
+      setCdtPerspectives(result);
+    } catch {
+      setCdtPerspectives(null);
+    } finally {
+      setCdtLoading(false);
+    }
+  };
+
   // 加载热点话题（从 RSS 数据）
   const loadHotTopics = async () => {
     setTopicsLoading(true);
@@ -145,6 +166,8 @@ export function HotTopicInsights() {
   // 切换话题时优先使用缓存
   const handleTopicChange = (topic: HotTopic) => {
     setSelectedTopic(topic);
+    setCdtPerspectives(null);
+    loadCdtPerspectives(topic);
     if (reportCache[topic.id]) {
       setReport(reportCache[topic.id]);
     } else {
@@ -652,6 +675,48 @@ export function HotTopicInsights() {
                 </ul>
               </div>
             </div>
+          </div>
+
+          {/* CDT 专家观点 (认知数字孪生) */}
+          <div className="cdt-perspectives-section" style={{ marginBottom: '24px' }}>
+            <div className="section-header">
+              <span className="section-icon">🧠</span>
+              <h3>CDT 专家深度解读</h3>
+            </div>
+            {cdtLoading ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#888' }}>CDT 专家观点生成中...</div>
+            ) : cdtPerspectives?.perspectives?.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {cdtPerspectives.perspectives.map((p: any) => (
+                  <div key={p.expertId} style={{ padding: '16px', background: 'var(--surface-container-low, #f5f5f5)', borderRadius: '12px', border: '1px solid var(--outline-variant, #e0e0e0)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary, #6750a4)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>
+                        {p.expertName?.charAt(0)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{p.expertName}</div>
+                        <div style={{ fontSize: '11px', color: '#888' }}>{p.domain?.slice(0, 2).join(' / ')}</div>
+                      </div>
+                      <div style={{ marginLeft: 'auto', fontSize: '11px', padding: '2px 8px', background: 'var(--primary, #6750a4)', color: 'white', borderRadius: '10px' }}>
+                        置信度 {(p.confidence * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '13px', lineHeight: 1.6, margin: '0 0 8px 0' }}>{p.opinion}</p>
+                    {p.keyInsights?.length > 0 && (
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#555' }}>
+                        {p.keyInsights.map((insight: string, i: number) => (
+                          <li key={i}>{insight}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                暂无 CDT 专家观点
+              </div>
+            )}
           </div>
 
           {/* 相关素材推荐 */}
