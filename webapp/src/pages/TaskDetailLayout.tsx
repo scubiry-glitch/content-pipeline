@@ -10,6 +10,7 @@ import {
   researchApi,
   complianceApi,
   orchestratorApi,
+  expertLibraryApi,
   type BlueTeamReview,
   type HotTopic,
   type ResearchConfig,
@@ -381,6 +382,17 @@ export function TaskDetailLayout() {
     try {
       await blueTeamApi.submitDecision(id!, reviewId, { questionIndex, decision, note });
       await loadReviews(id!);
+
+      // 反馈回流到专家校准系统（异步，不阻塞）
+      const review = reviews.find(r => r.id === reviewId);
+      if (review?.expert_role && (decision === 'accept' || decision === 'ignore')) {
+        expertLibraryApi.submitFeedback(
+          review.expert_role,
+          reviewId,
+          decision === 'accept' ? 'accepted' : 'ignored',
+          note
+        ).catch(() => {});
+      }
     } catch (error) {
       console.error('提交决策失败:', error);
       alert('操作失败，请重试');

@@ -1557,6 +1557,16 @@ export const expertLibraryApi = {
   matchExperts: (topic: string, industry?: string, taskType?: string, importance?: number) =>
     client.post('/expert-library/match', { topic, industry, taskType, importance }) as Promise<any>,
 
+  // 反馈（回流到专家校准系统）
+  submitFeedback: (expertId: string, invokeId: string, action: string, note?: string) =>
+    client.post('/expert-library/feedback', {
+      expert_id: expertId,
+      invoke_id: invokeId,
+      human_score: action === 'accepted' ? 4 : action === 'ignored' ? 2 : 3,
+      human_notes: note || `Review decision: ${action}`,
+      actual_outcome: action,
+    }) as Promise<any>,
+
   // 专家列表
   getExperts: (domain?: string) =>
     client.get('/expert-library/experts', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
