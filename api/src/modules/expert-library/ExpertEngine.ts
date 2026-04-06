@@ -253,13 +253,13 @@ ${expert.signature_phrases.length > 0 ? `标志性句式: ${expert.signature_phr
       maxTokens: 1500,
     });
 
-    const conversationId = request.conversation_id || `chat-${Date.now()}`;
+    const conversationId = request.conversation_id || uuidv4();
 
     // 异步记录（不阻塞）
     this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, params)
        VALUES ($1, $2, 'chat', 'text', $3, $4)`,
-      [conversationId + '-' + Date.now(), expert.expert_id, request.message.substring(0, 200), JSON.stringify({ conversation_id: conversationId })]
+      [uuidv4(), expert.expert_id, request.message.substring(0, 200), JSON.stringify({ conversation_id: conversationId })]
     ).catch(() => {});
 
     return { reply, expert_name: expert.name, conversation_id: conversationId };

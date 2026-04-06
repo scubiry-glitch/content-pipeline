@@ -22,6 +22,7 @@ export function createPipelineLLMAdapter(
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
         model: options?.model,
+        responseFormat: options?.responseFormat,
       });
       return result.content;
     },
@@ -31,6 +32,7 @@ export function createPipelineLLMAdapter(
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
         model: options?.model,
+        responseFormat: options?.responseFormat,
       });
       return result.content;
     },
