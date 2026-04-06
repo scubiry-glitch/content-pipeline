@@ -75,3 +75,13 @@ export type {
 } from './types.js';
 
 export { CONTENT_LIBRARY_EVENTS } from './types.js';
+
+// Singleton
+export { initContentLibraryEngineSingleton, getContentLibraryEngine, isContentLibraryInitialized } from './singleton.js';
+
+// Pipeline Adapter
+export { createContentLibraryPipelineDeps } from './adapters/pipeline.js';
+
+// Scheduler
+export { ContentLibraryScheduler, startContentLibraryScheduler } from './scheduler.js';
+export type { SchedulerConfig } from './scheduler.js';

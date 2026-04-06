@@ -40,7 +40,18 @@ const mainNavItems: NavItem[] = [
       { to: '/expert-knowledge-graph', label: '知识图谱', icon: '🧠' },
     ]
   },
-  { 
+  {
+    to: '/content-library',
+    label: '内容库',
+    icon: '📚',
+    children: [
+      { to: '/content-library', label: '产出物总览', icon: '📊' },
+      { to: '/content-library/facts', label: '事实浏览', icon: '📋' },
+      { to: '/content-library/entities', label: '实体图谱', icon: '🔗' },
+      { to: '/content-library/contradictions', label: '争议话题', icon: '⚡' },
+    ]
+  },
+  {
     to: '/hot-topics', 
     label: '热点洞察', 
     icon: '🔥',

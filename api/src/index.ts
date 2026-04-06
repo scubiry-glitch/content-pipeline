@@ -16,6 +16,20 @@ export { WriterAgent, WriterInput, WriterOutput, BlueTeamRound } from './agents'
 // Services
 export { AssetLibraryService, ImportAssetInput, ImportResult } from './services/assetLibrary';
 
+// Content Library (v7.0)
+export {
+  createContentLibraryEngine,
+  ContentLibraryEngine,
+  createRouter as createContentLibraryRouter,
+  createContentLibraryPipelineDeps,
+  initContentLibraryEngineSingleton,
+  getContentLibraryEngine,
+  startContentLibraryScheduler,
+  PostgresTextSearch,
+  LocalEventBus,
+  CONTENT_LIBRARY_EVENTS,
+} from './modules/content-library';
+
 // Pipeline
 export { PipelineOrchestrator, PipelineConfig, PipelineInput, PipelineStatus } from './pipeline/orchestrator';
 

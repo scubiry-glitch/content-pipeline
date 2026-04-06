@@ -32,6 +32,10 @@ import { ExpertAdmin } from './pages/ExpertAdmin';
 import { ExpertComparison } from './pages/ExpertComparison';
 import { ExpertNetwork } from './pages/ExpertNetwork';
 import { ExpertKnowledgeGraph } from './pages/ExpertKnowledgeGraph';
+import { ContentLibrary } from './pages/ContentLibrary';
+import { ContentLibraryFacts } from './pages/ContentLibraryFacts';
+import { ContentLibraryEntities } from './pages/ContentLibraryEntities';
+import { ContentLibraryContradictions } from './pages/ContentLibraryContradictions';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -105,6 +109,11 @@ function App() {
               <Route path="expert-comparison" element={<ExpertComparison />} />
               <Route path="expert-network" element={<ExpertNetwork />} />
 <Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />
+              {/* 内容库模块 (v7.0) */}
+              <Route path="content-library" element={<ContentLibrary />} />
+              <Route path="content-library/facts" element={<ContentLibraryFacts />} />
+              <Route path="content-library/entities" element={<ContentLibraryEntities />} />
+              <Route path="content-library/contradictions" element={<ContentLibraryContradictions />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

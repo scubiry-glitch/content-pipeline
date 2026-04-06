@@ -5,6 +5,7 @@ import type {
   DatabaseAdapter,
   EmbeddingAdapter,
   TextSearchAdapter,
+  LLMAdapter,
   ContentLibraryOptions,
   HybridSearchRequest,
   HybridSearchResult,
@@ -29,6 +30,7 @@ export class HybridSearch {
   private db: DatabaseAdapter;
   private embedding: EmbeddingAdapter;
   private textSearch: TextSearchAdapter;
+  private llm?: LLMAdapter;
   private tieredLoader: TieredLoader;
   private options: Required<ContentLibraryOptions>;
 
@@ -36,11 +38,13 @@ export class HybridSearch {
     db: DatabaseAdapter,
     embedding: EmbeddingAdapter,
     textSearch: TextSearchAdapter,
-    options: Required<ContentLibraryOptions>
+    options: Required<ContentLibraryOptions>,
+    llm?: LLMAdapter
   ) {
     this.db = db;
     this.embedding = embedding;
     this.textSearch = textSearch;
+    this.llm = llm;
     this.options = options;
     this.tieredLoader = new TieredLoader(db, options);
   }
@@ -64,8 +68,13 @@ export class HybridSearch {
       candidates = this.mergeCandidates(candidates, keywordResults);
     }
 
-    // Rerank
-    const ranked = this.rrfRerank(candidates, { k: 60 });
+    // Rerank — RRF (默认) 或 LLM (高优查询)
+    let ranked: RankedCandidate[];
+    if (rerankStrategy === 'llm' && this.llm && candidates.length > 0) {
+      ranked = await this.llmRerank(request.query, candidates, Math.min(limit, 20));
+    } else {
+      ranked = this.rrfRerank(candidates, { k: 60 });
+    }
 
     // 质量加权
     const weighted = ranked.map(c => ({
@@ -211,6 +220,60 @@ export class HybridSearch {
     }
 
     return candidates;
+  }
+
+  // ============================================================
+  // LLM-based Reranking (Phase 4 — 高精度模式)
+  // ============================================================
+
+  private async llmRerank(query: string, candidates: RankedCandidate[], topK: number): Promise<RankedCandidate[]> {
+    if (!this.llm) return this.rrfRerank(candidates, { k: 60 });
+
+    // 取 Top-20 候选，用 LLM 评分
+    const topCandidates = candidates
+      .sort((a, b) => (b.semanticScore || 0) - (a.semanticScore || 0))
+      .slice(0, Math.min(20, candidates.length));
+
+    // 加载 L0 摘要用于 LLM 评分
+    const summaries: string[] = [];
+    for (const c of topCandidates) {
+      try {
+        const tiered = await this.tieredLoader.load(c.assetId, { level: 'L0' });
+        const data = tiered.data as any;
+        summaries.push(`[${c.assetId}] ${data.title || ''}: ${data.summary || ''}`);
+      } catch {
+        summaries.push(`[${c.assetId}] (unavailable)`);
+      }
+    }
+
+    const prompt = `对以下 ${summaries.length} 个文档按与查询的相关性评分 (0-10)。
+
+查询: "${query}"
+
+文档:
+${summaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+输出 JSON 数组，每个元素包含 index (1-based) 和 score:
+[{"index": 1, "score": 8}, ...]
+
+只输出 JSON，不要其他内容。`;
+
+    try {
+      const response = await this.llm.complete(prompt, { temperature: 0.1, responseFormat: 'json', maxTokens: 1000 });
+      const scores: Array<{ index: number; score: number }> = JSON.parse(response);
+
+      for (const s of scores) {
+        const idx = s.index - 1;
+        if (idx >= 0 && idx < topCandidates.length) {
+          topCandidates[idx].semanticScore = s.score / 10;
+        }
+      }
+    } catch {
+      // LLM 评分失败，回退到 RRF
+      return this.rrfRerank(candidates, { k: 60 });
+    }
+
+    return topCandidates;
   }
 
   // ============================================================

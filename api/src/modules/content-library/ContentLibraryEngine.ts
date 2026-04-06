@@ -46,8 +46,8 @@ export class ContentLibraryEngine {
     // Layer 2: 层级加载
     this.tieredLoader = new TieredLoader(deps.db, this.options);
 
-    // Layer 3: 混合检索
-    this.hybridSearch = new HybridSearch(deps.db, deps.embedding, deps.textSearch, this.options);
+    // Layer 3: 混合检索 (LLM reranking 可选)
+    this.hybridSearch = new HybridSearch(deps.db, deps.embedding, deps.textSearch, this.options, deps.llm);
 
     // Layer 1: 知识整合
     this.factExtractor = new FactExtractor(deps.llm, this.options);

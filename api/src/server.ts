@@ -262,6 +262,15 @@ async function main() {
     assetsAIScheduler.start();
     console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
 
+    // v7.0: 启动内容库定时任务（信息增量报告 + 保鲜度检查）
+    const { startContentLibraryScheduler } = await import('./modules/content-library/scheduler.js');
+    startContentLibraryScheduler(contentLibraryEngine, undefined, {
+      deltaReportInterval: 6 * 60 * 60 * 1000,     // 每6小时生成增量报告
+      freshnessCheckInterval: 24 * 60 * 60 * 1000,  // 每24小时检查保鲜度
+      factMaxAgeDays: 90,
+    });
+    console.log('📚 内容库定时任务已启动（增量报告每6h，保鲜度每24h）');
+
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
     // 或配置定时任务调用 collectAllFeeds()
   } catch (err) {
