@@ -60,6 +60,9 @@ import { expertRoutes } from './routes/experts.js';
 import { createExpertEngine, createRouter as createExpertLibraryRouter } from './modules/expert-library/index.js';
 import { createPipelineDeps } from './modules/expert-library/adapters/pipeline.js';
 import { initExpertEngineSingleton } from './modules/expert-library/singleton.js';
+import { createContentLibraryEngine, createRouter as createContentLibraryRouter } from './modules/content-library/index.js';
+import { createContentLibraryPipelineDeps } from './modules/content-library/adapters/pipeline.js';
+import { initContentLibraryEngineSingleton } from './modules/content-library/singleton.js';
 import { query } from './db/connection.js';
 import { generate, generateEmbedding } from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
@@ -190,6 +193,13 @@ async function main() {
   const expertEngine = createExpertEngine(createPipelineDeps(query, generate, undefined, generateEmbedding));
   initExpertEngineSingleton(expertEngine);
   await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
+
+  // Content Library 独立模块 (v7.0) — 结构化记忆与层级检索
+  const contentLibraryEngine = createContentLibraryEngine(
+    createContentLibraryPipelineDeps(query, generate, generateEmbedding)
+  );
+  initContentLibraryEngineSingleton(contentLibraryEngine);
+  await fastify.register(createContentLibraryRouter(contentLibraryEngine), { prefix: '/api/v1/content-library' });
 
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });
