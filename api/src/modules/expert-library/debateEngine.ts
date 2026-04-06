@@ -10,6 +10,23 @@ import type {
   DebateResult,
 } from './types.js';
 
+/** 从 LLM 输出中提取 JSON 对象，兼容代码块和裸 JSON */
+function extractJSON(raw: string): any {
+  let s = raw.trim();
+  // 去除 ```json ... ``` 代码块
+  const codeBlock = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlock) s = codeBlock[1].trim();
+  // 尝试直接解析
+  try { return JSON.parse(s); } catch { /* fall through */ }
+  // 找到第一个 { 到最后一个 }
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    return JSON.parse(s.slice(start, end + 1));
+  }
+  throw new Error('No valid JSON found in response');
+}
+
 export class DebateEngine {
   private engine: ExpertEngine;
   private deps: ExpertLibraryDeps;
@@ -225,8 +242,10 @@ ${discussionSummary}
       round.opinions.map(o => `[${o.expertName}] ${o.content}`).join('\n')
     ).join('\n---\n');
 
-    const prompt = `以下是 ${experts.map(e => e.name).join('、')} 关于「${topic}」的多轮辩论记录。
-请分析并输出 JSON：
+    const systemPrompt = `你是一位学术辩论裁判。请严格按照 JSON 格式输出分析结果，不要输出任何其他文字。`;
+
+    const userPrompt = `以下是 ${experts.map(e => e.name).join('、')} 关于「${topic}」的多轮辩论记录。
+请分析并输出如下 JSON（不要包含 markdown 代码块，直接输出 JSON 对象）：
 {
   "consensus": ["共识点1", "共识点2"],
   "disagreements": ["分歧点1", "分歧点2"],
@@ -237,22 +256,15 @@ ${discussionSummary}
 }
 
 辩论记录：
-${allContent}
-
-只输出 JSON:`;
+${allContent}`;
 
     try {
-      const result = await this.deps.llm.complete(prompt, {
+      const result = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
         temperature: 0.3,
         maxTokens: 1500,
-        responseFormat: 'json',
       });
 
-      let jsonStr = result.trim();
-      const match = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (match) jsonStr = match[1].trim();
-
-      const parsed = JSON.parse(jsonStr);
+      const parsed = extractJSON(result);
       return {
         consensus: parsed.consensus || [],
         disagreements: parsed.disagreements || [],
@@ -263,7 +275,8 @@ ${allContent}
           position: p.position || '',
         })),
       };
-    } catch {
+    } catch (err) {
+      console.warn('[DebateEngine] synthesize failed:', err);
       return {
         consensus: [],
         disagreements: [],
