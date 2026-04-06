@@ -35,8 +35,9 @@ const mainNavItems: NavItem[] = [
     icon: '👥',
     children: [
       { to: '/expert-library', label: '专家库', icon: '👥' },
-      { to: '/expert-comparison', label: '专家对比', icon: '⚖️' },
-      { to: '/expert-network', label: '专家网络', icon: '🕸️' },
+      { to: '/expert-chat', label: '专家对话', icon: '💬' },
+      { to: '/expert-scheduling', label: '专家调度', icon: '📋' },
+      { to: '/expert-debate', label: '专家辩论', icon: '🔥' },
       { to: '/expert-knowledge-graph', label: '知识图谱', icon: '🧠' },
     ]
   },

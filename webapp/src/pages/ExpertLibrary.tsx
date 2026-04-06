@@ -25,9 +25,9 @@ const DOMAINS = [
 
 const TABS = [
   { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览专家的详细信息' },
-  { id: 'chat', label: '💬 1v1 对话', path: '/expert-chat', description: '与专家一对一深度对话' },
-  { id: 'comparison', label: '⚖️ 专家对比', path: '/expert-comparison', description: '并排对比不同专家的观点' },
-  { id: 'network', label: '🕸️ 协作网络', path: '/expert-network', description: '可视化专家协作关系' },
+  { id: 'chat', label: '💬 专家对话', path: '/expert-chat', description: '与专家一对一深度对话' },
+  { id: 'scheduling', label: '📋 专家调度', path: '/expert-scheduling', description: '工作量管理与任务分配' },
+  { id: 'debate', label: '🔥 专家辩论', path: '/expert-debate', description: '多专家协作辩论与对比分析' },
   { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
 ];
 

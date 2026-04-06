@@ -6,6 +6,8 @@ import { getQueue } from '../utils/queue-manager.js';
 import { PipelineService } from './pipeline.js';
 import { generate } from './llm.js';
 import { evaluateSource } from './sourceCredibility.js';
+import { getExpertEngine } from '../modules/expert-library/singleton.js';
+import { OutlineExpertReviewer } from '../modules/expert-library/outlineReviewer.js';
 
 export interface CreateTaskInput {
   topic: string;
@@ -330,6 +332,43 @@ ${JSON.stringify(outline, null, 2)}
 
     // Call pipeline service to confirm and start research
     const result = await this.pipelineService.confirmOutline(taskId);
+    return result;
+  }
+
+  // Expert review outline — 专家评审大纲 (在确认前触发)
+  async expertReviewOutline(taskId: string, options?: { expertIds?: string[]; autoRevise?: boolean }) {
+    const task = await this.getTask(taskId);
+    if (!task) {
+      throw Object.assign(new Error('Task not found'), { name: 'APIError', statusCode: 404 });
+    }
+
+    if (!task.outline) {
+      throw Object.assign(new Error('Task has no outline to review'), { name: 'APIError', statusCode: 400 });
+    }
+
+    const engine = getExpertEngine();
+    if (!engine) {
+      throw Object.assign(new Error('Expert engine not available'), { name: 'APIError', statusCode: 503 });
+    }
+
+    const reviewer = new OutlineExpertReviewer(engine, (engine as any).deps);
+    const result = await reviewer.reviewOutline({
+      taskId,
+      topic: task.topic,
+      outline: task.outline,
+      expertIds: options?.expertIds,
+      autoRevise: options?.autoRevise ?? true,
+    });
+
+    // 将评审结果保存到任务
+    await query(
+      `UPDATE tasks SET
+        metadata = jsonb_set(COALESCE(metadata, '{}'), '{expertOutlineReview}', $1::jsonb),
+        updated_at = NOW()
+      WHERE id = $2`,
+      [JSON.stringify(result), taskId]
+    );
+
     return result;
   }
 

@@ -1,6 +1,6 @@
 // ExpertProfile ↔ expert_profiles 表（与 dbRowToProfile 互逆，供 UPSERT 脚本使用）
 
-import type { ExpertProfile } from './types.js';
+import type { ExpertProfile, ExpertLibraryDeps } from './types.js';
 
 export function assertExpertProfile(data: unknown): data is ExpertProfile {
   if (!data || typeof data !== 'object') return false;
@@ -22,6 +22,23 @@ export function assertExpertProfile(data: unknown): data is ExpertProfile {
     if (Math.abs(sum - 1) > 0.02) return false;
   }
   return true;
+}
+
+/**
+ * 更新专家的 EMM factor_hierarchy 权重（数据库持久化）
+ */
+export async function updateExpertWeights(
+  expertId: string,
+  newWeights: Record<string, number>,
+  deps: ExpertLibraryDeps
+): Promise<void> {
+  await deps.db.query(
+    `UPDATE expert_profiles
+     SET emm = jsonb_set(COALESCE(emm, '{}'), '{factor_hierarchy}', $1::jsonb),
+         updated_at = NOW()
+     WHERE expert_id = $2`,
+    [JSON.stringify(newWeights), expertId]
+  );
 }
 
 /** 供 node-pg 写入 JSONB / text[] */

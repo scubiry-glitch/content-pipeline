@@ -96,6 +96,10 @@ export const tasksApi = {
       completedAt?: string;
     }>,
 
+  // 专家评审大纲
+  expertReviewOutline: (id: string, options?: { expertIds?: string[]; autoRevise?: boolean }) =>
+    client.post(`/production/${id}/outline/expert-review`, options) as Promise<any>,
+
   // 确认大纲并继续 (FR-005)
   confirmOutline: (id: string) =>
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,
@@ -1507,6 +1511,47 @@ export const aiProcessingApi = {
   // 获取情感分布
   getSentimentStats: () =>
     client.get('/ai/stats/sentiments') as Promise<{ items: Array<{ sentiment: string; count: number; avg_score: number }> }>,
+};
+
+// ===== Expert Library API (CDT 专家库) =====
+export const expertLibraryApi = {
+  // 调度
+  getWorkloads: () =>
+    client.get('/expert-library/scheduling/workloads') as Promise<{ total: number; workloads: any[] }>,
+  getWorkload: (expertId: string) =>
+    client.get(`/expert-library/scheduling/workload/${expertId}`) as Promise<any>,
+  assignTask: (expertId: string, taskId: string, role?: string) =>
+    client.post('/expert-library/scheduling/assign', { expertId, taskId, role }) as Promise<any>,
+  completeTask: (expertId: string, taskId: string) =>
+    client.post('/expert-library/scheduling/complete', { expertId, taskId }) as Promise<any>,
+  getAvailableExperts: (domain?: string) =>
+    client.get('/expert-library/scheduling/available', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
+
+  // 热点专家观点
+  generateHotTopicPerspectives: (topicId: string, topicTitle: string, topicContent?: string, expertIds?: string[]) =>
+    client.post('/expert-library/hot-topic-perspectives', { topicId, topicTitle, topicContent, expertIds }) as Promise<any>,
+  getHotTopicPerspectives: (topicId: string) =>
+    client.get(`/expert-library/hot-topic-perspectives/${topicId}`) as Promise<any>,
+
+  // 素材专家标注
+  annotateAsset: (assetId: string, assetTitle: string, assetContent: string, assetTags?: string[], expertIds?: string[]) =>
+    client.post('/expert-library/asset-annotations', { assetId, assetTitle, assetContent, assetTags, expertIds }) as Promise<any>,
+  getAssetAnnotations: (assetId: string) =>
+    client.get(`/expert-library/asset-annotations/${assetId}`) as Promise<any>,
+  assessAssetCredibility: (assetId: string, assetTitle: string, assetContent: string, expertIds?: string[]) =>
+    client.post('/expert-library/asset-credibility', { assetId, assetTitle, assetContent, expertIds }) as Promise<any>,
+
+  // 辩论
+  debate: (topic: string, content: string, expertIds: string[], rounds?: number, context?: string) =>
+    client.post('/expert-library/debate', { topic, content, expertIds, rounds, context }) as Promise<any>,
+
+  // 匹配
+  matchExperts: (topic: string, industry?: string, taskType?: string, importance?: number) =>
+    client.post('/expert-library/match', { topic, industry, taskType, importance }) as Promise<any>,
+
+  // 专家列表
+  getExperts: (domain?: string) =>
+    client.get('/expert-library/experts', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
 };
 
 export default client;
