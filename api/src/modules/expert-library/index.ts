@@ -6,6 +6,7 @@ import { ExpertEngine } from './ExpertEngine.js';
 import { createRouter } from './router.js';
 import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
+import { topExpertProfiles } from './data/topExperts.js';
 import type { ExpertLibraryDeps, ExpertProfile } from './types.js';
 
 // ===== 工厂函数 =====
@@ -30,6 +31,9 @@ export function createExpertEngine(
   if (options?.registerBuiltinExperts !== false) {
     engine.registerExpert(muskProfile);
     engine.registerExpert(xiaohongshuProfile);
+    for (const profile of topExpertProfiles) {
+      engine.registerExpert(profile);
+    }
   }
 
   // 注册额外专家
@@ -50,6 +54,8 @@ export { createRouter } from './router.js';
 
 // 子模块
 export { buildSystemPrompt } from './promptBuilder.js';
+export { addKnowledgeSource, retrieveKnowledge, listKnowledgeSources, deleteKnowledgeSource } from './knowledgeService.js';
+export { submitFeedback, calibrateExpert } from './feedbackLoop.js';
 export { processInput } from './inputProcessor.js';
 export { emmGateCheck, emmGateWithRetry } from './emmGate.js';
 export { analyzeThenJudge } from './analyzeThenJudge.js';
@@ -58,6 +64,7 @@ export { formatOutput } from './outputFormatter.js';
 // 数据
 export { muskProfile } from './data/musk.js';
 export { xiaohongshuProfile } from './data/xiaohongshu.js';
+export { topExpertProfiles } from './data/topExperts.js';
 
 // 类型
 export type {
@@ -90,3 +97,6 @@ export type {
 
 // Adapters
 export { createPipelineDeps, createPipelineDBAdapter, createPipelineLLMAdapter } from './adapters/pipeline.js';
+
+// Singleton
+export { initExpertEngineSingleton, getExpertEngine } from './singleton.js';

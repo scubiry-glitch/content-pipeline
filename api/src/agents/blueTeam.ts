@@ -5,6 +5,8 @@ import { BaseAgent, AgentContext, AgentResult } from './base.js';
 import { query } from '../db/connection.js';
 import { generate } from '../services/llm.js';
 import { expertLibrary, Expert, ExpertRole, ROLE_NAMES, ROLE_DESCRIPTIONS } from '../services/expertLibrary.js';
+import { getExpertEngine } from '../modules/expert-library/singleton.js';
+import { buildSystemPrompt } from '../modules/expert-library/promptBuilder.js';
 
 export interface BlueTeamConfig {
   mode: 'sequential' | 'parallel';     // 串行或并行模式
@@ -243,12 +245,24 @@ export class BlueTeamAgent extends BaseAgent {
       }
 
       for (const he of humanExperts) {
+        // CDT 增强：若该专家有深度 profile，使用 buildSystemPrompt 替代 DB 中的 system_prompt
+        let systemPrompt = he.system_prompt || '';
+        try {
+          const engine = getExpertEngine();
+          if (engine) {
+            const cdtProfile = await engine.loadExpert(he.id);
+            if (cdtProfile) {
+              systemPrompt = buildSystemPrompt(cdtProfile, { taskType: 'evaluation' });
+            }
+          }
+        } catch { /* CDT not available, use DB system_prompt */ }
+
         experts.push({
           id: he.id,
           name: he.name,
           title: he.title || '领域专家',
           role: (he.role as ExpertRole) || 'domain_expert',
-          systemPrompt: he.system_prompt || '',
+          systemPrompt,
           type: 'human'
         });
       }

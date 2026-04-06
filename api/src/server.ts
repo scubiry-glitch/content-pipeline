@@ -57,6 +57,11 @@ import streamingOutlineRoutes from './routes/streamingOutline.js';
 import { streamingBlueTeamRoutes } from './routes/streamingBlueTeam.js';
 import { streamingSequentialRoutes } from './routes/streamingSequential.js';
 import { expertRoutes } from './routes/experts.js';
+import { createExpertEngine, createRouter as createExpertLibraryRouter } from './modules/expert-library/index.js';
+import { createPipelineDeps } from './modules/expert-library/adapters/pipeline.js';
+import { initExpertEngineSingleton } from './modules/expert-library/singleton.js';
+import { query } from './db/connection.js';
+import { generate, generateEmbedding } from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
@@ -178,8 +183,13 @@ async function main() {
   // v4.5 国际化 (i18n) 路由
   await fastify.register(v45I18nRoutes, { prefix: '/api/v1/i18n' });
 
-  // 专家库路由 (v2.0)
+  // 专家库路由 (v2.0) — 旧版 keyword matching
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
+
+  // Expert Library 独立模块 (v3.0) — Cognitive Digital Twin
+  const expertEngine = createExpertEngine(createPipelineDeps(query, generate, undefined, generateEmbedding));
+  initExpertEngineSingleton(expertEngine);
+  await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
 
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });

@@ -25,6 +25,7 @@ const DOMAINS = [
 
 const TABS = [
   { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览专家的详细信息' },
+  { id: 'chat', label: '💬 1v1 对话', path: '/expert-chat', description: '与专家一对一深度对话' },
   { id: 'comparison', label: '⚖️ 专家对比', path: '/expert-comparison', description: '并排对比不同专家的观点' },
   { id: 'network', label: '🕸️ 协作网络', path: '/expert-network', description: '可视化专家协作关系' },
   { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
@@ -76,6 +77,8 @@ export function ExpertLibrary() {
   const [selectedExpertHistory, setSelectedExpertHistory] = useState<ExpertReviewHistory[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  // CDT (认知数字孪生) 扩展档案 — 从新 expert-library API 加载
+  const [cdtProfile, setCdtProfile] = useState<any>(null);
 
   const loadExpertStats = (expert: Expert) => {
     const stats = getExpertFeedbackStats(expert.id);
@@ -87,6 +90,12 @@ export function ExpertLibrary() {
     });
     const history = getExpertReviewHistory(expert.id, { limit: 5 });
     setSelectedExpertHistory(history);
+    // 尝试加载 CDT 档案（新专家库 API）
+    setCdtProfile(null);
+    fetch(`/api/v1/expert-library/experts/${expert.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setCdtProfile(data))
+      .catch(() => setCdtProfile(null));
   };
 
   useEffect(() => {
@@ -404,6 +413,20 @@ export function ExpertLibrary() {
                     <span className="metric-label">评审次数</span>
                   </div>
                 </div>
+
+                {/* 调试按钮 — 始终可见 */}
+                {!selectMode && (
+                  <button
+                    className="expert-tune-btn"
+                    title="调试专家"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/expert-admin/${expert.id}`);
+                    }}
+                  >
+                    ⚙
+                  </button>
+                )}
               </div>
             );
           })}
@@ -496,6 +519,129 @@ export function ExpertLibrary() {
                 </div>
               </section>
 
+              {/* CDT 扩展档案 — 仅对已建模专家显示 */}
+              {cdtProfile && (
+                <>
+                  {cdtProfile.persona?.cognition && (
+                    <section className="detail-section cdt-section">
+                      <h4>🧠 认知模型</h4>
+                      <div className="cdt-grid">
+                        {cdtProfile.persona.cognition.mentalModel && (
+                          <div className="cdt-item">
+                            <span className="cdt-label">思维框架</span>
+                            <span className="cdt-value">{cdtProfile.persona.cognition.mentalModel}</span>
+                          </div>
+                        )}
+                        {cdtProfile.persona.cognition.decisionStyle && (
+                          <div className="cdt-item">
+                            <span className="cdt-label">决策风格</span>
+                            <span className="cdt-value">{cdtProfile.persona.cognition.decisionStyle}</span>
+                          </div>
+                        )}
+                        {cdtProfile.persona.cognition.riskAttitude && (
+                          <div className="cdt-item">
+                            <span className="cdt-label">风险偏好</span>
+                            <span className="cdt-value">{cdtProfile.persona.cognition.riskAttitude}</span>
+                          </div>
+                        )}
+                        {cdtProfile.persona.cognition.timeHorizon && (
+                          <div className="cdt-item">
+                            <span className="cdt-label">时间视角</span>
+                            <span className="cdt-value">{cdtProfile.persona.cognition.timeHorizon}</span>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
+                  {cdtProfile.persona?.values && (
+                    <section className="detail-section cdt-section">
+                      <h4>⚡ 品味与价值观</h4>
+                      {cdtProfile.persona.values.excites?.length > 0 && (
+                        <div className="cdt-tag-group">
+                          <span className="cdt-tag-label positive">兴奋点</span>
+                          <div className="cdt-tags">
+                            {cdtProfile.persona.values.excites.map((v: string, i: number) => (
+                              <span key={i} className="cdt-tag positive">{v}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {cdtProfile.persona.values.dealbreakers?.length > 0 && (
+                        <div className="cdt-tag-group">
+                          <span className="cdt-tag-label negative">一票否决</span>
+                          <div className="cdt-tags">
+                            {cdtProfile.persona.values.dealbreakers.map((v: string, i: number) => (
+                              <span key={i} className="cdt-tag negative">{v}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {cdtProfile.persona.values.qualityBar && (
+                        <div className="cdt-quality-bar">
+                          <span className="cdt-label">质量标准</span>
+                          <p>{cdtProfile.persona.values.qualityBar}</p>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {cdtProfile.method?.analysis_steps?.length > 0 && (
+                    <section className="detail-section cdt-section">
+                      <h4>🔬 分析方法论</h4>
+                      <div className="cdt-frameworks">
+                        {cdtProfile.method.frameworks?.map((f: string, i: number) => (
+                          <span key={i} className="cdt-framework">{f}</span>
+                        ))}
+                      </div>
+                      <ol className="cdt-steps">
+                        {cdtProfile.method.analysis_steps.map((step: string, i: number) => (
+                          <li key={i}>{step}</li>
+                        ))}
+                      </ol>
+                    </section>
+                  )}
+
+                  {cdtProfile.emm?.veto_rules?.length > 0 && (
+                    <section className="detail-section cdt-section">
+                      <h4>🚫 EMM 门控规则</h4>
+                      <div className="cdt-factors">
+                        {cdtProfile.emm.critical_factors?.map((f: string) => {
+                          const weight = cdtProfile.emm.factor_hierarchy?.[f];
+                          return (
+                            <div key={f} className="cdt-factor-item">
+                              <span className="factor-name">{f}</span>
+                              {weight && (
+                                <div className="factor-bar-wrap">
+                                  <div className="factor-bar" style={{ width: `${weight * 100}%` }} />
+                                  <span className="factor-weight">{(weight * 100).toFixed(0)}%</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="cdt-veto-rules">
+                        {cdtProfile.emm.veto_rules.map((rule: string, i: number) => (
+                          <div key={i} className="veto-rule">⛔ {rule}</div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {cdtProfile.signature_phrases?.length > 0 && (
+                    <section className="detail-section cdt-section">
+                      <h4>💬 标志性表达</h4>
+                      <div className="cdt-phrases">
+                        {cdtProfile.signature_phrases.map((phrase: string, i: number) => (
+                          <blockquote key={i} className="cdt-phrase">"{phrase}"</blockquote>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+
               <section className="detail-section stats-section">
                 <h4>📊 统计数据</h4>
                 <div className="stats-grid">
@@ -583,6 +729,12 @@ export function ExpertLibrary() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setSelectedExpert(null)}>
                 关闭
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate(`/expert-admin/${selectedExpert.id}`)}
+              >
+                ⚙ 调试专家
               </button>
             </div>
           </div>

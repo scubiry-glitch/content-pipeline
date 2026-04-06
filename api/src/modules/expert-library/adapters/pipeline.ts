@@ -65,11 +65,16 @@ export function createPipelineFileParserAdapter(
 export function createPipelineDeps(
   queryFn: (sql: string, params?: any[]) => Promise<{ rows: any[] }>,
   generateFn: (prompt: string, taskType?: string, options?: any) => Promise<{ content: string }>,
-  fileParserFn?: (filePath: string) => Promise<{ text: string; metadata?: Record<string, any> }>
+  fileParserFn?: (filePath: string) => Promise<{ text: string; metadata?: Record<string, any> }>,
+  embedFn?: (text: string) => Promise<number[]>
 ): ExpertLibraryDeps {
+  const llm = createPipelineLLMAdapter(generateFn);
+  if (embedFn) {
+    llm.embed = embedFn;
+  }
   return {
     db: createPipelineDBAdapter(queryFn),
-    llm: createPipelineLLMAdapter(generateFn),
+    llm,
     fileParser: fileParserFn ? createPipelineFileParserAdapter(fileParserFn) : undefined,
   };
 }

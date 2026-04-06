@@ -4,6 +4,8 @@
 import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getLLMRouter } from '../providers/index.js';
+import { getExpertEngine } from '../modules/expert-library/singleton.js';
+import { buildSystemPrompt } from '../modules/expert-library/promptBuilder.js';
 import { KimiProvider } from '../providers/kimi.js';
 import { 
   broadcastSequentialEvent,
@@ -137,7 +139,7 @@ export async function configureSequentialReview(
   const KNOWN_EXPERTS: Record<string, { name: string; profile: string }> = {
     'S-01': { name: '张一鸣', profile: '字节跳动创始人，数据驱动思维，追求延迟满足，关注长期价值和执行效率' },
     'S-02': { name: '雷军', profile: '小米创始人，极致性价比思维，关注用户体验、效率提升和口碑传播' },
-    'S-03': { name: '黄仁勋', profile: 'NVIDIA创始人，AI算力先驱，关注技术前沿、生态系统和长期技术赌注' },
+    'S-03': { name: '马斯克', profile: 'Tesla/SpaceX创始人，第一性原理思维，从物理可行性和成本拆解角度评估技术投资' },
     'S-04': { name: '王兴', profile: '美团创始人，无边界扩张思维，关注本地生活和供给侧改革' },
     'S-05': { name: '马斯克', profile: 'Tesla/SpaceX创始人，第一性原理思维，关注颠覆性创新和长期愿景' },
     'S-06': { name: '任正非', profile: '华为创始人，狼性文化，关注技术自主、组织活力和战略定力' },
@@ -152,6 +154,7 @@ export async function configureSequentialReview(
     'S-15': { name: '林毅夫', profile: '著名经济学家，原世界银行首席经济学家，关注宏观经济、产业政策和比较优势' },
     'S-16': { name: '周其仁', profile: '北京大学经济学教授，关注产权制度、市场改革和经济转型' },
     'S-17': { name: '刘强东', profile: '京东创始人，供应链思维，关注效率、用户体验和物流优化' },
+    'E07-10': { name: '谷文栋', profile: '人工智能方向专家，关注大模型与机器学习、AI工程化、智能体与产业落地' },
   };
 
   // ★ 构建专家详情查找表：优先使用前端传来的详情，再 fallback 到 KNOWN_EXPERTS
@@ -162,7 +165,7 @@ export async function configureSequentialReview(
 
   let humanExperts: ExpertConfig[] = [];
   if (persistedHumanExpertIds.length > 0) {
-    const isLocalExpertId = (id: string) => /^S-\d+$/.test(id);
+    const isLocalExpertId = (id: string) => /^(S-\d+|E\d{2}-\d{2})$/.test(id);
     const localIds = persistedHumanExpertIds.filter(isLocalExpertId);
     const dbIds = persistedHumanExpertIds.filter(id => !isLocalExpertId(id));
 
@@ -804,13 +807,22 @@ async function conductHumanExpertReview(
   // 使用 AI 模拟专家风格评审，注入专家画像
   console.log(`[HumanReview] Simulating review for ${expertConfig.name} (${expertConfig.profile})`);
 
-  const prompt = `你现在模拟的是 ${expertConfig.name}。
-人物画像：${expertConfig.profile || '资深领域专家'}
+  // CDT 增强：若该专家有深度 profile，使用 buildSystemPrompt 生成更丰富的人格提示
+  let cdtSystemPrompt: string | undefined;
+  if (expertConfig.id) {
+    try {
+      const engine = getExpertEngine();
+      if (engine) {
+        const cdtProfile = await engine.loadExpert(expertConfig.id);
+        if (cdtProfile) {
+          cdtSystemPrompt = buildSystemPrompt(cdtProfile, { taskType: 'evaluation' });
+          console.log(`[HumanReview] CDT profile found for ${expertConfig.id}, using enriched system prompt`);
+        }
+      }
+    } catch { /* CDT not available, fall through to default */ }
+  }
 
-请以 ${expertConfig.name} 的思维方式和视角来评审以下文稿。
-评审风格应体现该人物的核心理念和关注点。
-
-当前文稿：
+  const taskPrompt = `当前文稿：
 ${draftContent.substring(0, 2000)}
 
 请以 ${expertConfig.name} 的口吻和视角进行评审，输出JSON格式：
@@ -828,11 +840,22 @@ ${draftContent.substring(0, 2000)}
   ]
 }`;
 
+  const prompt = cdtSystemPrompt
+    ? taskPrompt
+    : `你现在模拟的是 ${expertConfig.name}。
+人物画像：${expertConfig.profile || '资深领域专家'}
+
+请以 ${expertConfig.name} 的思维方式和视角来评审以下文稿。
+评审风格应体现该人物的核心理念和关注点。
+
+${taskPrompt}`;
+
   try {
     const llm = getLLMRouter();
     const response = await llm.generate(prompt, 'blue_team_review', {
       maxTokens: 2000,
       temperature: 0.7,
+      ...(cdtSystemPrompt ? { systemPrompt: cdtSystemPrompt } : {}),
     });
 
     const content = response.content.replace(/```json\n?|\n?```/g, '').trim();

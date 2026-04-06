@@ -527,6 +527,60 @@ export interface Expert {
   company?: string;
   domain?: string;
   bio?: string;
+  // CDT 认知数字孪生扩展（来自 /api/v1/expert-library/experts/:id）
+  cdtProfile?: {
+    expert_id: string;
+    persona: {
+      style: string;
+      tone: string;
+      bias?: string[];
+      cognition?: {
+        mentalModel?: string;
+        decisionStyle?: string;
+        riskAttitude?: string;
+        timeHorizon?: string;
+      };
+      values?: {
+        excites?: string[];
+        irritates?: string[];
+        qualityBar?: string;
+        dealbreakers?: string[];
+      };
+      taste?: {
+        admires?: string[];
+        disdains?: string[];
+        benchmark?: string;
+      };
+      voice?: {
+        disagreementStyle?: string;
+        praiseStyle?: string;
+      };
+      blindSpots?: {
+        knownBias?: string[];
+        weakDomains?: string[];
+        selfAwareness?: string;
+      };
+    };
+    method: {
+      frameworks: string[];
+      reasoning?: string;
+      analysis_steps: string[];
+      reviewLens?: {
+        firstGlance?: string;
+        deepDive?: string[];
+        killShot?: string;
+        bonusPoints?: string[];
+      };
+    };
+    emm?: {
+      critical_factors: string[];
+      factor_hierarchy: Record<string, number>;
+      veto_rules: string[];
+      aggregation_logic: string;
+    };
+    anti_patterns?: string[];
+    signature_phrases?: string[];
+  };
 }
 
 export interface ExpertReview {

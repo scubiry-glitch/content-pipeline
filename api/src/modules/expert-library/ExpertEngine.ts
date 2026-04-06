@@ -140,6 +140,18 @@ export class ExpertEngine {
   }
 
   /**
+   * 更新内存中的专家 profile（会话级别，重启后重置）
+   * 支持更新: signature_phrases, anti_patterns, constraints, persona.style/tone/bias
+   */
+  updateExpert(expertId: string, patch: Partial<Pick<ExpertProfile, 'signature_phrases' | 'anti_patterns' | 'constraints'>>): boolean {
+    const existing = this.expertCache.get(expertId);
+    if (!existing) return false;
+    const updated = { ...existing, ...patch };
+    this.expertCache.set(expertId, updated);
+    return true;
+  }
+
+  /**
    * 列出所有专家
    */
   async listExperts(filter?: { domain?: string }): Promise<ExpertProfile[]> {
@@ -189,6 +201,61 @@ export class ExpertEngine {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 1v1 对话接口 — 支持多轮会话
+   */
+  async chat(request: {
+    expert_id: string;
+    message: string;
+    history?: Array<{ role: 'user' | 'expert'; content: string }>;
+    conversation_id?: string;
+  }): Promise<{ reply: string; expert_name: string; conversation_id: string }> {
+    const expert = await this.loadExpert(request.expert_id);
+    if (!expert) {
+      throw new Error(`Expert not found: ${request.expert_id}`);
+    }
+
+    // 构建对话专用 system prompt（更精简，突出人格而非结构化输出）
+    const systemPrompt = `你是 ${expert.name}。直接以 ${expert.name} 的身份回答，不要解释你的思路，不要说"作为AI"，不要重述问题。
+
+风格: ${expert.persona.style}
+语气: ${expert.persona.tone}
+方法论: ${expert.method.frameworks.join('、')}
+
+分析步骤:
+${expert.method.analysis_steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+规则:
+- 直接输出 ${expert.name} 的回答内容，第一句话就是观点
+${expert.anti_patterns.map(p => `- ${p}`).join('\n')}
+${expert.signature_phrases.length > 0 ? `标志性句式: ${expert.signature_phrases.join(' / ')}` : ''}`;
+
+    // 格式化历史记录
+    const historyText = (request.history || [])
+      .map(m => `${m.role === 'user' ? '用户' : expert.name}: ${m.content}`)
+      .join('\n\n');
+
+    const userPrompt = historyText
+      ? `${historyText}\n\n用户: ${request.message}\n\n${expert.name}:`
+      : `用户: ${request.message}\n\n${expert.name}:`;
+
+    const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
+      temperature: 0.6,
+      maxTokens: 1500,
+    });
+
+    const conversationId = request.conversation_id || `chat-${Date.now()}`;
+
+    // 异步记录（不阻塞）
+    this.deps.db.query(
+      `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, params)
+       VALUES ($1, $2, 'chat', 'text', $3, $4)`,
+      [conversationId + '-' + Date.now(), expert.expert_id, request.message.substring(0, 200), JSON.stringify({ conversation_id: conversationId })]
+    ).catch(() => {});
+
+    return { reply, expert_name: expert.name, conversation_id: conversationId };
   }
 
   /**

@@ -27,6 +27,8 @@ import { ReportCompare } from './pages/ReportCompare';
 import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
 import { HotTopicInsights } from './pages/HotTopicInsights';
+import { ExpertChat } from './pages/ExpertChat';
+import { ExpertAdmin } from './pages/ExpertAdmin';
 import { ExpertComparison } from './pages/ExpertComparison';
 import { ExpertNetwork } from './pages/ExpertNetwork';
 import { ExpertKnowledgeGraph } from './pages/ExpertKnowledgeGraph';
@@ -98,6 +100,8 @@ function App() {
               <Route path="hot-topics/insights" element={<HotTopicInsights />} />
               <Route path="hot-topics/insights/:topicId" element={<HotTopicInsights />} />
               <Route path="hot-topics/:id" element={<HotTopicDetail />} />
+              <Route path="expert-chat" element={<ExpertChat />} />
+              <Route path="expert-admin/:expertId" element={<ExpertAdmin />} />
               <Route path="expert-comparison" element={<ExpertComparison />} />
               <Route path="expert-network" element={<ExpertNetwork />} />
 <Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />

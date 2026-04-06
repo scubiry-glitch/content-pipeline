@@ -285,6 +285,35 @@
   display: block;
 }
 
+.expert-tune-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  background: white;
+  color: #9ca3af;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  opacity: 0;
+}
+
+.expert-card:hover .expert-tune-btn {
+  opacity: 1;
+}
+
+.expert-tune-btn:hover {
+  border-color: #f59e0b;
+  color: #d97706;
+  background: #fffbeb;
+}
+
 /* 空状态 */
 .empty-state {
   text-align: center;
@@ -489,4 +518,195 @@
     max-height: 100vh;
     border-radius: 0;
   }
+}
+
+/* ===== CDT 扩展档案样式 ===== */
+.cdt-section {
+  border-left: 3px solid #818cf8;
+}
+
+.cdt-section h4::before {
+  display: none;
+}
+
+.cdt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cdt-item {
+  background: #f8f7ff;
+  border: 1px solid #e0e7ff;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.cdt-label {
+  display: block;
+  font-size: 11px;
+  color: #818cf8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.cdt-value {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+/* 品味标签组 */
+.cdt-tag-group {
+  margin-bottom: 12px;
+}
+
+.cdt-tag-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.cdt-tag-label.positive { background: #d1fae5; color: #065f46; }
+.cdt-tag-label.negative { background: #fee2e2; color: #991b1b; }
+
+.cdt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cdt-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  line-height: 1.5;
+}
+
+.cdt-tag.positive { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+.cdt-tag.negative { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+
+.cdt-quality-bar {
+  margin-top: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.cdt-quality-bar p {
+  font-size: 13px;
+  color: #374151;
+  margin: 4px 0 0 0;
+  line-height: 1.5;
+}
+
+/* 方法论 */
+.cdt-frameworks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cdt-framework {
+  font-size: 12px;
+  background: #eff6ff;
+  color: #3b82f6;
+  border: 1px solid #bfdbfe;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.cdt-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cdt-steps li {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+/* EMM 因子 */
+.cdt-factors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cdt-factor-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.factor-name {
+  font-size: 12px;
+  color: #374151;
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.factor-bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.factor-bar {
+  height: 6px;
+  background: linear-gradient(90deg, #818cf8, #a78bfa);
+  border-radius: 3px;
+  min-width: 2px;
+}
+
+.factor-weight {
+  font-size: 11px;
+  color: #6b7280;
+  width: 32px;
+}
+
+.cdt-veto-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.veto-rule {
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+/* 标志性表达 */
+.cdt-phrases {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cdt-phrase {
+  font-size: 13px;
+  color: #4b5563;
+  background: #f9fafb;
+  border-left: 3px solid #818cf8;
+  padding: 8px 12px;
+  margin: 0;
+  font-style: italic;
+  border-radius: 0 6px 6px 0;
 }

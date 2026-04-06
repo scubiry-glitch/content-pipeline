@@ -1,6 +1,6 @@
 # Expert Library 独立模块 — 实施计划 v3 + 当前进度
 
-> 更新时间: 2026-04-05
+> 更新时间: 2026-04-06
 
 ---
 
@@ -37,21 +37,45 @@
 
 **编译状态**: API ✅ 零错误 | Webapp ✅ 零错误
 
+**已注册专家（ExpertEngine 内存）**: S-03 马斯克, XHS-01 小红书, S-01 张一鸣, S-02 雷军, S-04 王兴, S-05 马斯克(战略版), S-06 任正非, S-07 张勇, S-08 宿华, S-09 王慧文, S-10 陆奇（共 11 位）
+
 ---
 
-### ⬜ 待完成（Phase 2 — 集成与扩展）
+### ✅ 已完成（Phase 2 — 集成）
 
-| 任务 | 优先级 | 描述 |
-|------|--------|------|
-| 挂载路由到 server.ts | P0 | `fastify.register(createRouter(engine), { prefix: '/api/v1/expert-library' })` |
-| 运行 DB migration | P0 | 执行 `migrations/001-expert-library.sql` |
-| 注入 pipeline Adapters | P0 | 用 `createPipelineDeps()` 创建 engine 实例 |
-| `knowledgeService.ts` | P1 | 知识源管理: 上传/解析/向量化/检索 |
-| `feedbackLoop.ts` | P1 | 反馈闭环: 人工打分 + 实际结果 → 参数校准 |
-| 接入 `blueTeam.ts` | P2 | 用 `ExpertEngine.invoke()` 替代硬编码 prompt |
-| 接入 `sequentialReview.ts` | P2 | 同上 |
-| `webapp/src/types/index.ts` | P2 | Expert 类型增加 persona/method/emm/output_schema |
-| 补充 10 位特级专家深度 profile | P2 | S-01 到 S-10 的 cognition/values/taste/voice/blindSpots |
+| 文件 | 状态 | 内容 |
+|------|------|------|
+| `api/src/server.ts` 路由挂载 | ✅ | `POST /api/v1/expert-library/invoke` 等3个端点上线 |
+| DB migration 执行 | ✅ | 4张表已创建：expert_profiles, knowledge_sources, invocations, feedback |
+| pipeline Adapter 注入 | ✅ | `createPipelineDeps(query, generate)` 接入 Kimi/Claude/OpenAI |
+| `/invoke` 端点 smoke test | ✅ | 马斯克分析特斯拉Q4财报：bullish，4节详细输出，EMM门控全通过(cost=0) |
+
+### ✅ 已完成（Phase 3 — 扩展）
+
+| 文件 | 状态 | 内容 |
+|------|------|------|
+| `feedbackLoop.ts` | ✅ | 反馈写入DB + LLM校准建议；`POST /feedback` 端点接入 |
+| `knowledgeService.ts` | ✅ | 知识源增删查 + LLM摘要提取；`/experts/:id/knowledge` CRUD |
+| `ExpertChat.tsx` + `ExpertChat.css` | ✅ | 1v1对话页面：左侧专家列表 + 右侧多轮对话 |
+| `POST /api/v1/expert-library/chat` | ✅ | 多轮对话端点：history携带，persona system prompt，CoT防漏 |
+| `GET /experts/:id/performance` | ✅ | 绩效指标端点（DB实时 + fallback） |
+| 专家卡片 CDT 扩展 | ✅ | 弹窗新增：认知模型/品味价值观/分析方法论/EMM门控/标志性表达 |
+| `webapp/src/types/index.ts` CDT 类型 | ✅ | Expert 增加 `cdtProfile` 可选字段 |
+| `ExpertLibrary.tsx` 新 Tab | ✅ | 新增「💬 1v1 对话」tab，链接到 `/expert-chat` |
+
+### ✅ 已完成（Phase 4 — 深化）
+
+| 文件 | 状态 | 内容 |
+|------|------|------|
+| `singleton.ts` | ✅ | ExpertEngine 跨模块共享单例（lazy init） |
+| `server.ts` initSingleton | ✅ | 启动时注入 `initExpertEngineSingleton(expertEngine)` |
+| `blueTeam.ts` CDT 接入 | ✅ | `configureExperts()` 为人类专家尝试 CDT `buildSystemPrompt()`，fallback 到 DB system_prompt |
+| `sequentialReview.ts` CDT 接入 | ✅ | `conductHumanExpertReview()` 若 id 有 CDT profile 则用 CDT system_prompt + 分离任务 prompt |
+| `data/topExperts.ts` | ✅ | S-01(张一鸣) S-02(雷军) S-04(王兴) S-05(马斯克) S-06(任正非) S-07(张勇) S-08(宿华) S-09(王慧文) S-10(陆奇) 9位特级专家完整 CDT profile |
+| `migrations/002-semantic-search.sql` | ✅ | `content_embedding vector(1536)` + IVFFlat 索引 |
+| `knowledgeService.ts` 语义检索 | ✅ | 新增时生成 embedding；检索时优先 cosine 相似度，降级 ILIKE，最终 fallback 最新记录 |
+| `adapters/pipeline.ts` embed | ✅ | `createPipelineDeps` 新增可选 `embedFn` 参数 |
+| `types.ts` LLMAdapter.embed | ✅ | 新增可选 `embed?(text): Promise<number[]>` |
 
 ---
 
