@@ -409,6 +409,141 @@ export function OverviewTab() {
           </div>
         </section>
 
+        {/* ========== Expert Insights Card ========== */}
+        <section className="relative step-line pl-12">
+          <div className="absolute left-0 top-0 w-10 h-10 bg-violet-500 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined">psychology</span>
+          </div>
+          <div className="flex items-baseline justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Expert Insights</h3>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* 大纲评审得分 */}
+            <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/30 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-violet-500 text-lg">grading</span>
+                <h4 className="font-bold text-on-surface">大纲评审</h4>
+              </div>
+              {(task as any).metadata?.expertOutlineReview ? (() => {
+                const review = (task as any).metadata.expertOutlineReview;
+                const score = review.consensus?.overallScore || review.overallScore || 0;
+                const scoreColor = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600';
+                return (
+                  <>
+                    <div className={`text-3xl font-black ${scoreColor}`}>{score}<span className="text-lg">分</span></div>
+                    <p className="text-xs text-on-surface-variant mt-2">
+                      {review.expertReviews?.length || 0} 位专家参与评审
+                    </p>
+                    <Link
+                      to={`/tasks/${task.id}/planning`}
+                      className="mt-3 inline-flex items-center gap-1 text-xs text-primary font-bold hover:underline"
+                    >
+                      查看详情 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                    </Link>
+                  </>
+                );
+              })() : (
+                <div className="text-sm text-on-surface-variant">
+                  <span className="text-2xl font-bold text-slate-300">—</span>
+                  <p className="mt-1">尚未进行大纲评审</p>
+                </div>
+              )}
+            </div>
+
+            {/* 蓝军评审摘要 */}
+            <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/30 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-amber-500 text-lg">fact_check</span>
+                <h4 className="font-bold text-on-surface">蓝军评审</h4>
+              </div>
+              {(task as any).review_summary?.total > 0 ? (() => {
+                const summary = (task as any).review_summary;
+                return (
+                  <>
+                    <div className="flex items-end gap-4 mb-2">
+                      <div>
+                        <span className="text-3xl font-black text-on-surface">{summary.total}</span>
+                        <span className="text-sm text-on-surface-variant ml-1">条问题</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {summary.critical > 0 && (
+                        <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-bold">
+                          {summary.critical} 严重
+                        </span>
+                      )}
+                      {summary.warning > 0 && (
+                        <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold">
+                          {summary.warning} 警告
+                        </span>
+                      )}
+                      {summary.praise > 0 && (
+                        <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-bold">
+                          {summary.praise} 亮点
+                        </span>
+                      )}
+                    </div>
+                    <Link
+                      to={`/tasks/${task.id}/reviews`}
+                      className="mt-3 inline-flex items-center gap-1 text-xs text-primary font-bold hover:underline"
+                    >
+                      查看评审 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                    </Link>
+                  </>
+                );
+              })() : (
+                <div className="text-sm text-on-surface-variant">
+                  <span className="text-2xl font-bold text-slate-300">—</span>
+                  <p className="mt-1">尚未进行蓝军评审</p>
+                </div>
+              )}
+            </div>
+
+            {/* 质量评分 */}
+            <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/30 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-green-500 text-lg">verified</span>
+                <h4 className="font-bold text-on-surface">质量评估</h4>
+              </div>
+              {(task as any).evaluation?.score ? (() => {
+                const eval_ = (task as any).evaluation;
+                const scoreColor = eval_.score >= 80 ? 'text-green-600' : eval_.score >= 60 ? 'text-amber-600' : 'text-red-600';
+                return (
+                  <>
+                    <div className={`text-3xl font-black ${scoreColor}`}>
+                      {eval_.score}<span className="text-lg">分</span>
+                    </div>
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                        eval_.riskLevel === 'low' ? 'bg-green-100 text-green-700' :
+                        eval_.riskLevel === 'medium' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {eval_.riskLevel === 'low' ? '低风险' : eval_.riskLevel === 'medium' ? '中风险' : '高风险'}
+                      </span>
+                      {eval_.stronglyRecommended && (
+                        <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-bold">强烈推荐</span>
+                      )}
+                    </div>
+                    <Link
+                      to={`/tasks/${task.id}/quality`}
+                      className="mt-3 inline-flex items-center gap-1 text-xs text-primary font-bold hover:underline"
+                    >
+                      查看质量 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                    </Link>
+                  </>
+                );
+              })() : (
+                <div className="text-sm text-on-surface-variant">
+                  <span className="text-2xl font-bold text-slate-300">—</span>
+                  <p className="mt-1">尚未进行质量评估</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* ========== Section 4: Tools ========== */}
         <section className="relative pl-12">
           <div className="absolute left-0 top-0 w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full flex items-center justify-center z-10 shadow-lg">

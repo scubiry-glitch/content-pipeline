@@ -7,7 +7,7 @@ import { ExternalLinksList } from '../../components/ExternalLinksList';
 import { AssetLinksList } from '../../components/AssetLinksList';
 import { DataCleaningPanel } from '../../components/DataCleaningPanel';
 import { CrossValidationPanel } from '../../components/CrossValidationPanel';
-import { rssSourcesApi, hotTopicsApi, assetsApi, researchApi } from '../../api/client';
+import { rssSourcesApi, hotTopicsApi, assetsApi, researchApi, expertLibraryApi } from '../../api/client';
 import type { Task } from '../../types';
 import type { ResearchConfig, RSSItem, HotTopic, Asset } from '../../api/client';
 
@@ -58,6 +58,10 @@ export function ResearchTab() {
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
   const [isSearchingAssets, setIsSearchingAssets] = useState(false);
+
+  // 素材可信度评分
+  const [credibilityScores, setCredibilityScores] = useState<Record<string, number>>({});
+  const [credibilityLoading, setCredibilityLoading] = useState<string | null>(null);
 
   // ===== 加载数据 =====
   const loadRssData = useCallback(async () => {
@@ -139,6 +143,23 @@ export function ResearchTab() {
       alert('搜索素材失败');
     } finally {
       setIsSearchingAssets(false);
+    }
+  };
+
+  const handleCredibilityCheck = async (asset: Asset) => {
+    if (credibilityScores[asset.id] !== undefined) return;
+    setCredibilityLoading(asset.id);
+    try {
+      const result = await expertLibraryApi.assessAssetCredibility(
+        asset.id,
+        asset.title,
+        (asset as any).content || (asset as any).summary || asset.title
+      );
+      setCredibilityScores(prev => ({ ...prev, [asset.id]: result.overallScore }));
+    } catch {
+      setCredibilityScores(prev => ({ ...prev, [asset.id]: -1 }));
+    } finally {
+      setCredibilityLoading(null);
     }
   };
 
@@ -523,6 +544,26 @@ export function ResearchTab() {
                           <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-indigo-600 transition-colors">{item.title}</p>
                           <p className="text-[10px] text-slate-500">{item.source || 'Internal'}</p>
                         </div>
+                        {/* 可信度评分 */}
+                        {credibilityScores[item.id] !== undefined ? (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            credibilityScores[item.id] >= 7 ? 'bg-green-100 text-green-700' :
+                            credibilityScores[item.id] >= 5 ? 'bg-amber-100 text-amber-700' :
+                            credibilityScores[item.id] < 0 ? 'bg-slate-100 text-slate-500' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {credibilityScores[item.id] < 0 ? '—' : `${credibilityScores[item.id].toFixed(1)}`}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCredibilityCheck(item); }}
+                            disabled={credibilityLoading === item.id}
+                            className="text-[10px] px-1.5 py-0.5 text-indigo-500 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="专家可信度评分"
+                          >
+                            {credibilityLoading === item.id ? '...' : '评分'}
+                          </button>
+                        )}
                       </label>
                     ))
                   )
