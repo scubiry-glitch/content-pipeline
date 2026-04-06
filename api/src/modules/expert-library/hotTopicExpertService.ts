@@ -173,12 +173,14 @@ export class HotTopicExpertService {
    * 缓存观点到数据库
    */
   private async cachePerspectives(topicId: string, perspectives: ExpertPerspective[]): Promise<void> {
+    const { randomUUID } = await import('crypto');
+    const primaryExpertId = perspectives[0]?.expertId || null;
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'hot_topic_perspective', 'text', $3, $4, $5)`,
       [
-        `htp-${topicId}-${Date.now()}`,
-        perspectives.map(p => p.expertId).join(','),
+        randomUUID(),
+        primaryExpertId,
         `Hot topic perspectives for ${topicId}`,
         JSON.stringify(perspectives),
         JSON.stringify({ topicId }),

@@ -281,13 +281,14 @@ ${allContent}
    * 保存辩论记录到数据库
    */
   private async saveDebate(result: DebateResult): Promise<void> {
-    const id = `debate-${Date.now()}`;
+    const { randomUUID } = await import('crypto');
+    const primaryExpertId = result.participantSummary[0]?.expertId || null;
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'debate', 'text', $3, $4, $5)`,
       [
-        id,
-        result.participantSummary.map(p => p.expertId).join(','),
+        randomUUID(),
+        primaryExpertId,
         result.topic.substring(0, 500),
         JSON.stringify(result),
         JSON.stringify({

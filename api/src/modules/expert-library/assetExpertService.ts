@@ -189,12 +189,14 @@ export class AssetExpertService {
   }
 
   private async cacheAnnotations(assetId: string, annotations: AssetAnnotation[]): Promise<void> {
+    const { randomUUID } = await import('crypto');
+    const primaryExpertId = annotations[0]?.expertId || null;
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'asset_annotation', 'text', $3, $4, $5)`,
       [
-        `asset-ann-${assetId}-${Date.now()}`,
-        annotations.map(a => a.expertId).join(','),
+        randomUUID(),
+        primaryExpertId,
         `Asset annotation for ${assetId}`,
         JSON.stringify(annotations),
         JSON.stringify({ assetId }),
