@@ -3,9 +3,12 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ExpertEngine } from './ExpertEngine.js';
-import type { ExpertRequest } from './types.js';
-import { submitFeedback } from './feedbackLoop.js';
+import type { ExpertRequest, OutlineReviewRequest } from './types.js';
+import { submitFeedback, applyCalibration } from './feedbackLoop.js';
 import { addKnowledgeSource, listKnowledgeSources, deleteKnowledgeSource } from './knowledgeService.js';
+import { OutlineExpertReviewer } from './outlineReviewer.js';
+import { DebateEngine } from './debateEngine.js';
+import { ExpertMatcher } from './expertMatcher.js';
 
 export function createRouter(engine: ExpertEngine) {
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
@@ -187,6 +190,55 @@ export function createRouter(engine: ExpertEngine) {
       return reply.send({ status: 'deleted' });
     });
 
+    // ===== 专家匹配接口 =====
+
+    /** POST /match — 根据任务信息匹配专家 */
+    fastify.post('/match', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { topic, industry, taskType, importance } = request.body as any;
+
+        if (!topic) {
+          return reply.status(400).send({ error: 'Missing required field: topic' });
+        }
+
+        const matcher = new ExpertMatcher(engine, engine['deps']);
+        const result = await matcher.match({ topic, industry, taskType, importance });
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Match error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 大纲评审接口 =====
+
+    /** POST /review-outline — 触发专家评审大纲 */
+    fastify.post('/review-outline', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { taskId, topic, outline, expertIds, autoRevise } = request.body as any;
+
+        if (!taskId || !topic || !outline) {
+          return reply.status(400).send({
+            error: 'Missing required fields: taskId, topic, outline',
+          });
+        }
+
+        const reviewer = new OutlineExpertReviewer(engine, engine['deps']);
+        const result = await reviewer.reviewOutline({
+          taskId,
+          topic,
+          outline,
+          expertIds,
+          autoRevise: autoRevise ?? true,
+        });
+
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Outline review error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
     // ===== 反馈接口 =====
 
     /** POST /feedback — 提交反馈 */
@@ -205,6 +257,42 @@ export function createRouter(engine: ExpertEngine) {
 
         return reply.send({ status: 'received', expert_id, invoke_id });
       } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 辩论接口 =====
+
+    /** POST /debate — 多专家协作辩论 */
+    fastify.post('/debate', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { topic, content, expertIds, rounds, context } = request.body as any;
+
+        if (!topic || !content || !expertIds || !Array.isArray(expertIds) || expertIds.length < 2) {
+          return reply.status(400).send({
+            error: 'Missing required fields: topic, content, expertIds (array of 2-4 expert IDs)',
+          });
+        }
+
+        const debateEngine = new DebateEngine(engine, engine['deps']);
+        const result = await debateEngine.debate({ topic, content, expertIds, rounds, context });
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Debate error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== 校准接口 =====
+
+    /** POST /calibrate/:id — 应用反馈校准，更新专家权重 */
+    fastify.post('/calibrate/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const result = await applyCalibration(id, engine['deps']);
+        return reply.send(result);
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Calibration error:', error);
         return reply.status(500).send({ error: error.message });
       }
     });

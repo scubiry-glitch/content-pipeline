@@ -96,6 +96,10 @@ export const tasksApi = {
       completedAt?: string;
     }>,
 
+  // 专家评审大纲
+  expertReviewOutline: (id: string, options?: { expertIds?: string[]; autoRevise?: boolean }) =>
+    client.post(`/production/${id}/outline/expert-review`, options) as Promise<any>,
+
   // 确认大纲并继续 (FR-005)
   confirmOutline: (id: string) =>
     client.post(`/production/${id}/outline/confirm`) as Promise<void>,

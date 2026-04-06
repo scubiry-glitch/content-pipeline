@@ -316,3 +316,117 @@ export interface ExpertPerformance {
   outcome_accuracy?: number;   // 预测vs实际的偏差统计
   top_task_types: Array<{ task_type: string; count: number }>;
 }
+
+// ============================================================
+// Outline Review (大纲专家评审)
+// ============================================================
+
+export interface OutlineSection {
+  id?: string;
+  title: string;
+  description?: string;
+  subsections?: OutlineSection[];
+  level?: number;
+}
+
+export interface OutlineReviewRequest {
+  taskId: string;
+  topic: string;
+  outline: { sections: OutlineSection[]; layers?: any[]; insights?: any[]; novelAngles?: any[] };
+  expertIds?: string[];          // 指定专家，不传则自动匹配
+  autoRevise?: boolean;          // 是否自动生成修订版大纲
+}
+
+export interface ExpertOutlineReview {
+  expertId: string;
+  expertName: string;
+  overallScore: number;          // 1-10
+  overallComment: string;        // 总体评价
+  sectionReviews: SectionReview[];
+  suggestions: string[];         // 修改建议列表
+  strengths: string[];           // 亮点
+  risks: string[];               // 潜在风险
+}
+
+export interface SectionReview {
+  sectionTitle: string;
+  score: number;                 // 1-10
+  comment: string;
+  suggestedChange?: string;      // 建议的修改内容
+}
+
+export interface OutlineReviewResult {
+  taskId: string;
+  reviews: ExpertOutlineReview[];
+  consensus: {
+    avgScore: number;
+    commonStrengths: string[];
+    commonIssues: string[];
+    keyRecommendations: string[];
+  };
+  revisedOutline?: { sections: OutlineSection[] };  // 基于评审意见的修订版
+}
+
+// ============================================================
+// Debate (多专家协作辩论)
+// ============================================================
+
+export interface DebateRequest {
+  topic: string;
+  content: string;
+  expertIds: string[];           // 参与辩论的专家（2-4位）
+  rounds?: number;               // 辩论轮数，默认3
+  context?: string;
+}
+
+export interface DebateRound {
+  round: number;
+  phase: 'independent' | 'cross_examination' | 'verdict';
+  opinions: Array<{
+    expertId: string;
+    expertName: string;
+    content: string;
+    targetExpertId?: string;     // cross_examination 时质疑的目标
+  }>;
+}
+
+export interface DebateResult {
+  topic: string;
+  rounds: DebateRound[];
+  consensus: string[];           // 共识点
+  disagreements: string[];       // 分歧点
+  finalVerdict: string;          // 综合裁决
+  participantSummary: Array<{
+    expertId: string;
+    expertName: string;
+    position: string;            // 核心立场
+  }>;
+}
+
+// ============================================================
+// Expert Matching (专家匹配)
+// ============================================================
+
+export interface ExpertMatchRequest {
+  topic: string;
+  industry?: string;
+  taskType?: string;
+  importance?: number;           // 0-1, 决定是否匹配特级专家
+}
+
+export interface ExpertMatchResult {
+  domainExperts: Array<{ expert: ExpertProfile; matchScore: number; matchReason: string }>;
+  seniorExpert?: { expert: ExpertProfile; matchScore: number; matchReason: string };
+  matchReasons: string[];
+}
+
+// ============================================================
+// Calibration (校准)
+// ============================================================
+
+export interface CalibrationResult {
+  expertId: string;
+  status: 'applied' | 'no_feedback' | 'db_unavailable' | 'llm_unavailable';
+  suggestions: string[];
+  weightChanges?: Record<string, { before: number; after: number }>;
+}

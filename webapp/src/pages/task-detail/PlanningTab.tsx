@@ -85,6 +85,11 @@ export function PlanningTab() {
     return [];
   }, [versions, task.outline, task.id, task.created_at]);
 
+  // ===== 专家评审状态 =====
+  const [expertReviewLoading, setExpertReviewLoading] = useState(false);
+  const [expertReviewResult, setExpertReviewResult] = useState<any>(null);
+  const [showExpertReview, setShowExpertReview] = useState(false);
+
   // ===== 重做对话框状态 =====
   const [showRedoDialog, setShowRedoDialog] = useState(false);
   const [redoComment, setRedoComment] = useState('');
@@ -238,6 +243,35 @@ export function PlanningTab() {
     
     // 清空评论
     setComments([]);
+  };
+
+  // ===== 专家评审大纲 =====
+  const handleExpertReview = async () => {
+    if (!task.id) return;
+    setExpertReviewLoading(true);
+    try {
+      const result = await tasksApi.expertReviewOutline(task.id, { autoRevise: true });
+      setExpertReviewResult(result);
+      setShowExpertReview(true);
+    } catch (error) {
+      console.error('Failed to get expert review:', error);
+      alert('专家评审失败，请稍后重试');
+    } finally {
+      setExpertReviewLoading(false);
+    }
+  };
+
+  // 采纳专家修订版大纲
+  const handleAcceptRevisedOutline = async () => {
+    if (!expertReviewResult?.revisedOutline || !task.id) return;
+    try {
+      await tasksApi.confirmOutline(task.id);
+      // 刷新页面数据
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to apply revised outline:', error);
+      alert('应用修订大纲失败');
+    }
   };
 
   // ===== 加载 RSS 数据 =====
@@ -928,12 +962,29 @@ export function PlanningTab() {
                 Regenerate Stage
             </button>
             {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
+            <>
+            <button className="px-6 py-3 border border-tertiary text-tertiary font-bold text-sm rounded-lg hover:bg-tertiary/10 transition-all active:scale-95 flex items-center gap-2"
+                onClick={handleExpertReview}
+                disabled={expertReviewLoading}>
+                {expertReviewLoading ? (
+                  <>
+                    <span className="material-symbols-outlined text-lg animate-spin">sync</span>
+                    评审中...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-lg">psychology</span>
+                    专家评审
+                  </>
+                )}
+            </button>
             <button className="px-8 py-3 bg-primary text-on-primary font-bold text-sm rounded-lg shadow-lg hover:bg-primary-dim transition-all active:scale-95 flex items-center gap-2"
                 onClick={onConfirmOutline}
                 disabled={actionLoading === 'confirm-outline'}>
                 {actionLoading === 'confirm-outline' ? 'Streaming...' : 'Proceed Details'}
                 <span className="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
+            </>
             )}
           </div>
         </div>
@@ -980,6 +1031,126 @@ export function PlanningTab() {
               >
                 {isRedoing ? '启动中...' : '确认重做'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== 专家评审结果面板 ========== */}
+      {showExpertReview && expertReviewResult && (
+        <div className="modal-overlay fixed inset-0 bg-black/50 z-[100] flex items-center justify-center overflow-y-auto py-8">
+          <div className="modal-content bg-surface-container-lowest rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-tertiary">psychology</span>
+                专家评审结果
+              </h3>
+              <button onClick={() => setShowExpertReview(false)} className="text-on-surface-variant hover:text-on-surface">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* 共识概览 */}
+            <div className="bg-tertiary/10 p-4 rounded-lg mb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl font-bold text-tertiary">
+                  {expertReviewResult.consensus?.avgScore?.toFixed(1)}/10
+                </span>
+                <span className="text-sm text-on-surface-variant">综合评分</span>
+              </div>
+              {expertReviewResult.consensus?.commonStrengths?.length > 0 && (
+                <div className="mb-2">
+                  <span className="text-xs font-bold text-on-surface-variant">亮点：</span>
+                  <ul className="text-sm text-on-surface list-disc pl-5 mt-1">
+                    {expertReviewResult.consensus.commonStrengths.map((s: string, i: number) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {expertReviewResult.consensus?.commonIssues?.length > 0 && (
+                <div className="mb-2">
+                  <span className="text-xs font-bold text-on-surface-variant">风险：</span>
+                  <ul className="text-sm text-on-surface list-disc pl-5 mt-1">
+                    {expertReviewResult.consensus.commonIssues.map((s: string, i: number) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {expertReviewResult.consensus?.keyRecommendations?.length > 0 && (
+                <div>
+                  <span className="text-xs font-bold text-on-surface-variant">关键建议：</span>
+                  <ol className="text-sm text-on-surface list-decimal pl-5 mt-1">
+                    {expertReviewResult.consensus.keyRecommendations.map((s: string, i: number) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+
+            {/* 各专家评审详情 */}
+            <div className="space-y-3 mb-4">
+              {expertReviewResult.reviews?.map((review: any) => (
+                <div key={review.expertId} className="border border-outline-variant/30 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-on-surface">{review.expertName}</span>
+                    <span className="text-sm font-bold text-tertiary">{review.overallScore}/10</span>
+                  </div>
+                  <p className="text-sm text-on-surface-variant mb-2">{review.overallComment}</p>
+                  {review.suggestions?.length > 0 && (
+                    <div className="mt-2">
+                      <span className="text-xs font-bold text-on-surface-variant">修改建议：</span>
+                      <ul className="text-xs text-on-surface list-disc pl-4 mt-1">
+                        {review.suggestions.map((s: string, i: number) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {review.sectionReviews?.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="text-xs font-bold text-on-surface-variant cursor-pointer">
+                        逐章评审 ({review.sectionReviews.length} 章)
+                      </summary>
+                      <div className="mt-2 space-y-1">
+                        {review.sectionReviews.map((sr: any, i: number) => (
+                          <div key={i} className="text-xs p-2 bg-surface-container-low rounded">
+                            <div className="flex justify-between">
+                              <span className="font-medium">{sr.sectionTitle}</span>
+                              <span className="text-tertiary font-bold">{sr.score}/10</span>
+                            </div>
+                            <p className="text-on-surface-variant mt-1">{sr.comment}</p>
+                            {sr.suggestedChange && (
+                              <p className="text-primary mt-1">建议: {sr.suggestedChange}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/30">
+              <button
+                className="px-4 py-2 border border-outline-variant text-on-surface font-bold text-sm rounded-lg hover:bg-surface-container"
+                onClick={() => setShowExpertReview(false)}
+              >
+                关闭
+              </button>
+              {expertReviewResult.revisedOutline && (
+                <button
+                  className="px-4 py-2 bg-tertiary text-on-tertiary font-bold text-sm rounded-lg hover:opacity-90 flex items-center gap-2"
+                  onClick={handleAcceptRevisedOutline}
+                >
+                  <span className="material-symbols-outlined text-sm">check</span>
+                  采纳修订版大纲
+                </button>
+              )}
             </div>
           </div>
         </div>

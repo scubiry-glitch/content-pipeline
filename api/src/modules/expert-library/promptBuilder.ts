@@ -5,7 +5,7 @@ import type { ExpertProfile, ExpertPersona, ExpertMethod, ExpertEMM, InputAnalys
 
 /**
  * 组装完整的 system prompt
- * 包含: 身份 + 方法论 + EMM规则 + 知识上下文 + 输入分析 + 任务 + 输出格式 + 反模式 + 签名
+ * 包含: 身份 + 决策DNA + 方法论 + EMM规则 + 知识上下文 + 输入分析 + 任务 + 输出格式 + 反模式 + 签名
  */
 export function buildSystemPrompt(
   expert: ExpertProfile,
@@ -21,43 +21,47 @@ export function buildSystemPrompt(
   // 1. Identity — 人格层
   sections.push(buildPersonaSection(expert.name, expert.persona, expert.domain));
 
-  // 2. Method — 方法层
+  // 2. Decision DNA — 决策基因（个性化增强）
+  sections.push(buildDecisionDNASection(expert));
+
+  // 3. Method — 方法层
   sections.push(buildMethodSection(expert.method));
 
-  // 3. EMM Rules — 门控规则
+  // 4. EMM Rules — 门控规则
   if (expert.emm) {
     sections.push(buildEMMSection(expert.emm));
   }
 
-  // 4. Knowledge Context — 知识源
+  // 5. Knowledge Context — 知识源
   if (options?.knowledgeContext) {
     sections.push(buildKnowledgeSection(options.knowledgeContext));
   }
 
-  // 5. Input Analysis — 输入增强结果
+  // 6. Input Analysis — 输入增强结果
   if (options?.inputAnalysis) {
     sections.push(buildInputAnalysisSection(options.inputAnalysis));
   }
 
-  // 6. Task — 任务指令
+  // 7. Task — 任务指令（按任务类型个性化）
   if (options?.taskType || options?.params) {
     sections.push(buildTaskSection(options.taskType, options.params));
+    sections.push(buildTaskPersonalization(expert, options?.taskType));
   }
 
-  // 7. Output Schema — 输出格式
+  // 8. Output Schema — 输出格式
   sections.push(buildOutputSection(expert.output_schema, options?.params?.output_format));
 
-  // 8. Anti-patterns — 禁止项
+  // 9. Anti-patterns — 禁止项
   if (expert.anti_patterns.length > 0) {
     sections.push(buildAntiPatternsSection(expert.anti_patterns));
   }
 
-  // 9. Signature — 标志性表达
+  // 10. Signature — 标志性表达
   if (expert.signature_phrases.length > 0) {
     sections.push(buildSignatureSection(expert.signature_phrases));
   }
 
-  // 10. Constraints
+  // 11. Constraints
   sections.push(buildConstraintsSection(expert.constraints));
 
   return sections.filter(Boolean).join('\n\n');
@@ -181,6 +185,83 @@ function buildEMMSection(emm: ExpertEMM): string {
   lines.push(`聚合逻辑：${emm.aggregation_logic}`);
 
   return lines.join('\n');
+}
+
+/**
+ * 决策基因 — 将专家的核心思维模式、价值判断、品味标准提炼为简洁的决策指引
+ * 这一段让专家的观点具有辨识度，而不是通用的"专家风格"
+ */
+function buildDecisionDNASection(expert: ExpertProfile): string {
+  const lines: string[] = [];
+  const { persona } = expert;
+
+  lines.push(`## 你的决策基因`);
+
+  // 核心思维模型 — 决策的第一推动力
+  if (persona.cognition?.mentalModel) {
+    lines.push(`你看问题的方式：${persona.cognition.mentalModel}`);
+  }
+
+  // 质量标杆 — 输出的评判标准
+  if (persona.values?.qualityBar) {
+    lines.push(`你的及格线：${persona.values.qualityBar}`);
+  }
+
+  // 审美品位 — 决定你会赞赏什么、批评什么
+  if (persona.taste?.benchmark) {
+    lines.push(`你心中的标杆：${persona.taste.benchmark}`);
+  }
+
+  // 一票否决 — 这些出现就必须指出
+  if (persona.values?.dealbreakers && persona.values.dealbreakers.length > 0) {
+    lines.push(`你绝对无法容忍：${persona.values.dealbreakers.join('；')}`);
+  }
+
+  // 时间视野 — 影响分析的深度和远见
+  if (persona.cognition?.timeHorizon) {
+    lines.push(`你的时间视野：${persona.cognition.timeHorizon}`);
+  }
+
+  // 如果没有深度人格数据，不输出空段落
+  if (lines.length <= 1) return '';
+  return lines.join('\n');
+}
+
+/**
+ * 任务个性化 — 根据任务类型注入专家特有的分析偏好
+ */
+function buildTaskPersonalization(expert: ExpertProfile, taskType?: string): string {
+  const { persona, method } = expert;
+  const lines: string[] = [];
+
+  if (taskType === 'analysis') {
+    // 分析任务 — 强调决策风格和风险态度
+    if (persona.cognition?.decisionStyle) {
+      lines.push(`分析时请体现你的决策风格：${persona.cognition.decisionStyle}`);
+    }
+    if (persona.cognition?.riskAttitude) {
+      lines.push(`你的风险态度：${persona.cognition.riskAttitude}`);
+    }
+  } else if (taskType === 'evaluation') {
+    // 评估任务 — 强调评审镜头和杀手锏
+    if (method.reviewLens?.firstGlance) {
+      lines.push(`你第一眼会看：${method.reviewLens.firstGlance}`);
+    }
+    if (method.reviewLens?.killShot) {
+      lines.push(`你的一票否决标准：${method.reviewLens.killShot}`);
+    }
+  } else if (taskType === 'generation') {
+    // 生成任务 — 强调让人眼前一亮的点和鄙视的套路
+    if (persona.values?.excites && persona.values.excites.length > 0) {
+      lines.push(`你追求的效果：${persona.values.excites.join('；')}`);
+    }
+    if (persona.taste?.disdains && persona.taste.disdains.length > 0) {
+      lines.push(`绝不要写成：${persona.taste.disdains.join('；')}`);
+    }
+  }
+
+  if (lines.length === 0) return '';
+  return `## 本次任务个性化指引\n${lines.join('\n')}`;
 }
 
 function buildKnowledgeSection(knowledgeContext: string): string {

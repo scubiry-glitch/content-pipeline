@@ -150,6 +150,18 @@ export async function productionRoutes(fastify: FastifyInstance) {
     return result;
   });
 
+  // Expert review outline — 专家评审大纲
+  fastify.post('/:taskId/outline/expert-review', { preHandler: authenticate }, async (request, reply) => {
+    const { taskId } = request.params as any;
+    const body = request.body as any;
+
+    const result = await productionService.expertReviewOutline(taskId, {
+      expertIds: body?.expertIds,
+      autoRevise: body?.autoRevise ?? true,
+    });
+    return result;
+  });
+
   // Confirm outline and proceed to research (FR-004 ~ FR-006)
   fastify.post('/:taskId/outline/confirm', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
