@@ -479,11 +479,17 @@ export function ExpertAdmin() {
                   </div>
                   <div>
                     <span className="ea-field-label">DEEP DIVE</span>
-                    {expert.method.reviewLens.deepDive.map(d => (
+                    {(Array.isArray(expert.method.reviewLens.deepDive)
+                      ? expert.method.reviewLens.deepDive
+                      : []
+                    ).map(d => (
                       <p key={d} className="ea-deep-item">— {d}</p>
                     ))}
                     <span className="ea-field-label ea-mt-sm">BONUS POINTS</span>
-                    {expert.method.reviewLens.bonusPoints.map(b => (
+                    {(Array.isArray(expert.method.reviewLens.bonusPoints)
+                      ? expert.method.reviewLens.bonusPoints
+                      : []
+                    ).map(b => (
                       <p key={b} className="ea-deep-item gold">+ {b}</p>
                     ))}
                   </div>
