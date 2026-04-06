@@ -153,29 +153,36 @@ export class ExpertEngine {
 
   /**
    * 列出所有专家
+   * 合并 DB 与内存 cache：先载入库中 is_active 行，再以 cache 覆盖同 expert_id（内置与 lazy-load 均以内存为准）
+   * domain 过滤在合并后施加，避免仅存在内存、尚未入库的专家被 SQL 域条件漏掉
    */
   async listExperts(filter?: { domain?: string }): Promise<ExpertProfile[]> {
-    // 先返回缓存中的
-    const cached = Array.from(this.expertCache.values());
-    if (cached.length > 0 && !filter?.domain) {
-      return cached;
-    }
+    const byId = new Map<string, ExpertProfile>();
 
     try {
-      let sql = `SELECT * FROM expert_profiles WHERE is_active = true`;
-      const params: any[] = [];
-
-      if (filter?.domain) {
-        sql += ` AND $1 = ANY(domain)`;
-        params.push(filter.domain);
+      const result = await this.deps.db.query(
+        `SELECT * FROM expert_profiles WHERE is_active = true ORDER BY name`
+      );
+      for (const row of result.rows) {
+        const profile = dbRowToProfile(row);
+        byId.set(profile.expert_id, profile);
       }
-
-      sql += ` ORDER BY name`;
-      const result = await this.deps.db.query(sql, params);
-      return result.rows.map(dbRowToProfile);
-    } catch {
-      return cached;
+    } catch (err) {
+      console.warn('[ExpertEngine] listExperts: DB query failed:', err);
     }
+
+    for (const [id, profile] of this.expertCache) {
+      byId.set(id, profile);
+    }
+
+    let list = Array.from(byId.values());
+    if (filter?.domain) {
+      list = list.filter(
+        (p) => Array.isArray(p.domain) && p.domain.some((d) => d === filter.domain || d.includes(filter.domain!))
+      );
+    }
+    list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    return list;
   }
 
   /**

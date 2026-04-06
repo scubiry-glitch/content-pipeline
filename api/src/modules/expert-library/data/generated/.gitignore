@@ -1,0 +1,4 @@
+pending-review/*
+!pending-review/.gitkeep
+approved/*
+!approved/.gitkeep

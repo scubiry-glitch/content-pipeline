@@ -66,6 +66,8 @@ export { muskProfile } from './data/musk.js';
 export { xiaohongshuProfile } from './data/xiaohongshu.js';
 export { topExpertProfiles } from './data/topExperts.js';
 export { yiMengProfile } from './data/yiMeng.js';
+export { CODEBASE_EXPERT_IDS, SKIP_GENERATE_IDS } from './builtinExpertIds.js';
+export { assertExpertProfile, expertProfileToDbParams } from './expertProfileDb.js';
 
 // 类型
 export type {
