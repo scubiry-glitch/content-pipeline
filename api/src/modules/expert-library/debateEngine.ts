@@ -13,11 +13,25 @@ import type {
 /** 从 LLM 输出中提取 JSON 对象，兼容代码块和裸 JSON */
 function extractJSON(raw: string): any {
   let s = raw.trim();
-  // 去除 ```json ... ``` 代码块
-  const codeBlock = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (codeBlock) s = codeBlock[1].trim();
+  // 去除 ```json ... ``` 代码块（贪婪匹配到最后一个 ```，避免 JSON 字符串内含 ``` 时截断）
+  const fenceEnd = s.lastIndexOf('```');
+  if (s.startsWith('```') && fenceEnd > 3) {
+    const inner = s.slice(s.indexOf('\n') + 1, fenceEnd).trim();
+    if (inner.length > 0) s = inner.replace(/^json\s*/i, '').trim();
+  } else {
+    const codeBlock = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlock) s = codeBlock[1].trim();
+  }
+  // 规范化容易弄坏 JSON.parse 的字符
+  s = s
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'");
   // 尝试直接解析
-  try { return JSON.parse(s); } catch { /* fall through */ }
+  try {
+    return JSON.parse(s);
+  } catch {
+    /* fall through */
+  }
   // 找到第一个 { 到最后一个 }
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
@@ -25,6 +39,71 @@ function extractJSON(raw: string): any {
     return JSON.parse(s.slice(start, end + 1));
   }
   throw new Error('No valid JSON found in response');
+}
+
+/** 模型综合分析失败时，用各轮原文生成可用的结论与列表（非空、可持久化） */
+function buildFallbackSynthesis(
+  experts: ExpertProfile[],
+  topic: string,
+  rounds: DebateRound[]
+): {
+  consensus: string[];
+  disagreements: string[];
+  finalVerdict: string;
+  participantSummary: DebateResult['participantSummary'];
+} {
+  const verdictRound = rounds.find(r => r.phase === 'verdict');
+  const crossRound = rounds.find(r => r.phase === 'cross_examination');
+  const independent = rounds.find(r => r.phase === 'independent');
+
+  const sourceRound =
+    verdictRound?.opinions?.length ? verdictRound : independent;
+  const participantSummary = sourceRound?.opinions?.length
+    ? sourceRound.opinions.map(o => ({
+        expertId: o.expertId,
+        expertName: o.expertName,
+        position:
+          o.content.length > 160 ? `${o.content.slice(0, 160)}…` : o.content,
+      }))
+    : experts.map(e => ({
+        expertId: e.expert_id,
+        expertName: e.name,
+        position: '',
+      }));
+
+  const verdictLines = (verdictRound?.opinions ?? []).map(
+    o => `【${o.expertName}】${o.content}`
+  );
+  const finalVerdict =
+    verdictLines.length > 0
+      ? `（系统自动摘录各专家最终立场，未使用模型综合段落）\n\n${verdictLines.join('\n\n')}`
+      : independent
+        ? `（无单独「裁决」轮）以下为首轮独立观点摘录：\n\n${independent.opinions.map(o => `【${o.expertName}】${o.content}`).join('\n\n')}`
+        : '暂无可摘录的辩论原文。';
+
+  const consensus: string[] = [];
+  if (verdictRound?.opinions.length) {
+    consensus.push(
+      `各方在「${topic}」下已分别给出最终立场，核心表述见下方「综合裁决」中的分专家摘录。`
+    );
+  } else if (independent?.opinions.length) {
+    consensus.push(
+      `已完成独立观点轮次；若模型未返回结构化共识，请阅读首轮各专家发言。`
+    );
+  }
+
+  const disagreements: string[] = [];
+  if (crossRound?.opinions.length) {
+    disagreements.push(
+      '交叉质疑轮中各方对彼此观点提出了反驳或补充，详见第二轮原文。'
+    );
+  } else {
+    disagreements.push(
+      '未进行交叉质疑轮或未摘录到结构化分歧，请结合各轮发言自行对照。'
+    );
+  }
+
+  return { consensus, disagreements, finalVerdict, participantSummary };
 }
 
 export class DebateEngine {
@@ -238,55 +317,110 @@ ${discussionSummary}
     finalVerdict: string;
     participantSummary: DebateResult['participantSummary'];
   }> {
+    const fallback = buildFallbackSynthesis(experts, topic, rounds);
+
     const allContent = rounds.map(round =>
       round.opinions.map(o => `[${o.expertName}] ${o.content}`).join('\n')
     ).join('\n---\n');
 
-    const systemPrompt = `你是一位学术辩论裁判。请严格按照 JSON 格式输出分析结果，不要输出任何其他文字。`;
+    const systemPrompt =
+      '你是一位学术辩论裁判。只输出一个合法的 JSON 对象，键名必须是英文：consensus、disagreements、finalVerdict、participants。不要输出任何 JSON 之外的文字、解释或 markdown。';
 
-    const userPrompt = `以下是 ${experts.map(e => e.name).join('、')} 关于「${topic}」的多轮辩论记录。
-请分析并输出如下 JSON（不要包含 markdown 代码块，直接输出 JSON 对象）：
-{
-  "consensus": ["共识点1", "共识点2"],
-  "disagreements": ["分歧点1", "分歧点2"],
-  "finalVerdict": "200字以内的综合裁决",
-  "participants": [
-    { "expertId": "id", "expertName": "名字", "position": "核心立场一句话" }
-  ]
-}
+    const userPrompt = `专家：${experts.map(e => `${e.name}(${e.expert_id})`).join('、')}
+议题：「${topic}」
 
-辩论记录：
-${allContent}`;
+多轮辩论记录：
+${allContent}
+
+请输出 JSON，格式示例（请把内容换成真实分析）：
+{"consensus":["…","…"],"disagreements":["…","…"],"finalVerdict":"不超过300字的综合裁决","participants":[{"expertId":"${experts[0]?.expert_id || ''}","expertName":"${experts[0]?.name || ''}","position":"一句话立场"}]}
+
+要求：
+- participants 须覆盖本次参与辩论的全部专家（expertId 与上文括号内一致）。
+- consensus / disagreements 各至少 1 条；
+- 字符串内如需引号请使用单引号 ' ，避免出现未转义的双引号。`;
+
+    const tryParse = (raw: string) => {
+      const parsed = extractJSON(raw);
+      const consensus = Array.isArray(parsed.consensus)
+        ? parsed.consensus.filter((x: unknown) => typeof x === 'string' && String(x).trim())
+        : [];
+      const disagreements = Array.isArray(parsed.disagreements)
+        ? parsed.disagreements.filter((x: unknown) => typeof x === 'string' && String(x).trim())
+        : [];
+      const finalVerdict =
+        typeof parsed.finalVerdict === 'string' ? parsed.finalVerdict.trim() : '';
+      let participantSummary = Array.isArray(parsed.participants)
+        ? parsed.participants.map((p: any) => ({
+            expertId: String(p.expertId || p.expert_id || '').trim(),
+            expertName: String(p.expertName || p.name || '').trim(),
+            position: String(p.position || '').trim(),
+          }))
+        : [];
+      const idSet = new Set(experts.map(e => e.expert_id));
+      participantSummary = participantSummary.filter(
+        (p: DebateResult['participantSummary'][number]) =>
+          p.expertId && idSet.has(p.expertId)
+      );
+      return { consensus, disagreements, finalVerdict, participantSummary };
+    };
+
+    const mergeWithFallback = (partial: {
+      consensus: string[];
+      disagreements: string[];
+      finalVerdict: string;
+      participantSummary: DebateResult['participantSummary'];
+    }) => ({
+      consensus:
+        partial.consensus.length > 0 ? partial.consensus : fallback.consensus,
+      disagreements:
+        partial.disagreements.length > 0
+          ? partial.disagreements
+          : fallback.disagreements,
+      finalVerdict:
+        partial.finalVerdict.length > 0
+          ? partial.finalVerdict
+          : fallback.finalVerdict,
+      participantSummary:
+        partial.participantSummary.length >= experts.length
+          ? partial.participantSummary
+          : fallback.participantSummary,
+    });
 
     try {
       const result = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-        temperature: 0.3,
-        maxTokens: 1500,
+        temperature: 0.2,
+        maxTokens: 4096,
       });
 
-      const parsed = extractJSON(result);
-      return {
-        consensus: parsed.consensus || [],
-        disagreements: parsed.disagreements || [],
-        finalVerdict: parsed.finalVerdict || '',
-        participantSummary: (parsed.participants || []).map((p: any) => ({
-          expertId: p.expertId || '',
-          expertName: p.expertName || '',
-          position: p.position || '',
-        })),
-      };
+      const first = tryParse(result);
+      if (
+        first.finalVerdict.length > 0 &&
+        first.consensus.length > 0 &&
+        first.disagreements.length > 0 &&
+        first.participantSummary.length >= experts.length
+      ) {
+        return {
+          consensus: first.consensus,
+          disagreements: first.disagreements,
+          finalVerdict: first.finalVerdict,
+          participantSummary: first.participantSummary,
+        };
+      }
+
+      const retryPrompt = `${userPrompt}\n\n上一次输出无效或不完整。请重新只输出一行紧凑 JSON（无换行、无 markdown），且 participants 必须包含全部 ${experts.length} 位专家的 expertId。`;
+      const retryRaw = await this.deps.llm.completeWithSystem(
+        systemPrompt,
+        retryPrompt,
+        { temperature: 0.1, maxTokens: 4096 }
+      );
+      const second = tryParse(retryRaw);
+      return mergeWithFallback(second);
     } catch (err) {
-      console.warn('[DebateEngine] synthesize failed:', err);
-      return {
-        consensus: [],
-        disagreements: [],
-        finalVerdict: '辩论综合分析生成失败',
-        participantSummary: experts.map(e => ({
-          expertId: e.expert_id,
-          expertName: e.name,
-          position: '',
-        })),
-      };
+      const hint =
+        err instanceof Error ? err.message : String(err);
+      console.warn('[DebateEngine] synthesize failed:', hint);
+      return fallback;
     }
   }
 
@@ -295,7 +429,14 @@ ${allContent}`;
    */
   private async saveDebate(result: DebateResult): Promise<void> {
     const { randomUUID } = await import('crypto');
-    const primaryExpertId = result.participantSummary[0]?.expertId || null;
+    const primaryExpertId =
+      result.participantSummary.find(p => p.expertId)?.expertId ||
+      result.rounds.flatMap(r => r.opinions).find(o => o.expertId)?.expertId ||
+      null;
+    if (!primaryExpertId) {
+      console.warn('[DebateEngine] saveDebate skipped: no expert_id');
+      return;
+    }
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'debate', 'text', $3, $4, $5)`,

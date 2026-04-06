@@ -3,8 +3,9 @@
  * 按 loadExpertsData() 顺序，跳过 data/*.ts 已有 ExpertProfile 的 id，至多 34 位生成待审 JSON。
  * 输出：api/src/modules/expert-library/data/generated/pending-review/{id}.json + manifest.json
  *
- * 用法：cd api && npx tsx src/scripts/batch-generate-expert-profiles.ts [--force]
+ * 用法：cd api && npx tsx src/scripts/batch-generate-expert-profiles.ts [--force] [--id=E08-08]
  * --force：覆盖已存在的 pending-review/{id}.json
+ * --id=：仅生成指定 expert_id（须存在于 loadExpertsData 且非内置 SKIP 集合）
  */
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
@@ -58,12 +59,19 @@ function buildPrompt(card: {
 顶层: expert_id, name, domain(字符串数组，含领域与评审取向标签), persona{style,tone,bias[],cognition{mentalModel,decisionStyle,riskAttitude,timeHorizon},values{excites[],irritates[],qualityBar,dealbreakers[]},taste{admires[],disdains[],benchmark},voice{disagreementStyle,praiseStyle},blindSpots{knownBias[],weakDomains[],selfAwareness}}, method{frameworks[],reasoning,analysis_steps[],reviewLens{firstGlance,deepDive[],killShot,bonusPoints[]},dataPreference,evidenceStandard}, emm{critical_factors[],factor_hierarchy(权重和=1),veto_rules[],aggregation_logic}, constraints{must_conclude,allow_assumption}, output_schema{format,sections[],rubrics可选}, anti_patterns[], signature_phrases[]
 
 认知与 EMM 必须贴合该人物卡片，可推理但不要宣称「本人亲自说过」。aggregation_logic 用 "weighted_score + 一票否决"。
+constraints.must_conclude 与 constraints.allow_assumption 必须为布尔值 true/false（不能用文字说明替代）。
 
 只输出一个 JSON 对象。`;
 }
 
+function parseOnlyId(): string | null {
+  const arg = process.argv.find((a) => a.startsWith('--id='));
+  return arg ? arg.slice('--id='.length).trim() || null : null;
+}
+
 async function main() {
   const force = process.argv.includes('--force');
+  const onlyId = parseOnlyId();
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   const expertServicePath = path.join(API_ROOT, '../webapp/src/services/expertService.ts');
@@ -83,9 +91,29 @@ async function main() {
     reviewDimensions: string[];
   }>;
 
-  const targets = all.filter((e) => !SKIP_GENERATE_IDS.has(e.id)).slice(0, BATCH_LIMIT);
+  const eligible = all.filter((e) => !SKIP_GENERATE_IDS.has(e.id));
+  let targets: typeof all;
+  if (onlyId) {
+    const one = eligible.filter((e) => e.id === onlyId);
+    if (one.length === 0) {
+      if (!all.some((e) => e.id === onlyId)) {
+        console.error(`找不到专家: ${onlyId}`);
+        process.exit(1);
+      }
+      if (SKIP_GENERATE_IDS.has(onlyId)) {
+        console.error(`${onlyId} 为代码内置画像，无需批量生成`);
+        process.exit(1);
+      }
+      console.error(`${onlyId} 无法进入生成列表`);
+      process.exit(1);
+    }
+    targets = one;
+    console.log(`单专家模式: ${onlyId}`);
+  } else {
+    targets = eligible.slice(0, BATCH_LIMIT);
+  }
 
-  console.log(`将处理 ${targets.length} 位专家（上限 ${BATCH_LIMIT}），输出目录: ${OUT_DIR}`);
+  console.log(`将处理 ${targets.length} 位专家${onlyId ? '' : `（上限 ${BATCH_LIMIT}）`}，输出目录: ${OUT_DIR}`);
 
   const manifest: {
     generatedAt: string;
@@ -94,8 +122,8 @@ async function main() {
     items: Array<{ expert_id: string; status: string; path?: string; error?: string }>;
   } = {
     generatedAt: new Date().toISOString(),
-    batchLimit: BATCH_LIMIT,
-    modelNotes: 'batch-generate-expert-profiles',
+    batchLimit: onlyId ? 1 : BATCH_LIMIT,
+    modelNotes: onlyId ? `single:${onlyId}` : 'batch-generate-expert-profiles',
     items: [],
   };
 
