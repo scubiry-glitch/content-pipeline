@@ -890,7 +890,9 @@
   color: var(--ea-text-muted);
 }
 .ea-error .material-symbols-outlined { font-size: 32px; color: var(--ea-error); }
-.ea-error p { font-size: 14px; }
+.ea-error p { font-size: 14px; max-width: 520px; text-align: center; }
+.ea-error-detail { color: var(--ea-error); font-weight: 600; }
+.ea-error-hint { font-size: 12px !important; opacity: 0.85; line-height: 1.5; }
 .ea-error button {
   background: none; border: 1px solid var(--ea-outline);
   padding: 8px 16px; cursor: pointer;

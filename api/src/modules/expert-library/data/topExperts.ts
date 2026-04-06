@@ -3,6 +3,7 @@
 // 每位专家包含完整 cognition / values / taste / voice / blindSpots + EMM
 
 import type { ExpertProfile } from '../types.js';
+import { yiMengProfile } from './yiMeng.js';
 
 // ===== S-01 张一鸣 — 字节跳动创始人 =====
 export const zhangYimingProfile: ExpertProfile = {
@@ -713,4 +714,5 @@ export const topExpertProfiles = [
   wangHuiwenProfile,
   luQiProfile,
   guWendongProfile,
+  yiMengProfile,
 ];

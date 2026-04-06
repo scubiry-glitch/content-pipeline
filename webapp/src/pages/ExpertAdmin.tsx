@@ -31,7 +31,7 @@ interface ExpertProfile {
     aggregation_logic: string;
   };
   constraints: { must_conclude: boolean; allow_assumption: boolean };
-  output_schema: { format: string; sections: string[] };
+  output_schema: { format: string; sections: string[]; rubrics?: { dimension: string; levels: { score: number; description: string }[] }[] };
   anti_patterns: string[];
   signature_phrases: string[];
 }
@@ -84,6 +84,7 @@ export function ExpertAdmin() {
   const [fbScore, setFbScore]   = useState(3);
   const [fbNotes, setFbNotes]   = useState('');
   const [fbSent, setFbSent]     = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Section refs for scrollspy
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -92,17 +93,57 @@ export function ExpertAdmin() {
   useEffect(() => {
     if (!expertId) return;
     setLoading(true);
-    Promise.all([
-      fetch(`${API}/experts/${expertId}`).then(r => r.json()),
-      fetch(`${API}/experts/${expertId}/performance`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/experts/${expertId}/knowledge`).then(r => r.json()).catch(() => ({ sources: [] })),
-    ]).then(([exp, p, k]) => {
-      setExpert(exp);
-      setSignatures(exp.signature_phrases || []);
-      setAntiPatterns(exp.anti_patterns || []);
-      setPerf(p);
-      setKnowledge(k.sources || []);
-    }).finally(() => setLoading(false));
+    setLoadError(null);
+
+    const isProfile = (d: unknown): d is ExpertProfile =>
+      !!d &&
+      typeof d === 'object' &&
+      'expert_id' in d &&
+      typeof (d as ExpertProfile).expert_id === 'string' &&
+      !!(d as ExpertProfile).persona &&
+      !!(d as ExpertProfile).method;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API}/experts/${expertId}`);
+        const exp = await res.json();
+        if (!res.ok || !isProfile(exp)) {
+          setExpert(null);
+          setSignatures([]);
+          setAntiPatterns([]);
+          setLoadError(typeof exp?.error === 'string' ? exp.error : !res.ok ? `HTTP ${res.status}` : 'Invalid profile payload');
+        } else {
+          setExpert(exp);
+          setSignatures(exp.signature_phrases || []);
+          setAntiPatterns(exp.anti_patterns || []);
+        }
+
+        const pr = await fetch(`${API}/experts/${expertId}/performance`).catch(() => null);
+        if (pr?.ok) {
+          const p = await pr.json();
+          setPerf(p && !p.error ? p : null);
+        } else {
+          setPerf(null);
+        }
+
+        const kr = await fetch(`${API}/experts/${expertId}/knowledge`).catch(() => null);
+        if (kr?.ok) {
+          const k = await kr.json();
+          setKnowledge(Array.isArray(k.sources) ? k.sources : []);
+        } else {
+          setKnowledge([]);
+        }
+      } catch (e: any) {
+        setExpert(null);
+        setSignatures([]);
+        setAntiPatterns([]);
+        setPerf(null);
+        setKnowledge([]);
+        setLoadError(e?.message || 'Network error');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [expertId]);
 
   // ── Scrollspy ──────────────────────────────────────────────────────────────
@@ -211,6 +252,8 @@ export function ExpertAdmin() {
     <div className="ea-error">
       <span className="material-symbols-outlined">error_outline</span>
       <p>Expert not found: {expertId}</p>
+      {loadError && <p className="ea-error-detail">{loadError}</p>}
+      <p className="ea-error-hint">请确认 API 已启动且 `GET /api/v1/expert-library/experts/{expertId}` 可访问（内置专家注册于进程内存，需与当前部署同源）。</p>
       <button onClick={() => navigate('/expert-library')}>← 返回专家库</button>
     </div>
   );

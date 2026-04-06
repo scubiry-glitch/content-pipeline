@@ -65,6 +65,7 @@ export { formatOutput } from './outputFormatter.js';
 export { muskProfile } from './data/musk.js';
 export { xiaohongshuProfile } from './data/xiaohongshu.js';
 export { topExpertProfiles } from './data/topExperts.js';
+export { yiMengProfile } from './data/yiMeng.js';
 
 // 类型
 export type {

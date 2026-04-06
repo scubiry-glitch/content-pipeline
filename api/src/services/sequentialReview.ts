@@ -155,6 +155,11 @@ export async function configureSequentialReview(
     'S-16': { name: '周其仁', profile: '北京大学经济学教授，关注产权制度、市场改革和经济转型' },
     'S-17': { name: '刘强东', profile: '京东创始人，供应链思维，关注效率、用户体验和物流优化' },
     'E07-10': { name: '谷文栋', profile: '人工智能方向专家，关注大模型与机器学习、AI工程化、智能体与产业落地' },
+    'E04-05': {
+      name: '一濛',
+      profile:
+        '居住服务·惠居美租方向；UE 卷积与 P&L 递归对齐、L3/L2/L1 分层治理与财务硬账、U×E 弹性与 BML 准实验、好产品好服务好效率好 UE',
+    },
   };
 
   // ★ 构建专家详情查找表：优先使用前端传来的详情，再 fallback 到 KNOWN_EXPERTS
