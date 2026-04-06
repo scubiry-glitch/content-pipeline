@@ -26,9 +26,36 @@ export function ExpertDebate() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DebateResult | null>(null);
 
+  // 辩论历史
+  const [debateHistory, setDebateHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   useEffect(() => {
     expertLibraryApi.getExperts().then(r => setExperts(r.experts || [])).catch(() => {});
+    loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await expertLibraryApi.listDebates(20);
+      setDebateHistory(res.debates || []);
+    } catch { /* ignore */ }
+    finally { setHistoryLoading(false); }
+  };
+
+  const viewHistoryDebate = async (debate: any) => {
+    if (debate.result) {
+      setResult(debate.result);
+      setShowHistory(false);
+    } else {
+      try {
+        const detail = await expertLibraryApi.getDebate(debate.id);
+        if (detail) { setResult(detail); setShowHistory(false); }
+      } catch { /* ignore */ }
+    }
+  };
 
   const toggleExpert = (id: string) => {
     setSelectedExperts(prev =>
@@ -43,6 +70,7 @@ export function ExpertDebate() {
     try {
       const res = await expertLibraryApi.debate(topic, content, selectedExperts, 3);
       setResult(res);
+      loadHistory(); // 刷新历史列表
     } catch (error) {
       console.error('Debate failed:', error);
       alert('辩论启动失败');
@@ -62,10 +90,49 @@ export function ExpertDebate() {
       <ExpertTabs />
 
       <div className="max-w-7xl mx-auto mt-6">
-        <h1 className="text-2xl font-bold text-on-surface mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">forum</span>
-          专家辩论
-        </h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">forum</span>
+            专家辩论
+          </h1>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="text-sm px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">history</span>
+            历史记录 {debateHistory.length > 0 && `(${debateHistory.length})`}
+          </button>
+        </div>
+
+        {/* 辩论历史面板 */}
+        {showHistory && (
+          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 mb-6">
+            <h3 className="font-bold text-on-surface mb-3">辩论历史</h3>
+            {historyLoading ? (
+              <div className="text-sm text-on-surface-variant text-center py-4">加载中...</div>
+            ) : debateHistory.length === 0 ? (
+              <div className="text-sm text-on-surface-variant text-center py-4">暂无辩论记录</div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {debateHistory.map((debate: any) => (
+                  <div
+                    key={debate.id}
+                    className="p-3 bg-surface-container-low rounded-lg hover:bg-surface-container cursor-pointer transition-colors flex items-center justify-between"
+                    onClick={() => viewHistoryDebate(debate)}
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-on-surface">{debate.topic}</div>
+                      <div className="text-xs text-on-surface-variant mt-0.5">
+                        {debate.expertNames?.join('、')} · {new Date(debate.createdAt).toLocaleString('zh-CN')}
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-on-surface-variant text-sm">arrow_forward</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {!result ? (
           /* 设置面板 */

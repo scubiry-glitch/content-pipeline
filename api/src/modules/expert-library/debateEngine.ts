@@ -59,7 +59,7 @@ export class DebateEngine {
     const { consensus, disagreements, finalVerdict, participantSummary } =
       await this.synthesize(experts, topic, debateRounds);
 
-    return {
+    const result: DebateResult = {
       topic,
       rounds: debateRounds,
       consensus,
@@ -67,6 +67,13 @@ export class DebateEngine {
       finalVerdict,
       participantSummary,
     };
+
+    // 持久化辩论记录
+    this.saveDebate(result).catch(err =>
+      console.warn('[DebateEngine] Failed to save debate:', err)
+    );
+
+    return result;
   }
 
   /**
@@ -267,6 +274,71 @@ ${allContent}
           position: '',
         })),
       };
+    }
+  }
+
+  /**
+   * 保存辩论记录到数据库
+   */
+  private async saveDebate(result: DebateResult): Promise<void> {
+    const id = `debate-${Date.now()}`;
+    await this.deps.db.query(
+      `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
+       VALUES ($1, $2, 'debate', 'text', $3, $4, $5)`,
+      [
+        id,
+        result.participantSummary.map(p => p.expertId).join(','),
+        result.topic.substring(0, 500),
+        JSON.stringify(result),
+        JSON.stringify({
+          expertIds: result.participantSummary.map(p => p.expertId),
+          roundCount: result.rounds.length,
+        }),
+      ]
+    );
+  }
+
+  /**
+   * 查询辩论历史
+   */
+  async listDebates(limit = 20): Promise<Array<{ id: string; topic: string; expertNames: string[]; createdAt: string; result: DebateResult }>> {
+    try {
+      const res = await this.deps.db.query(
+        `SELECT id, input_summary as topic, output_sections, created_at
+         FROM expert_invocations
+         WHERE task_type = 'debate'
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return res.rows.map((row: any) => {
+        const result = JSON.parse(row.output_sections || '{}');
+        return {
+          id: row.id,
+          topic: row.topic || result.topic || '',
+          expertNames: (result.participantSummary || []).map((p: any) => p.expertName),
+          createdAt: row.created_at,
+          result,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 获取单条辩论详情
+   */
+  async getDebate(debateId: string): Promise<DebateResult | null> {
+    try {
+      const res = await this.deps.db.query(
+        `SELECT output_sections FROM expert_invocations WHERE id = $1 AND task_type = 'debate'`,
+        [debateId]
+      );
+      if (res.rows.length === 0) return null;
+      return JSON.parse(res.rows[0].output_sections || '{}');
+    } catch {
+      return null;
     }
   }
 }
