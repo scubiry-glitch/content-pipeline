@@ -1544,6 +1544,10 @@ export const expertLibraryApi = {
   // 辩论
   debate: (topic: string, content: string, expertIds: string[], rounds?: number, context?: string) =>
     client.post('/expert-library/debate', { topic, content, expertIds, rounds, context }) as Promise<any>,
+  listDebates: (limit?: number) =>
+    client.get('/expert-library/debates', { params: { limit } }) as Promise<{ total: number; debates: any[] }>,
+  getDebate: (id: string) =>
+    client.get(`/expert-library/debates/${id}`) as Promise<any>,
 
   // 匹配
   matchExperts: (topic: string, industry?: string, taskType?: string, importance?: number) =>

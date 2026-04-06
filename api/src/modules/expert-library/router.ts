@@ -286,6 +286,31 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
+    /** GET /debates — 辩论历史列表 */
+    fastify.get('/debates', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { limit } = request.query as any;
+        const debateEngine = new DebateEngine(engine, engine['deps']);
+        const debates = await debateEngine.listDebates(parseInt(limit) || 20);
+        return reply.send({ total: debates.length, debates });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /debates/:id — 辩论详情 */
+    fastify.get('/debates/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const debateEngine = new DebateEngine(engine, engine['deps']);
+        const result = await debateEngine.getDebate(id);
+        if (!result) return reply.status(404).send({ error: 'Debate not found' });
+        return reply.send(result);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
     // ===== 校准接口 =====
 
     /** POST /calibrate/:id — 应用反馈校准，更新专家权重 */
