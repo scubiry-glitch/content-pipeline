@@ -12,6 +12,7 @@ interface NavItem {
   label: string;
   icon?: string;
   children?: NavItem[];
+  matchPrefixes?: string[]; // 额外的路径前缀匹配（用于无children但需高亮的导航组）
 }
 
 const mainNavItems: NavItem[] = [
@@ -29,17 +30,11 @@ const mainNavItems: NavItem[] = [
       { to: '/assets/bindings', label: '目录绑定', icon: '📂' },
     ]
   },
-  { 
-    to: '/expert-library', 
-    label: '专家体系', 
+  {
+    to: '/expert-library',
+    label: '专家体系',
     icon: '👥',
-    children: [
-      { to: '/expert-library', label: '专家库', icon: '👥' },
-      { to: '/expert-chat', label: '专家对话', icon: '💬' },
-      { to: '/expert-scheduling', label: '专家调度', icon: '📋' },
-      { to: '/expert-debate', label: '专家辩论', icon: '🔥' },
-      { to: '/expert-knowledge-graph', label: '知识图谱', icon: '🧠' },
-    ]
+    matchPrefixes: ['/expert-library', '/expert-chat', '/expert-scheduling', '/expert-debate', '/expert-knowledge-graph', '/expert-admin', '/expert-network', '/expert-comparison'],
   },
   { 
     to: '/hot-topics', 
@@ -70,6 +65,9 @@ const isActivePath = (pathname: string, item: NavItem): boolean => {
   if (pathname === item.to) return true;
   if (item.children) {
     return item.children.some(child => pathname.startsWith(child.to));
+  }
+  if (item.matchPrefixes) {
+    return item.matchPrefixes.some(prefix => pathname.startsWith(prefix));
   }
   return false;
 };

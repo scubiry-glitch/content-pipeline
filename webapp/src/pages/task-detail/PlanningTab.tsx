@@ -87,7 +87,10 @@ export function PlanningTab() {
 
   // ===== 专家评审状态 =====
   const [expertReviewLoading, setExpertReviewLoading] = useState(false);
-  const [expertReviewResult, setExpertReviewResult] = useState<any>(null);
+  const [expertReviewResult, setExpertReviewResult] = useState<any>(
+    // 从 task.metadata 恢复已有的评审结果
+    (task as any).metadata?.expertOutlineReview || null
+  );
   const [showExpertReview, setShowExpertReview] = useState(false);
 
   // ===== 重做对话框状态 =====
@@ -961,15 +964,20 @@ export function PlanningTab() {
                 <span className="material-symbols-outlined text-lg">refresh</span>
                 Regenerate Stage
             </button>
-            {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
-            <>
-            <button className="px-6 py-3 border border-tertiary text-tertiary font-bold text-sm rounded-lg hover:bg-tertiary/10 transition-all active:scale-95 flex items-center gap-2"
-                onClick={handleExpertReview}
+            {/* 专家评审按钮 — 只要有大纲就可以评审 */}
+            {outline?.sections?.length > 0 && !editingOutline && (
+            <button className="px-6 py-3 bg-tertiary text-on-tertiary font-bold text-sm rounded-lg shadow hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                onClick={expertReviewResult ? () => setShowExpertReview(true) : handleExpertReview}
                 disabled={expertReviewLoading}>
                 {expertReviewLoading ? (
                   <>
                     <span className="material-symbols-outlined text-lg animate-spin">sync</span>
                     评审中...
+                  </>
+                ) : expertReviewResult ? (
+                  <>
+                    <span className="material-symbols-outlined text-lg">psychology</span>
+                    查看评审 ({expertReviewResult.consensus?.avgScore?.toFixed(1)}/10)
                   </>
                 ) : (
                   <>
@@ -978,13 +986,14 @@ export function PlanningTab() {
                   </>
                 )}
             </button>
+            )}
+            {(task.status === 'planning' || (task as any).status === 'outline_pending') && !editingOutline && !selectedVersion && (
             <button className="px-8 py-3 bg-primary text-on-primary font-bold text-sm rounded-lg shadow-lg hover:bg-primary-dim transition-all active:scale-95 flex items-center gap-2"
                 onClick={onConfirmOutline}
                 disabled={actionLoading === 'confirm-outline'}>
                 {actionLoading === 'confirm-outline' ? 'Streaming...' : 'Proceed Details'}
                 <span className="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
-            </>
             )}
           </div>
         </div>
