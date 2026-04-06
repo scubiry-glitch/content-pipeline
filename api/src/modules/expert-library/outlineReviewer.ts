@@ -333,8 +333,8 @@ ${consensus.keyRecommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}
         `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
-          `outline-review-${taskId}-${Date.now()}`,
-          reviews.map(r => r.expertId).join(','),
+          (await import('crypto')).randomUUID(),
+          reviews[0]?.expertId || null,
           'outline_review',
           'text',
           `Outline review for task ${taskId}`,

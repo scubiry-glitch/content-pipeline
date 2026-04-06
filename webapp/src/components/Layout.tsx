@@ -34,7 +34,7 @@ const mainNavItems: NavItem[] = [
     to: '/expert-library',
     label: '专家体系',
     icon: '👥',
-    matchPrefixes: ['/expert-library', '/expert-chat', '/expert-scheduling', '/expert-debate', '/expert-knowledge-graph', '/expert-admin', '/expert-network', '/expert-comparison'],
+    matchPrefixes: ['/expert-library', '/expert-chat', '/expert-comparison', '/expert-network', '/expert-scheduling', '/expert-debate', '/expert-knowledge-graph', '/expert-admin'],
   },
   { 
     to: '/hot-topics', 
