@@ -269,7 +269,7 @@ export function createRouter(engine: ExpertEngine) {
     /** POST /debate — 多专家协作辩论 */
     fastify.post('/debate', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { topic, content, expertIds, rounds, context } = request.body as any;
+        const { topic, content, expertIds, rounds, temperature, context } = request.body as any;
 
         if (!topic || !content || !expertIds || !Array.isArray(expertIds) || expertIds.length < 2) {
           return reply.status(400).send({
@@ -278,7 +278,7 @@ export function createRouter(engine: ExpertEngine) {
         }
 
         const debateEngine = new DebateEngine(engine, engine['deps']);
-        const result = await debateEngine.debate({ topic, content, expertIds, rounds, context });
+        const result = await debateEngine.debate({ topic, content, expertIds, rounds, temperature, context });
         return reply.send(result);
       } catch (error: any) {
         console.error('[ExpertLibrary] Debate error:', error);
@@ -395,6 +395,47 @@ export function createRouter(engine: ExpertEngine) {
             domain: a.expert.domain,
             activeTaskCount: a.workload.activeTaskCount,
             availability: a.workload.availability,
+          })),
+        });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** PUT /scheduling/availability/:id — 更新专家可用状态 */
+    fastify.put('/scheduling/availability/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const { status } = request.body as any;
+        if (!['available', 'busy', 'unavailable'].includes(status)) {
+          return reply.status(400).send({ error: 'Invalid status. Must be: available, busy, unavailable' });
+        }
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        await scheduler.updateAvailability(id, status);
+        return reply.send({ expertId: id, availability: status });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /scheduling/recommend — 基于主题推荐专家 */
+    fastify.post('/scheduling/recommend', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { topic, limit } = request.body as any;
+        if (!topic) {
+          return reply.status(400).send({ error: 'Missing required field: topic' });
+        }
+        const scheduler = new SchedulingService(engine, engine['deps']);
+        const recommendations = await scheduler.recommendExperts(topic, parseInt(limit) || 3);
+        return reply.send({
+          total: recommendations.length,
+          recommendations: recommendations.map(r => ({
+            expert_id: r.expert.expert_id,
+            name: r.expert.name,
+            domain: r.expert.domain,
+            matchScore: r.matchScore,
+            activeTaskCount: r.workload.activeTaskCount,
+            availability: r.workload.availability,
           })),
         });
       } catch (error: any) {

@@ -120,7 +120,7 @@ export class DebateEngine {
    * 执行多专家辩论
    */
   async debate(request: DebateRequest): Promise<DebateResult> {
-    const { topic, content, expertIds, rounds = 3, context } = request;
+    const { topic, content, expertIds, rounds = 3, temperature = 0.7, context } = request;
 
     if (expertIds.length < 2 || expertIds.length > 4) {
       throw new Error('Debate requires 2-4 experts');
@@ -137,19 +137,19 @@ export class DebateEngine {
     const debateRounds: DebateRound[] = [];
 
     // Round 1: 独立观点 — 每位专家独立发表意见
-    const round1 = await this.independentOpinions(experts, topic, content, context);
+    const round1 = await this.independentOpinions(experts, topic, content, context, temperature);
     debateRounds.push(round1);
 
-    // Round 2: 交叉质疑 — 专家之间互相质疑
-    if (rounds >= 2) {
-      const round2 = await this.crossExamination(experts, topic, round1);
-      debateRounds.push(round2);
+    // Round 2..N-1: 交叉质疑 — 专家之间互相质疑
+    for (let r = 2; r < rounds; r++) {
+      const crossRound = await this.crossExamination(experts, topic, debateRounds[debateRounds.length - 1], temperature, r);
+      debateRounds.push(crossRound);
     }
 
-    // Round 3: 综合裁决 — 各专家总结立场
-    if (rounds >= 3) {
-      const round3 = await this.finalVerdict(experts, topic, debateRounds);
-      debateRounds.push(round3);
+    // Final Round: 综合裁决 — 各专家总结立场
+    if (rounds >= 2) {
+      const verdictRound = await this.finalVerdict(experts, topic, debateRounds, temperature);
+      debateRounds.push(verdictRound);
     }
 
     // 生成共识分析
@@ -234,7 +234,8 @@ export class DebateEngine {
     experts: ExpertProfile[],
     topic: string,
     content: string,
-    context?: string
+    context?: string,
+    temperature = 0.7
   ): Promise<DebateRound> {
     const opinions = await Promise.all(
       experts.map(async (expert) => {
@@ -254,7 +255,7 @@ ${content}
 请发表你的独立观点:`;
 
         const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature: 0.6,
+          temperature,
           maxTokens: 800,
         });
 
@@ -275,14 +276,16 @@ ${content}
   private async crossExamination(
     experts: ExpertProfile[],
     topic: string,
-    round1: DebateRound
+    previousRound: DebateRound,
+    temperature = 0.7,
+    roundNumber = 2
   ): Promise<DebateRound> {
     const opinions = await Promise.all(
       experts.map(async (expert, index) => {
         // 选择一位不同的专家作为质疑目标
         const targetIndex = (index + 1) % experts.length;
         const targetExpert = experts[targetIndex];
-        const targetOpinion = round1.opinions[targetIndex];
+        const targetOpinion = previousRound.opinions[targetIndex];
 
         const systemPrompt = `你是 ${expert.name}，${expert.domain.join('/')} 领域专家。
 风格: ${expert.persona.style}
@@ -299,7 +302,7 @@ ${targetOpinion.content}
 请对以上观点进行质疑或补充:`;
 
         const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature: 0.5,
+          temperature: Math.max(0.1, temperature - 0.1),
           maxTokens: 600,
         });
 
@@ -312,7 +315,7 @@ ${targetOpinion.content}
       })
     );
 
-    return { round: 2, phase: 'cross_examination', opinions };
+    return { round: roundNumber, phase: 'cross_examination', opinions };
   }
 
   /**
@@ -321,7 +324,8 @@ ${targetOpinion.content}
   private async finalVerdict(
     experts: ExpertProfile[],
     topic: string,
-    previousRounds: DebateRound[]
+    previousRounds: DebateRound[],
+    temperature = 0.7
   ): Promise<DebateRound> {
     // 汇总前几轮讨论
     const discussionSummary = previousRounds.map(round =>
@@ -344,7 +348,7 @@ ${discussionSummary}
 请总结你的最终立场:`;
 
         const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature: 0.4,
+          temperature: Math.max(0.1, temperature - 0.2),
           maxTokens: 600,
         });
 
@@ -356,7 +360,7 @@ ${discussionSummary}
       })
     );
 
-    return { round: 3, phase: 'verdict', opinions };
+    return { round: previousRounds.length + 1, phase: 'verdict', opinions };
   }
 
   /**

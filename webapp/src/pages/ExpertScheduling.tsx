@@ -14,10 +14,23 @@ interface Workload {
   availability: 'available' | 'busy' | 'unavailable';
 }
 
+interface Recommendation {
+  expert_id: string;
+  name: string;
+  domain: string[];
+  matchScore: number;
+  activeTaskCount: number;
+  availability: string;
+}
+
 export function ExpertScheduling() {
   const [workloads, setWorkloads] = useState<Workload[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedExpert, setSelectedExpert] = useState<Workload | null>(null);
+  // 智能推荐
+  const [recommendTopic, setRecommendTopic] = useState('');
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recommendLoading, setRecommendLoading] = useState(false);
 
   const loadWorkloads = useCallback(async () => {
     setLoading(true);
@@ -32,6 +45,24 @@ export function ExpertScheduling() {
   }, []);
 
   useEffect(() => { loadWorkloads(); }, [loadWorkloads]);
+
+  const handleRecommend = async () => {
+    if (!recommendTopic.trim()) return;
+    setRecommendLoading(true);
+    try {
+      const res = await expertLibraryApi.recommendExperts(recommendTopic, 3);
+      setRecommendations(res.recommendations || []);
+    } catch { /* ignore */ }
+    finally { setRecommendLoading(false); }
+  };
+
+  const handleAvailabilityToggle = async (expertId: string, current: string) => {
+    const next = current === 'available' ? 'busy' : current === 'busy' ? 'unavailable' : 'available';
+    try {
+      await expertLibraryApi.updateAvailability(expertId, next as any);
+      loadWorkloads();
+    } catch { /* ignore */ }
+  };
 
   const totalActive = workloads.reduce((s, w) => s + w.activeTaskCount, 0);
   const totalCompleted = workloads.reduce((s, w) => s + w.completedTaskCount, 0);
@@ -79,6 +110,61 @@ export function ExpertScheduling() {
             <div className="text-xs text-on-surface-variant">已完成</div>
             <div className="text-2xl font-bold text-on-surface">{totalCompleted}</div>
           </div>
+        </div>
+
+        {/* 智能推荐面板 */}
+        <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 mb-6">
+          <h2 className="font-bold text-on-surface mb-3 flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm text-primary">auto_awesome</span>
+            智能推荐
+          </h2>
+          <div className="flex gap-3">
+            <input
+              value={recommendTopic}
+              onChange={e => setRecommendTopic(e.target.value)}
+              placeholder="输入任务主题，推荐最匹配的专家..."
+              className="flex-1 p-2.5 text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/30 rounded-lg focus:ring-1 focus:ring-primary"
+              onKeyDown={e => e.key === 'Enter' && handleRecommend()}
+            />
+            <button
+              onClick={handleRecommend}
+              disabled={recommendLoading || !recommendTopic.trim()}
+              className="px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-1"
+            >
+              {recommendLoading ? (
+                <span className="material-symbols-outlined animate-spin text-sm">sync</span>
+              ) : (
+                <span className="material-symbols-outlined text-sm">search</span>
+              )}
+              推荐
+            </button>
+          </div>
+          {recommendations.length > 0 && (
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              {recommendations.map((r, i) => (
+                <div key={r.expert_id} className="p-3 bg-surface-container-low rounded-lg border border-primary/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                      {r.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-on-surface">{r.name}</div>
+                      <div className="text-xs text-on-surface-variant">{r.domain.slice(0, 2).join('/')}</div>
+                    </div>
+                    <span className="ml-auto text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                      #{i + 1}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-on-surface-variant">
+                    <span>匹配度: {(r.matchScore * 100).toFixed(0)}%</span>
+                    <span className={getAvailabilityColor(r.availability)}>
+                      {getAvailabilityLabel(r.availability)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 工作量列表 */}
@@ -145,6 +231,15 @@ export function ExpertScheduling() {
                     <div>{w.totalInvocations} 次调用</div>
                     <div>{w.completedTaskCount} 已完成</div>
                   </div>
+
+                  {/* 状态切换 */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAvailabilityToggle(w.expertId, w.availability); }}
+                    className="text-xs px-2 py-1 border border-outline-variant/30 rounded-md hover:bg-surface-container text-on-surface-variant"
+                    title="切换可用状态"
+                  >
+                    <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                  </button>
                 </div>
               ))}
             </div>

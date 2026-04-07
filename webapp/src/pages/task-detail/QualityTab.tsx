@@ -415,6 +415,143 @@ export function QualityTab() {
           </div>
         </section>
 
+        {/* ========== Expert Review Quality ========== */}
+        <section className="relative step-line pl-12">
+          <div className="absolute left-0 top-0 w-10 h-10 bg-violet-500 text-white rounded-full flex items-center justify-center z-10 shadow-lg">
+            <span className="material-symbols-outlined">psychology</span>
+          </div>
+          <div className="flex items-baseline justify-between mb-6">
+            <h3 className="text-xl font-bold font-headline">Expert Review Quality</h3>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 评审质量分析 */}
+            <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/30 shadow-sm">
+              <h4 className="font-bold text-on-surface mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-violet-500">fact_check</span>
+                评审覆盖度
+              </h4>
+              {reviews.length > 0 ? (() => {
+                const allQuestions = reviews.flatMap(r => r.questions || []);
+                const critical = allQuestions.filter(q => q.severity === 'critical' || q.severity === 'high');
+                const warning = allQuestions.filter(q => q.severity === 'warning' || q.severity === 'medium');
+                const praise = allQuestions.filter(q => q.severity === 'praise' || q.severity === 'low');
+
+                // 问题分类
+                const structural = allQuestions.filter(q => {
+                  const text = (q.question || '').toLowerCase();
+                  return text.includes('结构') || text.includes('框架') || text.includes('逻辑') || text.includes('论点');
+                });
+                const methodological = allQuestions.filter(q => {
+                  const text = (q.question || '').toLowerCase();
+                  return text.includes('数据') || text.includes('来源') || text.includes('证据') || text.includes('引用');
+                });
+
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="text-center p-3 bg-red-50 rounded-xl">
+                        <div className="text-2xl font-black text-red-600">{critical.length}</div>
+                        <div className="text-xs text-red-500">严重问题</div>
+                      </div>
+                      <div className="text-center p-3 bg-amber-50 rounded-xl">
+                        <div className="text-2xl font-black text-amber-600">{warning.length}</div>
+                        <div className="text-xs text-amber-500">一般警告</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-xl">
+                        <div className="text-2xl font-black text-green-600">{praise.length}</div>
+                        <div className="text-xs text-green-500">亮点肯定</div>
+                      </div>
+                    </div>
+                    <div className="pt-3 border-t border-outline-variant/20 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-on-surface-variant">结构性问题</span>
+                        <span className="font-bold text-on-surface">{structural.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-on-surface-variant">方法论问题</span>
+                        <span className="font-bold text-on-surface">{methodological.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-on-surface-variant">参与专家数</span>
+                        <span className="font-bold text-on-surface">{reviews.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="text-center py-6 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">pending</span>
+                  <p className="text-sm">尚未进行蓝军评审</p>
+                </div>
+              )}
+            </div>
+
+            {/* 发布就绪检查 */}
+            <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/30 shadow-sm">
+              <h4 className="font-bold text-on-surface mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-green-500">verified</span>
+                发布就绪检查
+              </h4>
+              {(() => {
+                const checks = [
+                  {
+                    label: '选题评分 ≥ 60',
+                    passed: (task.evaluation?.score || 0) >= 60,
+                    value: task.evaluation?.score ? `${task.evaluation.score}分` : '未评估',
+                  },
+                  {
+                    label: '严重问题全部处理',
+                    passed: reviews.length === 0 || reviews.every(r =>
+                      (r.questions || []).filter(q => q.severity === 'critical' || q.severity === 'high')
+                        .every(q => (q as any).decision === 'accept' || (q as any).decision === 'manual_resolved')
+                    ),
+                    value: reviews.length === 0 ? '无评审' : '已检查',
+                  },
+                  {
+                    label: '大纲评审得分 ≥ 70',
+                    passed: ((task as any).metadata?.expertOutlineReview?.consensus?.overallScore ||
+                             (task as any).metadata?.expertOutlineReview?.overallScore || 0) >= 70,
+                    value: (() => {
+                      const score = (task as any).metadata?.expertOutlineReview?.consensus?.overallScore ||
+                                    (task as any).metadata?.expertOutlineReview?.overallScore;
+                      return score ? `${score}分` : '未评审';
+                    })(),
+                  },
+                  {
+                    label: '已生成文稿',
+                    passed: !!getDraftFromTask()?.content,
+                    value: getDraftFromTask()?.content ? '已生成' : '未生成',
+                  },
+                ];
+                const allPassed = checks.every(c => c.passed);
+                return (
+                  <div className="space-y-3">
+                    {checks.map((check, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <span className={`material-symbols-outlined text-sm ${check.passed ? 'text-green-500' : 'text-red-400'}`}>
+                            {check.passed ? 'check_circle' : 'cancel'}
+                          </span>
+                          <span className="text-sm text-on-surface">{check.label}</span>
+                        </div>
+                        <span className={`text-xs font-bold ${check.passed ? 'text-green-600' : 'text-red-500'}`}>
+                          {check.value}
+                        </span>
+                      </div>
+                    ))}
+                    <div className={`mt-4 p-3 rounded-xl text-center font-bold text-sm ${
+                      allPassed ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'
+                    }`}>
+                      {allPassed ? '✓ 可发布' : '✗ 尚未满足发布条件'}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </section>
+
         {/* ========== Section 4: Tools ========== */}
         <section className="relative pl-12">
           <div className="absolute left-0 top-0 w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full flex items-center justify-center z-10 shadow-lg">

@@ -27,7 +27,7 @@ import { ExportPanel } from '../../components/ExportPanel';
 import { DraftGenerationProgress } from '../../components/DraftGenerationProgress';
 import { LivePreviewMarkdown, VersionTimeline } from '../../components/content';
 import { VersionComparePanel } from '../../components/VersionComparePanel';
-import { blueTeamApi, tasksApi } from '../../api/client';
+import { blueTeamApi, tasksApi, expertLibraryApi } from '../../api/client';
 import type { Task } from '../../types';
 
 interface TaskContext {
@@ -62,6 +62,32 @@ export function WritingTab() {
   const [compareVersions, setCompareVersions] = useState<[number, number] | undefined>(undefined);
   const [checkpointVersions, setCheckpointVersions] = useState<any[]>([]);
   
+  // 专家素材标注
+  const [expertAnnotations, setExpertAnnotations] = useState<any>(null);
+  const [annotationLoading, setAnnotationLoading] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+
+  const loadAnnotations = async () => {
+    if (!task.asset_ids?.length) return;
+    setAnnotationLoading(true);
+    try {
+      const firstAssetId = task.asset_ids[0];
+      const result = await expertLibraryApi.getAssetAnnotations(firstAssetId);
+      if (result) {
+        setExpertAnnotations(result);
+      } else {
+        // 无缓存，触发生成
+        const generated = await expertLibraryApi.annotateAsset(
+          firstAssetId,
+          task.topic || firstAssetId,
+          (task as any).research_data?.insights?.join('\n') || task.topic || ''
+        );
+        setExpertAnnotations(generated);
+      }
+    } catch { /* ignore */ }
+    finally { setAnnotationLoading(false); }
+  };
+
   const isGenerating = task.status === 'writing' || task.current_stage === 'generating_draft';
   useEffect(() => {
     let active = true;
@@ -277,6 +303,59 @@ export function WritingTab() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+            {/* 专家解读 */}
+            <div className="rounded bg-surface-container-low border border-outline-variant/30 overflow-hidden">
+              <button
+                onClick={() => { setShowAnnotations(!showAnnotations); if (!expertAnnotations && !annotationLoading) loadAnnotations(); }}
+                className="w-full flex items-center gap-2 p-2 hover:bg-surface-container-lowest transition-colors"
+              >
+                <span className="material-symbols-outlined text-violet-500 text-base">psychology</span>
+                <span className="text-xs font-medium truncate text-on-surface flex-1 text-left">专家解读</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant transition-transform" style={{ transform: showAnnotations ? 'rotate(180deg)' : 'rotate(0deg)' }}>expand_more</span>
+              </button>
+              {showAnnotations && (
+                <div className="px-2 pb-2 border-t border-outline-variant/20">
+                  {annotationLoading ? (
+                    <div className="py-3 text-center text-xs text-on-surface-variant">
+                      <span className="material-symbols-outlined animate-spin text-sm">sync</span> 生成专家解读...
+                    </div>
+                  ) : expertAnnotations?.annotations?.length > 0 ? (
+                    <div className="pt-2 space-y-2">
+                      {expertAnnotations.annotations.map((ann: any, idx: number) => (
+                        <div key={idx} className="p-2 bg-surface-container-lowest rounded">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-on-surface">{ann.expertName}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              ann.credibilityScore >= 7 ? 'bg-green-100 text-green-700' :
+                              ann.credibilityScore >= 5 ? 'bg-amber-100 text-amber-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {ann.credibilityScore}/10
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-on-surface-variant leading-relaxed">{ann.content}</p>
+                          {ann.takeaways?.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {ann.takeaways.map((t: string, ti: number) => (
+                                <span key={ti} className="text-[10px] px-1.5 py-0.5 bg-violet-50 text-violet-700 rounded">
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-3 text-center text-xs text-on-surface-variant">
+                      {task.asset_ids?.length ? '暂无专家解读' : '无关联素材'}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

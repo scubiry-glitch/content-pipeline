@@ -177,6 +177,50 @@ export class SchedulingService {
       .sort((a, b) => a.workload.activeTaskCount - b.workload.activeTaskCount);
   }
 
+  /**
+   * 更新专家可用状态
+   */
+  async updateAvailability(expertId: string, status: 'available' | 'busy' | 'unavailable'): Promise<void> {
+    await this.deps.db.query(
+      `UPDATE expert_profiles SET availability_status = $1 WHERE expert_id = $2`,
+      [status, expertId]
+    ).catch(() => {});
+  }
+
+  /**
+   * 基于任务主题推荐专家（复用 ExpertMatcher）
+   */
+  async recommendExperts(taskTopic: string, limit = 3): Promise<Array<{ expert: ExpertProfile; workload: ExpertWorkload; matchScore: number }>> {
+    const { ExpertMatcher } = await import('./expertMatcher.js');
+    const matcher = new ExpertMatcher(this.engine, this.deps);
+    const matchResult = await matcher.match({ topic: taskTopic, importance: 0.6 });
+
+    const candidates = matchResult.domainExperts.map(e => ({
+      expert: e.expert,
+      score: e.score,
+    }));
+    if (matchResult.seniorExpert) {
+      candidates.unshift({ expert: matchResult.seniorExpert.expert, score: matchResult.seniorExpert.score });
+    }
+
+    const results = await Promise.all(
+      candidates.slice(0, limit + 2).map(async (c) => {
+        const workload = await this.getWorkload(c.expert.expert_id);
+        return { expert: c.expert, workload: workload!, matchScore: c.score };
+      })
+    );
+
+    return results
+      .filter(r => r.workload)
+      .sort((a, b) => {
+        // 优先匹配度高且负载低的
+        const scoreA = a.matchScore * 0.6 + (1 - a.workload.activeTaskCount / 10) * 0.4;
+        const scoreB = b.matchScore * 0.6 + (1 - b.workload.activeTaskCount / 10) * 0.4;
+        return scoreB - scoreA;
+      })
+      .slice(0, limit);
+  }
+
   private rowToAssignment(row: any): TaskAssignment {
     return {
       id: row.id,

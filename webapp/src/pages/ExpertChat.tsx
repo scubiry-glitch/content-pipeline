@@ -32,6 +32,9 @@ export function ExpertChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [expertsLoading, setExpertsLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [chatTemperature, setChatTemperature] = useState(0.6);
+  const [historyLimit, setHistoryLimit] = useState(10);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -85,7 +88,7 @@ export function ExpertChat() {
 
     try {
       const conv = conversations[expertId];
-      const history = conv?.messages || [];
+      const history = (conv?.messages || []).slice(-historyLimit);
 
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
@@ -95,6 +98,7 @@ export function ExpertChat() {
           message: userMessage.content,
           history: history.map(m => ({ role: m.role, content: m.content })),
           conversation_id: conv?.conversation_id,
+          temperature: chatTemperature,
         }),
       });
 
@@ -240,12 +244,68 @@ export function ExpertChat() {
                       清除
                     </button>
                   )}
+                  <button
+                    className="clear-btn"
+                    onClick={() => setShowSettings(!showSettings)}
+                    title="对话设置"
+                    style={{ fontSize: '16px' }}
+                  >
+                    ⚙
+                  </button>
                   <div className="frameworks-pills">
                     {selectedExpert.method.frameworks.slice(0, 2).map(f => (
                       <span key={f} className="framework-pill">{f}</span>
                     ))}
                   </div>
                 </div>
+                {/* 对话设置面板 */}
+                {showSettings && (
+                  <div style={{
+                    position: 'absolute', right: '16px', top: '60px', zIndex: 50,
+                    background: 'var(--md-sys-color-surface-container-lowest, white)',
+                    border: '1px solid var(--md-sys-color-outline-variant, #e0e0e0)',
+                    borderRadius: '12px', padding: '16px', width: '280px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  }}>
+                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>对话设置</div>
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+                        历史上下文: {historyLimit} 轮
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[5, 10, 20].map(n => (
+                          <button
+                            key={n}
+                            onClick={() => setHistoryLimit(n)}
+                            style={{
+                              padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
+                              border: 'none', cursor: 'pointer',
+                              background: historyLimit === n ? 'var(--md-sys-color-primary, #6750A4)' : '#f0f0f0',
+                              color: historyLimit === n ? 'white' : '#333',
+                            }}
+                          >
+                            {n}轮
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+                        创造性: {chatTemperature.toFixed(1)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1" max="1.0" step="0.1"
+                        value={chatTemperature}
+                        onChange={e => setChatTemperature(parseFloat(e.target.value))}
+                        style={{ width: '100%' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#999' }}>
+                        <span>精确</span><span>平衡</span><span>创造</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 消息列表 */}

@@ -376,6 +376,7 @@ export interface DebateRequest {
   content: string;
   expertIds: string[];           // 参与辩论的专家（2-4位）
   rounds?: number;               // 辩论轮数，默认3
+  temperature?: number;          // 创造性温度 0.1-1.0，默认0.7
   context?: string;
 }
 
