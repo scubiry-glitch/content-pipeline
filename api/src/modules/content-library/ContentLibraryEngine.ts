@@ -488,6 +488,200 @@ export class ContentLibraryEngine {
     }));
   }
 
+  /** ⑩ 有价值的认知 (LLM 综合提炼) */
+  async synthesizeInsights(options?: {
+    subjects?: string[];
+    domain?: string;
+    limit?: number;
+  }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string }> {
+    const limit = options?.limit || 10;
+
+    // 获取高置信度事实
+    const factsQuery = `
+      SELECT DISTINCT subject, predicate, object, confidence, context
+      FROM content_facts
+      WHERE is_current = true AND confidence > 0.7
+      ${options?.domain ? 'AND context->\'domain\' = $1' : ''}
+      ORDER BY confidence DESC
+      LIMIT $2
+    `;
+    const factsParams = options?.domain ? [options.domain, limit * 5] : [limit * 5];
+    const factsResult = await this.deps.db.query(factsQuery, factsParams);
+
+    if (factsResult.rows.length === 0) {
+      return { insights: [], summary: 'No high-confidence facts available for synthesis' };
+    }
+
+    // 构建提示词
+    const factsText = factsResult.rows.map(f => `${f.subject} - ${f.predicate}: ${f.object}`).join('\n');
+    const prompt = `Based on these facts, synthesize 3-5 valuable insights that would be useful for content creators:
+
+${factsText}
+
+Format: each insight as a JSON object with:
+- text: the insight (concise, actionable)
+- sources: array of subject-predicate pairs this comes from
+- confidence: 0-1 score`;
+
+    try {
+      const response = await this.deps.llm.generate({
+        prompt,
+        maxTokens: 500,
+      });
+
+      // 简化解析（实际应该更健壮）
+      const insights = [];
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        insights.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+      }
+
+      return {
+        insights: insights.slice(0, limit),
+        summary: `Synthesized ${insights.length} insights from ${factsResult.rows.length} facts`,
+      };
+    } catch (err) {
+      console.error('[ContentLibrary] Synthesis failed:', err);
+      return { insights: [], summary: 'Synthesis failed' };
+    }
+  }
+
+  /** ⑪ 素材组合推荐 (基于生产经验) */
+  async recommendMaterials(options?: {
+    taskType?: string;
+    domain?: string;
+    limit?: number;
+  }): Promise<{ recommendations: Array<{ assetIds: string[]; experts: string[]; score: number; rationale: string }>; totalMatches: number }> {
+    const limit = options?.limit || 10;
+
+    // 查询 content_production_log 中评分最高的组合
+    const logsQuery = `
+      SELECT asset_ids, expert_ids, quality_score, feedback
+      FROM content_production_log
+      WHERE quality_score > 0.7
+      ${options?.domain ? 'AND metadata->\'domain\' = $1' : ''}
+      ORDER BY quality_score DESC
+      LIMIT $2
+    `;
+    const logsParams = options?.domain ? [options.domain, limit * 3] : [limit * 3];
+    const logsResult = await this.deps.db.query(logsQuery, logsParams);
+
+    const recommendations = logsResult.rows.slice(0, limit).map(row => ({
+      assetIds: Array.isArray(row.asset_ids) ? row.asset_ids : [],
+      experts: Array.isArray(row.expert_ids) ? row.expert_ids : [],
+      score: Number(row.quality_score),
+      rationale: `Based on ${row.feedback || 'production experience'} with quality score ${Number(row.quality_score).toFixed(2)}`,
+    }));
+
+    return {
+      recommendations,
+      totalMatches: logsResult.rows.length,
+    };
+  }
+
+  /** ⑫ 专家共识图 (集成专家库) */
+  async getExpertConsensus(options?: {
+    topic?: string;
+    domain?: string;
+    limit?: number;
+  }): Promise<{ consensus: Array<{ position: string; supportingExperts: string[]; confidence: number }>; divergences: Array<{ position1: string; position2: string; experts1: string[]; experts2: string[] }> }> {
+    // 简化版本：需要集成专家库的实现
+    const consensusQuery = `
+      SELECT subject, predicate, object, COUNT(*) as fact_count, AVG(confidence) as avg_conf
+      FROM content_facts
+      WHERE is_current = true
+      ${options?.domain ? 'AND context->\'domain\' = $1' : ''}
+      GROUP BY subject, predicate, object
+      ORDER BY fact_count DESC
+      LIMIT $2
+    `;
+    const params = options?.domain ? [options.domain, options?.limit || 20] : [options?.limit || 20];
+    const result = await this.deps.db.query(consensusQuery, params);
+
+    const consensus = result.rows.map(row => ({
+      position: `${row.subject} - ${row.predicate}: ${row.object}`,
+      supportingExperts: [], // TODO: 从专家库动态获取
+      confidence: Number(row.avg_conf),
+    }));
+
+    return {
+      consensus,
+      divergences: [],
+    };
+  }
+
+  /** ⑭ 观点演化 (BeliefTracker 时间线) */
+  async getBeliefEvolution(options?: {
+    beliefId?: string;
+    subject?: string;
+    limit?: number;
+  }): Promise<{ timeline: Array<{ date: string; state: string; sources: string[] }>; summary: string }> {
+    const queryCondition = options?.beliefId
+      ? 'id = $1'
+      : 'subject = $1';
+    const queryParam = options?.beliefId || options?.subject || '';
+
+    const beliefQuery = `
+      SELECT id, subject, state, created_at, source_ids, metadata
+      FROM content_beliefs
+      WHERE ${queryCondition}
+      ORDER BY created_at DESC
+      LIMIT $2
+    `;
+    const result = await this.deps.db.query(beliefQuery, [queryParam, options?.limit || 20]);
+
+    const timeline = result.rows.map(row => ({
+      date: new Date(row.created_at).toISOString(),
+      state: row.state,
+      sources: row.source_ids || [],
+    }));
+
+    return {
+      timeline,
+      summary: `${result.rows.length} state changes tracked for "${options?.subject || options?.beliefId}"`,
+    };
+  }
+
+  /** ⑮ 跨领域关联 (Cross-domain reasoning) */
+  async discoverCrossDomainInsights(options?: {
+    entityId?: string;
+    domain?: string;
+    limit?: number;
+  }): Promise<{ associations: Array<{ entity1: string; entity2: string; relationship: string; strength: number; domains: string[] }>; count: number }> {
+    // 查询实体的跨域关联（通过共同出现的事实）
+    const associationQuery = `
+      SELECT DISTINCT
+        cf1.subject as entity1,
+        cf2.subject as entity2,
+        cf1.context->>'domain' as domain1,
+        cf2.context->>'domain' as domain2,
+        COUNT(*) as co_occurrence
+      FROM content_facts cf1
+      JOIN content_facts cf2 ON cf1.predicate = cf2.predicate AND cf1.object = cf2.object
+      WHERE cf1.is_current = true AND cf2.is_current = true
+      AND cf1.subject < cf2.subject
+      AND cf1.context->>'domain' != cf2.context->>'domain'
+      GROUP BY cf1.subject, cf2.subject, domain1, domain2
+      ORDER BY co_occurrence DESC
+      LIMIT $1
+    `;
+    const result = await this.deps.db.query(associationQuery, [options?.limit || 20]);
+
+    const associations = result.rows.map(row => ({
+      entity1: row.entity1,
+      entity2: row.entity2,
+      relationship: `co-occur in ${row.co_occurrence} facts`,
+      strength: Math.min(row.co_occurrence / 10, 1),
+      domains: [row.domain1, row.domain2].filter(Boolean),
+    }));
+
+    return {
+      associations,
+      count: result.rows.length,
+    };
+  }
+
   // ============================================================
   // Private helpers
   // ============================================================
