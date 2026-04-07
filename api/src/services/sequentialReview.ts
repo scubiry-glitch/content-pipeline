@@ -160,6 +160,11 @@ export async function configureSequentialReview(
       profile:
         '居住服务·惠居美租方向；UE 卷积与 P&L 递归对齐、L3/L2/L1 分层治理与财务硬账、U×E 弹性与 BML 准实验、好产品好服务好效率好 UE',
     },
+    'E08-09': {
+      name: '魏行空',
+      profile:
+        '资产配置与不动产金融；工程化金融产品结构、资金监管与合规、募资渠道；房产估值方法论强调可解释与「只背书方法不背书结果」',
+    },
   };
 
   // ★ 构建专家详情查找表：优先使用前端传来的详情，再 fallback 到 KNOWN_EXPERTS

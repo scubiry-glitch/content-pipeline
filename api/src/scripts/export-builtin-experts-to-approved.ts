@@ -8,6 +8,7 @@ import path from 'node:path';
 import { muskProfile } from '../modules/expert-library/data/musk.js';
 import { xiaohongshuProfile } from '../modules/expert-library/data/xiaohongshu.js';
 import { topExpertProfiles } from '../modules/expert-library/data/topExperts.js';
+import { weiHangkongProfile } from '../modules/expert-library/data/weiHangkong.js';
 import { assertExpertProfile } from '../modules/expert-library/expertProfileDb.js';
 import type { ExpertProfile } from '../modules/expert-library/types.js';
 
@@ -18,7 +19,7 @@ const APPROVED = path.join(
 
 function main() {
   fs.mkdirSync(APPROVED, { recursive: true });
-  const list: ExpertProfile[] = [muskProfile, xiaohongshuProfile, ...topExpertProfiles];
+  const list: ExpertProfile[] = [muskProfile, xiaohongshuProfile, weiHangkongProfile, ...topExpertProfiles];
   const byId = new Map<string, ExpertProfile>();
   for (const p of list) {
     if (byId.has(p.expert_id)) {

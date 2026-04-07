@@ -7,6 +7,7 @@ import { createRouter } from './router.js';
 import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
+import { weiHangkongProfile } from './data/weiHangkong.js';
 import type { ExpertLibraryDeps, ExpertProfile } from './types.js';
 
 // ===== 工厂函数 =====
@@ -31,6 +32,7 @@ export function createExpertEngine(
   if (options?.registerBuiltinExperts !== false) {
     engine.registerExpert(muskProfile);
     engine.registerExpert(xiaohongshuProfile);
+    engine.registerExpert(weiHangkongProfile);
     for (const profile of topExpertProfiles) {
       engine.registerExpert(profile);
     }
@@ -66,6 +68,7 @@ export { muskProfile } from './data/musk.js';
 export { xiaohongshuProfile } from './data/xiaohongshu.js';
 export { topExpertProfiles } from './data/topExperts.js';
 export { yiMengProfile } from './data/yiMeng.js';
+export { weiHangkongProfile } from './data/weiHangkong.js';
 export { CODEBASE_EXPERT_IDS, SKIP_GENERATE_IDS } from './builtinExpertIds.js';
 export { assertExpertProfile, expertProfileToDbParams } from './expertProfileDb.js';
 

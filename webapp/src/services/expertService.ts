@@ -3181,6 +3181,37 @@ export function loadExpertsData(): Expert[] {
       reviewDimensions: ['平台模式', '服务体验', '技术赋能'],
       status: 'active', totalReviews: 234, acceptanceRate: 0.89, avgResponseTime: 6,
     },
+    {
+      id: 'E08-09',
+      name: '魏行空',
+      code: 'E08-09',
+      level: 'domain',
+      domainCode: 'E08',
+      domainName: '房地产',
+      profile: {
+        title: '资产配置与不动产金融专家',
+        background:
+          '清华五道口金融学院 FMBA；前和裕投资董事、基金经理；科技公司总经理；私募行业从业者。游走于一级市场与不动产科技之间，擅长金融产品架构、资金监管与合规、募资渠道，以及房产估值方法论（强调工程化与可解释性，主张「只背书方法、不背书结果」）。',
+        personality: '务实直接、风险前置；工程思维解构金融问题，重视书面条款与闭环结构',
+      },
+      philosophy: {
+        core: ['资产配置与风险对冲', '不动产金融与现金流结构', '合规表述与监管闭环', '简单可解释模型与人机协同'],
+        quotes: ['只背书方法，不背书结果', '算法不能是黑盒', '结构先闭环，话术再包装'],
+      },
+      achievements: [
+        {
+          title: '不动产与金融交叉项目实践',
+          description: '装修分期基金架构、四方资金监管、私募与渠道合作等复合场景的结构设计与募资协调',
+          date: '2025-2026',
+          impact: '强调合规防火墙与可执行条款，而非单一收益叙事',
+        },
+      ],
+      reviewDimensions: ['产品结构', '合规与披露', '现金流与情景', '募资与渠道', '估值方法论边界'],
+      status: 'active',
+      totalReviews: 0,
+      acceptanceRate: 0.9,
+      avgResponseTime: 8,
+    },
     // ==================== E08: 房地产 (5位) ====================
     {
       id: 'E08-01',
