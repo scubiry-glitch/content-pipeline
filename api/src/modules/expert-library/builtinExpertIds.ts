@@ -4,11 +4,13 @@
 import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
+import { weiHangkongProfile } from './data/weiHangkong.js';
 
 function collectCodebaseExpertIds(): string[] {
   const ids = new Set<string>();
   ids.add(muskProfile.expert_id);
   ids.add(xiaohongshuProfile.expert_id);
+  ids.add(weiHangkongProfile.expert_id);
   for (const p of topExpertProfiles) {
     ids.add(p.expert_id);
   }
