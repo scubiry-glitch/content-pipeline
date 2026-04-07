@@ -132,20 +132,34 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
 
     // ⑩ 认知综合
     fastify.post('/synthesize', async (request, reply) => {
-      // TODO: Phase 3 — LLM 综合提炼
-      return { message: 'Phase 3 — 认知综合引擎尚未实现' };
+      const body = request.body as any;
+      return engine.synthesizeInsights({
+        subjects: body.subjects,
+        domain: body.domain,
+        limit: body.limit,
+      });
     });
 
     // ⑪ 素材组合推荐
     fastify.get('/recommendations/:taskType', async (request, reply) => {
-      // TODO: Phase 3 — ExperienceLog
-      return { message: 'Phase 3 — 素材组合推荐尚未实现' };
+      const { taskType } = request.params as any;
+      const query = request.query as any;
+      return engine.recommendMaterials({
+        taskType,
+        domain: query.domain,
+        limit: query.limit ? parseInt(query.limit) : undefined,
+      });
     });
 
     // ⑫ 专家共识图
     fastify.get('/consensus/:topic', async (request, reply) => {
-      // TODO: Phase 3 — 专家库联动
-      return { message: 'Phase 3 — 专家共识图尚未实现' };
+      const { topic } = request.params as any;
+      const query = request.query as any;
+      return engine.getExpertConsensus({
+        topic,
+        domain: query.domain,
+        limit: query.limit ? parseInt(query.limit) : undefined,
+      });
     });
 
     // ⑬ 争议话题
@@ -160,14 +174,24 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
 
     // ⑭ 观点演化
     fastify.get('/beliefs/:beliefId/timeline', async (request, reply) => {
-      // TODO: Phase 3 — BeliefTracker
-      return { message: 'Phase 3 — 观点演化追踪尚未实现' };
+      const { beliefId } = request.params as any;
+      const query = request.query as any;
+      return engine.getBeliefEvolution({
+        beliefId,
+        subject: query.subject,
+        limit: query.limit ? parseInt(query.limit) : undefined,
+      });
     });
 
     // ⑮ 跨领域关联
     fastify.get('/cross-domain/:entityId', async (request, reply) => {
-      // TODO: Phase 3 — 跨域推理
-      return { message: 'Phase 3 — 跨领域关联洞察尚未实现' };
+      const { entityId } = request.params as any;
+      const query = request.query as any;
+      return engine.discoverCrossDomainInsights({
+        entityId,
+        domain: query.domain,
+        limit: query.limit ? parseInt(query.limit) : undefined,
+      });
     });
   };
 }

@@ -38,6 +38,10 @@ import { ContentLibrary } from './pages/ContentLibrary';
 import { ContentLibraryFacts } from './pages/ContentLibraryFacts';
 import { ContentLibraryEntities } from './pages/ContentLibraryEntities';
 import { ContentLibraryContradictions } from './pages/ContentLibraryContradictions';
+import { ContentLibrarySynthesis } from './pages/ContentLibrarySynthesis';
+import { ContentLibraryConsensus } from './pages/ContentLibraryConsensus';
+import { ContentLibraryBeliefs } from './pages/ContentLibraryBeliefs';
+import { ContentLibraryCrossDomain } from './pages/ContentLibraryCrossDomain';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -118,6 +122,10 @@ function App() {
               <Route path="content-library/facts" element={<ContentLibraryFacts />} />
               <Route path="content-library/entities" element={<ContentLibraryEntities />} />
               <Route path="content-library/contradictions" element={<ContentLibraryContradictions />} />
+              <Route path="content-library/synthesis" element={<ContentLibrarySynthesis />} />
+              <Route path="content-library/consensus" element={<ContentLibraryConsensus />} />
+              <Route path="content-library/beliefs" element={<ContentLibraryBeliefs />} />
+              <Route path="content-library/cross-domain" element={<ContentLibraryCrossDomain />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

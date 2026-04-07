@@ -29,12 +29,12 @@ export function ContentLibrary() {
     { number: '⑦', name: '信息增量', phase: '研究', status: 'live', endpoint: '/delta', count: null },
     { number: '⑧', name: '事实保鲜度', phase: '研究', status: 'live', endpoint: '/freshness/stale', count: null },
     { number: '⑨', name: '知识卡片', phase: '研究', status: 'live', endpoint: '/cards', count: null },
-    { number: '⑩', name: '有价值的认知', phase: '写作', status: 'planned', endpoint: '/synthesize', count: null },
-    { number: '⑪', name: '素材组合推荐', phase: '写作', status: 'preview', endpoint: '/recommendations', count: null },
-    { number: '⑫', name: '专家共识图', phase: '写作', status: 'planned', endpoint: '/consensus', count: null },
+    { number: '⑩', name: '有价值的认知', phase: '写作', status: 'live', endpoint: '/synthesize', count: null },
+    { number: '⑪', name: '素材组合推荐', phase: '写作', status: 'live', endpoint: '/recommendations', count: null },
+    { number: '⑫', name: '专家共识图', phase: '写作', status: 'live', endpoint: '/consensus', count: null },
     { number: '⑬', name: '争议话题', phase: '审核', status: 'live', endpoint: '/contradictions', count: null },
-    { number: '⑭', name: '观点演化', phase: '审核', status: 'preview', endpoint: '/beliefs', count: null },
-    { number: '⑮', name: '跨领域关联', phase: '审核', status: 'planned', endpoint: '/cross-domain', count: null },
+    { number: '⑭', name: '观点演化', phase: '审核', status: 'live', endpoint: '/beliefs', count: null },
+    { number: '⑮', name: '跨领域关联', phase: '审核', status: 'live', endpoint: '/cross-domain', count: null },
   ];
 
   useEffect(() => {
