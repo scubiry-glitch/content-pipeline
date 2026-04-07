@@ -42,9 +42,13 @@ const mainNavItems: NavItem[] = [
     icon: '📚',
     children: [
       { to: '/content-library', label: '产出物总览', icon: '📊' },
-      { to: '/content-library/facts', label: '事实浏览', icon: '📋' },
-      { to: '/content-library/entities', label: '实体图谱', icon: '🔗' },
-      { to: '/content-library/contradictions', label: '争议话题', icon: '⚡' },
+      { to: '/content-library/facts', label: '⑤ 事实浏览', icon: '📋' },
+      { to: '/content-library/entities', label: '⑥ 实体图谱', icon: '🔗' },
+      { to: '/content-library/contradictions', label: '⑬ 争议话题', icon: '⚡' },
+      { to: '/content-library/synthesis', label: '⑩ 认知综合', icon: '💡' },
+      { to: '/content-library/consensus', label: '⑫ 专家共识', icon: '🎯' },
+      { to: '/content-library/beliefs', label: '⑭ 观点演化', icon: '📈' },
+      { to: '/content-library/cross-domain', label: '⑮ 跨域关联', icon: '🌐' },
     ]
   },
   {
