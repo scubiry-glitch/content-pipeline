@@ -8,32 +8,39 @@ import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
 import { weiHangkongProfile } from './data/weiHangkong.js';
+import { seedExpertsToDb } from './expertSeed.js';
 import type { ExpertLibraryDeps, ExpertProfile } from './types.js';
 
 // ===== 工厂函数 =====
 
 /**
- * 创建 ExpertEngine 实例
+ * 创建 ExpertEngine 实例（异步：含 DB 播种）
  * @param deps 外部依赖（通过 Adapter 注入）
  * @param options 可选配置
  */
-export function createExpertEngine(
+export async function createExpertEngine(
   deps: ExpertLibraryDeps,
   options?: {
     /** 是否自动注册内置专家 (默认 true) */
     registerBuiltinExperts?: boolean;
     /** 额外的专家 profiles */
     additionalExperts?: ExpertProfile[];
+    /** 是否跳过 DB 播种 (默认 false) */
+    skipSeed?: boolean;
   }
-): ExpertEngine {
+): Promise<ExpertEngine> {
   const engine = new ExpertEngine(deps);
+
+  // 收集所有内置专家
+  const builtinExperts: ExpertProfile[] = [];
 
   // 注册内置专家
   if (options?.registerBuiltinExperts !== false) {
-    engine.registerExpert(muskProfile);
-    engine.registerExpert(xiaohongshuProfile);
-    engine.registerExpert(weiHangkongProfile);
+    builtinExperts.push(muskProfile, xiaohongshuProfile, weiHangkongProfile);
     for (const profile of topExpertProfiles) {
+      builtinExperts.push(profile);
+    }
+    for (const profile of builtinExperts) {
       engine.registerExpert(profile);
     }
   }
@@ -42,6 +49,23 @@ export function createExpertEngine(
   if (options?.additionalExperts) {
     for (const expert of options.additionalExperts) {
       engine.registerExpert(expert);
+      builtinExperts.push(expert);
+    }
+  }
+
+  // DB 播种：将所有内置专家 + 前端展示专家写入数据库
+  if (!options?.skipSeed) {
+    try {
+      let frontendExperts: any[] = [];
+      try {
+        const { frontendExpertsData } = await import('./data/frontendExperts.js');
+        frontendExperts = frontendExpertsData;
+      } catch {
+        console.warn('[ExpertEngine] Frontend expert data not found, seeding backend experts only');
+      }
+      await seedExpertsToDb(deps, builtinExperts, frontendExperts);
+    } catch (err) {
+      console.warn('[ExpertEngine] DB seed failed (non-fatal):', err);
     }
   }
 

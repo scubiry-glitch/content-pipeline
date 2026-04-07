@@ -99,19 +99,118 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
-    /** PATCH /experts/:id — 更新专家可调参数（会话级，重启重置） */
+    /** PATCH /experts/:id — 部分更新专家参数（持久化到 DB） */
     fastify.patch('/experts/:id', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = request.params as any;
-        const { signature_phrases, anti_patterns, constraints } = request.body as any;
+        const body = request.body as any;
         const patch: any = {};
-        if (Array.isArray(signature_phrases)) patch.signature_phrases = signature_phrases;
-        if (Array.isArray(anti_patterns)) patch.anti_patterns = anti_patterns;
-        if (constraints && typeof constraints === 'object') patch.constraints = constraints;
+        if (Array.isArray(body.signature_phrases)) patch.signature_phrases = body.signature_phrases;
+        if (Array.isArray(body.anti_patterns)) patch.anti_patterns = body.anti_patterns;
+        if (body.constraints && typeof body.constraints === 'object') patch.constraints = body.constraints;
+        if (body.persona && typeof body.persona === 'object') patch.persona = body.persona;
+        if (body.method && typeof body.method === 'object') patch.method = body.method;
+        if (body.emm && typeof body.emm === 'object') patch.emm = body.emm;
+        if (body.output_schema && typeof body.output_schema === 'object') patch.output_schema = body.output_schema;
 
         const ok = engine.updateExpert(id, patch);
         if (!ok) return reply.status(404).send({ error: 'Expert not found' });
         return reply.send({ status: 'updated', expert_id: id, updated_fields: Object.keys(patch) });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** PUT /experts/:id — 全量更新专家 profile（持久化） */
+    fastify.put('/experts/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const body = request.body as any;
+        const profile = { ...body, expert_id: id };
+        const ok = engine.updateExpert(id, profile);
+        if (!ok) {
+          // 新专家，创建
+          await engine.createExpert(profile);
+        }
+        return reply.send({ status: 'saved', expert_id: id });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /experts — 创建新专家 */
+    fastify.post('/experts', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const body = request.body as any;
+        if (!body.expert_id || !body.name) {
+          return reply.status(400).send({ error: 'Missing required fields: expert_id, name' });
+        }
+        await engine.createExpert(body);
+        return reply.status(201).send({ status: 'created', expert_id: body.expert_id });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** DELETE /experts/:id — 软删除专家 */
+    fastify.delete('/experts/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const ok = await engine.deleteExpert(id);
+        if (!ok) return reply.status(404).send({ error: 'Expert not found' });
+        return reply.send({ status: 'deleted', expert_id: id });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /experts/full — 前端兼容的完整专家列表（含 display_metadata） */
+    fastify.get('/experts/full', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { domain } = request.query as any;
+        // 直接从 DB 查询含 display_metadata 的数据
+        const result = await engine['deps'].db.query(
+          `SELECT *, display_metadata FROM expert_profiles WHERE is_active = true ORDER BY name`
+        );
+
+        const experts = result.rows.map((row: any) => {
+          const dm = row.display_metadata || {};
+          const persona = typeof row.persona === 'string' ? JSON.parse(row.persona) : (row.persona || {});
+          const method = typeof row.method === 'string' ? JSON.parse(row.method) : (row.method || {});
+          const emm = typeof row.emm === 'string' ? JSON.parse(row.emm) : (row.emm || {});
+
+          return {
+            id: row.expert_id,
+            name: row.name,
+            code: dm.code || row.expert_id,
+            level: dm.level || (row.expert_id.startsWith('S-') ? 'senior' : 'domain'),
+            domainCode: dm.domainCode || row.expert_id.split('-')[0],
+            domainName: dm.domainName || (Array.isArray(row.domain) ? row.domain[0] : ''),
+            profile: dm.profile || {
+              title: persona.tone || '',
+              background: persona.tone || '',
+              personality: persona.style || '',
+            },
+            philosophy: dm.philosophy || {
+              core: persona.bias || [],
+              quotes: row.signature_phrases || [],
+            },
+            achievements: dm.achievements || [],
+            reviewDimensions: dm.reviewDimensions || emm?.critical_factors || [],
+            status: dm.status || 'active',
+            totalReviews: dm.totalReviews || 0,
+            acceptanceRate: dm.acceptanceRate || 0,
+            avgResponseTime: dm.avgResponseTime || 0,
+            angle: dm.angle || undefined,
+          };
+        });
+
+        // 前端 domain 过滤
+        const filtered = domain
+          ? experts.filter((e: any) => e.domainCode === domain || e.domainName === domain)
+          : experts;
+
+        return reply.send({ total: filtered.length, experts: filtered });
       } catch (error: any) {
         return reply.status(500).send({ error: error.message });
       }

@@ -140,21 +140,86 @@ export class ExpertEngine {
   }
 
   /**
-   * 更新内存中的专家 profile（会话级别，重启后重置）
-   * 支持更新: signature_phrases, anti_patterns, constraints, persona.style/tone/bias
+   * 更新专家 profile — write-through cache + DB 持久化
+   * 支持所有字段更新：persona, method, emm, constraints, output_schema, signature_phrases, anti_patterns
    */
-  updateExpert(expertId: string, patch: Partial<Pick<ExpertProfile, 'signature_phrases' | 'anti_patterns' | 'constraints'>>): boolean {
+  updateExpert(expertId: string, patch: Partial<ExpertProfile>): boolean {
     const existing = this.expertCache.get(expertId);
     if (!existing) return false;
     const updated = { ...existing, ...patch };
     this.expertCache.set(expertId, updated);
+
+    // 异步持久化到 DB（不阻塞返回）
+    this.persistExpertToDb(expertId, updated).catch(err => {
+      console.warn(`[ExpertEngine] Failed to persist expert ${expertId} to DB:`, err);
+    });
+
     return true;
   }
 
   /**
-   * 列出所有专家
-   * 合并 DB 与内存 cache：先载入库中 is_active 行，再以 cache 覆盖同 expert_id（内置与 lazy-load 均以内存为准）
-   * domain 过滤在合并后施加，避免仅存在内存、尚未入库的专家被 SQL 域条件漏掉
+   * 创建新专家并持久化
+   */
+  async createExpert(profile: ExpertProfile): Promise<void> {
+    this.expertCache.set(profile.expert_id, profile);
+    await this.persistExpertToDb(profile.expert_id, profile);
+  }
+
+  /**
+   * 软删除专家
+   */
+  async deleteExpert(expertId: string): Promise<boolean> {
+    this.expertCache.delete(expertId);
+    try {
+      await this.deps.db.query(
+        `UPDATE expert_profiles SET is_active = false, updated_at = NOW() WHERE expert_id = $1`,
+        [expertId]
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 持久化专家到 DB (UPSERT)
+   */
+  private async persistExpertToDb(expertId: string, profile: ExpertProfile): Promise<void> {
+    await this.deps.db.query(
+      `INSERT INTO expert_profiles (expert_id, name, domain, persona, method, emm, constraints_config, output_schema, anti_patterns, signature_phrases, is_active, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, NOW())
+       ON CONFLICT (expert_id) DO UPDATE SET
+         name = EXCLUDED.name,
+         domain = EXCLUDED.domain,
+         persona = EXCLUDED.persona,
+         method = EXCLUDED.method,
+         emm = EXCLUDED.emm,
+         constraints_config = EXCLUDED.constraints_config,
+         output_schema = EXCLUDED.output_schema,
+         anti_patterns = EXCLUDED.anti_patterns,
+         signature_phrases = EXCLUDED.signature_phrases,
+         is_active = true,
+         updated_at = NOW()`,
+      [
+        expertId,
+        profile.name,
+        profile.domain,
+        JSON.stringify(profile.persona),
+        JSON.stringify(profile.method),
+        profile.emm ? JSON.stringify(profile.emm) : null,
+        JSON.stringify(profile.constraints),
+        JSON.stringify(profile.output_schema),
+        profile.anti_patterns,
+        profile.signature_phrases,
+      ]
+    );
+  }
+
+  /**
+   * 列出所有专家 — DB 优先
+   * 1. 从 DB 加载所有 is_active 专家
+   * 2. cache 仅补充 DB 中不存在的（开发/测试注入的临时专家）
+   * 3. domain 过滤在合并后施加
    */
   async listExperts(filter?: { domain?: string }): Promise<ExpertProfile[]> {
     const byId = new Map<string, ExpertProfile>();
@@ -171,8 +236,11 @@ export class ExpertEngine {
       console.warn('[ExpertEngine] listExperts: DB query failed:', err);
     }
 
+    // cache 仅补充 DB 中不存在的专家（不覆盖 DB 数据）
     for (const [id, profile] of this.expertCache) {
-      byId.set(id, profile);
+      if (!byId.has(id)) {
+        byId.set(id, profile);
+      }
     }
 
     let list = Array.from(byId.values());
