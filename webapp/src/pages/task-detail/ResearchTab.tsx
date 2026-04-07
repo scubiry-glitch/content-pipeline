@@ -63,6 +63,13 @@ export function ResearchTab() {
   const [credibilityScores, setCredibilityScores] = useState<Record<string, number>>({});
   const [credibilityLoading, setCredibilityLoading] = useState<string | null>(null);
 
+  // 智能推荐素材（语义搜索）
+  const [recommendedAssets, setRecommendedAssets] = useState<Array<{
+    assetId: string; title: string; source: string; qualityScore: number; relevanceScore: number;
+  }>>([]);
+  const [isRecommending, setIsRecommending] = useState(false);
+  const [assetViewMode, setAssetViewMode] = useState<'recommended' | 'all'>('recommended');
+
   // ===== 加载数据 =====
   const loadRssData = useCallback(async () => {
     if (!researchConfig.sources.includes('rss')) return;
@@ -102,7 +109,7 @@ export function ResearchTab() {
     if (!researchConfig.sources.includes('asset')) return;
     setAssetsLoading(true);
     try {
-      const result = await assetsApi.getAll({ limit: 5 });
+      const result = await assetsApi.getAll({ limit: 20 });
       setPrivateAssets(result.items || []);
     } catch (error) {
       console.error('Failed to load assets:', error);
@@ -110,6 +117,25 @@ export function ResearchTab() {
       setAssetsLoading(false);
     }
   }, [researchConfig.sources]);
+
+  const loadRecommendedAssets = useCallback(async () => {
+    if (!researchConfig.sources.includes('asset')) return;
+    // 用任务标题 + 研究关键词组成查询
+    const queryParts = [task.title, ...researchConfig.keywords].filter(Boolean);
+    if (queryParts.length === 0) return;
+    const query = queryParts.join(' ');
+
+    setIsRecommending(true);
+    try {
+      const result = await assetsApi.semanticSearch({ query, limit: 8, threshold: 0.5 });
+      setRecommendedAssets(result.items || []);
+    } catch (error) {
+      console.error('Failed to load recommended assets:', error);
+      setRecommendedAssets([]);
+    } finally {
+      setIsRecommending(false);
+    }
+  }, [researchConfig.sources, researchConfig.keywords, task.title]);
 
   // ===== 重试功能 =====
   const handleRetryWebSearch = async () => {
@@ -121,7 +147,7 @@ export function ResearchTab() {
   };
 
   const handleRetryAssets = async () => {
-    await loadAssetsData();
+    await Promise.all([loadAssetsData(), loadRecommendedAssets()]);
   };
 
   // ===== 素材库关键词搜索 =====
@@ -210,7 +236,8 @@ export function ResearchTab() {
     loadRssData();
     loadWebSearchData();
     loadAssetsData();
-  }, [loadRssData, loadWebSearchData, loadAssetsData]);
+    loadRecommendedAssets();
+  }, [loadRssData, loadWebSearchData, loadAssetsData, loadRecommendedAssets]);
 
   return (
     <div className="tab-panel research-panel animate-fade-in pb-32">
@@ -460,116 +487,188 @@ export function ResearchTab() {
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${researchConfig.sources.includes('asset') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
                           {researchConfig.sources.includes('asset') ? 'Active' : 'Disabled'}
                       </span>
-                      <button 
+                      <button
                         onClick={handleRetryAssets}
-                        disabled={assetsLoading || !researchConfig.sources.includes('asset')}
+                        disabled={(assetsLoading || isRecommending) || !researchConfig.sources.includes('asset')}
                         className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
                         title="重新加载 Assets"
                       >
-                        <span className={`material-symbols-outlined text-sm ${assetsLoading ? 'animate-spin' : ''}`}>refresh</span>
+                        <span className={`material-symbols-outlined text-sm ${assetsLoading || isRecommending ? 'animate-spin' : ''}`}>refresh</span>
                       </button>
                     </div>
                 </div>
                 <h3 className="font-bold text-sm mb-1 truncate text-slate-800 dark:text-slate-200">Private Vector Assets</h3>
                 <p className="text-xs text-slate-500 mb-3">Internal PDF, Docs and historical reports...</p>
-                
-                {/* 关键词搜索 */}
+
                 {researchConfig.sources.includes('asset') && (
-                  <div className="mb-3">
-                    <div className="flex gap-1.5">
-                      <div className="flex-1 relative">
-                        <input
-                          type="text"
-                          value={assetSearchQuery}
-                          onChange={(e) => setAssetSearchQuery(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleSearchAssets()}
-                          placeholder="输入关键词搜索素材..."
-                          className="w-full px-2.5 py-1.5 pr-7 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        />
-                        {assetSearchQuery && (
-                          <button
-                            onClick={handleClearAssetSearch}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600"
-                          >
-                            <span className="material-symbols-outlined text-sm">close</span>
-                          </button>
-                        )}
-                      </div>
+                  <>
+                    {/* 视图切换: 推荐 / 全部 */}
+                    <div className="flex gap-1 mb-2">
                       <button
-                        onClick={handleSearchAssets}
-                        disabled={isSearchingAssets || !assetSearchQuery.trim()}
-                        className="px-2.5 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        onClick={() => setAssetViewMode('recommended')}
+                        className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                          assetViewMode === 'recommended'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 hover:text-indigo-600'
+                        }`}
                       >
-                        <span className={`material-symbols-outlined text-sm ${isSearchingAssets ? 'animate-spin' : ''}`}>
-                          {isSearchingAssets ? 'sync' : 'search'}
-                        </span>
+                        <span className="mr-1">✦</span>智能推荐
+                        {recommendedAssets.length > 0 && (
+                          <span className={`ml-1 px-1 rounded-full text-[9px] ${assetViewMode === 'recommended' ? 'bg-indigo-500' : 'bg-indigo-100 text-indigo-600'}`}>
+                            {recommendedAssets.length}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setAssetViewMode('all')}
+                        className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                          assetViewMode === 'all'
+                            ? 'bg-slate-700 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 hover:text-slate-700'
+                        }`}
+                      >
+                        全部素材
                       </button>
                     </div>
-                    {assetSearchQuery && privateAssets.length > 0 && (
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        找到 {privateAssets.length} 个结果
-                        <button 
-                          onClick={handleClearAssetSearch}
-                          className="ml-2 text-indigo-600 hover:underline"
-                        >
-                          清除搜索
-                        </button>
+
+                    {/* 全部视图: 关键词搜索 */}
+                    {assetViewMode === 'all' && (
+                      <div className="mb-2">
+                        <div className="flex gap-1.5">
+                          <div className="flex-1 relative">
+                            <input
+                              type="text"
+                              value={assetSearchQuery}
+                              onChange={(e) => setAssetSearchQuery(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSearchAssets()}
+                              placeholder="输入关键词搜索素材..."
+                              className="w-full px-2.5 py-1.5 pr-7 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                            {assetSearchQuery && (
+                              <button
+                                onClick={handleClearAssetSearch}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600"
+                              >
+                                <span className="material-symbols-outlined text-sm">close</span>
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            onClick={handleSearchAssets}
+                            disabled={isSearchingAssets || !assetSearchQuery.trim()}
+                            className="px-2.5 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          >
+                            <span className={`material-symbols-outlined text-sm ${isSearchingAssets ? 'animate-spin' : ''}`}>
+                              {isSearchingAssets ? 'sync' : 'search'}
+                            </span>
+                          </button>
+                        </div>
+                        {assetSearchQuery && privateAssets.length > 0 && (
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            找到 {privateAssets.length} 个结果
+                            <button onClick={handleClearAssetSearch} className="ml-2 text-indigo-600 hover:underline">清除</button>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 推荐视图: 说明 */}
+                    {assetViewMode === 'recommended' && (
+                      <p className="text-[10px] text-indigo-500 mb-2 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">auto_awesome</span>
+                        基于「{[task.title, ...researchConfig.keywords].filter(Boolean).slice(0, 2).join('·')}」语义匹配
                       </p>
                     )}
-                  </div>
+                  </>
                 )}
-                
-                {/* Assets with Checkboxes */}
-                <div className="flex-1 max-h-28 overflow-y-auto space-y-1 mb-2">
-                  {assetsLoading || isSearchingAssets ? (
-                    <div className="flex items-center justify-center py-4">
-                      <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
-                    </div>
-                  ) : !researchConfig.sources.includes('asset') ? (
+
+                {/* Assets 列表 */}
+                <div className="flex-1 max-h-36 overflow-y-auto space-y-1 mb-2">
+                  {!researchConfig.sources.includes('asset') ? (
                     <p className="text-xs text-slate-400 italic text-center py-2">Assets source disabled</p>
-                  ) : privateAssets.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic text-center py-2">
-                      {assetSearchQuery ? '未找到匹配的素材' : 'No assets available'}
-                    </p>
+                  ) : assetViewMode === 'recommended' ? (
+                    // ---- 推荐模式 ----
+                    isRecommending ? (
+                      <div className="flex items-center justify-center py-4 gap-2">
+                        <span className="material-symbols-outlined animate-spin text-indigo-400 text-sm">auto_awesome</span>
+                        <span className="text-xs text-slate-400">语义匹配中...</span>
+                      </div>
+                    ) : recommendedAssets.length === 0 ? (
+                      <div className="text-center py-3">
+                        <p className="text-xs text-slate-400 italic mb-1">暂无推荐素材</p>
+                        <p className="text-[10px] text-slate-300">可能是素材库尚未生成向量索引</p>
+                      </div>
+                    ) : (
+                      recommendedAssets.map((item) => {
+                        const relevancePct = Math.round(item.relevanceScore * 100);
+                        const relevanceColor = relevancePct >= 80 ? 'bg-green-100 text-green-700' : relevancePct >= 65 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500';
+                        return (
+                          <label key={item.assetId} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={selectedAssets.has(item.assetId)}
+                              onChange={() => toggleAssetSelection(item.assetId)}
+                              className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-indigo-600 transition-colors">{item.title}</p>
+                              <p className="text-[10px] text-slate-500">{item.source || 'Internal'}</p>
+                            </div>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${relevanceColor}`} title="语义相关度">
+                              {relevancePct}%
+                            </span>
+                          </label>
+                        );
+                      })
+                    )
                   ) : (
-                    privateAssets.slice(0, 20).map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={selectedAssets.has(item.id)}
-                          onChange={() => toggleAssetSelection(item.id)}
-                          className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-indigo-600 transition-colors">{item.title}</p>
-                          <p className="text-[10px] text-slate-500">{item.source || 'Internal'}</p>
-                        </div>
-                        {/* 可信度评分 */}
-                        {credibilityScores[item.id] !== undefined ? (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            credibilityScores[item.id] >= 7 ? 'bg-green-100 text-green-700' :
-                            credibilityScores[item.id] >= 5 ? 'bg-amber-100 text-amber-700' :
-                            credibilityScores[item.id] < 0 ? 'bg-slate-100 text-slate-500' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {credibilityScores[item.id] < 0 ? '—' : `${credibilityScores[item.id].toFixed(1)}`}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCredibilityCheck(item); }}
-                            disabled={credibilityLoading === item.id}
-                            className="text-[10px] px-1.5 py-0.5 text-indigo-500 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="专家可信度评分"
-                          >
-                            {credibilityLoading === item.id ? '...' : '评分'}
-                          </button>
-                        )}
-                      </label>
-                    ))
-                  )
-                }
+                    // ---- 全部模式 ----
+                    assetsLoading || isSearchingAssets ? (
+                      <div className="flex items-center justify-center py-4">
+                        <span className="material-symbols-outlined animate-spin text-slate-400">sync</span>
+                      </div>
+                    ) : privateAssets.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic text-center py-2">
+                        {assetSearchQuery ? '未找到匹配的素材' : 'No assets available'}
+                      </p>
+                    ) : (
+                      privateAssets.slice(0, 20).map((item) => (
+                        <label key={item.id} className="flex items-start gap-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={selectedAssets.has(item.id)}
+                            onChange={() => toggleAssetSelection(item.id)}
+                            className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-slate-700 dark:text-slate-300 truncate group-hover:text-indigo-600 transition-colors">{item.title}</p>
+                            <p className="text-[10px] text-slate-500">{item.source || 'Internal'}</p>
+                          </div>
+                          {credibilityScores[item.id] !== undefined ? (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                              credibilityScores[item.id] >= 7 ? 'bg-green-100 text-green-700' :
+                              credibilityScores[item.id] >= 5 ? 'bg-amber-100 text-amber-700' :
+                              credibilityScores[item.id] < 0 ? 'bg-slate-100 text-slate-500' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {credibilityScores[item.id] < 0 ? '—' : credibilityScores[item.id].toFixed(1)}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCredibilityCheck(item); }}
+                              disabled={credibilityLoading === item.id}
+                              className="text-[10px] px-1.5 py-0.5 text-indigo-500 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              title="专家可信度评分"
+                            >
+                              {credibilityLoading === item.id ? '...' : '评分'}
+                            </button>
+                          )}
+                        </label>
+                      ))
+                    )
+                  )}
                 </div>
-                
+
                 {selectedAssets.size > 0 && (
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span className="text-[10px] text-indigo-600 font-medium">{selectedAssets.size} selected</span>
