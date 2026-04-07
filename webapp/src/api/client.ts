@@ -200,6 +200,20 @@ export const assetsApi = {
 
   updateTags: (id: string, tags: string[]) =>
     client.put(`/assets/${id}/tags`, { tags }) as Promise<Asset>,
+
+  // v6.2: 语义检索（向量相似度）
+  semanticSearch: (params: {
+    query: string;
+    limit?: number;
+    threshold?: number;
+    themeId?: string;
+    minQualityScore?: number;
+  }) =>
+    client.post('/ai/assets/semantic-search', params) as Promise<{
+      items: Array<{ assetId: string; title: string; source: string; qualityScore: number; relevanceScore: number }>;
+      total: number;
+      query: string;
+    }>,
 };
 
 // 素材使用统计类型 (v3.0.2)
