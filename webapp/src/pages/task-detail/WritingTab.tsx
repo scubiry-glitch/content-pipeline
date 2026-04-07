@@ -360,7 +360,6 @@ export function WritingTab() {
               )}
             </div>
           </div>
-        </div>
       </section>
 
       {/* 2. Process Section: AI Streaming Engine */}
