@@ -586,28 +586,61 @@ Format: each insight as a JSON object with:
     domain?: string;
     limit?: number;
   }): Promise<{ consensus: Array<{ position: string; supportingExperts: string[]; confidence: number }>; divergences: Array<{ position1: string; position2: string; experts1: string[]; experts2: string[] }> }> {
-    // 简化版本：需要集成专家库的实现
+    const limit = options?.limit || 20;
+
+    // 首先尝试从 content_facts 中聚合共识
     const consensusQuery = `
-      SELECT subject, predicate, object, COUNT(*) as fact_count, AVG(confidence) as avg_conf
+      SELECT subject, predicate, object, COUNT(*) as fact_count, AVG(confidence) as avg_conf,
+             ARRAY_AGG(DISTINCT context->>'source' FILTER (WHERE context->>'source' IS NOT NULL)) as sources
       FROM content_facts
       WHERE is_current = true
       ${options?.domain ? 'AND context->\'domain\' = $1' : ''}
       GROUP BY subject, predicate, object
-      ORDER BY fact_count DESC
+      ORDER BY fact_count DESC, avg_conf DESC
       LIMIT $2
     `;
-    const params = options?.domain ? [options.domain, options?.limit || 20] : [options?.limit || 20];
+    const params = options?.domain ? [options.domain, limit] : [limit];
     const result = await this.deps.db.query(consensusQuery, params);
 
+    // 构建共识列表
     const consensus = result.rows.map(row => ({
-      position: `${row.subject} - ${row.predicate}: ${row.object}`,
-      supportingExperts: [], // TODO: 从专家库动态获取
+      position: `${row.subject}: ${row.predicate} → ${row.object}`,
+      supportingExperts: row.sources || [], // 实际来源，可能包含专家名称
       confidence: Number(row.avg_conf),
+    }));
+
+    // 查找分歧（相同主体和谓词，但对象不同）
+    const divergenceQuery = `
+      SELECT
+        cf1.subject,
+        cf1.predicate,
+        cf1.object as object1,
+        cf2.object as object2,
+        cf1.context->>'source' as source1,
+        cf2.context->>'source' as source2,
+        (cf1.confidence + cf2.confidence) / 2 as avg_conf
+      FROM content_facts cf1
+      JOIN content_facts cf2 ON cf1.subject = cf2.subject AND cf1.predicate = cf2.predicate
+      WHERE cf1.is_current = true AND cf2.is_current = true
+      AND cf1.id < cf2.id
+      AND cf1.object != cf2.object
+      ${options?.domain ? 'AND cf1.context->\'domain\' = $1' : ''}
+      ORDER BY avg_conf DESC
+      LIMIT $2
+    `;
+    const divParams = options?.domain ? [options.domain, limit] : [limit];
+    const divResult = await this.deps.db.query(divergenceQuery, divParams);
+
+    const divergences = divResult.rows.map(row => ({
+      position1: `${row.subject}: ${row.object1}`,
+      position2: `${row.subject}: ${row.object2}`,
+      experts1: row.source1 ? [row.source1] : [],
+      experts2: row.source2 ? [row.source2] : [],
     }));
 
     return {
       consensus,
-      divergences: [],
+      divergences,
     };
   }
 
