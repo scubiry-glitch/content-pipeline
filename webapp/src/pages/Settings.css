@@ -279,6 +279,301 @@
   background-color: #4b5563;
 }
 
+/* ===== 模型配置 section ===== */
+
+/* Provider 状态网格 */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--surface, white);
+  border: 2px solid var(--linen, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  transition: all 0.2s;
+}
+
+.provider-card.online {
+  border-color: var(--sage, #93c572);
+}
+
+.provider-card.offline {
+  border-color: var(--stone, #9ca3af);
+  opacity: 0.7;
+}
+
+.provider-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.provider-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--earth, #374151);
+}
+
+.provider-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.provider-status.online {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.provider-status.offline {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.provider-status.testing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.provider-model {
+  font-size: 12px;
+  color: var(--pebble, #6b7280);
+  word-break: break-all;
+}
+
+.provider-test-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--surface, white);
+  border: 1px solid var(--linen, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  color: var(--earth, #374151);
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.provider-test-btn:hover {
+  border-color: var(--terracotta, #e07a5f);
+  color: var(--terracotta, #e07a5f);
+}
+
+.provider-test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.provider-test-result {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: var(--pebble, #6b7280);
+  word-break: break-all;
+}
+
+.provider-test-result.success {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.provider-test-result.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* 路由配置表格 */
+.routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.routing-table th {
+  text-align: left;
+  padding: 10px 8px;
+  font-weight: 600;
+  color: var(--earth, #374151);
+  border-bottom: 2px solid var(--linen, #e5e7eb);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.routing-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--linen, #e5e7eb);
+  vertical-align: middle;
+}
+
+.routing-table tr:last-child td {
+  border-bottom: none;
+}
+
+.routing-table .task-type {
+  font-weight: 500;
+  color: var(--soil, #1f2937);
+  white-space: nowrap;
+}
+
+.routing-table select {
+  padding: 5px 8px;
+  border: 1px solid var(--linen, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 12px;
+  color: var(--soil, #1f2937);
+  background: white;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.routing-table select:focus {
+  outline: none;
+  border-color: var(--terracotta, #e07a5f);
+}
+
+.priority-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.priority-badge.quality {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.priority-badge.speed {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.priority-badge.cost {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+/* 保存按钮 */
+.config-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+.btn-save {
+  padding: 8px 20px;
+  background: var(--terracotta, #e07a5f);
+  color: white;
+  border: none;
+  border-radius: var(--radius, 8px);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-save:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.save-status {
+  font-size: 13px;
+  color: var(--sage, #93c572);
+  align-self: center;
+}
+
+/* 全局模型显示 */
+.env-value {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--soil, #1f2937);
+}
+
+/* 深色模式 */
+.dark .provider-card {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .provider-card.online {
+  border-color: #4ade80;
+}
+
+.dark .provider-name {
+  color: #f3f4f6;
+}
+
+.dark .provider-model {
+  color: #9ca3af;
+}
+
+.dark .provider-status.online {
+  background: #064e3b;
+  color: #6ee7b7;
+}
+
+.dark .provider-status.offline {
+  background: #374151;
+  color: #9ca3af;
+}
+
+.dark .provider-test-btn {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+.dark .provider-test-result {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
+.dark .routing-table th {
+  color: #e5e7eb;
+  border-color: #374151;
+}
+
+.dark .routing-table td {
+  border-color: #374151;
+}
+
+.dark .routing-table .task-type {
+  color: #f3f4f6;
+}
+
+.dark .routing-table select {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+.dark .env-value {
+  background: #374151;
+  color: #e5e7eb;
+}
+
 /* 响应式 */
 @media (max-width: 640px) {
   .settings-section {
@@ -293,5 +588,17 @@
     flex: 1;
     min-width: 100px;
     padding: 12px;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .routing-table {
+    font-size: 12px;
+  }
+
+  .routing-table select {
+    min-width: 80px;
   }
 }

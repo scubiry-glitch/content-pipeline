@@ -1603,4 +1603,59 @@ export const expertLibraryApi = {
     client.delete(`/expert-library/experts/${id}`) as Promise<any>,
 };
 
+// ============================================
+// LLM 模型配置 API (/api/llm/*)
+// ============================================
+
+// LLM 路由挂载在 /api/llm（非 /api/v1），需要单独的 client
+const llmClient = axios.create({
+  baseURL: '/api/llm',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(import.meta.env.VITE_LLM_TOKEN ? { 'Authorization': `Bearer ${import.meta.env.VITE_LLM_TOKEN}` } : {}),
+  },
+  timeout: 30000,
+});
+
+export interface ModelRoutingRule {
+  taskType: string;
+  priority: 'quality' | 'speed' | 'cost';
+  preferredProvider: string;
+  fallbackProvider?: string;
+}
+
+export interface ModelConfigResponse {
+  providers: Record<string, { models: string[] }>;
+  routingRules: ModelRoutingRule[];
+  modelConfigs: Record<string, Record<string, string>>;
+  env: {
+    DEFAULT_LLM_MODEL: string;
+    DASHBOARD_LLM_MODEL: string;
+    VOLCANO_MODEL: string;
+  };
+}
+
+export interface TestProviderResult {
+  provider: string;
+  success: boolean;
+  latencyMs?: number;
+  model?: string;
+  content?: string;
+  error?: string;
+}
+
+export const llmConfigApi = {
+  getConfig: () =>
+    llmClient.get('/model-config').then(r => r.data?.data as ModelConfigResponse),
+
+  updateConfig: (data: {
+    routingRules?: Array<{ taskType: string; preferredProvider?: string; fallbackProvider?: string; priority?: 'quality' | 'speed' | 'cost' }>;
+    modelConfigs?: Record<string, Record<string, string>>;
+  }) =>
+    llmClient.put('/model-config', data).then(r => r.data),
+
+  testProvider: (provider: string, prompt?: string) =>
+    llmClient.post('/test-provider', { provider, prompt }).then(r => r.data?.data as TestProviderResult),
+};
+
 export default client;

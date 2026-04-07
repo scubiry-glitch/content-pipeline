@@ -363,15 +363,17 @@ export async function generate(
   taskType: string = 'default',
   options: GenerateOptions = {}
 ): Promise<GenerateResult> {
-  // 根据任务类型选择模型
+  // 根据任务类型选择模型（通过 DEFAULT_LLM_MODEL 环境变量统一配置）
+  const defaultModel = process.env.DEFAULT_LLM_MODEL || 'kimi-for-coding';
   const modelMap: Record<string, { model: string; temperature: number }> = {
-    planning: { model: 'kimi-for-coding', temperature: 0.7 },
-    writing: { model: 'kimi-for-coding', temperature: 0.8 },
-    blue_team: { model: 'kimi-for-coding', temperature: 0.9 },
-    analysis: { model: 'kimi-for-coding', temperature: 0.5 },
-    tagging: { model: 'kimi-for-coding', temperature: 0.3 },
-    content_library: { model: 'kimi-for-coding', temperature: 0.15 },
-    default: { model: 'kimi-for-coding', temperature: 0.7 },
+    planning: { model: defaultModel, temperature: 0.7 },
+    writing: { model: defaultModel, temperature: 0.8 },
+    blue_team: { model: defaultModel, temperature: 0.9 },
+    analysis: { model: defaultModel, temperature: 0.5 },
+    tagging: { model: defaultModel, temperature: 0.3 },
+    content_library: { model: defaultModel, temperature: 0.15 },
+    expert_library: { model: defaultModel, temperature: 0.5 },
+    default: { model: defaultModel, temperature: 0.7 },
   };
 
   const config = modelMap[taskType] || modelMap.default;
