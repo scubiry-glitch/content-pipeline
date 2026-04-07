@@ -2,6 +2,7 @@
 // webapp 嵌入模式入口
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -11,6 +12,7 @@ interface OutputCategory {
   phase: string;
   status: 'live' | 'preview' | 'planned';
   endpoint: string;
+  page: string;  // 对应的前端页面路由
   count: number | null;
 }
 
@@ -18,23 +20,24 @@ export function ContentLibrary() {
   const [categories, setCategories] = useState<OutputCategory[]>([]);
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const outputDefs: OutputCategory[] = [
-    { number: '①', name: '有价值的议题', phase: '选题', status: 'live', endpoint: '/topics/recommended', count: null },
-    { number: '②', name: '趋势信号', phase: '选题', status: 'live', endpoint: '/trends', count: null },
-    { number: '③', name: '差异化角度', phase: '选题', status: 'planned', endpoint: '/gaps', count: null },
-    { number: '④', name: '知识空白', phase: '选题', status: 'planned', endpoint: '/gaps', count: null },
-    { number: '⑤', name: '关键事实', phase: '研究', status: 'live', endpoint: '/facts', count: null },
-    { number: '⑥', name: '实体图谱', phase: '研究', status: 'live', endpoint: '/entities', count: null },
-    { number: '⑦', name: '信息增量', phase: '研究', status: 'live', endpoint: '/delta', count: null },
-    { number: '⑧', name: '事实保鲜度', phase: '研究', status: 'live', endpoint: '/freshness/stale', count: null },
-    { number: '⑨', name: '知识卡片', phase: '研究', status: 'live', endpoint: '/cards', count: null },
-    { number: '⑩', name: '有价值的认知', phase: '写作', status: 'live', endpoint: '/synthesize', count: null },
-    { number: '⑪', name: '素材组合推荐', phase: '写作', status: 'live', endpoint: '/recommendations', count: null },
-    { number: '⑫', name: '专家共识图', phase: '写作', status: 'live', endpoint: '/consensus', count: null },
-    { number: '⑬', name: '争议话题', phase: '审核', status: 'live', endpoint: '/contradictions', count: null },
-    { number: '⑭', name: '观点演化', phase: '审核', status: 'live', endpoint: '/beliefs', count: null },
-    { number: '⑮', name: '跨领域关联', phase: '审核', status: 'live', endpoint: '/cross-domain', count: null },
+    { number: '①', name: '有价值的议题', phase: '选题', status: 'live', endpoint: '/topics/recommended', page: '/content-library/topics', count: null },
+    { number: '②', name: '趋势信号', phase: '选题', status: 'live', endpoint: '/trends', page: '/content-library/trends', count: null },
+    { number: '③', name: '差异化角度', phase: '选题', status: 'live', endpoint: '/gaps', page: '/content-library/topics', count: null },
+    { number: '④', name: '知识空白', phase: '选题', status: 'live', endpoint: '/gaps', page: '/content-library/topics', count: null },
+    { number: '⑤', name: '关键事实', phase: '研究', status: 'live', endpoint: '/facts', page: '/content-library/facts', count: null },
+    { number: '⑥', name: '实体图谱', phase: '研究', status: 'live', endpoint: '/entities', page: '/content-library/entities', count: null },
+    { number: '⑦', name: '信息增量', phase: '研究', status: 'live', endpoint: '/delta', page: '/content-library/delta', count: null },
+    { number: '⑧', name: '事实保鲜度', phase: '研究', status: 'live', endpoint: '/freshness/stale', page: '/content-library/freshness', count: null },
+    { number: '⑨', name: '知识卡片', phase: '研究', status: 'live', endpoint: '/cards', page: '/content-library/cards', count: null },
+    { number: '⑩', name: '有价值的认知', phase: '写作', status: 'live', endpoint: '/synthesize', page: '/content-library/synthesis', count: null },
+    { number: '⑪', name: '素材组合推荐', phase: '写作', status: 'live', endpoint: '/recommendations', page: '/content-library/cards', count: null },
+    { number: '⑫', name: '专家共识图', phase: '写作', status: 'live', endpoint: '/consensus', page: '/content-library/consensus', count: null },
+    { number: '⑬', name: '争议话题', phase: '审核', status: 'live', endpoint: '/contradictions', page: '/content-library/contradictions', count: null },
+    { number: '⑭', name: '观点演化', phase: '审核', status: 'live', endpoint: '/beliefs', page: '/content-library/beliefs', count: null },
+    { number: '⑮', name: '跨领域关联', phase: '审核', status: 'live', endpoint: '/cross-domain', page: '/content-library/cross-domain', count: null },
   ];
 
   useEffect(() => {
@@ -122,6 +125,7 @@ export function ContentLibrary() {
           {filtered.map((cat, i) => (
             <div
               key={i}
+              onClick={() => navigate(cat.page)}
               className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="flex items-center justify-between mb-2">
@@ -141,9 +145,6 @@ export function ContentLibrary() {
                   {cat.count}
                   <span className="text-sm font-normal text-gray-500 ml-1">条</span>
                 </div>
-              )}
-              {cat.status === 'planned' && (
-                <span className="text-xs text-gray-400">规划中</span>
               )}
             </div>
           ))}
