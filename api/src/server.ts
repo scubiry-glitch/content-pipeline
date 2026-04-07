@@ -69,6 +69,7 @@ import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
 import { llmRoutes } from './routes/llm.js';
+import { langgraphRoutes } from './routes/langgraph.js';
 import { aiProcessingRoutes } from './routes/ai-processing.js';
 import { assetsAIProcessingRoutes } from './routes/assets-ai-processing.js';
 import { setupAuth } from './middleware/auth.js';
@@ -214,6 +215,9 @@ async function main() {
   // Dashboard LLM 路由
   await fastify.register(llmRoutes, { prefix: '/api/llm' });
   
+  // LangGraph 流水线路由 (独立模块)
+  await fastify.register(langgraphRoutes, { prefix: '/api/v1/langgraph' });
+
   // v6.1: AI 批量处理路由 (RSS)
   await fastify.register(aiProcessingRoutes, { prefix: '/api/v1/ai' });
   
