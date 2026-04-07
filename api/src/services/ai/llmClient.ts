@@ -40,7 +40,7 @@ export class LLMClient {
 
   constructor(config?: LLMConfig) {
     this.config = {
-      model: config?.model || process.env.DASHBOARD_LLM_MODEL || 'k2p5',
+      model: config?.model || process.env.DASHBOARD_LLM_MODEL || process.env.DEFAULT_LLM_MODEL || 'k2p5',
       maxTokens: config?.maxTokens || 4000,
       temperature: config?.temperature ?? 0.3,
     };

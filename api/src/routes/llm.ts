@@ -3,6 +3,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { callKimiCodingText, kimiCodingProvider } from '../services/kimi-coding.js';
+import { getLLMRouter } from '../providers/index.js';
 
 // 从请求头读取 Bearer Token
 function readBearerToken(req: FastifyRequest): string {
@@ -127,6 +128,149 @@ export async function llmRoutes(fastify: FastifyInstance): Promise<void> {
       return {
         status: 'error',
         message,
+      };
+    }
+  });
+
+  // GET /model-config - 获取当前模型配置
+  fastify.get('/model-config', async (_req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const router = getLLMRouter();
+      const providers = router.getAvailableProviders();
+      const providerDetails: Record<string, { models: string[] }> = {};
+
+      for (const name of providers) {
+        const provider = router.getProvider(name);
+        providerDetails[name] = {
+          models: provider?.getAvailableModels() || [],
+        };
+      }
+
+      return {
+        status: 'success',
+        data: {
+          providers: providerDetails,
+          routingRules: router.getRoutingRules(),
+          modelConfigs: router.getModelConfigs(),
+          env: {
+            DEFAULT_LLM_MODEL: process.env.DEFAULT_LLM_MODEL || '',
+            DASHBOARD_LLM_MODEL: process.env.DASHBOARD_LLM_MODEL || '',
+            VOLCANO_MODEL: process.env.VOLCANO_MODEL || '',
+          },
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get model config';
+      reply.status(500);
+      return { status: 'error', message };
+    }
+  });
+
+  // PUT /model-config - 更新运行时模型配置（重启后还原）
+  fastify.put('/model-config', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!isAuthorized(req)) {
+      reply.status(401);
+      return { status: 'error', message: 'Unauthorized' };
+    }
+
+    try {
+      const router = getLLMRouter();
+      const body = req.body as {
+        routingRules?: Array<{ taskType: string; preferredProvider?: string; fallbackProvider?: string; priority?: 'quality' | 'speed' | 'cost' }>;
+        modelConfigs?: Record<string, Record<string, string>>;
+      };
+
+      let updatedRules = 0;
+      let updatedModels = 0;
+
+      // 更新路由规则
+      if (body.routingRules) {
+        for (const rule of body.routingRules) {
+          const success = router.updateRoutingRule(rule.taskType, {
+            preferredProvider: rule.preferredProvider,
+            fallbackProvider: rule.fallbackProvider,
+            priority: rule.priority,
+          });
+          if (success) updatedRules++;
+        }
+      }
+
+      // 更新模型配置
+      if (body.modelConfigs) {
+        for (const [provider, priorities] of Object.entries(body.modelConfigs)) {
+          for (const [priority, model] of Object.entries(priorities)) {
+            router.updateModelConfig(provider, priority, model);
+            updatedModels++;
+          }
+        }
+      }
+
+      return {
+        status: 'success',
+        data: {
+          updatedRules,
+          updatedModels,
+          message: '运行时配置已更新（重启后还原）',
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update config';
+      reply.status(500);
+      return { status: 'error', message };
+    }
+  });
+
+  // POST /test-provider - 测试 provider 连通性
+  fastify.post('/test-provider', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!isAuthorized(req)) {
+      reply.status(401);
+      return { status: 'error', message: 'Unauthorized' };
+    }
+
+    const body = req.body as { provider: string; prompt?: string };
+    const providerName = body?.provider;
+    if (!providerName) {
+      reply.status(400);
+      return { status: 'error', message: 'provider 参数不能为空' };
+    }
+
+    try {
+      const router = getLLMRouter();
+      const provider = router.getProvider(providerName);
+      if (!provider) {
+        reply.status(404);
+        return {
+          status: 'error',
+          message: `Provider "${providerName}" 未注册`,
+          availableProviders: router.getAvailableProviders(),
+        };
+      }
+
+      const testPrompt = body.prompt || '请用一句话回答：1+1等于几？';
+      const startTime = Date.now();
+      const result = await provider.generate(testPrompt, { maxTokens: 100 });
+      const latencyMs = Date.now() - startTime;
+
+      return {
+        status: 'success',
+        data: {
+          provider: providerName,
+          success: true,
+          latencyMs,
+          model: result.model,
+          content: result.content.substring(0, 200),
+          usage: result.usage,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Test failed';
+      return {
+        status: 'error',
+        data: {
+          provider: providerName,
+          success: false,
+          error: message,
+        },
       };
     }
   });
