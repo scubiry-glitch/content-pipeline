@@ -1589,6 +1589,18 @@ export const expertLibraryApi = {
   // 专家列表
   getExperts: (domain?: string) =>
     client.get('/expert-library/experts', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
+  // 前端兼容的完整专家列表（含 display_metadata）
+  getExpertsFull: (domain?: string) =>
+    client.get('/expert-library/experts/full', { params: { domain } }) as Promise<{ total: number; experts: any[] }>,
+  // 全量更新专家
+  updateExpertFull: (id: string, data: any) =>
+    client.put(`/expert-library/experts/${id}`, data) as Promise<any>,
+  // 创建新专家
+  createExpert: (data: any) =>
+    client.post('/expert-library/experts', data) as Promise<any>,
+  // 删除专家
+  deleteExpert: (id: string) =>
+    client.delete(`/expert-library/experts/${id}`) as Promise<any>,
 };
 
 export default client;

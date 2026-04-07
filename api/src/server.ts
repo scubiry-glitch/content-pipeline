@@ -190,7 +190,7 @@ async function main() {
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
 
   // Expert Library 独立模块 (v3.0) — Cognitive Digital Twin
-  const expertEngine = createExpertEngine(createPipelineDeps(query, generate, undefined, generateEmbedding));
+  const expertEngine = await createExpertEngine(createPipelineDeps(query, generate, undefined, generateEmbedding));
   initExpertEngineSingleton(expertEngine);
   await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
 

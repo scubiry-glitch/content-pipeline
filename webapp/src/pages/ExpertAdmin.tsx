@@ -211,7 +211,7 @@ export function ExpertAdmin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ signature_phrases: signatures, anti_patterns: antiPatterns }),
       });
-      setSaveMsg('已保存（会话级，重启重置）');
+      setSaveMsg('已保存到数据库');
       setEditingSig(false);
       setTimeout(() => setSaveMsg(''), 3000);
     } finally {

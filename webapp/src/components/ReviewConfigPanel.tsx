@@ -174,20 +174,11 @@ export function ReviewConfigPanel({ isOpen, onClose, onConfirm, onSave, topic, s
   const loadLibraryExperts = async () => {
     setLoadingExperts(true);
     try {
-      // 优先使用本地 expertService 的完整专家库（包含75位专家）
+      // 使用 expertService（已支持 API 优先 + 本地 fallback）
       const localExperts = getAllExperts();
-      let activeExperts: Expert[];
-      if (localExperts.length > 0) {
-        activeExperts = localExperts.filter(e =>
-          e.status === 'active' && e.angle !== 'reader'
-        );
-      } else {
-        // 回退到 API 获取
-        const result = await expertsApi.getAll();
-        activeExperts = result.items.filter(e =>
-          e.status === 'active' && e.angle !== 'reader'
-        );
-      }
+      const activeExperts = localExperts.filter(e =>
+        e.status === 'active' && e.angle !== 'reader'
+      );
 
       // 2. 基于 topic 智能推荐专家
       let recommended: string[] = [];
