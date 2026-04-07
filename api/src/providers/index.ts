@@ -27,17 +27,17 @@ export interface ModelRoutingRule {
 export class LLMRouter {
   private providers: Map<string, LLMProvider> = new Map();
   private routingRules: ModelRoutingRule[] = [
-    // DeepSeek 主模型 (SiliconFlow)，Kimi 兜底
-    { taskType: 'planning', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'analysis', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'writing', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'content_library', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'summarization', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
-    { taskType: 'tagging', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
+    // 主模型切换到 Volcano Engine，SiliconFlow/Kimi 兜底
+    { taskType: 'planning', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'analysis', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'writing', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'content_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'summarization', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'tagging', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'siliconflow' },
-    { taskType: 'health_check', priority: 'speed', preferredProvider: 'siliconflow', fallbackProvider: 'kimi' },
+    { taskType: 'health_check', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
   ];
 
   // Model configs for different priorities
@@ -91,8 +91,8 @@ export class LLMRouter {
     const rule = this.routingRules.find(r => r.taskType === taskType) || {
       taskType: 'default',
       priority: 'quality',
-      preferredProvider: 'claude',
-      fallbackProvider: 'openai',
+      preferredProvider: 'volcano-engine',
+      fallbackProvider: 'siliconflow',
     };
 
     // Try preferred provider first

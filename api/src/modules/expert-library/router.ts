@@ -170,7 +170,7 @@ export function createRouter(engine: ExpertEngine) {
         const { domain } = request.query as any;
         // 直接从 DB 查询含 display_metadata 的数据
         const result = await engine['deps'].db.query(
-          `SELECT *, display_metadata FROM expert_profiles WHERE is_active = true ORDER BY name`
+          `SELECT * FROM expert_profiles WHERE is_active = true ORDER BY name`
         );
 
         const experts = result.rows.map((row: any) => {

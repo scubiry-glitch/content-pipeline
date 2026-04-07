@@ -1608,10 +1608,12 @@ export const expertLibraryApi = {
 // ============================================
 
 // LLM 路由挂载在 /api/llm（非 /api/v1），需要单独的 client
+// 默认携带与 /api/v1 相同的 X-API-Key，避免 Settings「测试连通」因仅校验 LLM_API_TOKEN 而 401
 const llmClient = axios.create({
   baseURL: '/api/llm',
   headers: {
     'Content-Type': 'application/json',
+    'X-API-Key': API_KEY,
     ...(import.meta.env.VITE_LLM_TOKEN ? { 'Authorization': `Bearer ${import.meta.env.VITE_LLM_TOKEN}` } : {}),
   },
   timeout: 30000,

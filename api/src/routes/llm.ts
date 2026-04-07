@@ -12,8 +12,17 @@ function readBearerToken(req: FastifyRequest): string {
   return auth.slice(7).trim();
 }
 
-// 检查是否授权
+// 与主站 authenticate 一致的管理员 Key（设置页「测试连通」走同一套）
+function getAdminApiKey(): string {
+  return process.env.ADMIN_API_KEY || 'dev-api-key-change-in-production';
+}
+
+// 检查是否授权：① X-API-Key = ADMIN_API_KEY（前端 Settings）；② Bearer = LLM_API_TOKEN（独立 Dashboard LLM 代理）
 function isAuthorized(req: FastifyRequest): boolean {
+  const apiKey = String(req.headers['x-api-key'] ?? '').trim();
+  if (apiKey && apiKey === getAdminApiKey()) {
+    return true;
+  }
   const expected = process.env.LLM_API_TOKEN?.trim();
   if (!expected) return true;
   return readBearerToken(req) === expected;

@@ -63,7 +63,9 @@ export async function createExpertEngine(
       } catch {
         console.warn('[ExpertEngine] Frontend expert data not found, seeding backend experts only');
       }
-      await seedExpertsToDb(deps, builtinExperts, frontendExperts);
+      // 不阻塞服务启动：播种改为后台执行，避免慢库导致 API 长时间不可用
+      void seedExpertsToDb(deps, builtinExperts, frontendExperts)
+        .catch((err) => console.warn('[ExpertEngine] Async seed failed (non-fatal):', err));
     } catch (err) {
       console.warn('[ExpertEngine] DB seed failed (non-fatal):', err);
     }
