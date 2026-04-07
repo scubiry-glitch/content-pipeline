@@ -382,7 +382,7 @@ export interface BlueTeamReview {
   questions: Array<{
     id: string;
     question: string;
-    severity: 'high' | 'medium' | 'low' | 'praise';
+    severity: 'high' | 'medium' | 'low' | 'praise' | 'critical' | 'warning';
     suggestion: string;
     location?: string;
   }>;

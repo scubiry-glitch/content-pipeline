@@ -121,7 +121,7 @@ export function ResearchTab() {
   const loadRecommendedAssets = useCallback(async () => {
     if (!researchConfig.sources.includes('asset')) return;
     // 用任务标题 + 研究关键词组成查询
-    const queryParts = [task.title, ...researchConfig.keywords].filter(Boolean);
+    const queryParts = [task.topic, ...researchConfig.keywords].filter(Boolean);
     if (queryParts.length === 0) return;
     const query = queryParts.join(' ');
 
@@ -135,7 +135,7 @@ export function ResearchTab() {
     } finally {
       setIsRecommending(false);
     }
-  }, [researchConfig.sources, researchConfig.keywords, task.title]);
+  }, [researchConfig.sources, researchConfig.keywords, task.topic]);
 
   // ===== 重试功能 =====
   const handleRetryWebSearch = async () => {
@@ -576,7 +576,7 @@ export function ResearchTab() {
                     {assetViewMode === 'recommended' && (
                       <p className="text-[10px] text-indigo-500 mb-2 flex items-center gap-1">
                         <span className="material-symbols-outlined text-xs">auto_awesome</span>
-                        基于「{[task.title, ...researchConfig.keywords].filter(Boolean).slice(0, 2).join('·')}」语义匹配
+                        基于「{[task.topic, ...researchConfig.keywords].filter(Boolean).slice(0, 2).join('·')}」语义匹配
                       </p>
                     )}
                   </>
