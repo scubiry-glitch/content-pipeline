@@ -8,6 +8,17 @@ import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
 import { weiHangkongProfile } from './data/weiHangkong.js';
+import { jobsProfile } from './data/jobs.js';
+import { mungerProfile } from './data/munger.js';
+import { talebProfile } from './data/taleb.js';
+import { feynmanProfile } from './data/feynman.js';
+import { karpathyProfile } from './data/karpathy.js';
+import { paulGrahamProfile } from './data/paulgraham.js';
+import { buffettProfile } from './data/buffett.js';
+import { bezosProfile } from './data/bezos.js';
+import { zhangXiaolongProfile } from './data/zhangxiaolong.js';
+import { huangZhengProfile } from './data/huangzheng.js';
+import { liKaifuProfile } from './data/likaifu.js';
 import { seedDefaultBuiltinExpertsToDb } from './expertSeed.js';
 import type { ExpertLibraryDeps, ExpertProfile } from './types.js';
 
@@ -38,7 +49,11 @@ export async function createExpertEngine(
 
   // 注册内置专家
   if (options?.registerBuiltinExperts !== false) {
-    builtinExperts.push(muskProfile, xiaohongshuProfile, weiHangkongProfile);
+    builtinExperts.push(
+      muskProfile, xiaohongshuProfile, weiHangkongProfile,
+      jobsProfile, mungerProfile, talebProfile, feynmanProfile, karpathyProfile, paulGrahamProfile,
+      buffettProfile, bezosProfile, zhangXiaolongProfile, huangZhengProfile, liKaifuProfile,
+    );
     for (const profile of topExpertProfiles) {
       builtinExperts.push(profile);
     }
@@ -86,6 +101,17 @@ export { xiaohongshuProfile } from './data/xiaohongshu.js';
 export { topExpertProfiles } from './data/topExperts.js';
 export { yiMengProfile } from './data/yiMeng.js';
 export { weiHangkongProfile } from './data/weiHangkong.js';
+export { jobsProfile } from './data/jobs.js';
+export { mungerProfile } from './data/munger.js';
+export { talebProfile } from './data/taleb.js';
+export { feynmanProfile } from './data/feynman.js';
+export { karpathyProfile } from './data/karpathy.js';
+export { paulGrahamProfile } from './data/paulgraham.js';
+export { buffettProfile } from './data/buffett.js';
+export { bezosProfile } from './data/bezos.js';
+export { zhangXiaolongProfile } from './data/zhangxiaolong.js';
+export { huangZhengProfile } from './data/huangzheng.js';
+export { liKaifuProfile } from './data/likaifu.js';
 export { CODEBASE_EXPERT_IDS, SKIP_GENERATE_IDS } from './builtinExpertIds.js';
 export { assertExpertProfile, expertProfileToDbParams } from './expertProfileDb.js';
 

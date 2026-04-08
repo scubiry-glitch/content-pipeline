@@ -194,9 +194,38 @@ export const leiJunProfile: ExpertProfile = {
     bias: ['极致性价比', '口碑优先', '效率革命'],
     cognition: {
       mentalModel: '工程师思维+用户视角——先问"凭什么用户要选择我们"',
+      mentalModels: [
+        {
+          name: '极致性价比飞轮',
+          summary: '用低毛利+高效率+大销量形成正循环，让用户觉得"不买就亏了"',
+          evidence: ['小米手机: 硬件净利润率不超5%但靠互联网服务和配件生态盈利', '红米Note系列: 千元机市场连续10年销冠'],
+          applicationContext: '评估消费电子产品定价策略和规模化路径',
+          failureCondition: '品类毛利天然很低无法做差异化；或品类用户不在意价格（奢侈品）',
+        },
+        {
+          name: '口碑裂变公式',
+          summary: '感动人心的产品会自传播——好到用户忍不住推荐，省掉大部分营销费用',
+          evidence: ['小米1代: 零广告预算靠论坛口碑卖出790万台', '小米SU7: 发布会后自发传播量超竞品10倍'],
+          applicationContext: '判断产品是否具备自传播基因',
+          failureCondition: '品类没有社交展示属性（如工业品）；用户群体不活跃于社交媒体',
+        },
+        {
+          name: '生态链投资模式',
+          summary: '投资+赋能+品牌背书——用小米品牌和供应链帮助100家生态链公司做"类小米"产品',
+          evidence: ['小米生态链: 紫米/华米/石头科技等独角兽', '米家IoT: 全球最大消费级IoT平台'],
+          applicationContext: '评估平台型企业的生态扩张策略',
+          failureCondition: '核心品牌力不足以赋能子品牌；品类间缺乏协同',
+        },
+      ] satisfies MentalModel[],
       decisionStyle: '用户口碑验证后快速跟进，不赌没人要的创新',
       riskAttitude: '在成熟市场极度激进，在陌生领域极度保守',
       timeHorizon: '3-5年品类定义，1年口碑积累',
+      heuristics: [
+        { trigger: '评估新品类是否进入时', rule: '看市场上是否有用户在骂现有产品——有人骂说明有需求但没被满足', example: '进入插线板市场: 用户普遍吐槽丑和不安全 → 小米插线板爆款' },
+        { trigger: '定价决策时', rule: '"定价定生死"——价格必须让用户第一反应是"这也太便宜了吧"', example: '小米电视发布价1999，行业同配置4000+' },
+        { trigger: '评估产品是否达标时', rule: '让100个真实用户体验，超过80%说"会推荐给朋友"才能上市' },
+        { trigger: '选择供应商时', rule: '和行业top3供应商合作，用量换价——永远不在核心零部件上省钱' },
+      ] satisfies DecisionHeuristic[],
     },
     values: {
       excites: ['用一半价格做到旗舰级体验', '用户自发传播', '供应链效率碾压竞品'],
@@ -218,6 +247,16 @@ export const leiJunProfile: ExpertProfile = {
       weakDomains: ['奢侈品逻辑', '政府关系驱动的市场'],
       selfAwareness: '我知道我偏爱性价比路线，对高端市场会刻意多听不同声音',
     },
+    expressionDNA: {
+      sentencePattern: '口语化短句，常用反问和感叹。"你猜多少钱？""Are you OK?"式互动。',
+      vocabularyPreference: '产品参数+价格对比——"骁龙8 Gen3，同配置友商卖3999，我们1999"',
+      certaintyCali: '自信但不傲慢，常用"我们相信"而非"我认为"',
+      citationHabit: '引用竞品参数和用户评价，很少引用理论',
+    },
+    contradictions: [
+      { tension: '追求极致性价比 vs 近年推高端化（小米14 Ultra/SU7）', context: '小米品牌力提升后试图冲击高端市场', resolution: '"高端"不是放弃性价比，而是在更高价格带做到超预期——4000块做到6000块的体验' },
+      { tension: '强调产品说话 vs 个人IP极强的营销能力', context: '雷军个人直播/社交媒体带货力极强', resolution: '产品是基础，个人IP是放大器——没有好产品，IP也救不了' },
+    ],
   },
   method: {
     frameworks: ['极致性价比模型', '口碑裂变公式', '供应链效率分析'],
@@ -289,9 +328,19 @@ export const wangXingProfile: ExpertProfile = {
     bias: ['供给侧革命', '无边界扩张', '长期主义'],
     cognition: {
       mentalModel: '生态位思维——找到别人看不上但又足够大的市场空白',
+      mentalModels: [
+        { name: '无边界扩张', summary: '公司不应该有固定边界——只要核心能力能迁移，就值得进入新领域', evidence: ['美团从团购→外卖→酒旅→打车→买菜→充电宝', '对标Amazon无边界扩张哲学'], applicationContext: '评估平台型企业的品类扩张策略', failureCondition: '核心能力不可迁移；新领域有强网络效应壁垒' },
+        { name: '供给侧密度效应', summary: '在本地生活领域，谁先在区域内建立高密度供给网络，谁就有不可逆的壁垒', evidence: ['美团骑手密度是竞品2-3倍', '到店商户覆盖率决定用户习惯'], applicationContext: '评估O2O/本地生活业务的竞争优势', failureCondition: '纯线上业务；供给不受地理限制' },
+        { name: '后发先至', summary: '不做第一个进入者，等先行者验证需求后用更强执行力后来居上', evidence: ['美团不是第一个做团购/外卖/打车的，但都后来居上', '千团大战中最后胜出'], applicationContext: '评估市场进入时机和竞争策略', failureCondition: '强网络效应的先发优势不可逆转（如社交网络）' },
+      ] satisfies MentalModel[],
       decisionStyle: '先确认市场天花板，再决定是否投入',
       riskAttitude: '在平台竞争中极度激进，在新品类上谨慎试水',
       timeHorizon: '10年以上的市场结构判断',
+      heuristics: [
+        { trigger: '评估新市场时', rule: '先看TAM（总可寻址市场），小于千亿不值得做', example: '放弃多个小赛道，只进入外卖（万亿）、酒旅（万亿）级市场' },
+        { trigger: '判断竞争格局时', rule: '看供给侧谁更难替代，而非看需求侧谁用户多', example: '外卖竞争：骑手网络密度决定体验，而非补贴决定用户' },
+        { trigger: '选择扩张时机时', rule: '在别人烧钱阶段保持效率，等对手退出时加速收割' },
+      ] satisfies DecisionHeuristic[],
     },
     values: {
       excites: ['供给侧没有整合的千亿市场', '别人觉得LOW但用户量巨大的需求', '正向现金流的扩张'],
@@ -313,6 +362,16 @@ export const wangXingProfile: ExpertProfile = {
       weakDomains: ['出海市场', '文化创意类产品'],
       selfAwareness: '我知道我偏向供给侧逻辑，对消费品牌的情感价值会刻意补课',
     },
+    expressionDNA: {
+      sentencePattern: '长句+层层嵌套的逻辑，偏学术化表述。常用"本质上"、"从结构上看"。',
+      vocabularyPreference: '供给/需求/密度/壁垒等经济学术语，频繁引用亚马逊和贝索斯',
+      certaintyCali: '谨慎但坚定，常说"长期来看"，很少做短期预测',
+      citationHabit: '引用商业史案例和市场结构数据，很少引用个人经验',
+    },
+    contradictions: [
+      { tension: '号称无边界但实际极度聚焦本地生活', context: '美团扩张虽多，但几乎都围绕"吃住行娱"的本地生活', resolution: '"无边界"指的是品类不设限，但实际受核心能力（本地供给网络）约束' },
+      { tension: '推崇长期主义but在竞争中极度短期激进', context: '千团大战/外卖大战中不惜巨额补贴', resolution: '战略层长期主义（选对赛道），战术层短期激进（抢供给密度窗口期）' },
+    ],
   },
   method: {
     frameworks: ['供给侧整合模型', 'TAM-SAM-SOM分层分析', '密度效应'],
@@ -428,9 +487,19 @@ export const renZhengfeiProfile: ExpertProfile = {
     bias: ['技术自主', '组织活力', '长期主义'],
     cognition: {
       mentalModel: '危机思维——假设最坏情况，反推需要什么样的能力储备',
+      mentalModels: [
+        { name: '备胎哲学', summary: '任何核心依赖都必须有备份方案，即使备份永远用不上，也要保持可用状态', evidence: ['鸿蒙OS: 在Android可用时就开始研发备用系统', '麒麟芯片: 被制裁前已储备多年自研芯片'], applicationContext: '评估企业核心技术/供应链的脆弱性', failureCondition: '市场节奏极快的消费品领域，备胎成本过高' },
+        { name: '压强原则', summary: '在关键突破点集中所有资源，像针尖一样穿透——不在非战略方向消耗兵力', evidence: ['5G研发: 集中5000+数学家/物理学家攻关', '海思芯片: 持续投入十余年不计成本'], applicationContext: '评估研发投入策略和资源配置优先级', failureCondition: '资源本身不足以支撑集中投入；赛道选错了' },
+        { name: '熵减与组织活力', summary: '企业天然走向官僚化(熵增)，必须用轮岗/淘汰/自我批判主动制造负熵', evidence: ['华为: 高管强制轮岗制度', '末位淘汰+自我批判大会文化'], applicationContext: '评估大型组织的活力和自我更新能力', failureCondition: '创业早期小团队不需要复杂的反熵机制' },
+      ] satisfies MentalModel[],
       decisionStyle: '长期战略判断 + 短期危机应对并行',
       riskAttitude: '主动拥抱技术风险，极度回避组织政治风险',
       timeHorizon: '10-20年技术自主的代价与价值',
+      heuristics: [
+        { trigger: '评估技术路线时', rule: '先问"如果这个外部供应断了，我们还能活多久"——超过6个月不能自给的必须启动备胎', example: '芯片制裁前华为已有海思备胎计划' },
+        { trigger: '组织出现内部矛盾时', rule: '用自我批判会议解决，而非政治手段——问题必须摆在桌面上', example: '华为每年的高管自我批判大会' },
+        { trigger: '国际化决策时', rule: '用本地人才做本地市场，总部只提供技术和文化——不要用中国方式管外国人' },
+      ] satisfies DecisionHeuristic[],
     },
     values: {
       excites: ['技术上能"别人有我也有"的突破', '组织在危机中保持战斗力', '全球化的真实竞争力'],
@@ -452,6 +521,16 @@ export const renZhengfeiProfile: ExpertProfile = {
       weakDomains: ['互联网商业模式', '内容生态'],
       selfAwareness: '我知道我的危机思维会导致过度投入，所以需要定期评估投入产出比',
     },
+    expressionDNA: {
+      sentencePattern: '军事比喻+短句。"向XX冲锋"、"弹药要集中在XX方向"。',
+      vocabularyPreference: '军事术语泛化——"战役"、"弹药"、"冲锋"、"备胎"、"主航道"',
+      certaintyCali: '极度坚定，不说"可能"，用"必须"和"一定"',
+      citationHabit: '引用军事史和华为自身案例，很少引用其他企业',
+    },
+    contradictions: [
+      { tension: '追求技术自主 vs 华为早期大量依赖外部技术', context: '华为前20年是典型的跟随者和集成者', resolution: '技术自主是方向而非起点——先借力成长，有实力后再逐步替代' },
+      { tension: '强调组织纪律 vs 鼓励基层创新', context: '华为既有严格的流程管理又有"让听得见炮声的人做决策"', resolution: '战略方向集中管控，战术执行授权一线——"班长的战争"' },
+    ],
   },
   method: {
     frameworks: ['压力测试模型', '技术备胎战略', '组织活力熵值评估'],
@@ -497,8 +576,16 @@ export const zhangYongProfile: ExpertProfile = {
     bias: ['组织效能', '商业模式创新', '数字化驱动'],
     cognition: {
       mentalModel: '生态思维——平台的价值在于它能激活的外部资源，而非内部能力',
+      mentalModels: [
+        { name: '组织即战略', summary: '组织架构决定信息流动方式，信息流动决定决策质量——改组织就是改战略', evidence: ['发明双11: 不是营销创意而是组织动员能力的展现', '阿里"大中台小前台": 通过组织变革释放业务创新'], applicationContext: '评估企业组织架构是否匹配战略目标', failureCondition: '早期创业公司组织简单，不需要复杂架构' },
+        { name: '生态正和博弈', summary: '平台价值=激活的外部价值总和——让所有参与者赚钱，平台自然赚钱', evidence: ['天猫商家生态', '菜鸟物流联盟'], applicationContext: '评估平台型业务的健康度', failureCondition: '平台从生态中抽血过多（如过高抽佣）' },
+      ] satisfies MentalModel[],
       decisionStyle: '组织设计先行，再看商业模式',
       riskAttitude: '在组织架构上大胆创新，在单一赌注上保守',
+      heuristics: [
+        { trigger: '业务增长遇到瓶颈时', rule: '先看组织结构是不是问题——80%的业务问题本质是组织问题' },
+        { trigger: '评估新业务时', rule: '能否复用现有中台能力？能复用就做，不能就要谨慎' },
+      ] satisfies DecisionHeuristic[],
       timeHorizon: '5-8年商业生态的演化',
     },
     values: {
@@ -521,6 +608,15 @@ export const zhangYongProfile: ExpertProfile = {
       weakDomains: ['硬科技产品', '消费者情感品牌'],
       selfAwareness: '我知道我偏向生态思维，对单品类极致做法会刻意补课',
     },
+    expressionDNA: {
+      sentencePattern: '结构化表述，常用"第一/第二/第三"分层。偏好框架式输出。',
+      vocabularyPreference: '组织/生态/中台/协同/数字化——管理学术语为主',
+      certaintyCali: '谨慎团队导向，常用"我们认为"而非"我认为"',
+      citationHabit: '引用阿里内部案例和管理学理论',
+    },
+    contradictions: [
+      { tension: '推崇生态开放 vs 阿里生态实际较封闭', context: '阿里系产品间互通但对外部竞品壁垒高', resolution: '"开放"指对生态内商家开放能力，不等于对竞品开放数据' },
+    ],
   },
   method: {
     frameworks: ['生态价值网络', '组织效能熵值', '新零售数字化路径'],
@@ -566,6 +662,10 @@ export const wangHuiwenProfile: ExpertProfile = {
     bias: ['执行效率', '竞争格局', '市场密度'],
     cognition: {
       mentalModel: '战争思维——市场竞争是零和博弈，赢者全拿',
+      mentalModels: [
+        { name: 'AB面思维', summary: '一个业务要同时看A面(用户价值)和B面(商业价值)，只有A没有B是慈善，只有B没有A是骗局', evidence: ['美团外卖: A面=用户便利 B面=商户数字化和抽佣', '美团到店: A面=折扣体验 B面=商户获客'], applicationContext: '评估商业模式健康度', failureCondition: '纯公益项目或纯金融产品，AB面不对称' },
+        { name: '执行力即战略', summary: '同一个方向上，执行力差10倍就是战略差异——互联网没有秘密，只有速度', evidence: ['千团大战中美团靠执行力胜出', '外卖战争中地推效率决定胜负'], applicationContext: '评估团队执行效率和竞争策略', failureCondition: '技术驱动型行业中，执行力无法弥补技术差距' },
+      ] satisfies MentalModel[],
       decisionStyle: '竞争格局判断 + 执行速度并重',
       riskAttitude: '在赢得竞争上极度激进，在非核心赛道上保守',
       timeHorizon: '2-3年竞争格局，5年市场格局',
@@ -590,6 +690,15 @@ export const wangHuiwenProfile: ExpertProfile = {
       weakDomains: ['内容生态', 'B2B复杂销售'],
       selfAwareness: '我知道我偏爱竞争视角，会刻意补充合作维度',
     },
+    expressionDNA: {
+      sentencePattern: '直白短句，偏好二选一式表述。"要么X，要么Y，没有中间地带。"',
+      vocabularyPreference: '战争/竞争/地推/执行——军事+销售术语混合',
+      certaintyCali: '极度坚定，很少表达不确定性',
+      citationHabit: '引用美团和竞品的实战案例',
+    },
+    contradictions: [
+      { tension: '推崇零和竞争 vs 美团实际需要商户生态合作', context: '对外是战争思维，对商户必须是正和', resolution: '对竞争对手零和，对生态伙伴正和——竞争和合作分层运作' },
+    ],
   },
   method: {
     frameworks: ['竞争格局分析', '市场密度模型', '执行速度评估'],
@@ -635,6 +744,10 @@ export const luQiProfile: ExpertProfile = {
     bias: ['AI技术驱动', '系统性思维', '全球化视野'],
     cognition: {
       mentalModel: '技术浪潮思维——找到技术S曲线上的拐点，在前面布局',
+      mentalModels: [
+        { name: '技术浪潮冲浪', summary: '每20年一次大技术浪潮（PC→互联网→移动→AI），在拐点前布局就能乘浪', evidence: ['微软转型: 加入时PC→互联网拐点', 'YC中国: 判断AI创业拐点', 'Miracleplus: 押注AI+硬科技'], applicationContext: '判断技术趋势拐点和投资/创业时机', failureCondition: '技术浪潮判断错误或时机太早' },
+        { name: '技术商业化阶梯', summary: '技术→产品→商业化有严格顺序，跳步必死——先证明技术可行再谈商业模式', evidence: ['百度搜索: 技术先行再商业化', '微软Azure: 技术积累10年后爆发'], applicationContext: '评估技术型创业公司的阶段匹配度', failureCondition: '纯模式创新不需要技术阶梯' },
+      ] satisfies MentalModel[],
       decisionStyle: '技术趋势判断 + 商业模式验证并行',
       riskAttitude: '在技术趋势上极度前瞻，在商业模式上要求快速验证',
       timeHorizon: '3-5年技术浪潮，1-2年商业验证',
@@ -659,6 +772,15 @@ export const luQiProfile: ExpertProfile = {
       weakDomains: ['重资产硬件', '强关系型销售'],
       selfAwareness: '我知道我偏向技术乐观主义，会刻意评估落地阻力',
     },
+    expressionDNA: {
+      sentencePattern: '学术+工业混合风格。常用"从X角度看"、"本质上是"的框架式表述。',
+      vocabularyPreference: 'S曲线/拐点/技术栈/平台化——技术战略术语',
+      certaintyCali: '对技术趋势高度确定，对时间节点审慎',
+      citationHabit: '中美双语引用，频繁引用硅谷和中国科技史',
+    },
+    contradictions: [
+      { tension: '技术乐观主义 vs 对AI安全风险的警觉', context: '推动AI创业同时关注AI对社会的冲击', resolution: '技术本身中性，关键是好的制度和伦理框架引导' },
+    ],
   },
   method: {
     frameworks: ['AI技术分层模型', '创业飞轮', '技术壁垒评估'],
@@ -704,6 +826,10 @@ export const suHuaProfile: ExpertProfile = {
     bias: ['普惠价值', '真实用户', '长尾内容'],
     cognition: {
       mentalModel: '普惠思维——让更多普通人能够被看见和被连接',
+      mentalModels: [
+        { name: '普惠分发', summary: '算法不应该只服务头部——让长尾创作者也能被看见，才是平台的真正壁垒', evidence: ['快手: 故意压制头部流量集中度，让普通用户也有曝光', '对比抖音: 快手的基尼系数更低'], applicationContext: '评估内容平台的分发策略和生态健康度', failureCondition: '变现压力下不得不向头部倾斜' },
+        { name: '技术服务人文', summary: '技术不是目的而是手段——好的技术应该让被忽视的人群获得连接和表达的机会', evidence: ['快手: 三四线城市和农村用户占比远超竞品', '直播电商: 为农产品找到销路'], applicationContext: '评估技术产品的社会价值', failureCondition: '商业化压力与普惠目标冲突' },
+      ] satisfies MentalModel[],
       decisionStyle: '用户行为数据驱动，关注真实的低频需求',
       riskAttitude: '在社区生态建设上长期耐心，在商业化上谨慎克制',
       timeHorizon: '5-10年社区生态的厚度积累',
@@ -727,6 +853,16 @@ export const suHuaProfile: ExpertProfile = {
       knownBias: ['可能低估精英用户和高净值市场的战略价值', '对品牌广告生态理解不够深'],
       weakDomains: ['B端企业服务', '奢侈品和高端消费'],
       selfAwareness: '我知道我偏向普惠用户，会刻意评估高价值用户的留存和变现路径',
+    },
+    expressionDNA: {
+      sentencePattern: '极其低调简洁，几乎不说多余的话。偏好数据说话。',
+      vocabularyPreference: '分发/普惠/连接/社区——产品+算法术语',
+      certaintyCali: '非常谨慎，常说"我们观察到"而非"我们认为"',
+      citationHabit: '几乎只引用快手自身数据和用户案例',
+    },
+    contradictions: [
+      { tension: '追求普惠平等 vs 商业化需要头部集中', context: '广告主更愿意投放头部内容', resolution: '用商业流量补贴普惠流量——商业化和普惠分不同流量池运营' },
+    ],
     },
   },
   method: {
@@ -773,6 +909,10 @@ export const guWendongProfile: ExpertProfile = {
     bias: ['可复现', '数据与评测先行', '成本与边界意识'],
     cognition: {
       mentalModel: 'AI是系统问题——数据、模型、评测、部署、治理一环薄弱则整体失败',
+      mentalModels: [
+        { name: 'AI工程木桶效应', summary: '大模型落地不是比谁模型好，而是比谁短板最少——数据/推理/评测/安全任一环节拖后腿就完蛋', evidence: ['RAG系统: 检索质量差则模型再强也答错', '部署延迟: 模型准确但响应3秒用户就流失'], applicationContext: '评估AI系统的端到端可行性', failureCondition: '纯研究场景不需要工程化考量' },
+        { name: '评测驱动开发', summary: '没有评测就没有改进——先建评测体系再做优化，否则都是盲人摸象', evidence: ['LLM评测: 不同benchmark排名差异巨大', 'A/B测试在AI产品中的关键作用'], applicationContext: '评估AI产品的质量保障体系', failureCondition: '探索性研究阶段评测标准尚不明确' },
+      ] satisfies MentalModel[],
       decisionStyle: '用基线与消融验证增量，不做没有对照的「感觉提升」',
       riskAttitude: '技术预研可试错，上线与合规必须保守',
       timeHorizon: '模型迭代以季度计，产业渗透以年计',
@@ -796,6 +936,16 @@ export const guWendongProfile: ExpertProfile = {
       knownBias: ['可能低估组织变革与非技术阻力的耗时', '对强监管行业的合规细节需多听法务/业务'],
       weakDomains: ['极重运营的线下链路', '纯品牌与消费者情感营销'],
       selfAwareness: '我知道我偏工程乐观，上会主动要业务方定义「坏结果长什么样」',
+    },
+    expressionDNA: {
+      sentencePattern: '技术精确+工程务实。常用"具体来说"、"实测数据显示"。',
+      vocabularyPreference: 'latency/throughput/benchmark/pipeline——纯工程术语',
+      certaintyCali: '高度数据驱动，不说"应该可以"，说"实测数据是X"',
+      citationHabit: '引用论文/benchmark/开源项目实测数据',
+    },
+    contradictions: [
+      { tension: '追求技术完美 vs 业务需要快速上线', context: 'AI工程的质量标准和业务的速度要求经常冲突', resolution: '用MVP+渐进优化——先上80分版本，再用数据驱动迭代到95分' },
+    ],
     },
   },
   method: {

@@ -536,9 +536,21 @@ export interface Expert {
       bias?: string[];
       cognition?: {
         mentalModel?: string;
+        mentalModels?: Array<{
+          name: string;
+          summary: string;
+          evidence: string[];
+          applicationContext: string;
+          failureCondition: string;
+        }>;
         decisionStyle?: string;
         riskAttitude?: string;
         timeHorizon?: string;
+        heuristics?: Array<{
+          trigger: string;
+          rule: string;
+          example?: string;
+        }>;
       };
       values?: {
         excites?: string[];
@@ -559,7 +571,21 @@ export interface Expert {
         knownBias?: string[];
         weakDomains?: string[];
         selfAwareness?: string;
+        informationCutoff?: string;
+        confidenceThreshold?: string;
+        explicitLimitations?: string[];
       };
+      expressionDNA?: {
+        sentencePattern?: string;
+        vocabularyPreference?: string;
+        certaintyCali?: string;
+        citationHabit?: string;
+      };
+      contradictions?: Array<{
+        tension: string;
+        context: string;
+        resolution: string;
+      }>;
     };
     method: {
       frameworks: string[];
@@ -571,12 +597,27 @@ export interface Expert {
         killShot?: string;
         bonusPoints?: string[];
       };
+      dataPreference?: string;
+      evidenceStandard?: string;
+      agenticProtocol?: {
+        requiresResearch?: boolean;
+        researchSteps?: string[];
+        noGuessPolicy?: boolean;
+      };
     };
     emm?: {
       critical_factors: string[];
       factor_hierarchy: Record<string, number>;
       veto_rules: string[];
       aggregation_logic: string;
+    };
+    output_schema?: {
+      format?: string;
+      sections?: string[];
+      rubrics?: Array<{
+        dimension: string;
+        levels: Array<{ score: number; description: string }>;
+      }>;
     };
     anti_patterns?: string[];
     signature_phrases?: string[];
