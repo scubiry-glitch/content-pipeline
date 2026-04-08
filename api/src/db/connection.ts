@@ -139,6 +139,15 @@ export async function initDatabase(config?: DBConfig): Promise<void> {
   await setupMVPSchema();
 }
 
+/**
+ * 仅创建连接池并 ping 数据库，不执行 setupMVPSchema。
+ * 适用于库结构已由 `npm run db:init` 或 API 启动迁移过的环境，避免脚本重复跑漫长 DDL。
+ */
+export async function ensureDbPoolConnected(): Promise<void> {
+  createPool();
+  await query('SELECT 1');
+}
+
 async function withConnectionRetry<T>(
   operation: () => Promise<T>,
   operationName: string

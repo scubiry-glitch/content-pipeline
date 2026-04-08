@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 const API_BASE = '/api/v1/content-library';
 
 interface TopicRecommendation {
-  topic: string;
+  entityId: string;
+  entityName: string;
   score: number;
-  reason: string;
-  relatedEntities: string[];
-  trendDirection: 'rising' | 'falling' | 'stable';
+  factDensity: number;
+  timeliness: number;
+  gapScore: number;
+  suggestedAngles: string[];
 }
 
 interface KnowledgeGap {
@@ -45,10 +47,19 @@ export function ContentLibraryTopics() {
 
   useEffect(() => { load(); }, []);
 
-  const directionIcon = (d: string) =>
-    d === 'rising' ? '↑' : d === 'falling' ? '↓' : '→';
-  const directionColor = (d: string) =>
-    d === 'rising' ? 'text-green-600' : d === 'falling' ? 'text-red-600' : 'text-gray-500';
+  const timelinessLabel = (t: number) => {
+    if (!Number.isFinite(t)) return '—';
+    if (t >= 0.75) return '新';
+    if (t >= 0.4) return '中';
+    return '旧';
+  };
+
+  const timelinessColor = (t: number) => {
+    if (!Number.isFinite(t)) return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+    if (t >= 0.75) return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+    if (t >= 0.4) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200';
+    return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+  };
 
   return (
     <div className="p-6">
@@ -81,17 +92,21 @@ export function ContentLibraryTopics() {
             {topics.map((t, i) => (
               <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.topic}</h3>
-                  <span className={`text-lg font-bold ${directionColor(t.trendDirection)}`}>{directionIcon(t.trendDirection)}</span>
+                  <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.entityName || '（未命名实体）'}</h3>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${timelinessColor(t.timeliness)}`}>
+                    {timelinessLabel(t.timeliness)}
+                  </span>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{t.reason}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                  事实密度：{Number.isFinite(t.factDensity) ? t.factDensity : '—'}；空白度：{Number.isFinite(t.gapScore) ? t.gapScore.toFixed(2) : '—'}
+                </p>
                 <div className="flex items-center justify-between">
                   <div className="flex gap-1.5 flex-wrap">
-                    {t.relatedEntities?.slice(0, 3).map((e, j) => (
-                      <span key={j} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-full text-xs">{e}</span>
+                    {t.suggestedAngles?.slice(0, 3).map((a, j) => (
+                      <span key={j} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-full text-xs">{a}</span>
                     ))}
                   </div>
-                  <span className="text-sm font-medium text-indigo-600">{(t.score * 100).toFixed(0)} 分</span>
+                  <span className="text-sm font-medium text-indigo-600">{Number.isFinite(t.score) ? t.score.toFixed(2) : '—'}</span>
                 </div>
               </div>
             ))}

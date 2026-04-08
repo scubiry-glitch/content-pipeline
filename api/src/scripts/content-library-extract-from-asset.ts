@@ -4,15 +4,20 @@
  *
  * 用法（在 api/ 下）:
  *   npx tsx src/scripts/content-library-extract-from-asset.ts
- *   npx tsx src/scripts/content-library-extract-from-asset.ts --id=asset_xxxx
+ *     默认：质量分最高的前 10 条（同 --top=10；按 quality_score + ai_quality_score 归一化排序）
  *   npx tsx src/scripts/content-library-extract-from-asset.ts --top=10
- *     （按 assets.quality_score、ai_quality_score 综合排序，对前 N 条各跑一遍抽取）
+ *   npx tsx src/scripts/content-library-extract-from-asset.ts --id=asset_xxxx
+ *   npx tsx src/scripts/content-library-extract-from-asset.ts --random
+ *     随机一条（旧版默认行为）
  *
  * 依赖: api/.env 数据库 + 任一可用 LLM（与 server 相同）
+ *
+ * 若库已用 `npm run db:init` 初始化过，可跳过长迁移（大表 ALTER 可能十多分钟）:
+ *   CONTENT_LIBRARY_SKIP_SCHEMA=1 npm run content-library:extract-top10
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import { initDatabase, query } from '../db/connection.js';
+import { ensureDbPoolConnected, initDatabase, query } from '../db/connection.js';
 import { generateEmbedding } from '../services/llm.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from '../providers/index.js';
 import { createContentLibraryEngine } from '../modules/content-library/index.js';
@@ -36,6 +41,10 @@ function argTop(): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+function argRandom(): boolean {
+  return process.argv.includes('--random');
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -53,11 +62,25 @@ async function main() {
     useClaudeCode: inClaudeCode && !claudeApiKey,
   });
 
-  console.log('[ContentLibrary:ExtractFromAsset] 初始化数据库…');
-  await initDatabase();
+  const skipSchema =
+    process.env.CONTENT_LIBRARY_SKIP_SCHEMA === '1' ||
+    process.env.CONTENT_LIBRARY_SKIP_SCHEMA === 'true';
+  if (skipSchema) {
+    console.log(
+      '[ContentLibrary:ExtractFromAsset] CONTENT_LIBRARY_SKIP_SCHEMA 已启用：只连接数据库，不执行全量 schema 迁移…'
+    );
+    await ensureDbPoolConnected();
+  } else {
+    console.log('[ContentLibrary:ExtractFromAsset] 初始化数据库（全量 schema，首次或空库较慢）…');
+    await initDatabase();
+  }
+  console.log('[ContentLibrary:ExtractFromAsset] 数据库连接就绪。');
 
   const idArg = argId();
-  const topN = argTop();
+  const topFromFlag = argTop();
+  const wantRandom = argRandom();
+  /** 无 --id / --random / --top= 时，默认质量前 10 */
+  const topN = topFromFlag ?? (!idArg && !wantRandom ? 10 : undefined);
 
   const deps = createContentLibraryPipelineDeps(query, undefined, generateEmbedding);
   const engine = createContentLibraryEngine(deps);
@@ -77,7 +100,7 @@ async function main() {
       process.exit(1);
     }
     rows = [row];
-  } else if (topN) {
+  } else if (topN != null) {
     const r = await query(
       `SELECT id, title, content,
               COALESCE(quality_score, 0)::float AS q,
@@ -104,9 +127,9 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `[ContentLibrary:ExtractFromAsset] 按质量排序取前 ${rows.length} 条（--top=${topN}）`
+      `[ContentLibrary:ExtractFromAsset] 按质量排序取前 ${rows.length} 条（top=${topN}${topFromFlag == null ? '，默认' : ''}）`
     );
-  } else {
+  } else if (wantRandom) {
     const r = await query(
       `SELECT id, title, content FROM assets
        WHERE (is_deleted IS NOT TRUE)
@@ -124,6 +147,9 @@ async function main() {
       process.exit(1);
     }
     rows = [row];
+  } else {
+    console.error('[ContentLibrary:ExtractFromAsset] 请使用 --id=、--top=N、--random 之一（默认等价 --top=10）');
+    process.exit(1);
   }
 
   for (let i = 0; i < rows.length; i++) {
