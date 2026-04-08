@@ -8,6 +8,17 @@ import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
 import { weiHangkongProfile } from './data/weiHangkong.js';
+import { jobsProfile } from './data/jobs.js';
+import { mungerProfile } from './data/munger.js';
+import { talebProfile } from './data/taleb.js';
+import { feynmanProfile } from './data/feynman.js';
+import { karpathyProfile } from './data/karpathy.js';
+import { paulGrahamProfile } from './data/paulgraham.js';
+import { buffettProfile } from './data/buffett.js';
+import { bezosProfile } from './data/bezos.js';
+import { zhangXiaolongProfile } from './data/zhangxiaolong.js';
+import { huangZhengProfile } from './data/huangzheng.js';
+import { liKaifuProfile } from './data/likaifu.js';
 
 /** 将前端 Expert 格式转换为后端 ExpertProfile 格式 */
 export function frontendExpertToProfile(fe: any): ExpertProfile & { display_metadata: any } {
@@ -143,6 +154,8 @@ export async function buildDefaultBuiltinProfileMap(): Promise<
         xiaohongshuProfile,
         weiHangkongProfile,
         ...topExpertProfiles,
+        jobsProfile, mungerProfile, talebProfile, feynmanProfile, karpathyProfile, paulGrahamProfile,
+        buffettProfile, bezosProfile, zhangXiaolongProfile, huangZhengProfile, liKaifuProfile,
       ];
       const frontendExperts = await loadFrontendExpertsData();
       return mergeExpertProfilesToMap(builtinExperts, frontendExperts);
