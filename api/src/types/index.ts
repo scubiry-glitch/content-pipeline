@@ -104,6 +104,8 @@ export interface GenerationParams {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
+  /** OpenAI 兼容：json_object，需提示词要求输出 JSON */
+  responseFormat?: 'json' | 'text';
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;

@@ -11,7 +11,8 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { initDatabase, query } from '../db/connection.js';
-import { generate, generateEmbedding } from '../services/llm.js';
+import { generateEmbedding } from '../services/llm.js';
+import { initLLMRouter, isClaudeCodeEnvironment } from '../providers/index.js';
 import { createContentLibraryEngine } from '../modules/content-library/index.js';
 import { createContentLibraryPipelineDeps } from '../modules/content-library/adapters/pipeline.js';
 
@@ -27,6 +28,18 @@ function argId(): string | undefined {
 }
 
 async function main() {
+  const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const inClaudeCode = isClaudeCodeEnvironment();
+  const kimiApiKey =
+    process.env.KIMI_API_KEY || (claudeApiKey?.startsWith('sk-kimi') ? claudeApiKey : undefined);
+  initLLMRouter({
+    kimiApiKey,
+    claudeApiKey: claudeApiKey?.startsWith('sk-kimi') ? undefined : claudeApiKey,
+    openaiApiKey,
+    useClaudeCode: inClaudeCode && !claudeApiKey,
+  });
+
   console.log('[ContentLibrary:ExtractFromAsset] 初始化数据库…');
   await initDatabase();
 
@@ -66,7 +79,7 @@ async function main() {
   console.log(`[ContentLibrary:ExtractFromAsset] 选中素材 id=${row.id} title=${(row.title || '').slice(0, 80)}…`);
   console.log(`[ContentLibrary:ExtractFromAsset] 抽取正文长度=${snippet.length}（上限 ${MAX_EXTRACT_CHARS}）`);
 
-  const deps = createContentLibraryPipelineDeps(query, generate, generateEmbedding);
+  const deps = createContentLibraryPipelineDeps(query, undefined, generateEmbedding);
   const engine = createContentLibraryEngine(deps);
 
   console.log('[ContentLibrary:ExtractFromAsset] 调用 LLM 抽取事实（可能需数十秒）…');

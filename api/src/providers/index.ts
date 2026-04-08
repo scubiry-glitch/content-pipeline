@@ -95,32 +95,61 @@ export class LLMRouter {
       fallbackProvider: 'siliconflow',
     };
 
-    // Try preferred provider first
-    let provider = this.providers.get(rule.preferredProvider);
-    let model: string | undefined = this.modelConfigs[rule.preferredProvider as keyof typeof this.modelConfigs]?.[rule.priority];
+    const preferredProv = this.providers.get(rule.preferredProvider);
+    const fallbackName = rule.fallbackProvider;
+    const fallbackProv = fallbackName ? this.providers.get(fallbackName) : undefined;
 
-    // If preferred not available, try fallback
-    if (!provider && rule.fallbackProvider) {
-      provider = this.providers.get(rule.fallbackProvider);
-      model = this.modelConfigs[rule.fallbackProvider as keyof typeof this.modelConfigs]?.[rule.priority];
-    }
+    let primary: LLMProvider;
+    let primaryModel: string | undefined;
+    /** 本次请求是否优先走了 routing 表里的首选 provider（失败时可再试 fallback） */
+    let triedPreferred: boolean;
 
-    if (!provider) {
-      // Use any available provider as last resort
+    if (preferredProv) {
+      primary = preferredProv;
+      primaryModel = this.modelConfigs[rule.preferredProvider]?.[rule.priority];
+      triedPreferred = true;
+    } else if (fallbackProv) {
+      primary = fallbackProv;
+      primaryModel = fallbackName
+        ? this.modelConfigs[fallbackName]?.[rule.priority]
+        : undefined;
+      triedPreferred = false;
+    } else {
       const available = Array.from(this.providers.values())[0];
       if (!available) {
         throw new Error('No LLM provider available');
       }
-      provider = available;
-      model = undefined;
+      const params: GenerationParams = {
+        ...customParams,
+        model: customParams?.model,
+      };
+      return available.generate(prompt, params);
     }
 
-    const params: GenerationParams = {
+    const buildParams = (model?: string): GenerationParams => ({
       ...customParams,
       model: customParams?.model || model,
-    };
+    });
 
-    return provider.generate(prompt, params);
+    try {
+      return await primary.generate(prompt, buildParams(primaryModel));
+    } catch (err) {
+      if (
+        triedPreferred &&
+        fallbackProv &&
+        fallbackProv !== primary &&
+        fallbackName
+      ) {
+        const fbModel = this.modelConfigs[fallbackName]?.[rule.priority];
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[LLM Router] ${rule.preferredProvider} failed, trying ${fallbackName}:`,
+          msg
+        );
+        return await fallbackProv.generate(prompt, buildParams(fbModel));
+      }
+      throw err;
+    }
   }
 
   async complete(params: {

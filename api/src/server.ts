@@ -64,7 +64,7 @@ import { createContentLibraryEngine, createRouter as createContentLibraryRouter 
 import { createContentLibraryPipelineDeps } from './modules/content-library/adapters/pipeline.js';
 import { initContentLibraryEngineSingleton } from './modules/content-library/singleton.js';
 import { query } from './db/connection.js';
-import { generate, generateEmbedding } from './services/llm.js';
+import { generateEmbedding } from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
@@ -191,13 +191,15 @@ async function main() {
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
 
   // Expert Library 独立模块 (v3.0) — Cognitive Digital Twin
-  const expertEngine = await createExpertEngine(createPipelineDeps(query, generate, undefined, generateEmbedding));
+  const expertEngine = await createExpertEngine(
+    createPipelineDeps(query, undefined, undefined, generateEmbedding)
+  );
   initExpertEngineSingleton(expertEngine);
   await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
 
   // Content Library 独立模块 (v7.0) — 结构化记忆与层级检索
   const contentLibraryEngine = createContentLibraryEngine(
-    createContentLibraryPipelineDeps(query, generate, generateEmbedding)
+    createContentLibraryPipelineDeps(query, undefined, generateEmbedding)
   );
   initContentLibraryEngineSingleton(contentLibraryEngine);
   await fastify.register(createContentLibraryRouter(contentLibraryEngine), { prefix: '/api/v1/content-library' });

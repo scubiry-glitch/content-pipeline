@@ -559,6 +559,7 @@ async function setupMVPSchema(): Promise<void> {
       display_metadata JSONB DEFAULT '{}',
       is_active BOOLEAN DEFAULT true,
       availability_status VARCHAR(20) DEFAULT 'available',
+      authority_score DECIMAL(4,3) DEFAULT 0.500,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -568,6 +569,7 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS display_metadata JSONB DEFAULT '{}'`).catch(() => {});
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS availability_status VARCHAR(20) DEFAULT 'available'`).catch(() => {});
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+  await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS authority_score DECIMAL(4,3) DEFAULT 0.500`).catch(() => {});
 
   // Seed default experts for BlueTeam if none exist
   const expertCount = await query(`SELECT COUNT(*) FROM expert_library WHERE is_active = true`);

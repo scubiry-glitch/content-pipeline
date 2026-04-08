@@ -20,6 +20,7 @@ export class KimiProvider extends LLMProvider {
       temperature: params?.temperature,
       maxTokens: params?.maxTokens,
       systemPrompt: params?.systemPrompt,
+      responseFormat: params?.responseFormat,
     });
 
     return {
