@@ -17,7 +17,15 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { to: '/', label: '仪表盘', icon: '📊' },
-  { to: '/tasks', label: '任务中心', icon: '📋' },
+  {
+    to: '/tasks',
+    label: '任务中心',
+    icon: '📋',
+    children: [
+      { to: '/tasks', label: '任务列表', icon: '📋' },
+      { to: '/lg-tasks', label: 'LangGraph任务', icon: '🧠' },
+    ]
+  },
   { 
     to: '/assets', 
     label: '内容资产', 

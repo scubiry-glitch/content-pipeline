@@ -117,6 +117,27 @@ export class DebateEngine {
   }
 
   /**
+   * 调用 LLM 的安全包装：单次失败不抛出，返回可展示的降级文本。
+   * 避免某位专家失败导致整个 /debate 请求 500。
+   */
+  private async safeCompleteWithSystem(
+    systemPrompt: string,
+    userPrompt: string,
+    options: { temperature: number; maxTokens: number },
+    fallback: string
+  ): Promise<string> {
+    try {
+      const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, options);
+      const text = typeof reply === 'string' ? reply.trim() : '';
+      return text || fallback;
+    } catch (err) {
+      const hint = err instanceof Error ? err.message : String(err);
+      console.warn('[DebateEngine] LLM call failed, using fallback:', hint);
+      return fallback;
+    }
+  }
+
+  /**
    * 执行多专家辩论
    */
   async debate(request: DebateRequest): Promise<DebateResult> {
@@ -254,10 +275,12 @@ ${content}
 
 请发表你的独立观点:`;
 
-        const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature,
-          maxTokens: 800,
-        });
+        const reply = await this.safeCompleteWithSystem(
+          systemPrompt,
+          userPrompt,
+          { temperature, maxTokens: 800 },
+          `【降级输出】${expert.name} 暂时无法生成独立观点，请稍后重试。`
+        );
 
         return {
           expertId: expert.expert_id,
@@ -301,10 +324,12 @@ ${targetOpinion.content}
 
 请对以上观点进行质疑或补充:`;
 
-        const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature: Math.max(0.1, temperature - 0.1),
-          maxTokens: 600,
-        });
+        const reply = await this.safeCompleteWithSystem(
+          systemPrompt,
+          userPrompt,
+          { temperature: Math.max(0.1, temperature - 0.1), maxTokens: 600 },
+          `【降级输出】${expert.name} 暂时无法完成交叉质疑。`
+        );
 
         return {
           expertId: expert.expert_id,
@@ -347,10 +372,12 @@ ${discussionSummary}
 
 请总结你的最终立场:`;
 
-        const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-          temperature: Math.max(0.1, temperature - 0.2),
-          maxTokens: 600,
-        });
+        const reply = await this.safeCompleteWithSystem(
+          systemPrompt,
+          userPrompt,
+          { temperature: Math.max(0.1, temperature - 0.2), maxTokens: 600 },
+          `【降级输出】${expert.name} 暂时无法给出最终立场。`
+        );
 
         return {
           expertId: expert.expert_id,

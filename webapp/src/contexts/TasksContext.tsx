@@ -39,6 +39,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     {
       // 每30秒自动刷新（对应 Dashboard 自动刷新需求）
       refreshInterval: 30000,
+      // 避免后端启动/迁移阶段 HTTP 长时间 pending 时 SWR 一直 isLoading，导致 /tasks 无限「加载中」
+      fallbackData: [],
     }
   );
 

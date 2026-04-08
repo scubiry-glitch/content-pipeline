@@ -3,6 +3,8 @@
  * 按 loadExpertsData() 顺序，跳过 data/*.ts 已有 ExpertProfile 的 id，至多 34 位生成待审 JSON。
  * 输出：api/src/modules/expert-library/data/generated/pending-review/{id}.json + manifest.json
  *
+ * LLM：与在线专家库一致，经 initLLMRouter + task `expert_library`（火山优先 → SiliconFlow → 已注册 Provider，见 providers/index.ts）。
+ *
  * 用法：cd api && npx tsx src/scripts/batch-generate-expert-profiles.ts [--force] [--id=E08-08]
  * --force：覆盖已存在的 pending-review/{id}.json
  * --id=：仅生成指定 expert_id（须存在于 loadExpertsData 且非内置 SKIP 集合）
@@ -11,7 +13,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import { generate } from '../services/llm.js';
+import { initLLMRouter, getLLMRouter, isClaudeCodeEnvironment } from '../providers/index.js';
 import { SKIP_GENERATE_IDS } from '../modules/expert-library/builtinExpertIds.js';
 import { assertExpertProfile } from '../modules/expert-library/expertProfileDb.js';
 import type { ExpertProfile } from '../modules/expert-library/types.js';
@@ -19,6 +21,21 @@ import type { ExpertProfile } from '../modules/expert-library/types.js';
 /** 请在仓库 `api/` 目录下执行：npm run expert:gen-batch */
 const API_ROOT = process.cwd();
 dotenv.config({ path: path.join(API_ROOT, '.env') });
+
+function initRouterLikeServer() {
+  const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const inClaudeCode = isClaudeCodeEnvironment();
+  const kimiApiKey =
+    process.env.KIMI_API_KEY || (claudeApiKey?.startsWith('sk-kimi') ? claudeApiKey : undefined);
+  // 与 server.ts 一致；VOLCANO / SILICONFLOW 等由 initLLMRouter 读取 process.env
+  initLLMRouter({
+    kimiApiKey,
+    claudeApiKey: claudeApiKey?.startsWith('sk-kimi') ? undefined : claudeApiKey,
+    openaiApiKey,
+    useClaudeCode: inClaudeCode && !claudeApiKey,
+  });
+}
 
 const BATCH_LIMIT = 34;
 const OUT_DIR = path.join(API_ROOT, 'src/modules/expert-library/data/generated/pending-review');
@@ -74,6 +91,9 @@ async function main() {
   const onlyId = parseOnlyId();
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
+  initRouterLikeServer();
+  const llmRouter = getLLMRouter();
+
   const expertServicePath = path.join(API_ROOT, '../webapp/src/services/expertService.ts');
   if (!fs.existsSync(expertServicePath)) {
     console.error('找不到 webapp expertService:', expertServicePath);
@@ -123,7 +143,9 @@ async function main() {
   } = {
     generatedAt: new Date().toISOString(),
     batchLimit: onlyId ? 1 : BATCH_LIMIT,
-    modelNotes: onlyId ? `single:${onlyId}` : 'batch-generate-expert-profiles',
+    modelNotes: onlyId
+      ? `single:${onlyId};llm=LLMRouter:expert_library`
+      : 'batch-generate-expert-profiles;llm=LLMRouter:expert_library',
     items: [],
   };
 
@@ -148,7 +170,7 @@ async function main() {
     });
 
     try {
-      const { content, model } = await generate(prompt, 'analysis', {
+      const { content, model } = await llmRouter.generate(prompt, 'expert_library', {
         maxTokens: 8192,
         temperature: 0.35,
       });

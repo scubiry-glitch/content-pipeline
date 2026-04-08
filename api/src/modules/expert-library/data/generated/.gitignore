@@ -1,4 +1,5 @@
+# pending-review：LLM 待审/中间产物，默认不提交
 pending-review/*
 !pending-review/.gitkeep
-approved/*
-!approved/.gitkeep
+
+# approved：已审查 ExpertProfile JSON，纳入版本控制（与 expert:upsert-approved 一致）

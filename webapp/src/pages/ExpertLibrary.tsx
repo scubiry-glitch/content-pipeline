@@ -1,9 +1,17 @@
 // 专家库 v5.2 - Expert Library with Tab Navigation
 // 整合专家库列表、对比、网络、知识图谱
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getAllExperts, getExpertFeedbackStats, getExpertWorkload, getExpertReviewHistory, type ExpertReviewHistory } from '../services/expertService';
+import {
+  getAllExperts,
+  getExpertFeedbackStats,
+  getExpertWorkload,
+  getExpertReviewHistory,
+  initExpertsFromApi,
+  type ExpertReviewHistory,
+} from '../services/expertService';
+import { expertLibraryApi } from '../api/client';
 import type { Expert } from '../types';
 import './ExpertLibrary.css';
 
@@ -79,6 +87,19 @@ export function ExpertLibrary() {
   const [selectedExpertHistory, setSelectedExpertHistory] = useState<ExpertReviewHistory[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [syncingBuiltins, setSyncingBuiltins] = useState(false);
+  const [syncBuiltinMessage, setSyncBuiltinMessage] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<{
+    current: number;
+    total: number;
+    currentName: string | null;
+  } | null>(null);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    expert_id: string;
+    name: string;
+  } | null>(null);
+  const duplicateWaitRef = useRef<((choice: 'skip' | 'overwrite') => void) | null>(null);
+  const duplicatePolicyForRestRef = useRef<'skip' | 'overwrite' | null>(null);
   // CDT (认知数字孪生) 扩展档案 — 从新 expert-library API 加载
   const [cdtProfile, setCdtProfile] = useState<any>(null);
 
@@ -162,6 +183,90 @@ export function ExpertLibrary() {
     return colors[angle] || '#6b7280';
   };
 
+  const refreshExpertsList = async () => {
+    await initExpertsFromApi();
+    const allExperts = getAllExperts();
+    setExperts(allExperts);
+  };
+
+  const resolveDuplicateChoice = (choice: 'skip' | 'overwrite', applyToRest?: boolean) => {
+    if (applyToRest) duplicatePolicyForRestRef.current = choice;
+    duplicateWaitRef.current?.(choice);
+    duplicateWaitRef.current = null;
+    setDuplicateModal(null);
+  };
+
+  const askDuplicateChoice = (expert_id: string, name: string): Promise<'skip' | 'overwrite'> => {
+    const preset = duplicatePolicyForRestRef.current;
+    if (preset) return Promise.resolve(preset);
+    return new Promise((resolve) => {
+      duplicateWaitRef.current = resolve;
+      setDuplicateModal({ expert_id, name });
+    });
+  };
+
+  const handleSyncBuiltinExperts = async () => {
+    setSyncingBuiltins(true);
+    setSyncBuiltinMessage(null);
+    setSyncProgress(null);
+    duplicatePolicyForRestRef.current = null;
+    let inserted = 0;
+    let skipped = 0;
+    let overwritten = 0;
+    let errorCount = 0;
+    try {
+      const manifest = await expertLibraryApi.getSyncBuiltinsManifest();
+      const { experts, total } = manifest;
+      if (!experts?.length) {
+        setSyncBuiltinMessage('内置专家清单为空');
+        return;
+      }
+
+      for (let i = 0; i < experts.length; i++) {
+        const { expert_id, name } = experts[i];
+        setSyncProgress({ current: i + 1, total, currentName: name });
+
+        try {
+          let res = await expertLibraryApi.syncBuiltinExpertItem({ expert_id });
+          while (res.status === 'duplicate_pending') {
+            const choice = await askDuplicateChoice(expert_id, name);
+            res = await expertLibraryApi.syncBuiltinExpertItem({
+              expert_id,
+              duplicate_resolution: choice,
+            });
+          }
+
+          if (res.status === 'inserted') inserted++;
+          else if (res.status === 'skipped') skipped++;
+          else if (res.status === 'overwritten') overwritten++;
+        } catch {
+          errorCount++;
+        }
+      }
+
+      setSyncProgress({ current: total, total, currentName: null });
+      await refreshExpertsList();
+      setSyncBuiltinMessage(
+        `同步完成：新增 ${inserted}，跳过 ${skipped}，覆盖 ${overwritten}${
+          errorCount ? `，失败 ${errorCount}` : ''
+        }`
+      );
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      const msg =
+        err?.response?.data?.error ||
+        err?.message ||
+        '同步失败，请检查网络与 API Key';
+      setSyncBuiltinMessage(`错误：${msg}`);
+    } finally {
+      duplicateWaitRef.current = null;
+      setSyncingBuiltins(false);
+      setSyncProgress(null);
+      duplicatePolicyForRestRef.current = null;
+      setDuplicateModal(null);
+    }
+  };
+
   // 切换专家选择
   const toggleExpertSelection = (expertId: string) => {
     setSelectedExpertIds(prev => {
@@ -202,13 +307,100 @@ export function ExpertLibrary() {
     <div className="expert-library-page">
       <ExpertTabs />
       {/* 页面标题 */}
-      <div className="page-header">
-        <div className="header-title">
-          <h1>专家库 v5.2</h1>
-          <span className="version-badge">{stats.total}位专家</span>
+      <div className="page-header expert-library-page-header">
+        <div className="page-header-main">
+          <div className="header-title expert-library-header-title">
+            <div className="header-title-text">
+              <h1>专家库 v5.2</h1>
+              <span className="version-badge">{stats.total}位专家</span>
+            </div>
+            <div className="header-title-sync">
+              <button
+                type="button"
+                className="expert-library-sync-builtins-btn"
+                onClick={handleSyncBuiltinExperts}
+                disabled={syncingBuiltins}
+                title="按内置顺序同步专家档案；已存在时请选跳过或覆盖，可对该条或后续全部生效"
+              >
+                {syncingBuiltins ? '同步中…' : '同步内置专家到数据库'}
+              </button>
+              {syncProgress && syncingBuiltins && (
+                <div className="expert-library-sync-progress">
+                  <div className="expert-library-sync-progress-bar" aria-hidden>
+                    <div
+                      className="expert-library-sync-progress-fill"
+                      style={{
+                        width: `${
+                          syncProgress.total
+                            ? Math.min(100, Math.round((syncProgress.current / syncProgress.total) * 100))
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <span className="expert-library-sync-progress-label">
+                    {syncProgress.current}/{syncProgress.total}
+                    {syncProgress.currentName ? ` · ${syncProgress.currentName}` : ''}
+                  </span>
+                </div>
+              )}
+              {syncBuiltinMessage && !syncingBuiltins && (
+                <p
+                  className={`expert-library-sync-msg ${syncBuiltinMessage.startsWith('错误：') ? 'is-error' : 'is-ok'}`}
+                >
+                  {syncBuiltinMessage}
+                </p>
+              )}
+            </div>
+          </div>
+          <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
         </div>
-        <p className="header-desc">基于真实商业领袖和领域专家构建的智能评审体系</p>
       </div>
+
+      {duplicateModal && (
+        <div
+          className="expert-library-sync-modal-backdrop"
+          role="presentation"
+          aria-label="同步冲突处理"
+        >
+          <div
+            className="expert-library-sync-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="expert-sync-dup-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="expert-sync-dup-title">数据库已有同名内置专家</h3>
+            <p className="expert-library-sync-modal-expert">
+              <strong>{duplicateModal.name}</strong>
+              <span className="expert-library-sync-modal-id">{duplicateModal.expert_id}</span>
+            </p>
+            <p className="expert-library-sync-modal-hint">
+              跳过：保留当前数据库中的记录。覆盖：用代码中的内置档案替换该条（含 persona / 展示元数据等）。
+            </p>
+            <div className="expert-library-sync-modal-actions">
+              <button type="button" className="btn-skip" onClick={() => resolveDuplicateChoice('skip')}>
+                跳过本条
+              </button>
+              <button
+                type="button"
+                className="btn-overwrite"
+                onClick={() => resolveDuplicateChoice('overwrite')}
+              >
+                用内置覆盖本条
+              </button>
+            </div>
+            <div className="expert-library-sync-modal-actions-secondary">
+              <button type="button" onClick={() => resolveDuplicateChoice('skip', true)}>
+                以下重复全部跳过
+              </button>
+              <button type="button" onClick={() => resolveDuplicateChoice('overwrite', true)}>
+                以下重复全部覆盖
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 统计栏 */}
       <div className="stats-bar">

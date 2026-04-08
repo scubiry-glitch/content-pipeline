@@ -20,6 +20,11 @@ export class ExpertEngine {
     this.deps = deps;
   }
 
+  /** 供管理接口（如同步内置专家）获取注入的 DB/LLM 依赖 */
+  getDeps(): ExpertLibraryDeps {
+    return this.deps;
+  }
+
   /**
    * 核心调用入口
    */

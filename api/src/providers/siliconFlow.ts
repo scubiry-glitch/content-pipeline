@@ -34,6 +34,9 @@ export class SiliconFlowProvider extends LLMProvider {
           temperature: params?.temperature ?? 0.7,
           top_p: params?.topP ?? 0.9,
           stream: false,
+          ...(params?.responseFormat === 'json'
+            ? { response_format: { type: 'json_object' } }
+            : {}),
         }),
       });
 

@@ -382,7 +382,7 @@ export interface BlueTeamReview {
   questions: Array<{
     id: string;
     question: string;
-    severity: 'high' | 'medium' | 'low' | 'praise';
+    severity: 'high' | 'medium' | 'low' | 'praise' | 'critical' | 'warning';
     suggestion: string;
     location?: string;
   }>;
@@ -1601,6 +1601,85 @@ export const expertLibraryApi = {
   // 删除专家
   deleteExpert: (id: string) =>
     client.delete(`/expert-library/experts/${id}`) as Promise<any>,
+  /** 手动将内置专家同步到数据库（与 CLI `expert:seed-builtins` 等价，需 X-API-Key） */
+  syncBuiltinExperts: () =>
+    client.post('/expert-library/admin/sync-builtins') as Promise<{
+      ok: boolean;
+      seeded: number;
+      skipped: number;
+      errors: number;
+    }>,
+  /** 内置专家同步清单（顺序与单条同步一致） */
+  getSyncBuiltinsManifest: () =>
+    client.get('/expert-library/admin/sync-builtins/manifest') as Promise<{
+      total: number;
+      experts: { expert_id: string; name: string }[];
+    }>,
+  /** 同步单条内置专家；若 status 为 duplicate_pending，需带 duplicate_resolution 再调一次 */
+  syncBuiltinExpertItem: (body: { expert_id: string; duplicate_resolution?: 'skip' | 'overwrite' }) =>
+    client.post('/expert-library/admin/sync-builtins/item', body) as Promise<{
+      ok: boolean;
+      status: 'inserted' | 'skipped' | 'overwritten' | 'duplicate_pending';
+      expert_id: string;
+      name: string;
+    }>,
+};
+
+// ============================================
+// LLM 模型配置 API (/api/llm/*)
+// ============================================
+
+// LLM 路由挂载在 /api/llm（非 /api/v1），需要单独的 client
+// 默认携带与 /api/v1 相同的 X-API-Key，避免 Settings「测试连通」因仅校验 LLM_API_TOKEN 而 401
+const llmClient = axios.create({
+  baseURL: '/api/llm',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': API_KEY,
+    ...(import.meta.env.VITE_LLM_TOKEN ? { 'Authorization': `Bearer ${import.meta.env.VITE_LLM_TOKEN}` } : {}),
+  },
+  timeout: 30000,
+});
+
+export interface ModelRoutingRule {
+  taskType: string;
+  priority: 'quality' | 'speed' | 'cost';
+  preferredProvider: string;
+  fallbackProvider?: string;
+}
+
+export interface ModelConfigResponse {
+  providers: Record<string, { models: string[] }>;
+  routingRules: ModelRoutingRule[];
+  modelConfigs: Record<string, Record<string, string>>;
+  env: {
+    DEFAULT_LLM_MODEL: string;
+    DASHBOARD_LLM_MODEL: string;
+    VOLCANO_MODEL: string;
+  };
+}
+
+export interface TestProviderResult {
+  provider: string;
+  success: boolean;
+  latencyMs?: number;
+  model?: string;
+  content?: string;
+  error?: string;
+}
+
+export const llmConfigApi = {
+  getConfig: () =>
+    llmClient.get('/model-config').then(r => r.data?.data as ModelConfigResponse),
+
+  updateConfig: (data: {
+    routingRules?: Array<{ taskType: string; preferredProvider?: string; fallbackProvider?: string; priority?: 'quality' | 'speed' | 'cost' }>;
+    modelConfigs?: Record<string, Record<string, string>>;
+  }) =>
+    llmClient.put('/model-config', data).then(r => r.data),
+
+  testProvider: (provider: string, prompt?: string) =>
+    llmClient.post('/test-provider', { provider, prompt }).then(r => r.data?.data as TestProviderResult),
 };
 
 export default client;

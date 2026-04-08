@@ -11,6 +11,7 @@
     "demo": "tsx src/demo.ts",
     "db:init": "tsx src/scripts/init-db.ts",
     "content-library:extract-sample": "tsx src/scripts/content-library-extract-from-asset.ts",
+    "content-library:extract-top10": "tsx src/scripts/content-library-extract-from-asset.ts --top=10",
     "db:migrate:v6.2": "tsx src/scripts/migrate-v6.2-assets-ai.ts",
     "test:file-parser": "tsx src/scripts/test-file-parser.ts",
     "test:dashboard-llm": "tsx src/scripts/test-dashboard-llm-embedding.ts",
@@ -18,6 +19,7 @@
     "expert:gen-batch": "tsx src/scripts/batch-generate-expert-profiles.ts",
     "expert:export-builtin-approved": "tsx src/scripts/export-builtin-experts-to-approved.ts",
     "expert:upsert-approved": "tsx src/scripts/upsert-expert-profiles-from-files.ts",
+    "expert:seed-builtins": "tsx src/scripts/seed-expert-library-builtins.ts",
     "setup:production": "tsx src/scripts/setup-production.ts",
     "worker": "tsx src/worker.ts",
     "test": "echo \"Tests not implemented yet\"",
@@ -25,6 +27,9 @@
     "docker:run": "docker run -p 3000:3000 --env-file ../.env content-pipeline-api"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/langgraph-checkpoint-postgres": "^0.1.2",
     "@anthropic-ai/sdk": "^0.17.0",
     "@fastify/cors": "^9.0.1",
     "@fastify/multipart": "^8.0.0",

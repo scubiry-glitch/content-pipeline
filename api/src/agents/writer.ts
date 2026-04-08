@@ -43,6 +43,103 @@ export class WriterAgent extends BaseAgent {
     super('WriterAgent', llmRouter);
   }
 
+  /** 将 expert_profiles 行（expert_id / 认知 schema）转为 WriterAgent 使用的 ExpertProfile */
+  private mapExpertRow(row: any): ExpertProfile {
+    const id = String(row.expert_id ?? row.id ?? '');
+    const persona = typeof row.persona === 'string' ? JSON.parse(row.persona) : (row.persona || {});
+    const method = typeof row.method === 'string' ? JSON.parse(row.method) : (row.method || {});
+    const frameworks = Array.isArray(method.frameworks) ? method.frameworks : [];
+    const title =
+      (typeof persona.title === 'string' && persona.title) ||
+      (typeof persona.tone === 'string' && persona.tone) ||
+      String(row.title || '');
+    const bio =
+      (typeof row.bio === 'string' && row.bio) ||
+      (typeof persona.style === 'string' && persona.style) ||
+      '';
+    const communication_style =
+      (typeof row.communication_style === 'string' && row.communication_style) ||
+      (typeof persona.style === 'string' && persona.style) ||
+      '专业严谨';
+
+    let core_viewpoints = row.core_viewpoints;
+    if (typeof core_viewpoints === 'string') {
+      try {
+        core_viewpoints = JSON.parse(core_viewpoints);
+      } catch {
+        core_viewpoints = [];
+      }
+    }
+    if (!Array.isArray(core_viewpoints) || core_viewpoints.length === 0) {
+      const factors = Array.isArray(method.reviewLens?.deepDive) ? method.reviewLens.deepDive : [];
+      core_viewpoints = factors.slice(0, 5).map((topic: string) => ({
+        topic,
+        stance: '待结合全文评估',
+        evidence: [],
+        confidence: 0.7,
+      }));
+    }
+
+    let credentials = row.credentials;
+    if (typeof credentials === 'string') {
+      try {
+        credentials = JSON.parse(credentials);
+      } catch {
+        credentials = [];
+      }
+    }
+    if (!Array.isArray(credentials)) credentials = [];
+
+    let domains = row.domains;
+    if (domains == null && Array.isArray(row.domain)) {
+      domains = row.domain.map((d: string) => ({ domain: d, level: 'domain', years: 0 }));
+    }
+    if (typeof domains === 'string') {
+      try {
+        domains = JSON.parse(domains);
+      } catch {
+        domains = [];
+      }
+    }
+    if (!Array.isArray(domains)) domains = [];
+
+    let question_patterns = row.question_patterns;
+    if (typeof question_patterns === 'string') {
+      try {
+        question_patterns = JSON.parse(question_patterns);
+      } catch {
+        question_patterns = [];
+      }
+    }
+    if (!Array.isArray(question_patterns)) question_patterns = [];
+
+    let favorite_frameworks = row.favorite_frameworks;
+    if (typeof favorite_frameworks === 'string') {
+      try {
+        favorite_frameworks = JSON.parse(favorite_frameworks);
+      } catch {
+        favorite_frameworks = [];
+      }
+    }
+    if (!Array.isArray(favorite_frameworks) || favorite_frameworks.length === 0) {
+      favorite_frameworks = frameworks;
+    }
+
+    return {
+      id,
+      name: String(row.name || '专家'),
+      title,
+      bio,
+      authority_score: Number(row.authority_score ?? 0.5),
+      credentials,
+      domains,
+      core_viewpoints,
+      communication_style,
+      question_patterns,
+      favorite_frameworks,
+    };
+  }
+
   async execute(input: WriterInput, context?: AgentContext): Promise<AgentResult<WriterOutput>> {
     this.clearLogs();
     this.log('info', 'Starting writing phase with Blue Team review', { topicId: input.topicId });
@@ -170,16 +267,16 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
 
     if (expertIds && expertIds.length > 0) {
       const result = await query(
-        `SELECT * FROM expert_profiles WHERE id = ANY($1)`,
+        `SELECT * FROM expert_profiles WHERE expert_id = ANY($1::varchar[]) AND is_active = true`,
         [expertIds]
       );
-      experts = result.rows;
+      experts = result.rows.map((r: any) => this.mapExpertRow(r));
     } else {
-      // Load default experts
+      // Load default experts（authority_score 由 DB migration 保证存在）
       const result = await query(
-        `SELECT * FROM expert_profiles ORDER BY authority_score DESC LIMIT 5`
+        `SELECT * FROM expert_profiles WHERE is_active = true ORDER BY authority_score DESC NULLS LAST, name ASC LIMIT 5`
       );
-      experts = result.rows;
+      experts = result.rows.map((r: any) => this.mapExpertRow(r));
       console.log('[WriterAgent] Loaded experts from DB:', experts.length, experts.map((e: any) => ({ id: e?.id, name: e?.name })));
     }
 
@@ -206,6 +303,7 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
   private async createDefaultExperts(): Promise<ExpertProfile[]> {
     const defaultExperts = [
       {
+        expert_id: 'lg_writer_zqg',
         name: '张其光',
         title: '住建部政策研究中心原主任',
         bio: '专注住房政策与REITs制度设计，政策实操派代表',
@@ -220,6 +318,7 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
         favorite_frameworks: ['PEST分析', '政策生命周期'],
       },
       {
+        expert_id: 'lg_writer_lm',
         name: '陆铭',
         title: '上海交通大学安泰经管学院教授',
         bio: '城市经济学家，专注区域发展与住房市场',
@@ -234,6 +333,7 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
         favorite_frameworks: ['供需模型', '空间均衡模型'],
       },
       {
+        expert_id: 'lg_writer_lyc',
         name: '刘元春',
         title: '上海财经大学校长',
         bio: '宏观经济学家，专注金融风险与政策',
@@ -248,6 +348,7 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
         favorite_frameworks: ['金融周期理论', '系统性风险模型'],
       },
       {
+        expert_id: 'lg_writer_bear',
         name: '看空派',
         title: '市场 skeptics 代表',
         bio: '关注风险与负面因素，压力测试视角',
@@ -265,25 +366,64 @@ ${i + 1}. [${insight.type}] ${insight.content} (置信度: ${insight.confidence}
 
     const experts: ExpertProfile[] = [];
     for (const expert of defaultExperts) {
+      const persona = {
+        title: expert.title,
+        tone: expert.title,
+        style: expert.communication_style,
+        bias: [],
+      };
+      const method = {
+        frameworks: expert.favorite_frameworks,
+        reasoning: 'deductive',
+        analysis_steps: [],
+        reviewLens: {
+          firstGlance: expert.core_viewpoints[0]?.topic || '',
+          deepDive: expert.core_viewpoints.map((v: { topic: string }) => v.topic),
+          killShot: '',
+          bonusPoints: [],
+        },
+        dataPreference: '',
+        evidenceStandard: '',
+      };
+      const domainArr = expert.domains.map((d: { domain: string }) => d.domain);
+
       const result = await query(
-        `INSERT INTO expert_profiles (name, title, bio, authority_score, credentials, domains, core_viewpoints, communication_style, question_patterns, favorite_frameworks)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO expert_profiles (
+          expert_id, name, domain, persona, method, authority_score,
+          anti_patterns, signature_phrases, is_active
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+         ON CONFLICT (expert_id) DO NOTHING
          RETURNING *`,
         [
+          expert.expert_id,
           expert.name,
-          expert.title,
-          expert.bio,
+          domainArr,
+          JSON.stringify(persona),
+          JSON.stringify(method),
           expert.authority_score,
-          JSON.stringify(expert.credentials),
-          JSON.stringify(expert.domains),
-          JSON.stringify(expert.core_viewpoints),
-          expert.communication_style,
-          JSON.stringify(expert.question_patterns),
-          JSON.stringify(expert.favorite_frameworks),
+          [],
+          [],
         ]
       );
-      console.log('[WriterAgent] Insert result:', result.rows[0]);
-      experts.push(result.rows[0]);
+      let row = result.rows[0];
+      if (!row) {
+        const again = await query(`SELECT * FROM expert_profiles WHERE expert_id = $1`, [expert.expert_id]);
+        row = again.rows[0];
+      }
+      if (row) {
+        const mapped = this.mapExpertRow({
+          ...row,
+          bio: expert.bio,
+          credentials: expert.credentials,
+          domains: expert.domains,
+          core_viewpoints: expert.core_viewpoints,
+          communication_style: expert.communication_style,
+          question_patterns: expert.question_patterns,
+          favorite_frameworks: expert.favorite_frameworks,
+        });
+        experts.push(mapped);
+      }
     }
 
     return experts;

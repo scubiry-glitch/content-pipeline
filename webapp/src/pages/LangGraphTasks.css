@@ -1,0 +1,671 @@
+/* LangGraph Tasks Styles */
+/* 遵循项目现有设计系统 (Premium Design System v4.0) */
+
+/* === Page Layout === */
+.lg-tasks-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.lg-tasks-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.lg-tasks-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text, #333);
+  margin: 0;
+}
+
+.lg-tasks-subtitle {
+  color: var(--text-secondary, #666);
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* === Buttons === */
+.lg-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.lg-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lg-btn-primary {
+  background: var(--primary, #D46648);
+  color: white;
+  border-color: var(--primary, #D46648);
+}
+
+.lg-btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark, #b5553b);
+}
+
+.lg-btn-secondary {
+  background: var(--surface, white);
+  color: var(--text, #333);
+  border-color: var(--border, #ddd);
+}
+
+.lg-btn-secondary:hover:not(:disabled) {
+  background: var(--gray-100, #f5f5f5);
+}
+
+.lg-btn-danger {
+  background: var(--danger, #dc3545);
+  color: white;
+}
+
+.lg-btn-danger:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.lg-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #666);
+  padding: 0.5rem 0.75rem;
+}
+
+.lg-btn-ghost:hover {
+  color: var(--primary, #D46648);
+}
+
+/* === Task List === */
+.lg-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lg-task-card {
+  background: var(--surface, white);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius-md, 8px);
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lg-task-card:hover {
+  border-color: var(--primary, #D46648);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.lg-task-card-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.lg-task-topic {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text, #333);
+  margin: 0;
+}
+
+.lg-task-card-meta {
+  display: flex;
+  gap: 1rem;
+  color: var(--text-muted, #999);
+  font-size: 0.8rem;
+}
+
+/* === Status Badge === */
+.lg-status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.lg-status--outline_pending { background: #fff3cd; color: #856404; }
+.lg-status--outline_confirmed { background: #d4edda; color: #155724; }
+.lg-status--outline_rejected { background: #f8d7da; color: #721c24; }
+.lg-status--pending { background: #e2e3e5; color: #383d41; }
+.lg-status--researching, .lg-status--researching_complete { background: #cce5ff; color: #004085; }
+.lg-status--writing, .lg-status--writing_complete { background: #d1ecf1; color: #0c5460; }
+.lg-status--reviewing, .lg-status--review_passed { background: #e8daef; color: #6c3483; }
+.lg-status--review_needs_revision { background: #fadbd8; color: #922b21; }
+.lg-status--awaiting_approval { background: #fff3cd; color: #856404; }
+.lg-status--approved { background: #d5f5e3; color: #1e8449; }
+.lg-status--completed { background: #d4edda; color: #155724; }
+.lg-status--failed, .lg-status--planning_failed, .lg-status--research_failed, .lg-status--writing_failed, .lg-status--review_failed {
+  background: #f8d7da; color: #721c24;
+}
+
+/* === Modal === */
+.lg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.lg-modal {
+  background: var(--surface, white);
+  border-radius: var(--radius-lg, 12px);
+  padding: 2rem;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.lg-modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+}
+
+.lg-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+/* === Form === */
+.lg-form-group {
+  margin-bottom: 1rem;
+}
+
+.lg-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text, #333);
+  margin-bottom: 0.375rem;
+}
+
+.lg-input, .lg-textarea, .lg-select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.875rem;
+  color: var(--text, #333);
+  background: var(--surface, white);
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.lg-input:focus, .lg-textarea:focus, .lg-select:focus {
+  outline: none;
+  border-color: var(--primary, #D46648);
+  box-shadow: 0 0 0 3px var(--primary-alpha, rgba(212, 102, 72, 0.1));
+}
+
+.lg-error {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+/* === Empty State === */
+.lg-empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.lg-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.lg-empty h3 {
+  margin: 0 0 0.5rem;
+  color: var(--text, #333);
+}
+
+.lg-empty-text {
+  color: var(--text-muted, #999);
+  text-align: center;
+  padding: 2rem;
+}
+
+/* === Detail Page === */
+.lg-detail-page {
+  padding: 1.5rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.lg-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.lg-detail-title-area {
+  flex: 1;
+}
+
+.lg-detail-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text, #333);
+}
+
+.lg-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.375rem;
+}
+
+.lg-progress-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  font-weight: 600;
+}
+
+/* === Progress Bar === */
+.lg-progress-bar {
+  height: 6px;
+  background: var(--gray-200, #e0e0e0);
+  border-radius: 3px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.lg-progress-fill {
+  height: 100%;
+  background: var(--primary, #D46648);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* === Graph Visualization === */
+.lg-detail-graph {
+  margin-bottom: 1.5rem;
+}
+
+.graph-visualization {
+  background: var(--surface, white);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius-md, 8px);
+  padding: 1.25rem;
+}
+
+.graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.graph-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.graph-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border, #ddd);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--text-secondary, #666);
+}
+
+.graph-pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 1rem 0;
+}
+
+.graph-node-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.graph-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 8px);
+  min-width: 80px;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.graph-node--active {
+  border-width: 2px;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.graph-node--completed {
+  border-color: var(--success, #28a745);
+  background: rgba(40, 167, 69, 0.05);
+}
+
+.graph-node--pending {
+  opacity: 0.5;
+}
+
+.graph-node-icon {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.graph-node-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text, #333);
+  white-space: nowrap;
+}
+
+.graph-node-pulse {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  background: var(--primary, #D46648);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+.graph-node-check {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  background: var(--success, #28a745);
+  color: white;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+}
+
+.graph-edge {
+  color: var(--gray-400, #999);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.graph-edge--active {
+  color: var(--success, #28a745);
+}
+
+.graph-loop-indicator {
+  width: 100%;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.graph-loop-label {
+  font-size: 0.7rem;
+  color: var(--text-muted, #999);
+  background: var(--surface-alt, #f5f5f5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.graph-mermaid-raw {
+  background: var(--gray-100, #f5f5f5);
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  margin: 0;
+}
+
+/* === Action Panel === */
+.lg-action-panel {
+  background: var(--surface, white);
+  border: 2px solid var(--accent, #C5A572);
+  border-radius: var(--radius-md, 8px);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.lg-action-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--text, #333);
+}
+
+.lg-action-desc {
+  color: var(--text-secondary, #666);
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+}
+
+.lg-action-buttons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+/* === Tabs === */
+.lg-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  margin-bottom: 1.5rem;
+}
+
+.lg-tab {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.lg-tab:hover {
+  color: var(--text, #333);
+}
+
+.lg-tab--active {
+  color: var(--primary, #D46648);
+  border-bottom-color: var(--primary, #D46648);
+}
+
+/* === Tab Content === */
+.lg-tab-content {
+  background: var(--surface, white);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius-md, 8px);
+  padding: 1.25rem;
+  min-height: 200px;
+}
+
+.lg-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.lg-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lg-info-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #999);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.lg-info-value {
+  font-size: 0.9rem;
+  color: var(--text, #333);
+  word-break: break-all;
+}
+
+.lg-json-view {
+  background: var(--gray-100, #f5f5f5);
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  max-height: 500px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.lg-draft-content {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--text, #333);
+}
+
+/* === Review Round === */
+.lg-review-round {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+}
+
+.lg-review-round:last-child {
+  border-bottom: none;
+}
+
+.lg-review-round h4 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.lg-review-summary {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  margin: 0 0 0.75rem;
+}
+
+.lg-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lg-question {
+  padding: 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+}
+
+.lg-question--high { border-color: #dc3545; background: #fff5f5; }
+.lg-question--medium { border-color: #ffc107; background: #fffcf0; }
+.lg-question--low { border-color: #28a745; background: #f0fff4; }
+.lg-question--praise { border-color: #007bff; background: #f0f8ff; }
+
+.lg-question-expert {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #666);
+}
+
+.lg-severity {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.lg-severity--high { background: #f8d7da; color: #721c24; }
+.lg-severity--medium { background: #fff3cd; color: #856404; }
+.lg-severity--low { background: #d4edda; color: #155724; }
+.lg-severity--praise { background: #cce5ff; color: #004085; }
+
+.lg-question-text {
+  margin: 0.375rem 0;
+  font-size: 0.875rem;
+}
+
+.lg-question-suggestion {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #666);
+  font-style: italic;
+}
+
+.lg-evaluation {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--surface-alt, #f5f5f5);
+  border-radius: 6px;
+}
+
+.lg-evaluation h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.lg-errors-list {
+  margin-top: 1rem;
+}
+
+.lg-errors-list h4 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+  color: #721c24;
+}
+
+.lg-error-item {
+  padding: 0.5rem 0.75rem;
+  background: #f8d7da;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #721c24;
+  margin-bottom: 0.375rem;
+}
+
+.lg-loading {
+  text-align: center;
+  padding: 4rem;
+  color: var(--text-secondary, #666);
+}

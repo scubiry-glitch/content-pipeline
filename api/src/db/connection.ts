@@ -543,6 +543,34 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'domain_expert'`).catch(() => {});
   await query(`ALTER TABLE expert_library ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`).catch(() => {});
 
+  // Expert profiles table - for Expert Library module
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_profiles (
+      expert_id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      domain TEXT[] DEFAULT '{}',
+      persona JSONB DEFAULT '{}',
+      method JSONB DEFAULT '{}',
+      emm JSONB,
+      constraints_config JSONB DEFAULT '{"must_conclude": true, "allow_assumption": false}',
+      output_schema JSONB DEFAULT '{"format": "structured_report", "sections": []}',
+      anti_patterns TEXT[] DEFAULT '{}',
+      signature_phrases TEXT[] DEFAULT '{}',
+      display_metadata JSONB DEFAULT '{}',
+      is_active BOOLEAN DEFAULT true,
+      availability_status VARCHAR(20) DEFAULT 'available',
+      authority_score DECIMAL(4,3) DEFAULT 0.500,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+
+  // 兼容旧库：补齐 expert_profiles 新增列，避免 expert seed / experts/full 500
+  await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS display_metadata JSONB DEFAULT '{}'`).catch(() => {});
+  await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS availability_status VARCHAR(20) DEFAULT 'available'`).catch(() => {});
+  await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+  await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS authority_score DECIMAL(4,3) DEFAULT 0.500`).catch(() => {});
+
   // Seed default experts for BlueTeam if none exist
   const expertCount = await query(`SELECT COUNT(*) FROM expert_library WHERE is_active = true`);
   if (parseInt(expertCount.rows[0].count) === 0) {

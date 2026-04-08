@@ -1,7 +1,27 @@
 // Pipeline Adapter — 桥接 pipeline 已有服务到 Expert Library 模块
 // 嵌入式部署时使用
 
+import { getLLMRouter } from '../../../providers/index.js';
+import type { GenerationParams } from '../../../types/index.js';
 import type { DatabaseAdapter, LLMAdapter, LLMOptions, FileParserAdapter, ParsedDocument, ExpertLibraryDeps } from '../types.js';
+
+function expertLibraryRouterParams(
+  options?: LLMOptions,
+  systemPrompt?: string
+): GenerationParams {
+  const p: GenerationParams = {
+    temperature: options?.temperature,
+    maxTokens: options?.maxTokens,
+    model: options?.model,
+  };
+  if (systemPrompt !== undefined && systemPrompt !== '') {
+    p.systemPrompt = systemPrompt;
+  }
+  if (options?.responseFormat) {
+    p.responseFormat = options.responseFormat;
+  }
+  return p;
+}
 
 /**
  * 从 pipeline 的 db/connection 创建 DatabaseAdapter
@@ -11,29 +31,31 @@ export function createPipelineDBAdapter(queryFn: (sql: string, params?: any[]) =
 }
 
 /**
- * 从 pipeline 的 llm.generate 创建 LLMAdapter
+ * 专家库 LLM：统一走 LLMRouter（expert_library → 火山优先，失败则 SiliconFlow 等路由规则）。
+ * 须在进程内已执行 initLLMRouter() 之后使用。
  */
-export function createPipelineLLMAdapter(
-  generateFn: (prompt: string, taskType?: string, options?: any) => Promise<{ content: string }>
-): LLMAdapter {
+export function createPipelineLLMAdapter(): LLMAdapter {
   return {
     async complete(prompt: string, options?: LLMOptions): Promise<string> {
-      const result = await generateFn(prompt, 'expert_library', {
-        temperature: options?.temperature,
-        maxTokens: options?.maxTokens,
-        model: options?.model,
-        responseFormat: options?.responseFormat,
-      });
+      const router = getLLMRouter();
+      const result = await router.generate(
+        prompt,
+        'expert_library',
+        expertLibraryRouterParams(options)
+      );
       return result.content;
     },
-    async completeWithSystem(systemPrompt: string, userPrompt: string, options?: LLMOptions): Promise<string> {
-      const combinedPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-      const result = await generateFn(combinedPrompt, 'expert_library', {
-        temperature: options?.temperature,
-        maxTokens: options?.maxTokens,
-        model: options?.model,
-        responseFormat: options?.responseFormat,
-      });
+    async completeWithSystem(
+      systemPrompt: string,
+      userPrompt: string,
+      options?: LLMOptions
+    ): Promise<string> {
+      const router = getLLMRouter();
+      const result = await router.generate(
+        userPrompt,
+        'expert_library',
+        expertLibraryRouterParams(options, systemPrompt)
+      );
       return result.content;
     },
   };
@@ -60,17 +82,19 @@ export function createPipelineFileParserAdapter(
  * 一键创建 pipeline 环境的全部依赖
  * 用法:
  *   import { query } from '../../db/connection.js';
- *   import { generate } from '../../services/llm.js';
- *   const deps = createPipelineDeps(query, generate);
- *   const engine = createExpertEngine(deps);
+ *   const deps = createPipelineDeps(query, undefined, undefined, generateEmbedding);
+ *   const engine = await createExpertEngine(deps);
+ *
+ * @param _legacyGenerate 已废弃；专家库 LLM 固定使用 initLLMRouter 注册的 LLMRouter
  */
 export function createPipelineDeps(
   queryFn: (sql: string, params?: any[]) => Promise<{ rows: any[] }>,
-  generateFn: (prompt: string, taskType?: string, options?: any) => Promise<{ content: string }>,
+  _legacyGenerate?: (prompt: string, taskType?: string, options?: any) => Promise<{ content: string }>,
   fileParserFn?: (filePath: string) => Promise<{ text: string; metadata?: Record<string, any> }>,
   embedFn?: (text: string) => Promise<number[]>
 ): ExpertLibraryDeps {
-  const llm = createPipelineLLMAdapter(generateFn);
+  void _legacyGenerate;
+  const llm = createPipelineLLMAdapter();
   if (embedFn) {
     llm.embed = embedFn;
   }

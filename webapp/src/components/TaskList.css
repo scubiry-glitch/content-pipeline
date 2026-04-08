@@ -485,3 +485,26 @@
   font-size: 14px;
   color: var(--gray-700);
 }
+
+/* 任务列表：拉取失败（含 API 未就绪 / 网络错误） */
+.task-list-fetch-error.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.task-list-fetch-error .task-list-error-detail {
+  color: var(--gray-700, #374151);
+  margin: 8px 0 4px;
+}
+
+.task-list-fetch-error .task-list-error-hint {
+  font-size: 13px;
+  color: var(--gray-500, #6b7280);
+  margin: 0 0 20px;
+}
+
+.task-list-fetch-error .btn {
+  margin-top: 8px;
+}
