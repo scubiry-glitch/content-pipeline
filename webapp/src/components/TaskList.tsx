@@ -117,7 +117,7 @@ interface TaskListProps {
 
 export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) {
   const navigate = useNavigate();
-  const { tasks, loading, deleteTask, hideTask, unhideTask, updateTask } = useTasks();
+  const { tasks, loading, error, fetchTasks, deleteTask, hideTask, unhideTask, updateTask } = useTasks();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmHide, setConfirmHide] = useState<string | null>(null);
   const [confirmUnhide, setConfirmUnhide] = useState<string | null>(null);
@@ -310,6 +310,19 @@ export function TaskList({ filter = 'all', showHidden = false }: TaskListProps) 
   }
 
   if (filteredTasks.length === 0) {
+    if (error && tasks.length === 0) {
+      return (
+        <div className="empty-state task-list-fetch-error">
+          <div className="empty-icon">⚠️</div>
+          <div className="empty-title">无法加载任务列表</div>
+          <p className="task-list-error-detail">{error}</p>
+          <p className="task-list-error-hint">若 API 正在启动或数据库迁移中，请稍后重试。</p>
+          <button type="button" className="btn btn-primary" onClick={() => void fetchTasks()}>
+            重新加载
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="empty-state">
         <div className="empty-icon">📭</div>

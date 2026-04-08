@@ -1601,6 +1601,28 @@ export const expertLibraryApi = {
   // 删除专家
   deleteExpert: (id: string) =>
     client.delete(`/expert-library/experts/${id}`) as Promise<any>,
+  /** 手动将内置专家同步到数据库（与 CLI `expert:seed-builtins` 等价，需 X-API-Key） */
+  syncBuiltinExperts: () =>
+    client.post('/expert-library/admin/sync-builtins') as Promise<{
+      ok: boolean;
+      seeded: number;
+      skipped: number;
+      errors: number;
+    }>,
+  /** 内置专家同步清单（顺序与单条同步一致） */
+  getSyncBuiltinsManifest: () =>
+    client.get('/expert-library/admin/sync-builtins/manifest') as Promise<{
+      total: number;
+      experts: { expert_id: string; name: string }[];
+    }>,
+  /** 同步单条内置专家；若 status 为 duplicate_pending，需带 duplicate_resolution 再调一次 */
+  syncBuiltinExpertItem: (body: { expert_id: string; duplicate_resolution?: 'skip' | 'overwrite' }) =>
+    client.post('/expert-library/admin/sync-builtins/item', body) as Promise<{
+      ok: boolean;
+      status: 'inserted' | 'skipped' | 'overwritten' | 'duplicate_pending';
+      expert_id: string;
+      name: string;
+    }>,
 };
 
 // ============================================

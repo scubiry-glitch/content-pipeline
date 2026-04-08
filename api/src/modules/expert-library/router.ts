@@ -2,6 +2,7 @@
 // 挂载: fastify.register(createRouter(engine), { prefix: '/api/v1/expert-library' })
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { authenticate } from '../../middleware/auth.js';
 import type { ExpertEngine } from './ExpertEngine.js';
 import type { ExpertRequest, OutlineReviewRequest } from './types.js';
 import { submitFeedback, applyCalibration } from './feedbackLoop.js';
@@ -12,6 +13,7 @@ import { ExpertMatcher } from './expertMatcher.js';
 import { SchedulingService } from './schedulingService.js';
 import { HotTopicExpertService } from './hotTopicExpertService.js';
 import { AssetExpertService } from './assetExpertService.js';
+import { seedDefaultBuiltinExpertsToDb, getBuiltinSyncManifest, syncBuiltinExpertItem } from './expertSeed.js';
 
 export function createRouter(engine: ExpertEngine) {
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
@@ -215,6 +217,68 @@ export function createRouter(engine: ExpertEngine) {
         return reply.status(500).send({ error: error.message });
       }
     });
+
+    /** POST /admin/sync-builtins — 手动将内置专家同步到数据库（需 X-API-Key） */
+    fastify.post(
+      '/admin/sync-builtins',
+      { preHandler: authenticate },
+      async (_request: FastifyRequest, reply: FastifyReply) => {
+        try {
+          const stats = await seedDefaultBuiltinExpertsToDb(engine.getDeps());
+          return reply.send({ ok: true, ...stats });
+        } catch (error: any) {
+          console.error('[ExpertLibrary] sync-builtins error:', error);
+          return reply.status(500).send({ ok: false, error: error.message });
+        }
+      }
+    );
+
+    /** GET /admin/sync-builtins/manifest — 内置专家同步顺序列表（供前端逐项同步与进度） */
+    fastify.get(
+      '/admin/sync-builtins/manifest',
+      { preHandler: authenticate },
+      async (_request: FastifyRequest, reply: FastifyReply) => {
+        try {
+          const m = await getBuiltinSyncManifest();
+          return reply.send(m);
+        } catch (error: any) {
+          console.error('[ExpertLibrary] sync-builtins manifest error:', error);
+          return reply.status(500).send({ error: error.message });
+        }
+      }
+    );
+
+    /** POST /admin/sync-builtins/item — 同步单个内置专家；重复时先发无 duplicate_resolution，返回 duplicate_pending */
+    fastify.post(
+      '/admin/sync-builtins/item',
+      { preHandler: authenticate },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+          const { expert_id, duplicate_resolution } = request.body as {
+            expert_id?: string;
+            duplicate_resolution?: 'skip' | 'overwrite';
+          };
+          if (!expert_id || typeof expert_id !== 'string') {
+            return reply.status(400).send({ ok: false, error: '缺少 expert_id' });
+          }
+          if (
+            duplicate_resolution !== undefined &&
+            duplicate_resolution !== 'skip' &&
+            duplicate_resolution !== 'overwrite'
+          ) {
+            return reply.status(400).send({ ok: false, error: 'duplicate_resolution 须为 skip 或 overwrite' });
+          }
+          const result = await syncBuiltinExpertItem(engine.getDeps(), expert_id, duplicate_resolution);
+          if (!result.ok) {
+            return reply.status(400).send({ ok: false, error: result.error });
+          }
+          return reply.send({ ok: true, status: result.status, expert_id: result.expert_id, name: result.name });
+        } catch (error: any) {
+          console.error('[ExpertLibrary] sync-builtins item error:', error);
+          return reply.status(500).send({ ok: false, error: error.message });
+        }
+      }
+    );
 
     /** GET /experts/:id/performance — 专家绩效指标 */
     fastify.get('/experts/:id/performance', async (request: FastifyRequest, reply: FastifyReply) => {

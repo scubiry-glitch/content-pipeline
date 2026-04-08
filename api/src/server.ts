@@ -4,17 +4,14 @@
 // 首先加载环境变量，确保在所有模块导入前完成
 import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// @ts-ignore - import.meta is available at runtime with tsx
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// 尝试多个可能的 .env 文件路径
+// 仅用 cwd 解析 .env，使 `tsc` 产出的 CommonJS 可被 `node dist/server.js` / PM2 正常运行
 const envPaths = [
-  path.join(__dirname, '..', '.env'),           // 开发环境 (src/../.env)
-  path.join(process.cwd(), '.env'),             // 生产环境 (工作目录)
-  path.join(__dirname, '..', '..', '.env'),     // 备用路径
+  path.join(process.cwd(), '.env'),
+  path.join(process.cwd(), 'api', '.env'),
+  path.resolve(process.cwd(), '..', '.env'),
+  path.resolve(process.cwd(), '..', 'api', '.env'),
 ];
 
 let envLoaded = false;
@@ -103,11 +100,10 @@ async function main() {
   });
   console.log('✓ LLM Router initialized');
 
-  // Initialize Database
-  if (process.env.DATABASE_URL || process.env.DB_HOST) {
-    await initDatabase();
-    console.log('✓ Database connected');
-  }
+  let resolveDbReady!: () => void;
+  const dbReadyPromise = new Promise<void>((resolve) => {
+    resolveDbReady = resolve;
+  });
 
   const fastify = Fastify({
     logger: {
@@ -131,6 +127,12 @@ async function main() {
 
   // Setup authentication
   setupAuth(fastify);
+
+  fastify.addHook('onRequest', async (request, _reply) => {
+    const url = request.raw.url || '';
+    if (url === '/health' || url.startsWith('/health?')) return;
+    await dbReadyPromise;
+  });
 
   // Health check (public)
   fastify.get('/health', async () => {
@@ -190,10 +192,9 @@ async function main() {
   // 专家库路由 (v2.0) — 旧版 keyword matching
   await fastify.register(expertRoutes, { prefix: '/api/v1/experts' });
 
-  // Expert Library 独立模块 (v3.0) — Cognitive Digital Twin
-  const expertEngine = await createExpertEngine(
-    createPipelineDeps(query, undefined, undefined, generateEmbedding)
-  );
+  // Expert Library 独立模块 (v3.0) — Cognitive Digital Twin（DB 播种推迟到 initDatabase 完成之后，避免与迁移竞态）
+  const expertLibraryDeps = createPipelineDeps(query, undefined, undefined, generateEmbedding);
+  const expertEngine = await createExpertEngine(expertLibraryDeps);
   initExpertEngineSingleton(expertEngine);
   await fastify.register(createExpertLibraryRouter(expertEngine), { prefix: '/api/v1/expert-library' });
 
@@ -226,10 +227,8 @@ async function main() {
   // v6.2: Assets AI 批量处理路由
   await fastify.register(assetsAIProcessingRoutes, { prefix: '/api/v1/ai/assets' });
 
-  // Error handler
   fastify.setErrorHandler(errorHandler);
 
-  // 404 handler
   fastify.setNotFoundHandler(async (request, reply) => {
     reply.status(404);
     return {
@@ -239,14 +238,25 @@ async function main() {
     };
   });
 
-  // Start server
-  const PORT = parseInt(process.env.PORT || '3006');
+  const PORT = parseInt(process.env.PORT || '3006', 10);
   const HOST = process.env.HOST || '0.0.0.0';
 
   try {
     await fastify.listen({ port: PORT, host: HOST });
     console.log(`🚀 Content Pipeline API running at http://${HOST}:${PORT}`);
     console.log(`📚 Health Check: http://${HOST}:${PORT}/health`);
+
+    try {
+      if (process.env.DATABASE_URL || process.env.DB_HOST) {
+        console.log('[Server] Running database migrations / schema setup…');
+        await initDatabase();
+        console.log('✓ Database connected');
+      }
+    } catch (e) {
+      console.error('[Server] Database init failed:', e);
+      process.exit(1);
+    }
+    resolveDbReady();
 
     // Initialize directory watcher service
     const watcherService = getDirectoryWatcherService();

@@ -8,15 +8,17 @@ import { muskProfile } from './data/musk.js';
 import { xiaohongshuProfile } from './data/xiaohongshu.js';
 import { topExpertProfiles } from './data/topExperts.js';
 import { weiHangkongProfile } from './data/weiHangkong.js';
-import { seedExpertsToDb } from './expertSeed.js';
+import { seedDefaultBuiltinExpertsToDb } from './expertSeed.js';
 import type { ExpertLibraryDeps, ExpertProfile } from './types.js';
+
+export { seedDefaultBuiltinExpertsToDb as seedDefaultExpertsToDb } from './expertSeed.js';
 
 // ===== 工厂函数 =====
 
 /**
  * 创建 ExpertEngine 实例（异步：含 DB 播种）
  * @param deps 外部依赖（通过 Adapter 注入）
- * @param options 可选配置
+ * @param options 可选配置；默认不写入 DB，请使用 POST /expert-library/admin/sync-builtins 或 `npm run expert:seed-builtins`
  */
 export async function createExpertEngine(
   deps: ExpertLibraryDeps,
@@ -25,7 +27,7 @@ export async function createExpertEngine(
     registerBuiltinExperts?: boolean;
     /** 额外的专家 profiles */
     additionalExperts?: ExpertProfile[];
-    /** 是否跳过 DB 播种 (默认 false) */
+    /** 传 `false` 时在后台自动播种；默认 `undefined`/不传则不写库，请用手动 API 或 CLI */
     skipSeed?: boolean;
   }
 ): Promise<ExpertEngine> {
@@ -53,22 +55,11 @@ export async function createExpertEngine(
     }
   }
 
-  // DB 播种：将所有内置专家 + 前端展示专家写入数据库
-  if (!options?.skipSeed) {
-    try {
-      let frontendExperts: any[] = [];
-      try {
-        const { frontendExpertsData } = await import('./data/frontendExperts.js');
-        frontendExperts = frontendExpertsData;
-      } catch {
-        console.warn('[ExpertEngine] Frontend expert data not found, seeding backend experts only');
-      }
-      // 不阻塞服务启动：播种改为后台执行，避免慢库导致 API 长时间不可用
-      void seedExpertsToDb(deps, builtinExperts, frontendExperts)
-        .catch((err) => console.warn('[ExpertEngine] Async seed failed (non-fatal):', err));
-    } catch (err) {
-      console.warn('[ExpertEngine] DB seed failed (non-fatal):', err);
-    }
+  // 仅在显式 skipSeed: false 时后台播种（兼容旧行为；默认请用手动同步）
+  if (options?.skipSeed === false) {
+    void seedDefaultBuiltinExpertsToDb(deps).catch((err) =>
+      console.warn('[ExpertEngine] Async seed failed (non-fatal):', err)
+    );
   }
 
   return engine;
