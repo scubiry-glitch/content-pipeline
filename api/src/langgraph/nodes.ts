@@ -6,8 +6,6 @@ import { interrupt } from '@langchain/langgraph';
 import { PipelineStateType, NODE_NAMES } from './state.js';
 import { PlannerAgent } from '../agents/planner.js';
 import { ResearchAgent } from '../agents/researcher.js';
-import { WriterAgent } from '../agents/writer.js';
-import { BlueTeamAgent } from '../agents/blueTeam.js';
 import { getLLMRouter } from '../providers/index.js';
 import { evaluateTopic } from '../services/topicEvaluation.js';
 import { analyzeCompetitors } from '../services/competitorAnalysis.js';
@@ -170,7 +168,10 @@ export async function researcherNode(state: PipelineStateType): Promise<Partial<
 
 /**
  * Writer Node — 内容生成
- * 包装: WriterAgent.execute()
+ * 直接调用 LLMRouter 生成草稿，不经过 WriterAgent.execute()
+ * 原因: WriterAgent.execute() 内部捆绑了 BlueTeam 评审 + saveDocument()，
+ *       其中 saveDocument() 依赖不存在的 documents 表，导致整个执行失败，草稿丢失。
+ *       LangGraph 已将 BlueTeam 和输出拆分为独立节点，此处只需生成初稿。
  */
 export async function writerNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
   console.log(`[LangGraph:writer] Starting writing for task: ${state.taskId}`);
@@ -180,48 +181,94 @@ export async function writerNode(state: PipelineStateType): Promise<Partial<Pipe
     [state.taskId]
   );
 
-  const llmRouter = getLLMRouter();
-  const writer = new WriterAgent(llmRouter);
+  try {
+    const llmRouter = getLLMRouter();
 
-  const result = await writer.execute({
-    topicId: state.taskId,
-    topic: state.topic,
-    outline: state.outline?.sections || [],
-    researchReport: {
-      dataPackage: state.researchData?.dataPackage || [],
-      analysis: state.researchData?.analysis || { summary: '', keyFindings: [] },
-      insights: state.researchData?.insights || [],
-    },
-    blueTeamConfig: { expertCount: 0, questionsPerExpert: 0, rounds: 0 }, // BlueTeam 由独立节点处理
-  });
+    const outlineSections = state.outline?.sections || [];
+    const dataPackage = state.researchData?.dataPackage || [];
+    const insights = state.researchData?.insights || [];
 
-  if (!result.success || !result.data) {
+    const prompt = `你是一位资深财经产业研究撰稿人。请基于以下信息撰写深度研究报告。
+
+## 研究话题
+${state.topic}
+
+## 大纲结构
+${JSON.stringify(outlineSections, null, 2)}
+
+## 研究数据
+${dataPackage.map((d: any, i: number) => `
+[${i + 1}] ${d.source || '来源'}: ${(d.content || '').substring(0, 500)}...
+`).join('\n')}
+
+## 关键洞察
+${insights.map((insight: any, i: number) => `
+${i + 1}. [${insight.type || 'insight'}] ${insight.content || ''} (置信度: ${insight.confidence || 0})
+`).join('\n')}
+
+## 写作要求
+1. 采用"三层穿透"结构：宏观视野 → 中观解剖 → 微观行动
+2. 每个观点必须有数据支撑，标注来源
+3. 语言专业、客观、有洞察力
+4. 总字数控制在5000-8000字
+5. 包含以下部分：
+   - 执行摘要
+   - 宏观视野（政策、趋势）
+   - 中观解剖（产业链、机制）
+   - 微观行动（案例、建议）
+   - 风险提示
+   - 数据来源说明
+
+请直接输出完整的报告正文。`;
+
+    const result = await llmRouter.generate(prompt, 'writing', {
+      temperature: 0.7,
+      maxTokens: 8000,
+    });
+
+    const draftContent = result.content || '';
+
+    if (!draftContent || draftContent.trim().length < 100) {
+      console.warn(`[LangGraph:writer] Draft too short (${draftContent.length} chars), may indicate LLM issue`);
+      return {
+        status: 'writing_failed',
+        progress: 60,
+        errors: [`Draft generation returned insufficient content (${draftContent.length} chars)`],
+        currentNode: NODE_NAMES.WRITER,
+      };
+    }
+
+    // 保存草稿到 tasks 表（不依赖 documents 表）
+    await query(
+      `UPDATE tasks SET draft_content = $1, progress = 70, status = 'writing', updated_at = NOW() WHERE id = $2`,
+      [draftContent, state.taskId]
+    );
+
+    console.log(`[LangGraph:writer] Draft generated successfully: ${draftContent.length} chars`);
+
+    return {
+      draftContent,
+      status: 'writing_complete',
+      progress: 70,
+      currentNode: NODE_NAMES.WRITER,
+    };
+  } catch (error: any) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[LangGraph:writer] Writing failed:`, errorMsg);
     return {
       status: 'writing_failed',
       progress: 60,
-      errors: [`Writing failed: ${result.error || 'Unknown error'}`],
+      errors: [`Writing failed: ${errorMsg}`],
       currentNode: NODE_NAMES.WRITER,
     };
   }
-
-  const draftContent = result.data.content;
-
-  await query(
-    `UPDATE tasks SET draft_content = $1, progress = 70, updated_at = NOW() WHERE id = $2`,
-    [draftContent, state.taskId]
-  );
-
-  return {
-    draftContent,
-    status: 'writing_complete',
-    progress: 70,
-    currentNode: NODE_NAMES.WRITER,
-  };
 }
 
 /**
  * Blue Team Node — 蓝军评审
- * 包装: BlueTeamAgent.execute()
+ * 直接调用 LLMRouter 执行评审，不经过 BlueTeamAgent.execute()
+ * 原因: BlueTeamAgent 内部依赖 expert_review_tasks / draft_versions 等不存在的表，
+ *       会导致整轮评审失败。此处用轻量级 LLM 调用实现 3 专家评审 + 修订。
  */
 export async function blueTeamNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
   const round = state.currentReviewRound + 1;
@@ -232,45 +279,134 @@ export async function blueTeamNode(state: PipelineStateType): Promise<Partial<Pi
     [70 + round * 5, `reviewing_round_${round}`, state.taskId]
   );
 
-  const blueTeam = new BlueTeamAgent();
+  try {
+    const llmRouter = getLLMRouter();
+    const draftPreview = (state.draftContent || '').substring(0, 6000);
 
-  const result = await blueTeam.execute({
-    taskId: state.taskId,
-    draftContent: state.draftContent,
-    topic: state.topic,
-    outline: state.outline?.sections,
-    config: { rounds: 1, mode: 'sequential', aiExpertCount: 3, humanExpertCount: 0, revisionMode: 'per_round' },
-  });
+    // 3 专家角色一次性评审
+    const reviewPrompt = `你是一个由三位专家组成的蓝军评审团，负责审核研究报告。
 
-  if (!result.success || !result.data) {
+## 专家角色
+1. **批判者(Challenger)**: 找出逻辑漏洞、论证跳跃、数据可靠性问题
+2. **拓展者(Expander)**: 指出遗漏的视角、未考虑的关联性
+3. **提炼者(Synthesizer)**: 评估核心观点是否清晰、结论是否站得住脚
+
+## 当前是第${round}轮评审
+
+## 研究报告内容
+${draftPreview}
+
+## 输出要求
+以JSON数组格式输出所有问题，每个问题包含:
+{
+  "expertId": "challenger|expander|synthesizer",
+  "expertName": "批判者|拓展者|提炼者",
+  "role": "challenger|expander|synthesizer",
+  "question": "具体问题描述",
+  "severity": "high|medium|low|praise",
+  "suggestion": "改进建议"
+}
+
+每位专家提出3-5个问题，请以JSON数组格式直接输出。`;
+
+    const reviewResult = await llmRouter.generate(reviewPrompt, 'blue_team_review', {
+      temperature: 0.8,
+      maxTokens: 4000,
+    });
+
+    // 解析评审结果
+    let questions: any[] = [];
+    try {
+      const jsonMatch = reviewResult.content.match(/```json\s*([\s\S]*?)\s*```/) ||
+                        reviewResult.content.match(/(\[[\s\S]*\])/);
+      if (jsonMatch) {
+        questions = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      }
+    } catch (parseErr) {
+      console.warn('[LangGraph:blue_team] Failed to parse review JSON, using raw text');
+      questions = [{
+        expertId: 'synthesizer',
+        expertName: '提炼者',
+        role: 'synthesizer',
+        question: reviewResult.content.substring(0, 500),
+        severity: 'medium' as const,
+        suggestion: '请查看评审意见',
+      }];
+    }
+
+    const highSeverityCount = questions.filter((q: any) => q.severity === 'high').length;
+    const passed = highSeverityCount === 0;
+
+    // 如果有 high severity 问题，执行修订
+    let revisedDraft = state.draftContent;
+    let revisionSummary = `Round ${round}: ${questions.length} questions, ${highSeverityCount} high severity`;
+
+    if (!passed && questions.length > 0) {
+      const revisionPrompt = `你是一位资深研究报告修订专家。请基于蓝军评审反馈修改报告。
+
+## 第${round}轮评审意见
+${questions.filter((q: any) => q.severity === 'high' || q.severity === 'medium').map((q: any, i: number) =>
+  `${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}\n   建议: ${q.suggestion || '无'}`
+).join('\n\n')}
+
+## 当前报告
+${draftPreview}
+
+## 修订要求
+1. 逐条回应高优先级问题
+2. 补充必要的数据支撑
+3. 保持整体结构和风格
+4. 在开头附上简短修订说明
+
+请输出修订后的完整报告正文。`;
+
+      const revisionResult = await llmRouter.generate(revisionPrompt, 'writing', {
+        temperature: 0.7,
+        maxTokens: 8000,
+      });
+
+      if (revisionResult.content && revisionResult.content.trim().length > 100) {
+        revisedDraft = revisionResult.content;
+        const summaryMatch = revisedDraft.match(/修订说明[:：]?\s*([\s\S]{0,300}?)\n\n/);
+        revisionSummary = summaryMatch
+          ? summaryMatch[1].trim()
+          : `第${round}轮修订：处理了${questions.length}条专家意见`;
+      }
+    }
+
+    // 更新 tasks 表
+    await query(
+      `UPDATE tasks SET draft_content = $1, updated_at = NOW() WHERE id = $2`,
+      [revisedDraft, state.taskId]
+    );
+
+    console.log(`[LangGraph:blue_team] Round ${round} complete: ${questions.length} questions, ${highSeverityCount} high, passed=${passed}`);
+
+    const roundData = {
+      round,
+      questions,
+      revisionContent: revisedDraft,
+      revisionSummary,
+    };
+
+    return {
+      blueTeamRounds: [roundData],
+      currentReviewRound: round,
+      reviewPassed: passed,
+      draftContent: revisedDraft,
+      status: passed ? 'review_passed' : 'review_needs_revision',
+      progress: Math.min(70 + round * 10, 90),
+      currentNode: NODE_NAMES.BLUE_TEAM,
+    };
+  } catch (error: any) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[LangGraph:blue_team] Review failed:`, errorMsg);
     return {
       status: 'review_failed',
-      errors: [`Blue team review failed: ${result.error || 'Unknown error'}`],
+      errors: [`Blue team review failed: ${errorMsg}`],
       currentNode: NODE_NAMES.BLUE_TEAM,
     };
   }
-
-  // 判断是否通过评审
-  const allQuestions = result.data.rounds.flatMap((r: any) => r.questions || []);
-  const highSeverityCount = allQuestions.filter((q: any) => q.severity === 'high').length;
-  const passed = highSeverityCount === 0;
-
-  const roundData = {
-    round,
-    questions: allQuestions,
-    revisionContent: result.data.finalDraft,
-    revisionSummary: `Round ${round}: ${allQuestions.length} questions, ${highSeverityCount} high severity`,
-  };
-
-  return {
-    blueTeamRounds: [roundData],
-    currentReviewRound: round,
-    reviewPassed: passed,
-    draftContent: result.data.finalDraft || state.draftContent,
-    status: passed ? 'review_passed' : 'review_needs_revision',
-    progress: Math.min(70 + round * 10, 90),
-    currentNode: NODE_NAMES.BLUE_TEAM,
-  };
 }
 
 /**
