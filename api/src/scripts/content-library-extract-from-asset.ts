@@ -5,6 +5,8 @@
  * 用法（在 api/ 下）:
  *   npx tsx src/scripts/content-library-extract-from-asset.ts
  *   npx tsx src/scripts/content-library-extract-from-asset.ts --id=asset_xxxx
+ *   npx tsx src/scripts/content-library-extract-from-asset.ts --top=10
+ *     （按 assets.quality_score、ai_quality_score 综合排序，对前 N 条各跑一遍抽取）
  *
  * 依赖: api/.env 数据库 + 任一可用 LLM（与 server 相同）
  */
@@ -27,6 +29,17 @@ function argId(): string | undefined {
   return a ? a.slice('--id='.length).trim() || undefined : undefined;
 }
 
+function argTop(): number | undefined {
+  const a = process.argv.find((x) => x.startsWith('--top='));
+  if (!a) return undefined;
+  const n = parseInt(a.slice('--top='.length).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function main() {
   const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -44,18 +57,55 @@ async function main() {
   await initDatabase();
 
   const idArg = argId();
-  let row: { id: string; title: string; content: string } | undefined;
+  const topN = argTop();
+
+  const deps = createContentLibraryPipelineDeps(query, undefined, generateEmbedding);
+  const engine = createContentLibraryEngine(deps);
+
+  type AssetRow = { id: string; title: string; content: string };
+
+  let rows: AssetRow[] = [];
 
   if (idArg) {
     const r = await query(
       `SELECT id, title, content FROM assets WHERE id = $1 AND (is_deleted IS NOT TRUE)`,
       [idArg]
     );
-    row = r.rows[0];
+    const row = r.rows[0];
     if (!row?.content?.trim()) {
       console.error(`未找到可用素材或正文为空: ${idArg}`);
       process.exit(1);
     }
+    rows = [row];
+  } else if (topN) {
+    const r = await query(
+      `SELECT id, title, content,
+              COALESCE(quality_score, 0)::float AS q,
+              COALESCE(ai_quality_score, 0)::float AS ai_q
+       FROM assets
+       WHERE (is_deleted IS NOT TRUE)
+         AND content IS NOT NULL
+         AND length(trim(content)) >= $1
+       ORDER BY
+         GREATEST(
+           COALESCE(quality_score, 0)::float,
+           LEAST(1.0, COALESCE(ai_quality_score, 0)::float / 100.0)
+         ) DESC,
+         COALESCE(quality_score, 0) DESC,
+         COALESCE(ai_quality_score, 0) DESC
+       LIMIT $2`,
+      [MIN_CONTENT_LEN, topN]
+    );
+    rows = r.rows;
+    if (rows.length === 0) {
+      console.error(
+        `[ContentLibrary:ExtractFromAsset] 没有符合条件的素材（正文字数 ≥ ${MIN_CONTENT_LEN}）。请先上传素材到 assets。`
+      );
+      process.exit(1);
+    }
+    console.log(
+      `[ContentLibrary:ExtractFromAsset] 按质量排序取前 ${rows.length} 条（--top=${topN}）`
+    );
   } else {
     const r = await query(
       `SELECT id, title, content FROM assets
@@ -66,31 +116,40 @@ async function main() {
        LIMIT 1`,
       [MIN_CONTENT_LEN]
     );
-    row = r.rows[0];
+    const row = r.rows[0];
     if (!row) {
       console.error(
         `[ContentLibrary:ExtractFromAsset] 没有符合条件的素材（正文字数 ≥ ${MIN_CONTENT_LEN}）。请先上传素材到 assets。`
       );
       process.exit(1);
     }
+    rows = [row];
   }
 
-  const snippet = row.content.trim().slice(0, MAX_EXTRACT_CHARS);
-  console.log(`[ContentLibrary:ExtractFromAsset] 选中素材 id=${row.id} title=${(row.title || '').slice(0, 80)}…`);
-  console.log(`[ContentLibrary:ExtractFromAsset] 抽取正文长度=${snippet.length}（上限 ${MAX_EXTRACT_CHARS}）`);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const snippet = row.content.trim().slice(0, MAX_EXTRACT_CHARS);
+    console.log(
+      `\n[ContentLibrary:ExtractFromAsset] [${i + 1}/${rows.length}] id=${row.id} title=${(row.title || '').slice(0, 80)}…`
+    );
+    console.log(`[ContentLibrary:ExtractFromAsset] 抽取正文长度=${snippet.length}（上限 ${MAX_EXTRACT_CHARS}）`);
 
-  const deps = createContentLibraryPipelineDeps(query, undefined, generateEmbedding);
-  const engine = createContentLibraryEngine(deps);
+    console.log('[ContentLibrary:ExtractFromAsset] 调用 LLM 抽取事实（可能需数十秒）…');
+    const out = await engine.extractFacts({
+      content: snippet,
+      assetId: row.id,
+    });
 
-  console.log('[ContentLibrary:ExtractFromAsset] 调用 LLM 抽取事实（可能需数十秒）…');
-  const out = await engine.extractFacts({
-    content: snippet,
-    assetId: row.id,
-  });
+    console.log('[ContentLibrary:ExtractFromAsset] 本条完成。');
+    console.log(`  - 返回事实条数(本轮压缩后): ${out.facts.length}`);
+    console.log(`  - 返回实体数: ${out.entities.length}`);
 
-  console.log('[ContentLibrary:ExtractFromAsset] 完成。');
-  console.log(`  - 返回事实条数(本轮压缩后): ${out.facts.length}`);
-  console.log(`  - 返回实体数: ${out.entities.length}`);
+    if (i < rows.length - 1) {
+      await sleep(1500);
+    }
+  }
+
+  console.log('\n[ContentLibrary:ExtractFromAsset] 全部完成。');
   console.log('  请在 Web「内容库」/facts、/entities 刷新查看；议题推荐需实体与事实已入库。');
 }
 

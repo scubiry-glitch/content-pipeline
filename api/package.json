@@ -11,6 +11,7 @@
     "demo": "tsx src/demo.ts",
     "db:init": "tsx src/scripts/init-db.ts",
     "content-library:extract-sample": "tsx src/scripts/content-library-extract-from-asset.ts",
+    "content-library:extract-top10": "tsx src/scripts/content-library-extract-from-asset.ts --top=10",
     "db:migrate:v6.2": "tsx src/scripts/migrate-v6.2-assets-ai.ts",
     "test:file-parser": "tsx src/scripts/test-file-parser.ts",
     "test:dashboard-llm": "tsx src/scripts/test-dashboard-llm-embedding.ts",
