@@ -1623,6 +1623,16 @@ export const expertLibraryApi = {
       expert_id: string;
       name: string;
     }>,
+  /** 6 Agent 并行调研 + 三重验证 + Profile 生成（需 X-API-Key） */
+  researchGenerate: (body: { name: string; domain: string; expert_id?: string; depth?: 'quick' | 'standard' | 'deep' }) =>
+    client.post('/expert-library/experts/research-generate', body) as Promise<{
+      ok: boolean;
+      expertId: string;
+      name: string;
+      phase1_research: any[];
+      phase2_synthesis: any;
+      phase3_profile: any;
+    }>,
 };
 
 // ============================================

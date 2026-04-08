@@ -48,6 +48,48 @@ export interface ExpertLibraryDeps {
 }
 
 // ============================================================
+// Cognitive Distillation Types (借鉴 nuwa-skill 认知蒸馏)
+// ============================================================
+
+/** 结构化心智模型 — 必须有跨域证据 + 失败条件 */
+export interface MentalModel {
+  name: string;                 // 模型名称（如"第一性原理"）
+  summary: string;              // 一句话描述
+  evidence: string[];           // 证据（2+ 不同领域出现过）
+  applicationContext: string;   // 适用场景
+  failureCondition: string;     // 失败/不适用条件
+}
+
+/** 决策启发式 — 触发条件 + 规则 + 实例 */
+export interface DecisionHeuristic {
+  trigger: string;              // 触发条件（如"面对需求列表时"）
+  rule: string;                 // 决策规则（如"给每条需求找到署名人"）
+  example?: string;             // 实际案例
+}
+
+/** 表达 DNA — 量化语言特征，比 style/tone 更精细 */
+export interface ExpressionDNA {
+  sentencePattern: string;      // 句式偏好（如"极简陈述句，3-6个字"）
+  vocabularyPreference: string; // 用词偏好（如"工程术语泛化到所有领域"）
+  certaintyCali: string;        // 确定性校准（如"结论式，不说'我认为'"）
+  citationHabit: string;        // 引用习惯（如"优先物理定律，其次工程实例"）
+}
+
+/** 已知矛盾 — 显式管理内部矛盾，让 LLM 知道何时展现矛盾 */
+export interface Contradiction {
+  tension: string;              // 矛盾描述
+  context: string;              // 在什么场景下出现
+  resolution: string;           // 如何共存
+}
+
+/** Agentic 协议 — 先研究再回答，不凭感觉说话 */
+export interface AgenticProtocol {
+  requiresResearch: boolean;    // 是否需要先调研再回答
+  researchSteps?: string[];     // 调研步骤
+  noGuessPolicy: boolean;       // 不凭感觉说话
+}
+
+// ============================================================
 // Expert Profile (专家数据结构)
 // ============================================================
 
@@ -92,10 +134,12 @@ export interface ExpertPersona {
 
   // 深度人格（可选，逐步补充）
   cognition?: {
-    mentalModel: string;
+    mentalModel: string;          // 保留：一句话概述（向后兼容）
+    mentalModels?: MentalModel[]; // 新增：结构化心智模型列表
     decisionStyle: string;
     riskAttitude: string;
     timeHorizon: string;
+    heuristics?: DecisionHeuristic[];  // 新增：决策启发式
   };
   values?: {
     excites: string[];
@@ -116,7 +160,14 @@ export interface ExpertPersona {
     knownBias: string[];
     weakDomains: string[];
     selfAwareness: string;
+    informationCutoff?: string;       // 新增：信息截止说明
+    confidenceThreshold?: string;     // 新增：何时应表达不确定
+    explicitLimitations?: string[];   // 新增：显式能力边界声明
   };
+
+  // ===== nuwa-skill 启发的新增字段 =====
+  expressionDNA?: ExpressionDNA;      // 表达 DNA（比 style/tone 更细粒度）
+  contradictions?: Contradiction[];   // 已知矛盾管理
 }
 
 // ----- Method 方法层 -----
@@ -136,6 +187,9 @@ export interface ExpertMethod {
   };
   dataPreference?: string;
   evidenceStandard?: string;
+
+  // ===== nuwa-skill 启发的新增字段 =====
+  agenticProtocol?: AgenticProtocol;  // 先研究再回答协议
 }
 
 // ----- EMM 门控 -----
