@@ -13,16 +13,26 @@ interface ExpertProfile {
   domain: string[];
   persona: {
     style: string; tone: string; bias?: string[];
-    cognition?: { mentalModel: string; decisionStyle: string; riskAttitude: string; timeHorizon: string };
+    cognition?: {
+      mentalModel: string; decisionStyle: string; riskAttitude: string; timeHorizon: string;
+      mentalModels?: Array<{ name: string; summary: string; evidence: string[]; applicationContext: string; failureCondition: string }>;
+      heuristics?: Array<{ trigger: string; rule: string; example?: string }>;
+    };
     values?: { excites: string[]; irritates: string[]; qualityBar: string; dealbreakers: string[] };
     taste?: { admires: string[]; disdains: string[]; benchmark: string };
     voice?: { disagreementStyle: string; praiseStyle: string };
-    blindSpots?: { knownBias: string[]; weakDomains: string[]; selfAwareness: string };
+    blindSpots?: {
+      knownBias: string[]; weakDomains: string[]; selfAwareness: string;
+      informationCutoff?: string; confidenceThreshold?: string; explicitLimitations?: string[];
+    };
+    expressionDNA?: { sentencePattern: string; vocabularyPreference: string; certaintyCali: string; citationHabit: string };
+    contradictions?: Array<{ tension: string; context: string; resolution: string }>;
   };
   method: {
     frameworks: string[]; reasoning: string; analysis_steps: string[];
     reviewLens?: { firstGlance: string; deepDive: string[]; killShot: string; bonusPoints: string[] };
     dataPreference?: string; evidenceStandard?: string;
+    agenticProtocol?: { requiresResearch: boolean; researchSteps?: string[]; noGuessPolicy: boolean };
   };
   emm?: {
     critical_factors: string[];
@@ -399,6 +409,90 @@ export function ExpertAdmin() {
               </div>
             )}
 
+            {/* Mental Models (structured, nuwa-skill inspired) */}
+            {expert.persona.cognition?.mentalModels && expert.persona.cognition.mentalModels.length > 0 && (
+              <div className="ea-card ea-mb">
+                <span className="ea-field-label">MENTAL MODELS ({expert.persona.cognition.mentalModels.length})</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+                  {expert.persona.cognition.mentalModels.map((mm, i) => (
+                    <div key={i} style={{ borderLeft: '3px solid #7c3aed', paddingLeft: 12 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{mm.name}</div>
+                      <p className="ea-field-val sm">{mm.summary}</p>
+                      <div className="ea-tag-row" style={{ marginTop: 4 }}>
+                        {mm.evidence.map((ev, j) => (
+                          <span key={j} className="ea-tag neutral" style={{ fontSize: 11 }}>{ev}</span>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, marginTop: 4, fontSize: 12, color: '#888' }}>
+                        <span>Applies: {mm.applicationContext}</span>
+                        <span>Fails: {mm.failureCondition}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Decision Heuristics */}
+            {expert.persona.cognition?.heuristics && expert.persona.cognition.heuristics.length > 0 && (
+              <div className="ea-card ea-mb">
+                <span className="ea-field-label">DECISION HEURISTICS ({expert.persona.cognition.heuristics.length})</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                  {expert.persona.cognition.heuristics.map((h, i) => (
+                    <div key={i} style={{ borderLeft: '3px solid #f59e0b', paddingLeft: 12 }}>
+                      <div style={{ fontSize: 13 }}>
+                        <strong>When:</strong> {h.trigger}
+                      </div>
+                      <div style={{ fontSize: 13 }}>
+                        <strong>Rule:</strong> {h.rule}
+                      </div>
+                      {h.example && (
+                        <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>
+                          e.g. {h.example}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Expression DNA */}
+            {expert.persona.expressionDNA && (
+              <div className="ea-card ea-mb">
+                <span className="ea-field-label">EXPRESSION DNA</span>
+                <div className="ea-grid-2" style={{ marginTop: 8 }}>
+                  {[
+                    { label: 'SENTENCE PATTERN', val: expert.persona.expressionDNA.sentencePattern },
+                    { label: 'VOCABULARY', val: expert.persona.expressionDNA.vocabularyPreference },
+                    { label: 'CERTAINTY CALIBRATION', val: expert.persona.expressionDNA.certaintyCali },
+                    { label: 'CITATION HABIT', val: expert.persona.expressionDNA.citationHabit },
+                  ].map(({ label, val }) => (
+                    <div key={label}>
+                      <span className="ea-field-label" style={{ fontSize: 10 }}>{label}</span>
+                      <p className="ea-field-val sm">{val}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Contradictions */}
+            {expert.persona.contradictions && expert.persona.contradictions.length > 0 && (
+              <div className="ea-card ea-mb">
+                <span className="ea-field-label">KNOWN CONTRADICTIONS ({expert.persona.contradictions.length})</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  {expert.persona.contradictions.map((c, i) => (
+                    <div key={i} style={{ borderLeft: '3px solid #ef4444', paddingLeft: 12 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{c.tension}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>Context: {c.context}</div>
+                      <div style={{ fontSize: 12, color: '#059669' }}>Resolution: {c.resolution}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {expert.persona.values && (
               <div className="ea-grid-4 ea-mb">
                 <div className="ea-val-card excites">
@@ -442,6 +536,26 @@ export function ExpertAdmin() {
                     </div>
                     <span className="ea-field-label">SELF-AWARENESS</span>
                     <p className="ea-field-val sm italic">{expert.persona.blindSpots.selfAwareness}</p>
+                    {expert.persona.blindSpots.informationCutoff && (
+                      <>
+                        <span className="ea-field-label" style={{ marginTop: 8 }}>INFORMATION BOUNDARY</span>
+                        <p className="ea-field-val sm">{expert.persona.blindSpots.informationCutoff}</p>
+                      </>
+                    )}
+                    {expert.persona.blindSpots.confidenceThreshold && (
+                      <>
+                        <span className="ea-field-label" style={{ marginTop: 8 }}>UNCERTAINTY THRESHOLD</span>
+                        <p className="ea-field-val sm">{expert.persona.blindSpots.confidenceThreshold}</p>
+                      </>
+                    )}
+                    {expert.persona.blindSpots.explicitLimitations && expert.persona.blindSpots.explicitLimitations.length > 0 && (
+                      <>
+                        <span className="ea-field-label" style={{ marginTop: 8 }}>EXPLICIT LIMITATIONS</span>
+                        <div className="ea-tag-row">
+                          {expert.persona.blindSpots.explicitLimitations.map(l => <span key={l} className="ea-tag warn" style={{ fontSize: 11 }}>{l}</span>)}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -541,6 +655,49 @@ export function ExpertAdmin() {
                     <p className="ea-field-val sm">{expert.method.evidenceStandard}</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Agentic Protocol */}
+            {expert.method.agenticProtocol && (
+              <div className="ea-card ea-mt">
+                <span className="ea-field-label">AGENTIC PROTOCOL</span>
+                <div style={{ display: 'flex', gap: 12, marginTop: 8, marginBottom: 8 }}>
+                  <div className={`ea-constraint-chip ${expert.method.agenticProtocol.requiresResearch ? 'on' : 'off'}`}>
+                    REQUIRES RESEARCH {expert.method.agenticProtocol.requiresResearch ? '✓' : '✗'}
+                  </div>
+                  <div className={`ea-constraint-chip ${expert.method.agenticProtocol.noGuessPolicy ? 'on' : 'off'}`}>
+                    NO-GUESS POLICY {expert.method.agenticProtocol.noGuessPolicy ? '✓' : '✗'}
+                  </div>
+                </div>
+                {expert.method.agenticProtocol.researchSteps && expert.method.agenticProtocol.researchSteps.length > 0 && (
+                  <ol className="ea-steps">
+                    {expert.method.agenticProtocol.researchSteps.map((s, i) => (
+                      <li key={i} className="ea-step-item">{s}</li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
+
+            {/* Output Rubrics */}
+            {expert.output_schema.rubrics && expert.output_schema.rubrics.length > 0 && (
+              <div className="ea-card ea-mt">
+                <span className="ea-field-label">EVALUATION RUBRICS ({expert.output_schema.rubrics.length})</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+                  {expert.output_schema.rubrics.map((rubric, i) => (
+                    <div key={i} style={{ borderLeft: '3px solid #3b82f6', paddingLeft: 12 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{rubric.dimension}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                        {rubric.levels.map(level => (
+                          <span key={level.score} className="ea-tag neutral" style={{ fontSize: 11 }}>
+                            {level.score}★ {level.description}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>

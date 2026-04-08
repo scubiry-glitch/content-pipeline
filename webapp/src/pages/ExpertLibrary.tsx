@@ -746,6 +746,68 @@ export function ExpertLibrary() {
                           </div>
                         )}
                       </div>
+
+                      {/* Structured Mental Models */}
+                      {cdtProfile.persona.cognition.mentalModels?.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                          <span className="cdt-label" style={{ fontWeight: 600 }}>心智模型 ({cdtProfile.persona.cognition.mentalModels.length})</span>
+                          {cdtProfile.persona.cognition.mentalModels.map((mm: any, i: number) => (
+                            <div key={i} style={{ borderLeft: '3px solid #7c3aed', paddingLeft: 10, margin: '8px 0' }}>
+                              <div style={{ fontWeight: 600, fontSize: 13 }}>{mm.name}</div>
+                              <div style={{ fontSize: 12, color: '#666' }}>{mm.summary}</div>
+                              <div style={{ fontSize: 11, color: '#999' }}>适用: {mm.applicationContext} | 失效: {mm.failureCondition}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Decision Heuristics */}
+                      {cdtProfile.persona.cognition.heuristics?.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                          <span className="cdt-label" style={{ fontWeight: 600 }}>决策启发式 ({cdtProfile.persona.cognition.heuristics.length})</span>
+                          {cdtProfile.persona.cognition.heuristics.map((h: any, i: number) => (
+                            <div key={i} style={{ borderLeft: '3px solid #f59e0b', paddingLeft: 10, margin: '6px 0', fontSize: 12 }}>
+                              <div><strong>When:</strong> {h.trigger}</div>
+                              <div><strong>Rule:</strong> {h.rule}</div>
+                              {h.example && <div style={{ color: '#888', fontStyle: 'italic' }}>e.g. {h.example}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {/* Expression DNA */}
+                  {cdtProfile.persona?.expressionDNA && (
+                    <section className="detail-section cdt-section">
+                      <h4>🗣️ 表达 DNA</h4>
+                      <div className="cdt-grid">
+                        {[
+                          { label: '句式偏好', val: cdtProfile.persona.expressionDNA.sentencePattern },
+                          { label: '用词偏好', val: cdtProfile.persona.expressionDNA.vocabularyPreference },
+                          { label: '确定性表达', val: cdtProfile.persona.expressionDNA.certaintyCali },
+                          { label: '引用习惯', val: cdtProfile.persona.expressionDNA.citationHabit },
+                        ].filter(x => x.val).map(({ label, val }) => (
+                          <div key={label} className="cdt-item">
+                            <span className="cdt-label">{label}</span>
+                            <span className="cdt-value">{val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Contradictions */}
+                  {cdtProfile.persona?.contradictions?.length > 0 && (
+                    <section className="detail-section cdt-section">
+                      <h4>⚡ 已知矛盾</h4>
+                      {cdtProfile.persona.contradictions.map((c: any, i: number) => (
+                        <div key={i} style={{ borderLeft: '3px solid #ef4444', paddingLeft: 10, margin: '8px 0' }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{c.tension}</div>
+                          <div style={{ fontSize: 12, color: '#666' }}>场景: {c.context}</div>
+                          <div style={{ fontSize: 12, color: '#059669' }}>调和: {c.resolution}</div>
+                        </div>
+                      ))}
                     </section>
                   )}
 
@@ -794,6 +856,41 @@ export function ExpertLibrary() {
                           <li key={i}>{step}</li>
                         ))}
                       </ol>
+
+                      {/* Agentic Protocol */}
+                      {cdtProfile.method.agenticProtocol && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 10 }}>
+                          <span className="cdt-label" style={{ fontWeight: 600 }}>Agentic 调研协议</span>
+                          <div className="cdt-tags" style={{ marginTop: 4 }}>
+                            {cdtProfile.method.agenticProtocol.requiresResearch && (
+                              <span className="cdt-tag positive">需先调研</span>
+                            )}
+                            {cdtProfile.method.agenticProtocol.noGuessPolicy && (
+                              <span className="cdt-tag negative">禁止猜测</span>
+                            )}
+                          </div>
+                          {cdtProfile.method.agenticProtocol.researchSteps?.length > 0 && (
+                            <ol style={{ fontSize: 12, paddingLeft: 16, margin: '6px 0 0' }}>
+                              {cdtProfile.method.agenticProtocol.researchSteps.map((s: string, i: number) => (
+                                <li key={i}>{s}</li>
+                              ))}
+                            </ol>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Rubrics */}
+                      {cdtProfile.output_schema?.rubrics?.length > 0 && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 10 }}>
+                          <span className="cdt-label" style={{ fontWeight: 600 }}>评估量表</span>
+                          {cdtProfile.output_schema.rubrics.map((r: any, i: number) => (
+                            <div key={i} style={{ margin: '6px 0', fontSize: 12 }}>
+                              <strong>{r.dimension}:</strong>{' '}
+                              {r.levels?.map((l: any) => `${l.score}★ ${l.description}`).join(' | ')}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </section>
                   )}
 
