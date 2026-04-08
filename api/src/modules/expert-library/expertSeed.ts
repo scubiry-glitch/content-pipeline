@@ -275,7 +275,6 @@ export async function seedExpertsToDb(
   let seeded = 0, skipped = 0, errors = 0;
 
   const profileMap = mergeExpertProfilesToMap(backendExperts, frontendExperts);
-
   for (const [id, profile] of profileMap) {
     try {
       const params = expertProfileToDbParams(profile);

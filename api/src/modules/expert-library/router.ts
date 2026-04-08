@@ -14,6 +14,7 @@ import { SchedulingService } from './schedulingService.js';
 import { HotTopicExpertService } from './hotTopicExpertService.js';
 import { AssetExpertService } from './assetExpertService.js';
 import { seedDefaultBuiltinExpertsToDb, getBuiltinSyncManifest, syncBuiltinExpertItem } from './expertSeed.js';
+import { researchAndGenerateProfile } from './researchService.js';
 
 export function createRouter(engine: ExpertEngine) {
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
@@ -275,6 +276,34 @@ export function createRouter(engine: ExpertEngine) {
           return reply.send({ ok: true, status: result.status, expert_id: result.expert_id, name: result.name });
         } catch (error: any) {
           console.error('[ExpertLibrary] sync-builtins item error:', error);
+          return reply.status(500).send({ ok: false, error: error.message });
+        }
+      }
+    );
+    /** POST /experts/research-generate — 6 Agent 并行调研 + 三重验证 + Profile 生成 */
+    fastify.post(
+      '/experts/research-generate',
+      { preHandler: authenticate },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+          const { name, domain, expert_id, title, background, depth } = request.body as {
+            name?: string;
+            domain?: string;
+            expert_id?: string;
+            title?: string;
+            background?: string;
+            depth?: 'quick' | 'standard' | 'deep';
+          };
+          if (!name || !domain) {
+            return reply.status(400).send({ ok: false, error: '缺少必填字段: name, domain' });
+          }
+          const result = await researchAndGenerateProfile(
+            { name, domain, expertId: expert_id, title, background, depth },
+            engine.getDeps()
+          );
+          return reply.send({ ok: true, ...result });
+        } catch (error: any) {
+          console.error('[ExpertLibrary] research-generate error:', error);
           return reply.status(500).send({ ok: false, error: error.message });
         }
       }

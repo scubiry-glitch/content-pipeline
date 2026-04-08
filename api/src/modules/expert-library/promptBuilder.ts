@@ -82,10 +82,28 @@ function buildPersonaSection(name: string, persona: ExpertPersona, domains: stri
   if (persona.cognition) {
     const c = persona.cognition;
     lines.push('');
-    lines.push(`思维模型：${c.mentalModel}`);
+    // 结构化心智模型优先于单字符串
+    if (c.mentalModels && c.mentalModels.length > 0) {
+      lines.push('### 心智模型清单');
+      c.mentalModels.forEach((m, i) => {
+        lines.push(`${i + 1}. **${m.name}**：${m.summary}`);
+        lines.push(`   适用：${m.applicationContext}`);
+        lines.push(`   失效：${m.failureCondition}`);
+      });
+    } else {
+      lines.push(`思维模型：${c.mentalModel}`);
+    }
     lines.push(`决策风格：${c.decisionStyle}`);
     lines.push(`风险态度：${c.riskAttitude}`);
     lines.push(`时间视野：${c.timeHorizon}`);
+    // 决策启发式
+    if (c.heuristics && c.heuristics.length > 0) {
+      lines.push('');
+      lines.push('### 决策启发式');
+      c.heuristics.forEach(h => {
+        lines.push(`- 当${h.trigger}：${h.rule}${h.example ? `（如：${h.example}）` : ''}`);
+      });
+    }
   }
 
   // 深度人格 — 价值标尺
@@ -116,6 +134,17 @@ function buildPersonaSection(name: string, persona: ExpertPersona, domains: stri
     lines.push(`赞赏时：${persona.voice.praiseStyle}`);
   }
 
+  // 表达 DNA（比 style/tone 更精细的语言特征）
+  if (persona.expressionDNA) {
+    const e = persona.expressionDNA;
+    lines.push('');
+    lines.push('### 表达 DNA');
+    lines.push(`句式偏好：${e.sentencePattern}`);
+    lines.push(`用词偏好：${e.vocabularyPreference}`);
+    lines.push(`确定性表达：${e.certaintyCali}`);
+    lines.push(`引用习惯：${e.citationHabit}`);
+  }
+
   // 深度人格 — 盲区自知
   if (persona.blindSpots) {
     const b = persona.blindSpots;
@@ -123,6 +152,26 @@ function buildPersonaSection(name: string, persona: ExpertPersona, domains: stri
     lines.push(`你的已知偏见：${b.knownBias.join('；')}`);
     lines.push(`你的薄弱领域：${b.weakDomains.join('；')}`);
     lines.push(`自我认知：${b.selfAwareness}`);
+    if (b.informationCutoff) {
+      lines.push(`信息边界：${b.informationCutoff}`);
+    }
+    if (b.confidenceThreshold) {
+      lines.push(`不确定性标注标准：${b.confidenceThreshold}`);
+    }
+    if (b.explicitLimitations && b.explicitLimitations.length > 0) {
+      lines.push(`能力边界：${b.explicitLimitations.join('；')}`);
+    }
+  }
+
+  // 已知矛盾（让 LLM 知道何时该展现矛盾而非一致）
+  if (persona.contradictions && persona.contradictions.length > 0) {
+    lines.push('');
+    lines.push('### 你的已知矛盾（真实存在，不要回避）');
+    persona.contradictions.forEach(c => {
+      lines.push(`- ${c.tension}`);
+      lines.push(`  场景：${c.context}`);
+      lines.push(`  调和：${c.resolution}`);
+    });
   }
 
   return lines.join('\n');
@@ -155,6 +204,21 @@ function buildMethodSection(method: ExpertMethod): string {
 
   if (method.evidenceStandard) {
     lines.push(`证据标准：${method.evidenceStandard}`);
+  }
+
+  // Agentic 协议 — 先研究再回答
+  if (method.agenticProtocol) {
+    const ap = method.agenticProtocol;
+    lines.push('');
+    if (ap.requiresResearch && ap.researchSteps && ap.researchSteps.length > 0) {
+      lines.push('### 调研协议（回答前必须执行）');
+      ap.researchSteps.forEach((step, i) => {
+        lines.push(`  ${i + 1}. ${step}`);
+      });
+    }
+    if (ap.noGuessPolicy) {
+      lines.push('【重要】对于需要事实支撑的问题，你必须先承认信息边界，再给出基于已知信息的分析。不要虚构数据或假装知道你不知道的事情。');
+    }
   }
 
   return lines.join('\n');

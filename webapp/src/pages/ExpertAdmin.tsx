@@ -86,6 +86,11 @@ export function ExpertAdmin() {
   const [fbSent, setFbSent]     = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // AI Research Enhance
+  const [aiResearching, setAiResearching] = useState(false);
+  const [aiResearchResult, setAiResearchResult] = useState<any>(null);
+  const [aiResearchDepth, setAiResearchDepth] = useState<'quick' | 'standard' | 'deep'>('standard');
+
   // Section refs for scrollspy
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -177,6 +182,31 @@ export function ExpertAdmin() {
       setIsRunning(false);
     }
   }, [testInput, testType, expertId, isRunning]);
+
+  // ── AI Research Enhance ────────────────────────────────────────────────────
+  const runAiResearch = useCallback(async () => {
+    if (!expert || !expertId || aiResearching) return;
+    setAiResearching(true);
+    setAiResearchResult(null);
+    try {
+      const r = await fetch(`${API}/experts/research-generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: expert.name,
+          domain: expert.domain[0] || '',
+          expert_id: expertId,
+          depth: aiResearchDepth,
+        }),
+      });
+      const data = await r.json();
+      setAiResearchResult(data);
+    } catch (e: any) {
+      setAiResearchResult({ ok: false, error: e.message });
+    } finally {
+      setAiResearching(false);
+    }
+  }, [expert, expertId, aiResearching, aiResearchDepth]);
 
   // ── Materials ──────────────────────────────────────────────────────────────
   const addMaterial = async () => {
@@ -678,6 +708,68 @@ export function ExpertAdmin() {
                 )}
               </div>
             )}
+            {/* AI Research Enhance */}
+            <div className="ea-mt" style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 20 }}>
+              <span className="ea-field-label">AI RESEARCH ENHANCE (6 Agent)</span>
+              <p style={{ fontSize: 13, color: '#888', margin: '4px 0 12px' }}>
+                6 维并行调研 + 三重验证，增强专家认知框架（心智模型、决策启发式、表达 DNA、矛盾管理）
+              </p>
+              <div className="ea-task-type-row ea-mb">
+                {(['quick', 'standard', 'deep'] as const).map(d => (
+                  <button
+                    key={d}
+                    className={`ea-type-btn ${aiResearchDepth === d ? 'active' : ''}`}
+                    onClick={() => setAiResearchDepth(d)}
+                  >
+                    {d.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <button
+                className={`ea-run-btn ${aiResearching ? 'running' : ''}`}
+                onClick={runAiResearch}
+                disabled={aiResearching}
+                style={{ background: aiResearching ? undefined : '#7c3aed' }}
+              >
+                {aiResearching ? '◌ RESEARCHING...' : '⚡ AI RESEARCH ENHANCE'}
+              </button>
+
+              {aiResearchResult && (
+                <div className="ea-test-result" style={{ marginTop: 16 }}>
+                  <div className="ea-test-result-header">
+                    <span className="material-symbols-outlined">neurology</span>
+                    <span>RESEARCH RESULT</span>
+                  </div>
+                  {aiResearchResult.ok === false ? (
+                    <p className="ea-result-error">{aiResearchResult.error}</p>
+                  ) : (
+                    <div className="ea-result-sections">
+                      {aiResearchResult.phase2_synthesis?.mentalModels?.map((m: any, i: number) => (
+                        <div key={i} className="ea-result-section">
+                          <div className="ea-result-section-title">Mental Model: {m.name}</div>
+                          <p className="ea-result-section-body">{m.summary}</p>
+                          <p style={{ fontSize: 12, color: '#888' }}>
+                            Evidence: {m.evidence?.join(' | ')}
+                          </p>
+                        </div>
+                      ))}
+                      {aiResearchResult.phase2_synthesis?.heuristics?.map((h: any, i: number) => (
+                        <div key={`h-${i}`} className="ea-result-section">
+                          <div className="ea-result-section-title">Heuristic: {h.trigger}</div>
+                          <p className="ea-result-section-body">{h.rule}</p>
+                        </div>
+                      ))}
+                      {aiResearchResult.phase2_synthesis?.contradictions?.map((c: any, i: number) => (
+                        <div key={`c-${i}`} className="ea-result-section">
+                          <div className="ea-result-section-title">Contradiction: {c.tension}</div>
+                          <p className="ea-result-section-body">{c.resolution}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* ═══ MATERIALS ══════════════════════════════════════════════════ */}
