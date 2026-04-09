@@ -107,6 +107,20 @@ export interface LGGraphData {
   graph: string;
 }
 
+// 注释条目类型（对应 draft_annotations 表）
+export interface LGAnnotation {
+  id: string;
+  expertName: string;
+  severity: 'high' | 'medium' | 'low' | 'praise';
+  comment: string;
+  suggestion?: string;
+  location?: string;
+  startOffset?: number;
+  endOffset?: number;
+  resolved: boolean;
+  createdAt: string;
+}
+
 // --- API Functions ---
 
 export const langgraphApi = {
@@ -129,4 +143,12 @@ export const langgraphApi = {
   /** 获取 Mermaid 流程图 */
   getGraph: (): Promise<LGGraphData> =>
     lgClient.get('/graph') as any,
+
+  /** 获取已保存的评审配置 */
+  getReviewConfig: (threadId: string): Promise<any> =>
+    lgClient.get(`/tasks/${threadId}/review-config`) as any,
+
+  /** 获取草稿标注列表（评审高亮段落） */
+  getAnnotations: (threadId: string): Promise<LGAnnotation[]> =>
+    lgClient.get(`/tasks/${threadId}/annotations`) as any,
 };

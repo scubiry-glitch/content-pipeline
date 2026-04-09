@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, NavLink, Outlet } from 'react-router-dom';
 import { langgraphApi, type LGTaskDetail, type LGTaskState, type LGGraphData } from '../api/langgraph';
+import { blueTeamApi } from '../api/client';
 import { GraphVisualization } from '../components/GraphVisualization';
 import './TaskDetailLayout.css';
 import './TaskDetail.css';
@@ -59,6 +60,8 @@ export interface LGTaskContext {
   onResume: (approved: boolean, feedback?: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   resuming: boolean;
+  reviewConfig: any | null;
+  onSaveReviewConfig: (config: any) => Promise<void>;
 }
 
 export function LGTaskDetailLayout() {
@@ -71,19 +74,22 @@ export function LGTaskDetailLayout() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resuming, setResuming] = useState(false);
+  const [reviewConfig, setReviewConfig] = useState<any | null>(null);
 
   // 加载数据
   const loadData = useCallback(async () => {
     if (!threadId) return;
     try {
-      const [detailRes, stateRes, graphRes] = await Promise.all([
+      const [detailRes, stateRes, graphRes, configRes] = await Promise.all([
         langgraphApi.getTaskDetail(threadId).catch(() => null),
         langgraphApi.getTaskState(threadId).catch(() => null),
         langgraphApi.getGraph().catch(() => null),
+        langgraphApi.getReviewConfig(threadId).catch(() => null),
       ]);
       if (detailRes) setDetail(detailRes);
       if (stateRes) setState(stateRes);
       if (graphRes) setGraphData(graphRes);
+      setReviewConfig(configRes ?? null);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to load task');
@@ -91,6 +97,13 @@ export function LGTaskDetailLayout() {
       setLoading(false);
     }
   }, [threadId]);
+
+  // 保存评审配置
+  const handleSaveReviewConfig = useCallback(async (config: any) => {
+    if (!detail?.taskId) return;
+    await blueTeamApi.saveReviewConfig(detail.taskId, config);
+    setReviewConfig(config);
+  }, [detail?.taskId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -144,6 +157,8 @@ export function LGTaskDetailLayout() {
     onResume: handleResume,
     onRefresh: loadData,
     resuming,
+    reviewConfig,
+    onSaveReviewConfig: handleSaveReviewConfig,
   };
 
   if (loading) {

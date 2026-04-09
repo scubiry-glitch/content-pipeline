@@ -188,6 +188,55 @@ export async function langgraphRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/v1/langgraph/tasks/:threadId/review-config
+   * 获取已保存的评审配置（blue_team_config）
+   */
+  fastify.get('/tasks/:threadId/review-config', async (
+    request: FastifyRequest<{ Params: { threadId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { threadId } = request.params;
+    try {
+      const result = await query(
+        `SELECT blue_team_config FROM tasks WHERE thread_id = $1 LIMIT 1`,
+        [threadId]
+      );
+      return result.rows[0]?.blue_team_config || null;
+    } catch (error: any) {
+      console.error('[LangGraph] Get review-config error:', error);
+      reply.status(500);
+      return { error: 'Failed to get review config', detail: error.message };
+    }
+  });
+
+  /**
+   * GET /api/v1/langgraph/tasks/:threadId/annotations
+   * 获取草稿标注列表（评审高亮段落）
+   */
+  fastify.get('/tasks/:threadId/annotations', async (
+    request: FastifyRequest<{ Params: { threadId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { threadId } = request.params;
+    try {
+      const result = await query(
+        `SELECT da.id, da.expert_name, da.severity, da.comment, da.suggestion,
+                da.location, da.start_offset, da.end_offset, da.resolved, da.created_at
+         FROM draft_annotations da
+         JOIN tasks t ON da.task_id = t.id
+         WHERE t.thread_id = $1
+         ORDER BY da.start_offset NULLS LAST, da.created_at`,
+        [threadId]
+      );
+      return result.rows;
+    } catch (error: any) {
+      console.error('[LangGraph] Get annotations error:', error);
+      reply.status(500);
+      return { error: 'Failed to get annotations', detail: error.message };
+    }
+  });
+
+  /**
    * GET /api/v1/langgraph/graph
    * 获取 Mermaid 流程图定义
    */
