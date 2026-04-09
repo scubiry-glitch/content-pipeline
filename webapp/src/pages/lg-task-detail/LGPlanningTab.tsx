@@ -1,26 +1,63 @@
 // LG Planning Tab - 选题策划
 // 大纲结构化展示 + 选题评估 + 竞品分析 + 人工确认面板
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+import { langgraphApi, type LGStateHistoryItem } from '../../api/langgraph';
 
 export function LGPlanningTab() {
   const { detail, pendingAction, onResume, resuming } = useOutletContext<LGTaskContext>();
   const [feedback, setFeedback] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editedOutlineText, setEditedOutlineText] = useState('');
+  const [history, setHistory] = useState<LGStateHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // 加载 checkpoint 历史
+  useEffect(() => {
+    const threadId = detail?.threadId;
+    if (!threadId) return;
+    setLoadingHistory(true);
+    langgraphApi.getStateHistory(threadId, 10)
+      .then(res => setHistory(res.history || []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoadingHistory(false));
+  }, [detail?.threadId]);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
   }
 
+  // 开始编辑大纲
+  const startEditing = () => {
+    if (detail?.outline) {
+      setEditedOutlineText(JSON.stringify(detail.outline.sections || [], null, 2));
+    }
+    setEditing(true);
+  };
+
   const handleConfirm = async () => {
-    await onResume(true, feedback);
+    // 如果用户编辑了大纲，解析并传递
+    let editedOutline: any = undefined;
+    if (editing && editedOutlineText.trim()) {
+      try {
+        const parsed = JSON.parse(editedOutlineText);
+        editedOutline = { sections: parsed, title: detail?.outline?.title };
+      } catch {
+        // parse failed, ignore edit
+      }
+    }
+    // onResume 的第三个参数为 outline（通过 LGTaskContext.onResume 扩展）
+    await (onResume as any)(true, feedback, editedOutline);
     setFeedback('');
+    setEditing(false);
   };
 
   const handleReject = async () => {
     await onResume(false, feedback);
     setFeedback('');
+    setEditing(false);
   };
 
   return (
@@ -35,6 +72,23 @@ export function LGPlanningTab() {
               : `选题评分 ${detail.evaluation?.score || '?'} 分，建议调整角度后再继续`
             }
           </p>
+          {/* 编辑大纲模式 */}
+          {editing && (
+            <div className="lg-form-group">
+              <label className="lg-label">编辑大纲结构 (JSON)</label>
+              <textarea
+                className="lg-textarea"
+                value={editedOutlineText}
+                onChange={e => setEditedOutlineText(e.target.value)}
+                rows={12}
+                style={{ fontFamily: 'monospace', fontSize: '12px' }}
+              />
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                编辑后的大纲将随确认一起提交。格式：JSON 数组，每项包含 title, level, content 字段。
+              </div>
+            </div>
+          )}
+
           <div className="lg-form-group">
             <textarea
               className="lg-textarea"
@@ -45,11 +99,22 @@ export function LGPlanningTab() {
             />
           </div>
           <div className="lg-action-buttons">
+            {!editing && (
+              <button className="lg-btn lg-btn-secondary" onClick={startEditing} disabled={resuming}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>edit</span>
+                编辑大纲
+              </button>
+            )}
+            {editing && (
+              <button className="lg-btn lg-btn-secondary" onClick={() => setEditing(false)} disabled={resuming}>
+                取消编辑
+              </button>
+            )}
             <button className="lg-btn lg-btn-danger" onClick={handleReject} disabled={resuming}>
               {resuming ? '处理中...' : '退回修改'}
             </button>
             <button className="lg-btn lg-btn-primary" onClick={handleConfirm} disabled={resuming}>
-              {resuming ? '处理中...' : '确认大纲'}
+              {resuming ? '处理中...' : editing ? '确认并提交修改' : '确认大纲'}
             </button>
           </div>
         </div>
@@ -87,6 +152,52 @@ export function LGPlanningTab() {
           </div>
         )}
       </div>
+
+      {/* Pipeline 版本历史 (Checkpoints) */}
+      {history.length > 0 && (
+        <div className="panel-grid" style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div className="section-title">
+              <span className="material-symbols-outlined">history</span>
+              Pipeline 版本历史
+            </div>
+            <div className="section-desc">LangGraph checkpoint 快照 ({history.length} 条)</div>
+          </div>
+          <div className="info-card full-width">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {history.map((item, i) => {
+                const nodeLabels: Record<string, string> = {
+                  planner: '选题策划', human_outline: '大纲确认', researcher: '数据研究',
+                  writer: '内容写作', blue_team: '蓝军评审', human_approve: '最终审批', output: '输出发布',
+                };
+                return (
+                  <div key={item.checkpoint_id || i} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)', background: i === 0 ? 'var(--primary-alpha)' : 'transparent',
+                    border: i === 0 ? '1px solid var(--primary)' : '1px solid transparent',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: i === 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {i === 0 ? 'radio_button_checked' : 'radio_button_unchecked'}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: '12px', fontWeight: i === 0 ? 700 : 400, color: 'var(--text)' }}>
+                        {nodeLabels[item.values.currentNode] || item.values.currentNode || 'unknown'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                        {item.values.status} · {item.values.progress}%
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      {item.checkpoint_id?.slice(0, 8) || ''}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {loadingHistory && <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '8px' }}>加载中...</p>}
+          </div>
+        </div>
+      )}
 
       {/* 选题评估 */}
       {detail.evaluation && (

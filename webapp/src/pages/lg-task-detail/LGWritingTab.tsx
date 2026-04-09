@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { LivePreviewMarkdown } from '../../components/content/LivePreviewMarkdown';
+import { complianceApi, type ComplianceCheckResult } from '../../api/client';
 
 // 导出工具
 function exportMarkdown(content: string, topic: string) {
@@ -37,6 +38,8 @@ export function LGWritingTab() {
   const navigate = useNavigate();
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [showRefs, setShowRefs] = useState(false);
+  const [complianceResult, setComplianceResult] = useState<ComplianceCheckResult | null>(null);
+  const [checkingCompliance, setCheckingCompliance] = useState(false);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -220,6 +223,72 @@ export function LGWritingTab() {
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* 合规检查 */}
+      <div className="info-card full-width" style={{ marginBottom: '24px' }}>
+        <div className="card-title">
+          <span className="material-symbols-outlined">verified_user</span>
+          合规检查
+          <button
+            className="lg-btn lg-btn-secondary"
+            style={{ marginLeft: 'auto', fontSize: '11px', padding: '4px 10px' }}
+            onClick={async () => {
+              if (!detail.taskId || !displayContent) return;
+              setCheckingCompliance(true);
+              try {
+                const result = await complianceApi.checkContent(detail.taskId, displayContent.substring(0, 5000));
+                setComplianceResult(result);
+              } catch (err: any) {
+                setComplianceResult({ score: 0, status: 'error', issues: [{ type: 'error', severity: 'medium', description: err.message || '检查失败', suggestion: '请稍后重试' }] } as any);
+              } finally {
+                setCheckingCompliance(false);
+              }
+            }}
+            disabled={checkingCompliance || !displayContent}
+          >
+            {checkingCompliance ? '检查中...' : '执行检查'}
+          </button>
+        </div>
+        {complianceResult ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: (complianceResult.score ?? 0) >= 80 ? 'var(--success)' : (complianceResult.score ?? 0) >= 60 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)',
+                color: '#fff', fontSize: '16px', fontWeight: 800,
+              }}>
+                {complianceResult.score ?? '?'}
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>
+                  {complianceResult.status === 'compliant' ? '合规通过' : complianceResult.status === 'warning' ? '存在风险' : '需要修正'}
+                </div>
+              </div>
+            </div>
+            {complianceResult.issues && complianceResult.issues.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {complianceResult.issues.map((issue: any, i: number) => {
+                  const sevColors: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6' };
+                  return (
+                    <div key={i} style={{ padding: '8px 10px', borderRadius: 'var(--radius-sm)', borderLeft: `3px solid ${sevColors[issue.severity] || '#64748b'}`, background: 'var(--surface-alt)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: `${sevColors[issue.severity] || '#64748b'}15`, color: sevColors[issue.severity] || '#64748b' }}>
+                          {issue.severity === 'high' ? '高风险' : issue.severity === 'medium' ? '中风险' : '低风险'}
+                        </span>
+                        {issue.type && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{issue.type}</span>}
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text)', margin: '0 0 4px' }}>{issue.description}</p>
+                      {issue.suggestion && <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>建议: {issue.suggestion}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>点击「执行检查」对当前草稿进行合规分析</p>
         )}
       </div>
 
