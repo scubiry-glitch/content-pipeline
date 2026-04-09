@@ -169,9 +169,22 @@ export async function researcherNode(state: PipelineStateType): Promise<Partial<
 
   return {
     researchData: {
-      dataPackage: result.data.dataPackage,
-      analysis: result.data.analysis,
-      insights: result.data.insights,
+      dataPackage: (result.data.dataPackage || []).map((d: any) => ({
+        source: d.source || '',
+        type: d.metadata?.type || 'unknown',
+        content: d.content || '',
+        reliability: d.quality,
+      })),
+      analysis: {
+        summary: JSON.stringify(result.data.analysis?.statistics || {}),
+        keyFindings: (result.data.analysis?.trends || []).map((t: any) => `${t.metric}: ${t.direction}`),
+        gaps: (result.data.coverageReport?.gaps || []).map((g: any) => g.section),
+      },
+      insights: (result.data.insights || []).map((i: any) => ({
+        type: i.type || 'trend',
+        content: i.content || '',
+        confidence: i.confidence || 0,
+      })),
     },
     status: 'researching_complete',
     progress: 50,
@@ -180,78 +193,91 @@ export async function researcherNode(state: PipelineStateType): Promise<Partial<
 }
 
 /**
- * Writer Node — 内容生成
- * 直接调用 LLMRouter 生成草稿，不经过 WriterAgent.execute()
- * 原因: WriterAgent.execute() 内部捆绑了 BlueTeam 评审 + saveDocument()，
- *       其中 saveDocument() 依赖不存在的 documents 表，导致整个执行失败，草稿丢失。
- *       LangGraph 已将 BlueTeam 和输出拆分为独立节点，此处只需生成初稿。
+ * Writer Node — 流式分段生成
+ * 接入 streamingDraft.ts，逐章节生成，带上下文传递
+ * 如果 streamingDraft 不可用则 fallback 到直接 LLM 调用
  */
 export async function writerNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
   console.log(`[LangGraph:writer] Starting writing for task: ${state.taskId}`);
 
   await query(
-    `UPDATE tasks SET status = 'writing', progress = 60, current_stage = 'writing', updated_at = NOW() WHERE id = $1`,
+    `UPDATE tasks SET status = 'writing', progress = 55, current_stage = 'writing', updated_at = NOW() WHERE id = $1`,
     [state.taskId]
   );
 
   try {
-    const llmRouter = getLLMRouter();
+    let draftContent: string;
 
-    const outlineSections = state.outline?.sections || [];
-    const dataPackage = state.researchData?.dataPackage || [];
-    const insights = state.researchData?.insights || [];
+    // 优先使用流式分段生成
+    try {
+      const { generateDraftStreaming } = await import('../services/streamingDraft.js');
+      const result = await generateDraftStreaming(
+        {
+          taskId: state.taskId,
+          topic: state.topic,
+          outline: state.outline,
+          researchData: {
+            dataPackage: state.researchData?.dataPackage || [],
+            analysis: state.researchData?.analysis,
+            insights: state.researchData?.insights || [],
+          },
+          style: 'formal',
+          options: { includeContext: true, saveProgress: true },
+        },
+        async (progress) => {
+          const pct = 55 + Math.floor((progress.currentIndex / Math.max(progress.total, 1)) * 15);
+          await query(`UPDATE tasks SET progress = $1, updated_at = NOW() WHERE id = $2`, [pct, state.taskId]);
+        }
+      );
+      draftContent = result.content;
+      console.log(`[LangGraph:writer] Streaming draft generated: ${draftContent.length} chars, ${result.sections.length} sections`);
+    } catch (streamErr) {
+      // Fallback: 直接 LLM 生成
+      console.warn(`[LangGraph:writer] streamingDraft unavailable, falling back to direct LLM`, streamErr);
+      const llmRouter = getLLMRouter();
+      const outlineSections = state.outline?.sections || [];
+      const dataPackage = state.researchData?.dataPackage || [];
+      const insights = state.researchData?.insights || [];
 
-    const prompt = `你是一位资深财经产业研究撰稿人。请基于以下信息撰写深度研究报告。
+      const prompt = `你是一位资深产业研究撰稿人。请基于以下信息撰写深度研究报告。
 
 ## 研究话题
 ${state.topic}
 
 ## 大纲结构
-${JSON.stringify(outlineSections, null, 2)}
+${outlineSections.map((s: any, i: number) => `${i + 1}. ${s.title}${s.coreQuestion ? ` — ${s.coreQuestion}` : ''}
+   分析方法: ${s.analysisApproach || '综合分析'}
+   要点: ${s.content || ''}`).join('\n')}
 
 ## 研究数据
-${dataPackage.map((d: any, i: number) => `
-[${i + 1}] ${d.source || '来源'}: ${(d.content || '').substring(0, 500)}...
-`).join('\n')}
+${dataPackage.slice(0, 15).map((d: any, i: number) => `[${i + 1}] ${d.source || '来源'}: ${(d.content || '').substring(0, 400)}`).join('\n')}
 
 ## 关键洞察
-${insights.map((insight: any, i: number) => `
-${i + 1}. [${insight.type || 'insight'}] ${insight.content || ''} (置信度: ${insight.confidence || 0})
-`).join('\n')}
+${insights.map((ins: any, i: number) => `${i + 1}. [${ins.type}] ${ins.content}`).join('\n')}
 
 ## 写作要求
-1. 采用"三层穿透"结构：宏观视野 → 中观解剖 → 微观行动
-2. 每个观点必须有数据支撑，标注来源
-3. 语言专业、客观、有洞察力
-4. 总字数控制在5000-8000字
-5. 包含以下部分：
-   - 执行摘要
-   - 宏观视野（政策、趋势）
-   - 中观解剖（产业链、机制）
-   - 微观行动（案例、建议）
-   - 风险提示
-   - 数据来源说明
+1. 按大纲结构组织，每章回答对应的核心问题
+2. 每节遵循 What(现象) → Why(原因) → So What(启示) 叙事链
+3. 每个观点必须有数据支撑，标注来源
+4. 总字数 5000-8000 字
+5. 包含执行摘要和风险提示
 
-请直接输出完整的报告正文。`;
+请直接输出完整报告正文。`;
 
-    const result = await llmRouter.generate(prompt, 'writing', {
-      temperature: 0.7,
-      maxTokens: 8000,
-    });
-
-    const draftContent = result.content || '';
+      const result = await llmRouter.generate(prompt, 'writing', { temperature: 0.7, maxTokens: 8000 });
+      draftContent = result.content || '';
+    }
 
     if (!draftContent || draftContent.trim().length < 100) {
-      console.warn(`[LangGraph:writer] Draft too short (${draftContent.length} chars), may indicate LLM issue`);
       return {
         status: 'writing_failed',
-        progress: 60,
-        errors: [`Draft generation returned insufficient content (${draftContent.length} chars)`],
+        progress: 55,
+        errors: [`Draft too short (${(draftContent || '').length} chars)`],
         currentNode: NODE_NAMES.WRITER,
       };
     }
 
-    // 保存草稿到 tasks 表 + draft_versions 表（双写，让旧版写作页也能看到）
+    // 双写: tasks + draft_versions
     const draftVersion = (state.currentReviewRound || 0) + 1;
     await Promise.all([
       query(
@@ -264,19 +290,11 @@ ${i + 1}. [${insight.type || 'insight'}] ${insight.content || ''} (置信度: ${
          ON CONFLICT (task_id, version) DO UPDATE SET
            content = EXCLUDED.content, change_summary = EXCLUDED.change_summary,
            word_count = EXCLUDED.word_count, status = EXCLUDED.status`,
-        [
-          state.taskId,
-          draftVersion,
-          draftContent,
-          draftVersion === 1 ? 'LangGraph 初稿生成' : `LangGraph 第${draftVersion}版（基于蓝军评审修订）`,
-          'draft',
-          draftContent.length,
-          state.currentReviewRound || 0,
-        ]
+        [state.taskId, draftVersion, draftContent,
+         draftVersion === 1 ? '初稿生成' : `第${draftVersion}版（基于评审修订）`,
+         'draft', draftContent.length, state.currentReviewRound || 0]
       ),
     ]);
-
-    console.log(`[LangGraph:writer] Draft generated successfully: ${draftContent.length} chars, saved as version ${draftVersion}`);
 
     return {
       draftContent,
@@ -287,20 +305,93 @@ ${i + 1}. [${insight.type || 'insight'}] ${insight.content || ''} (置信度: ${
   } catch (error: any) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[LangGraph:writer] Writing failed:`, errorMsg);
-    return {
-      status: 'writing_failed',
-      progress: 60,
-      errors: [`Writing failed: ${errorMsg}`],
-      currentNode: NODE_NAMES.WRITER,
-    };
+    return { status: 'writing_failed', progress: 55, errors: [`Writing failed: ${errorMsg}`], currentNode: NODE_NAMES.WRITER };
   }
 }
 
 /**
- * Blue Team Node — 蓝军评审
- * 直接调用 LLMRouter 执行评审，不经过 BlueTeamAgent.execute()
- * 原因: BlueTeamAgent 内部依赖 expert_review_tasks / draft_versions 等不存在的表，
- *       会导致整轮评审失败。此处用轻量级 LLM 调用实现 3 专家评审 + 修订。
+ * Polish Node — 润色 + 事实核查
+ * 接入 draftGenerator.ts (polish 模式) + LLM 事实核查
+ */
+export async function polishNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
+  console.log(`[LangGraph:polish] Starting polish + fact-check for task: ${state.taskId}`);
+
+  await query(
+    `UPDATE tasks SET status = 'polishing', progress = 72, current_stage = 'polishing', updated_at = NOW() WHERE id = $1`,
+    [state.taskId]
+  );
+
+  let polishedContent = state.draftContent || '';
+
+  // Step A: 润色（尝试用 draftGenerator 的 polish 模式）
+  try {
+    const { generateFinalDraft } = await import('../services/draftGenerator.js');
+    const polishResult = await generateFinalDraft(state.taskId, undefined, false, 'polish');
+    if (polishResult.success && polishResult.content) {
+      polishedContent = polishResult.content;
+      console.log(`[LangGraph:polish] Polish completed via draftGenerator`);
+    }
+  } catch (polishErr) {
+    console.warn(`[LangGraph:polish] draftGenerator unavailable, skipping polish step`, polishErr);
+  }
+
+  // Step B: 事实核查 — 提取数据点并与研究数据交叉验证
+  let factCheckReport: any[] = [];
+  try {
+    const llmRouter = getLLMRouter();
+    const dataPackage = state.researchData?.dataPackage || [];
+    const realData = dataPackage.filter((d: any) => !d.metadata?.isMissing);
+
+    if (polishedContent.length > 200 && realData.length > 0) {
+      const prompt = `从以下文稿中提取所有数据点（数字、百分比、排名、引用），并检查是否能在研究数据中找到支撑。
+
+## 文稿（前 4000 字）
+${polishedContent.substring(0, 4000)}
+
+## 可用研究数据
+${realData.slice(0, 10).map((d: any, i: number) => `[${i + 1}] ${d.source}: ${(d.content || '').substring(0, 200)}`).join('\n')}
+
+## 输出 JSON 数组
+[{
+  "claim": "原文中的数据点",
+  "location": "所在章节标题",
+  "verified": true/false,
+  "credibility": "A|B|C|D",
+  "sources": ["验证来源"]
+}]
+
+只输出 JSON 数组，不要其他内容。`;
+
+      const result = await llmRouter.generate(prompt, 'analysis', { temperature: 0.3, maxTokens: 3000 });
+      const match = result.content.match(/\[[\s\S]*\]/);
+      if (match) {
+        factCheckReport = JSON.parse(match[0]);
+      }
+    }
+    console.log(`[LangGraph:polish] Fact-check: ${factCheckReport.length} claims checked, ${factCheckReport.filter((f: any) => !f.verified).length} unverified`);
+  } catch (factErr) {
+    console.warn(`[LangGraph:polish] Fact-check failed`, factErr);
+  }
+
+  // 保存润色后稿件
+  await query(
+    `UPDATE tasks SET draft_content = $1, progress = 75, updated_at = NOW() WHERE id = $2`,
+    [polishedContent, state.taskId]
+  );
+
+  return {
+    draftContent: polishedContent,
+    factCheckReport,
+    status: 'polished',
+    progress: 75,
+    currentNode: NODE_NAMES.POLISH,
+  };
+}
+
+/**
+ * Blue Team Node — 蓝军评审（串行/并行双模式）
+ * 优先接入 sequentialReview.ts（串行专家链），fallback 到 LLM 直调
+ * 支持: 用户配置专家、段落级定位、事实核查融合
  */
 export async function blueTeamNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
   const round = state.currentReviewRound + 1;
@@ -308,158 +399,179 @@ export async function blueTeamNode(state: PipelineStateType): Promise<Partial<Pi
 
   await query(
     `UPDATE tasks SET status = 'reviewing', progress = $1, current_stage = $2, updated_at = NOW() WHERE id = $3`,
-    [70 + round * 5, `reviewing_round_${round}`, state.taskId]
+    [75 + round * 3, `reviewing_round_${round}`, state.taskId]
   );
 
   try {
-    const llmRouter = getLLMRouter();
-    const draftPreview = (state.draftContent || '').substring(0, 6000);
+    // 读取用户配置的评审方案（前端通过 save-review-config 保存）
+    const taskRow = await query(`SELECT blue_team_config FROM tasks WHERE id = $1`, [state.taskId]);
+    const userConfig = taskRow.rows[0]?.blue_team_config;
 
-    // 3 专家角色一次性评审
-    const reviewPrompt = `你是一个由三位专家组成的蓝军评审团，负责审核研究报告。
+    // 尝试接入 sequentialReview.ts
+    let questions: any[] = [];
+    let revisedDraft = state.draftContent || '';
+    let revisionSummary = '';
+    let completedRounds = round;
+
+    try {
+      const { configureSequentialReview, startSequentialReview, getSequentialReviewProgress } =
+        await import('../services/sequentialReview.js');
+
+      // 配置专家队列（用户选择 或 自动匹配）
+      await configureSequentialReview(
+        state.taskId,
+        state.topic,
+        userConfig?.selectedExperts
+      );
+
+      // 获取最新草稿 ID 和内容
+      const draftRow = await query(
+        `SELECT id, content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+        [state.taskId]
+      );
+      const draftId = draftRow.rows[0]?.id || state.taskId;
+      const draftContent = draftRow.rows[0]?.content || state.draftContent || '';
+
+      // 启动串行评审（内部自动 SSE 推送）
+      await startSequentialReview(state.taskId, draftId, draftContent);
+
+      // 获取结果
+      const progress = await getSequentialReviewProgress(state.taskId);
+      completedRounds = progress.completedRounds || round;
+
+      // 汇总所有轮次的评审意见
+      if (progress.reviewChain) {
+        for (const item of progress.reviewChain) {
+          if (item.questions) {
+            questions.push(...item.questions.map((q: any) => ({
+              ...q,
+              expertName: item.expertName,
+              expertRole: item.expertRole,
+            })));
+          }
+        }
+      }
+
+      // 获取最新修订稿
+      const latestDraft = await query(
+        `SELECT content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+        [state.taskId]
+      );
+      if (latestDraft.rows[0]?.content) {
+        revisedDraft = latestDraft.rows[0].content;
+      }
+      revisionSummary = `串行评审 ${completedRounds} 轮完成，${questions.length} 条意见`;
+      console.log(`[LangGraph:blue_team] Sequential review completed: ${completedRounds} rounds, ${questions.length} questions`);
+
+    } catch (seqErr) {
+      // Fallback: LLM 直调评审
+      console.warn(`[LangGraph:blue_team] sequentialReview unavailable, falling back to LLM`, seqErr);
+
+      const llmRouter = getLLMRouter();
+      const draftPreview = (state.draftContent || '').substring(0, 6000);
+
+      // 事实核查上下文
+      const factCheckCtx = (state.factCheckReport || [])
+        .filter((f: any) => !f.verified)
+        .map((f: any) => `⚠️ "${f.claim}" (${f.location}) — 未验证`)
+        .join('\n');
+
+      const reviewPrompt = `你是一个由三位专家组成的蓝军评审团。
 
 ## 专家角色
-1. **批判者(Challenger)**: 找出逻辑漏洞、论证跳跃、数据可靠性问题
-2. **拓展者(Expander)**: 指出遗漏的视角、未考虑的关联性
-3. **提炼者(Synthesizer)**: 评估核心观点是否清晰、结论是否站得住脚
+1. **批判者(Challenger)**: 逻辑漏洞、论证跳跃、数据可靠性
+2. **拓展者(Expander)**: 遗漏视角、关联因素、国际对比
+3. **提炼者(Synthesizer)**: 核心观点清晰度、结论可靠性
 
-## 当前是第${round}轮评审
+## 第${round}轮评审
 
-## 研究报告内容
+${factCheckCtx ? `## 事实核查发现\n${factCheckCtx}\n` : ''}
+
+## 研究报告
 ${draftPreview}
 
-## 输出要求
-以JSON数组格式输出所有问题，每个问题包含:
+## 输出 JSON 数组，每个问题包含:
 {
   "expertId": "challenger|expander|synthesizer",
   "expertName": "批判者|拓展者|提炼者",
-  "role": "challenger|expander|synthesizer",
-  "question": "具体问题描述",
+  "question": "问题描述",
   "severity": "high|medium|low|praise",
-  "suggestion": "改进建议"
+  "suggestion": "改进建议",
+  "location": "问题所在位置（如: 第二章第一段）"
 }
 
-每位专家提出3-5个问题，请以JSON数组格式直接输出。`;
+每位专家提出 3-5 个问题。只输出 JSON 数组。`;
 
-    const reviewResult = await llmRouter.generate(reviewPrompt, 'blue_team_review', {
-      temperature: 0.8,
-      maxTokens: 4000,
-    });
+      const reviewResult = await llmRouter.generate(reviewPrompt, 'blue_team_review', {
+        temperature: 0.8,
+        maxTokens: 4000,
+      });
 
-    // 解析评审结果
-    let questions: any[] = [];
-    try {
-      const jsonMatch = reviewResult.content.match(/```json\s*([\s\S]*?)\s*```/) ||
-                        reviewResult.content.match(/(\[[\s\S]*\])/);
-      if (jsonMatch) {
-        questions = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      try {
+        const jsonMatch = reviewResult.content.match(/```json\s*([\s\S]*?)\s*```/) ||
+                          reviewResult.content.match(/(\[[\s\S]*\])/);
+        if (jsonMatch) {
+          questions = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        }
+      } catch {
+        questions = [{ expertId: 'synthesizer', expertName: '提炼者', question: reviewResult.content.substring(0, 500), severity: 'medium', suggestion: '请查看评审意见' }];
       }
-    } catch (parseErr) {
-      console.warn('[LangGraph:blue_team] Failed to parse review JSON, using raw text');
-      questions = [{
-        expertId: 'synthesizer',
-        expertName: '提炼者',
-        role: 'synthesizer',
-        question: reviewResult.content.substring(0, 500),
-        severity: 'medium' as const,
-        suggestion: '请查看评审意见',
-      }];
-    }
 
-    const highSeverityCount = questions.filter((q: any) => q.severity === 'high').length;
-    const passed = highSeverityCount === 0;
+      // 有 high severity 则修订
+      const highCount = questions.filter((q: any) => q.severity === 'high').length;
+      if (highCount > 0) {
+        const revisionPrompt = `基于蓝军评审反馈修订报告。
 
-    // 如果有 high severity 问题，执行修订
-    let revisedDraft = state.draftContent;
-    let revisionSummary = `Round ${round}: ${questions.length} questions, ${highSeverityCount} high severity`;
-
-    if (!passed && questions.length > 0) {
-      const revisionPrompt = `你是一位资深研究报告修订专家。请基于蓝军评审反馈修改报告。
-
-## 第${round}轮评审意见
+## 评审意见
 ${questions.filter((q: any) => q.severity === 'high' || q.severity === 'medium').map((q: any, i: number) =>
-  `${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}\n   建议: ${q.suggestion || '无'}`
+  `${i + 1}. [${q.severity}] ${q.expertName}: ${q.question}${q.location ? ` (位置: ${q.location})` : ''}\n   建议: ${q.suggestion || '无'}`
 ).join('\n\n')}
 
 ## 当前报告
 ${draftPreview}
 
-## 修订要求
-1. 逐条回应高优先级问题
-2. 补充必要的数据支撑
-3. 保持整体结构和风格
-4. 在开头附上简短修订说明
+## 要求: 逐条回应高优先级问题，保持结构和风格。输出完整报告。`;
 
-请输出修订后的完整报告正文。`;
-
-      const revisionResult = await llmRouter.generate(revisionPrompt, 'writing', {
-        temperature: 0.7,
-        maxTokens: 8000,
-      });
-
-      if (revisionResult.content && revisionResult.content.trim().length > 100) {
-        revisedDraft = revisionResult.content;
-        const summaryMatch = revisedDraft.match(/修订说明[:：]?\s*([\s\S]{0,300}?)\n\n/);
-        revisionSummary = summaryMatch
-          ? summaryMatch[1].trim()
-          : `第${round}轮修订：处理了${questions.length}条专家意见`;
+        const revisionResult = await llmRouter.generate(revisionPrompt, 'writing', { temperature: 0.7, maxTokens: 8000 });
+        if (revisionResult.content?.trim().length > 100) {
+          revisedDraft = revisionResult.content;
+        }
       }
+      revisionSummary = `第${round}轮评审：${questions.length} 条意见，${questions.filter((q: any) => q.severity === 'high').length} 条高优`;
     }
 
-    // 更新 tasks 表 + draft_versions 表（双写）
+    // 判断是否通过
+    const highSeverityCount = questions.filter((q: any) => q.severity === 'high').length;
+    const passed = highSeverityCount === 0;
+
+    // 保存修订稿
     const revisionVersion = round + 1;
     await Promise.all([
-      query(
-        `UPDATE tasks SET draft_content = $1, updated_at = NOW() WHERE id = $2`,
-        [revisedDraft, state.taskId]
-      ),
-      !passed && revisedDraft !== state.draftContent
+      query(`UPDATE tasks SET draft_content = $1, updated_at = NOW() WHERE id = $2`, [revisedDraft, state.taskId]),
+      revisedDraft !== state.draftContent
         ? query(
             `INSERT INTO draft_versions (task_id, version, content, change_summary, status, word_count, round, expert_role)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (task_id, version) DO UPDATE SET
-               content = EXCLUDED.content, change_summary = EXCLUDED.change_summary,
-               word_count = EXCLUDED.word_count, status = EXCLUDED.status`,
-            [
-              state.taskId,
-              revisionVersion,
-              revisedDraft,
-              revisionSummary,
-              'revised',
-              (revisedDraft || '').length,
-              round,
-              'blue_team',
-            ]
+               content = EXCLUDED.content, change_summary = EXCLUDED.change_summary, word_count = EXCLUDED.word_count, status = EXCLUDED.status`,
+            [state.taskId, revisionVersion, revisedDraft, revisionSummary, 'revised', revisedDraft.length, round, 'blue_team']
           )
         : Promise.resolve(),
     ]);
 
-    console.log(`[LangGraph:blue_team] Round ${round} complete: ${questions.length} questions, ${highSeverityCount} high, passed=${passed}`);
-
-    const roundData = {
-      round,
-      questions,
-      revisionContent: revisedDraft,
-      revisionSummary,
-    };
-
     return {
-      blueTeamRounds: [roundData],
+      blueTeamRounds: [{ round, questions, revisionContent: revisedDraft, revisionSummary }],
       currentReviewRound: round,
       reviewPassed: passed,
       draftContent: revisedDraft,
       status: passed ? 'review_passed' : 'review_needs_revision',
-      progress: Math.min(70 + round * 10, 90),
+      progress: Math.min(75 + round * 5, 90),
       currentNode: NODE_NAMES.BLUE_TEAM,
     };
   } catch (error: any) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[LangGraph:blue_team] Review failed:`, errorMsg);
-    return {
-      status: 'review_failed',
-      errors: [`Blue team review failed: ${errorMsg}`],
-      currentNode: NODE_NAMES.BLUE_TEAM,
-    };
+    return { status: 'review_failed', errors: [`Blue team review failed: ${errorMsg}`], currentNode: NODE_NAMES.BLUE_TEAM };
   }
 }
 
@@ -496,18 +608,68 @@ export async function humanApproveNode(state: PipelineStateType): Promise<Partia
 }
 
 /**
- * Output Node — 生成最终输出
+ * Output Node — 多格式输出（Markdown + HTML + PDF）
+ * 按 target_formats 生成对应格式，写入 outputs 表
  */
 export async function outputNode(state: PipelineStateType): Promise<Partial<PipelineStateType>> {
-  console.log(`[LangGraph:output] Generating final output for task: ${state.taskId}`);
+  console.log(`[LangGraph:output] Generating output for task: ${state.taskId}`);
 
+  const content = state.draftContent || '';
+  if (!content || content.trim().length < 100) {
+    return { status: 'output_failed', errors: ['No draft content'], currentNode: NODE_NAMES.OUTPUT };
+  }
+
+  // 读取 target_formats
+  const taskResult = await query(
+    `SELECT target_formats, topic FROM tasks WHERE id = $1`,
+    [state.taskId]
+  );
+  const targetFormats: string[] = taskResult.rows[0]?.target_formats || ['markdown'];
+  const topic = taskResult.rows[0]?.topic || state.topic;
+  const outputFiles: Array<{ id: string; format: string }> = [];
+
+  // 1. Markdown（始终生成）
+  const mdId = `output_${uuidv4().slice(0, 8)}`;
+  await query(
+    `INSERT INTO outputs (id, task_id, format, content, created_at) VALUES ($1, $2, 'markdown', $3, NOW())`,
+    [mdId, state.taskId, content]
+  );
+  outputFiles.push({ id: mdId, format: 'markdown' });
+
+  // 2. HTML（按需 — 或 PDF 也需要先生成 HTML）
+  if (targetFormats.includes('html') || targetFormats.includes('pdf')) {
+    try {
+      const { renderMarkdownToHtml } = await import('../services/htmlRenderer.js');
+      const htmlContent = renderMarkdownToHtml(content, {
+        title: topic,
+        includeTableOfContents: true,
+        includeCoverPage: true,
+      });
+
+      const htmlId = `output_${uuidv4().slice(0, 8)}`;
+      await query(
+        `INSERT INTO outputs (id, task_id, format, content, created_at) VALUES ($1, $2, 'html', $3, NOW())`,
+        [htmlId, state.taskId, htmlContent]
+      );
+      outputFiles.push({ id: htmlId, format: 'html' });
+      console.log(`[LangGraph:output] HTML generated: ${htmlContent.length} chars`);
+    } catch (htmlErr) {
+      console.warn(`[LangGraph:output] HTML generation failed`, htmlErr);
+    }
+  }
+
+  // 3. PDF — 通过 HTML 在浏览器端 Print-to-PDF（CSS 已做打印优化）
+  // 后续可接入 Puppeteer 实现服务端 PDF
+
+  // 更新任务状态
   await query(
     `UPDATE tasks SET status = 'completed', progress = 100, current_stage = 'completed',
-     draft_content = $1, updated_at = NOW() WHERE id = $2`,
-    [state.draftContent, state.taskId]
+     output_ids = $1, completed_at = NOW(), updated_at = NOW() WHERE id = $2`,
+    [JSON.stringify(outputFiles.map(f => f.id)), state.taskId]
   );
 
   return {
+    outputFiles,
     status: 'completed',
     progress: 100,
     currentNode: NODE_NAMES.OUTPUT,

@@ -60,6 +60,7 @@ export const NODE_NAMES = {
   HUMAN_OUTLINE: 'human_outline',
   RESEARCHER: 'researcher',
   WRITER: 'writer',
+  POLISH: 'polish',
   BLUE_TEAM: 'blue_team',
   HUMAN_APPROVE: 'human_approve',
   OUTPUT: 'output',
@@ -159,6 +160,18 @@ export const PipelineState = Annotation.Root({
   currentNode: Annotation<string>({
     reducer: (_prev, next) => next,
     default: () => '',
+  }),
+
+  // Stage 3: 润色 + 事实核查
+  factCheckReport: Annotation<any[]>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
+
+  // Stage 5: 多格式输出
+  outputFiles: Annotation<Array<{ id: string; format: string }>>({
+    reducer: (_prev, next) => next,
+    default: () => [],
   }),
 });
 

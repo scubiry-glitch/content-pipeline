@@ -1,5 +1,5 @@
 // LangGraph Content Pipeline Graph Definition
-// 声明式工作流定义：选题 → 大纲确认 → 研究 → 写作 → 蓝军评审 → 人工审批 → 输出
+// 声明式工作流: 选题 → 大纲确认 → 研究 → 写作 → 润色 → 蓝军评审 → 人工审批 → 多格式输出
 
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { PipelineState, PipelineStateType, NODE_NAMES } from './state.js';
@@ -8,6 +8,7 @@ import {
   humanOutlineNode,
   researcherNode,
   writerNode,
+  polishNode,
   blueTeamNode,
   humanApproveNode,
   outputNode,
@@ -16,15 +17,20 @@ import { getCheckpointer } from './checkpointer.js';
 
 /**
  * 构建内容生产流水线 StateGraph
+ *
+ * START → planner → human_outline → researcher → writer → polish → blue_team → human_approve → output → END
+ *                   ↑ (rejected)                  ↑ (needs revision)           ↑ (打回)
+ *                   └── planner                   └── writer                   └── writer
  */
 function buildGraph() {
   const graph = new StateGraph(PipelineState);
 
-  // 添加节点
+  // 添加节点 (8 个)
   graph.addNode(NODE_NAMES.PLANNER, plannerNode);
   graph.addNode(NODE_NAMES.HUMAN_OUTLINE, humanOutlineNode);
   graph.addNode(NODE_NAMES.RESEARCHER, researcherNode);
   graph.addNode(NODE_NAMES.WRITER, writerNode);
+  graph.addNode(NODE_NAMES.POLISH, polishNode);
   graph.addNode(NODE_NAMES.BLUE_TEAM, blueTeamNode);
   graph.addNode(NODE_NAMES.HUMAN_APPROVE, humanApproveNode);
   graph.addNode(NODE_NAMES.OUTPUT, outputNode);
@@ -40,20 +46,22 @@ function buildGraph() {
     if (state.outlineApproved) {
       return NODE_NAMES.RESEARCHER;
     }
-    // 拒绝后回到 planner 重新生成
     return NODE_NAMES.PLANNER;
   });
 
   // 边: researcher → writer
   graph.addEdge(NODE_NAMES.RESEARCHER, NODE_NAMES.WRITER);
 
-  // 边: writer → blue_team
-  graph.addEdge(NODE_NAMES.WRITER, NODE_NAMES.BLUE_TEAM);
+  // 边: writer → polish (润色+事实核查)
+  graph.addEdge(NODE_NAMES.WRITER, NODE_NAMES.POLISH);
+
+  // 边: polish → blue_team
+  graph.addEdge(NODE_NAMES.POLISH, NODE_NAMES.BLUE_TEAM);
 
   // 条件边: blue_team → writer (需要修改) | human_approve (通过)
   graph.addConditionalEdges(NODE_NAMES.BLUE_TEAM, (state: PipelineStateType) => {
     if (state.currentReviewRound < state.maxReviewRounds && !state.reviewPassed) {
-      return NODE_NAMES.WRITER; // 回到写作修改
+      return NODE_NAMES.WRITER;
     }
     return NODE_NAMES.HUMAN_APPROVE;
   });
@@ -63,7 +71,7 @@ function buildGraph() {
     if (state.finalApproved) {
       return NODE_NAMES.OUTPUT;
     }
-    return NODE_NAMES.WRITER; // 打回修改
+    return NODE_NAMES.WRITER;
   });
 
   // 边: output → END
