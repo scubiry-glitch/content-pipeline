@@ -271,12 +271,161 @@ app.get('/api/v1/outputs/:id/pdf', async (req, reply) => {
 | `services/output.ts` | 补充 pdf contentType | 小 |
 | `package.json` | 安装 `marked`，可选 `puppeteer` | 小 |
 
-## PDF 方案选型
+## PDF 方案
 
-| 方案 | 优点 | 缺点 | 推荐场景 |
-|------|------|------|---------|
-| **浏览器端 Print** | 零后端成本，用户可微调 | 需手动操作 | MVP / 用户量少 |
-| **Puppeteer** | 全自动，高保真 | 依赖重（~400MB） | 自动化 / API 调用 |
-| **wkhtmltopdf** | 轻量 | 渲染能力弱于 Chrome | 服务器资源受限 |
+HTML → PDF，两种路径：
 
-**建议**: MVP 阶段先用浏览器端方案，后续按需加 Puppeteer。
+| 方案 | 优点 | 缺点 | 推荐 |
+|------|------|------|------|
+| **浏览器端 Print** | 零后端成本，用户可微调 | 需手动操作 | MVP 阶段 ✅ |
+| **Puppeteer** | 全自动，高保真 | 依赖重（~400MB） | 后续按需 |
+
+**建议**: 先 HTML 落地，PDF 靠浏览器 Print-to-PDF（CSS 已做打印优化 `@page` + `@media print`）。
+
+---
+
+## PPT 方案（参考 `skills/ppt-generation/SKILL.md`）
+
+> PPT SKILL.md 定义了完整的 AI 图像幻灯片生成流程，包含 8 种视觉风格。
+
+### SKILL.md 核心流程
+
+```
+Step 1: 理解需求 → 确定话题/页数/风格/比例
+Step 2: 生成 Presentation Plan JSON
+Step 3: 逐页生成 AI 图像（每页参考前一页保持风格一致）
+Step 4: python generate.py 合成 PPTX
+```
+
+### 8 种视觉风格
+
+| 风格 | 适用场景 |
+|------|---------|
+| `glassmorphism` | 科技产品、AI/SaaS 演示 |
+| `dark-premium` | 高端品牌、管理层汇报 |
+| `gradient-modern` | 创业公司、品牌发布 |
+| `neo-brutalist` | Z世代营销、颠覆性品牌 |
+| `3d-isometric` | 技术讲解、SaaS 产品 |
+| `editorial` | 年报、行业洞察 |
+| `minimal-swiss` | 建筑设计、咨询报告 |
+| `keynote` | 主题演讲、产品发布 |
+
+### 接入 LangGraph 的方案
+
+PPT 生成需要 AI 图像生成能力（image-generation skill），不同于 HTML/PDF 的纯文本转换。分两层设计：
+
+#### 层 1: 从报告内容生成 Presentation Plan
+
+```typescript
+// 将研究报告大纲转换为 PPT Plan JSON
+async function generatePresentationPlan(
+  topic: string,
+  outline: OutlineSection[],
+  style: string = 'editorial'  // 研究报告默认 editorial 风格
+): Promise<PresentationPlan> {
+  const llmRouter = getLLMRouter();
+  
+  const prompt = `将以下研究报告大纲转换为 PPT 演示文稿计划。
+
+## 报告话题
+${topic}
+
+## 大纲章节
+${outline.map((s, i) => `${i+1}. ${s.title}\n   核心问题: ${s.coreQuestion || ''}\n   要点: ${s.content}`).join('\n')}
+
+## PPT 风格
+${style}
+
+## 输出要求
+生成 JSON 格式的 Presentation Plan:
+{
+  "title": "演示文稿标题",
+  "style": "${style}",
+  "style_guidelines": { ... },
+  "aspect_ratio": "16:9",
+  "slides": [
+    {
+      "slide_number": 1,
+      "type": "title",
+      "title": "主标题",
+      "subtitle": "副标题",
+      "visual_description": "详细的视觉描述（用于 AI 图像生成）"
+    },
+    {
+      "slide_number": 2,
+      "type": "content",
+      "title": "章节标题",
+      "key_points": ["要点1", "要点2"],
+      "visual_description": "视觉描述"
+    }
+  ]
+}
+
+规则:
+- 每个大纲章节对应 1-2 页幻灯片
+- 第 1 页固定为封面页（title 类型）
+- 最后 1 页为结论/行动建议
+- visual_description 用英文，非常具体（颜色代码、布局、字体权重）
+- 总页数控制在 8-15 页`;
+
+  const result = await llmRouter.generate(prompt, 'planning', {
+    temperature: 0.7, maxTokens: 4000,
+  });
+  
+  // 解析 JSON ...
+  return parsedPlan;
+}
+```
+
+#### 层 2: 图像生成 + PPTX 合成
+
+```typescript
+// outputNode 中的 PPT 生成流程
+if (targetFormats.includes('ppt')) {
+  // Step 1: 生成 Presentation Plan
+  const plan = await generatePresentationPlan(topic, outline.sections, 'editorial');
+  const planPath = `/tmp/ppt-plans/${state.taskId}.json`;
+  fs.writeFileSync(planPath, JSON.stringify(plan));
+
+  // Step 2: 逐页生成 AI 图像（串行，每页参考前一页）
+  const slideImages: string[] = [];
+  for (let i = 0; i < plan.slides.length; i++) {
+    const slide = plan.slides[i];
+    const outputPath = `/tmp/ppt-images/${state.taskId}-slide-${i+1}.jpg`;
+    
+    // 调用 image-generation 服务
+    await generateSlideImage({
+      prompt: slide.visual_description,
+      style: plan.style,
+      referenceImage: i > 0 ? slideImages[i-1] : undefined,  // 参考前一页
+      outputPath,
+      aspectRatio: plan.aspect_ratio,
+    });
+    slideImages.push(outputPath);
+  }
+
+  // Step 3: 合成 PPTX（复用 skills/ppt-generation/scripts/generate.py）
+  const pptxPath = `/tmp/ppt-output/${state.taskId}.pptx`;
+  await execAsync(`python skills/ppt-generation/scripts/generate.py \
+    --plan-file ${planPath} \
+    --slide-images ${slideImages.join(' ')} \
+    --output-file ${pptxPath}`);
+
+  // Step 4: 保存到 outputs
+  const pptContent = fs.readFileSync(pptxPath);
+  // ... 写入 outputs 表或文件存储
+}
+```
+
+### PPT 实现优先级
+
+| 步骤 | 依赖 | 工作量 |
+|------|------|--------|
+| 1. Presentation Plan 生成 | 无（LLM 即可） | 小 |
+| 2. AI 图像生成集成 | 需要 image-generation 服务 | 大 |
+| 3. PPTX 合成 | `generate.py` 已就绪，需 `python-pptx` | 小 |
+
+**建议**: 
+- 短期: 先实现 Plan 生成（可独立使用，用户拿 Plan 手动生成）
+- 中期: 接入图像生成 API 实现全自动 PPT
+- HTML/PDF 优先于 PPT（用户价值更直接）
