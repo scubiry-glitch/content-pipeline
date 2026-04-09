@@ -4,3 +4,4 @@ export { LGResearchTab } from './LGResearchTab';
 export { LGWritingTab } from './LGWritingTab';
 export { LGReviewsTab } from './LGReviewsTab';
 export { LGQualityTab } from './LGQualityTab';
+export { LGPortalTab } from './LGPortalTab';

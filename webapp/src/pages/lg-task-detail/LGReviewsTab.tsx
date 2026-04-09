@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 
 // severity 配色
 const SEVERITY_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -27,6 +28,7 @@ const EXPERT_STYLES: Record<string, { icon: string; label: string }> = {
 export function LGReviewsTab() {
   const { detail, pendingAction, onResume, resuming } = useOutletContext<LGTaskContext>();
   const [feedback, setFeedback] = useState('');
+  const [showDraftViewer, setShowDraftViewer] = useState(false);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -208,6 +210,27 @@ export function LGReviewsTab() {
           </div>
         </div>
       ))}
+
+      {/* 草稿文档查看器 */}
+      {detail.draftContent && rounds.length > 0 && (
+        <div style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div className="section-title" style={{ cursor: 'pointer' }} onClick={() => setShowDraftViewer(!showDraftViewer)}>
+              <span className="material-symbols-outlined">description</span>
+              评审文档查看
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                {showDraftViewer ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+            <div className="section-desc">查看被评审的草稿内容</div>
+          </div>
+          {showDraftViewer && (
+            <div className="info-card full-width" style={{ maxHeight: '500px', overflow: 'auto' }}>
+              <MarkdownRenderer content={detail.draftContent} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

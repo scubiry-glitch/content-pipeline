@@ -65,7 +65,7 @@ import { Settings } from './pages/Settings';
 import { Notifications } from './pages/Notifications';
 import { LangGraphTasks } from './pages/LangGraphTasks';
 import { LGTaskDetailLayout } from './pages/LGTaskDetailLayout';
-import { LGOverviewTab, LGPlanningTab, LGResearchTab, LGWritingTab, LGReviewsTab, LGQualityTab } from './pages/lg-task-detail';
+import { LGOverviewTab, LGPlanningTab, LGResearchTab, LGWritingTab, LGReviewsTab, LGQualityTab, LGPortalTab } from './pages/lg-task-detail';
 
 import './App.css';
 
@@ -163,6 +163,7 @@ function App() {
                 <Route path="writing" element={<LGWritingTab />} />
                 <Route path="reviews" element={<LGReviewsTab />} />
                 <Route path="quality" element={<LGQualityTab />} />
+                <Route path="portal" element={<LGPortalTab />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
