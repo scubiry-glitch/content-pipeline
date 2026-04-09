@@ -669,3 +669,51 @@
   padding: 4rem;
   color: var(--text-secondary, #666);
 }
+
+/* === LG Detail Layout Supplements === */
+
+/* Sidebar graph compact mode */
+.lg-sidebar-graph {
+  padding: 8px !important;
+}
+
+.lg-sidebar-graph .graph-pipeline {
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.lg-sidebar-graph .graph-node {
+  min-width: auto;
+  padding: 4px 8px;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.lg-sidebar-graph .graph-node-icon {
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+
+.lg-sidebar-graph .graph-node-label {
+  font-size: 0.65rem;
+}
+
+.lg-sidebar-graph .graph-edge {
+  font-size: 0.9rem;
+  transform: rotate(90deg);
+}
+
+/* Outline tree view */
+.lg-outline-tree {
+  padding: 8px 0;
+}
+
+/* Insight card */
+.lg-insight-card {
+  transition: border-color 0.2s;
+}
+
+.lg-insight-card:hover {
+  border-color: var(--primary-light, #e8a090);
+}

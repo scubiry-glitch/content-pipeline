@@ -12,6 +12,7 @@
   "dependencies": {
     "@types/react-window": "^1.8.8",
     "axios": "^1.13.6",
+    "dotenv": "^17.4.1",
     "echarts": "^5.4.3",
     "echarts-for-react": "^3.0.3",
     "lucide-react": "^1.7.0",

@@ -64,7 +64,8 @@ import { RecycleBin } from './pages/RecycleBin';
 import { Settings } from './pages/Settings';
 import { Notifications } from './pages/Notifications';
 import { LangGraphTasks } from './pages/LangGraphTasks';
-import { LangGraphTaskDetail } from './pages/LangGraphTaskDetail';
+import { LGTaskDetailLayout } from './pages/LGTaskDetailLayout';
+import { LGOverviewTab, LGPlanningTab, LGResearchTab, LGWritingTab, LGReviewsTab, LGQualityTab } from './pages/lg-task-detail';
 
 import './App.css';
 
@@ -154,7 +155,15 @@ function App() {
               <Route path="ai-task-recommendations" element={<AITaskRecommendations />} />
               {/* LangGraph 流水线独立页面 */}
               <Route path="lg-tasks" element={<LangGraphTasks />} />
-              <Route path="lg-tasks/:threadId" element={<LangGraphTaskDetail />} />
+              <Route path="lg-tasks/:threadId" element={<LGTaskDetailLayout />}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<LGOverviewTab />} />
+                <Route path="planning" element={<LGPlanningTab />} />
+                <Route path="research" element={<LGResearchTab />} />
+                <Route path="writing" element={<LGWritingTab />} />
+                <Route path="reviews" element={<LGReviewsTab />} />
+                <Route path="quality" element={<LGQualityTab />} />
+              </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
