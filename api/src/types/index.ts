@@ -4,13 +4,31 @@ export interface OutlineSection {
   title: string;
   level: number;
   content: string;
+  coreQuestion?: string;
+  analysisApproach?: string;
+  hypothesis?: string;
+  dataNeeds?: DataNeed[];
+  visualizationPlan?: {
+    chartType: string;
+    title: string;
+    dataMapping: string;
+  };
   subsections?: OutlineSection[];
+}
+
+export interface DataNeed {
+  metric: string;
+  searchKeywords: string[];
+  priority: 'P0' | 'P1' | 'P2';
+  timeRange?: string;
 }
 
 export interface DataRequirement {
   type: 'government' | 'industry' | 'academic' | 'expert';
   description: string;
   priority: 'high' | 'medium' | 'low';
+  searchKeywords?: string[];
+  timeRange?: string;
 }
 
 export interface TopicPlan {

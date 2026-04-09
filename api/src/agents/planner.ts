@@ -1,10 +1,10 @@
 // Planner Agent - 选题规划专家
-// 负责: 话题选择 → 大纲生成 → 数据需求分析
+// 负责: 话题解构 → 结构推导 → 章节展开（含数据需求和可视化规划）
 
 import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
-import { TopicPlan, OutlineSection, DataRequirement } from '../types/index.js';
+import { TopicPlan, OutlineSection, DataRequirement, DataNeed } from '../types/index.js';
 
 export interface PlannerInput {
   topic: string;
@@ -50,20 +50,19 @@ export class PlannerAgent extends BaseAgent {
     const taskId = await this.saveTask('planning', 'running', input);
 
     try {
-      // Step 0: Analyze knowledge base for insights and novel angles (并行执行)
+      // Step 0: 知识库洞察 + 新角度（并行执行）
       this.log('info', 'Analyzing knowledge base for insights and novel angles');
       const [knowledgeInsights, novelAngles] = await Promise.all([
         this.generateKnowledgeInsights(input),
-        this.generateNovelAnglesSimple(input) // 使用不依赖 insights 的版本
+        this.generateNovelAnglesSimple(input)
       ]);
 
-      // Step 1: Generate comprehensive outline using 三层穿透结构 (enhanced with insights)
-      this.log('info', 'Generating outline with three-layer structure');
+      // Step 1: 内容驱动的大纲生成（含数据需求和可视化规划）
+      this.log('info', 'Generating content-driven outline');
       const outline = await this.generateOutline(input, knowledgeInsights, novelAngles);
 
-      // Step 2: Analyze data requirements
-      this.log('info', 'Analyzing data requirements');
-      const dataRequirements = await this.analyzeDataRequirements(input, outline);
+      // Step 2: 从大纲中提取数据需求（向后兼容）
+      const dataRequirements = this.extractDataRequirements(outline);
 
       // Step 3: Save to database
       this.log('info', 'Saving plan to database');
@@ -104,55 +103,39 @@ export class PlannerAgent extends BaseAgent {
     }
   }
 
-  private buildOutlinePrompt(input: PlannerInput): string {
-    const depthMap = {
-      macro: '宏观视野层（政策、趋势、周期）',
-      meso: '中观解剖层（行业、区域、机制）',
-      micro: '微观行动层（项目、企业、操作）',
-      comprehensive: '完整三层结构（宏观→中观→微观）',
+  /**
+   * 从大纲的 dataNeeds 中提取 DataRequirement（向后兼容旧接口）
+   */
+  private extractDataRequirements(outline: OutlineSection[]): DataRequirement[] {
+    const requirements: DataRequirement[] = [];
+
+    const extract = (sections: OutlineSection[]) => {
+      for (const section of sections) {
+        if (section.dataNeeds) {
+          for (const need of section.dataNeeds) {
+            requirements.push({
+              type: 'industry',
+              description: need.metric,
+              priority: need.priority === 'P0' ? 'high' : need.priority === 'P1' ? 'medium' : 'low',
+              searchKeywords: need.searchKeywords,
+              timeRange: need.timeRange,
+            });
+          }
+        }
+        if (section.subsections) {
+          extract(section.subsections);
+        }
+      }
     };
 
-    return `你是一位资深产业研究专家，擅长构建系统性研究框架。
+    extract(outline);
 
-请为以下研究话题设计详细大纲，采用"三层穿透"结构：
-
-## 话题
-${input.topic}
-
-## 背景信息
-${input.context || '无特定背景'}
-
-## 目标受众
-${input.targetAudience || '产业研究人员和投资者'}
-
-## 深度要求
-${depthMap[input.desiredDepth || 'comprehensive']}
-
-## 输出要求
-请输出JSON格式，包含以下结构：
-{
-  "outline": [
-    {
-      "title": "章节标题",
-      "level": 1,
-      "content": "核心论述要点",
-      "subsections": [
-        {
-          "title": "子章节",
-          "level": 2,
-          "content": "子章节要点"
-        }
-      ]
+    // 如果大纲没有 dataNeeds（兼容旧格式），返回基础需求
+    if (requirements.length === 0) {
+      return this.createFallbackRequirements();
     }
-  ]
-}
 
-要求：
-1. 至少包含3个一级章节，每个章节有2-3个子章节
-2. 宏观层关注：政策导向、经济周期、国际比较
-3. 中观层关注：产业链分析、区域差异、商业模式
-4. 微观层关注：标杆案例、数据验证、行动建议
-5. 标注每个章节的关键数据需求`;
+    return requirements;
   }
 
   private validateAndNormalizeOutline(outline: any[]): OutlineSection[] {
@@ -164,10 +147,39 @@ ${depthMap[input.desiredDepth || 'comprehensive']}
       title: section.title || `Section ${idx + 1}`,
       level: section.level || 1,
       content: section.content || '',
+      coreQuestion: section.coreQuestion || undefined,
+      analysisApproach: section.analysisApproach || undefined,
+      hypothesis: section.hypothesis || undefined,
+      dataNeeds: Array.isArray(section.dataNeeds)
+        ? section.dataNeeds.map((d: any) => ({
+            metric: d.metric || d.description || '',
+            searchKeywords: Array.isArray(d.searchKeywords) ? d.searchKeywords : [],
+            priority: (['P0', 'P1', 'P2'].includes(d.priority) ? d.priority : 'P1') as DataNeed['priority'],
+            timeRange: d.timeRange || undefined,
+          }))
+        : undefined,
+      visualizationPlan: section.visualizationPlan
+        ? {
+            chartType: section.visualizationPlan.chartType || '',
+            title: section.visualizationPlan.title || '',
+            dataMapping: section.visualizationPlan.dataMapping || '',
+          }
+        : undefined,
       subsections: section.subsections?.map((sub: any, subIdx: number) => ({
         title: sub.title || `Subsection ${subIdx + 1}`,
         level: sub.level || 2,
         content: sub.content || '',
+        coreQuestion: sub.coreQuestion || undefined,
+        analysisApproach: sub.analysisApproach || undefined,
+        hypothesis: sub.hypothesis || undefined,
+        dataNeeds: Array.isArray(sub.dataNeeds)
+          ? sub.dataNeeds.map((d: any) => ({
+              metric: d.metric || d.description || '',
+              searchKeywords: Array.isArray(d.searchKeywords) ? d.searchKeywords : [],
+              priority: (['P0', 'P1', 'P2'].includes(d.priority) ? d.priority : 'P1') as DataNeed['priority'],
+              timeRange: d.timeRange || undefined,
+            }))
+          : undefined,
       })) || [],
     }));
   }
@@ -175,75 +187,36 @@ ${depthMap[input.desiredDepth || 'comprehensive']}
   private createFallbackOutline(input: PlannerInput): OutlineSection[] {
     return [
       {
-        title: '一、宏观视野：政策与趋势',
+        title: `${input.topic}：全景扫描`,
         level: 1,
-        content: '从政策导向和经济周期角度分析',
+        content: '梳理话题的基本面和关键背景',
+        coreQuestion: `${input.topic}的现状和基本面是怎样的？`,
         subsections: [
-          { title: '1.1 政策背景与演变', level: 2, content: '梳理相关政策历史脉络' },
-          { title: '1.2 宏观经济影响', level: 2, content: '分析经济周期对话题的影响' },
+          { title: '背景与定义', level: 2, content: '厘清核心概念和范畴' },
+          { title: '现状概览', level: 2, content: '关键数据和当前格局' },
         ],
       },
       {
-        title: '二、中观解剖：产业与机制',
+        title: '驱动因素与关键张力',
         level: 1,
-        content: '产业链分析和商业模式探讨',
+        content: '分析推动变化的核心因素和矛盾',
+        coreQuestion: '是什么力量在推动变化？关键矛盾在哪？',
         subsections: [
-          { title: '2.1 产业链全景图', level: 2, content: '绘制产业各环节关系' },
-          { title: '2.2 商业模式分析', level: 2, content: '解析主要盈利模式' },
+          { title: '核心驱动力', level: 2, content: '技术/政策/市场等驱动分析' },
+          { title: '挑战与约束', level: 2, content: '阻碍因素和关键瓶颈' },
         ],
       },
       {
-        title: '三、微观行动：案例与建议',
+        title: '趋势研判与行动建议',
         level: 1,
-        content: '具体项目案例和行动建议',
+        content: '基于分析得出判断和建议',
+        coreQuestion: '未来会怎样？应该怎么做？',
         subsections: [
-          { title: '3.1 标杆案例研究', level: 2, content: '深度剖析典型案例' },
-          { title: '3.2 行动建议', level: 2, content: '给出可操作建议' },
+          { title: '趋势判断', level: 2, content: '基于数据和逻辑的趋势推导' },
+          { title: '行动路径', level: 2, content: '针对目标受众的可操作建议' },
         ],
       },
     ];
-  }
-
-  private async analyzeDataRequirements(
-    input: PlannerInput,
-    outline: OutlineSection[]
-  ): Promise<DataRequirement[]> {
-    const prompt = `基于以下研究大纲，分析每个章节需要的数据类型和来源。
-
-## 话题
-${input.topic}
-
-## 大纲
-${JSON.stringify(outline, null, 2)}
-
-## 输出要求
-输出JSON数组，每个数据需求包含：
-{
-  "type": "government" | "industry" | "academic" | "expert",
-  "description": "具体数据描述",
-  "priority": "high" | "medium" | "low"
-}
-
-请识别所有需要的数据点，并标注优先级。`;
-
-    try {
-      const result = await this.llmRouter.generate(prompt, 'analysis', {
-        temperature: 0.5,
-        maxTokens: 2000,
-      });
-
-      const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/) ||
-                       result.content.match(/\[[\s\S]*\]/);
-
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-        return Array.isArray(parsed) ? parsed.slice(0, 10) : this.createFallbackRequirements();
-      }
-    } catch (error) {
-      this.log('warn', 'Failed to parse data requirements', { error });
-    }
-
-    return this.createFallbackRequirements();
   }
 
   private createFallbackRequirements(): DataRequirement[] {
@@ -259,7 +232,6 @@ ${JSON.stringify(outline, null, 2)}
    */
   private async generateKnowledgeInsights(input: PlannerInput): Promise<KnowledgeInsight[]> {
     try {
-      // 1. 从数据库获取相关历史内容
       const relatedContent = await this.queryKnowledgeBase(input.topic);
 
       if (relatedContent.length === 0) {
@@ -267,7 +239,6 @@ ${JSON.stringify(outline, null, 2)}
         return [];
       }
 
-      // 2. 使用 LLM 分析历史内容，生成洞见
       const prompt = `你是一位资深产业研究专家，擅长从历史研究中发现趋势和空白。
 
 ## 待研究话题
@@ -473,10 +444,8 @@ ${input.context || '无特定背景'}
    */
   private async queryKnowledgeBase(topic: string): Promise<any[]> {
     try {
-      // 提取关键词
       const keywords = topic.split(/\s+/).filter(w => w.length > 1);
 
-      // 查询历史任务/文章
       const tasksResult = await query(
         `SELECT id, topic as title, outline, research_data, created_at, 'task' as type
          FROM tasks
@@ -490,7 +459,6 @@ ${input.context || '无特定背景'}
         [keywords.map((k: string) => `%${k}%`)]
       );
 
-      // 查询素材库
       const assetsResult = await query(
         `SELECT id, title, content_preview as summary, content_type, tags, created_at, 'asset' as type
          FROM assets
@@ -518,18 +486,18 @@ ${input.context || '无特定背景'}
   }
 
   /**
-   * 增强大纲生成 - 融入知识库洞见和新角度
+   * 内容驱动的大纲生成 - 从话题解构到章节展开
    */
   private async generateOutline(
     input: PlannerInput,
     insights?: KnowledgeInsight[],
     novelAngles?: NovelAngle[]
   ): Promise<OutlineSection[]> {
-    const prompt = this.buildEnhancedOutlinePrompt(input, insights, novelAngles);
+    const prompt = this.buildContentDrivenPrompt(input, insights, novelAngles);
 
     const result = await this.llmRouter.generate(prompt, 'planning', {
       temperature: 0.7,
-      maxTokens: 4000,
+      maxTokens: 6000,
     });
 
     try {
@@ -549,34 +517,37 @@ ${input.context || '无特定背景'}
   }
 
   /**
-   * 构建增强的大纲生成提示词
+   * 内容驱动的大纲 prompt — 从问题出发推导结构，而非套用固定模板
    */
-  private buildEnhancedOutlinePrompt(
+  private buildContentDrivenPrompt(
     input: PlannerInput,
     insights?: KnowledgeInsight[],
     novelAngles?: NovelAngle[]
   ): string {
-    const depthMap = {
-      macro: '宏观视野层（政策、趋势、周期）',
-      meso: '中观解剖层（行业、区域、机制）',
-      micro: '微观行动层（项目、企业、操作）',
-      comprehensive: '完整三层结构（宏观→中观→微观）',
-    };
-
     const insightsSection = insights && insights.length > 0
-      ? `## 基于知识库的关键洞见\n${insights.map((i, idx) => `${idx + 1}. [${i.type}] ${i.content} (相关度: ${(i.relevance * 100).toFixed(0)}%)`).join('\n')}`
+      ? `## 知识库洞察（基于历史内容分析）
+${insights.map((i, idx) => `${idx + 1}. [${i.type}] ${i.content} (相关度: ${(i.relevance * 100).toFixed(0)}%)`).join('\n')}
+
+这些洞察揭示了已有研究的趋势和空白，请让它们塑造章节结构——而不仅仅是"提到"它们。`
       : '';
 
     const anglesSection = novelAngles && novelAngles.length > 0
-      ? `## 建议的新研究角度\n${novelAngles.map((a, idx) => `${idx + 1}. **${a.angle}** [影响: ${a.potentialImpact}]\n   - 差异化: ${a.differentiation}\n   - 理由: ${a.rationale}`).join('\n')}`
+      ? `## 新研究角度
+${novelAngles.map((a, idx) => `${idx + 1}. **${a.angle}** [影响: ${a.potentialImpact}]
+   - 差异化: ${a.differentiation}
+   - 理由: ${a.rationale}`).join('\n')}
+
+如果某个角度值得成为独立章节，请将它设计为一个完整的分析单元。`
       : '';
 
-    // 新增：用户评论反馈
     const commentsSection = input.comments && input.comments.length > 0
-      ? `## 用户反馈与修改建议\n${input.comments.map((c, idx) => `${idx + 1}. ${c}`).join('\n')}\n\n**重要：请务必根据以上用户反馈调整大纲结构或内容，体现用户的修改意图。**`
+      ? `## 用户反馈与修改建议
+${input.comments.map((c, idx) => `${idx + 1}. ${c}`).join('\n')}
+
+**重要：请务必根据以上用户反馈调整大纲结构或内容。**`
       : '';
 
-    return `你是一位资深产业研究专家，擅长构建系统性研究框架并提出创新观点。
+    return `你是一位资深产业研究专家。你的任务不是填充模板，而是针对具体话题设计最合适的分析路径。
 
 ## 话题
 ${input.topic}
@@ -587,43 +558,74 @@ ${input.context || '无特定背景'}
 ## 目标受众
 ${input.targetAudience || '产业研究人员和投资者'}
 
-## 深度要求
-${depthMap[input.desiredDepth || 'comprehensive']}
-
 ${insightsSection}
 
 ${anglesSection}
 
 ${commentsSection}
 
+## 你的工作流程
+
+### 第一步：话题解构（先思考，再动笔）
+分析这个话题：
+- 核心实体是什么？（市场？品牌？技术？政策？消费群体？企业？）
+- 最关键的张力或矛盾是什么？
+- 读者最想回答的3-5个核心问题是什么？
+- 上述洞察揭示了哪些被忽视的角度？
+
+### 第二步：结构推导（从问题出发，不套模板）
+基于解构结果设计章节。要求：
+- 每个章节对应一个核心问题或分析维度
+- 章节之间有逻辑递进关系（而非简单并列）
+- 为每个章节选择最适合的分析方法。可以是经典框架（SWOT、Porter五力、STP、BCG矩阵、TAM-SAM-SOM、消费者决策旅程、价值链、AARRR 等），也可以是话题特有的分析角度
+- 不同话题需要完全不同的结构——消费者研究、产业分析、投资评估不应该长一样
+
+### 第三步：章节展开（每章是完整的研究单元）
+
 ## 输出要求
-请输出JSON格式，包含以下结构：
+请输出JSON格式：
+\`\`\`json
 {
   "outline": [
     {
-      "title": "章节标题",
+      "title": "章节标题（用问题或判断句，不要用'宏观视野'这类标签）",
       "level": 1,
-      "content": "核心论述要点，要求融入上述洞见或新角度",
+      "coreQuestion": "这一章要回答什么核心问题",
+      "analysisApproach": "用什么分析方法/框架，为什么选这个方法",
+      "hypothesis": "初始假设（待数据验证或推翻）",
+      "content": "核心论述要点",
+      "dataNeeds": [
+        {
+          "metric": "需要的具体数据指标",
+          "searchKeywords": ["可直接搜索的关键词1", "关键词2"],
+          "priority": "P0|P1|P2",
+          "timeRange": "如 2020-2026"
+        }
+      ],
+      "visualizationPlan": {
+        "chartType": "推荐的图表类型（折线图/柱状图/饼图/雷达图/桑基图等）",
+        "title": "图表标题",
+        "dataMapping": "数据如何映射到图表（如 X轴:年份, Y轴:市场规模）"
+      },
       "subsections": [
         {
-          "title": "子章节",
+          "title": "子章节标题",
           "level": 2,
-          "content": "子章节要点"
+          "content": "子章节要点",
+          "coreQuestion": "子问题（可选）"
         }
       ]
     }
   ]
 }
+\`\`\`
 
-要求：
-1. 至少包含3个一级章节，每个章节有2-3个子章节
-2. 必须融入上述洞见中的至少2个，体现知识积累
-3. 优先采用建议的新研究角度，形成差异化
-4. 如有用户反馈，必须根据反馈调整相应章节的内容或结构
-5. 宏观层关注：政策导向、经济周期、国际比较
-6. 中观层关注：产业链分析、区域差异、商业模式
-7. 微观层关注：标杆案例、数据验证、行动建议
-8. 标注每个章节的关键数据需求`;
+## 质量要求
+1. 至少3个一级章节，每个有2-3个子章节
+2. 每个一级章节必须有 coreQuestion、analysisApproach、至少1条 dataNeeds
+3. dataNeeds 中的 searchKeywords 必须是可直接用于搜索引擎的具体查询词
+4. P0 数据需求是该章节论证所必需的，缺失则无法成文
+5. 章节标题应是具体的问题或判断，而非抽象标签`;
   }
 
   private async savePlan(
@@ -633,7 +635,6 @@ ${commentsSection}
     knowledgeInsights?: KnowledgeInsight[],
     novelAngles?: NovelAngle[]
   ): Promise<string> {
-    // Store knowledge insights and novel angles within the outline object
     const enrichedOutline = {
       sections: outline,
       knowledgeInsights: knowledgeInsights || [],
@@ -642,12 +643,11 @@ ${commentsSection}
       generatedAt: new Date().toISOString(),
     };
 
-    // 如果提供了 existingTaskId，则更新现有 task
     if (input.existingTaskId) {
       await query(
-        `UPDATE tasks 
-         SET outline = $1, 
-             status = 'outline_pending', 
+        `UPDATE tasks
+         SET outline = $1,
+             status = 'outline_pending',
              progress = 10,
              current_stage = 'outline_pending',
              updated_at = NOW()
@@ -657,7 +657,6 @@ ${commentsSection}
       return input.existingTaskId;
     }
 
-    // 否则创建新 task
     const result = await query(
       `INSERT INTO tasks (id, topic, outline, status, progress, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
@@ -674,11 +673,8 @@ ${commentsSection}
   }
 
   private calculateEstimatedTime(outline: OutlineSection[], requirements: DataRequirement[]): number {
-    // Base time: 4 hours
     let time = 4;
-    // Add time for each section
     time += outline.length * 2;
-    // Add time for high priority data requirements
     time += requirements.filter(r => r.priority === 'high').length * 0.5;
     return Math.ceil(time);
   }
