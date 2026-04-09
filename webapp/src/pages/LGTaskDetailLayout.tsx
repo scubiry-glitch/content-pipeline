@@ -18,6 +18,7 @@ const LG_TABS = [
   { id: 'writing', label: '文稿生成', materialIcon: 'edit_note', path: 'writing' },
   { id: 'reviews', label: '蓝军评审', materialIcon: 'fact_check', path: 'reviews' },
   { id: 'quality', label: '质量分析', materialIcon: 'analytics', path: 'quality' },
+  { id: 'portal', label: '发布预览', materialIcon: 'preview', path: 'portal' },
 ];
 
 // 状态标签映射

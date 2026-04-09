@@ -1,12 +1,13 @@
 // LG Overview Tab - 概览
 // 显示 Pipeline 状态、任务元信息、选题评估、错误信息
 
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { GraphVisualization } from '../../components/GraphVisualization';
 
 export function LGOverviewTab() {
   const { detail, state, graphData, pendingAction, onResume, resuming, onRefresh } = useOutletContext<LGTaskContext>();
+  const navigate = useNavigate();
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -126,6 +127,132 @@ export function LGOverviewTab() {
         </div>
       )}
 
+      {/* 大纲摘要 + 蓝军评审概览 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        {/* 大纲摘要预览 */}
+        {detail.outline && detail.outline.sections && detail.outline.sections.length > 0 && (
+          <div className="info-card">
+            <div className="card-title">
+              <span className="material-symbols-outlined">article</span>
+              大纲摘要
+              <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 400, color: 'var(--primary)', cursor: 'pointer' }} onClick={() => navigate('../planning')}>
+                查看详情
+              </span>
+            </div>
+            {detail.outline.title && (
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '12px' }}>
+                {detail.outline.title}
+              </div>
+            )}
+            {detail.outline.sections.slice(0, 3).map((section: any, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px', paddingLeft: `${(section.level || 1) * 8}px` }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--primary)', marginTop: '2px' }}>
+                  {i === 0 ? 'looks_one' : i === 1 ? 'looks_two' : 'looks_3'}
+                </span>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{section.title}</div>
+                  {section.content && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {section.content.substring(0, 60)}{section.content.length > 60 ? '...' : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {detail.outline.sections.length > 3 && (
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '8px' }}>
+                +{detail.outline.sections.length - 3} 更多章节...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 蓝军评审概览 */}
+        {(() => {
+          const rounds = detail.blueTeamRounds || [];
+          const allQuestions = rounds.flatMap((r: any) => r.questions || []);
+          if (allQuestions.length === 0 && rounds.length === 0) return null;
+
+          const highCount = allQuestions.filter((q: any) => q.severity === 'high').length;
+          const mediumCount = allQuestions.filter((q: any) => q.severity === 'medium').length;
+          const praiseCount = allQuestions.filter((q: any) => q.severity === 'praise').length;
+
+          return (
+            <div className="info-card">
+              <div className="card-title">
+                <span className="material-symbols-outlined">fact_check</span>
+                蓝军评审概览
+                <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 400, color: 'var(--primary)', cursor: 'pointer' }} onClick={() => navigate('../reviews')}>
+                  查看详情
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ textAlign: 'center', flex: 1, padding: '8px', borderRadius: 'var(--radius-sm)', background: 'hsla(0, 72%, 51%, 0.08)' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#ef4444' }}>{highCount}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>严重</div>
+                </div>
+                <div style={{ textAlign: 'center', flex: 1, padding: '8px', borderRadius: 'var(--radius-sm)', background: 'hsla(30, 80%, 50%, 0.08)' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#f59e0b' }}>{mediumCount}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>中等</div>
+                </div>
+                <div style={{ textAlign: 'center', flex: 1, padding: '8px', borderRadius: 'var(--radius-sm)', background: 'hsla(142, 45%, 45%, 0.08)' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#22c55e' }}>{praiseCount}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>优点</div>
+                </div>
+              </div>
+              <div className="info-item">
+                <span className="label">评审轮数</span>
+                <span className="value">{rounds.length} 轮 / {allQuestions.length} 条意见</span>
+              </div>
+              <div className="info-item">
+                <span className="label">结果</span>
+                <span className="value" style={{ color: detail.reviewPassed ? 'var(--success)' : 'var(--warning, #f59e0b)' }}>
+                  {detail.reviewPassed ? '评审通过' : '修订中'}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* 快捷操作 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div className="section-title">
+            <span className="material-symbols-outlined">bolt</span>
+            快捷操作
+          </div>
+        </div>
+        <div className="info-card full-width">
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button className="lg-btn lg-btn-secondary" onClick={() => navigate('../planning')}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>lightbulb</span>
+              选题策划
+            </button>
+            <button className="lg-btn lg-btn-secondary" onClick={() => navigate('../research')}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>search</span>
+              深度研究
+            </button>
+            <button className="lg-btn lg-btn-secondary" onClick={() => navigate('../writing')}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>edit_note</span>
+              文稿生成
+            </button>
+            <button className="lg-btn lg-btn-secondary" onClick={() => navigate('../reviews')}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>fact_check</span>
+              蓝军评审
+            </button>
+            <button className="lg-btn lg-btn-secondary" onClick={() => navigate('../portal')}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>preview</span>
+              发布预览
+            </button>
+            <button className="lg-btn lg-btn-secondary" onClick={onRefresh}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
+              刷新数据
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* 人工交互提示 */}
       {pendingAction && (
         <div className="lg-action-panel" style={{ marginTop: '24px' }}>
@@ -158,13 +285,7 @@ export function LGOverviewTab() {
         </div>
       )}
 
-      {/* 刷新按钮 */}
-      <div style={{ marginTop: '24px', textAlign: 'right' }}>
-        <button className="lg-btn lg-btn-secondary" onClick={onRefresh}>
-          <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
-          刷新数据
-        </button>
-      </div>
+      {/* (refresh moved to quick actions above) */}
     </div>
   );
 }

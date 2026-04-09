@@ -232,6 +232,83 @@ export function LGQualityTab() {
         </div>
       )}
 
+      {/* 质量健康检查计分卡 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div className="section-title">
+            <span className="material-symbols-outlined">health_and_safety</span>
+            质量健康检查
+          </div>
+        </div>
+        <div className="info-card full-width">
+          {(() => {
+            const checks = [
+              {
+                label: '大纲完整性',
+                passed: !!(detail.outline && detail.outline.sections && detail.outline.sections.length > 0),
+                detail: detail.outline?.sections ? `${detail.outline.sections.length} 个章节` : '未生成',
+              },
+              {
+                label: '选题评估通过',
+                passed: detail.evaluation?.passed === true,
+                detail: detail.evaluation ? `${detail.evaluation.score} 分` : '未评估',
+              },
+              {
+                label: '研究数据充足',
+                passed: !!(detail.researchData?.dataPackage && (Array.isArray(detail.researchData.dataPackage) ? detail.researchData.dataPackage.length : Object.keys(detail.researchData.dataPackage).length) >= 3),
+                detail: detail.researchData?.dataPackage ? `${Array.isArray(detail.researchData.dataPackage) ? detail.researchData.dataPackage.length : Object.keys(detail.researchData.dataPackage).length} 个来源` : '未采集',
+              },
+              {
+                label: '草稿字数达标',
+                passed: draftWordCount >= 3000,
+                detail: draftWordCount > 0 ? `${draftWordCount.toLocaleString()} 字` : '未生成',
+              },
+              {
+                label: '评审无严重问题',
+                passed: rounds.length > 0 && (severityCounts['high'] || 0) === 0,
+                detail: rounds.length > 0 ? `${severityCounts['high'] || 0} 个严重问题` : '未评审',
+              },
+              {
+                label: '最终审批',
+                passed: detail.finalApproved === true,
+                detail: detail.finalApproved ? '已批准' : '待审批',
+              },
+            ];
+            const passedCount = checks.filter(c => c.passed).length;
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{
+                    width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: passedCount === checks.length ? 'var(--success)' : passedCount >= 4 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)',
+                    color: '#fff', fontSize: '18px', fontWeight: 800,
+                  }}>
+                    {passedCount}/{checks.length}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>
+                      {passedCount === checks.length ? '全部通过' : passedCount >= 4 ? '基本达标' : '需要改进'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{passedCount} / {checks.length} 项检查通过</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {checks.map((check, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: i < checks.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px', color: check.passed ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {check.passed ? 'check_circle' : 'radio_button_unchecked'}
+                      </span>
+                      <span style={{ flex: 1, fontSize: '13px', color: check.passed ? 'var(--text)' : 'var(--text-muted)' }}>{check.label}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{check.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
       {/* LangGraph 状态信息 */}
       {state && (
         <div style={{ marginTop: '24px' }}>
