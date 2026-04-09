@@ -7,6 +7,7 @@ import {
   createPipelineRun,
   resumePipelineRun,
   getPipelineState,
+  getPipelineStateHistory,
   getGraphMermaid,
 } from '../langgraph/index.js';
 import { query } from '../db/connection.js';
@@ -234,6 +235,99 @@ export async function langgraphRoutes(fastify: FastifyInstance) {
       reply.status(500);
       return { error: 'Failed to get annotations', detail: error.message };
     }
+  });
+
+  /**
+   * GET /api/v1/langgraph/tasks/:threadId/history
+   * 获取 pipeline 状态历史（checkpoint 快照列表）
+   */
+  fastify.get('/tasks/:threadId/history', async (
+    request: FastifyRequest<{ Params: { threadId: string }; Querystring: { limit?: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { threadId } = request.params;
+    const limit = parseInt((request.query as any).limit || '20', 10);
+
+    try {
+      const result = await getPipelineStateHistory(threadId, limit);
+      return result;
+    } catch (error: any) {
+      console.error('[LangGraph] Get history error:', error);
+      reply.status(500);
+      return { error: 'Failed to get state history', detail: error.message };
+    }
+  });
+
+  /**
+   * GET /api/v1/langgraph/tasks/:threadId/stream
+   * SSE 端点 - 实时推送 pipeline 状态变化
+   * 每 2s 检查一次 state，当 status/progress/currentNode 变化时推送事件
+   */
+  fastify.get('/tasks/:threadId/stream', async (
+    request: FastifyRequest<{ Params: { threadId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { threadId } = request.params;
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    reply.raw.write(`data: ${JSON.stringify({ type: 'connected', threadId })}\n\n`);
+
+    let lastStatus = '';
+    let lastProgress = -1;
+    let lastNode = '';
+    let stopped = false;
+
+    const poll = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const state = await getPipelineState(threadId);
+        const values = state.values;
+        const status = values.status || '';
+        const progress = values.progress || 0;
+        const currentNode = values.currentNode || '';
+
+        if (status !== lastStatus || progress !== lastProgress || currentNode !== lastNode) {
+          lastStatus = status;
+          lastProgress = progress;
+          lastNode = currentNode;
+
+          reply.raw.write(`data: ${JSON.stringify({
+            type: 'progress',
+            threadId,
+            status,
+            progress,
+            currentNode,
+            outlineApproved: values.outlineApproved,
+            reviewPassed: values.reviewPassed,
+            blueTeamRoundsCount: values.blueTeamRounds?.length || 0,
+            next: state.next,
+          })}\n\n`);
+        }
+
+        // 终态时关闭流
+        const terminal = ['completed', 'failed', 'planning_failed', 'research_failed', 'writing_failed', 'review_failed'];
+        const humanPending = ['outline_pending', 'awaiting_approval'];
+        if (terminal.includes(status) || humanPending.includes(status)) {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'done', status })}\n\n`);
+          clearInterval(poll);
+          reply.raw.end();
+          stopped = true;
+        }
+      } catch {
+        // state read failed, skip
+      }
+    }, 2000);
+
+    request.raw.on('close', () => {
+      stopped = true;
+      clearInterval(poll);
+    });
   });
 
   /**

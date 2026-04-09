@@ -19,6 +19,7 @@ const LG_TABS = [
   { id: 'writing', label: '文稿生成', materialIcon: 'edit_note', path: 'writing' },
   { id: 'reviews', label: '蓝军评审', materialIcon: 'fact_check', path: 'reviews' },
   { id: 'quality', label: '质量分析', materialIcon: 'analytics', path: 'quality' },
+  { id: 'portal', label: '发布预览', materialIcon: 'preview', path: 'portal' },
 ];
 
 // 状态标签映射
@@ -57,7 +58,7 @@ export interface LGTaskContext {
   loading: boolean;
   error: string | null;
   pendingAction: 'outline_review' | 'final_approval' | null;
-  onResume: (approved: boolean, feedback?: string) => Promise<void>;
+  onResume: (approved: boolean, feedback?: string, outline?: any) => Promise<void>;
   onRefresh: () => Promise<void>;
   resuming: boolean;
   reviewConfig: any | null;
@@ -107,15 +108,55 @@ export function LGTaskDetailLayout() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // 自动轮询：非终态且非等待人工时，每 5s 刷新
+  // SSE 流式进度更新：非终态且非等待人工时，连接 SSE 流
   useEffect(() => {
     const status = detail?.status || '';
     if (TERMINAL_STATUSES.has(status) || HUMAN_PENDING_STATUSES.has(status)) return;
-    if (!status) return;
+    if (!status || !threadId) return;
 
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
-  }, [detail?.status, loadData]);
+    let es: EventSource | null = null;
+    try {
+      const streamUrl = langgraphApi.getStreamUrl(threadId);
+      es = new EventSource(streamUrl);
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'progress') {
+            // 局部更新 detail 而非完整 reload
+            setDetail(prev => prev ? {
+              ...prev,
+              status: data.status,
+              progress: data.progress,
+              currentNode: data.currentNode,
+              outlineApproved: data.outlineApproved ?? prev.outlineApproved,
+              reviewPassed: data.reviewPassed ?? prev.reviewPassed,
+            } : prev);
+          }
+          if (data.type === 'done') {
+            // 终态或人工等待时，完整 reload 获取所有产物
+            loadData();
+            es?.close();
+          }
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.onerror = () => {
+        // SSE 失败，回退到轮询
+        es?.close();
+      };
+    } catch {
+      // EventSource 不支持，忽略
+    }
+
+    // SSE 失败兜底：轮询
+    const interval = setInterval(loadData, 8000);
+
+    return () => {
+      es?.close();
+      clearInterval(interval);
+    };
+  }, [detail?.status, threadId, loadData]);
 
   // 判断当前需要的人工交互
   const getPendingAction = useCallback((): 'outline_review' | 'final_approval' | null => {
@@ -129,7 +170,7 @@ export function LGTaskDetailLayout() {
   const pendingAction = getPendingAction();
 
   // 恢复执行
-  const handleResume = useCallback(async (approved: boolean, feedback?: string) => {
+  const handleResume = useCallback(async (approved: boolean, feedback?: string, outline?: any) => {
     if (!threadId) return;
     setResuming(true);
     setError(null);
@@ -137,6 +178,7 @@ export function LGTaskDetailLayout() {
       await langgraphApi.resumeTask(threadId, {
         approved,
         feedback: feedback?.trim() || undefined,
+        outline: outline || undefined,
       });
       await loadData();
     } catch (err: any) {

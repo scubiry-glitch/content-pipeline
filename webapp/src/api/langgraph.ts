@@ -121,6 +121,31 @@ export interface LGAnnotation {
   createdAt: string;
 }
 
+export interface LGStateHistoryItem {
+  checkpoint_id: string;
+  values: {
+    taskId: string;
+    topic: string;
+    status: string;
+    progress: number;
+    currentNode: string;
+    outlineApproved: boolean;
+    reviewPassed: boolean;
+    hasOutline: boolean;
+    hasDraft: boolean;
+    blueTeamRoundsCount: number;
+  };
+  next: string[];
+  metadata: any;
+  createdAt: string;
+  parentConfig: string | null;
+}
+
+export interface LGStateHistory {
+  threadId: string;
+  history: LGStateHistoryItem[];
+}
+
 // --- API Functions ---
 
 export const langgraphApi = {
@@ -151,4 +176,12 @@ export const langgraphApi = {
   /** 获取草稿标注列表（评审高亮段落） */
   getAnnotations: (threadId: string): Promise<LGAnnotation[]> =>
     lgClient.get(`/tasks/${threadId}/annotations`) as any,
+
+  /** 获取状态历史（checkpoint 快照列表） */
+  getStateHistory: (threadId: string, limit?: number): Promise<LGStateHistory> =>
+    lgClient.get(`/tasks/${threadId}/history`, { params: { limit } }) as any,
+
+  /** 获取 SSE 流的 URL */
+  getStreamUrl: (threadId: string): string =>
+    `${lgClient.defaults.baseURL}/tasks/${threadId}/stream`,
 };

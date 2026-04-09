@@ -7,6 +7,7 @@ import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
 import { InlineAnnotationArea } from '../../components/content/InlineAnnotationArea';
 import { langgraphApi, type LGAnnotation } from '../../api/langgraph';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 
 // severity 配色
 const SEVERITY_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -43,6 +44,7 @@ export function LGReviewsTab() {
   const [configOpen, setConfigOpen] = useState(false);
   const [annotations, setAnnotations] = useState<LGAnnotation[]>([]);
   const [configSaving, setConfigSaving] = useState(false);
+  const [showDraftViewer, setShowDraftViewer] = useState(false);
 
   // 加载标注（每当评审轮次变化时重新拉取）
   const blueTeamRoundsCount = detail?.blueTeamRounds?.length ?? 0;
@@ -299,6 +301,27 @@ export function LGReviewsTab() {
           color: 'var(--text)', zIndex: 1000,
         }}>
           保存配置中...
+        </div>
+      )}
+
+      {/* 草稿文档查看器 */}
+      {detail.draftContent && rounds.length > 0 && (
+        <div style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div className="section-title" style={{ cursor: 'pointer' }} onClick={() => setShowDraftViewer(!showDraftViewer)}>
+              <span className="material-symbols-outlined">description</span>
+              评审文档查看
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                {showDraftViewer ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+            <div className="section-desc">查看被评审的草稿内容</div>
+          </div>
+          {showDraftViewer && (
+            <div className="info-card full-width" style={{ maxHeight: '500px', overflow: 'auto' }}>
+              <MarkdownRenderer content={detail.draftContent} />
+            </div>
+          )}
         </div>
       )}
     </div>

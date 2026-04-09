@@ -1,8 +1,10 @@
 // LG Quality Tab - 质量分析
-// Pipeline 状态总览 + 评审质量指标 + 草稿质量 + 错误日志
+// Pipeline 状态总览 + 评审质量指标 + 草稿质量 + 热点追踪 + 合规提示 + 错误日志
 
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+import { hotTopicsApi, sentimentApi, type HotTopic } from '../../api/client';
 
 // Pipeline 节点定义
 const PIPELINE_NODES = [
@@ -17,6 +19,30 @@ const PIPELINE_NODES = [
 
 export function LGQualityTab() {
   const { detail, state } = useOutletContext<LGTaskContext>();
+  const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
+  const [sentiment, setSentiment] = useState<{ positive: number; negative: number; neutral: number } | null>(null);
+  const [loadingExtras, setLoadingExtras] = useState(false);
+
+  // 加载热点话题 + 情感分析
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingExtras(true);
+    Promise.allSettled([
+      hotTopicsApi.getAll({ limit: 5 }).catch(() => ({ items: [] })),
+      sentimentApi.getStats().catch(() => null),
+    ]).then(([topicsRes, sentimentRes]) => {
+      if (cancelled) return;
+      if (topicsRes.status === 'fulfilled' && topicsRes.value) {
+        setHotTopics((topicsRes.value as any).items || []);
+      }
+      if (sentimentRes.status === 'fulfilled' && sentimentRes.value) {
+        const s = sentimentRes.value as any;
+        setSentiment({ positive: s.positive || 0, negative: s.negative || 0, neutral: s.neutral || 0 });
+      }
+      setLoadingExtras(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -231,6 +257,218 @@ export function LGQualityTab() {
           </div>
         </div>
       )}
+
+      {/* 质量健康检查计分卡 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div className="section-title">
+            <span className="material-symbols-outlined">health_and_safety</span>
+            质量健康检查
+          </div>
+        </div>
+        <div className="info-card full-width">
+          {(() => {
+            const checks = [
+              {
+                label: '大纲完整性',
+                passed: !!(detail.outline && detail.outline.sections && detail.outline.sections.length > 0),
+                detail: detail.outline?.sections ? `${detail.outline.sections.length} 个章节` : '未生成',
+              },
+              {
+                label: '选题评估通过',
+                passed: detail.evaluation?.passed === true,
+                detail: detail.evaluation ? `${detail.evaluation.score} 分` : '未评估',
+              },
+              {
+                label: '研究数据充足',
+                passed: !!(detail.researchData?.dataPackage && (Array.isArray(detail.researchData.dataPackage) ? detail.researchData.dataPackage.length : Object.keys(detail.researchData.dataPackage).length) >= 3),
+                detail: detail.researchData?.dataPackage ? `${Array.isArray(detail.researchData.dataPackage) ? detail.researchData.dataPackage.length : Object.keys(detail.researchData.dataPackage).length} 个来源` : '未采集',
+              },
+              {
+                label: '草稿字数达标',
+                passed: draftWordCount >= 3000,
+                detail: draftWordCount > 0 ? `${draftWordCount.toLocaleString()} 字` : '未生成',
+              },
+              {
+                label: '评审无严重问题',
+                passed: rounds.length > 0 && (severityCounts['high'] || 0) === 0,
+                detail: rounds.length > 0 ? `${severityCounts['high'] || 0} 个严重问题` : '未评审',
+              },
+              {
+                label: '最终审批',
+                passed: detail.finalApproved === true,
+                detail: detail.finalApproved ? '已批准' : '待审批',
+              },
+            ];
+            const passedCount = checks.filter(c => c.passed).length;
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{
+                    width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: passedCount === checks.length ? 'var(--success)' : passedCount >= 4 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)',
+                    color: '#fff', fontSize: '18px', fontWeight: 800,
+                  }}>
+                    {passedCount}/{checks.length}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>
+                      {passedCount === checks.length ? '全部通过' : passedCount >= 4 ? '基本达标' : '需要改进'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{passedCount} / {checks.length} 项检查通过</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {checks.map((check, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: i < checks.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px', color: check.passed ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {check.passed ? 'check_circle' : 'radio_button_unchecked'}
+                      </span>
+                      <span style={{ flex: 1, fontSize: '13px', color: check.passed ? 'var(--text)' : 'var(--text-muted)' }}>{check.label}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{check.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* 情感分析 + 热点追踪 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div className="section-title">
+            <span className="material-symbols-outlined">trending_up</span>
+            市场情报
+          </div>
+        </div>
+
+        {/* 情感分析 */}
+        <div className="info-card">
+          <div className="card-title">
+            <span className="material-symbols-outlined">sentiment_satisfied</span>
+            市场情感指数
+          </div>
+          {sentiment ? (
+            <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                {[
+                  { label: '积极', value: sentiment.positive, color: '#22c55e' },
+                  { label: '中性', value: sentiment.neutral, color: '#64748b' },
+                  { label: '消极', value: sentiment.negative, color: '#ef4444' },
+                ].map(item => {
+                  const total = sentiment.positive + sentiment.neutral + sentiment.negative || 1;
+                  const pct = Math.round((item.value / total) * 100);
+                  return (
+                    <div key={item.label} style={{ flex: 1, textAlign: 'center', padding: '8px', borderRadius: 'var(--radius-sm)', background: `${item.color}10` }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: item.color }}>{pct}%</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{item.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+              {loadingExtras ? '加载中...' : '暂无情感数据'}
+            </p>
+          )}
+        </div>
+
+        {/* 热点追踪 */}
+        <div className="info-card">
+          <div className="card-title">
+            <span className="material-symbols-outlined">local_fire_department</span>
+            热点话题
+          </div>
+          {hotTopics.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {hotTopics.map((topic: any, i: number) => (
+                <div key={topic.id || i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: i < hotTopics.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', width: '20px' }}>#{i + 1}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text)', flex: 1 }}>{topic.name || topic.topic || topic.title}</span>
+                  {topic.trend && (
+                    <span className="material-symbols-outlined" style={{
+                      fontSize: '16px',
+                      color: topic.trend === 'up' ? '#22c55e' : topic.trend === 'down' ? '#ef4444' : '#64748b',
+                    }}>
+                      {topic.trend === 'up' ? 'trending_up' : topic.trend === 'down' ? 'trending_down' : 'trending_flat'}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+              {loadingExtras ? '加载中...' : '暂无热点数据'}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* 智能优化建议 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div className="section-title">
+            <span className="material-symbols-outlined">tips_and_updates</span>
+            智能优化建议
+          </div>
+        </div>
+        <div className="info-card full-width">
+          {(() => {
+            const suggestions: Array<{ area: string; suggestion: string; priority: 'high' | 'medium' | 'low'; icon: string }> = [];
+
+            if (!detail.outline || !detail.outline.sections?.length) {
+              suggestions.push({ area: '大纲', suggestion: '任务尚未生成大纲，建议进入选题策划阶段', priority: 'high', icon: 'article' });
+            }
+            if (detail.evaluation && detail.evaluation.score < 70) {
+              suggestions.push({ area: '选题', suggestion: `选题评分 ${detail.evaluation.score} 分较低，建议优化选题角度或寻找差异化切入点`, priority: 'high', icon: 'assessment' });
+            }
+            if (!detail.researchData?.dataPackage || (Array.isArray(detail.researchData.dataPackage) && detail.researchData.dataPackage.length < 3)) {
+              suggestions.push({ area: '研究', suggestion: '数据来源不足，建议补充更多研究素材以提升可信度', priority: 'medium', icon: 'search' });
+            }
+            if (draftWordCount > 0 && draftWordCount < 3000) {
+              suggestions.push({ area: '篇幅', suggestion: `当前字数 ${draftWordCount.toLocaleString()}，建议补充至 5000-8000 字以达到深度报告标准`, priority: 'medium', icon: 'format_size' });
+            }
+            if ((severityCounts['high'] || 0) > 0) {
+              suggestions.push({ area: '评审', suggestion: `仍有 ${severityCounts['high']} 个严重问题未解决，建议在下一轮修订中重点处理`, priority: 'high', icon: 'error' });
+            }
+            if (rounds.length === 0 && draftWordCount > 0) {
+              suggestions.push({ area: '评审', suggestion: '草稿已生成但尚未经过蓝军评审，等待 Pipeline 自动进入评审阶段', priority: 'low', icon: 'fact_check' });
+            }
+            if (detail.reviewPassed && !detail.finalApproved) {
+              suggestions.push({ area: '审批', suggestion: '评审已通过，建议尽快完成最终审批以发布内容', priority: 'medium', icon: 'gavel' });
+            }
+
+            if (suggestions.length === 0) {
+              suggestions.push({ area: '状态', suggestion: '当前各项指标良好，继续保持', priority: 'low', icon: 'check_circle' });
+            }
+
+            const priorityColors = { high: '#ef4444', medium: '#f59e0b', low: '#22c55e' };
+            const priorityLabels = { high: '高', medium: '中', low: '低' };
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {suggestions.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '8px 0', borderBottom: i < suggestions.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: priorityColors[s.priority], marginTop: '1px' }}>{s.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>{s.area}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: `${priorityColors[s.priority]}15`, color: priorityColors[s.priority] }}>
+                          {priorityLabels[s.priority]}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{s.suggestion}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
 
       {/* LangGraph 状态信息 */}
       {state && (
