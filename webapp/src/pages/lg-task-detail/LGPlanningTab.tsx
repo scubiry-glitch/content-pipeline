@@ -59,7 +59,7 @@ export function LGPlanningTab() {
       <div className="panel-grid">
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">article</span>
+            <span className="material-symbols-outlined">article</span>
             大纲结构
           </div>
           <div className="section-desc">LangGraph Planner 生成的文章大纲</div>
@@ -69,7 +69,7 @@ export function LGPlanningTab() {
           <div className="info-card full-width">
             {detail.outline.title && (
               <div className="card-title">
-                <span className="material-icons-outlined">title</span>
+                <span className="material-symbols-outlined">title</span>
                 {detail.outline.title}
               </div>
             )}
@@ -93,14 +93,14 @@ export function LGPlanningTab() {
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">assessment</span>
+              <span className="material-symbols-outlined">assessment</span>
               选题评估
             </div>
           </div>
 
           <div className="info-card">
             <div className="card-title">
-              <span className="material-icons-outlined">score</span>
+              <span className="material-symbols-outlined">score</span>
               评分概览
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
@@ -112,11 +112,11 @@ export function LGPlanningTab() {
               </div>
             </div>
             {detail.evaluation.dimensions && (
-              <div>
+              <div className="lg-quality-kv-list">
                 {Object.entries(detail.evaluation.dimensions).map(([key, val]) => (
-                  <div key={key} className="info-item">
-                    <span className="label">{key}</span>
-                    <span className="value">{val as number} 分</span>
+                  <div key={key} className="lg-quality-kv-row">
+                    <span className="lg-quality-kv-label">{mapEvaluationDimensionLabel(key)}</span>
+                    <span className="lg-quality-kv-value">{val as number} 分</span>
                   </div>
                 ))}
               </div>
@@ -126,11 +126,11 @@ export function LGPlanningTab() {
           {detail.evaluation.suggestions && detail.evaluation.suggestions.length > 0 && (
             <div className="info-card">
               <div className="card-title">
-                <span className="material-icons-outlined">tips_and_updates</span>
+                <span className="material-symbols-outlined">tips_and_updates</span>
                 优化建议
               </div>
-              <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                {detail.evaluation.suggestions.map((s: string, i: number) => (
+              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                {normalizeSuggestions(detail.evaluation.suggestions).map((s: string, i: number) => (
                   <li key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>{s}</li>
                 ))}
               </ul>
@@ -144,7 +144,7 @@ export function LGPlanningTab() {
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">compare_arrows</span>
+              <span className="material-symbols-outlined">compare_arrows</span>
               竞品分析
             </div>
           </div>
@@ -173,7 +173,7 @@ function OutlineSection({ section, index }: { section: any; index: number }) {
         }}
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="material-icons-outlined" style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
           {expanded ? 'expand_more' : 'chevron_right'}
         </span>
         <span style={{
@@ -203,8 +203,12 @@ function OutlineSection({ section, index }: { section: any; index: number }) {
 function CompetitorAnalysisView({ data }: { data: any }) {
   if (!data) return null;
 
-  // 适配不同格式
+  // 字符串优先尝试解析 JSON，避免把长 JSON 原文直接渲染到页面
   if (typeof data === 'string') {
+    const parsed = safeParseJson(data);
+    if (parsed !== null) {
+      return <CompetitorAnalysisView data={parsed} />;
+    }
     return <div style={{ fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{data}</div>;
   }
 
@@ -234,16 +238,98 @@ function CompetitorAnalysisView({ data }: { data: any }) {
   }
 
   // Object format
+  const reportLikeList = extractReportLikeList(data);
+  if (reportLikeList.length > 0) {
+    return (
+      <div className="data-review-table-wrapper">
+        <table className="data-review-table">
+          <thead>
+            <tr>
+              <th style={{ width: '32%' }}>竞品/来源</th>
+              <th style={{ width: '48%' }}>摘要</th>
+              <th style={{ width: '20%' }}>相关度</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reportLikeList.map((item: any, i: number) => (
+              <tr key={i}>
+                <td style={{ fontWeight: 600 }}>
+                  {item.title || item.name || item.source || `条目 ${i + 1}`}
+                </td>
+                <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {item.coreView || item.features || item.description || summarizeObject(item)}
+                </td>
+                <td>
+                  {typeof item.relevance === 'number' ? `${item.relevance}%` : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div>
       {Object.entries(data).map(([key, val]) => (
         <div key={key} className="info-item">
           <span className="label">{key}</span>
           <span className="value" style={{ maxWidth: '60%', textAlign: 'right' }}>
-            {typeof val === 'string' ? val : JSON.stringify(val)}
+            {formatValue(val)}
           </span>
         </div>
       ))}
     </div>
   );
+}
+
+function safeParseJson(text: string): any | null {
+  const trimmed = text.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function extractReportLikeList(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.reports)) return data.reports;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
+function summarizeObject(obj: any): string {
+  if (!obj || typeof obj !== 'object') return String(obj ?? '-');
+  const keys = Object.keys(obj);
+  return `字段: ${keys.slice(0, 6).join(', ')}${keys.length > 6 ? ' ...' : ''}`;
+}
+
+function formatValue(val: any): string {
+  if (val == null) return '-';
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return `数组(${val.length})`;
+  if (typeof val === 'object') return summarizeObject(val);
+  return String(val);
+}
+
+function mapEvaluationDimensionLabel(key: string): string {
+  const labelMap: Record<string, string> = {
+    dataAvailability: '数据可得性',
+    topicHeat: '选题热度',
+    differentiation: '差异化',
+    timeliness: '时效性',
+    credibility: '可信度',
+    novelty: '新颖性',
+    audienceFit: '受众匹配',
+  };
+  return labelMap[key] || key;
+}
+
+function normalizeSuggestions(input: any): string[] {
+  if (Array.isArray(input)) return input.map(x => String(x)).filter(Boolean);
+  if (typeof input === 'string') return [input];
+  return [];
 }

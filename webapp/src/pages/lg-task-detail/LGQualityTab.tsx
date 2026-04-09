@@ -57,7 +57,7 @@ export function LGQualityTab() {
       <div className="panel-grid">
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">timeline</span>
+            <span className="material-symbols-outlined">timeline</span>
             Pipeline 状态
           </div>
         </div>
@@ -76,7 +76,7 @@ export function LGQualityTab() {
                     border: status === 'active' ? '1px solid var(--primary)' : '1px solid transparent',
                     minWidth: '80px',
                   }}>
-                    <span className="material-icons-outlined" style={{
+                    <span className="material-symbols-outlined" style={{
                       fontSize: '20px',
                       color: status === 'completed' ? 'var(--success)' : status === 'active' ? 'var(--primary)' : 'var(--text-muted)',
                     }}>
@@ -90,7 +90,7 @@ export function LGQualityTab() {
                     </span>
                   </div>
                   {!isLast && (
-                    <span className="material-icons-outlined" style={{
+                    <span className="material-symbols-outlined" style={{
                       fontSize: '16px', color: 'var(--text-muted)', margin: '0 2px',
                     }}>
                       arrow_forward
@@ -107,61 +107,50 @@ export function LGQualityTab() {
       <div className="panel-grid" style={{ marginTop: '24px' }}>
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">analytics</span>
+            <span className="material-symbols-outlined">analytics</span>
             质量指标
           </div>
         </div>
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">description</span>
+            <span className="material-symbols-outlined">description</span>
             草稿质量
           </div>
-          <div className="info-item">
-            <span className="label">字数</span>
-            <span className="value highlight">{draftWordCount > 0 ? draftWordCount.toLocaleString() : '-'}</span>
-          </div>
-          <div className="info-item">
-            <span className="label">修订轮数</span>
-            <span className="value">{rounds.length}</span>
-          </div>
-          <div className="info-item">
-            <span className="label">评审结果</span>
-            <span className="value" style={{ color: detail.reviewPassed ? 'var(--success)' : 'var(--text-muted)' }}>
-              {detail.reviewPassed ? '通过' : rounds.length > 0 ? '修订中' : '未开始'}
-            </span>
-          </div>
-          <div className="info-item">
-            <span className="label">最终审批</span>
-            <span className="value" style={{ color: detail.finalApproved ? 'var(--success)' : 'var(--text-muted)' }}>
-              {detail.finalApproved ? '已批准' : '待审批'}
-            </span>
+          <div className="lg-quality-kv-list">
+            <KVRow label="字数" value={draftWordCount > 0 ? draftWordCount.toLocaleString() : '-'} highlight />
+            <KVRow label="修订轮数" value={String(rounds.length)} />
+            <KVRow
+              label="评审结果"
+              value={detail.reviewPassed ? '通过' : rounds.length > 0 ? '修订中' : '未开始'}
+              valueColor={detail.reviewPassed ? 'var(--success)' : 'var(--text-muted)'}
+            />
+            <KVRow
+              label="最终审批"
+              value={detail.finalApproved ? '已批准' : '待审批'}
+              valueColor={detail.finalApproved ? 'var(--success)' : 'var(--text-muted)'}
+            />
           </div>
         </div>
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">assessment</span>
+            <span className="material-symbols-outlined">assessment</span>
             选题评估
           </div>
           {detail.evaluation ? (
             <>
-              <div className="info-item">
-                <span className="label">综合评分</span>
-                <span className="value highlight">{detail.evaluation.score} 分</span>
-              </div>
-              <div className="info-item">
-                <span className="label">评估结果</span>
-                <span className="value" style={{ color: detail.evaluation.passed ? 'var(--success)' : 'var(--warning, #f59e0b)' }}>
-                  {detail.evaluation.passed ? '通过' : '建议调整'}
-                </span>
-              </div>
+              <div className="lg-quality-kv-list">
+                <KVRow label="综合评分" value={`${detail.evaluation.score} 分`} highlight />
+                <KVRow
+                  label="评估结果"
+                  value={detail.evaluation.passed ? '通过' : '建议调整'}
+                  valueColor={detail.evaluation.passed ? 'var(--success)' : 'var(--warning, #f59e0b)'}
+                />
               {detail.evaluation.dimensions && Object.entries(detail.evaluation.dimensions).map(([key, val]) => (
-                <div key={key} className="info-item">
-                  <span className="label">{key}</span>
-                  <span className="value">{val as number}</span>
-                </div>
+                <KVRow key={key} label={key} value={String(val as number)} />
               ))}
+              </div>
             </>
           ) : (
             <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>暂无评估数据</p>
@@ -174,14 +163,14 @@ export function LGQualityTab() {
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">pie_chart</span>
+              <span className="material-symbols-outlined">pie_chart</span>
               评审分析
             </div>
           </div>
 
           <div className="info-card">
             <div className="card-title">
-              <span className="material-icons-outlined">warning</span>
+              <span className="material-symbols-outlined">warning</span>
               问题严重度分布
             </div>
             {Object.entries(severityCounts).map(([severity, count]) => {
@@ -209,14 +198,11 @@ export function LGQualityTab() {
 
           <div className="info-card">
             <div className="card-title">
-              <span className="material-icons-outlined">group</span>
+              <span className="material-symbols-outlined">group</span>
               专家贡献
             </div>
             {Object.entries(expertCounts).map(([role, count]) => (
-              <div key={role} className="info-item">
-                <span className="label">{role}</span>
-                <span className="value">{count} 条意见</span>
-              </div>
+              <KVRow key={role} label={role} value={`${count} 条意见`} />
             ))}
           </div>
         </div>
@@ -227,7 +213,7 @@ export function LGQualityTab() {
         <div style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title" style={{ color: 'var(--danger, #ef4444)' }}>
-              <span className="material-icons-outlined">error_outline</span>
+              <span className="material-symbols-outlined">error_outline</span>
               错误日志 ({detail.errors.length})
             </div>
           </div>
@@ -251,28 +237,45 @@ export function LGQualityTab() {
         <div style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">developer_mode</span>
+              <span className="material-symbols-outlined">developer_mode</span>
               Graph 状态
             </div>
           </div>
           <div className="info-card full-width">
-            <div className="info-item">
-              <span className="label">Next Nodes</span>
-              <span className="value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                {state.next?.join(', ') || 'none'}
-              </span>
-            </div>
-            <div className="info-item">
-              <span className="label">Max Review Rounds</span>
-              <span className="value">{state.values?.maxReviewRounds || '-'}</span>
-            </div>
-            <div className="info-item">
-              <span className="label">Current Review Round</span>
-              <span className="value">{state.values?.currentReviewRound || 0}</span>
+            <div className="lg-quality-kv-list">
+              <KVRow label="Next Nodes" value={state.next?.join(', ') || 'none'} mono />
+              <KVRow label="Max Review Rounds" value={String(state.values?.maxReviewRounds || '-')} />
+              <KVRow label="Current Review Round" value={String(state.values?.currentReviewRound || 0)} />
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function KVRow({
+  label,
+  value,
+  mono,
+  highlight,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+  valueColor?: string;
+}) {
+  return (
+    <div className="lg-quality-kv-row">
+      <div className="lg-quality-kv-label">{label}</div>
+      <div
+        className={`lg-quality-kv-value ${mono ? 'mono' : ''} ${highlight ? 'highlight' : ''}`}
+        style={valueColor ? { color: valueColor } : undefined}
+      >
+        {value}
+      </div>
     </div>
   );
 }

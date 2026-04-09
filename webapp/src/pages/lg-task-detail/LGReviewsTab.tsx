@@ -84,7 +84,7 @@ export function LGReviewsTab() {
       <div className="panel-grid">
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">fact_check</span>
+            <span className="material-symbols-outlined">fact_check</span>
             蓝军评审
           </div>
           <div className="section-desc">
@@ -94,7 +94,7 @@ export function LGReviewsTab() {
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">bar_chart</span>
+            <span className="material-symbols-outlined">bar_chart</span>
             评审统计
           </div>
           <div className="info-item">
@@ -115,7 +115,7 @@ export function LGReviewsTab() {
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">pie_chart</span>
+            <span className="material-symbols-outlined">pie_chart</span>
             问题分布
           </div>
           {Object.entries(severityCounts).map(([severity, count]) => {
@@ -141,7 +141,7 @@ export function LGReviewsTab() {
       {/* 无评审记录 */}
       {rounds.length === 0 && (
         <div className="info-card full-width" style={{ textAlign: 'center', padding: '48px 24px', marginTop: '24px' }}>
-          <span className="material-icons-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
             rate_review
           </span>
           <h3 style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>评审记录尚未生成</h3>
@@ -156,7 +156,7 @@ export function LGReviewsTab() {
         <div key={i} style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">loop</span>
+              <span className="material-symbols-outlined">loop</span>
               第 {round.round} 轮评审
             </div>
             {round.revisionSummary && (

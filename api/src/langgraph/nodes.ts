@@ -22,12 +22,16 @@ export async function plannerNode(state: PipelineStateType): Promise<Partial<Pip
   const llmRouter = getLLMRouter();
   const planner = new PlannerAgent(llmRouter);
 
+  // 先确定 taskId，传给 PlannerAgent 避免它再创建重复 task
+  const taskId = state.taskId || `task_${uuidv4().slice(0, 8)}`;
+
   // 并行执行: 大纲生成 + 选题评估 + 竞品分析
   const [planResult, evaluation, competitorAnalysis] = await Promise.all([
     planner.execute({
       topic: state.topic,
       context: state.context,
       comments: state.outlineFeedback ? [state.outlineFeedback] : undefined,
+      existingTaskId: taskId, // 传入 taskId，savePlan() 会 UPDATE 而非 INSERT
     }),
     evaluateTopic({ topic: state.topic, context: state.context }),
     analyzeCompetitors(state.topic, state.context),
@@ -41,29 +45,28 @@ export async function plannerNode(state: PipelineStateType): Promise<Partial<Pip
     };
   }
 
-  // 创建/更新数据库任务记录
-  const taskId = state.taskId || `task_${uuidv4().slice(0, 8)}`;
-  if (!state.taskId) {
-    await query(
-      `INSERT INTO tasks (id, topic, status, progress, outline, evaluation, competitor_analysis, search_config, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-       ON CONFLICT (id) DO UPDATE SET
-         outline = EXCLUDED.outline,
-         evaluation = EXCLUDED.evaluation,
-         competitor_analysis = EXCLUDED.competitor_analysis,
-         updated_at = NOW()`,
-      [
-        taskId,
-        state.topic,
-        'outline_pending',
-        10,
-        JSON.stringify(planResult.data.outline),
-        JSON.stringify(evaluation),
-        JSON.stringify(competitorAnalysis),
-        JSON.stringify(state.searchConfig || {}),
-      ]
-    );
-  }
+  // 创建/更新数据库任务记录（plannerAgent.savePlan 可能已 INSERT/UPDATE，这里用 UPSERT 确保完整性）
+  await query(
+    `INSERT INTO tasks (id, topic, status, progress, outline, evaluation, competitor_analysis, search_config, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       outline = EXCLUDED.outline,
+       evaluation = EXCLUDED.evaluation,
+       competitor_analysis = EXCLUDED.competitor_analysis,
+       status = EXCLUDED.status,
+       progress = EXCLUDED.progress,
+       updated_at = NOW()`,
+    [
+      taskId,
+      state.topic,
+      'outline_pending',
+      10,
+      JSON.stringify(planResult.data.outline),
+      JSON.stringify(evaluation),
+      JSON.stringify(competitorAnalysis),
+      JSON.stringify(state.searchConfig || {}),
+    ]
+  );
 
   return {
     taskId,

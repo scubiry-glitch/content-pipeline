@@ -21,7 +21,7 @@ export function LGWritingTab() {
     return (
       <div className="tab-panel">
         <div className="info-card full-width" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <span className="material-icons-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
             edit_note
           </span>
           <h3 style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>草稿尚未生成</h3>
@@ -50,7 +50,7 @@ export function LGWritingTab() {
       <div className="panel-grid" style={{ marginBottom: '24px' }}>
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">edit_note</span>
+            <span className="material-symbols-outlined">edit_note</span>
             文稿内容
           </div>
           <div className="section-desc">
@@ -63,7 +63,7 @@ export function LGWritingTab() {
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">analytics</span>
+            <span className="material-symbols-outlined">analytics</span>
             文稿统计
           </div>
           <div className="info-item">
@@ -86,7 +86,7 @@ export function LGWritingTab() {
         {blueTeamRounds.length > 0 && (
           <div className="info-card">
             <div className="card-title">
-              <span className="material-icons-outlined">history</span>
+              <span className="material-symbols-outlined">history</span>
               版本历史
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

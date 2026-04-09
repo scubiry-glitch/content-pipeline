@@ -12,12 +12,13 @@ export function LGResearchTab() {
   }
 
   const research = detail.researchData;
+  const dataPackage = normalizeDataPackage(research?.dataPackage);
 
   if (!research) {
     return (
       <div className="tab-panel">
         <div className="info-card full-width" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <span className="material-icons-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: 'var(--text-muted)', marginBottom: '16px', display: 'block' }}>
             hourglass_empty
           </span>
           <h3 style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>研究阶段尚未启动</h3>
@@ -40,14 +41,14 @@ export function LGResearchTab() {
         <div className="panel-grid">
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">summarize</span>
+              <span className="material-symbols-outlined">summarize</span>
               研究分析
             </div>
           </div>
 
           <div className="info-card full-width">
             <div className="card-title">
-              <span className="material-icons-outlined">description</span>
+              <span className="material-symbols-outlined">description</span>
               摘要
             </div>
             <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: 1.7 }}>
@@ -58,7 +59,7 @@ export function LGResearchTab() {
           {research.analysis.keyFindings && research.analysis.keyFindings.length > 0 && (
             <div className="info-card">
               <div className="card-title">
-                <span className="material-icons-outlined">lightbulb</span>
+                <span className="material-symbols-outlined">lightbulb</span>
                 关键发现
               </div>
               <ol style={{ margin: 0, paddingLeft: '20px' }}>
@@ -74,7 +75,7 @@ export function LGResearchTab() {
           {research.analysis.gaps && research.analysis.gaps.length > 0 && (
             <div className="info-card">
               <div className="card-title">
-                <span className="material-icons-outlined">warning</span>
+                <span className="material-symbols-outlined">warning</span>
                 研究空白
               </div>
               <ul style={{ margin: 0, paddingLeft: '20px' }}>
@@ -90,12 +91,12 @@ export function LGResearchTab() {
       )}
 
       {/* 数据包 */}
-      {research.dataPackage && research.dataPackage.length > 0 && (
+      {dataPackage.length > 0 && (
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">storage</span>
-              数据来源 ({research.dataPackage.length})
+              <span className="material-symbols-outlined">storage</span>
+              数据来源 ({dataPackage.length})
             </div>
           </div>
 
@@ -111,7 +112,7 @@ export function LGResearchTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {research.dataPackage.map((item: any, i: number) => (
+                  {dataPackage.map((item: any, i: number) => (
                     <tr key={i}>
                       <td style={{ fontWeight: 600 }}>{item.source || '未知'}</td>
                       <td>
@@ -124,7 +125,7 @@ export function LGResearchTab() {
                         </span>
                       </td>
                       <td style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                        {(item.content || '').substring(0, 200)}{(item.content || '').length > 200 ? '...' : ''}
+                        {formatDataPackageContent(item)}
                       </td>
                       <td>
                         <ReliabilityBar value={item.reliability} />
@@ -143,7 +144,7 @@ export function LGResearchTab() {
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">psychology</span>
+              <span className="material-symbols-outlined">psychology</span>
               关键洞察 ({research.insights.length})
             </div>
           </div>
@@ -175,7 +176,8 @@ export function LGResearchTab() {
 }
 
 function ReliabilityBar({ value }: { value?: number }) {
-  const pct = Math.round((value || 0) * 100);
+  const raw = typeof value === 'number' ? value : 0;
+  const pct = raw > 1 ? Math.round(raw) : Math.round(raw * 100);
   const color = pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -195,4 +197,74 @@ function getInsightColor(type: string): { bg: string; text: string } {
     data: { bg: 'hsla(270, 50%, 50%, 0.1)', text: '#8b5cf6' },
   };
   return map[type] || { bg: 'var(--surface-alt)', text: 'var(--text-secondary)' };
+}
+
+function normalizeDataPackage(input: any): any[] {
+  if (!input) return [];
+  if (Array.isArray(input)) return input;
+  if (typeof input === 'object') {
+    return Object.entries(input).map(([key, value]) => ({
+      source: key,
+      type: inferTypeFromKey(key),
+      content: value,
+    }));
+  }
+  return [{ source: 'raw', type: 'text', content: input }];
+}
+
+function inferTypeFromKey(key: string): string {
+  const k = key.toLowerCase();
+  if (k.includes('report')) return 'report';
+  if (k.includes('news')) return 'news';
+  if (k.includes('web')) return 'web';
+  return 'data';
+}
+
+function formatDataPackageContent(item: any): string {
+  const content = item?.content;
+  if (content == null) return '-';
+  if (typeof content === 'string') {
+    const parsed = safeParseJson(content);
+    if (parsed !== null) return summarizeStructuredContent(parsed);
+    return truncate(content);
+  }
+  if (typeof content === 'object') {
+    return summarizeStructuredContent(content);
+  }
+  return String(content);
+}
+
+function summarizeStructuredContent(value: any): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '空数组';
+    if (typeof value[0] === 'object' && value[0] !== null) {
+      const previews = value.slice(0, 3).map((x: any) => x.title || x.name || x.id || '未命名条目');
+      const suffix = value.length > 3 ? ` 等 ${value.length} 条` : ` 共 ${value.length} 条`;
+      return `${previews.join(' / ')}${suffix}`;
+    }
+    return `${value.slice(0, 5).join(', ')}${value.length > 5 ? ' ...' : ''}`;
+  }
+  if (value && typeof value === 'object') {
+    // 处理常见的 reports 结构：{ reports: [...] }
+    if (Array.isArray((value as any).reports)) {
+      return summarizeStructuredContent((value as any).reports);
+    }
+    const keys = Object.keys(value);
+    return `对象字段: ${keys.slice(0, 6).join(', ')}${keys.length > 6 ? ' ...' : ''}`;
+  }
+  return truncate(String(value));
+}
+
+function safeParseJson(text: string): any | null {
+  const trimmed = text.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function truncate(text: string, max = 200): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }

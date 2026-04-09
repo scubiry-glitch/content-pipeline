@@ -166,7 +166,7 @@ export function LGTaskDetailLayout() {
         {/* 返回按钮 */}
         <div style={{ marginBottom: '16px' }}>
           <a className="back-link" onClick={() => navigate('/lg-tasks')} style={{ cursor: 'pointer' }}>
-            <span className="material-icons-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
             返回列表
           </a>
         </div>
@@ -196,7 +196,7 @@ export function LGTaskDetailLayout() {
               to={tab.path}
               className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
             >
-              <span className="material-icons-outlined nav-item-icon">{tab.materialIcon}</span>
+              <span className="material-symbols-outlined nav-item-icon">{tab.materialIcon}</span>
               {tab.label}
               {tab.id === 'planning' && pendingAction === 'outline_review' && (
                 <span className="nav-item-badge">!</span>

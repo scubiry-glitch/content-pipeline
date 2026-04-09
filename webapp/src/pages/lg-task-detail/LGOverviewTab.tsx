@@ -18,7 +18,7 @@ export function LGOverviewTab() {
       {graphData && (
         <div className="info-card full-width" style={{ marginBottom: '24px' }}>
           <div className="card-title">
-            <span className="material-icons-outlined">account_tree</span>
+            <span className="material-symbols-outlined">account_tree</span>
             Pipeline 流程图
           </div>
           <GraphVisualization
@@ -32,23 +32,23 @@ export function LGOverviewTab() {
       <div className="panel-grid">
         <div className="section-header">
           <div className="section-title">
-            <span className="material-icons-outlined">info</span>
+            <span className="material-symbols-outlined">info</span>
             任务信息
           </div>
         </div>
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">fingerprint</span>
+            <span className="material-symbols-outlined">fingerprint</span>
             标识信息
           </div>
           <div className="info-item">
             <span className="label">Thread ID</span>
-            <span className="value" style={{ fontSize: '12px', fontFamily: 'monospace' }}>{detail.threadId || '-'}</span>
+            <span className="value lg-mono-id">{detail.threadId || '-'}</span>
           </div>
           <div className="info-item">
             <span className="label">Task ID</span>
-            <span className="value" style={{ fontSize: '12px', fontFamily: 'monospace' }}>{detail.taskId || '-'}</span>
+            <span className="value lg-mono-id">{detail.taskId || '-'}</span>
           </div>
           <div className="info-item">
             <span className="label">当前节点</span>
@@ -62,7 +62,7 @@ export function LGOverviewTab() {
 
         <div className="info-card">
           <div className="card-title">
-            <span className="material-icons-outlined">check_circle</span>
+            <span className="material-symbols-outlined">check_circle</span>
             状态检查点
           </div>
           <div className="info-item">
@@ -89,7 +89,7 @@ export function LGOverviewTab() {
         <div className="panel-grid" style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title">
-              <span className="material-icons-outlined">assessment</span>
+              <span className="material-symbols-outlined">assessment</span>
               选题评估
             </div>
           </div>
@@ -146,7 +146,7 @@ export function LGOverviewTab() {
         <div style={{ marginTop: '24px' }}>
           <div className="section-header">
             <div className="section-title" style={{ color: 'var(--danger, #ef4444)' }}>
-              <span className="material-icons-outlined">error</span>
+              <span className="material-symbols-outlined">error</span>
               错误信息
             </div>
           </div>
@@ -161,7 +161,7 @@ export function LGOverviewTab() {
       {/* 刷新按钮 */}
       <div style={{ marginTop: '24px', textAlign: 'right' }}>
         <button className="lg-btn lg-btn-secondary" onClick={onRefresh}>
-          <span className="material-icons-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
+          <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
           刷新数据
         </button>
       </div>

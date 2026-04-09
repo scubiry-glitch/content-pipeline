@@ -101,8 +101,84 @@
   color: var(--text);
 }
 
+.info-item .value.lg-mono-id {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: right;
+  max-width: 72%;
+}
+
 .info-item .value.highlight {
   color: var(--primary);
+}
+
+/* LG 详情页：键值布局防挤压（避免“标签值粘连/逐字换行”） */
+.info-item.lg-kv-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.info-item .label.lg-kv-label {
+  flex: 0 0 120px;
+  white-space: nowrap;
+}
+
+.info-item .value.lg-kv-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.info-item .value.lg-kv-value.lg-kv-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+/* LG Quality 独立键值布局（避免受全局 info-item 影响） */
+.lg-quality-kv-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.lg-quality-kv-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--background);
+}
+
+.lg-quality-kv-row:last-child {
+  border-bottom: none;
+}
+
+.lg-quality-kv-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.lg-quality-kv-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.lg-quality-kv-value.highlight {
+  color: var(--primary);
+}
+
+.lg-quality-kv-value.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
 }
 
 /* Data Review Table Premium */
