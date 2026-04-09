@@ -45,6 +45,16 @@ export async function plannerNode(state: PipelineStateType): Promise<Partial<Pip
     };
   }
 
+  // 统一 outline 格式为 {sections, title, ...}，与旧版系统兼容
+  const outlineObj = {
+    sections: planResult.data.outline,
+    title: planResult.data.plan.title,
+    knowledgeInsights: planResult.data.knowledgeInsights || [],
+    novelAngles: planResult.data.novelAngles || [],
+    dataRequirements: planResult.data.dataRequirements || [],
+    generatedAt: new Date().toISOString(),
+  };
+
   // 创建/更新数据库任务记录（plannerAgent.savePlan 可能已 INSERT/UPDATE，这里用 UPSERT 确保完整性）
   await query(
     `INSERT INTO tasks (id, topic, status, progress, outline, evaluation, competitor_analysis, search_config, created_at, updated_at)
@@ -61,7 +71,7 @@ export async function plannerNode(state: PipelineStateType): Promise<Partial<Pip
       state.topic,
       'outline_pending',
       10,
-      JSON.stringify(planResult.data.outline),
+      JSON.stringify(outlineObj),
       JSON.stringify(evaluation),
       JSON.stringify(competitorAnalysis),
       JSON.stringify(state.searchConfig || {}),
@@ -70,7 +80,7 @@ export async function plannerNode(state: PipelineStateType): Promise<Partial<Pip
 
   return {
     taskId,
-    outline: { sections: planResult.data.outline, title: planResult.data.plan.title },
+    outline: outlineObj,
     evaluation,
     competitorAnalysis,
     status: 'outline_pending',
@@ -241,13 +251,32 @@ ${i + 1}. [${insight.type || 'insight'}] ${insight.content || ''} (置信度: ${
       };
     }
 
-    // 保存草稿到 tasks 表（不依赖 documents 表）
-    await query(
-      `UPDATE tasks SET draft_content = $1, progress = 70, status = 'writing', updated_at = NOW() WHERE id = $2`,
-      [draftContent, state.taskId]
-    );
+    // 保存草稿到 tasks 表 + draft_versions 表（双写，让旧版写作页也能看到）
+    const draftVersion = (state.currentReviewRound || 0) + 1;
+    await Promise.all([
+      query(
+        `UPDATE tasks SET draft_content = $1, progress = 70, status = 'writing', updated_at = NOW() WHERE id = $2`,
+        [draftContent, state.taskId]
+      ),
+      query(
+        `INSERT INTO draft_versions (task_id, version, content, change_summary, status, word_count, round)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (task_id, version) DO UPDATE SET
+           content = EXCLUDED.content, change_summary = EXCLUDED.change_summary,
+           word_count = EXCLUDED.word_count, status = EXCLUDED.status`,
+        [
+          state.taskId,
+          draftVersion,
+          draftContent,
+          draftVersion === 1 ? 'LangGraph 初稿生成' : `LangGraph 第${draftVersion}版（基于蓝军评审修订）`,
+          'draft',
+          draftContent.length,
+          state.currentReviewRound || 0,
+        ]
+      ),
+    ]);
 
-    console.log(`[LangGraph:writer] Draft generated successfully: ${draftContent.length} chars`);
+    console.log(`[LangGraph:writer] Draft generated successfully: ${draftContent.length} chars, saved as version ${draftVersion}`);
 
     return {
       draftContent,
@@ -377,11 +406,33 @@ ${draftPreview}
       }
     }
 
-    // 更新 tasks 表
-    await query(
-      `UPDATE tasks SET draft_content = $1, updated_at = NOW() WHERE id = $2`,
-      [revisedDraft, state.taskId]
-    );
+    // 更新 tasks 表 + draft_versions 表（双写）
+    const revisionVersion = round + 1;
+    await Promise.all([
+      query(
+        `UPDATE tasks SET draft_content = $1, updated_at = NOW() WHERE id = $2`,
+        [revisedDraft, state.taskId]
+      ),
+      !passed && revisedDraft !== state.draftContent
+        ? query(
+            `INSERT INTO draft_versions (task_id, version, content, change_summary, status, word_count, round, expert_role)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (task_id, version) DO UPDATE SET
+               content = EXCLUDED.content, change_summary = EXCLUDED.change_summary,
+               word_count = EXCLUDED.word_count, status = EXCLUDED.status`,
+            [
+              state.taskId,
+              revisionVersion,
+              revisedDraft,
+              revisionSummary,
+              'revised',
+              (revisedDraft || '').length,
+              round,
+              'blue_team',
+            ]
+          )
+        : Promise.resolve(),
+    ]);
 
     console.log(`[LangGraph:blue_team] Round ${round} complete: ${questions.length} questions, ${highSeverityCount} high, passed=${passed}`);
 
