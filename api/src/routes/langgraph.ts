@@ -9,6 +9,7 @@ import {
   getPipelineState,
   getGraphMermaid,
 } from '../langgraph/index.js';
+import { query } from '../db/connection.js';
 
 interface CreateTaskBody {
   topic: string;
@@ -157,10 +158,26 @@ export async function langgraphRoutes(fastify: FastifyInstance) {
 
     try {
       const state = await getPipelineState(threadId);
+      const values = { ...state.values };
+
+      // ★ Fallback: 如果 LangGraph state 中没有草稿，从 draft_versions 表读取
+      if (!values.draftContent && values.taskId) {
+        try {
+          const draftResult = await query(
+            `SELECT content FROM draft_versions WHERE task_id = $1 ORDER BY version DESC LIMIT 1`,
+            [values.taskId]
+          );
+          if (draftResult.rows[0]?.content) {
+            values.draftContent = draftResult.rows[0].content;
+          }
+        } catch (e) {
+          console.warn('[LangGraph] Failed to load draft fallback:', e);
+        }
+      }
 
       return {
         threadId: state.threadId,
-        ...state.values,
+        ...values,
         next: state.next,
       };
     } catch (error: any) {

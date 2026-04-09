@@ -863,7 +863,6 @@ export const suHuaProfile: ExpertProfile = {
     contradictions: [
       { tension: '追求普惠平等 vs 商业化需要头部集中', context: '广告主更愿意投放头部内容', resolution: '用商业流量补贴普惠流量——商业化和普惠分不同流量池运营' },
     ],
-    },
   },
   method: {
     frameworks: ['普惠价值模型', '长尾内容生态', '社区信任积累'],
@@ -946,7 +945,6 @@ export const guWendongProfile: ExpertProfile = {
     contradictions: [
       { tension: '追求技术完美 vs 业务需要快速上线', context: 'AI工程的质量标准和业务的速度要求经常冲突', resolution: '用MVP+渐进优化——先上80分版本，再用数据驱动迭代到95分' },
     ],
-    },
   },
   method: {
     frameworks: ['任务形式化', '基线-消融评测', '数据治理', 'RAG/Agent架构评估', '成本-延迟权衡'],

@@ -3,7 +3,7 @@
 
 import type { ExpertProfile, MentalModel, DecisionHeuristic } from '../types.js';
 
-export const paulgrahamProfile: ExpertProfile = {
+export const paulGrahamProfile: ExpertProfile = {
   expert_id: 'S-41',
   name: 'Paul Graham',
   domain: ['创业策略', '写作方法', '产品思维', '人生哲学'],

@@ -947,6 +947,9 @@ export async function productionRoutes(fastify: FastifyInstance) {
   });
 
   // 启动流式文稿生成（SSE 推送）
+  // ★ 防重复生成锁：同一 task 只允许一个生成实例运行
+  const activeGenerations = new Map<string, { startedAt: number; subscribers: import('http').ServerResponse[] }>();
+
   fastify.get('/:taskId/draft/generate-stream', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
     const { generateDraftStreaming, getDraftProgress } = await import('../services/streamingDraft.js');
@@ -961,6 +964,22 @@ export async function productionRoutes(fastify: FastifyInstance) {
       'Access-Control-Allow-Credentials': 'true',
     });
 
+    // ★ 如果该 task 已经在生成中，新连接作为 subscriber 加入而不是重复生成
+    const existing = activeGenerations.get(taskId);
+    if (existing && (Date.now() - existing.startedAt < 10 * 60 * 1000)) {
+      console.log(`[DraftStream] Task ${taskId} already generating, adding subscriber (${existing.subscribers.length + 1} total)`);
+      existing.subscribers.push(reply.raw);
+      reply.raw.write(`event: info\ndata: ${JSON.stringify({ message: '已有生成任务进行中，正在同步进度...' })}\n\n`);
+      // 连接关闭时移除 subscriber
+      reply.raw.on('close', () => {
+        const gen = activeGenerations.get(taskId);
+        if (gen) {
+          gen.subscribers = gen.subscribers.filter(s => s !== reply.raw);
+        }
+      });
+      return;
+    }
+
     const task = await productionService.getTask(taskId);
     if (!task) {
       reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: 'Task not found' })}\n\n`);
@@ -973,16 +992,38 @@ export async function productionRoutes(fastify: FastifyInstance) {
       ? JSON.parse(task.research_data)
       : task.research_data;
 
+    // 注册生成锁
+    const generation = { startedAt: Date.now(), subscribers: [reply.raw] as import('http').ServerResponse[] };
+    activeGenerations.set(taskId, generation);
+
+    // 广播给所有 subscriber
+    const broadcast = (eventData: string) => {
+      for (const sub of generation.subscribers) {
+        try { sub.write(eventData); } catch (_) { /* subscriber disconnected */ }
+      }
+    };
+    const broadcastEnd = () => {
+      for (const sub of generation.subscribers) {
+        try { sub.end(); } catch (_) { /* subscriber disconnected */ }
+      }
+      activeGenerations.delete(taskId);
+    };
+
     // SSE 服务端超时（10分钟）
     const SSE_TIMEOUT = 10 * 60 * 1000;
     const sseTimer = setTimeout(() => {
-      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: '生成超时，请重试' })}\n\n`);
-      reply.raw.end();
+      broadcast(`event: error\ndata: ${JSON.stringify({ error: '生成超时，请重试' })}\n\n`);
+      broadcastEnd();
     }, SSE_TIMEOUT);
+
+    // 连接关闭时移除 subscriber
+    reply.raw.on('close', () => {
+      generation.subscribers = generation.subscribers.filter(s => s !== reply.raw);
+    });
 
     try {
       // 推送开始事件
-      reply.raw.write(`event: start\ndata: ${JSON.stringify({ taskId, totalSections: countSections(outline) })}\n\n`);
+      broadcast(`event: start\ndata: ${JSON.stringify({ taskId, totalSections: countSections(outline) })}\n\n`);
 
       // 执行流式生成
       await generateDraftStreaming({
@@ -993,20 +1034,20 @@ export async function productionRoutes(fastify: FastifyInstance) {
         style: 'formal',
         options: { includeContext: true, realtimePreview: true, saveProgress: true }
       }, async (progress) => {
-        // 推送进度更新
-        reply.raw.write(`event: progress\ndata: ${JSON.stringify(progress)}\n\n`);
+        // 推送进度更新给所有 subscriber
+        broadcast(`event: progress\ndata: ${JSON.stringify(progress)}\n\n`);
       });
 
       // 推送完成事件
       clearTimeout(sseTimer);
-      reply.raw.write(`event: complete\ndata: ${JSON.stringify({ taskId, status: 'completed' })}\n\n`);
-      reply.raw.end();
+      broadcast(`event: complete\ndata: ${JSON.stringify({ taskId, status: 'completed' })}\n\n`);
+      broadcastEnd();
 
     } catch (error) {
       clearTimeout(sseTimer);
       console.error('[DraftStream] Generation failed:', error);
-      reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
-      reply.raw.end();
+      broadcast(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+      broadcastEnd();
     }
   });
 
