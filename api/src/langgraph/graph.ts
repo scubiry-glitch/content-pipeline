@@ -169,3 +169,46 @@ export async function getPipelineState(threadId: string) {
     metadata: state.metadata,
   };
 }
+
+/**
+ * 获取 pipeline 状态历史（checkpoint 快照列表）
+ */
+export async function getPipelineStateHistory(threadId: string, limit: number = 20) {
+  const graph = await getCompiledGraph();
+
+  const config = {
+    configurable: { thread_id: threadId },
+  };
+
+  const history: any[] = [];
+  try {
+    for await (const snapshot of graph.getStateHistory(config)) {
+      history.push({
+        checkpoint_id: snapshot.config?.configurable?.checkpoint_id,
+        checkpoint_ns: snapshot.config?.configurable?.checkpoint_ns,
+        values: {
+          taskId: snapshot.values?.taskId,
+          topic: snapshot.values?.topic,
+          status: snapshot.values?.status,
+          progress: snapshot.values?.progress,
+          currentNode: snapshot.values?.currentNode,
+          outlineApproved: snapshot.values?.outlineApproved,
+          reviewPassed: snapshot.values?.reviewPassed,
+          // 轻量化：不返回完整的 draftContent / researchData
+          hasOutline: !!snapshot.values?.outline,
+          hasDraft: !!(snapshot.values?.draftContent && snapshot.values.draftContent.length > 0),
+          blueTeamRoundsCount: snapshot.values?.blueTeamRounds?.length || 0,
+        },
+        next: snapshot.next,
+        metadata: snapshot.metadata,
+        createdAt: snapshot.createdAt,
+        parentConfig: snapshot.parentConfig?.configurable?.checkpoint_id || null,
+      });
+      if (history.length >= limit) break;
+    }
+  } catch (err) {
+    console.warn('[LangGraph] getStateHistory failed (may not be supported by checkpointer):', err);
+  }
+
+  return { threadId, history };
+}
