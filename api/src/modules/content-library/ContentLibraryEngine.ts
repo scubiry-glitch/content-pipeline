@@ -297,10 +297,23 @@ export class ContentLibraryEngine {
     });
   }
 
-  /** ⑥ 实体关系图谱 */
+  /**
+   * ⑥ 实体关系图谱 (v7.1: 4 信号加权评分)
+   *
+   * 受 nashsu/llm_wiki 启发，用四个信号的加权合成替代原来的简单 COUNT:
+   *   score = 3.0 × direct_links       (直接共现事实数)
+   *         + 4.0 × source_overlap     (共享 asset 数 — 最强信号)
+   *         + 1.0 × type_affinity      (同类型加成)
+   * Adamic-Adar 信号留待 Tier 2
+   */
   async getEntityGraph(entityId: string): Promise<{
     center: ContentEntity;
-    relations: Array<{ entity: ContentEntity; relation: string; strength: number }>;
+    relations: Array<{
+      entity: ContentEntity;
+      relation: string;
+      strength: number;
+      breakdown: { direct: number; sourceOverlap: number; typeAffinity: number };
+    }>;
   }> {
     const entityResult = await this.deps.db.query(
       'SELECT * FROM content_entities WHERE id = $1', [entityId]
@@ -310,33 +323,71 @@ export class ContentLibraryEngine {
     }
     const center = this.mapEntity(entityResult.rows[0]);
 
-    // 找到通过事实关联的实体
+    // v7.1 加权查询:
+    //  - direct_links: 中心实体与邻居在同一 content_fact 里共现的次数
+    //  - source_overlap: 中心实体与邻居出现在同一 asset_id 里的 DISTINCT 数
+    //  - type_affinity: 同 entity_type 时为 1，否则 0
     const relatedResult = await this.deps.db.query(`
-      SELECT DISTINCT
+      WITH center_assets AS (
+        SELECT DISTINCT asset_id
+        FROM content_facts
+        WHERE (subject = $1 OR object = $1) AND is_current = true
+      ),
+      direct_edges AS (
+        SELECT
+          CASE WHEN subject = $1 THEN object ELSE subject END AS neighbor_name,
+          predicate AS relation,
+          COUNT(*) AS direct_links
+        FROM content_facts
+        WHERE (subject = $1 OR object = $1) AND is_current = true
+        GROUP BY neighbor_name, predicate
+      ),
+      neighbor_source_overlap AS (
+        SELECT
+          CASE WHEN subject = $1 THEN object ELSE subject END AS neighbor_name,
+          COUNT(DISTINCT asset_id) FILTER (WHERE asset_id IN (SELECT asset_id FROM center_assets)) AS shared_assets
+        FROM content_facts
+        WHERE (subject = $1 OR object = $1) AND is_current = true
+        GROUP BY neighbor_name
+      ),
+      agg AS (
+        SELECT
+          de.neighbor_name,
+          MAX(de.relation) AS relation,
+          SUM(de.direct_links) AS direct_links,
+          COALESCE(MAX(nso.shared_assets), 0) AS source_overlap
+        FROM direct_edges de
+        LEFT JOIN neighbor_source_overlap nso ON nso.neighbor_name = de.neighbor_name
+        GROUP BY de.neighbor_name
+      )
+      SELECT
         ce.id, ce.canonical_name, ce.aliases, ce.entity_type,
         ce.taxonomy_domain_id, ce.metadata, ce.created_at, ce.updated_at,
-        COUNT(cf.id) as shared_facts,
-        cf.predicate as relation
-      FROM content_facts cf
-      JOIN content_entities ce ON (
-        cf.subject = ce.canonical_name OR cf.object = ce.canonical_name
-      )
-      WHERE cf.subject = $1 OR cf.object = $1
-      AND ce.canonical_name != $1
-      AND cf.is_current = true
-      GROUP BY ce.id, ce.canonical_name, ce.aliases, ce.entity_type,
-               ce.taxonomy_domain_id, ce.metadata, ce.created_at, ce.updated_at, cf.predicate
-      ORDER BY COUNT(cf.id) DESC
+        agg.direct_links, agg.source_overlap, agg.relation,
+        CASE WHEN ce.entity_type = $2 THEN 1 ELSE 0 END AS type_affinity
+      FROM agg
+      JOIN content_entities ce ON ce.canonical_name = agg.neighbor_name
+      WHERE ce.canonical_name != $1
+      ORDER BY
+        (3.0 * agg.direct_links + 4.0 * agg.source_overlap +
+         1.0 * CASE WHEN ce.entity_type = $2 THEN 1 ELSE 0 END) DESC
       LIMIT 20
-    `, [center.canonicalName]);
+    `, [center.canonicalName, center.entityType]);
 
     return {
       center,
-      relations: relatedResult.rows.map(row => ({
-        entity: this.mapEntity(row),
-        relation: row.relation,
-        strength: Number(row.shared_facts),
-      })),
+      relations: relatedResult.rows.map(row => {
+        const direct = Number(row.direct_links) || 0;
+        const sourceOverlap = Number(row.source_overlap) || 0;
+        const typeAffinity = Number(row.type_affinity) || 0;
+        const strength = 3.0 * direct + 4.0 * sourceOverlap + 1.0 * typeAffinity;
+        return {
+          entity: this.mapEntity(row),
+          relation: row.relation,
+          strength: Math.round(strength * 100) / 100,
+          breakdown: { direct, sourceOverlap, typeAffinity },
+        };
+      }),
     };
   }
 
@@ -524,10 +575,11 @@ Format: each insight as a JSON object with:
 - confidence: 0-1 score`;
 
     try {
-      const response = await this.deps.llm.generate({
+      const response = await this.deps.llm.completeWithSystem(
+        'You are a content synthesis engine. Output only JSON.',
         prompt,
-        maxTokens: 500,
-      });
+        { temperature: 0.2, maxTokens: 500, responseFormat: 'json' }
+      );
 
       // 简化解析（实际应该更健壮）
       const insights = [];
