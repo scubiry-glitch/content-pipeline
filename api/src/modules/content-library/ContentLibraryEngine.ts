@@ -29,6 +29,7 @@ import { HybridSearch } from './retrieval/hybridSearch.js';
 import { FactExtractor } from './consolidation/factExtractor.js';
 import { EntityResolver } from './consolidation/entityResolver.js';
 import { DeltaCompressor } from './consolidation/deltaCompressor.js';
+import { WikiGenerator } from './wiki/wikiGenerator.js';
 
 export class ContentLibraryEngine {
   private deps: ContentLibraryDeps;
@@ -38,6 +39,8 @@ export class ContentLibraryEngine {
   private factExtractor: FactExtractor;
   private entityResolver: EntityResolver;
   private deltaCompressor: DeltaCompressor;
+  /** v7.1: Wiki 生成器 (Obsidian 兼容物化视图) */
+  readonly wikiGenerator: WikiGenerator;
 
   constructor(deps: ContentLibraryDeps, options?: ContentLibraryOptions) {
     this.deps = deps;
@@ -53,6 +56,9 @@ export class ContentLibraryEngine {
     this.factExtractor = new FactExtractor(deps.llm, this.options);
     this.entityResolver = new EntityResolver(deps.db, deps.embedding);
     this.deltaCompressor = new DeltaCompressor(deps.db);
+
+    // v7.1: Wiki 生成器
+    this.wikiGenerator = new WikiGenerator(deps.db);
   }
 
   // ============================================================

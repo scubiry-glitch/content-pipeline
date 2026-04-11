@@ -205,5 +205,58 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         limit: query.limit ? parseInt(query.limit) : undefined,
       });
     });
+
+    // ============================================================
+    // v7.1: Wiki 生成层 (Obsidian 兼容物化视图)
+    // ============================================================
+
+    // 生成 wiki
+    fastify.post('/wiki/generate', async (request, reply) => {
+      const body = (request.body || {}) as any;
+      const wikiRoot = body.wikiRoot || process.env.CONTENT_LIBRARY_WIKI_ROOT || './data/content-wiki/default';
+      return engine.wikiGenerator.generate({
+        wikiRoot,
+        domainFilter: body.domainFilter,
+        maxEntities: body.maxEntities ? parseInt(body.maxEntities) : undefined,
+        maxFactsPerEntity: body.maxFactsPerEntity ? parseInt(body.maxFactsPerEntity) : undefined,
+      });
+    });
+
+    // 列出所有已生成的 wiki
+    fastify.get('/wiki/list', async (request, reply) => {
+      const query = request.query as any;
+      const rootDir = query.rootDir || process.env.CONTENT_LIBRARY_WIKI_ROOT_DIR || './data/content-wiki';
+      const wikis = await engine.wikiGenerator.listWikis(rootDir);
+      return { rootDir, wikis };
+    });
+
+    // 列出 wiki 下的文件
+    fastify.get('/wiki/files', async (request, reply) => {
+      const query = request.query as any;
+      const wikiRoot = query.wikiRoot;
+      if (!wikiRoot) {
+        reply.code(400);
+        return { error: 'wikiRoot query parameter required' };
+      }
+      const files = await engine.wikiGenerator.listFiles(String(wikiRoot));
+      return { wikiRoot, files };
+    });
+
+    // 读取单个 markdown 文件
+    fastify.get('/wiki/preview', async (request, reply) => {
+      const query = request.query as any;
+      const wikiRoot = query.wikiRoot;
+      const relPath = query.path;
+      if (!wikiRoot || !relPath) {
+        reply.code(400);
+        return { error: 'wikiRoot and path query parameters required' };
+      }
+      const content = await engine.wikiGenerator.readMarkdown(String(wikiRoot), String(relPath));
+      if (content === null) {
+        reply.code(404);
+        return { error: 'File not found' };
+      }
+      return { wikiRoot, path: relPath, content };
+    });
   };
 }
