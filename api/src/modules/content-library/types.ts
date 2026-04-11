@@ -95,6 +95,8 @@ export interface ContentLibraryOptions {
   l0MaxChars?: number;
   /** L1 关键点最大条数 */
   l1MaxPoints?: number;
+  /** v7.1: 启用两段式事实提取 (analyze → generate)，提升 F1 但每次多一次 LLM 调用 */
+  useTwoStageExtraction?: boolean;
 }
 
 export const DEFAULT_OPTIONS: Required<ContentLibraryOptions> = {
@@ -104,6 +106,7 @@ export const DEFAULT_OPTIONS: Required<ContentLibraryOptions> = {
   defaultSearchLimit: 20,
   l0MaxChars: 50,
   l1MaxPoints: 5,
+  useTwoStageExtraction: true,
 };
 
 // ============================================================
