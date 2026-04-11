@@ -125,6 +125,109 @@ export class ContentLibraryEngine {
     return { facts: compressedFacts, entities: extraction.entities };
   }
 
+  /**
+   * v7.1: 批量重新提取事实 (手动触发回填)
+   *
+   * 从 asset_library 读取素材，对每个素材调用两段式 extract()，将结果写入 content_facts。
+   * 新事实走 DeltaCompressor，旧事实若被新高置信度事实覆盖则标记 superseded。
+   *
+   * 查询条件选择 asset (按时间/id)。
+   */
+  async reextractBatch(options: {
+    assetIds?: string[];
+    limit?: number;
+    since?: string;
+    minConfidence?: number;
+    dryRun?: boolean;
+  }): Promise<{
+    processed: number;
+    newFacts: number;
+    updatedFacts: number;
+    skipped: number;
+    errors: number;
+    tokenEstimate: number;
+  }> {
+    const limit = Math.min(options.limit || 20, 200);
+    const minConf = options.minConfidence ?? this.options.factConfidenceThreshold;
+
+    const conds: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+    if (options.assetIds && options.assetIds.length > 0) {
+      conds.push(`id = ANY($${idx++}::varchar[])`);
+      params.push(options.assetIds);
+    }
+    if (options.since) {
+      conds.push(`created_at >= $${idx++}`);
+      params.push(options.since);
+    }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    params.push(limit);
+    const sql = `
+      SELECT id, content FROM asset_library
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT $${idx}
+    `;
+
+    const assets = await this.deps.db.query(sql, params);
+
+    let processed = 0;
+    let newFacts = 0;
+    let updatedFacts = 0;
+    let skipped = 0;
+    let errors = 0;
+    let tokenEstimate = 0;
+
+    for (const row of assets.rows) {
+      try {
+        const content = String(row.content || '').slice(0, 8000);
+        if (!content.trim()) {
+          skipped++;
+          continue;
+        }
+        // 每个 asset 2 次 LLM 调用 (analyze + extract)，约 4k input + 1k output tokens
+        tokenEstimate += 5000;
+
+        if (options.dryRun) {
+          processed++;
+          continue;
+        }
+
+        // 调用 factExtractor 的新两段式提取
+        const extraction = await this.factExtractor.extract({
+          content,
+          assetId: row.id,
+        });
+
+        // 实体归一化
+        for (const entity of extraction.entities) {
+          await this.entityResolver.resolveAndRegister(entity);
+        }
+
+        // 过滤低置信度
+        const highQuality = extraction.facts.filter(f => f.confidence >= minConf);
+
+        // Delta 压缩
+        for (const fact of highQuality) {
+          const compressed = await this.deltaCompressor.compress(fact);
+          if (compressed.supersededBy) {
+            updatedFacts++;
+          } else {
+            newFacts++;
+          }
+          await this.storeFacts([compressed]);
+        }
+        processed++;
+      } catch (err) {
+        console.warn('[reextractBatch] Asset failed:', row.id, err);
+        errors++;
+      }
+    }
+
+    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate };
+  }
+
   /** 查询事实 */
   async queryFacts(options: {
     subject?: string;

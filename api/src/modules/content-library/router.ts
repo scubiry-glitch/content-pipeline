@@ -51,6 +51,18 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       });
     });
 
+    // v7.1 T1.4: 手动触发回填 (两段式重新提取)
+    fastify.post('/reextract', async (request, reply) => {
+      const body = (request.body || {}) as any;
+      return engine.reextractBatch({
+        assetIds: Array.isArray(body.assetIds) ? body.assetIds : undefined,
+        limit: body.limit ? parseInt(body.limit) : undefined,
+        since: body.since,
+        minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : undefined,
+        dryRun: body.dryRun === true || body.dryRun === 'true',
+      });
+    });
+
     fastify.get('/facts', async (request, reply) => {
       const query = request.query as any;
       return engine.queryFacts({
