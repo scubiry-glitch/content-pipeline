@@ -47,6 +47,7 @@ import { ContentLibraryTrends } from './pages/ContentLibraryTrends';
 import { ContentLibraryDelta } from './pages/ContentLibraryDelta';
 import { ContentLibraryFreshness } from './pages/ContentLibraryFreshness';
 import { ContentLibraryCards } from './pages/ContentLibraryCards';
+import { ContentLibraryWiki } from './pages/ContentLibraryWiki';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -139,6 +140,7 @@ function App() {
               <Route path="content-library/delta" element={<ContentLibraryDelta />} />
               <Route path="content-library/freshness" element={<ContentLibraryFreshness />} />
               <Route path="content-library/cards" element={<ContentLibraryCards />} />
+              <Route path="content-library/wiki" element={<ContentLibraryWiki />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />
