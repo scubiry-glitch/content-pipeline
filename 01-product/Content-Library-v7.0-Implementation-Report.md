@@ -561,3 +561,187 @@ class ContentLibraryScheduler {
 *Created: 2026-04-07*
 *Relates: Product-Spec-v7.0-ContentLibrary.md, Product-Spec-v6.2-AI-Assets-Processing.md, Product-Spec-v5.0-ExpertLibrary.md*
 *参考: Hermes Agent Memory Provider (Hindsight/OpenViking/RetainDB/Mem0)*
+
+---
+
+# v7.1 升级 — llm_wiki 启发优化
+
+**日期**: 2026-04-11
+**状态**: ✅ 已实现并合并到 main
+**灵感来源**: [nashsu/llm_wiki](https://github.com/nashsu/llm_wiki) (665⭐ Tauri 桌面应用，Karpathy LLM Wiki 范式)
+**核心决策**: 增量优化，不重构 v7.0 — 5 个新增/改动全部叠加式
+
+## 一、本次升级的 5 个改动
+
+| # | 改动 | 类型 | 文件 | Commit |
+|---|------|------|------|--------|
+| T1.1 | SHA256 内容哈希缓存 | 后端 | `assetLibrary.ts` + `003-content-sha256.sql` | `1fd450c` |
+| T1.2 | 两段式事实提取 (analyze → generate) | 后端 | `factExtractor.ts` + `types.ts` | `5aa266b` |
+| T1.3 | 实体图谱 4 信号加权 | 后端 | `ContentLibraryEngine.getEntityGraph` | `e8dd5ee` |
+| T1.4 | 两段式 ingest 前端触发回填按钮 | 全栈 | `ContentLibraryEngine.reextractBatch` + `ContentLibraryFacts.tsx` | `081921e` |
+| T3.1-3 | Wiki 物化视图 (Obsidian 兼容) | 全栈 | `wiki/wikiGenerator.ts` + `ContentLibraryWiki.tsx` | `84f1f91` / `b8d47e7` / `5e62f65` |
+
+## 二、T1.1 — SHA256 内容哈希缓存
+
+**问题**: `importAsset()` 每次都跑完整 pipeline (tagging + embedding + fact extraction)，重复导入浪费大量 LLM token。
+
+**改动**:
+- Migration `003-content-sha256.sql`: `asset_library` 加 `content_sha256 VARCHAR(64)` 列 + 索引
+- `importAsset()` 开头计算 SHA256 → 若命中已有 asset → 直接返回 `{ skipped: true, assetId: 老的 }`
+- 兼容降级: 未执行 migration 时自动 fallback 到无缓存模式
+
+**收益**: 重复导入时省掉 3 次 LLM 调用 (tagging / embedding / fact extraction)，耗时 < 50ms
+
+## 三、T1.2 — 两段式事实提取
+
+**问题**: 原 `FactExtractor.extract()` 是单次 LLM 调用，长文档提取 F1 低。
+
+**改动** (受 llm_wiki Stage1→Stage2 启发):
+```
+Stage 1 analyze(content): LLM 产出结构化理解
+  → ContentAnalysisResult { entities, keyClaims, contradictions, organizationHints, domain }
+
+Stage 2 extract(content, analysisContext):
+  → 把 Stage 1 输出拼进 prompt 作为上下文
+  → LLM 产出三元组 (更有依据)
+```
+
+- 新增 `ContentAnalysisResult` 类型
+- `ContentLibraryOptions.useTwoStageExtraction` (默认 `true`)
+- 失败时自动 fallback 到单次模式，不破坏现有流程
+
+**预期**: 事实提取 F1 提升，低置信度事实占比下降
+
+## 四、T1.3 — 实体图谱 4 信号加权
+
+**问题**: 原 `getEntityGraph()` 用 `COUNT(shared_facts)` 单信号排序，质量差。
+
+**改动** (llm_wiki 的 4 信号加权模型):
+```
+strength = 3.0 × direct_links      (共现事实数)
+         + 4.0 × source_overlap    (共享 asset 数 — 最强信号)
+         + 1.0 × type_affinity     (同类型加成)
+```
+
+- SQL 用 CTE 计算 `center_assets` / `direct_edges` / `neighbor_source_overlap`
+- 返回 `relations[]` 增加 `breakdown: { direct, sourceOverlap, typeAffinity }` 字段
+- Adamic-Adar 信号留到 Tier 2 (未做)
+
+**核心突破**: "共享 asset" 信号 (权重 4.0，最高) **首次被利用**，而这个信息 v7.0 现有 `content_facts.asset_id` 就已经有了，只是没用。
+
+## 五、T1.4 — 两段式 ingest 前端回填按钮
+
+**需求**: 两段式 ingest 启用后，历史素材需要一种"按需回填"方式。用户决策: **不用 CLI 脚本，改用前端按钮**。
+
+**后端**:
+- `ContentLibraryEngine.reextractBatch(options)` 批量对历史 asset 调用新 extract (两段式)
+- 参数: `assetIds / limit / since / minConfidence / dryRun`
+- 返回: `{ processed, newFacts, updatedFacts, skipped, errors, tokenEstimate }`
+- 新端点: `POST /api/v1/content-library/reextract`
+
+**前端** (`/content-library/facts` 页面顶部):
+- 📤 "🔄 重新提取事实" 按钮 → 展开回填面板
+- 参数: 处理数量上限 / 起始日期 / 最低置信度
+- 双按钮: 🧪 预演 (dryRun) / ▶️ 正式执行 (带 confirm)
+- 结果卡片: 6 项统计 (含 ~Token 估算)
+- 正式执行后自动刷新事实列表
+
+## 六、T3 — Wiki 物化视图 (Obsidian 兼容)
+
+**需求**: 把 content_facts + content_entities 物化成人类可读的 markdown wiki。
+
+### 6.1 后端模块 `api/src/modules/content-library/wiki/`
+
+```
+wiki/
+├── templates.ts       # 5 种页面模板 + YAML frontmatter + slugify + wikilink
+└── wikiGenerator.ts   # WikiGenerator 类: generate() / listWikis() / listFiles() / readMarkdown()
+```
+
+**生成目录结构** (Obsidian vault 格式):
+```
+{wikiRoot}/
+├── .obsidian/app.json          # 自动 wikilink / graph view 配置
+├── overview.md                 # 顶层摘要
+├── index.md                    # 分类目录
+├── entities/                   # 实体页 (一实体一文件)
+│   ├── OpenAI.md
+│   └── ...
+├── concepts/                   # 按领域分组的概念页
+│   ├── AI芯片.md
+│   └── ...
+└── sources/                    # 素材来源页 (带 L0 摘要)
+    ├── asset_abc123.md
+    └── ...
+```
+
+**页面模板特性**:
+- `[[wikilink]]` 语法 + slugify 保证文件名安全
+- YAML frontmatter: `type / aliases / sources[] / domains / updatedAt`
+- 实体页: 置信度排序的关键事实 + 邻居列表 + 来源引用
+- 只读物化视图: 不改数据库，每次 generate() 重新覆盖
+
+### 6.2 API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/content-library/wiki/generate` | 生成 wiki (body: wikiRoot / domainFilter / maxEntities) |
+| GET  | `/api/v1/content-library/wiki/list?rootDir=X` | 列出根目录下所有 wiki |
+| GET  | `/api/v1/content-library/wiki/files?wikiRoot=X` | 列出 wiki 下所有 md 文件 |
+| GET  | `/api/v1/content-library/wiki/preview?wikiRoot=X&path=Y` | 读取单个文件 (防路径越狱) |
+
+### 6.3 前端页面 `/content-library/wiki`
+
+三栏布局:
+- **左栏**: 已生成 Wiki 列表 (按 mtime 倒序)
+- **中栏**: 当前 Wiki 文件树 (按 category: root / entities / concepts / sources)
+- **右栏**: Markdown 预览 (SimpleMarkdown 组件支持标题/列表/段落，frontmatter 折叠，`[[wikilink]]` 可点击跳转)
+
+顶部"✦ 生成 Wiki"折叠面板, 生成完成后统计 + 错误列表
+
+侧边栏: 内容库组新增 "📖 Wiki 物化" 入口
+
+## 七、被拒绝的 llm_wiki 启发点
+
+| 启发点 | 为何不做 |
+|--------|---------|
+| Tauri 桌面壳 | 产品形态是 Web 多人协作 |
+| Chrome 剪藏插件 | 已有 RSS + 上传 + 语义搜索 |
+| Deep Research + Tavily | 已有 ResearchTab + Tavily 集成 |
+| Louvain 社区发现 | 数据量不足以发挥价值，延后到 v7.2 |
+| 持久化 content_entity_relations 边表 | 运行时 SQL (T1.3 的 CTE) 已够用 |
+| Adamic-Adar 替代 COUNT | 延后到 v7.2 (T2) |
+| task_purpose_docs 目标锚定 | 延后到 v7.2 (T2) |
+
+## 八、v7.1 成功指标
+
+| 指标 | v7.0 | v7.1 | 备注 |
+|------|------|------|------|
+| 重复 import 耗时 | ~3-5s (3 次 LLM) | < 50ms (0 次 LLM) | SHA256 缓存命中 |
+| 事实提取 F1 | 单次 baseline | 两段式预期 +20~30% | 需实测 |
+| 实体图谱准确性 | COUNT 单信号 | 4 信号加权 | 定性: source overlap 信号首次被利用 |
+| 回填工具 | 无 | Facts 页面按钮 | 支持 dryRun 预演 |
+| 产出形态数 | 1 (结构化 API) | 2 (API + Wiki 物化) | 新增 Markdown wiki (Obsidian 兼容) |
+
+## 九、文件清单
+
+**新增**:
+- `api/src/modules/content-library/migrations/003-content-sha256.sql`
+- `api/src/modules/content-library/wiki/templates.ts` (278 行)
+- `api/src/modules/content-library/wiki/wikiGenerator.ts` (357 行)
+- `webapp/src/pages/ContentLibraryWiki.tsx` (394 行)
+
+**修改**:
+- `api/src/services/assetLibrary.ts` (SHA256 缓存)
+- `api/src/modules/content-library/types.ts` (`useTwoStageExtraction` option)
+- `api/src/modules/content-library/consolidation/factExtractor.ts` (两段式)
+- `api/src/modules/content-library/ContentLibraryEngine.ts` (weighted graph + reextractBatch + wikiGenerator)
+- `api/src/modules/content-library/router.ts` (reextract + wiki endpoints)
+- `webapp/src/pages/ContentLibraryFacts.tsx` (回填按钮)
+- `webapp/src/App.tsx` (wiki 路由)
+- `webapp/src/components/Layout.tsx` (wiki 侧边栏)
+
+---
+
+*v7.1 Update: 2026-04-11*
+*灵感来源: https://github.com/nashsu/llm_wiki*
