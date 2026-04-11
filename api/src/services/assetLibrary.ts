@@ -1,6 +1,8 @@
 // Smart Asset Library Service
 // 负责: 文档导入 → 自动标签 → 向量化 → 质量评分 → 事实提取(v7.0)
+// v7.1: 新增 SHA256 内容哈希缓存，避免重复 LLM 调用
 
+import { createHash } from 'crypto';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { AssetLibraryItem, AutoTag, QualityFactors } from '../types/index.js';
@@ -22,6 +24,15 @@ export interface ImportResult {
   /** v7.0: 事实提取结果 */
   factsExtracted?: number;
   entitiesRegistered?: number;
+  /** v7.1: SHA256 命中缓存时为 true，跳过了 LLM 调用 */
+  skipped?: boolean;
+  contentSha256?: string;
+}
+
+/** v7.1: 计算内容的 SHA256 (先归一化空白) */
+function computeContentSha256(content: string): string {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  return createHash('sha256').update(normalized, 'utf8').digest('hex');
 }
 
 export class AssetLibraryService {
@@ -33,6 +44,38 @@ export class AssetLibraryService {
 
   async importAsset(input: ImportAssetInput): Promise<ImportResult> {
     console.log(`[AssetLibrary] Importing from ${input.source}`);
+
+    // v7.1 Step 0: 计算 SHA256，若命中已有 asset 则直接返回（零 LLM 调用）
+    const contentSha256 = computeContentSha256(input.content);
+    try {
+      const existing = await query(
+        `SELECT id, auto_tags, quality_score, embedding FROM asset_library
+          WHERE content_sha256 = $1
+          LIMIT 1`,
+        [contentSha256]
+      );
+      if (existing.rows.length > 0) {
+        const row = existing.rows[0];
+        console.log(`[AssetLibrary] SHA256 cache hit → asset ${row.id} (skipped LLM)`);
+        let cachedTags: AutoTag[] = [];
+        try {
+          cachedTags = typeof row.auto_tags === 'string'
+            ? JSON.parse(row.auto_tags)
+            : (row.auto_tags || []);
+        } catch { /* ignore */ }
+        return {
+          assetId: row.id,
+          tags: cachedTags,
+          qualityScore: Number(row.quality_score) || 0,
+          embeddingStored: !!row.embedding,
+          skipped: true,
+          contentSha256,
+        };
+      }
+    } catch (err) {
+      // content_sha256 列不存在时 (migration 未执行) 降级为无缓存模式
+      console.warn('[AssetLibrary] SHA256 cache check failed, falling back:', (err as Error).message);
+    }
 
     // Step 1: Generate auto tags
     const tags = await this.generateTags(input.content);
@@ -49,27 +92,60 @@ export class AssetLibraryService {
     // Step 5: Calculate initial combined weight
     const combinedWeight = this.calculateCombinedWeight(qualityScore, 0, new Date());
 
-    // Step 6: Save to database
-    const result = await query(
-      `INSERT INTO asset_library (
-        content, content_type, auto_tags, quality_score, quality_factors,
-        reference_weight, combined_weight, embedding, source, source_url, publish_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id`,
-      [
-        input.content,
-        input.contentType,
-        JSON.stringify(tags),
-        qualityScore,
-        JSON.stringify(qualityFactors),
-        0,
-        combinedWeight,
-        embedding ? JSON.stringify(embedding) : null,
-        input.source,
-        input.sourceUrl,
-        input.publishDate,
-      ]
-    );
+    // Step 6: Save to database (v7.1: 附带 content_sha256)
+    let result: any;
+    try {
+      result = await query(
+        `INSERT INTO asset_library (
+          content, content_type, auto_tags, quality_score, quality_factors,
+          reference_weight, combined_weight, embedding, source, source_url, publish_date,
+          content_sha256
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id`,
+        [
+          input.content,
+          input.contentType,
+          JSON.stringify(tags),
+          qualityScore,
+          JSON.stringify(qualityFactors),
+          0,
+          combinedWeight,
+          embedding ? JSON.stringify(embedding) : null,
+          input.source,
+          input.sourceUrl,
+          input.publishDate,
+          contentSha256,
+        ]
+      );
+    } catch (err) {
+      // content_sha256 列不存在时降级为旧版 INSERT
+      const msg = (err as Error).message || '';
+      if (msg.includes('content_sha256')) {
+        console.warn('[AssetLibrary] content_sha256 column missing, insert without hash');
+        result = await query(
+          `INSERT INTO asset_library (
+            content, content_type, auto_tags, quality_score, quality_factors,
+            reference_weight, combined_weight, embedding, source, source_url, publish_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          RETURNING id`,
+          [
+            input.content,
+            input.contentType,
+            JSON.stringify(tags),
+            qualityScore,
+            JSON.stringify(qualityFactors),
+            0,
+            combinedWeight,
+            embedding ? JSON.stringify(embedding) : null,
+            input.source,
+            input.sourceUrl,
+            input.publishDate,
+          ]
+        );
+      } else {
+        throw err;
+      }
+    }
 
     const assetId = result.rows[0].id;
 
@@ -100,6 +176,8 @@ export class AssetLibraryService {
       embeddingStored: !!embedding,
       factsExtracted,
       entitiesRegistered,
+      skipped: false,
+      contentSha256,
     };
   }
 
