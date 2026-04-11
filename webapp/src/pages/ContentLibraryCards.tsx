@@ -3,14 +3,25 @@ import { useState, useEffect } from 'react';
 
 const API_BASE = '/api/v1/content-library';
 
+/** 与 api ContentFact 对齐 */
+interface ContentFact {
+  id: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+  createdAt: string;
+}
+
+/** 与 api KnowledgeCard 对齐 */
 interface KnowledgeCard {
   entityId: string;
   entityName: string;
   entityType: string;
-  summary: string;
-  keyFacts: Array<{ predicate: string; object: string; confidence: number }>;
-  relatedEntities: Array<{ id: string; name: string; relationship: string }>;
-  lastUpdated: string;
+  coreData: Array<{ label: string; value: string; freshness: 'fresh' | 'aging' | 'stale' }>;
+  latestFacts: ContentFact[];
+  relatedEntities: Array<{ id: string; name: string; relation: string }>;
+  tokenCount: number;
 }
 
 export function ContentLibraryCards() {
@@ -84,25 +95,42 @@ export function ContentLibraryCards() {
             </div>
           </div>
 
-          {/* 摘要 */}
-          {card.summary && (
+          {/* 核心数据 (coreData) */}
+          {card.coreData && card.coreData.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <p className="text-gray-700 dark:text-gray-300">{card.summary}</p>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">核心数据</h3>
+              <div className="space-y-2">
+                {card.coreData.map((d, i) => {
+                  const freshColor = d.freshness === 'fresh' ? 'text-green-600' : d.freshness === 'aging' ? 'text-amber-600' : 'text-red-500';
+                  return (
+                    <div key={i} className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-gray-500">{d.label}: </span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{d.value}</span>
+                      </div>
+                      <span className={`text-xs ${freshColor}`}>● {d.freshness}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* 关键事实 */}
-          {card.keyFacts && card.keyFacts.length > 0 && (
+          {/* 最新事实 (latestFacts) */}
+          {card.latestFacts && card.latestFacts.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">关键事实</h3>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">最新事实</h3>
               <div className="space-y-2">
-                {card.keyFacts.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm text-gray-500">{f.predicate}: </span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">{f.object}</span>
+                {card.latestFacts.map(f => (
+                  <div key={f.id} className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1 text-sm">
+                      <span className="text-indigo-600 dark:text-indigo-400">{f.subject}</span>
+                      <span className="text-gray-400 mx-1">·</span>
+                      <span className="text-gray-500">{f.predicate}</span>
+                      <span className="text-gray-400 mx-1">→</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{f.object}</span>
                     </div>
-                    <span className="text-xs text-gray-400">{(f.confidence * 100).toFixed(0)}%</span>
+                    <span className="text-xs text-gray-400 shrink-0">{(f.confidence * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -117,18 +145,19 @@ export function ContentLibraryCards() {
                 {card.relatedEntities.map((r, i) => (
                   <button key={i} onClick={() => { setEntityId(r.id); loadCard(r.id); }}
                     className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm text-gray-700 dark:text-gray-300 hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
-                    title={r.relationship}>
+                    title={r.relation}>
                     {r.name}
+                    <span className="ml-1 text-[10px] text-gray-400">{r.relation}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 更新时间 */}
-          {card.lastUpdated && (
+          {/* Token 估算 */}
+          {Number.isFinite(card.tokenCount) && card.tokenCount > 0 && (
             <div className="px-6 py-3 bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-400 text-right">
-              最后更新: {new Date(card.lastUpdated).toLocaleDateString()}
+              约 {card.tokenCount} tokens
             </div>
           )}
         </div>

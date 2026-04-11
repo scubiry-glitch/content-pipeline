@@ -3,12 +3,14 @@ import { useState, useEffect } from 'react';
 
 const API_BASE = '/api/v1/content-library';
 
+/** 与 api TrendSignal 对齐 */
 interface TrendSignal {
   entityId: string;
   entityName: string;
+  metric: string;
   direction: 'rising' | 'falling' | 'stable' | 'volatile';
-  dataPoints: Array<{ date: string; value: string }>;
-  summary: string;
+  dataPoints: Array<{ time: string; value: string; source: string }>;
+  significance: number;
 }
 
 export function ContentLibraryTrends() {
@@ -91,19 +93,29 @@ export function ContentLibraryTrends() {
             return (
               <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{t.entityName || t.entityId}</h3>
-                  <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${dir.color}`}>
-                    <span className="material-symbols-outlined text-base">{dir.icon}</span>
-                    {dir.text}
-                  </span>
+                  <div>
+                    <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{t.entityName || t.entityId}</h3>
+                    {t.metric && <p className="text-xs text-gray-500 mt-0.5">指标: {t.metric}</p>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${dir.color}`}>
+                      <span className="material-symbols-outlined text-base">{dir.icon}</span>
+                      {dir.text}
+                    </span>
+                    {Number.isFinite(t.significance) && (
+                      <span className="px-2 py-0.5 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">
+                        显著度 {t.significance.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {t.summary && <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{t.summary}</p>}
                 {t.dataPoints && t.dataPoints.length > 0 && (
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {t.dataPoints.map((dp, j) => (
-                      <div key={j} className="flex flex-col items-center min-w-[80px] px-2 py-1.5 bg-gray-50 dark:bg-gray-900/50 rounded text-xs">
-                        <span className="text-gray-500">{new Date(dp.date).toLocaleDateString()}</span>
+                      <div key={j} className="flex flex-col items-center min-w-[96px] px-2 py-1.5 bg-gray-50 dark:bg-gray-900/50 rounded text-xs">
+                        <span className="text-gray-500">{dp.time ? new Date(dp.time).toLocaleDateString() : '—'}</span>
                         <span className="font-medium text-gray-900 dark:text-white mt-0.5">{dp.value}</span>
+                        {dp.source && <span className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[90px]" title={dp.source}>{dp.source}</span>}
                       </div>
                     ))}
                   </div>

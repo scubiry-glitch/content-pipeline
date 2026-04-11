@@ -1,21 +1,34 @@
 // 内容库 — ⑧ 事实保鲜度
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 const API_BASE = '/api/v1/content-library';
 
-interface StaleFact {
+/** 与 api ContentFact 对齐 (getStaleFacts 返回 ContentFact[]) */
+interface ContentFact {
   id: string;
+  assetId: string;
   subject: string;
   predicate: string;
   object: string;
+  context: Record<string, unknown>;
   confidence: number;
+  isCurrent: boolean;
   createdAt: string;
-  freshness: 'fresh' | 'aging' | 'stale';
-  daysSinceUpdate: number;
+}
+
+/** 前端派生的保鲜度 */
+type Freshness = 'fresh' | 'aging' | 'stale';
+
+function computeFreshness(createdAt: string, maxAgeDays: number): { freshness: Freshness; days: number } {
+  const days = Math.round((Date.now() - new Date(createdAt).getTime()) / 86400000);
+  let freshness: Freshness = 'stale';
+  if (days < maxAgeDays * 0.3) freshness = 'fresh';
+  else if (days < maxAgeDays * 0.7) freshness = 'aging';
+  return { freshness, days };
 }
 
 export function ContentLibraryFreshness() {
-  const [facts, setFacts] = useState<StaleFact[]>([]);
+  const [facts, setFacts] = useState<ContentFact[]>([]);
   const [loading, setLoading] = useState(true);
   const [maxAgeDays, setMaxAgeDays] = useState(90);
   const [domain, setDomain] = useState('');
@@ -34,7 +47,13 @@ export function ContentLibraryFreshness() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  /** 为每个 fact 派生 freshness 和 days */
+  const withFreshness = useMemo(
+    () => facts.map(f => ({ ...f, ...computeFreshness(f.createdAt, maxAgeDays) })),
+    [facts, maxAgeDays]
+  );
 
   const freshnessConfig: Record<string, { label: string; color: string; bg: string }> = {
     fresh: { label: '新鲜', color: 'text-green-700', bg: 'bg-green-100' },
@@ -42,8 +61,8 @@ export function ContentLibraryFreshness() {
     stale: { label: '过期', color: 'text-red-700', bg: 'bg-red-100' },
   };
 
-  const staleCount = facts.filter(f => f.freshness === 'stale').length;
-  const agingCount = facts.filter(f => f.freshness === 'aging').length;
+  const staleCount = withFreshness.filter(f => f.freshness === 'stale').length;
+  const agingCount = withFreshness.filter(f => f.freshness === 'aging').length;
 
   return (
     <div className="p-6">
@@ -66,7 +85,7 @@ export function ContentLibraryFreshness() {
       </div>
 
       {/* 摘要 */}
-      {facts.length > 0 && (
+      {withFreshness.length > 0 && (
         <div className="flex gap-4 mb-6">
           <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
             <span className="text-2xl font-bold text-red-600">{staleCount}</span>
@@ -77,7 +96,7 @@ export function ContentLibraryFreshness() {
             <span className="text-sm text-gray-500 ml-2">老化中</span>
           </div>
           <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <span className="text-2xl font-bold text-gray-600">{facts.length}</span>
+            <span className="text-2xl font-bold text-gray-600">{withFreshness.length}</span>
             <span className="text-sm text-gray-500 ml-2">总计</span>
           </div>
         </div>
@@ -85,11 +104,11 @@ export function ContentLibraryFreshness() {
 
       {loading ? (
         <div className="text-center py-12 text-gray-500">加载中...</div>
-      ) : facts.length === 0 ? (
+      ) : withFreshness.length === 0 ? (
         <div className="text-center py-12 text-gray-400">所有事实都在保鲜期内，或暂无数据。</div>
       ) : (
         <div className="space-y-2">
-          {facts.map(f => {
+          {withFreshness.map(f => {
             const cfg = freshnessConfig[f.freshness] || freshnessConfig.stale;
             return (
               <div key={f.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3">
@@ -104,7 +123,7 @@ export function ContentLibraryFreshness() {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-xs text-gray-500">{f.daysSinceUpdate ?? Math.round((Date.now() - new Date(f.createdAt).getTime()) / 86400000)} 天前</div>
+                  <div className="text-xs text-gray-500">{f.days} 天前</div>
                   <div className="text-xs text-gray-400">{(f.confidence * 100).toFixed(0)}%</div>
                 </div>
               </div>
