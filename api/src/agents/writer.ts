@@ -5,6 +5,7 @@ import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { Document, BlueTeamQuestion, ExpertProfile } from '../types/index.js';
+import { getWriterContext } from './contentLibraryContext.js';
 
 export interface WriterInput {
   topicId: string;
@@ -217,8 +218,11 @@ export class WriterAgent extends BaseAgent {
   }
 
   private async generateInitialDraft(input: WriterInput): Promise<string> {
-    const prompt = `你是一位资深财经产业研究撰稿人。请基于以下信息撰写深度研究报告。
+    // v7.1: 注入 Content Library ⑩⑪⑫ 产出物
+    const clContext = await getWriterContext(input.topic).catch(() => '');
 
+    const prompt = `你是一位资深财经产业研究撰稿人。请基于以下信息撰写深度研究报告。
+${clContext}
 ## 研究话题
 ${input.topic}
 

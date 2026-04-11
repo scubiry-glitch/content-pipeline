@@ -5,6 +5,7 @@ import { BaseAgent, AgentContext, AgentResult } from './base';
 import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { TopicPlan, OutlineSection, DataRequirement, DataNeed } from '../types/index.js';
+import { getPlannerContext } from './contentLibraryContext.js';
 
 export interface PlannerInput {
   topic: string;
@@ -493,7 +494,9 @@ ${input.context || '无特定背景'}
     insights?: KnowledgeInsight[],
     novelAngles?: NovelAngle[]
   ): Promise<OutlineSection[]> {
-    const prompt = this.buildContentDrivenPrompt(input, insights, novelAngles);
+    // v7.1: 注入 Content Library ①②③④ 产出物作为上下文
+    const clContext = await getPlannerContext(input.topic).catch(() => '');
+    const prompt = this.buildContentDrivenPrompt(input, insights, novelAngles) + clContext;
 
     const result = await this.llmRouter.generate(prompt, 'planning', {
       temperature: 0.7,

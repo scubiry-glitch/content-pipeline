@@ -7,6 +7,7 @@ import { generate } from '../services/llm.js';
 import { expertLibrary, Expert, ExpertRole, ROLE_NAMES, ROLE_DESCRIPTIONS } from '../services/expertLibrary.js';
 import { getExpertEngine } from '../modules/expert-library/singleton.js';
 import { buildSystemPrompt } from '../modules/expert-library/promptBuilder.js';
+import { getBlueTeamContext } from './contentLibraryContext.js';
 
 export interface BlueTeamConfig {
   mode: 'sequential' | 'parallel';     // 串行或并行模式
@@ -384,8 +385,11 @@ export class BlueTeamAgent extends BaseAgent {
     const roleName = ROLE_NAMES[expert.role];
     const roleDesc = ROLE_DESCRIPTIONS[expert.role];
 
-    const prompt = `${expert.systemPrompt}
+    // v7.1: 注入 Content Library ⑧⑬⑭ 产出物 (审核重点)
+    const clContext = await getBlueTeamContext(topic).catch(() => '');
 
+    const prompt = `${expert.systemPrompt}
+${clContext}
 ## 当前评审任务
 - 评审轮次：第${round}轮
 - 你的角色：${roleName}

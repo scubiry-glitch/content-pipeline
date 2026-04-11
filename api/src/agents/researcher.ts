@@ -6,6 +6,7 @@ import { LLMRouter } from '../providers';
 import { query } from '../db/connection';
 import { ResearchReport, CleanData, Insight, AnalysisResult, OutlineSection } from '../types/index.js';
 import { getWebSearchService, SearchResult } from '../services/webSearch.js';
+import { getResearcherContext } from './contentLibraryContext.js';
 
 export interface ResearcherInput {
   topicId: string;
@@ -495,8 +496,11 @@ ${realData.slice(0, 15).map((d, i) => `
     analysis: AnalysisResult,
     dataPackage: CleanData[]
   ): Promise<Insight[]> {
-    const prompt = `基于分析结果，生成研究洞察。
+    // v7.1: 注入 Content Library ⑤⑥⑦⑨ 产出物
+    const clContext = await getResearcherContext(topic).catch(() => '');
 
+    const prompt = `基于分析结果，生成研究洞察。
+${clContext}
 ## 分析结果
 ${JSON.stringify(analysis, null, 2)}
 
