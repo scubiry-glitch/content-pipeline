@@ -22,9 +22,18 @@ export function ContentLibraryTrends() {
 
   // 加载实体列表用于快速选择
   useEffect(() => {
-    fetch(`${API_BASE}/entities?limit=20`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setRecentEntities(Array.isArray(data) ? data : []))
+    fetch(`${API_BASE}/entities?limit=20&page=1`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) {
+          setRecentEntities([]);
+          return;
+        }
+        const list = Array.isArray(data) ? data : (data.items ?? []);
+        setRecentEntities(
+          list.map((e: { id: string; canonicalName: string }) => ({ id: e.id, canonicalName: e.canonicalName }))
+        );
+      })
       .catch(() => {});
   }, []);
 

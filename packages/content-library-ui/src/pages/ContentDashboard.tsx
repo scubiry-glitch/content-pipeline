@@ -19,7 +19,7 @@ export function ContentDashboard() {
       React.createElement('h2', null, '① 议题推荐'),
       topics.loading && React.createElement('p', null, '加载中...'),
       topics.data && React.createElement('ul', null,
-        topics.data.map(t =>
+        (topics.data.items ?? []).map(t =>
           React.createElement('li', { key: t.entityId },
             `${t.entityName} (得分: ${t.score.toFixed(2)}, 事实密度: ${t.factDensity})`
           )

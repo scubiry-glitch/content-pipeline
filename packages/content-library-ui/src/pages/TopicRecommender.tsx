@@ -11,7 +11,7 @@ export function TopicRecommender({ domain }: { domain?: string }) {
     React.createElement('h1', null, '议题推荐'),
     topics.loading && React.createElement('p', null, '加载中...'),
     topics.data && React.createElement('div', { className: 'topic-list' },
-      topics.data.map(t =>
+      (topics.data.items ?? []).map(t =>
         React.createElement('div', { key: t.entityId, className: 'topic-card' },
           React.createElement('h3', null, t.entityName),
           React.createElement('div', { className: 'scores' },

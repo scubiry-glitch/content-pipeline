@@ -4,13 +4,14 @@ import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 import { parse } from 'dotenv'
 
-// 只读取 api/.env 里的 PORT 用于本地 dev server 代理，避免把其中的 VITE_* 注入 process.env
-// （否则会覆盖 webapp/.env，生产构建把 localhost 打进包里，触发「公网页访问 loopback」被浏览器拦截）
+// 只读取 api/.env 里的 PORT / ADMIN_API_KEY 用于本地 dev server 代理
 const apiEnvPath = resolve(__dirname, '../api/.env')
 let apiPort = process.env.PORT || '3006'
+let adminApiKey = 'dev-api-key'
 if (existsSync(apiEnvPath)) {
   const parsed = parse(readFileSync(apiEnvPath, 'utf-8'))
   if (parsed.PORT) apiPort = parsed.PORT
+  if (parsed.ADMIN_API_KEY) adminApiKey = parsed.ADMIN_API_KEY
 }
 const API_URL = `http://localhost:${apiPort}`
 
@@ -40,7 +41,10 @@ export default defineConfig({
       '/api': {
         target: API_URL,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        headers: {
+          'x-api-key': adminApiKey
+        }
       }
     }
   }

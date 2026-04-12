@@ -24,7 +24,7 @@ export function KnowledgeCards() {
 
     // 实体列表
     entities.data && React.createElement('div', { className: 'entity-list' },
-      entities.data.map(e =>
+      (entities.data.items ?? []).map(e =>
         React.createElement('button', {
           key: e.id, className: 'entity-chip',
           onClick: () => fetchCard(e.id),

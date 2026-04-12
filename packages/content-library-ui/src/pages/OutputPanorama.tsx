@@ -63,13 +63,13 @@ export function OutputPanorama() {
   // 15 类产出物状态汇总
   const categories: OutputCategory[] = [
     // 选题阶段
-    { id: 'topics', number: '①', name: '有价值的议题', phase: '选题', status: 'live', count: topics.data?.length ?? null, description: '基于实体趋势和信息密度推荐的选题' },
+    { id: 'topics', number: '①', name: '有价值的议题', phase: '选题', status: 'live', count: topics.data?.total ?? null, description: '基于实体趋势和信息密度推荐的选题' },
     { id: 'trends', number: '②', name: '趋势信号', phase: '选题', status: 'live', count: null, description: '实体/指标的方向性变化检测' },
     { id: 'differentiation', number: '③', name: '差异化角度建议', phase: '选题', status: 'planned', count: null, description: '竞品未覆盖的独特切入点' },
     { id: 'gaps', number: '④', name: '知识空白/盲区', phase: '选题', status: 'planned', count: null, description: '有实体但缺事实支撑的领域' },
     // 研究阶段
-    { id: 'facts', number: '⑤', name: '关键事实', phase: '研究', status: 'live', count: facts.data?.length ?? null, description: '高置信度结构化事实三元组' },
-    { id: 'entityGraph', number: '⑥', name: '实体关系图谱', phase: '研究', status: 'live', count: entities.data?.length ?? null, description: '实体间关联网络可视化' },
+    { id: 'facts', number: '⑤', name: '关键事实', phase: '研究', status: 'live', count: facts.data?.total ?? null, description: '高置信度结构化事实三元组' },
+    { id: 'entityGraph', number: '⑥', name: '实体关系图谱', phase: '研究', status: 'live', count: entities.data?.total ?? null, description: '实体间关联网络可视化' },
     { id: 'delta', number: '⑦', name: '信息增量报告', phase: '研究', status: 'live', count: delta.data ? (delta.data.newFacts.length + delta.data.updatedFacts.length + delta.data.refutedFacts.length) : null, description: '按时间窗口的事实变化统计' },
     { id: 'freshness', number: '⑧', name: '事实保鲜度报告', phase: '研究', status: 'live', count: staleFacts.data?.length ?? null, description: '过期数据预警' },
     { id: 'cards', number: '⑨', name: '高密度知识卡片', phase: '研究', status: 'live', count: null, description: '单实体 L1 级精华浓缩' },

@@ -62,7 +62,9 @@ export function ContentLibrary() {
           const res = await fetch(url);
           if (res.ok) {
             const data = await res.json();
-            updated[idx].count = Array.isArray(data) ? data.length : (data.totalCount || 0);
+            updated[idx].count = Array.isArray(data)
+              ? data.length
+              : (typeof data?.total === 'number' ? data.total : (data.totalCount || 0));
           }
         } catch { /* ignore */ }
       })

@@ -36,10 +36,11 @@ export async function getPlannerContext(topic: string, domain?: string): Promise
   if (!isContentLibraryInitialized()) return '';
   const engine = getContentLibraryEngine();
 
-  const [topics, entities] = await Promise.all([
+  const [topicsPage, entities] = await Promise.all([
     safeCall('topicRecommendations', () => engine.getTopicRecommendations({ domain, limit: 5 })),
     safeCall('queryEntities', () => engine.queryEntities({ search: topic, limit: 5 })),
   ]);
+  const topics = topicsPage?.items ?? [];
 
   // 尝试获取第一个相关实体的趋势
   let trends: Awaited<ReturnType<typeof engine.getTrendSignals>> | null = null;
@@ -48,7 +49,7 @@ export async function getPlannerContext(topic: string, domain?: string): Promise
   }
 
   const lines: string[] = [];
-  if (topics && topics.length > 0) {
+  if (topics.length > 0) {
     lines.push('## 内容库·议题推荐 (①)');
     for (const t of topics.slice(0, 5)) {
       lines.push(`- **${t.entityName}** — 事实密度 ${t.factDensity}, 时效 ${t.timeliness?.toFixed?.(2) ?? '—'}, 空白度 ${t.gapScore?.toFixed?.(2) ?? '—'}`);

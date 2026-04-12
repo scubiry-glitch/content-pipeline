@@ -50,18 +50,27 @@ export function ContentLibraryBatchOps() {
   const triggerDirectoryScan = async () => {
     setStep('import', { status: 'running', message: '正在扫描目录...' });
     try {
-      const res = await fetch('/api/assets/bindings', { method: 'GET' });
+      const res = await fetch('/api/v1/assets/bindings', { method: 'GET' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const bindings = await res.json();
       const items = Array.isArray(bindings) ? bindings : bindings.items || [];
-      let imported = 0;
+      let totalImported = 0, totalErrors = 0, scanned = 0;
       for (const b of items.slice(0, 5)) {
         try {
-          await fetch(`/api/assets/bindings/${b.id}/scan`, { method: 'POST' });
-          imported++;
+          const scanRes = await fetch(`/api/v1/assets/bindings/${b.id}/scan`, { method: 'POST' });
+          if (scanRes.ok) {
+            const scanData = await scanRes.json();
+            totalImported += scanData.imported || 0;
+            totalErrors += scanData.errors || 0;
+          }
+          scanned++;
         } catch { /* ignore */ }
       }
-      setStep('import', { status: 'done', message: `扫描了 ${imported} 个绑定目录`, lastRun: new Date().toISOString() });
+      setStep('import', {
+        status: 'done',
+        message: `扫描 ${scanned} 个目录 · 新素材 ${totalImported} · 错误 ${totalErrors}`,
+        lastRun: new Date().toISOString(),
+      });
     } catch (err) {
       setStep('import', { status: 'error', message: (err as Error).message });
     }
@@ -78,7 +87,13 @@ export function ContentLibraryBatchOps() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setStep('ai', { status: 'done', message: `Job ${data.jobId || 'started'}, ${data.totalAssets || '?'} 个素材`, lastRun: new Date().toISOString() });
+      const processed = data.processed ?? data.totalAssets ?? data.queued ?? '?';
+      const msg = data.message && data.message !== 'No assets to process'
+        ? `${data.message}（处理 ${processed} 个）`
+        : processed === 0 || processed === '0'
+          ? '暂无待分析素材'
+          : `处理 ${processed} 个素材`;
+      setStep('ai', { status: 'done', message: msg, lastRun: new Date().toISOString() });
     } catch (err) {
       setStep('ai', { status: 'error', message: (err as Error).message });
     }

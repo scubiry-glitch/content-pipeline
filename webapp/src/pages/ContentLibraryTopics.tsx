@@ -30,8 +30,12 @@ interface KnowledgeGap {
   opportunity: string;
 }
 
+const TOPICS_PAGE_SIZE = 10;
+
 export function ContentLibraryTopics() {
   const [topics, setTopics] = useState<TopicRecommendation[]>([]);
+  const [topicsTotal, setTopicsTotal] = useState(0);
+  const [topicsPage, setTopicsPage] = useState(1);
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState('');
@@ -39,25 +43,42 @@ export function ContentLibraryTopics() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [enriching, setEnriching] = useState(false);
 
-  const load = async () => {
+  const load = async (pageArg?: number) => {
+    const page = pageArg ?? topicsPage;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (domain) params.set('domain', domain);
-      params.set('limit', '10');
+      const topicParams = new URLSearchParams();
+      if (domain) topicParams.set('domain', domain);
+      topicParams.set('limit', String(TOPICS_PAGE_SIZE));
+      topicParams.set('page', String(page));
+
+      const gapParams = new URLSearchParams();
+      if (domain) gapParams.set('domain', domain);
+      gapParams.set('limit', '10');
 
       const [topicsRes, gapsRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/topics/recommended?${params}`).then(r => r.ok ? r.json() : []),
-        fetch(`${API_BASE}/gaps?${params}`).then(r => r.ok ? r.json() : []),
+        fetch(`${API_BASE}/topics/recommended?${topicParams}`).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/gaps?${gapParams}`).then(r => r.ok ? r.json() : []),
       ]);
 
-      setTopics(topicsRes.status === 'fulfilled' ? (Array.isArray(topicsRes.value) ? topicsRes.value : []) : []);
+      if (topicsRes.status === 'fulfilled' && topicsRes.value) {
+        const raw = topicsRes.value as TopicRecommendation[] | { items?: TopicRecommendation[]; total?: number };
+        const list = Array.isArray(raw) ? raw : (raw.items ?? []);
+        const total = Array.isArray(raw) ? raw.length : (typeof raw.total === 'number' ? raw.total : list.length);
+        setTopics(list);
+        setTopicsTotal(total);
+      } else {
+        setTopics([]);
+        setTopicsTotal(0);
+      }
       setGaps(gapsRes.status === 'fulfilled' ? (Array.isArray(gapsRes.value) ? gapsRes.value : []) : []);
     } catch { /* ignore */ }
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(topicsPage); }, [topicsPage]);
+
+  const topicsTotalPages = Math.max(1, Math.ceil(topicsTotal / TOPICS_PAGE_SIZE) || 1);
 
   const toggleExpand = (idx: number) => {
     setExpanded(prev => {
@@ -70,10 +91,10 @@ export function ContentLibraryTopics() {
   const generateEnrichment = async () => {
     setEnriching(true);
     try {
-      const params = new URLSearchParams({ limit: '10' });
+      const params = new URLSearchParams({ limit: String(TOPICS_PAGE_SIZE), page: String(topicsPage) });
       if (domain) params.set('domain', domain);
       await fetch(`${API_BASE}/topics/enrich?${params}`, { method: 'POST' });
-      await load();
+      await load(topicsPage);
     } catch { /* ignore */ }
     setEnriching(false);
   };
@@ -116,7 +137,30 @@ export function ContentLibraryTopics() {
           type="text" value={domain} onChange={e => setDomain(e.target.value)}
           placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
         />
-        <button onClick={load} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
+        <button type="button" onClick={() => void load()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
+        {tab === 'topics' && topicsTotal > 0 && (
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <button
+              type="button"
+              disabled={topicsPage <= 1 || loading}
+              onClick={() => setTopicsPage(p => Math.max(1, p - 1))}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              上一页
+            </button>
+            <span>
+              第 {topicsPage} / {topicsTotalPages} 页（共 {topicsTotal} 条）
+            </span>
+            <button
+              type="button"
+              disabled={topicsPage >= topicsTotalPages || loading}
+              onClick={() => setTopicsPage(p => p + 1)}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              下一页
+            </button>
+          </div>
+        )}
         <button onClick={generateEnrichment} disabled={enriching}
           className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 text-sm"
           title="调用 LLM 生成议题标题/导语/角度，结果缓存到数据库">

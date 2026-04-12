@@ -17,6 +17,9 @@ import type {
   ContentBelief,
   Contradiction,
   TopicRecommendation,
+  TopicRecommendationsPage,
+  ContentFactsPage,
+  ContentEntitiesPage,
   TrendSignal,
   DeltaReport,
   KnowledgeCard,
@@ -420,6 +423,65 @@ export class ContentLibraryEngine {
     return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed };
   }
 
+  /** WHERE 子句构建（事实表）— 供 queryFacts / queryFactsPage 共用 */
+  private buildFactsFilter(options: {
+    subject?: string;
+    predicate?: string;
+    domain?: string;
+    currentOnly?: boolean;
+  }): { where: string; params: any[]; nextIdx: number } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (options.subject) {
+      conditions.push(`subject ILIKE $${idx++}`);
+      params.push(`%${options.subject}%`);
+    }
+    if (options.predicate) {
+      conditions.push(`predicate ILIKE $${idx++}`);
+      params.push(`%${options.predicate}%`);
+    }
+    if (options.currentOnly !== false) {
+      conditions.push('is_current = true');
+    }
+    if (options.domain) {
+      conditions.push(`context->>'domain' = $${idx++}`);
+      params.push(options.domain);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    return { where, params, nextIdx: idx };
+  }
+
+  /** WHERE 子句构建（实体表）— 供 queryEntities / queryEntitiesPage 共用 */
+  private buildEntitiesFilter(options: {
+    search?: string;
+    entityType?: string;
+    domainId?: string;
+  }): { where: string; params: any[]; nextIdx: number } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (options.search) {
+      conditions.push(`(canonical_name ILIKE $${idx} OR $${idx} = ANY(aliases))`);
+      params.push(`%${options.search}%`);
+      idx++;
+    }
+    if (options.entityType) {
+      conditions.push(`entity_type = $${idx++}`);
+      params.push(options.entityType);
+    }
+    if (options.domainId) {
+      conditions.push(`taxonomy_domain_id = $${idx++}`);
+      params.push(options.domainId);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    return { where, params, nextIdx: idx };
+  }
+
   /** 查询事实 */
   async queryFacts(options: {
     subject?: string;
@@ -429,35 +491,53 @@ export class ContentLibraryEngine {
     currentOnly?: boolean;
     limit?: number;
   }): Promise<ContentFact[]> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    if (options.subject) {
-      conditions.push(`subject ILIKE $${paramIndex++}`);
-      params.push(`%${options.subject}%`);
-    }
-    if (options.predicate) {
-      conditions.push(`predicate ILIKE $${paramIndex++}`);
-      params.push(`%${options.predicate}%`);
-    }
-    if (options.currentOnly !== false) {
-      conditions.push('is_current = true');
-    }
-    if (options.domain) {
-      conditions.push(`context->>'domain' = $${paramIndex++}`);
-      params.push(options.domain);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { where, params, nextIdx } = this.buildFactsFilter(options);
     const limit = options.limit || this.options.defaultSearchLimit;
 
     const result = await this.deps.db.query(
-      `SELECT * FROM content_facts ${where} ORDER BY created_at DESC LIMIT $${paramIndex}`,
+      `SELECT * FROM content_facts ${where} ORDER BY created_at DESC LIMIT $${nextIdx}`,
       [...params, limit]
     );
 
     return result.rows.map(this.mapFact);
+  }
+
+  /** 分页查询事实（HTTP GET /facts） */
+  async queryFactsPage(options: {
+    subject?: string;
+    predicate?: string;
+    domain?: string;
+    currentOnly?: boolean;
+    limit?: number;
+    offset?: number;
+    page?: number;
+  }): Promise<ContentFactsPage> {
+    const { where, params, nextIdx } = this.buildFactsFilter(options);
+    const limit = Math.min(Math.max(options.limit ?? this.options.defaultSearchLimit, 1), 200);
+    let offset = options.offset ?? 0;
+    if (!Number.isFinite(offset)) offset = 0;
+    offset = Math.max(offset, 0);
+    if (options.page != null && options.page > 0 && Number.isFinite(options.page)) {
+      offset = (options.page - 1) * limit;
+    }
+
+    const countResult = await this.deps.db.query(
+      `SELECT COUNT(*)::int AS c FROM content_facts ${where}`,
+      params
+    );
+    const total = Number(countResult.rows[0]?.c ?? 0);
+
+    const result = await this.deps.db.query(
+      `SELECT * FROM content_facts ${where} ORDER BY created_at DESC LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
+      [...params, limit, offset]
+    );
+
+    return {
+      items: result.rows.map(this.mapFact),
+      total,
+      limit,
+      offset,
+    };
   }
 
   /** 查询实体 */
@@ -467,33 +547,52 @@ export class ContentLibraryEngine {
     domainId?: string;
     limit?: number;
   }): Promise<ContentEntity[]> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    if (options.search) {
-      conditions.push(`(canonical_name ILIKE $${paramIndex} OR $${paramIndex} = ANY(aliases))`);
-      params.push(`%${options.search}%`);
-      paramIndex++;
-    }
-    if (options.entityType) {
-      conditions.push(`entity_type = $${paramIndex++}`);
-      params.push(options.entityType);
-    }
-    if (options.domainId) {
-      conditions.push(`taxonomy_domain_id = $${paramIndex++}`);
-      params.push(options.domainId);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { where, params, nextIdx } = this.buildEntitiesFilter(options);
     const limit = options.limit || this.options.defaultSearchLimit;
 
     const result = await this.deps.db.query(
-      `SELECT * FROM content_entities ${where} ORDER BY updated_at DESC LIMIT $${paramIndex}`,
+      `SELECT * FROM content_entities ${where} ORDER BY updated_at DESC LIMIT $${nextIdx}`,
       [...params, limit]
     );
 
     return result.rows.map(this.mapEntity);
+  }
+
+  /** 分页查询实体（HTTP GET /entities） */
+  async queryEntitiesPage(options: {
+    search?: string;
+    entityType?: string;
+    domainId?: string;
+    limit?: number;
+    offset?: number;
+    page?: number;
+  }): Promise<ContentEntitiesPage> {
+    const { where, params, nextIdx } = this.buildEntitiesFilter(options);
+    const limit = Math.min(Math.max(options.limit ?? this.options.defaultSearchLimit, 1), 200);
+    let offset = options.offset ?? 0;
+    if (!Number.isFinite(offset)) offset = 0;
+    offset = Math.max(offset, 0);
+    if (options.page != null && options.page > 0 && Number.isFinite(options.page)) {
+      offset = (options.page - 1) * limit;
+    }
+
+    const countResult = await this.deps.db.query(
+      `SELECT COUNT(*)::int AS c FROM content_entities ${where}`,
+      params
+    );
+    const total = Number(countResult.rows[0]?.c ?? 0);
+
+    const result = await this.deps.db.query(
+      `SELECT * FROM content_entities ${where} ORDER BY updated_at DESC LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
+      [...params, limit, offset]
+    );
+
+    return {
+      items: result.rows.map(this.mapEntity),
+      total,
+      limit,
+      offset,
+    };
   }
 
   // ============================================================
@@ -546,13 +645,41 @@ export class ContentLibraryEngine {
   async getTopicRecommendations(options?: {
     domain?: string;
     limit?: number;
+    /** 从 0 开始的跳过条数 */
+    offset?: number;
+    /** 1-based 页码；若设置则覆盖 offset */
+    page?: number;
     enrich?: boolean;   // true = 强制重新生成并保存缓存；false/undefined = 仅读缓存
-  }): Promise<TopicRecommendation[]> {
-    const limit = options?.limit || 10;
+  }): Promise<TopicRecommendationsPage> {
+    const rawLimit = options?.limit ?? 10;
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 200);
+    let offset = options?.offset ?? 0;
+    if (!Number.isFinite(offset)) offset = 0;
+    offset = Math.max(offset, 0);
+    if (options?.page != null && options.page > 0 && Number.isFinite(options.page)) {
+      offset = (options.page - 1) * limit;
+    }
     const forceEnrich = options?.enrich === true;
-    const domainFilter = options?.domain ? `AND ce.taxonomy_domain_id = $2` : '';
-    const params: any[] = [limit];
-    if (options?.domain) params.push(options.domain);
+    const domainFilter = options?.domain ? `AND ce.taxonomy_domain_id = $3` : '';
+    const listParams: any[] = options?.domain ? [limit, offset, options.domain] : [limit, offset];
+
+    const countSql = `
+      SELECT COUNT(*)::int AS total FROM (
+        SELECT ce.id
+        FROM content_entities ce
+        LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
+        WHERE 1=1 ${options?.domain ? 'AND ce.taxonomy_domain_id = $1' : ''}
+        GROUP BY ce.id
+        HAVING COUNT(cf.id) > 0
+      ) sub`;
+    const countParams = options?.domain ? [options.domain] : [];
+    let total = 0;
+    try {
+      const countResult = await this.deps.db.query(countSql, countParams);
+      total = Number(countResult.rows[0]?.total ?? 0);
+    } catch {
+      total = 0;
+    }
 
     const result = await this.deps.db.query(`
       SELECT
@@ -569,8 +696,8 @@ export class ContentLibraryEngine {
       GROUP BY ce.id, ce.canonical_name, ce.community_id, ce.community_cohesion
       HAVING COUNT(cf.id) > 0
       ORDER BY COUNT(cf.id) * AVG(cf.confidence) DESC
-      LIMIT $1
-    `, params);
+      LIMIT $1 OFFSET $2
+    `, listParams);
 
     // 基础结果 (纯指标)
     const base: TopicRecommendation[] = result.rows.map((row: any) => ({
@@ -590,7 +717,9 @@ export class ContentLibraryEngine {
       communityCohesion: row.community_cohesion ? Number(row.community_cohesion) : undefined,
     }));
 
-    if (base.length === 0) return base;
+    if (base.length === 0) {
+      return { items: [], total, limit, offset };
+    }
 
     // 读取缓存
     const entityIds = base.map(b => `'${b.entityId}'`).join(',');
@@ -611,7 +740,7 @@ export class ContentLibraryEngine {
       }
     } catch { /* 缓存表不存在时忽略 */ }
 
-    if (!forceEnrich) return base;
+    if (!forceEnrich) return { items: base, total, limit, offset };
 
     // 强制重新生成：对 top 5 调 LLM，写回缓存
     const enrichLimit = Math.min(limit, 5);
@@ -705,7 +834,7 @@ export class ContentLibraryEngine {
       console.warn('[getTopicRecommendations] LLM enrich failed:', err);
     }
 
-    return base;
+    return { items: base, total, limit, offset };
   }
 
   /** ② 趋势信号 */
@@ -1160,18 +1289,21 @@ export class ContentLibraryEngine {
     const limit = options?.limit || 20;
 
     // 首先尝试从 content_facts 中聚合共识
+    const consensusParams: any[] = [];
+    const domainCond = options?.domain
+      ? (() => { consensusParams.push(options.domain); return `AND context->>'domain' = $${consensusParams.length}`; })()
+      : '';
+    consensusParams.push(limit);
     const consensusQuery = `
       SELECT subject, predicate, object, COUNT(*) as fact_count, AVG(confidence) as avg_conf,
-             ARRAY_AGG(DISTINCT context->>'source' FILTER (WHERE context->>'source' IS NOT NULL)) as sources
+             ARRAY_AGG(DISTINCT context->>'source') FILTER (WHERE context->>'source' IS NOT NULL) as sources
       FROM content_facts
-      WHERE is_current = true
-      ${options?.domain ? 'AND context->\'domain\' = $1' : ''}
+      WHERE is_current = true ${domainCond}
       GROUP BY subject, predicate, object
       ORDER BY fact_count DESC, avg_conf DESC
-      LIMIT $2
+      LIMIT $${consensusParams.length}
     `;
-    const params = options?.domain ? [options.domain, limit] : [limit];
-    const result = await this.deps.db.query(consensusQuery, params);
+    const result = await this.deps.db.query(consensusQuery, consensusParams);
 
     // 构建共识列表
     const consensus = result.rows.map(row => ({
@@ -1181,6 +1313,11 @@ export class ContentLibraryEngine {
     }));
 
     // 查找分歧（相同主体和谓词，但对象不同）
+    const divParams: any[] = [];
+    const divDomainCond = options?.domain
+      ? (() => { divParams.push(options.domain); return `AND cf1.context->>'domain' = $${divParams.length}`; })()
+      : '';
+    divParams.push(limit);
     const divergenceQuery = `
       SELECT
         cf1.subject,
@@ -1195,11 +1332,10 @@ export class ContentLibraryEngine {
       WHERE cf1.is_current = true AND cf2.is_current = true
       AND cf1.id < cf2.id
       AND cf1.object != cf2.object
-      ${options?.domain ? 'AND cf1.context->\'domain\' = $1' : ''}
+      ${divDomainCond}
       ORDER BY avg_conf DESC
-      LIMIT $2
+      LIMIT $${divParams.length}
     `;
-    const divParams = options?.domain ? [options.domain, limit] : [limit];
     const divResult = await this.deps.db.query(divergenceQuery, divParams);
 
     const divergences = divResult.rows.map(row => ({

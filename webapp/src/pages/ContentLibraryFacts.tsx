@@ -4,6 +4,8 @@ import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
+const FACTS_PAGE_SIZE = 50;
+
 interface ContentFact {
   id: string;
   assetId: string;
@@ -27,6 +29,8 @@ interface ReextractResult {
 
 export function ContentLibraryFacts() {
   const [facts, setFacts] = useState<ContentFact[]>([]);
+  const [factsTotal, setFactsTotal] = useState(0);
+  const [factsPage, setFactsPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [domain, setDomain] = useState('');
@@ -39,20 +43,30 @@ export function ContentLibraryFacts() {
   const [reextracting, setReextracting] = useState(false);
   const [reextractResult, setReextractResult] = useState<ReextractResult | null>(null);
 
-  const loadFacts = async () => {
+  const loadFacts = async (pageArg?: number) => {
+    const page = pageArg ?? factsPage;
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.set('subject', search);
       if (domain) params.set('domain', domain);
-      params.set('limit', '50');
+      params.set('limit', String(FACTS_PAGE_SIZE));
+      params.set('page', String(page));
       const res = await fetch(`${API_BASE}/facts?${params}`);
-      if (res.ok) setFacts(await res.json());
+      if (res.ok) {
+        const raw = await res.json();
+        const list = Array.isArray(raw) ? raw : (raw?.items ?? []);
+        const total = Array.isArray(raw) ? raw.length : (typeof raw?.total === 'number' ? raw.total : list.length);
+        setFacts(list);
+        setFactsTotal(total);
+      }
     } catch { /* ignore */ }
     setLoading(false);
   };
 
-  useEffect(() => { loadFacts(); }, []);
+  useEffect(() => { void loadFacts(factsPage); }, [factsPage]);
+
+  const factsTotalPages = Math.max(1, Math.ceil(factsTotal / FACTS_PAGE_SIZE) || 1);
 
   const getFreshnessColor = (date: string) => {
     const days = (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24);
@@ -83,7 +97,7 @@ export function ContentLibraryFacts() {
         setReextractResult(data);
         if (!dryRun) {
           // 实际跑完后刷新事实列表
-          loadFacts();
+          void loadFacts(factsPage);
         }
       } else {
         alert(`回填失败: HTTP ${res.status}`);
@@ -181,14 +195,14 @@ export function ContentLibraryFacts() {
         </div>
       )}
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6 items-center">
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && loadFacts()}
+          onKeyDown={e => e.key === 'Enter' && (setFactsPage(1), void loadFacts(1))}
           placeholder="按主体搜索..."
-          className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
         <input
           type="text"
@@ -197,9 +211,36 @@ export function ContentLibraryFacts() {
           placeholder="领域过滤..."
           className="w-40 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
-        <button onClick={loadFacts} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+        <button
+          type="button"
+          onClick={() => { setFactsPage(1); void loadFacts(1); }}
+          className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
           搜索
         </button>
+        {factsTotal > 0 && (
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <button
+              type="button"
+              disabled={factsPage <= 1 || loading}
+              onClick={() => setFactsPage(p => Math.max(1, p - 1))}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              上一页
+            </button>
+            <span>
+              第 {factsPage} / {factsTotalPages} 页（共 {factsTotal} 条）
+            </span>
+            <button
+              type="button"
+              disabled={factsPage >= factsTotalPages || loading}
+              onClick={() => setFactsPage(p => p + 1)}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              下一页
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (

@@ -5,9 +5,11 @@ import { useState, useCallback } from 'react';
 import { apiGet, apiPost } from '../api-client.js';
 import type {
   TopicRecommendation,
+  TopicRecommendationsPage,
   TrendSignal,
   ContentFact,
-  ContentEntity,
+  ContentFactsPage,
+  ContentEntitiesPage,
   KnowledgeCard,
   Contradiction,
   SearchResult,
@@ -41,10 +43,10 @@ function useApiCall<T>() {
 }
 
 export function useContentLibrary() {
-  const topics = useApiCall<TopicRecommendation[]>();
+  const topics = useApiCall<TopicRecommendationsPage>();
   const trends = useApiCall<TrendSignal[]>();
-  const facts = useApiCall<ContentFact[]>();
-  const entities = useApiCall<ContentEntity[]>();
+  const facts = useApiCall<ContentFactsPage>();
+  const entities = useApiCall<ContentEntitiesPage>();
   const card = useApiCall<KnowledgeCard>();
   const contradictions = useApiCall<Contradiction[]>();
   const search = useApiCall<SearchResult>();
@@ -54,8 +56,14 @@ export function useContentLibrary() {
   return {
     // 1. 议题推荐
     topics,
-    fetchTopics: (domain?: string) =>
-      topics.execute(() => apiGet('/topics/recommended', domain ? { domain } : undefined)),
+    fetchTopics: (domain?: string, page?: number, limit?: number) =>
+      topics.execute(() =>
+        apiGet('/topics/recommended', {
+          ...(domain ? { domain } : {}),
+          ...(page != null && page > 0 ? { page: String(page) } : {}),
+          ...(limit != null && limit > 0 ? { limit: String(limit) } : {}),
+        })
+      ),
 
     // 2. 趋势信号
     trends,
@@ -64,13 +72,26 @@ export function useContentLibrary() {
 
     // 5. 关键事实
     facts,
-    fetchFacts: (subject?: string, domain?: string) =>
-      facts.execute(() => apiGet('/facts', { ...(subject && { subject }), ...(domain && { domain }) })),
+    fetchFacts: (subject?: string, domain?: string, page?: number, limit?: number) =>
+      facts.execute(() =>
+        apiGet('/facts', {
+          ...(subject && { subject }),
+          ...(domain && { domain }),
+          ...(page != null && page > 0 ? { page: String(page) } : {}),
+          ...(limit != null && limit > 0 ? { limit: String(limit) } : {}),
+        })
+      ),
 
     // 6. 实体列表
     entities,
-    fetchEntities: (search?: string) =>
-      entities.execute(() => apiGet('/entities', search ? { search } : undefined)),
+    fetchEntities: (search?: string, page?: number, limit?: number) =>
+      entities.execute(() =>
+        apiGet('/entities', {
+          ...(search ? { search } : {}),
+          ...(page != null && page > 0 ? { page: String(page) } : {}),
+          ...(limit != null && limit > 0 ? { limit: String(limit) } : {}),
+        })
+      ),
 
     // 7. 信息增量
     delta,

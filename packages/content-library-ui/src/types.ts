@@ -26,6 +26,22 @@ export interface ContentEntity {
   metadata: Record<string, any>;
 }
 
+/** GET /facts 分页 */
+export interface ContentFactsPage {
+  items: ContentFact[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** GET /entities 分页 */
+export interface ContentEntitiesPage {
+  items: ContentEntity[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface TieredContent {
   assetId: string;
   level: TierLevel;
@@ -42,6 +58,14 @@ export interface TopicRecommendation {
   timeliness: number;
   gapScore: number;
   suggestedAngles: string[];
+}
+
+/** GET /topics/recommended 分页响应 */
+export interface TopicRecommendationsPage {
+  items: TopicRecommendation[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface TrendSignal {

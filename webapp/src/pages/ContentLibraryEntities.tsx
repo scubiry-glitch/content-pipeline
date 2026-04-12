@@ -4,6 +4,8 @@ import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
+const ENTITIES_PAGE_SIZE = 50;
+
 interface ContentEntity {
   id: string;
   canonicalName: string;
@@ -21,22 +23,36 @@ interface EntityRelation {
 
 export function ContentLibraryEntities() {
   const [entities, setEntities] = useState<ContentEntity[]>([]);
+  const [entitiesTotal, setEntitiesTotal] = useState(0);
+  const [entitiesPage, setEntitiesPage] = useState(1);
   const [selected, setSelected] = useState<ContentEntity | null>(null);
   const [relations, setRelations] = useState<EntityRelation[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const loadEntities = async () => {
+  const loadEntities = async (pageArg?: number) => {
+    const page = pageArg ?? entitiesPage;
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      params.set('limit', '50');
+      params.set('limit', String(ENTITIES_PAGE_SIZE));
+      params.set('page', String(page));
       const res = await fetch(`${API_BASE}/entities?${params}`);
-      if (res.ok) setEntities(await res.json());
+      if (res.ok) {
+        const raw = await res.json();
+        const list = Array.isArray(raw) ? raw : (raw?.items ?? []);
+        const total = Array.isArray(raw) ? raw.length : (typeof raw?.total === 'number' ? raw.total : list.length);
+        setEntities(list);
+        setEntitiesTotal(total);
+      }
     } catch { /* ignore */ }
     setLoading(false);
   };
+
+  const entitiesTotalPages = Math.max(1, Math.ceil(entitiesTotal / ENTITIES_PAGE_SIZE) || 1);
+
+  useEffect(() => { void loadEntities(entitiesPage); }, [entitiesPage]);
 
   const loadGraph = async (entityId: string) => {
     try {
@@ -49,8 +65,6 @@ export function ContentLibraryEntities() {
     } catch { /* ignore */ }
   };
 
-  useEffect(() => { loadEntities(); }, []);
-
   const typeIcons: Record<string, string> = {
     company: '🏢', person: '👤', concept: '💡', metric: '📊',
     event: '📅', product: '📦', organization: '🏛️', location: '📍',
@@ -61,17 +75,44 @@ export function ContentLibraryEntities() {
       <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">实体图谱</h1>
       <ProductMetaBar productKey="entities" />
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6 items-center">
         <input
           type="text" value={search}
           onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && loadEntities()}
+          onKeyDown={e => e.key === 'Enter' && (setEntitiesPage(1), void loadEntities(1))}
           placeholder="搜索实体..."
-          className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
-        <button onClick={loadEntities} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+        <button
+          type="button"
+          onClick={() => { setEntitiesPage(1); void loadEntities(1); }}
+          className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
           搜索
         </button>
+        {entitiesTotal > 0 && (
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <button
+              type="button"
+              disabled={entitiesPage <= 1 || loading}
+              onClick={() => setEntitiesPage(p => Math.max(1, p - 1))}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              上一页
+            </button>
+            <span>
+              第 {entitiesPage} / {entitiesTotalPages} 页（共 {entitiesTotal} 个）
+            </span>
+            <button
+              type="button"
+              disabled={entitiesPage >= entitiesTotalPages || loading}
+              onClick={() => setEntitiesPage(p => p + 1)}
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              下一页
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

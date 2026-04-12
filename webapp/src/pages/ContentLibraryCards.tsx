@@ -32,9 +32,16 @@ export function ContentLibraryCards() {
   const [entities, setEntities] = useState<Array<{ id: string; canonicalName: string; entityType: string }>>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/entities?limit=30`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setEntities(Array.isArray(data) ? data : []))
+    fetch(`${API_BASE}/entities?limit=30&page=1`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) {
+          setEntities([]);
+          return;
+        }
+        const list = Array.isArray(data) ? data : (data.items ?? []);
+        setEntities(list);
+      })
       .catch(() => {});
   }, []);
 

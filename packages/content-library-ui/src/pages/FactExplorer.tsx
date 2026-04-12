@@ -24,7 +24,7 @@ export function FactExplorer() {
     facts.loading && React.createElement('p', null, '加载中...'),
     facts.error && React.createElement('p', { className: 'error' }, facts.error),
     facts.data && React.createElement('div', { className: 'fact-list' },
-      facts.data.map(f => React.createElement(FactCard, { key: f.id, fact: f }))
+      (facts.data.items ?? []).map(f => React.createElement(FactCard, { key: f.id, fact: f }))
     )
   );
 }

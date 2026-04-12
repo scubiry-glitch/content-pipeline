@@ -163,6 +163,22 @@ export interface EntityMetadata {
   [key: string]: any;
 }
 
+/** GET /facts 分页 */
+export interface ContentFactsPage {
+  items: ContentFact[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** GET /entities 分页 */
+export interface ContentEntitiesPage {
+  items: ContentEntity[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 /** 事实提取请求 */
 export interface FactExtractionRequest {
   content: string;
@@ -360,6 +376,14 @@ export interface TopicRecommendation {
   communityCohesion?: number;
   /** v7.2: 与 task purpose 的匹配度 */
   purposeAlignment?: number;
+}
+
+/** ① 议题推荐分页响应 */
+export interface TopicRecommendationsPage {
+  items: TopicRecommendation[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /** ② 趋势信号 */

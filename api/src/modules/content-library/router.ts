@@ -151,22 +151,26 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
 
     fastify.get('/facts', async (request, reply) => {
       const query = request.query as any;
-      return engine.queryFacts({
+      return engine.queryFactsPage({
         subject: query.subject,
         predicate: query.predicate,
         domain: query.domain,
         currentOnly: query.currentOnly !== 'false',
-        limit: query.limit ? parseInt(query.limit) : undefined,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+        offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
+        page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
       });
     });
 
     fastify.get('/entities', async (request, reply) => {
       const query = request.query as any;
-      return engine.queryEntities({
+      return engine.queryEntitiesPage({
         search: query.search,
         entityType: query.entityType,
         domainId: query.domainId,
-        limit: query.limit ? parseInt(query.limit) : undefined,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+        offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
+        page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
       });
     });
 
@@ -179,7 +183,9 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       return engine.getTopicRecommendations({
         domain: query.domain,
-        limit: query.limit ? parseInt(query.limit) : undefined,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+        offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
+        page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
         enrich: query.enrich === 'true',
       });
     });
@@ -189,11 +195,13 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       const result = await engine.getTopicRecommendations({
         domain: query.domain,
-        limit: query.limit ? parseInt(query.limit) : 10,
+        limit: query.limit ? parseInt(query.limit, 10) : 10,
+        offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
+        page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
         enrich: true,
       });
-      const enriched = result.filter(t => t.reason || t.titleSuggestion);
-      return reply.send({ ok: true, total: result.length, enriched: enriched.length });
+      const enriched = result.items.filter(t => t.reason || t.titleSuggestion);
+      return reply.send({ ok: true, total: result.total, pageItems: result.items.length, enriched: enriched.length });
     });
 
     // 知识空白
