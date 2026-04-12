@@ -336,7 +336,7 @@ export interface ProductionExperience {
 // 产出物类型 (15 类可消费产出物)
 // ============================================================
 
-/** ① 议题推荐 */
+/** ① 议题推荐 (v7.2: LLM 增强字段) */
 export interface TopicRecommendation {
   entityId: string;
   entityName: string;
@@ -345,6 +345,21 @@ export interface TopicRecommendation {
   timeliness: number;
   gapScore: number;
   suggestedAngles: string[];
+  /** v7.2: 一句话推荐理由 */
+  reason?: string;
+  /** v7.2: 建议文章标题 (15~25 字) */
+  titleSuggestion?: string;
+  /** v7.2: 80~120 字选题会导语 */
+  narrative?: string;
+  /** v7.2: 支撑证据事实 */
+  evidenceFacts?: Array<{ subject: string; predicate: string; object: string; confidence: number }>;
+  /** v7.2: 角度矩阵 */
+  angleMatrix?: Array<{ angle: string; rationale: string }>;
+  /** v7.2: Louvain 社区 */
+  communityId?: string;
+  communityCohesion?: number;
+  /** v7.2: 与 task purpose 的匹配度 */
+  purposeAlignment?: number;
 }
 
 /** ② 趋势信号 */

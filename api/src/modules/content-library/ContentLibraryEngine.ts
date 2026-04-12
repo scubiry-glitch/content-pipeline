@@ -462,11 +462,17 @@ export class ContentLibraryEngine {
   // ============================================================
 
   /** ① 有价值的议题推荐 */
+  /**
+   * ① 议题推荐 (v7.2: LLM 增强 — 每条议题附带 reason/title/narrative/angles)
+   */
   async getTopicRecommendations(options?: {
     domain?: string;
     limit?: number;
+    enrich?: boolean;  // v7.2: 默认 true, 调用 LLM 生成叙事
   }): Promise<TopicRecommendation[]> {
     const limit = options?.limit || 10;
+    const enrichLimit = Math.min(limit, 5);  // LLM 只处理 top 5
+    const doEnrich = options?.enrich !== false;
     const domainFilter = options?.domain ? `AND ce.taxonomy_domain_id = $2` : '';
     const params: any[] = [limit];
     if (options?.domain) params.push(options.domain);
@@ -475,27 +481,110 @@ export class ContentLibraryEngine {
       SELECT
         ce.id as entity_id,
         ce.canonical_name as entity_name,
+        ce.community_id,
+        ce.community_cohesion,
         COUNT(cf.id) as fact_count,
         MAX(cf.created_at) as latest_fact,
         AVG(cf.confidence) as avg_confidence
       FROM content_entities ce
       LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
       WHERE 1=1 ${domainFilter}
-      GROUP BY ce.id, ce.canonical_name
+      GROUP BY ce.id, ce.canonical_name, ce.community_id, ce.community_cohesion
       HAVING COUNT(cf.id) > 0
       ORDER BY COUNT(cf.id) * AVG(cf.confidence) DESC
       LIMIT $1
     `, params);
 
-    return result.rows.map(row => ({
+    // 基础结果 (纯指标)
+    const base: TopicRecommendation[] = result.rows.map((row: any) => ({
       entityId: row.entity_id,
       entityName: row.entity_name,
-      score: row.fact_count * row.avg_confidence,
+      score: Number(row.fact_count) * Number(row.avg_confidence),
       factDensity: Number(row.fact_count),
       timeliness: this.calculateTimeliness(row.latest_fact),
-      gapScore: 0, // TODO: Phase 3 — 空白度计算
-      suggestedAngles: [],
+      gapScore: 0,
+      suggestedAngles: [] as string[],
+      // v7.2 字段 (LLM 增强后填充)
+      reason: '',
+      titleSuggestion: '',
+      narrative: '',
+      evidenceFacts: [] as Array<{ subject: string; predicate: string; object: string; confidence: number }>,
+      angleMatrix: [] as Array<{ angle: string; rationale: string }>,
+      communityId: row.community_id || undefined,
+      communityCohesion: row.community_cohesion ? Number(row.community_cohesion) : undefined,
     }));
+
+    if (!doEnrich || base.length === 0) return base;
+
+    // LLM 增强: 对 top N 批量生成叙事
+    const topItems = base.slice(0, enrichLimit);
+
+    // 加载每个实体的证据事实 (top 5)
+    for (const item of topItems) {
+      try {
+        const factsResult = await this.deps.db.query(
+          `SELECT subject, predicate, object, confidence FROM content_facts
+           WHERE subject = $1 AND is_current = true ORDER BY confidence DESC LIMIT 5`,
+          [item.entityName]
+        );
+        item.evidenceFacts = factsResult.rows.map((f: any) => ({
+          subject: f.subject, predicate: f.predicate, object: f.object, confidence: Number(f.confidence),
+        }));
+      } catch { /* ignore */ }
+    }
+
+    // 批量 LLM 调用 (1 次 prompt 处理所有 topItems)
+    try {
+      const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
+      const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
+        items: topItems,
+        systemPrompt: `你是内容选题编辑。根据候选议题的事实证据，为每个议题产出 JSON 数组。
+每个元素: {"entityName":"实体名","reason":"一句话为什么现在值得写","titleSuggestion":"15~25字建议标题","narrative":"80~120字选题会导语","angleMatrix":[{"angle":"角度","rationale":"为什么有料"}]}
+严格输出 JSON 数组, 不要 markdown 代码块, 不要多余文字。`,
+        buildUserPrompt: (items) => {
+          const lines = items.map((t, i) => {
+            const evidenceLines = (t.evidenceFacts || []).map(
+              (f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`
+            ).join('\n');
+            return `${i + 1}. ${t.entityName}  密度=${t.factDensity} 时效=${t.timeliness.toFixed(2)} 分数=${t.score.toFixed(2)}\n${evidenceLines || '  (无证据事实)'}`;
+          }).join('\n\n');
+          return `候选议题:\n\n${lines}\n\n请为每个议题生成 reason/titleSuggestion/narrative/angleMatrix (JSON 数组):`;
+        },
+        parseResponse: (parsed: any) => {
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && Array.isArray(parsed.topics)) return parsed.topics;
+          return [];
+        },
+        maxTokens: 3000,
+        fallback: [],
+      });
+
+      if (!error && enriched.length > 0) {
+        for (const e of enriched) {
+          const match = topItems.find(t =>
+            t.entityName === e.entityName ||
+            t.entityName.includes(e.entityName) ||
+            e.entityName?.includes(t.entityName)
+          );
+          if (match) {
+            match.reason = String(e.reason || '');
+            match.titleSuggestion = String(e.titleSuggestion || '');
+            match.narrative = String(e.narrative || '');
+            if (Array.isArray(e.angleMatrix)) {
+              match.angleMatrix = e.angleMatrix.map((a: any) => ({
+                angle: String(a?.angle || ''),
+                rationale: String(a?.rationale || ''),
+              }));
+              match.suggestedAngles = match.angleMatrix.map((a: any) => a.angle).filter(Boolean);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[getTopicRecommendations] LLM enrich failed:', err);
+    }
+
+    return base;
   }
 
   /** ② 趋势信号 */
