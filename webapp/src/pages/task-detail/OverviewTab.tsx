@@ -1,5 +1,6 @@
 // 任务详情 - 概览 Tab (v5.0 - Material Design 3)
 // 布局逻辑: 1.输入 2.加工 3.输出 4.辅助工具
+import { useState, useEffect } from 'react';
 import { useOutletContext, Link } from 'react-router-dom';
 import type { Task } from '../../types';
 
@@ -654,6 +655,9 @@ export function OverviewTab() {
         </section>
       </div>
 
+      {/* ========== v7.2: 任务意图书 (Purpose Doc) ========== */}
+      <PurposeDocEditor taskId={task.id} />
+
       {/* ========== Bottom Global Action Bar ========== */}
       <div className="fixed bottom-0 left-[256px] right-0 h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-40 flex items-center justify-center px-8 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
         <div className="max-w-5xl w-full flex items-center justify-between">
@@ -681,6 +685,99 @@ export function OverviewTab() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// v7.2: 任务意图书编辑器 (受 llm_wiki purpose.md 启发)
+function PurposeDocEditor({ taskId }: { taskId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [purposeText, setPurposeText] = useState('');
+  const [goalEntities, setGoalEntities] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/v1/content-library/tasks/${taskId}/purpose`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setPurposeText(data.purposeText || '');
+          setGoalEntities((data.goalEntities || []).join(', '));
+          setLastSaved(data.updatedAt);
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [taskId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/content-library/tasks/${taskId}/purpose`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purposeText,
+          goalEntities: goalEntities.split(',').map(s => s.trim()).filter(Boolean),
+        }),
+      });
+      if (res.ok) setLastSaved(new Date().toISOString());
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="mb-8 mx-4">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 mb-2"
+      >
+        <span className="material-symbols-outlined text-base">{expanded ? 'expand_less' : 'expand_more'}</span>
+        任务意图书 (Purpose Doc)
+        {purposeText && <span className="w-2 h-2 bg-green-500 rounded-full" title="已填写" />}
+      </button>
+      {expanded && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+          <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">
+            描述此任务的研究目标和重点角度，Content Library 会据此加权议题推荐和 Agent 生成。
+          </p>
+          <textarea
+            value={purposeText}
+            onChange={e => setPurposeText(e.target.value)}
+            placeholder="例如: 研究 AI 芯片市场格局变化，重点关注 NVIDIA 和国产替代..."
+            rows={3}
+            className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-700 rounded-md dark:bg-gray-800 dark:text-white text-sm mb-2"
+          />
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">关注实体 (逗号分隔)</label>
+              <input
+                type="text"
+                value={goalEntities}
+                onChange={e => setGoalEntities(e.target.value)}
+                placeholder="如: NVIDIA, 华为, 寒武纪"
+                className="w-full px-3 py-1.5 border border-indigo-200 dark:border-indigo-700 rounded-md dark:bg-gray-800 dark:text-white text-sm"
+              />
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving || !purposeText.trim()}
+              className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+          {lastSaved && (
+            <p className="text-[10px] text-gray-400 mt-2">
+              上次保存: {new Date(lastSaved).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

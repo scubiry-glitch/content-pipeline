@@ -207,6 +207,34 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // ============================================================
+    // v7.2: Task Purpose Docs 目标锚定
+    // ============================================================
+
+    fastify.put('/tasks/:taskId/purpose', async (request, reply) => {
+      const { taskId } = request.params as any;
+      const body = (request.body || {}) as any;
+      if (!body.purposeText) {
+        reply.code(400);
+        return { error: 'purposeText is required' };
+      }
+      return engine.setTaskPurpose({
+        taskId,
+        purposeText: body.purposeText,
+        goalEntities: Array.isArray(body.goalEntities) ? body.goalEntities : undefined,
+      });
+    });
+
+    fastify.get('/tasks/:taskId/purpose', async (request, reply) => {
+      const { taskId } = request.params as any;
+      const result = await engine.getTaskPurpose(String(taskId));
+      if (!result) {
+        reply.code(404);
+        return { error: 'No purpose doc found for this task' };
+      }
+      return result;
+    });
+
+    // ============================================================
     // v7.2: Louvain 社区发现
     // ============================================================
 

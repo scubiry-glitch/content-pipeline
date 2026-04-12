@@ -73,6 +73,54 @@ export class ContentLibraryEngine {
   }
 
   // ============================================================
+  // v7.2: Task Purpose Docs 目标锚定
+  // ============================================================
+
+  /** 设置/更新任务意图书 */
+  async setTaskPurpose(params: {
+    taskId: string;
+    purposeText: string;
+    goalEntities?: string[];
+  }): Promise<{ taskId: string; updated: boolean }> {
+    const { taskId, purposeText, goalEntities } = params;
+    let embedding: number[] | null = null;
+    try {
+      embedding = await this.deps.embedding.embed(purposeText);
+    } catch { /* embedding 可选 */ }
+
+    const result = await this.deps.db.query(
+      `INSERT INTO task_purpose_docs (task_id, purpose_text, goal_entities, embedding, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (task_id) DO UPDATE SET
+         purpose_text = EXCLUDED.purpose_text,
+         goal_entities = EXCLUDED.goal_entities,
+         embedding = EXCLUDED.embedding,
+         updated_at = NOW()
+       RETURNING task_id`,
+      [taskId, purposeText, goalEntities || [], embedding ? JSON.stringify(embedding) : null]
+    );
+    return { taskId, updated: result.rows.length > 0 };
+  }
+
+  /** 读取任务意图书 */
+  async getTaskPurpose(taskId: string): Promise<{
+    taskId: string; purposeText: string; goalEntities: string[]; updatedAt: string;
+  } | null> {
+    const result = await this.deps.db.query(
+      `SELECT task_id, purpose_text, goal_entities, updated_at FROM task_purpose_docs WHERE task_id = $1`,
+      [taskId]
+    );
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    return {
+      taskId: row.task_id,
+      purposeText: row.purpose_text,
+      goalEntities: Array.isArray(row.goal_entities) ? row.goal_entities : [],
+      updatedAt: row.updated_at,
+    };
+  }
+
+  // ============================================================
   // Layer 2: 层级加载 (← OpenViking L0/L1/L2)
   // ============================================================
 
