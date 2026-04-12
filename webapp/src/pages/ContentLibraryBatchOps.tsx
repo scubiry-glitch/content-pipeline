@@ -1,10 +1,7 @@
 // 内容库 — 统一批量操作面板
-// v7.2 G3: 整合 Step 1-5 到一个向导式 UI
-// Step 1: 素材来源 (目录/上传/RSS)
-// Step 2: AI 分析 (向量化/质量评分)
-// Step 3: 事实提取 (两段式, SSE 进度)
-// Step 4: 知识图谱重算 (社区/边表)
-// Step 5: Wiki 重生成
+// v7.3: 认知综合预生成 + 断点续传 + 跳过/覆盖
+// Step 1: 素材来源 | Step 2: AI 分析 | Step 3: 事实提取
+// Step 4: 知识图谱重算 | Step 5: AI 产出物预生成 | Step 6: Wiki
 
 import { useState, useEffect, useRef } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
@@ -26,6 +23,15 @@ interface JobProgress {
   errors: number;
 }
 
+interface SynthesisProgress {
+  total: number;
+  processed: number;
+  generated: number;
+  skipped: number;
+  errors: number;
+  currentEntity?: string;
+}
+
 export function ContentLibraryBatchOps() {
   const [steps, setSteps] = useState<Record<string, StepStatus>>({
     import: { status: 'idle' },
@@ -33,6 +39,7 @@ export function ContentLibraryBatchOps() {
     extract: { status: 'idle' },
     graph: { status: 'idle' },
     topics: { status: 'idle' },
+    synthesis: { status: 'idle' },
     wiki: { status: 'idle' },
   });
   const [extractJobId, setExtractJobId] = useState<string | null>(null);
@@ -40,6 +47,14 @@ export function ContentLibraryBatchOps() {
   const [extractLimit, setExtractLimit] = useState(50);
   const [extractSource, setExtractSource] = useState<'assets' | 'rss'>('assets');
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Step 5b: 认知综合预生成
+  const [synthesisJobId, setSynthesisJobId] = useState<string | null>(null);
+  const [synthesisProgress, setSynthesisProgress] = useState<SynthesisProgress | null>(null);
+  const [synthesisOverwrite, setSynthesisOverwrite] = useState(false);
+  const [synthesisLimit, setSynthesisLimit] = useState(30);
+  const [synthesisCacheStats, setSynthesisCacheStats] = useState<{ total: number; entities: number } | null>(null);
+  const synthesisEsRef = useRef<EventSource | null>(null);
 
   // 通用 step 状态更新
   const setStep = (key: string, update: Partial<StepStatus>) => {
@@ -180,7 +195,7 @@ export function ContentLibraryBatchOps() {
     }
   };
 
-  // Step 5: 议题叙事预生成
+  // Step 5a: 议题叙事预生成
   const triggerTopicEnrich = async () => {
     setStep('topics', { status: 'running', message: '调用 LLM 生成议题叙事并缓存...' });
     try {
@@ -194,6 +209,86 @@ export function ContentLibraryBatchOps() {
       });
     } catch (err) {
       setStep('topics', { status: 'error', message: (err as Error).message });
+    }
+  };
+
+  // Step 5b: 认知综合预生成 — 读取缓存状态
+  const loadSynthesisCacheStats = async () => {
+    try {
+      const res = await fetch(`${API}/synthesize/cache/stats`);
+      if (res.ok) setSynthesisCacheStats(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  // Step 5b: 启动预生成 job + SSE
+  const startSynthesisJob = async () => {
+    setStep('synthesis', { status: 'running', message: '启动认知综合预生成...' });
+    setSynthesisProgress(null);
+    synthesisEsRef.current?.close();
+    try {
+      const res = await fetch(`${API}/synthesize/pregenerate/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: synthesisLimit, overwrite: synthesisOverwrite, minFacts: 3 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { jobId } = await res.json();
+      setSynthesisJobId(jobId);
+
+      const es = new EventSource(`${API}/synthesize/pregenerate/jobs/${jobId}/stream`);
+      synthesisEsRef.current = es;
+
+      const applyProgress = (d: any) => {
+        if (d.total !== undefined) {
+          setSynthesisProgress(prev => ({ ...prev!, ...d }));
+        }
+        if (d.processed !== undefined) {
+          const pct = d.total > 0 ? Math.round(d.processed / d.total * 100) : 0;
+          const skip = synthesisOverwrite ? '' : ` · 跳过 ${d.skipped || 0}`;
+          setStep('synthesis', {
+            status: 'running',
+            message: `${d.processed}/${d.total} (${pct}%) · 已生成 ${d.generated || 0}${skip}`,
+          });
+        }
+      };
+
+      es.onmessage = (e) => {
+        try { applyProgress(JSON.parse(e.data)); } catch { /* ignore */ }
+      };
+      es.addEventListener('total', (e: any) => {
+        try { const d = JSON.parse(e.data); setSynthesisProgress(p => ({ ...p!, total: d.total })); } catch { /* */ }
+      });
+      es.addEventListener('progress', (e: any) => {
+        try { applyProgress(JSON.parse(e.data)); } catch { /* ignore */ }
+      });
+      es.addEventListener('done', (e: any) => {
+        try {
+          const d = JSON.parse(e.data);
+          const isOk = d.status === 'completed';
+          setStep('synthesis', {
+            status: isOk ? 'done' : 'error',
+            message: `完成 ${d.generated || 0} 条 · 跳过 ${d.skipped || 0} · 错误 ${d.errors || 0}`,
+            lastRun: new Date().toISOString(),
+          });
+          loadSynthesisCacheStats();
+        } catch { /* ignore */ }
+        es.close();
+      });
+      es.onerror = () => {
+        setStep('synthesis', { status: 'done', message: 'SSE 已关闭', lastRun: new Date().toISOString() });
+        es.close();
+        loadSynthesisCacheStats();
+      };
+    } catch (err) {
+      setStep('synthesis', { status: 'error', message: (err as Error).message });
+    }
+  };
+
+  const cancelSynthesisJob = async () => {
+    if (synthesisJobId) {
+      await fetch(`${API}/synthesize/pregenerate/jobs/${synthesisJobId}`, { method: 'DELETE' }).catch(() => {});
+      synthesisEsRef.current?.close();
+      setStep('synthesis', { status: 'idle', message: '已取消' });
     }
   };
 
@@ -226,9 +321,13 @@ export function ContentLibraryBatchOps() {
     // Step 4-5 在 extract job done 后执行不太方便同步等待, 留给用户手动点
   };
 
-  // cleanup
+  // 初始化：加载缓存统计
   useEffect(() => {
-    return () => { eventSourceRef.current?.close(); };
+    loadSynthesisCacheStats();
+    return () => {
+      eventSourceRef.current?.close();
+      synthesisEsRef.current?.close();
+    };
   }, []);
 
   const statusIcon = (s: StepStatus['status']) => {
@@ -345,20 +444,109 @@ export function ContentLibraryBatchOps() {
           {steps.graph.message && <p className="text-sm text-gray-500 mt-1">{steps.graph.message}</p>}
         </div>
 
-        {/* Step 5: 议题叙事预生成 */}
+        {/* Step 5: AI 产出物预生成（5a 议题叙事 + 5b 认知综合） */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              {statusIcon(steps.topics.status)} Step 5: 议题叙事预生成
-            </h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            {(steps.topics.status === 'running' || steps.synthesis.status === 'running') ? '🔄' :
+             (steps.topics.status === 'error' || steps.synthesis.status === 'error') ? '❌' :
+             (steps.topics.status === 'done' && steps.synthesis.status === 'done') ? '✅' : '⚪'}
+            Step 5: AI 产出物预生成
+          </h3>
+
+          {/* 5a: 议题叙事 */}
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.topics.status)} 5a · 议题叙事</span>
+              </div>
+              <p className="text-xs text-gray-400">Top 10 议题 → 标题/导语/角度矩阵，缓存至 DB</p>
+              {steps.topics.message && <p className="text-xs text-gray-500 mt-0.5">{steps.topics.message}</p>}
+              {steps.topics.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
+            </div>
             <button onClick={triggerTopicEnrich} disabled={steps.topics.status === 'running'}
-              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50">
+              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50 shrink-0">
               ✍️ 生成叙事
             </button>
           </div>
-          <p className="text-xs text-gray-400">LLM 为 Top 10 议题生成标题/导语/角度并缓存到数据库，打开议题页直接读取</p>
-          {steps.topics.message && <p className="text-sm text-gray-500 mt-1">{steps.topics.message}</p>}
-          {steps.topics.lastRun && <p className="text-xs text-gray-400 mt-1">上次生成: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
+
+          {/* 5b: 认知综合 */}
+          <div className="pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.synthesis.status)} 5b · 认知综合</span>
+                  {synthesisCacheStats && (
+                    <span className="text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">
+                      缓存 {synthesisCacheStats.entities || 0} 实体
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">按实体逐一调 LLM 提炼洞察并写缓存，打开综合页直接读取</p>
+              </div>
+              <div className="flex gap-2 items-center shrink-0">
+                {steps.synthesis.status === 'running' ? (
+                  <button onClick={cancelSynthesisJob}
+                    className="px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600">
+                    ⏹ 取消
+                  </button>
+                ) : (
+                  <button onClick={startSynthesisJob}
+                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                    🧠 预生成
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 参数行 */}
+            <div className="flex gap-4 items-center mt-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input type="number" min={5} max={200} value={synthesisLimit}
+                  onChange={e => setSynthesisLimit(Math.min(200, Math.max(5, Number(e.target.value) || 30)))}
+                  className="w-14 px-1.5 py-0.5 border rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                个实体
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input type="checkbox" checked={synthesisOverwrite}
+                  onChange={e => setSynthesisOverwrite(e.target.checked)}
+                  className="rounded accent-indigo-600" />
+                覆盖已有缓存
+                {!synthesisOverwrite && <span className="text-[10px] text-green-600 ml-0.5">(断点续传)</span>}
+              </label>
+            </div>
+
+            {/* 进度条 */}
+            {synthesisProgress && synthesisProgress.total > 0 && (
+              <div className="mt-2">
+                <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                  <span>
+                    {synthesisProgress.processed}/{synthesisProgress.total}
+                    {synthesisProgress.currentEntity && (
+                      <span className="text-indigo-500 ml-1">· {synthesisProgress.currentEntity}</span>
+                    )}
+                  </span>
+                  <span>
+                    生成 {synthesisProgress.generated}
+                    {!synthesisOverwrite && ` · 跳过 ${synthesisProgress.skipped}`}
+                    {synthesisProgress.errors > 0 && ` · 错误 ${synthesisProgress.errors}`}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                  <div
+                    className="bg-indigo-500 rounded-full h-1.5 transition-all"
+                    style={{ width: `${Math.round(synthesisProgress.processed / synthesisProgress.total * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {steps.synthesis.message && (
+              <p className="text-xs text-gray-500 mt-1">{steps.synthesis.message}</p>
+            )}
+            {steps.synthesis.lastRun && (
+              <p className="text-[10px] text-gray-400">上次: {new Date(steps.synthesis.lastRun).toLocaleString()}</p>
+            )}
+          </div>
         </div>
 
         {/* Step 6: Wiki */}
@@ -386,7 +574,7 @@ export function ContentLibraryBatchOps() {
             🔄 一键全量更新 (Step 1→3 顺序执行)
           </button>
           <p className="text-xs text-gray-400 text-center mt-2">
-            Step 4-5 在事实提取完成后手动触发 (需确认数据正确)
+            Step 4–5 在事实提取完成后手动触发（需确认数据正确）
           </p>
         </div>
       </div>

@@ -1163,8 +1163,71 @@ export class ContentLibraryEngine {
     }));
   }
 
-  /** ⑩ 有价值的认知 (LLM 综合提炼) — v7.2 修复 6 bug + 降级策略 */
+  /** ⑩ 有价值的认知 — 先读缓存，命中直接返回；未命中调用 LLM 并写缓存 */
   async synthesizeInsights(options?: {
+    subjects?: string[];
+    domain?: string;
+    limit?: number;
+    forceRefresh?: boolean;  // true = 跳过缓存，强制重新生成
+  }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string; error?: string; factsUsed?: number; fromCache?: boolean }> {
+    // 构建 cache_key
+    let cacheKey: string;
+    if (options?.subjects && options.subjects.length === 1) {
+      cacheKey = `entity:${options.subjects[0]}`;
+    } else if (!options?.subjects?.length && options?.domain) {
+      cacheKey = `domain:${options.domain}`;
+    } else if (!options?.subjects?.length && !options?.domain) {
+      cacheKey = 'global';
+    } else {
+      cacheKey = `multi:${(options?.subjects || []).sort().join('+')}`;
+    }
+
+    // 读缓存（forceRefresh 时跳过）
+    if (!options?.forceRefresh) {
+      try {
+        const cached = await this.deps.db.query(
+          `SELECT insights, summary, facts_used FROM content_synthesis_cache WHERE cache_key = $1`,
+          [cacheKey],
+        );
+        if (cached.rows.length > 0) {
+          const row = cached.rows[0];
+          const insights = Array.isArray(row.insights) ? row.insights : JSON.parse(row.insights || '[]');
+          return { insights, summary: row.summary, factsUsed: row.facts_used, fromCache: true };
+        }
+      } catch { /* 缓存读取失败不影响主流程 */ }
+    }
+
+    // 调用 LLM 生成
+    const result = await this.synthesizeInsightsRaw(options);
+
+    // 写缓存（生成成功时）
+    if (result.insights.length > 0 && !result.error) {
+      try {
+        await this.deps.db.query(`
+          INSERT INTO content_synthesis_cache
+            (cache_key, scope_type, scope_value, insights, summary, facts_used, generated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, NOW())
+          ON CONFLICT (cache_key) DO UPDATE SET
+            insights = EXCLUDED.insights,
+            summary = EXCLUDED.summary,
+            facts_used = EXCLUDED.facts_used,
+            generated_at = NOW()
+        `, [
+          cacheKey,
+          cacheKey.startsWith('entity:') ? 'entity' : cacheKey.startsWith('domain:') ? 'domain' : 'global',
+          options?.subjects?.[0] ?? options?.domain ?? null,
+          JSON.stringify(result.insights),
+          result.summary || '',
+          result.factsUsed || 0,
+        ]);
+      } catch { /* 缓存写入失败不影响返回 */ }
+    }
+
+    return { ...result, fromCache: false };
+  }
+
+  /** ⑩ 内部：直接调 LLM，不经过缓存（供 synthesisJob 调用） */
+  async synthesizeInsightsRaw(options?: {
     subjects?: string[];
     domain?: string;
     limit?: number;
@@ -1175,17 +1238,26 @@ export class ContentLibraryEngine {
     // B2 fix: context->>'domain' 用 ->> 取文本值
     let factsResult: any = { rows: [] };
     for (const threshold of [0.5, 0.3, 0.0]) {
-      const domainClause = options?.domain ? `AND context->>'domain' = $1` : '';
+      // 过滤条件：支持 subjects（IN 列表） + domain（context 字段）
+      const conditions: string[] = [`is_current = true`, `confidence > ${threshold}`];
+      const params: any[] = [];
+      if (options?.subjects && options.subjects.length > 0) {
+        params.push(options.subjects);
+        conditions.push(`subject = ANY($${params.length})`);
+      }
+      if (options?.domain) {
+        params.push(options.domain);
+        conditions.push(`context->>'domain' = $${params.length}`);
+      }
+      params.push(limit * 5);
       const factsQuery = `
         SELECT DISTINCT subject, predicate, object, confidence, context
         FROM content_facts
-        WHERE is_current = true AND confidence > ${threshold}
-        ${domainClause}
+        WHERE ${conditions.join(' AND ')}
         ORDER BY confidence DESC
-        LIMIT $${options?.domain ? '2' : '1'}
+        LIMIT $${params.length}
       `;
-      const factsParams = options?.domain ? [options.domain, limit * 5] : [limit * 5];
-      factsResult = await this.deps.db.query(factsQuery, factsParams);
+      factsResult = await this.deps.db.query(factsQuery, params);
       if (factsResult.rows.length >= 3) break;  // 至少 3 条才有价值
     }
 

@@ -10,6 +10,13 @@ import {
   subscribeJob,
   listReextractJobs,
 } from './reextractJob.js';
+import {
+  startSynthesisJob,
+  getSynthesisJob,
+  cancelSynthesisJob,
+  subscribeSynthesisJob,
+  listSynthesisJobs,
+} from './synthesisJob.js';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
@@ -258,14 +265,79 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.getKnowledgeCard(entityId);
     });
 
-    // ⑩ 认知综合
+    // ⑩ 认知综合（读缓存优先）
     fastify.post('/synthesize', async (request, reply) => {
       const body = request.body as any;
       return engine.synthesizeInsights({
         subjects: body.subjects,
         domain: body.domain,
         limit: body.limit,
+        forceRefresh: body.forceRefresh === true,
       });
+    });
+
+    // ⑩ 认知综合预生成 — 启动异步 job
+    fastify.post('/synthesize/pregenerate/start', async (request, reply) => {
+      const body = (request.body || {}) as any;
+      const jobId = startSynthesisJob(engine, {
+        limit: body.limit ? parseInt(body.limit) : 50,
+        domain: body.domain,
+        overwrite: body.overwrite === true || body.overwrite === 'true',
+        minFacts: body.minFacts ? parseInt(body.minFacts) : 3,
+      });
+      return { jobId };
+    });
+
+    fastify.get('/synthesize/pregenerate/jobs', async () => listSynthesisJobs());
+
+    fastify.get('/synthesize/pregenerate/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      const state = getSynthesisJob(String(jobId));
+      if (!state) return { error: 'Job not found' };
+      return state;
+    });
+
+    fastify.delete('/synthesize/pregenerate/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      return { cancelled: cancelSynthesisJob(String(jobId)) };
+    });
+
+    // SSE 进度流
+    fastify.get('/synthesize/pregenerate/jobs/:jobId/stream', async (request, reply) => {
+      const { jobId } = request.params as any;
+      const state = getSynthesisJob(String(jobId));
+      if (!state) { reply.code(404); return { error: 'Job not found' }; }
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      reply.raw.write(`data: ${JSON.stringify(state)}\n\n`);
+
+      if (state.status !== 'running') { reply.raw.end(); return; }
+
+      const unsub = subscribeSynthesisJob(String(jobId), (event, data) => {
+        try {
+          reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (event === 'done') reply.raw.end();
+        } catch { /* connection closed */ }
+      });
+      request.raw.on('close', () => unsub());
+    });
+
+    // 查询缓存状态（有多少条 synthesis 已生成）
+    fastify.get('/synthesize/cache/stats', async () => {
+      const result = await engine['deps'].db.query(`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE scope_type = 'entity') AS entities,
+          COUNT(*) FILTER (WHERE scope_type = 'domain') AS domains,
+          MIN(generated_at) AS oldest,
+          MAX(generated_at) AS newest
+        FROM content_synthesis_cache
+      `);
+      return result.rows[0] || { total: 0 };
     });
 
     // ⑪ 素材组合推荐
