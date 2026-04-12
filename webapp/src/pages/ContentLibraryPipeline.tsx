@@ -1,6 +1,7 @@
 // 数据生产流水线可视化页面
 // v7.3: 流程图 + 分析摘要 + 点击弹窗 (上下游复用 PRODUCT_META)
-import { useState, useEffect } from 'react';
+// v7.3b: SVG 连线 + 按阶段/按步骤切换
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PRODUCT_META, type ProductMetaDef } from '../components/ContentLibraryProductMeta';
 import './ContentLibraryPipeline.css';
@@ -72,6 +73,27 @@ const PHASES = [
   { key: '审核', label: '审核阶段', cssClass: 'phase-review' },
 ] as const;
 
+/** 每个步骤的颜色 (与步骤节点 step-number 背景色一致) */
+const STEP_COLORS: Record<string, string> = {
+  step2:  'hsl(220, 50%, 55%)',
+  step3:  'hsl(220, 50%, 55%)',
+  step4:  'hsl(140, 45%, 40%)',
+  step5a: 'hsl(30, 50%, 50%)',
+  step5b: 'hsl(30, 50%, 50%)',
+  step6:  'hsl(270, 40%, 50%)',
+};
+
+/** 步骤分组定义 (按步骤视图用) */
+const STEP_GROUPS = [
+  { stepKey: 'step2',  label: 'Step 2: AI 分析',   color: STEP_COLORS.step2 },
+  { stepKey: 'step3',  label: 'Step 3: 事实提取',  color: STEP_COLORS.step3 },
+  { stepKey: 'step4',  label: 'Step 4: 图谱重算',  color: STEP_COLORS.step4 },
+  { stepKey: 'step5a', label: 'Step 5a: 议题叙事', color: STEP_COLORS.step5a },
+  { stepKey: 'step5b', label: 'Step 5b: 认知综合', color: STEP_COLORS.step5b },
+];
+
+type GroupMode = 'phase' | 'step';
+
 function getCount(o: typeof OUTPUTS[0], stats: OverviewStats | null): number | null {
   if (!stats || !o.statKey) return null;
   if (typeof o.statKey === 'function') return o.statKey(stats);
@@ -86,7 +108,38 @@ export function ContentLibraryPipeline() {
   const [loading, setLoading] = useState(true);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [modalNode, setModalNode] = useState<{ type: 'output' | 'step' | 'source'; key: string } | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>('phase');
   const navigate = useNavigate();
+
+  // SVG 连线
+  const flowRef = useRef<HTMLDivElement>(null);
+  const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const outputRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [lines, setLines] = useState<Array<{ x1: number; y1: number; x2: number; y2: number; color: string; key: string }>>([]);
+
+  const computeLines = useCallback(() => {
+    const container = flowRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const newLines: typeof lines = [];
+    for (const [stepKey, outputKeys] of Object.entries(STEP_OUTPUTS)) {
+      const stepEl = stepRefs.current[stepKey];
+      if (!stepEl) continue;
+      const sRect = stepEl.getBoundingClientRect();
+      const sx = sRect.right - rect.left;
+      const sy = sRect.top + sRect.height / 2 - rect.top;
+      const color = STEP_COLORS[stepKey] || '#999';
+      for (const ok of outputKeys) {
+        const outEl = outputRefs.current[ok];
+        if (!outEl) continue;
+        const oRect = outEl.getBoundingClientRect();
+        const ox = oRect.left - rect.left;
+        const oy = oRect.top + oRect.height / 2 - rect.top;
+        newLines.push({ x1: sx, y1: sy, x2: ox, y2: oy, color, key: `${stepKey}-${ok}` });
+      }
+    }
+    setLines(newLines);
+  }, []);
 
   useEffect(() => {
     fetch(`${API}/stats/overview`)
@@ -96,7 +149,17 @@ export function ContentLibraryPipeline() {
       .finally(() => setLoading(false));
   }, []);
 
+  // 重算连线 (加载完成 / 切换模式后)
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(computeLines, 100);
+    const onResize = () => computeLines();
+    window.addEventListener('resize', onResize);
+    return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
+  }, [loading, groupMode, computeLines]);
+
   const outputsByPhase = (phase: string) => OUTPUTS.filter(o => o.meta.phase === phase);
+  const outputsByStep = (stepKey: string) => OUTPUTS.filter(o => o.sourceStep === stepKey);
 
   // ============================================================
   // 弹窗内容
@@ -196,8 +259,17 @@ export function ContentLibraryPipeline() {
       if (!sd) return null;
       title = sd.title;
       statCards = sd.stats;
-      upstream = ['参见流程图上游连线'];
-      // 自动生成下游产出物列表
+      // 上游: 从 PRODUCT_META 汇总
+      const stepUpstreamMap: Record<string, string[]> = {
+        step2: ['Assets 素材 (文件上传/目录绑定/RSS 导入)', '可选: retryFailed 重试失败素材'],
+        step3: ['Assets 素材正文 (content 字段)', 'Step 2 的 ai_quality_score / ai_theme_id (可选过滤)'],
+        step4: ['⑤ content_facts (is_current=true)', '⑥ content_entities', 'content_facts 共现关系'],
+        step5a: ['⑤ content_entities + content_facts', 'LLM 调用 (completeWithSystem)'],
+        step5b: ['⑤ 高置信度事实 (confidence > 0.5)', 'LLM 综合提炼 (completeWithSystem)'],
+        step6: ['全部 content_entities + content_facts', 'asset_library L0 摘要', '.obsidian 配置'],
+      };
+      upstream = stepUpstreamMap[modalNode.key] || ['参见流程图上游连线'];
+      // 下游: 从 STEP_OUTPUTS 自动生成
       const stepOutputKeys = STEP_OUTPUTS[modalNode.key] || [];
       downstream = stepOutputKeys.map(k => {
         const o = OUTPUTS.find(x => x.key === k);
@@ -271,6 +343,32 @@ export function ContentLibraryPipeline() {
   };
 
   // ============================================================
+  // 产出物节点渲染 (共用)
+  // ============================================================
+  const renderOutputNode = (o: OutputDef) => {
+    const c = getCount(o, stats);
+    const stepNum = o.sourceStep.replace('step', '');
+    const stepColor = STEP_COLORS[o.sourceStep] || '#999';
+    return (
+      <div
+        key={o.key}
+        ref={el => { outputRefs.current[o.key] = el; }}
+        className={`output-node ${o.mode === 'precomputed' ? 'output-precomputed' : 'output-querytime'}`}
+        onClick={() => setModalNode({ type: 'output', key: o.key })}
+        title={`来源: Step ${stepNum} · ${o.mode === 'precomputed' ? '预计算' : '查询时计算'}`}
+        style={{ borderLeftColor: stepColor, borderLeftWidth: 3 }}
+      >
+        <span className="output-id">{o.meta.id}</span>
+        <span className="output-name">{o.meta.name}</span>
+        <span className="output-step-tag" style={{ color: stepColor, background: `color-mix(in srgb, ${stepColor} 12%, white)` }}>S{stepNum}</span>
+        {c !== null && <span className="output-count">{c}</span>}
+        {o.mode === 'precomputed' && <span className="output-mode-badge precomputed-badge">预</span>}
+        {o.mode === 'query-time' && <span className="output-mode-badge querytime-badge">⚡</span>}
+      </div>
+    );
+  };
+
+  // ============================================================
   // 渲染
   // ============================================================
   return (
@@ -314,8 +412,49 @@ export function ContentLibraryPipeline() {
         )}
       </div>
 
+      {/* 分组切换 + 图例 */}
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
+        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <button onClick={() => setGroupMode('phase')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${groupMode === 'phase' ? 'bg-white dark:bg-gray-700 shadow text-indigo-700 dark:text-indigo-300' : 'text-gray-500 hover:text-gray-700'}`}>
+            按阶段
+          </button>
+          <button onClick={() => setGroupMode('step')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${groupMode === 'step' ? 'bg-white dark:bg-gray-700 shadow text-indigo-700 dark:text-indigo-300' : 'text-gray-500 hover:text-gray-700'}`}>
+            按步骤
+          </button>
+        </div>
+        <div className="flex gap-3 text-[10px] text-gray-400">
+          <span>连线颜色 = 步骤颜色</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step3 }} /> S3</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step4 }} /> S4</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step5a }} /> S5</span>
+        </div>
+      </div>
+
       {/* 流程图 */}
-      <div className="pipeline-flow">
+      <div className="pipeline-flow" ref={flowRef}>
+        {/* SVG 连线层 */}
+        {lines.length > 0 && (
+          <svg className="pipeline-svg-overlay">
+            {lines.map(l => {
+              const dx = l.x2 - l.x1;
+              const cp = dx * 0.4;
+              return (
+                <path
+                  key={l.key}
+                  d={`M ${l.x1} ${l.y1} C ${l.x1 + cp} ${l.y1}, ${l.x2 - cp} ${l.y2}, ${l.x2} ${l.y2}`}
+                  stroke={l.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="5 3"
+                  fill="none"
+                  opacity="0.55"
+                />
+              );
+            })}
+          </svg>
+        )}
+
         {loading ? (
           <div className="text-center py-12 text-gray-500">加载统计数据中...</div>
         ) : (
@@ -337,60 +476,55 @@ export function ContentLibraryPipeline() {
               </div>
             </div>
 
-            {/* 列 2: 加工步骤 */}
+            {/* 列 2: 加工步骤 (带 ref) */}
             <div>
               <div className="pipeline-col-label">加工步骤</div>
               <div className="pipeline-steps">
-                <div className="step-node parallel-hint" onClick={() => setModalNode({ type: 'step', key: 'step2' })}>
+                <div className="step-node parallel-hint" ref={el => { stepRefs.current['step2'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step2' })}>
                   <div className="step-header">
                     <span className="step-number">2</span>
                     <span className="step-label">AI 批量分析</span>
                   </div>
                   <div className="step-desc">向量化 + 质量评分 + 主题 + 去重</div>
                   {stats && <div className="step-stat">{stats.assets.ai_analyzed}/{stats.assets.total} 已分析</div>}
-                  <div className="step-outputs-tag">→ ⑪ 素材推荐</div>
                 </div>
-                <div className="step-node parallel-hint" onClick={() => setModalNode({ type: 'step', key: 'step3' })}>
+                <div className="step-node parallel-hint" ref={el => { stepRefs.current['step3'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step3' })}>
                   <div className="step-header">
                     <span className="step-number">3</span>
                     <span className="step-label">两段式事实提取</span>
                   </div>
                   <div className="step-desc">analyze → extract → delta → resolve</div>
                   {stats && <div className="step-stat">{stats.facts} 事实 · {stats.entities} 实体</div>}
-                  <div className="step-outputs-tag">→ ⑤⑥ + ②④⑦⑧⑨⑫ (查询时)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
-                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step4' })}>
+                <div className="step-node" ref={el => { stepRefs.current['step4'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step4' })}>
                   <div className="step-header">
-                    <span className="step-number" style={{ background: 'hsl(140 45% 40%)' }}>4</span>
+                    <span className="step-number" style={{ background: 'hsl(140, 45%, 40%)' }}>4</span>
                     <span className="step-label">知识图谱重算</span>
                   </div>
                   <div className="step-desc">Louvain 社区 + 4 信号边表 + 观点</div>
                   {stats && <div className="step-stat">{stats.communities} 社区 · {stats.relations} 边 · {stats.beliefs} 观点</div>}
-                  <div className="step-outputs-tag">→ ⑬⑭ + ⑮ (查询时)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
-                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step5a' })}>
+                <div className="step-node" ref={el => { stepRefs.current['step5a'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step5a' })}>
                   <div className="step-header">
-                    <span className="step-number" style={{ background: 'hsl(30 50% 50%)' }}>5a</span>
+                    <span className="step-number" style={{ background: 'hsl(30, 50%, 50%)' }}>5a</span>
                     <span className="step-label">议题叙事预生成</span>
                   </div>
                   <div className="step-desc">Top 议题 → 标题/导语/角度矩阵</div>
-                  <div className="step-outputs-tag">→ ①③ (缓存)</div>
                 </div>
-                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step5b' })}>
+                <div className="step-node" ref={el => { stepRefs.current['step5b'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step5b' })}>
                   <div className="step-header">
-                    <span className="step-number" style={{ background: 'hsl(30 50% 50%)' }}>5b</span>
+                    <span className="step-number" style={{ background: 'hsl(30, 50%, 50%)' }}>5b</span>
                     <span className="step-label">认知综合预生成</span>
                   </div>
                   <div className="step-desc">按实体 LLM 提炼洞察 → 缓存</div>
                   {stats && <div className="step-stat">{stats.synthesisCached} 条综合缓存</div>}
-                  <div className="step-outputs-tag">→ ⑩ (预计算)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
-                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step6' })}>
+                <div className="step-node" ref={el => { stepRefs.current['step6'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step6' })}>
                   <div className="step-header">
-                    <span className="step-number" style={{ background: 'hsl(270 40% 50%)' }}>6</span>
+                    <span className="step-number" style={{ background: 'hsl(270, 40%, 50%)' }}>6</span>
                     <span className="step-label">Wiki 物化</span>
                   </div>
                   <div className="step-desc">Obsidian 兼容 Markdown vault</div>
@@ -398,48 +532,46 @@ export function ContentLibraryPipeline() {
               </div>
             </div>
 
-            {/* 列 3: 产出物 (按阶段分组) */}
+            {/* 列 3: 产出物 */}
             <div>
               <div className="pipeline-col-label">15 个产出物</div>
               <div className="pipeline-outputs">
-                {PHASES.map(phase => {
+                {/* 按阶段分组 */}
+                {groupMode === 'phase' && PHASES.map(phase => {
                   const items = outputsByPhase(phase.key);
                   if (items.length === 0) return null;
                   return (
                     <div key={phase.key} className={`phase-group ${phase.cssClass}`}>
                       <div className="phase-label">{phase.label}</div>
                       <div className="phase-items">
-                        {items.map(o => {
-                          const c = getCount(o, stats);
-                          const stepNum = o.sourceStep.replace('step', '');
-                          return (
-                            <div
-                              key={o.key}
-                              className={`output-node ${o.mode === 'precomputed' ? 'output-precomputed' : 'output-querytime'}`}
-                              onClick={() => setModalNode({ type: 'output', key: o.key })}
-                              title={`来源: Step ${stepNum} · ${o.mode === 'precomputed' ? '预计算' : '查询时计算'}`}
-                            >
-                              <span className="output-id">{o.meta.id}</span>
-                              <span className="output-name">{o.meta.name}</span>
-                              <span className="output-step-tag">S{stepNum}</span>
-                              {c !== null && <span className="output-count">{c}</span>}
-                              {o.mode === 'precomputed' && <span className="output-mode-badge precomputed-badge">预</span>}
-                              {o.mode === 'query-time' && <span className="output-mode-badge querytime-badge">⚡</span>}
-                            </div>
-                          );
-                        })}
+                        {items.map(o => renderOutputNode(o))}
                       </div>
                     </div>
                   );
                 })}
 
-                {/* Wiki (无 phase) */}
-                <div className="phase-group" style={{ borderColor: 'hsl(270 30% 75%)', background: 'hsl(270 20% 98%)' }}>
-                  <div className="phase-label" style={{ color: 'hsl(270 40% 40%)' }}>物化输出</div>
+                {/* 按步骤分组 */}
+                {groupMode === 'step' && STEP_GROUPS.map(sg => {
+                  const items = outputsByStep(sg.stepKey);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={sg.stepKey} className="phase-group" style={{ borderColor: sg.color, background: `color-mix(in srgb, ${sg.color} 6%, white)` }}>
+                      <div className="phase-label" style={{ color: sg.color }}>{sg.label} ({items.length} 个产出物)</div>
+                      <div className="phase-items">
+                        {items.map(o => renderOutputNode(o))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Wiki (始终显示) */}
+                <div className="phase-group" style={{ borderColor: 'hsl(270, 30%, 75%)', background: 'hsl(270, 20%, 98%)' }}>
+                  <div className="phase-label" style={{ color: 'hsl(270, 40%, 40%)' }}>物化输出</div>
                   <div className="phase-items">
-                    <div className="output-node" onClick={() => setModalNode({ type: 'output', key: 'wiki' })}>
+                    <div className="output-node" ref={el => { outputRefs.current['wiki'] = el; }} onClick={() => setModalNode({ type: 'output', key: 'wiki' })}>
                       <span className="output-id">📖</span>
                       <span className="output-name">{PRODUCT_META.wiki.name}</span>
+                      <span className="output-step-tag">S6</span>
                     </div>
                   </div>
                 </div>
