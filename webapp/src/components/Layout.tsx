@@ -63,6 +63,7 @@ const mainNavItems: NavItem[] = [
       { to: '/content-library/beliefs', label: '⑭ 观点演化', icon: '🔀' },
       { to: '/content-library/cross-domain', label: '⑮ 跨域关联', icon: '🌐' },
       { to: '/content-library/wiki', label: 'Wiki 物化', icon: '📖' },
+      { to: '/content-library/batch-ops', label: '批量操作', icon: '⚡' },
     ]
   },
   {
