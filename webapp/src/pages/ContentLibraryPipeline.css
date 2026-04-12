@@ -142,6 +142,15 @@
 .step-label { font-size: 12px; font-weight: 600; color: hsl(220 40% 25%); }
 .step-desc { font-size: 10px; color: hsl(220 20% 55%); margin-top: 2px; }
 .step-stat { font-size: 10px; color: hsl(220 30% 50%); margin-top: 4px; font-weight: 500; }
+.step-outputs-tag {
+  font-size: 9px;
+  color: hsl(250 40% 55%);
+  margin-top: 3px;
+  padding: 1px 6px;
+  background: hsl(250 30% 96%);
+  border-radius: 3px;
+  display: inline-block;
+}
 
 /* 产出物区域 */
 .pipeline-outputs {
@@ -197,6 +206,31 @@
   margin-left: 2px;
   font-weight: 600;
 }
+.output-step-tag {
+  font-size: 9px;
+  color: hsl(220 40% 55%);
+  background: hsl(220 30% 94%);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.output-mode-badge {
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 700;
+}
+.precomputed-badge {
+  color: hsl(140 50% 30%);
+  background: hsl(140 40% 92%);
+}
+.querytime-badge {
+  color: hsl(30 60% 40%);
+  background: hsl(30 50% 92%);
+}
+.output-precomputed { border-color: hsl(140 35% 70%); }
+.output-precomputed:hover { border-color: hsl(140 50% 50%); }
+.output-querytime { border-style: dashed; }
 
 /* 连接指示 (简化版，用 CSS 箭头代替 SVG) */
 .flow-arrow {
