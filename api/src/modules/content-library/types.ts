@@ -184,6 +184,10 @@ export interface FactExtractionRequest {
   content: string;
   assetId: string;
   sourceChunkIndex?: number;
+  /** v7.3: Step 2 产出的主题分类 ID，写入 fact.context.themeId */
+  themeId?: string;
+  /** v7.3: 主题名称 (用于 LLM 提示上下文) */
+  themeName?: string;
 }
 
 /** 事实提取结果 */

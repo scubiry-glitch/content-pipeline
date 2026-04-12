@@ -46,6 +46,10 @@ export function ContentLibraryBatchOps() {
   const [progress, setProgress] = useState<JobProgress | null>(null);
   const [extractLimit, setExtractLimit] = useState(50);
   const [extractSource, setExtractSource] = useState<'assets' | 'rss'>('assets');
+  /** v7.3 调整1: 质量分门槛 (0=不过滤, >0 = 过滤低于此分的素材) */
+  const [extractMinQuality, setExtractMinQuality] = useState(0);
+  /** v7.3 调整2: Step 2 重试失败的资产 */
+  const [retryFailed, setRetryFailed] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Step 5b: 认知综合预生成
@@ -91,14 +95,14 @@ export function ContentLibraryBatchOps() {
     }
   };
 
-  // Step 2: AI 批量分析
+  // Step 2: AI 批量分析 (v7.3: 断点续传 + 可选重试失败)
   const triggerAIBatch = async () => {
-    setStep('ai', { status: 'running', message: '启动 AI 批量分析...' });
+    setStep('ai', { status: 'running', message: retryFailed ? '启动 AI 分析 (含重试失败)...' : '启动 AI 批量分析...' });
     try {
       const res = await fetch(`${API_AI}/batch-process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize: 20 }),
+        body: JSON.stringify({ batchSize: 20, retryFailed }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -122,7 +126,12 @@ export function ContentLibraryBatchOps() {
       const res = await fetch(`${API}/reextract/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: extractLimit, onlyUnprocessed: true, source: extractSource }),
+        body: JSON.stringify({
+          limit: extractLimit,
+          onlyUnprocessed: true,
+          source: extractSource,
+          minQualityScore: extractMinQuality > 0 ? extractMinQuality : undefined,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { jobId } = await res.json();
@@ -314,11 +323,12 @@ export function ContentLibraryBatchOps() {
   };
 
   // 一键全量更新
+  // v7.3: Step 2 与 Step 3 无数据依赖，可并发执行 (Step 2 写 AI 元数据, Step 3 写知识三元组)
   const runAll = async () => {
     await triggerDirectoryScan();
     await triggerAIBatch();
     await startExtractJob();
-    // Step 4-5 在 extract job done 后执行不太方便同步等待, 留给用户手动点
+    // Step 2 & 3 的后台 job 并发运行；Step 4-6 需前置完成，留给用户手动触发
   };
 
   // 初始化：加载缓存统计
@@ -372,7 +382,7 @@ export function ContentLibraryBatchOps() {
           {steps.import.message && <p className="text-sm text-gray-500">{steps.import.message}</p>}
         </div>
 
-        {/* Step 2: AI 分析 */}
+        {/* Step 2: AI 分析 (v7.3: 断点续传 + 重试失败) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -383,7 +393,12 @@ export function ContentLibraryBatchOps() {
               🧠 启动分析
             </button>
           </div>
-          <p className="text-xs text-gray-400">向量化 + 质量评分 + 主题检测 + 去重</p>
+          <p className="text-xs text-gray-400">向量化 + 质量评分 + 主题检测 + 去重（断点续传: 卡住 &gt;30min 自动恢复）</p>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 cursor-pointer select-none">
+            <input type="checkbox" checked={retryFailed} onChange={e => setRetryFailed(e.target.checked)}
+              className="rounded accent-indigo-600" />
+            包含之前失败的素材
+          </label>
           {steps.ai.message && <p className="text-sm text-gray-500 mt-1">{steps.ai.message}</p>}
         </div>
 
@@ -414,7 +429,16 @@ export function ContentLibraryBatchOps() {
               )}
             </div>
           </div>
-          <p className="text-xs text-gray-400">analyze → extract → delta compress → entity resolve (断点续传)</p>
+          <div className="flex gap-4 items-center mt-1 flex-wrap">
+            <p className="text-xs text-gray-400">analyze → extract → delta compress → entity resolve (断点续传 + themeId 关联)</p>
+            <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
+              质量门槛
+              <input type="number" min={0} max={100} value={extractMinQuality}
+                onChange={e => setExtractMinQuality(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                className="w-12 px-1 py-0.5 border rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+              {extractMinQuality > 0 && <span className="text-amber-500 text-[10px]">跳过 &lt;{extractMinQuality} 分</span>}
+            </label>
+          </div>
           {progress && (
             <div className="mt-3">
               <div className="flex justify-between text-xs text-gray-500 mb-1">

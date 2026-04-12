@@ -153,9 +153,14 @@ export class FactExtractor {
       }
     }
 
+    // v7.3 调整3: 将 themeId/themeName 注入上下文，提高领域相关性
+    const themeHint = request.themeName
+      ? `\n【主题分类】${request.themeName}${request.themeId ? ` (ID: ${request.themeId})` : ''}`
+      : request.themeId ? `\n【主题 ID】${request.themeId}` : '';
+
     const userPrompt = analysisContext
-      ? `【上下文：前置分析结果】\n${analysisContext}\n\n【原始内容】\n${request.content}\n\n请基于上述分析，从原始内容中提取事实三元组和实体。`
-      : `从以下内容中提取事实三元组和实体:\n\n${request.content}`;
+      ? `【上下文：前置分析结果】\n${analysisContext}${themeHint}\n\n【原始内容】\n${request.content}\n\n请基于上述分析，从原始内容中提取事实三元组和实体。`
+      : `${themeHint ? `${themeHint}\n\n` : ''}从以下内容中提取事实三元组和实体:\n\n${request.content}`;
 
     const response = await this.llm.completeWithSystem(
       EXTRACTION_SYSTEM_PROMPT,

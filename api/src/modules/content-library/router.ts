@@ -22,6 +22,12 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
 
     // ============================================================
+    // v7.3: Pipeline 统一统计 (流水线可视化页面)
+    // ============================================================
+
+    fastify.get('/stats/overview', async () => engine.getOverviewStats());
+
+    // ============================================================
     // 辅助查询: 下拉选项列表
     // ============================================================
 
@@ -88,10 +94,12 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         dryRun: body.dryRun === true || body.dryRun === 'true',
         onlyUnprocessed: body.onlyUnprocessed !== false,
         source: body.source === 'rss' ? 'rss' : 'assets',
+        minQualityScore: body.minQualityScore ? parseInt(body.minQualityScore) : undefined,
       });
     });
 
     // v7.2 G2: 异步回填 job (大量素材, SSE 进度推送)
+    // v7.3: 支持 minQualityScore 过滤低质素材
     fastify.post('/reextract/start', async (request, reply) => {
       const body = (request.body || {}) as any;
       const jobId = startReextractJob(engine, {
@@ -100,6 +108,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : undefined,
         onlyUnprocessed: body.onlyUnprocessed !== false,
         source: body.source === 'rss' ? 'rss' : 'assets',
+        minQualityScore: body.minQualityScore ? parseInt(body.minQualityScore) : undefined,
       });
       return { jobId };
     });

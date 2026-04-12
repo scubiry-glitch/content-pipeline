@@ -177,19 +177,39 @@ export class PersistenceService {
 
   /**
    * 获取待处理的 Assets
+   * v7.3 调整2: 断点续传 — 恢复卡在 'processing' 超 30 分钟的资产，可选重试 'failed'
    */
   async getUnprocessedAssets(options: {
     limit?: number;
     minQualityScore?: number;
     maxAgeHours?: number;
+    /** v7.3: 也重试之前失败的资产 */
+    retryFailed?: boolean;
+    /** v7.3: 'processing' 超过此分钟数视为 stale，自动重试 (默认 30) */
+    staleMinutes?: number;
   } = {}): Promise<Asset[]> {
-    const { limit = 20, maxAgeHours = 168 } = options;
+    const { limit = 20, maxAgeHours = 168, retryFailed = false, staleMinutes = 30 } = options;
+
+    // 断点续传: 先把 stale 'processing' 资产重置为 'pending'
+    await query(
+      `UPDATE assets SET ai_processing_status = 'pending'
+       WHERE ai_processing_status = 'processing'
+         AND updated_at < NOW() - INTERVAL '${staleMinutes} minutes'`
+    );
+
+    // 可选: 重试失败的资产
+    if (retryFailed) {
+      await query(
+        `UPDATE assets SET ai_processing_status = 'pending'
+         WHERE ai_processing_status = 'failed'`
+      );
+    }
 
     const result = await query(
-      `SELECT 
+      `SELECT
         id, title, file_url as "fileUrl", file_type as "fileType", file_size as "fileSize",
         source, author, published_at as "publishedAt", created_at as "createdAt",
-        metadata
+        metadata, content
       FROM assets
       WHERE (ai_processing_status = 'pending' OR ai_processing_status IS NULL)
         AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'
@@ -210,6 +230,7 @@ export class PersistenceService {
       publishedAt: row.publishedAt,
       createdAt: row.createdAt,
       metadata: row.metadata || {},
+      content: row.content,
     }));
   }
 

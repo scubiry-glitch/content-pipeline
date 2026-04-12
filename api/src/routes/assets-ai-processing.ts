@@ -20,6 +20,10 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       priority?: 'high' | 'normal' | 'low';
       force?: boolean;
       includeEmbedding?: boolean;
+      /** v7.3 调整2: 重试之前失败的资产 */
+      retryFailed?: boolean;
+      /** v7.3 调整2: 批量大小 */
+      batchSize?: number;
       config?: {
         batchSize?: number;
         qualityThreshold?: number;
@@ -38,9 +42,10 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
         );
         assets = result.rows;
       } else {
-        // 自动获取未处理 assets
+        // v7.3 调整2: 自动获取未处理 assets (含 stale recovery)
         assets = await persistenceService.getUnprocessedAssets({
-          limit: 20,
+          limit: body.batchSize || 20,
+          retryFailed: body.retryFailed || false,
         });
       }
 
