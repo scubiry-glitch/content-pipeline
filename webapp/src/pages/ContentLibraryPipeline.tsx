@@ -12,7 +12,8 @@ const API = '/api/v1/content-library';
 // 统计数据类型
 // ============================================================
 interface OverviewStats {
-  assets: { total: number; ai_analyzed: number; fact_extracted: number; pending_ai: number; failed_ai: number };
+  assets: { total: number; ai_analyzed: number; fact_extracted: number; pending_ai: number; failed_ai: number; rss_imported: number };
+  rssItems: number;
   facts: number;
   entities: number;
   contradictions: number;
@@ -286,7 +287,10 @@ export function ContentLibraryPipeline() {
               { value: String(stats.assets.fact_extracted), label: '事实已提取' },
               { value: String(stats.assets.failed_ai), label: '处理失败' },
             ]
-          : [{ value: '-', label: 'RSS 源' }];
+          : [
+              { value: String(stats.rssItems), label: 'RSS 条目' },
+              { value: String(stats.assets.rss_imported), label: '已导入素材' },
+            ];
       }
       upstream = modalNode.key === 'assets'
         ? ['文件上传 / 目录绑定扫描 / API 导入']
@@ -471,6 +475,7 @@ export function ContentLibraryPipeline() {
                 <div className="source-node" onClick={() => setModalNode({ type: 'source', key: 'rss' })}>
                   <span className="source-icon">📡</span>
                   <span className="source-label">RSS 源</span>
+                  <span className="source-count">{stats?.rssItems ?? '-'} 条</span>
                 </div>
                 <div className="flow-arrow">→</div>
               </div>

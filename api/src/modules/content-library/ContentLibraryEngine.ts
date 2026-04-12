@@ -1615,7 +1615,8 @@ export class ContentLibraryEngine {
   // ============================================================
 
   async getOverviewStats(): Promise<{
-    assets: { total: number; ai_analyzed: number; fact_extracted: number; pending_ai: number; failed_ai: number };
+    assets: { total: number; ai_analyzed: number; fact_extracted: number; pending_ai: number; failed_ai: number; rss_imported: number };
+    rssItems: number;
     facts: number;
     entities: number;
     contradictions: number;
@@ -1631,7 +1632,7 @@ export class ContentLibraryEngine {
       } catch { return 0; }
     };
 
-    const [facts, entities, contradictions, beliefs, synthesis, relations, communities] =
+    const [facts, entities, contradictions, beliefs, synthesis, relations, communities, rssItems] =
       await Promise.all([
         safeCount('SELECT COUNT(*)::int AS c FROM content_facts WHERE is_current = true'),
         safeCount('SELECT COUNT(*)::int AS c FROM content_entities'),
@@ -1642,22 +1643,25 @@ export class ContentLibraryEngine {
         safeCount('SELECT COUNT(*)::int AS c FROM content_synthesis_cache'),
         safeCount('SELECT COUNT(*)::int AS c FROM content_entity_relations'),
         safeCount(`SELECT COUNT(DISTINCT community_id)::int AS c FROM content_entities WHERE community_id IS NOT NULL`),
+        safeCount(`SELECT COUNT(*)::int AS c FROM rss_items`),
       ]);
 
-    let assetRow = { total: 0, ai_analyzed: 0, fact_extracted: 0, pending_ai: 0, failed_ai: 0 };
+    let assetRow = { total: 0, ai_analyzed: 0, fact_extracted: 0, pending_ai: 0, failed_ai: 0, rss_imported: 0 };
     try {
       const ar = await this.deps.db.query(`SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE ai_analyzed_at IS NOT NULL)::int AS ai_analyzed,
         COUNT(*) FILTER (WHERE last_reextracted_at IS NOT NULL)::int AS fact_extracted,
         COUNT(*) FILTER (WHERE ai_processing_status = 'pending' OR ai_processing_status IS NULL)::int AS pending_ai,
-        COUNT(*) FILTER (WHERE ai_processing_status = 'failed')::int AS failed_ai
+        COUNT(*) FILTER (WHERE ai_processing_status = 'failed')::int AS failed_ai,
+        COUNT(*) FILTER (WHERE id LIKE 'rss-%')::int AS rss_imported
       FROM assets WHERE is_deleted IS NOT TRUE`);
       assetRow = ar.rows[0] || assetRow;
     } catch { /* assets 表不存在时 fallback */ }
 
     return {
       assets: assetRow,
+      rssItems,
       facts, entities, contradictions, beliefs,
       synthesisCached: synthesis, relations, communities,
     };
