@@ -26,6 +26,8 @@ export interface ReextractJobOptions {
   minConfidence?: number;
   onlyUnprocessed?: boolean;
   source?: 'assets' | 'rss';
+  /** v7.3 调整1: 利用 Step 2 质量分过滤低质素材 */
+  minQualityScore?: number;
 }
 
 type SSEListener = (event: string, data: any) => void;

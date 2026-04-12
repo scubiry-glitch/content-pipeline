@@ -303,6 +303,8 @@ export class ContentLibraryEngine {
     dryRun?: boolean;
     onlyUnprocessed?: boolean;
     source?: 'assets' | 'rss';
+    /** v7.3 调整1: 利用 Step 2 质量分过滤低质素材 (仅 source='assets') */
+    minQualityScore?: number;
   }): Promise<{
     processed: number;
     newFacts: number;
@@ -311,6 +313,7 @@ export class ContentLibraryEngine {
     errors: number;
     tokenEstimate: number;
     resumable: boolean;
+    filteredByQuality: number;
   }> {
     const limit = Math.min(options.limit || 20, 200);
     const minConf = options.minConfidence ?? this.options.factConfidenceThreshold;
@@ -348,10 +351,15 @@ export class ContentLibraryEngine {
       if (onlyUnprocessed) {
         conds.push(`last_reextracted_at IS NULL`);
       }
+      // v7.3 调整1: 质量分门槛过滤 (利用 Step 2 的 ai_quality_score)
+      if (options.minQualityScore != null && options.minQualityScore > 0) {
+        conds.push(`ai_quality_score >= $${idx++}`);
+        params.push(options.minQualityScore);
+      }
       const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
       params.push(limit);
-      // 尝试从 assets 表查，fallback 到 asset_library
-      let sql = `SELECT id, content FROM assets ${where} ORDER BY created_at DESC LIMIT $${idx}`;
+      // v7.3 调整3: 同时取 ai_theme_id, ai_quality_score 供后续使用
+      let sql = `SELECT id, content, ai_theme_id, ai_quality_score FROM assets ${where} ORDER BY created_at DESC LIMIT $${idx}`;
       try {
         var assets = await this.deps.db.query(sql, params);
       } catch {
@@ -367,6 +375,7 @@ export class ContentLibraryEngine {
     let skipped = 0;
     let errors = 0;
     let tokenEstimate = 0;
+    let filteredByQuality = 0;
 
     for (const row of assets.rows) {
       try {
@@ -382,9 +391,11 @@ export class ContentLibraryEngine {
           continue;
         }
 
+        // v7.3 调整3: 传递 themeId 让 fact.context 关联主题分类
         const extraction = await this.factExtractor.extract({
           content,
           assetId: row._assetId || row.id,
+          themeId: row.ai_theme_id || undefined,
         });
 
         for (const entity of extraction.entities) {
@@ -394,6 +405,10 @@ export class ContentLibraryEngine {
         const highQuality = extraction.facts.filter(f => f.confidence >= minConf);
 
         for (const fact of highQuality) {
+          // v7.3 调整3: 将 themeId 注入 fact context
+          if (row.ai_theme_id && fact.context) {
+            fact.context.themeId = row.ai_theme_id;
+          }
           const compressed = await this.deltaCompressor.compress(fact);
           if (compressed.supersededBy) {
             updatedFacts++;
@@ -420,7 +435,7 @@ export class ContentLibraryEngine {
       }
     }
 
-    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed };
+    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed, filteredByQuality };
   }
 
   /** WHERE 子句构建（事实表）— 供 queryFacts / queryFactsPage 共用 */
