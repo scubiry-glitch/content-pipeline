@@ -208,12 +208,24 @@ export class PersistenceService {
     }
 
     // v7.3: 构建可选的 source 过滤
-    const sourceCond = options.sources && options.sources.length > 0
-      ? `AND source = ANY($2::text[])`
-      : '';
+    // RSS 导入的素材 id 以 'rss-' 开头 (source 列存的是源名称如 "36氪"，不是 'rss')
+    // 所以 'rss' 需要特殊处理：用 id LIKE 'rss-%' 匹配
+    let sourceCond = '';
     const params: any[] = [limit];
     if (options.sources && options.sources.length > 0) {
-      params.push(options.sources);
+      const hasRss = options.sources.includes('rss');
+      const otherSources = options.sources.filter(s => s !== 'rss');
+      const conditions: string[] = [];
+      if (otherSources.length > 0) {
+        params.push(otherSources);
+        conditions.push(`source = ANY($${params.length}::text[])`);
+      }
+      if (hasRss) {
+        conditions.push(`id LIKE 'rss-%'`);
+      }
+      if (conditions.length > 0) {
+        sourceCond = `AND (${conditions.join(' OR ')})`;
+      }
     }
 
     const result = await query(
