@@ -30,6 +30,7 @@ import { FactExtractor } from './consolidation/factExtractor.js';
 import { EntityResolver } from './consolidation/entityResolver.js';
 import { DeltaCompressor } from './consolidation/deltaCompressor.js';
 import { WikiGenerator } from './wiki/wikiGenerator.js';
+import { CommunityDetector } from './reasoning/communityDetector.js';
 
 export class ContentLibraryEngine {
   private deps: ContentLibraryDeps;
@@ -41,6 +42,8 @@ export class ContentLibraryEngine {
   private deltaCompressor: DeltaCompressor;
   /** v7.1: Wiki 生成器 (Obsidian 兼容物化视图) */
   readonly wikiGenerator: WikiGenerator;
+  /** v7.2: Louvain 社区发现 */
+  private communityDetector: CommunityDetector;
 
   constructor(deps: ContentLibraryDeps, options?: ContentLibraryOptions) {
     this.deps = deps;
@@ -59,6 +62,14 @@ export class ContentLibraryEngine {
 
     // v7.1: Wiki 生成器
     this.wikiGenerator = new WikiGenerator(deps.db);
+
+    // v7.2: Louvain 社区发现
+    this.communityDetector = new CommunityDetector(deps.db);
+  }
+
+  /** v7.2: Louvain 社区重算 */
+  async recomputeCommunities() {
+    return this.communityDetector.recompute();
   }
 
   // ============================================================

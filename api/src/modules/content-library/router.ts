@@ -207,6 +207,14 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // ============================================================
+    // v7.2: Louvain 社区发现
+    // ============================================================
+
+    fastify.post('/communities/recompute', async (request, reply) => {
+      return engine.recomputeCommunities();
+    });
+
+    // ============================================================
     // v7.1: Wiki 生成层 (Obsidian 兼容物化视图)
     // ============================================================
 
