@@ -1611,6 +1611,59 @@ export class ContentLibraryEngine {
   }
 
   // ============================================================
+  // v7.3: Pipeline 统一统计 (供流水线可视化页面)
+  // ============================================================
+
+  async getOverviewStats(): Promise<{
+    assets: { total: number; ai_analyzed: number; fact_extracted: number; pending_ai: number; failed_ai: number };
+    facts: number;
+    entities: number;
+    contradictions: number;
+    beliefs: number;
+    synthesisCached: number;
+    relations: number;
+    communities: number;
+  }> {
+    const safeCount = async (sql: string): Promise<number> => {
+      try {
+        const r = await this.deps.db.query(sql);
+        return Number(r.rows[0]?.c) || 0;
+      } catch { return 0; }
+    };
+
+    const [facts, entities, contradictions, beliefs, synthesis, relations, communities] =
+      await Promise.all([
+        safeCount('SELECT COUNT(*)::int AS c FROM content_facts WHERE is_current = true'),
+        safeCount('SELECT COUNT(*)::int AS c FROM content_entities'),
+        safeCount(`SELECT COUNT(*)::int AS c FROM (
+          SELECT subject, predicate FROM content_facts WHERE is_current = true
+          GROUP BY subject, predicate HAVING COUNT(*) > 1) sub`),
+        safeCount('SELECT COUNT(*)::int AS c FROM content_beliefs'),
+        safeCount('SELECT COUNT(*)::int AS c FROM content_synthesis_cache'),
+        safeCount('SELECT COUNT(*)::int AS c FROM content_entity_relations'),
+        safeCount(`SELECT COUNT(DISTINCT community_id)::int AS c FROM content_entities WHERE community_id IS NOT NULL`),
+      ]);
+
+    let assetRow = { total: 0, ai_analyzed: 0, fact_extracted: 0, pending_ai: 0, failed_ai: 0 };
+    try {
+      const ar = await this.deps.db.query(`SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE ai_analyzed_at IS NOT NULL)::int AS ai_analyzed,
+        COUNT(*) FILTER (WHERE last_reextracted_at IS NOT NULL)::int AS fact_extracted,
+        COUNT(*) FILTER (WHERE ai_processing_status = 'pending' OR ai_processing_status IS NULL)::int AS pending_ai,
+        COUNT(*) FILTER (WHERE ai_processing_status = 'failed')::int AS failed_ai
+      FROM assets WHERE is_deleted IS NOT TRUE`);
+      assetRow = ar.rows[0] || assetRow;
+    } catch { /* assets 表不存在时 fallback */ }
+
+    return {
+      assets: assetRow,
+      facts, entities, contradictions, beliefs,
+      synthesisCached: synthesis, relations, communities,
+    };
+  }
+
+  // ============================================================
   // Private helpers
   // ============================================================
 

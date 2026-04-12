@@ -22,6 +22,12 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
 
     // ============================================================
+    // v7.3: Pipeline 统一统计 (流水线可视化页面)
+    // ============================================================
+
+    fastify.get('/stats/overview', async () => engine.getOverviewStats());
+
+    // ============================================================
     // 辅助查询: 下拉选项列表
     // ============================================================
 

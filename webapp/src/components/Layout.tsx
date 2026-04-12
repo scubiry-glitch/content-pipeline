@@ -64,6 +64,7 @@ const mainNavItems: NavItem[] = [
       { to: '/content-library/cross-domain', label: '⑮ 跨域关联', icon: '🌐' },
       { to: '/content-library/wiki', label: 'Wiki 物化', icon: '📖' },
       { to: '/content-library/batch-ops', label: '批量操作', icon: '⚡' },
+      { to: '/content-library/pipeline', label: '生产流水线', icon: '🔀' },
     ]
   },
   {
