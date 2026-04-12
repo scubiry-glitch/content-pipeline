@@ -50,9 +50,8 @@ export function ContentLibraryBatchOps() {
   const [extractMinQuality, setExtractMinQuality] = useState(0);
   /** v7.3 调整2: Step 2 重试失败的资产 */
   const [retryFailed, setRetryFailed] = useState(false);
-  /** v7.3: Step 2 数据来源勾选 */
+  /** v7.3: Step 2 素材来源勾选（仅 assets 表，不含 rss_items） */
   const [aiSourceAssets, setAiSourceAssets] = useState(true);
-  const [aiSourceRss, setAiSourceRss] = useState(false);
   const [aiSourceBinding, setAiSourceBinding] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -109,7 +108,6 @@ export function ContentLibraryBatchOps() {
         body: JSON.stringify((() => {
           const sources = [
             ...(aiSourceAssets ? ['upload'] : []),
-            ...(aiSourceRss ? ['rss'] : []),
             ...(aiSourceBinding ? ['binding'] : []),
           ];
           return {
@@ -410,7 +408,7 @@ export function ContentLibraryBatchOps() {
           </div>
           <p className="text-xs text-gray-400">向量化 + 质量评分 + 主题检测 + 去重（断点续传: 卡住 &gt;30min 自动恢复）</p>
           <div className="flex flex-wrap gap-4 mt-2">
-            <span className="text-xs text-gray-500">数据来源:</span>
+            <span className="text-xs text-gray-500">素材来源:</span>
             <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
               <input type="checkbox" checked={aiSourceAssets} onChange={e => setAiSourceAssets(e.target.checked)}
                 className="rounded accent-indigo-600" />
@@ -422,16 +420,14 @@ export function ContentLibraryBatchOps() {
               📂 目录绑定 (binding)
             </label>
             <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-              <input type="checkbox" checked={aiSourceRss} onChange={e => setAiSourceRss(e.target.checked)}
-                className="rounded accent-indigo-600" />
-              📡 RSS 导入 (rss)
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
               <input type="checkbox" checked={retryFailed} onChange={e => setRetryFailed(e.target.checked)}
                 className="rounded accent-indigo-600" />
               🔄 包含之前失败的素材
             </label>
           </div>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+            📡 RSS 条目 (1116 条) 存储在独立表，不经过此步 → 直接在 Step 3 选「RSS 源」提取事实
+          </p>
           {steps.ai.message && <p className="text-sm text-gray-500 mt-1">{steps.ai.message}</p>}
         </div>
 
@@ -444,8 +440,8 @@ export function ContentLibraryBatchOps() {
             <div className="flex gap-2 items-center">
               <select value={extractSource} onChange={e => setExtractSource(e.target.value as any)}
                 className="px-2 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                <option value="assets">素材库</option>
-                <option value="rss">RSS 源</option>
+                <option value="assets">素材库 (assets)</option>
+                <option value="rss">📡 RSS 源 (1116 条)</option>
               </select>
               <input type="number" min={1} max={500} value={extractLimit}
                 onChange={e => setExtractLimit(Math.min(500, Math.max(1, Number(e.target.value) || 50)))}

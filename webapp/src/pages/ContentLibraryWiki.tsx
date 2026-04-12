@@ -1,6 +1,6 @@
 // 内容库 Wiki 页面 — 生成、浏览、预览物化的 markdown wiki (Obsidian 兼容)
 import { useState, useEffect } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -120,6 +120,9 @@ export function ContentLibraryWiki() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
+
+  // 领域选项 (复用通用 hook)
+  const { domains } = useDropdownOptions();
 
   // 生成面板
   const [showGen, setShowGen] = useState(false);
@@ -252,11 +255,10 @@ export function ContentLibraryWiki() {
             </div>
             <div>
               <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">领域过滤 (可选)</label>
-              <input
-                type="text" value={genDomainFilter}
-                placeholder="如: AI芯片"
-                onChange={e => setGenDomainFilter(e.target.value)}
-                className="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+              <DomainSelect
+                value={genDomainFilter}
+                onChange={setGenDomainFilter}
+                domains={domains}
               />
             </div>
             <div>
