@@ -286,12 +286,20 @@ export class ContentLibraryEngine {
    *
    * 查询条件选择 asset (按时间/id)。
    */
+  /**
+   * v7.1 + v7.2 G1: 批量重新提取事实 (两段式 + 断点续传)
+   * - onlyUnprocessed=true 时只处理 last_reextracted_at IS NULL 的素材
+   * - 每个 asset 处理完立即写 last_reextracted_at (断点)
+   * - 也支持从 rss_items 提取 (source='rss')
+   */
   async reextractBatch(options: {
     assetIds?: string[];
     limit?: number;
     since?: string;
     minConfidence?: number;
     dryRun?: boolean;
+    onlyUnprocessed?: boolean;
+    source?: 'assets' | 'rss';
   }): Promise<{
     processed: number;
     newFacts: number;
@@ -299,31 +307,56 @@ export class ContentLibraryEngine {
     skipped: number;
     errors: number;
     tokenEstimate: number;
+    resumable: boolean;
   }> {
     const limit = Math.min(options.limit || 20, 200);
     const minConf = options.minConfidence ?? this.options.factConfidenceThreshold;
+    const onlyUnprocessed = options.onlyUnprocessed !== false;
+    const source = options.source || 'assets';
 
     const conds: string[] = [];
     const params: any[] = [];
     let idx = 1;
-    if (options.assetIds && options.assetIds.length > 0) {
-      conds.push(`id = ANY($${idx++}::varchar[])`);
-      params.push(options.assetIds);
-    }
-    if (options.since) {
-      conds.push(`created_at >= $${idx++}`);
-      params.push(options.since);
-    }
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-    params.push(limit);
-    const sql = `
-      SELECT id, content FROM asset_library
-      ${where}
-      ORDER BY created_at DESC
-      LIMIT $${idx}
-    `;
 
-    const assets = await this.deps.db.query(sql, params);
+    if (source === 'rss') {
+      // 从 rss_items 取内容
+      if (options.since) {
+        conds.push(`published_at >= $${idx++}`);
+        params.push(options.since);
+      }
+      conds.push(`content IS NOT NULL AND length(trim(content)) > 80`);
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      params.push(limit);
+      const sql = `SELECT id, content, title FROM rss_items ${where} ORDER BY published_at DESC LIMIT $${idx}`;
+      var assets = await this.deps.db.query(sql, params);
+      // rss items 的 assetId 前缀 rss_
+      for (const row of assets.rows) { row._assetId = `rss_${row.id}`; }
+    } else {
+      // 从 assets / asset_library 取内容
+      if (options.assetIds && options.assetIds.length > 0) {
+        conds.push(`id = ANY($${idx++}::varchar[])`);
+        params.push(options.assetIds);
+      }
+      if (options.since) {
+        conds.push(`created_at >= $${idx++}`);
+        params.push(options.since);
+      }
+      // G1: 断点续传 — 只处理未提取的
+      if (onlyUnprocessed) {
+        conds.push(`last_reextracted_at IS NULL`);
+      }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      params.push(limit);
+      // 尝试从 assets 表查，fallback 到 asset_library
+      let sql = `SELECT id, content FROM assets ${where} ORDER BY created_at DESC LIMIT $${idx}`;
+      try {
+        var assets = await this.deps.db.query(sql, params);
+      } catch {
+        sql = `SELECT id, content FROM asset_library ${where} ORDER BY created_at DESC LIMIT $${idx}`;
+        var assets = await this.deps.db.query(sql, params);
+      }
+      for (const row of assets.rows) { row._assetId = row.id; }
+    }
 
     let processed = 0;
     let newFacts = 0;
@@ -339,7 +372,6 @@ export class ContentLibraryEngine {
           skipped++;
           continue;
         }
-        // 每个 asset 2 次 LLM 调用 (analyze + extract)，约 4k input + 1k output tokens
         tokenEstimate += 5000;
 
         if (options.dryRun) {
@@ -347,21 +379,17 @@ export class ContentLibraryEngine {
           continue;
         }
 
-        // 调用 factExtractor 的新两段式提取
         const extraction = await this.factExtractor.extract({
           content,
-          assetId: row.id,
+          assetId: row._assetId || row.id,
         });
 
-        // 实体归一化
         for (const entity of extraction.entities) {
           await this.entityResolver.resolveAndRegister(entity);
         }
 
-        // 过滤低置信度
         const highQuality = extraction.facts.filter(f => f.confidence >= minConf);
 
-        // Delta 压缩
         for (const fact of highQuality) {
           const compressed = await this.deltaCompressor.compress(fact);
           if (compressed.supersededBy) {
@@ -371,14 +399,25 @@ export class ContentLibraryEngine {
           }
           await this.storeFacts([compressed]);
         }
+
+        // G1: 断点写入 — 每个 asset 处理完立即标记
+        if (source === 'assets' && !options.dryRun) {
+          try {
+            await this.deps.db.query(
+              'UPDATE assets SET last_reextracted_at = NOW() WHERE id = $1',
+              [row.id]
+            );
+          } catch { /* last_reextracted_at 列不存在时忽略 */ }
+        }
+
         processed++;
       } catch (err) {
-        console.warn('[reextractBatch] Asset failed:', row.id, err);
+        console.warn('[reextractBatch] Asset failed:', row._assetId || row.id, err);
         errors++;
       }
     }
 
-    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate };
+    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed };
   }
 
   /** 查询事实 */

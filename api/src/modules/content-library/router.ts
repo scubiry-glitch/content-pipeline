@@ -71,6 +71,8 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         since: body.since,
         minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : undefined,
         dryRun: body.dryRun === true || body.dryRun === 'true',
+        onlyUnprocessed: body.onlyUnprocessed !== false,
+        source: body.source === 'rss' ? 'rss' : 'assets',
       });
     });
 
