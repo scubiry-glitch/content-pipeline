@@ -187,6 +187,8 @@ export class PersistenceService {
     retryFailed?: boolean;
     /** v7.3: 'processing' 超过此分钟数视为 stale，自动重试 (默认 30) */
     staleMinutes?: number;
+    /** v7.3: 数据来源筛选 (如 ['upload', 'rss', 'binding']) */
+    sources?: string[];
   } = {}): Promise<Asset[]> {
     const { limit = 20, maxAgeHours = 168, retryFailed = false, staleMinutes = 30 } = options;
 
@@ -205,6 +207,15 @@ export class PersistenceService {
       );
     }
 
+    // v7.3: 构建可选的 source 过滤
+    const sourceCond = options.sources && options.sources.length > 0
+      ? `AND source = ANY($2::text[])`
+      : '';
+    const params: any[] = [limit];
+    if (options.sources && options.sources.length > 0) {
+      params.push(options.sources);
+    }
+
     const result = await query(
       `SELECT
         id, title, file_url as "fileUrl", file_type as "fileType", file_size as "fileSize",
@@ -214,9 +225,10 @@ export class PersistenceService {
       WHERE (ai_processing_status = 'pending' OR ai_processing_status IS NULL)
         AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'
         AND (is_deleted = false OR is_deleted IS NULL)
+        ${sourceCond}
       ORDER BY created_at DESC
       LIMIT $1`,
-      [limit]
+      params
     );
 
     return result.rows.map((row) => ({

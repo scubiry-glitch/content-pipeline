@@ -24,28 +24,46 @@ interface OverviewStats {
 // ============================================================
 // 节点定义 — 与 PRODUCT_META 保持一致
 // ============================================================
-const OUTPUTS: Array<{
+interface OutputDef {
   key: string;
   meta: ProductMetaDef;
-  /** stats 字段名或取值函数 */
   statKey?: keyof OverviewStats | ((s: OverviewStats) => number | null);
-}> = [
-  { key: 'topics',         meta: PRODUCT_META.topics,         statKey: (s) => null },
-  { key: 'trends',         meta: PRODUCT_META.trends },
-  { key: 'angles',         meta: PRODUCT_META.angles },
-  { key: 'gaps',           meta: PRODUCT_META.gaps },
-  { key: 'facts',          meta: PRODUCT_META.facts,          statKey: 'facts' },
-  { key: 'entities',       meta: PRODUCT_META.entities,       statKey: 'entities' },
-  { key: 'delta',          meta: PRODUCT_META.delta },
-  { key: 'freshness',      meta: PRODUCT_META.freshness },
-  { key: 'cards',          meta: PRODUCT_META.cards },
-  { key: 'synthesis',      meta: PRODUCT_META.synthesis,      statKey: 'synthesisCached' },
-  { key: 'materials',      meta: PRODUCT_META.materials },
-  { key: 'consensus',      meta: PRODUCT_META.consensus },
-  { key: 'contradictions',  meta: PRODUCT_META.contradictions,  statKey: 'contradictions' },
-  { key: 'beliefs',        meta: PRODUCT_META.beliefs,        statKey: 'beliefs' },
-  { key: 'crossDomain',    meta: PRODUCT_META.crossDomain },
+  /** 主要数据来源步骤 */
+  sourceStep: 'step2' | 'step3' | 'step4' | 'step5' | 'step5a' | 'step5b' | 'step6';
+  /** 预计算 vs 查询时计算 */
+  mode: 'precomputed' | 'query-time';
+}
+
+const OUTPUTS: OutputDef[] = [
+  // 选题阶段
+  { key: 'topics',    meta: PRODUCT_META.topics,    statKey: (s) => null,   sourceStep: 'step5a', mode: 'query-time' },
+  { key: 'trends',    meta: PRODUCT_META.trends,                            sourceStep: 'step3',  mode: 'query-time' },
+  { key: 'angles',    meta: PRODUCT_META.angles,                            sourceStep: 'step5a', mode: 'query-time' },
+  { key: 'gaps',      meta: PRODUCT_META.gaps,                              sourceStep: 'step3',  mode: 'query-time' },
+  // 研究阶段
+  { key: 'facts',     meta: PRODUCT_META.facts,     statKey: 'facts',       sourceStep: 'step3',  mode: 'precomputed' },
+  { key: 'entities',  meta: PRODUCT_META.entities,  statKey: 'entities',    sourceStep: 'step3',  mode: 'precomputed' },
+  { key: 'delta',     meta: PRODUCT_META.delta,                             sourceStep: 'step3',  mode: 'query-time' },
+  { key: 'freshness', meta: PRODUCT_META.freshness,                         sourceStep: 'step3',  mode: 'query-time' },
+  { key: 'cards',     meta: PRODUCT_META.cards,                             sourceStep: 'step3',  mode: 'query-time' },
+  // 写作阶段
+  { key: 'synthesis',  meta: PRODUCT_META.synthesis,  statKey: 'synthesisCached', sourceStep: 'step5b', mode: 'precomputed' },
+  { key: 'materials',  meta: PRODUCT_META.materials,                              sourceStep: 'step2',  mode: 'query-time' },
+  { key: 'consensus',  meta: PRODUCT_META.consensus,                              sourceStep: 'step3',  mode: 'query-time' },
+  // 审核阶段
+  { key: 'contradictions', meta: PRODUCT_META.contradictions, statKey: 'contradictions', sourceStep: 'step4', mode: 'precomputed' },
+  { key: 'beliefs',        meta: PRODUCT_META.beliefs,        statKey: 'beliefs',        sourceStep: 'step4', mode: 'precomputed' },
+  { key: 'crossDomain',    meta: PRODUCT_META.crossDomain,                               sourceStep: 'step4', mode: 'query-time' },
 ];
+
+/** 步骤 → 产出物映射 (用于流程图连线标注) */
+const STEP_OUTPUTS: Record<string, string[]> = {
+  step2:  ['materials'],
+  step3:  ['facts', 'entities', 'trends', 'gaps', 'delta', 'freshness', 'cards', 'consensus'],
+  step4:  ['contradictions', 'beliefs', 'crossDomain'],
+  step5a: ['topics', 'angles'],
+  step5b: ['synthesis'],
+};
 
 const PHASES = [
   { key: '选题', label: '选题阶段', cssClass: 'phase-selection' },
@@ -96,8 +114,17 @@ export function ContentLibraryPipeline() {
     if (modalNode.type === 'output') {
       const o = OUTPUTS.find(x => x.key === modalNode.key);
       if (!o) return null;
+      const stepLabels: Record<string, string> = {
+        step2: 'Step 2: AI 批量分析', step3: 'Step 3: 事实提取',
+        step4: 'Step 4: 图谱重算', step5a: 'Step 5a: 议题叙事',
+        step5b: 'Step 5b: 认知综合预生成', step6: 'Step 6: Wiki',
+      };
       title = `${o.meta.id} ${o.meta.name}`;
-      upstream = o.meta.upstream;
+      upstream = [
+        `数据源步骤: ${stepLabels[o.sourceStep] || o.sourceStep}`,
+        `生产模式: ${o.mode === 'precomputed' ? '✅ 预计算 (由步骤直接写入)' : '⚡ 查询时实时计算'}`,
+        ...o.meta.upstream,
+      ];
       downstream = o.meta.downstream;
       pagePath = o.meta.page;
       const c = getCount(o, stats);
@@ -147,6 +174,18 @@ export function ContentLibraryPipeline() {
             { value: String(stats.synthesisCached), label: '综合缓存数' },
           ] : [],
         },
+        step5a: {
+          title: 'Step 5a: 议题叙事预生成',
+          desc: 'Top 议题 → 标题/导语/角度矩阵，缓存至 DB',
+          stats: [],
+        },
+        step5b: {
+          title: 'Step 5b: 认知综合预生成',
+          desc: '按实体逐一调 LLM 提炼洞察并写缓存',
+          stats: stats ? [
+            { value: String(stats.synthesisCached), label: '综合缓存数' },
+          ] : [],
+        },
         step6: {
           title: 'Step 6: Wiki 物化',
           desc: '生成 Obsidian 兼容 Markdown vault',
@@ -158,7 +197,13 @@ export function ContentLibraryPipeline() {
       title = sd.title;
       statCards = sd.stats;
       upstream = ['参见流程图上游连线'];
-      downstream = ['参见流程图下游产出物'];
+      // 自动生成下游产出物列表
+      const stepOutputKeys = STEP_OUTPUTS[modalNode.key] || [];
+      downstream = stepOutputKeys.map(k => {
+        const o = OUTPUTS.find(x => x.key === k);
+        return o ? `${o.meta.id} ${o.meta.name} (${o.mode === 'precomputed' ? '预计算' : '查询时'})` : k;
+      });
+      if (downstream.length === 0) downstream = ['无直接产出物'];
     } else if (modalNode.type === 'source') {
       title = modalNode.key === 'assets' ? '📁 素材库 (Assets)' : '📡 RSS 源';
       if (stats) {
@@ -198,18 +243,14 @@ export function ContentLibraryPipeline() {
               </div>
             )}
 
-            {modalNode.type !== 'step' && (
-              <>
-                <div className="pipeline-modal-section section-upstream">
-                  <h4>⬆️ 上游来源</h4>
-                  <ul>{upstream.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                </div>
-                <div className="pipeline-modal-section section-downstream">
-                  <h4>⬇️ 下游引用</h4>
-                  <ul>{downstream.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                </div>
-              </>
-            )}
+            <div className="pipeline-modal-section section-upstream">
+              <h4>⬆️ 上游来源</h4>
+              <ul>{upstream.map((s, i) => <li key={i}>{s}</li>)}</ul>
+            </div>
+            <div className="pipeline-modal-section section-downstream">
+              <h4>⬇️ {modalNode.type === 'step' ? '产出物' : '下游引用'}</h4>
+              <ul>{downstream.map((s, i) => <li key={i}>{s}</li>)}</ul>
+            </div>
 
             <div className="pipeline-modal-actions">
               {pagePath && (
@@ -307,6 +348,7 @@ export function ContentLibraryPipeline() {
                   </div>
                   <div className="step-desc">向量化 + 质量评分 + 主题 + 去重</div>
                   {stats && <div className="step-stat">{stats.assets.ai_analyzed}/{stats.assets.total} 已分析</div>}
+                  <div className="step-outputs-tag">→ ⑪ 素材推荐</div>
                 </div>
                 <div className="step-node parallel-hint" onClick={() => setModalNode({ type: 'step', key: 'step3' })}>
                   <div className="step-header">
@@ -315,6 +357,7 @@ export function ContentLibraryPipeline() {
                   </div>
                   <div className="step-desc">analyze → extract → delta → resolve</div>
                   {stats && <div className="step-stat">{stats.facts} 事实 · {stats.entities} 实体</div>}
+                  <div className="step-outputs-tag">→ ⑤⑥ + ②④⑦⑧⑨⑫ (查询时)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
                 <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step4' })}>
@@ -324,15 +367,25 @@ export function ContentLibraryPipeline() {
                   </div>
                   <div className="step-desc">Louvain 社区 + 4 信号边表 + 观点</div>
                   {stats && <div className="step-stat">{stats.communities} 社区 · {stats.relations} 边 · {stats.beliefs} 观点</div>}
+                  <div className="step-outputs-tag">→ ⑬⑭ + ⑮ (查询时)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
-                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step5' })}>
+                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step5a' })}>
                   <div className="step-header">
-                    <span className="step-number" style={{ background: 'hsl(30 50% 50%)' }}>5</span>
-                    <span className="step-label">AI 产出物预生成</span>
+                    <span className="step-number" style={{ background: 'hsl(30 50% 50%)' }}>5a</span>
+                    <span className="step-label">议题叙事预生成</span>
                   </div>
-                  <div className="step-desc">5a 议题叙事 + 5b 认知综合</div>
+                  <div className="step-desc">Top 议题 → 标题/导语/角度矩阵</div>
+                  <div className="step-outputs-tag">→ ①③ (缓存)</div>
+                </div>
+                <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step5b' })}>
+                  <div className="step-header">
+                    <span className="step-number" style={{ background: 'hsl(30 50% 50%)' }}>5b</span>
+                    <span className="step-label">认知综合预生成</span>
+                  </div>
+                  <div className="step-desc">按实体 LLM 提炼洞察 → 缓存</div>
                   {stats && <div className="step-stat">{stats.synthesisCached} 条综合缓存</div>}
+                  <div className="step-outputs-tag">→ ⑩ (预计算)</div>
                 </div>
                 <div className="flow-arrow">↓</div>
                 <div className="step-node" onClick={() => setModalNode({ type: 'step', key: 'step6' })}>
@@ -358,15 +411,20 @@ export function ContentLibraryPipeline() {
                       <div className="phase-items">
                         {items.map(o => {
                           const c = getCount(o, stats);
+                          const stepNum = o.sourceStep.replace('step', '');
                           return (
                             <div
                               key={o.key}
-                              className="output-node"
+                              className={`output-node ${o.mode === 'precomputed' ? 'output-precomputed' : 'output-querytime'}`}
                               onClick={() => setModalNode({ type: 'output', key: o.key })}
+                              title={`来源: Step ${stepNum} · ${o.mode === 'precomputed' ? '预计算' : '查询时计算'}`}
                             >
                               <span className="output-id">{o.meta.id}</span>
                               <span className="output-name">{o.meta.name}</span>
+                              <span className="output-step-tag">S{stepNum}</span>
                               {c !== null && <span className="output-count">{c}</span>}
+                              {o.mode === 'precomputed' && <span className="output-mode-badge precomputed-badge">预</span>}
+                              {o.mode === 'query-time' && <span className="output-mode-badge querytime-badge">⚡</span>}
                             </div>
                           );
                         })}
