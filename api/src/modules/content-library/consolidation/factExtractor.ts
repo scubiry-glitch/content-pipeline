@@ -129,10 +129,34 @@ function parseFactExtractionResponse(raw: string): { facts: unknown[]; entities:
 export class FactExtractor {
   private llm: LLMAdapter;
   private options: Required<ContentLibraryOptions>;
+  /** v7.3: 已知领域名称 (来自 asset_themes)，用于规范化 LLM 输出的 domain */
+  private knownDomains: string[] = [];
 
   constructor(llm: LLMAdapter, options: Required<ContentLibraryOptions>) {
     this.llm = llm;
     this.options = options;
+  }
+
+  /** 加载已知领域列表 (从 asset_themes 表) */
+  async loadDomains(db: { query: (sql: string) => Promise<any> }): Promise<void> {
+    try {
+      const r = await db.query('SELECT name FROM asset_themes ORDER BY sort_order');
+      this.knownDomains = r.rows.map((row: any) => String(row.name)).filter(Boolean);
+    } catch { /* asset_themes 不存在时忽略 */ }
+  }
+
+  /** 将 LLM 输出的自由文本 domain 归一到已知分类 */
+  private normalizeDomain(raw: string): string {
+    if (!raw || this.knownDomains.length === 0) return raw;
+    const lower = raw.trim().toLowerCase();
+    // 精确匹配
+    const exact = this.knownDomains.find(d => d.toLowerCase() === lower);
+    if (exact) return exact;
+    // 包含匹配 (双向)
+    const contains = this.knownDomains.find(d =>
+      d.toLowerCase().includes(lower) || lower.includes(d.toLowerCase())
+    );
+    return contains || raw;
   }
 
   async extract(request: FactExtractionRequest): Promise<FactExtractionResult> {
@@ -142,6 +166,10 @@ export class FactExtractor {
       try {
         const analysis = await this.analyze(request.content);
         if (analysis) {
+          // v7.3: 规范化 domain — 将 LLM 自由文本映射到已知分类
+          if (analysis.domain) {
+            analysis.domain = this.normalizeDomain(analysis.domain);
+          }
           analysisContext = this.formatAnalysisAsContext(analysis);
           console.log(
             `[FactExtractor] Stage 1 analyze OK: ${analysis.entities.length} entities, ` +

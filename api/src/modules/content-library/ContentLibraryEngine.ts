@@ -250,6 +250,8 @@ export class ContentLibraryEngine {
 
   /** 从内容中提取事实三元组 */
   async extractFacts(request: FactExtractionRequest): Promise<FactExtractionResult> {
+    // v7.3: 确保 domain 规范化映射已加载
+    await this.factExtractor.loadDomains(this.deps.db);
     // Step 1: LLM 提取事实
     const extraction = await this.factExtractor.extract(request);
 
@@ -368,6 +370,9 @@ export class ContentLibraryEngine {
       }
       for (const row of assets.rows) { row._assetId = row.id; }
     }
+
+    // v7.3: 确保 domain 规范化映射已加载
+    await this.factExtractor.loadDomains(this.deps.db);
 
     let processed = 0;
     let newFacts = 0;
@@ -614,14 +619,22 @@ export class ContentLibraryEngine {
   // 辅助查询: 下拉选项列表
   // ============================================================
 
-  /** 获取所有 distinct domain 列表 (用于下拉选择) */
+  /** 获取所有 distinct domain 列表 (用于下拉选择)
+   *  v7.3: 合并 content_facts 中的 domain + asset_themes 中的分类名称
+   */
   async listDomains(): Promise<string[]> {
-    const result = await this.deps.db.query(
-      `SELECT DISTINCT context->>'domain' AS domain FROM content_facts
-       WHERE is_current = true AND context->>'domain' IS NOT NULL AND context->>'domain' != ''
-       ORDER BY domain`
-    );
-    return result.rows.map((r: any) => r.domain);
+    const safeQuery = async (sql: string) => {
+      try { return (await this.deps.db.query(sql)).rows; } catch { return []; }
+    };
+    const [factDomains, themes] = await Promise.all([
+      safeQuery(`SELECT DISTINCT context->>'domain' AS domain FROM content_facts
+       WHERE is_current = true AND context->>'domain' IS NOT NULL AND context->>'domain' != ''`),
+      safeQuery('SELECT name FROM asset_themes ORDER BY sort_order'),
+    ]);
+    const set = new Set<string>();
+    for (const r of themes) if (r.name) set.add(r.name);
+    for (const r of factDomains) if (r.domain) set.add(r.domain);
+    return [...set].sort();
   }
 
   /** 获取所有 belief subjects 列表 (用于下拉选择) */

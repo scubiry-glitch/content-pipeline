@@ -1,6 +1,6 @@
 // 内容库 — ⑦ 信息增量报告
 import { useState, useEffect } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -58,6 +58,7 @@ export function ContentLibraryDelta() {
     return d.toISOString().split('T')[0];
   });
   const [domain, setDomain] = useState('');
+  const { domains } = useDropdownOptions();
 
   const load = async () => {
     setLoading(true);
@@ -98,8 +99,7 @@ export function ContentLibraryDelta() {
           onChange={(e) => setSince(e.target.value)}
           className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
         />
-        <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
-          placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" />
+        <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <button
           onClick={load}
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
