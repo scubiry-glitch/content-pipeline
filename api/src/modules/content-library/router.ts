@@ -243,6 +243,14 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // ============================================================
+    // v7.2: 持久化实体关系边表
+    // ============================================================
+
+    fastify.post('/relations/recompute', async (request, reply) => {
+      return engine.recomputeEntityRelations();
+    });
+
+    // ============================================================
     // v7.1: Wiki 生成层 (Obsidian 兼容物化视图)
     // ============================================================
 

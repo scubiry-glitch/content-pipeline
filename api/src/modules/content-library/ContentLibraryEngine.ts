@@ -102,6 +102,94 @@ export class ContentLibraryEngine {
     return { taskId, updated: result.rows.length > 0 };
   }
 
+  // ============================================================
+  // v7.2: 持久化实体关系边表
+  // ============================================================
+
+  /** 重算所有实体关系并写入 content_entity_relations */
+  async recomputeEntityRelations(): Promise<{
+    processed: number; inserted: number; durationMs: number;
+  }> {
+    const started = Date.now();
+
+    // 清空旧数据
+    await this.deps.db.query('DELETE FROM content_entity_relations');
+
+    // 用 v7.1 的 4 信号 + v7.2 的 Adamic-Adar 一次性计算所有 pair
+    const sql = `
+      WITH center_pairs AS (
+        SELECT DISTINCT
+          LEAST(cf1.subject, cf1.object) AS name_a,
+          GREATEST(cf1.subject, cf1.object) AS name_b
+        FROM content_facts cf1
+        WHERE cf1.is_current = true AND cf1.subject != cf1.object
+      ),
+      direct AS (
+        SELECT name_a, name_b, COUNT(*) AS direct_count
+        FROM (
+          SELECT LEAST(subject, object) AS name_a, GREATEST(subject, object) AS name_b
+          FROM content_facts WHERE is_current = true AND subject != object
+        ) sub
+        GROUP BY name_a, name_b
+      ),
+      source_ov AS (
+        SELECT
+          LEAST(cf1.subject, cf2.subject) AS name_a,
+          GREATEST(cf1.subject, cf2.subject) AS name_b,
+          COUNT(DISTINCT cf1.asset_id) FILTER (WHERE cf1.asset_id = cf2.asset_id) AS shared_assets
+        FROM content_facts cf1
+        JOIN content_facts cf2 ON cf1.asset_id = cf2.asset_id
+          AND cf1.subject < cf2.subject
+        WHERE cf1.is_current = true AND cf2.is_current = true
+        GROUP BY name_a, name_b
+      ),
+      relation_info AS (
+        SELECT
+          LEAST(subject, object) AS name_a,
+          GREATEST(subject, object) AS name_b,
+          MODE() WITHIN GROUP (ORDER BY predicate) AS top_predicate
+        FROM content_facts WHERE is_current = true AND subject != object
+        GROUP BY name_a, name_b
+      )
+      INSERT INTO content_entity_relations
+        (entity_a_id, entity_b_id, entity_a_name, entity_b_name, relation_type,
+         direct_score, source_overlap_score, type_affinity_score, combined_score,
+         common_assets, recomputed_at)
+      SELECT
+        cea.id, ceb.id, d.name_a, d.name_b,
+        COALESCE(ri.top_predicate, ''),
+        d.direct_count,
+        COALESCE(so.shared_assets, 0),
+        CASE WHEN cea.entity_type = ceb.entity_type THEN 1 ELSE 0 END,
+        ROUND((3.0 * d.direct_count
+             + 4.0 * COALESCE(so.shared_assets, 0)
+             + 1.0 * CASE WHEN cea.entity_type = ceb.entity_type THEN 1 ELSE 0 END)::numeric, 3),
+        COALESCE(so.shared_assets, 0),
+        NOW()
+      FROM direct d
+      JOIN content_entities cea ON cea.canonical_name = d.name_a
+      JOIN content_entities ceb ON ceb.canonical_name = d.name_b
+      LEFT JOIN source_ov so ON so.name_a = d.name_a AND so.name_b = d.name_b
+      LEFT JOIN relation_info ri ON ri.name_a = d.name_a AND ri.name_b = d.name_b
+      ON CONFLICT (entity_a_id, entity_b_id) DO UPDATE SET
+        relation_type = EXCLUDED.relation_type,
+        direct_score = EXCLUDED.direct_score,
+        source_overlap_score = EXCLUDED.source_overlap_score,
+        type_affinity_score = EXCLUDED.type_affinity_score,
+        combined_score = EXCLUDED.combined_score,
+        common_assets = EXCLUDED.common_assets,
+        recomputed_at = NOW()
+    `;
+    const result = await this.deps.db.query(sql);
+    const inserted = (result as any).rowCount || 0;
+
+    return {
+      processed: inserted,
+      inserted,
+      durationMs: Date.now() - started,
+    };
+  }
+
   /** 读取任务意图书 */
   async getTaskPurpose(taskId: string): Promise<{
     taskId: string; purposeText: string; goalEntities: string[]; updatedAt: string;
