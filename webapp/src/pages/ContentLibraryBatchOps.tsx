@@ -50,6 +50,10 @@ export function ContentLibraryBatchOps() {
   const [extractMinQuality, setExtractMinQuality] = useState(0);
   /** v7.3 调整2: Step 2 重试失败的资产 */
   const [retryFailed, setRetryFailed] = useState(false);
+  /** v7.3: Step 2 数据来源勾选 */
+  const [aiSourceAssets, setAiSourceAssets] = useState(true);
+  const [aiSourceRss, setAiSourceRss] = useState(false);
+  const [aiSourceBinding, setAiSourceBinding] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Step 5b: 认知综合预生成
@@ -102,7 +106,18 @@ export function ContentLibraryBatchOps() {
       const res = await fetch(`${API_AI}/batch-process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize: 20, retryFailed }),
+        body: JSON.stringify((() => {
+          const sources = [
+            ...(aiSourceAssets ? ['upload'] : []),
+            ...(aiSourceRss ? ['rss'] : []),
+            ...(aiSourceBinding ? ['binding'] : []),
+          ];
+          return {
+            batchSize: 20,
+            retryFailed,
+            sources: sources.length > 0 ? sources : undefined,
+          };
+        })()),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -394,11 +409,29 @@ export function ContentLibraryBatchOps() {
             </button>
           </div>
           <p className="text-xs text-gray-400">向量化 + 质量评分 + 主题检测 + 去重（断点续传: 卡住 &gt;30min 自动恢复）</p>
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 cursor-pointer select-none">
-            <input type="checkbox" checked={retryFailed} onChange={e => setRetryFailed(e.target.checked)}
-              className="rounded accent-indigo-600" />
-            包含之前失败的素材
-          </label>
+          <div className="flex flex-wrap gap-4 mt-2">
+            <span className="text-xs text-gray-500">数据来源:</span>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" checked={aiSourceAssets} onChange={e => setAiSourceAssets(e.target.checked)}
+                className="rounded accent-indigo-600" />
+              📁 素材库 (upload)
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" checked={aiSourceBinding} onChange={e => setAiSourceBinding(e.target.checked)}
+                className="rounded accent-indigo-600" />
+              📂 目录绑定 (binding)
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" checked={aiSourceRss} onChange={e => setAiSourceRss(e.target.checked)}
+                className="rounded accent-indigo-600" />
+              📡 RSS 导入 (rss)
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" checked={retryFailed} onChange={e => setRetryFailed(e.target.checked)}
+                className="rounded accent-indigo-600" />
+              🔄 包含之前失败的素材
+            </label>
+          </div>
           {steps.ai.message && <p className="text-sm text-gray-500 mt-1">{steps.ai.message}</p>}
         </div>
 

@@ -24,6 +24,8 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       retryFailed?: boolean;
       /** v7.3 调整2: 批量大小 */
       batchSize?: number;
+      /** v7.3: 数据来源筛选 (如 ['upload', 'rss', 'binding']) */
+      sources?: string[];
       config?: {
         batchSize?: number;
         qualityThreshold?: number;
@@ -46,6 +48,7 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
         assets = await persistenceService.getUnprocessedAssets({
           limit: body.batchSize || 20,
           retryFailed: body.retryFailed || false,
+          sources: body.sources,
         });
       }
 
