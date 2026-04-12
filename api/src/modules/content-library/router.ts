@@ -3,6 +3,13 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ContentLibraryEngine } from './ContentLibraryEngine.js';
+import {
+  startReextractJob,
+  getReextractJob,
+  cancelReextractJob,
+  subscribeJob,
+  listReextractJobs,
+} from './reextractJob.js';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
@@ -63,6 +70,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // v7.1 T1.4: 手动触发回填 (两段式重新提取)
+    // 同步回填 (小量, 保留向后兼容)
     fastify.post('/reextract', async (request, reply) => {
       const body = (request.body || {}) as any;
       return engine.reextractBatch({
@@ -73,6 +81,71 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         dryRun: body.dryRun === true || body.dryRun === 'true',
         onlyUnprocessed: body.onlyUnprocessed !== false,
         source: body.source === 'rss' ? 'rss' : 'assets',
+      });
+    });
+
+    // v7.2 G2: 异步回填 job (大量素材, SSE 进度推送)
+    fastify.post('/reextract/start', async (request, reply) => {
+      const body = (request.body || {}) as any;
+      const jobId = startReextractJob(engine, {
+        limit: body.limit ? parseInt(body.limit) : 100,
+        since: body.since,
+        minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : undefined,
+        onlyUnprocessed: body.onlyUnprocessed !== false,
+        source: body.source === 'rss' ? 'rss' : 'assets',
+      });
+      return { jobId };
+    });
+
+    fastify.get('/reextract/jobs', async () => listReextractJobs());
+
+    fastify.get('/reextract/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      const state = getReextractJob(String(jobId));
+      if (!state) return { error: 'Job not found' };
+      return state;
+    });
+
+    fastify.delete('/reextract/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      const cancelled = cancelReextractJob(String(jobId));
+      return { cancelled };
+    });
+
+    // SSE 进度流
+    fastify.get('/reextract/jobs/:jobId/stream', async (request, reply) => {
+      const { jobId } = request.params as any;
+      const state = getReextractJob(String(jobId));
+      if (!state) {
+        reply.code(404);
+        return { error: 'Job not found' };
+      }
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      // 立即发送当前状态
+      reply.raw.write(`data: ${JSON.stringify(state)}\n\n`);
+
+      if (state.status !== 'running') {
+        reply.raw.end();
+        return;
+      }
+
+      const unsub = subscribeJob(String(jobId), (event, data) => {
+        try {
+          reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (event === 'done') {
+            reply.raw.end();
+          }
+        } catch { /* connection closed */ }
+      });
+
+      request.raw.on('close', () => {
+        unsub();
       });
     });
 
