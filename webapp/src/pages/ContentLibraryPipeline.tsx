@@ -108,6 +108,7 @@ export function ContentLibraryPipeline() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [zepStatus, setZepStatus] = useState<{ enabled: boolean; connected: boolean } | null>(null);
   const [modalNode, setModalNode] = useState<{ type: 'output' | 'step' | 'source'; key: string } | null>(null);
   const [groupMode, setGroupMode] = useState<GroupMode>('phase');
   const navigate = useNavigate();
@@ -148,6 +149,11 @@ export function ContentLibraryPipeline() {
       .then(d => { if (d) setStats(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Zep 状态检查 (异步, 不阻塞)
+    fetch(`${API}/zep/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setZepStatus(d); })
+      .catch(() => {});
   }, []);
 
   // 重算连线 (加载完成 / 切换模式后)
@@ -588,11 +594,11 @@ export function ContentLibraryPipeline() {
 
       {/* 底部全局统计 */}
       {stats && (
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { v: stats.assets.total, l: '总素材', icon: '📁' },
             { v: stats.facts, l: '事实三元组', icon: '📋' },
-            { v: stats.entities, l: '实体', icon: '🔗' },
+            { v: stats.entities, l: '实体', icon: '���' },
             { v: stats.relations, l: '关系边', icon: '🌐' },
           ].map((s, i) => (
             <div key={i} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center">
@@ -600,6 +606,19 @@ export function ContentLibraryPipeline() {
               <div className="text-xs text-gray-500 mt-1">{s.l}</div>
             </div>
           ))}
+          {/* Zep 增强状态 */}
+          <div className={`border rounded-lg p-4 text-center ${
+            zepStatus?.connected
+              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+              : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+          }`}>
+            <div className={`text-2xl font-bold ${zepStatus?.connected ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`}>
+              {zepStatus?.connected ? '🟢' : zepStatus?.enabled ? '🟡' : '⚪'}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Zep {zepStatus?.connected ? '已连接' : zepStatus?.enabled ? '未连接' : '未启用'}
+            </div>
+          </div>
         </div>
       )}
 
