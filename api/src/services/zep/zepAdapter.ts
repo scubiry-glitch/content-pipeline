@@ -169,19 +169,53 @@ export async function enhanceCrossDomain(
   }
 }
 
-/** Zep 状态检查 (供前端 pipeline 页面显示) */
+/** Zep 状态检查 (供前端 pipeline 页面显示)
+ *  用 GET /api/v2/users 检测 API Key 是否有效，不依赖系统用户是否存在
+ */
 export async function getZepStatus(): Promise<{
   enabled: boolean;
   connected: boolean;
   graphUserId: string;
+  userExists?: boolean;
 }> {
   if (!isZepEnabled()) {
     return { enabled: false, connected: false, graphUserId: '' };
   }
+
+  const apiKey = process.env.ZEP_API_KEY!;
+  const baseUrl = process.env.ZEP_BASE_URL || 'https://api.getzep.com';
+
   try {
-    const result = await searchGraphNodes(SYSTEM_USER, 'test', 1);
-    return { enabled: true, connected: result !== null, graphUserId: SYSTEM_USER };
-  } catch {
+    // 用列出用户接口验证 API Key 有效性 (不依赖系统用户存在)
+    // 正确格式: Authorization: Api-Key (非 Bearer)
+    // 正确端点: /api/v2/users-ordered (GET /users 返回 405)
+    const res = await fetch(`${baseUrl}/api/v2/users-ordered?pageSize=1&pageNumber=1`, {
+      headers: { 'Authorization': `Api-Key ${apiKey}` },
+    });
+
+    if (!res.ok) {
+      console.warn(`[Zep] Auth check failed: ${res.status}`);
+      return { enabled: true, connected: false, graphUserId: SYSTEM_USER };
+    }
+
+    // API Key 有效，额外检查系统用户是否存在 (不影响 connected 状态)
+    const userRes = await fetch(`${baseUrl}/api/v2/users/${SYSTEM_USER}`, {
+      headers: { 'Authorization': `Api-Key ${apiKey}` },
+    });
+    const userExists = userRes.ok;
+
+    // 若系统用户不存在，自动创建
+    if (!userExists) {
+      await fetch(`${baseUrl}/api/v2/users`, {
+        method: 'POST',
+        headers: { 'Authorization': `Api-Key ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: SYSTEM_USER, first_name: 'Content Pipeline System' }),
+      }).catch(() => {/* 创建失败不影响状态 */});
+    }
+
+    return { enabled: true, connected: true, graphUserId: SYSTEM_USER, userExists };
+  } catch (err) {
+    console.warn('[Zep] Status check error:', err);
     return { enabled: true, connected: false, graphUserId: SYSTEM_USER };
   }
 }

@@ -10,11 +10,15 @@ interface Recommendation {
   experts: string[];
   score: number;
   rationale: string;
+  theme?: string;
+  tags?: string[];
+  titles?: string[];
 }
 
 interface MaterialsData {
   recommendations: Recommendation[];
   totalMatches: number;
+  source?: 'production_log' | 'assets_fallback';
 }
 
 const TASK_TYPES = [
@@ -130,55 +134,89 @@ export function ContentLibraryMaterials() {
         </div>
       )}
 
+      {/* 数据来源说明 */}
+      {data && (
+        <div className={`text-xs px-3 py-2 rounded-lg mb-4 flex items-center gap-2 ${
+          data.source === 'production_log'
+            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+            : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+        }`}>
+          {data.source === 'production_log' ? '✅ 基于历史生产记录推荐' : '📊 基于素材质量评分推荐（尚无生产记录，自动按主题分组）'}
+          <span className="ml-auto">共 {data.totalMatches} 个组合</span>
+        </div>
+      )}
+
       {/* 推荐列表 */}
       {data && recs.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          暂无推荐数据。需要有已完成的生产任务记录才能生成推荐。
-        </div>
+        <div className="text-center py-12 text-gray-400">暂无推荐数据</div>
       ) : (
         <div className="space-y-4">
           {pageItems.map((rec, idx) => (
             <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-lg font-bold text-gray-300">#{(safeP - 1) * PAGE_SIZE + idx + 1}</span>
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getScoreColor(rec.score)}`}>
                     质量分 {(rec.score * 100).toFixed(0)}%
                   </span>
+                  {rec.theme && (
+                    <span className="px-2 py-1 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                      {rec.theme}
+                    </span>
+                  )}
                 </div>
+                <span className="text-xs text-gray-400">{rec.assetIds.length} 篇素材</span>
               </div>
 
-              {/* 素材 IDs */}
+              {/* 代表性标题 */}
+              {rec.titles && rec.titles.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-gray-500 mb-1.5">代表性研报</div>
+                  <ul className="space-y-1">
+                    {rec.titles.map((title, i) => (
+                      <li key={i} className="text-xs text-gray-600 dark:text-gray-400 truncate">· {title}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* 标签 */}
+              {rec.tags && rec.tags.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1">
+                  {rec.tags.slice(0, 8).map((tag, i) => (
+                    <span key={i} className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[11px] rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* 素材链接 */}
               <div className="mb-3">
-                <div className="text-xs font-medium text-gray-500 mb-1.5">推荐素材</div>
+                <div className="text-xs font-medium text-gray-500 mb-1.5">全部素材</div>
                 <div className="flex flex-wrap gap-1.5">
                   {rec.assetIds.length > 0 ? rec.assetIds.map((id, i) => (
                     <a key={i} href={`/assets/${id}`}
                       className="px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors">
-                      📄 {id.length > 20 ? `${id.slice(0, 20)}...` : id}
+                      📄 {id.length > 16 ? `${id.slice(0, 16)}…` : id}
                     </a>
-                  )) : (
-                    <span className="text-xs text-gray-400">无关联素材</span>
-                  )}
+                  )) : <span className="text-xs text-gray-400">无关联素材</span>}
                 </div>
               </div>
 
               {/* 专家 */}
               {rec.experts.length > 0 && (
-                <div className="mb-3">
-                  <div className="text-xs font-medium text-gray-500 mb-1.5">关联专家</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {rec.experts.map((e, i) => (
-                      <span key={i} className="px-2 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs rounded border border-purple-200 dark:border-purple-800">
-                        👤 {e}
-                      </span>
-                    ))}
-                  </div>
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {rec.experts.map((e, i) => (
+                    <span key={i} className="px-2 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs rounded border border-purple-200 dark:border-purple-800">
+                      👤 {e}
+                    </span>
+                  ))}
                 </div>
               )}
 
               {/* 推荐理由 */}
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-2 italic">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic border-t border-gray-100 dark:border-gray-700 pt-2">
                 {rec.rationale}
               </div>
             </div>

@@ -17,6 +17,13 @@ import {
   subscribeSynthesisJob,
   listSynthesisJobs,
 } from './synthesisJob.js';
+import {
+  startZepSyncJob,
+  getZepSyncJob,
+  cancelZepSyncJob,
+  subscribeZepSyncJob,
+  listZepSyncJobs,
+} from './zepSyncJob.js';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
@@ -69,6 +76,53 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         const { enhanceCrossDomain } = await import('../../services/zep/index.js');
         return await enhanceCrossDomain(decodeURIComponent(entity)) || { relations: [], source: 'none' };
       } catch { return { relations: [], source: 'none' }; }
+    });
+
+    // Zep 知识回填 — 历史事实批量同步
+    fastify.post('/zep/sync/start', async (request) => {
+      const body = (request.body || {}) as any;
+      const db = (engine as any).deps.db;
+      const jobId = startZepSyncJob(db, {
+        limit: body.limit ? parseInt(body.limit) : undefined,
+        batchSize: body.batchSize ? parseInt(body.batchSize) : 10,
+        minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : 0.5,
+      });
+      return { jobId };
+    });
+
+    fastify.get('/zep/sync/jobs', async () => listZepSyncJobs());
+
+    fastify.get('/zep/sync/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      return getZepSyncJob(String(jobId)) || { error: 'Job not found' };
+    });
+
+    fastify.delete('/zep/sync/jobs/:jobId', async (request) => {
+      const { jobId } = request.params as any;
+      return { cancelled: cancelZepSyncJob(String(jobId)) };
+    });
+
+    fastify.get('/zep/sync/jobs/:jobId/stream', async (request, reply) => {
+      const { jobId } = request.params as any;
+      const state = getZepSyncJob(String(jobId));
+      if (!state) { reply.code(404); return { error: 'Job not found' }; }
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      reply.raw.write(`data: ${JSON.stringify(state)}\n\n`);
+
+      if (state.status !== 'running') { reply.raw.end(); return; }
+
+      const unsub = subscribeZepSyncJob(String(jobId), (event, data) => {
+        try {
+          reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (event === 'done') reply.raw.end();
+        } catch { /* connection closed */ }
+      });
+      request.raw.on('close', () => unsub());
     });
 
     // ============================================================

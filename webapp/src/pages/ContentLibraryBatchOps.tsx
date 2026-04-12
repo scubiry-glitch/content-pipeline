@@ -38,6 +38,7 @@ export function ContentLibraryBatchOps() {
     ai: { status: 'idle' },
     extract: { status: 'idle' },
     graph: { status: 'idle' },
+    zepSync: { status: 'idle' },
     topics: { status: 'idle' },
     synthesis: { status: 'idle' },
     wiki: { status: 'idle' },
@@ -54,6 +55,11 @@ export function ContentLibraryBatchOps() {
   const [aiSourceAssets, setAiSourceAssets] = useState(true);
   const [aiSourceBinding, setAiSourceBinding] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Step 4b: Zep 知识回填
+  const [zepSyncJobId, setZepSyncJobId] = useState<string | null>(null);
+  const [zepSyncProgress, setZepSyncProgress] = useState<{ total: number; synced: number; skipped: number; errors: number } | null>(null);
+  const zepSyncEsRef = useRef<EventSource | null>(null);
 
   // Step 5b: 认知综合预生成
   const [synthesisJobId, setSynthesisJobId] = useState<string | null>(null);
@@ -217,6 +223,67 @@ export function ContentLibraryBatchOps() {
     }
   };
 
+  // Step 4b: Zep 知识回填 — 启动 job + SSE
+  const startZepSync = async () => {
+    setStep('zepSync', { status: 'running', message: '启动 Zep 知识回填...' });
+    setZepSyncProgress(null);
+    zepSyncEsRef.current?.close();
+    try {
+      const res = await fetch(`${API}/zep/sync/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchSize: 10, minConfidence: 0.5 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { jobId } = await res.json();
+      setZepSyncJobId(jobId);
+
+      const es = new EventSource(`${API}/zep/sync/jobs/${jobId}/stream`);
+      zepSyncEsRef.current = es;
+
+      es.addEventListener('total', (e: any) => {
+        try {
+          const d = JSON.parse(e.data);
+          setZepSyncProgress(p => ({ synced: 0, skipped: 0, errors: 0, ...p, total: d.total }));
+        } catch { /* ignore */ }
+      });
+      es.addEventListener('progress', (e: any) => {
+        try {
+          const d = JSON.parse(e.data);
+          setZepSyncProgress(d);
+          const pct = d.total > 0 ? Math.round((d.synced + d.skipped + d.errors) / d.total * 100) : 0;
+          setStep('zepSync', { status: 'running', message: `${d.synced + d.skipped + d.errors}/${d.total} (${pct}%) · 同步 ${d.synced} · 跳过 ${d.skipped}` });
+        } catch { /* ignore */ }
+      });
+      es.addEventListener('done', (e: any) => {
+        try {
+          const d = JSON.parse(e.data);
+          const isOk = d.status === 'completed';
+          setStep('zepSync', {
+            status: isOk ? 'done' : 'error',
+            message: `同步 ${d.synced || 0} 条 · 跳过 ${d.skipped || 0} · 错误 ${d.errors || 0}`,
+            lastRun: new Date().toISOString(),
+          });
+        } catch { /* ignore */ }
+        es.close();
+      });
+      es.onerror = () => {
+        setStep('zepSync', { status: 'done', message: 'SSE 已关闭', lastRun: new Date().toISOString() });
+        es.close();
+      };
+    } catch (err) {
+      setStep('zepSync', { status: 'error', message: (err as Error).message });
+    }
+  };
+
+  const cancelZepSync = async () => {
+    if (zepSyncJobId) {
+      await fetch(`${API}/zep/sync/jobs/${zepSyncJobId}`, { method: 'DELETE' }).catch(() => {});
+      zepSyncEsRef.current?.close();
+      setStep('zepSync', { status: 'idle', message: '已取消' });
+    }
+  };
+
   // Step 5a: 议题叙事预生成
   const triggerTopicEnrich = async () => {
     setStep('topics', { status: 'running', message: '调用 LLM 生成议题叙事并缓存...' });
@@ -350,6 +417,7 @@ export function ContentLibraryBatchOps() {
     return () => {
       eventSourceRef.current?.close();
       synthesisEsRef.current?.close();
+      zepSyncEsRef.current?.close();
     };
   }, []);
 
@@ -482,19 +550,88 @@ export function ContentLibraryBatchOps() {
           {steps.extract.message && <p className="text-sm text-gray-500 mt-1">{steps.extract.message}</p>}
         </div>
 
-        {/* Step 4: 知识图谱 */}
+        {/* Step 4: 知识图谱 + Zep 回填 */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              {statusIcon(steps.graph.status)} Step 4: 知识图谱重算
-            </h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            {(steps.graph.status === 'running' || steps.zepSync.status === 'running') ? '🔄' :
+             (steps.graph.status === 'error' || steps.zepSync.status === 'error') ? '❌' :
+             (steps.graph.status === 'done' && steps.zepSync.status === 'done') ? '✅' : '⚪'}
+            Step 4: 知识图谱 & Zep 增强
+          </h3>
+
+          {/* 4a: 图谱重算 */}
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.graph.status)} 4a · 图谱重算</span>
+              </div>
+              <p className="text-xs text-gray-400">Louvain 社区发现 + 4 信号边表 + 观点聚合</p>
+              {steps.graph.message && <p className="text-xs text-gray-500 mt-0.5">{steps.graph.message}</p>}
+              {steps.graph.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.graph.lastRun).toLocaleString()}</p>}
+            </div>
             <button onClick={triggerGraphRecompute} disabled={steps.graph.status === 'running'}
-              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 shrink-0">
               🔗 重算图谱
             </button>
           </div>
-          <p className="text-xs text-gray-400">Louvain 社区发现 + 4 信号边表</p>
-          {steps.graph.message && <p className="text-sm text-gray-500 mt-1">{steps.graph.message}</p>}
+
+          {/* 4b: Zep 知识回填 */}
+          <div className="pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.zepSync.status)} 4b · Zep 知识回填</span>
+                  {zepSyncProgress && zepSyncProgress.total > 0 && (
+                    <span className="text-[10px] text-purple-500 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded">
+                      {zepSyncProgress.synced} / {zepSyncProgress.total} 已同步
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">将 content_facts 历史数据回填至 Zep Graph，激活图谱实体关联与时序矛盾检测</p>
+              </div>
+              <div className="shrink-0">
+                {steps.zepSync.status === 'running' ? (
+                  <button onClick={cancelZepSync}
+                    className="px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600">
+                    ⏹ 取消
+                  </button>
+                ) : (
+                  <button onClick={startZepSync}
+                    className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700">
+                    🧠 回填 Zep
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Zep 进度条 */}
+            {zepSyncProgress && zepSyncProgress.total > 0 && (() => {
+              const done = zepSyncProgress.synced + zepSyncProgress.skipped + zepSyncProgress.errors;
+              const pct = Math.round(done / zepSyncProgress.total * 100);
+              return (
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>{done}/{zepSyncProgress.total} ({pct}%)</span>
+                    <span>
+                      同步 {zepSyncProgress.synced}
+                      {zepSyncProgress.skipped > 0 && ` · 跳过 ${zepSyncProgress.skipped}`}
+                      {zepSyncProgress.errors > 0 && ` · 错误 ${zepSyncProgress.errors}`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div className="bg-purple-500 rounded-full h-1.5 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {steps.zepSync.message && (
+              <p className="text-xs text-gray-500 mt-1">{steps.zepSync.message}</p>
+            )}
+            {steps.zepSync.lastRun && (
+              <p className="text-[10px] text-gray-400">上次: {new Date(steps.zepSync.lastRun).toLocaleString()}</p>
+            )}
+          </div>
         </div>
 
         {/* Step 5: AI 产出物预生成（5a 议题叙事 + 5b 认知综合） */}

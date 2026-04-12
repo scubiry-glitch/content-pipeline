@@ -32,7 +32,7 @@ async function zepFetch(path: string, options: {
   const res = await fetch(url.toString(), {
     method: options.method || 'GET',
     headers: {
-      'Authorization': `Bearer ${getApiKey()}`,
+      'Authorization': `Api-Key ${getApiKey()}`,   // Zep Cloud 用 Api-Key，不是 Bearer
       'Content-Type': 'application/json',
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -82,15 +82,18 @@ export interface ZepEpisode {
   user_id?: string;
 }
 
-/** 向 Zep Graph 添加 Episode (写入知识) */
+/** 向 Zep Graph 添加 Episode (写入知识)
+ *  正确端点: POST /api/v2/graph — user_id 放在 body 里
+ *  （/api/v2/users/{id}/graph/episodes 不存在，返回 404）
+ */
 export async function addGraphEpisode(
   userId: string,
   episode: ZepEpisode
 ): Promise<any> {
   if (!isZepEnabled()) return null;
-  return zepFetch(`/api/v2/users/${userId}/graph/episodes`, {
+  return zepFetch('/api/v2/graph', {
     method: 'POST',
-    body: episode,
+    body: { ...episode, user_id: userId },
   });
 }
 

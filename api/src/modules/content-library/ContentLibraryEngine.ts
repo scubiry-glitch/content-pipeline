@@ -1391,36 +1391,112 @@ export class ContentLibraryEngine {
     }
   }
 
-  /** ⑪ 素材组合推荐 (基于生产经验) */
+  /** ⑪ 素材组合推荐
+   *  优先级1: content_production_log (历史生产记录)
+   *  优先级2: assets 按 ai_theme_id 分组 fallback (无生产记录时)
+   */
   async recommendMaterials(options?: {
     taskType?: string;
     domain?: string;
     limit?: number;
-  }): Promise<{ recommendations: Array<{ assetIds: string[]; experts: string[]; score: number; rationale: string }>; totalMatches: number }> {
+  }): Promise<{ recommendations: Array<{ assetIds: string[]; experts: string[]; score: number; rationale: string; theme?: string; tags?: string[] }>; totalMatches: number; source: 'production_log' | 'assets_fallback' }> {
     const limit = options?.limit || 10;
 
-    // 查询 content_production_log 中评分最高的组合
-    const logsQuery = `
-      SELECT asset_ids, expert_ids, quality_score, feedback
-      FROM content_production_log
-      WHERE quality_score > 0.7
-      ${options?.domain ? 'AND metadata->\'domain\' = $1' : ''}
-      ORDER BY quality_score DESC
-      LIMIT $2
-    `;
-    const logsParams = options?.domain ? [options.domain, limit * 3] : [limit * 3];
-    const logsResult = await this.deps.db.query(logsQuery, logsParams);
+    // ── 优先级1: content_production_log ─────────────────────────
+    try {
+      const logResult = await this.deps.db.query(
+        `SELECT asset_ids, expert_ids, output_quality_score, combination_insight
+         FROM content_production_log
+         WHERE output_quality_score > 0.7
+         ORDER BY output_quality_score DESC LIMIT $1`,
+        [limit],
+      );
+      if (logResult.rows.length > 0) {
+        return {
+          source: 'production_log',
+          totalMatches: logResult.rows.length,
+          recommendations: logResult.rows.map((row: any) => ({
+            assetIds: Array.isArray(row.asset_ids) ? row.asset_ids : [],
+            experts: Array.isArray(row.expert_ids) ? row.expert_ids : [],
+            score: Number(row.output_quality_score) / 100,
+            rationale: row.combination_insight || '基于历史生产经验推荐',
+          })),
+        };
+      }
+    } catch { /* 表不存在，继续 fallback */ }
 
-    const recommendations = logsResult.rows.slice(0, limit).map(row => ({
-      assetIds: Array.isArray(row.asset_ids) ? row.asset_ids : [],
-      experts: Array.isArray(row.expert_ids) ? row.expert_ids : [],
-      score: Number(row.quality_score),
-      rationale: `Based on ${row.feedback || 'production experience'} with quality score ${Number(row.quality_score).toFixed(2)}`,
+    // ── 优先级2: assets 按主题分组 fallback ──────────────────────
+    const domainJoin = options?.domain
+      ? `JOIN content_facts cf2 ON cf2.subject = ANY(
+           ARRAY(SELECT title FROM assets WHERE id = a.id LIMIT 1)
+         ) AND cf2.context->>'domain' = '${options.domain.replace(/'/g, "''")}'`
+      : '';
+
+    // 按 ai_theme_id 分组，每组取质量最高的 5 个 asset
+    const groupResult = await this.deps.db.query(`
+      WITH ranked AS (
+        SELECT id, title, ai_quality_score, ai_tags, ai_theme_id,
+               ROW_NUMBER() OVER (PARTITION BY ai_theme_id ORDER BY ai_quality_score DESC) AS rn
+        FROM assets
+        WHERE ai_quality_score IS NOT NULL
+          AND ai_quality_score > 20
+          AND (is_deleted = false OR is_deleted IS NULL)
+          AND ai_theme_id IS NOT NULL
+      ),
+      grouped AS (
+        SELECT
+          ai_theme_id,
+          ARRAY_AGG(id ORDER BY ai_quality_score DESC) FILTER (WHERE rn <= 5) AS asset_ids,
+          ARRAY_AGG(title ORDER BY ai_quality_score DESC) FILTER (WHERE rn <= 5) AS titles,
+          ROUND(AVG(ai_quality_score)::numeric, 1) AS avg_quality,
+          COUNT(*) AS asset_count
+        FROM ranked
+        GROUP BY ai_theme_id
+      )
+      SELECT * FROM grouped
+      ORDER BY avg_quality DESC
+      LIMIT $1
+    `, [limit]);
+
+    // 取每组前5个 asset 的 tags，拼出推荐理由
+    const recommendations = await Promise.all(groupResult.rows.map(async (row: any) => {
+      const topIds: string[] = (row.asset_ids || []).slice(0, 5);
+      const titles: string[] = (row.titles || []).slice(0, 5);
+
+      // 取 tags
+      let tags: string[] = [];
+      try {
+        const tagsResult = await this.deps.db.query(
+          `SELECT ai_tags FROM assets WHERE id = ANY($1) AND ai_tags IS NOT NULL LIMIT 5`,
+          [topIds],
+        );
+        for (const r of tagsResult.rows) {
+          const t = typeof r.ai_tags === 'string' ? JSON.parse(r.ai_tags) : r.ai_tags;
+          if (Array.isArray(t)) tags.push(...t);
+        }
+        tags = [...new Set(tags)].slice(0, 8);
+      } catch { /* ignore */ }
+
+      const score = Number(row.avg_quality) / 100;
+      const rationale = tags.length > 0
+        ? `主题「${row.ai_theme_id}」· 涵盖 ${row.asset_count} 篇 · 标签: ${tags.slice(0, 4).join('、')}`
+        : `主题「${row.ai_theme_id}」· 涵盖 ${row.asset_count} 篇研报，平均质量分 ${row.avg_quality}`;
+
+      return {
+        assetIds: topIds,
+        experts: [] as string[],
+        score,
+        rationale,
+        theme: row.ai_theme_id,
+        tags,
+        titles: titles.slice(0, 3),
+      };
     }));
 
     return {
+      source: 'assets_fallback',
+      totalMatches: groupResult.rows.length,
       recommendations,
-      totalMatches: logsResult.rows.length,
     };
   }
 
