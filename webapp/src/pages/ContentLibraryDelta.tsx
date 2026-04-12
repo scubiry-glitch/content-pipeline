@@ -57,11 +57,14 @@ export function ContentLibraryDelta() {
     d.setDate(d.getDate() - 7);
     return d.toISOString().split('T')[0];
   });
+  const [domain, setDomain] = useState('');
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/delta?since=${since}`);
+      const params = new URLSearchParams({ since });
+      if (domain) params.set('domain', domain);
+      const res = await fetch(`${API_BASE}/delta?${params}`);
       if (res.ok) setReport(await res.json());
     } catch {
       /* ignore */
@@ -95,6 +98,8 @@ export function ContentLibraryDelta() {
           onChange={(e) => setSince(e.target.value)}
           className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
         />
+        <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
+          placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" />
         <button
           onClick={load}
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"

@@ -49,6 +49,7 @@ export function ContentLibraryCards() {
   const [filterCore, setFilterCore] = useState(false);         // 有核心数据
   const [filterType, setFilterType] = useState('全部类型');    // 实体类型
   const [minFacts, setMinFacts] = useState(0);                  // 最低事实数
+  const [gridPage, setGridPage] = useState(1);                  // v7.3: 分页
 
   useEffect(() => {
     fetch(`${API_BASE}/dropdown/entities?limit=100`)
@@ -158,45 +159,61 @@ export function ContentLibraryCards() {
         <div className="text-xs text-gray-400">
           共 {filtered.length} 个实体
           {(filterFacts || filterCore || filterType !== '全部类型' || minFacts > 0 || query) && (
-            <button onClick={() => { setFilterFacts(false); setFilterCore(false); setFilterType('全部类型'); setMinFacts(0); setQuery(''); }}
+            <button onClick={() => { setFilterFacts(false); setFilterCore(false); setFilterType('全部类型'); setMinFacts(0); setQuery(''); setGridPage(1); }}
               className="ml-2 text-indigo-500 hover:underline">清除筛选</button>
           )}
         </div>
       </div>
 
-      {/* 实体网格 */}
-      {!card && !loading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 mb-6">
-          {filtered.slice(0, 60).map(e => (
-            <button
-              key={e.id}
-              onClick={() => loadCard(e.name)}
-              className="flex flex-col gap-1 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-left hover:border-indigo-400 hover:shadow-sm transition-all group"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-base shrink-0">{typeEmoji[e.type] || '📄'}</span>
-                <span className="text-sm text-gray-800 dark:text-gray-200 truncate font-medium group-hover:text-indigo-600">{e.name}</span>
-              </div>
-              <div className="flex gap-2 text-[10px]">
-                {e.factCount > 0 && (
-                  <span className="text-indigo-500">{e.factCount} 事实</span>
-                )}
-                {e.coreDataCount > 0 && (
-                  <span className="text-amber-500">📊 {e.coreDataCount} 数据</span>
-                )}
-                {e.factCount === 0 && (
-                  <span className="text-gray-300">无事实</span>
-                )}
-              </div>
-            </button>
-          ))}
-          {filtered.length > 60 && (
-            <div className="col-span-full text-center text-xs text-gray-400 py-2">
-              仅显示前 60 条，请使用搜索或筛选缩小范围
+      {/* 实体网格 (v7.3: 真分页) */}
+      {!card && !loading && (() => {
+        const GRID_PAGE_SIZE = 40;
+        const totalGridPages = Math.max(1, Math.ceil(filtered.length / GRID_PAGE_SIZE));
+        const safeGP = Math.min(gridPage, totalGridPages);
+        const gridItems = filtered.slice((safeGP - 1) * GRID_PAGE_SIZE, safeGP * GRID_PAGE_SIZE);
+        return (
+        <>
+          {filtered.length > GRID_PAGE_SIZE && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3">
+              <button disabled={safeGP <= 1} onClick={() => setGridPage(p => p - 1)}
+                className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                上一页
+              </button>
+              <span>第 {safeGP} / {totalGridPages} 页（共 {filtered.length} 个）</span>
+              <button disabled={safeGP >= totalGridPages} onClick={() => setGridPage(p => p + 1)}
+                className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                下一页
+              </button>
             </div>
           )}
-        </div>
-      )}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 mb-6">
+            {gridItems.map(e => (
+              <button
+                key={e.id}
+                onClick={() => loadCard(e.name)}
+                className="flex flex-col gap-1 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-left hover:border-indigo-400 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base shrink-0">{typeEmoji[e.type] || '📄'}</span>
+                  <span className="text-sm text-gray-800 dark:text-gray-200 truncate font-medium group-hover:text-indigo-600">{e.name}</span>
+                </div>
+                <div className="flex gap-2 text-[10px]">
+                  {e.factCount > 0 && (
+                    <span className="text-indigo-500">{e.factCount} 事实</span>
+                  )}
+                  {e.coreDataCount > 0 && (
+                    <span className="text-amber-500">📊 {e.coreDataCount} 数据</span>
+                  )}
+                  {e.factCount === 0 && (
+                    <span className="text-gray-300">无事实</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+        );
+      })()}
 
       {/* 卡片区 */}
       {loading ? (

@@ -28,6 +28,7 @@ export function ContentLibraryEntities() {
   const [selected, setSelected] = useState<ContentEntity | null>(null);
   const [relations, setRelations] = useState<EntityRelation[]>([]);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
   const loadEntities = async (pageArg?: number) => {
@@ -36,6 +37,7 @@ export function ContentLibraryEntities() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
+      if (typeFilter) params.set('entityType', typeFilter);
       params.set('limit', String(ENTITIES_PAGE_SIZE));
       params.set('page', String(page));
       const res = await fetch(`${API_BASE}/entities?${params}`);
@@ -83,6 +85,18 @@ export function ContentLibraryEntities() {
           placeholder="搜索实体..."
           className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
+        <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setEntitiesPage(1); setTimeout(() => loadEntities(1), 0); }}
+          className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+          <option value="">全部类型</option>
+          <option value="company">🏢 公司</option>
+          <option value="person">👤 人物</option>
+          <option value="concept">💡 概念</option>
+          <option value="metric">📊 指标</option>
+          <option value="event">📅 事件</option>
+          <option value="product">📦 产品</option>
+          <option value="organization">🏛️ 组织</option>
+          <option value="location">📍 地点</option>
+        </select>
         <button
           type="button"
           onClick={() => { setEntitiesPage(1); void loadEntities(1); }}
