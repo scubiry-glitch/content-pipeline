@@ -648,63 +648,116 @@ export class ContentLibraryEngine {
     }));
   }
 
-  /** ⑩ 有价值的认知 (LLM 综合提炼) */
+  /** ⑩ 有价值的认知 (LLM 综合提炼) — v7.2 修复 6 bug + 降级策略 */
   async synthesizeInsights(options?: {
     subjects?: string[];
     domain?: string;
     limit?: number;
-  }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string }> {
+  }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string; error?: string; factsUsed?: number }> {
     const limit = options?.limit || 10;
 
-    // 获取高置信度事实
-    const factsQuery = `
-      SELECT DISTINCT subject, predicate, object, confidence, context
-      FROM content_facts
-      WHERE is_current = true AND confidence > 0.7
-      ${options?.domain ? 'AND context->\'domain\' = $1' : ''}
-      ORDER BY confidence DESC
-      LIMIT $2
-    `;
-    const factsParams = options?.domain ? [options.domain, limit * 5] : [limit * 5];
-    const factsResult = await this.deps.db.query(factsQuery, factsParams);
-
-    if (factsResult.rows.length === 0) {
-      return { insights: [], summary: 'No high-confidence facts available for synthesis' };
+    // B1 fix: 两阶段降级 (> 0.5 → > 0.3)，保证能取到事实
+    // B2 fix: context->>'domain' 用 ->> 取文本值
+    let factsResult: any = { rows: [] };
+    for (const threshold of [0.5, 0.3, 0.0]) {
+      const domainClause = options?.domain ? `AND context->>'domain' = $1` : '';
+      const factsQuery = `
+        SELECT DISTINCT subject, predicate, object, confidence, context
+        FROM content_facts
+        WHERE is_current = true AND confidence > ${threshold}
+        ${domainClause}
+        ORDER BY confidence DESC
+        LIMIT $${options?.domain ? '2' : '1'}
+      `;
+      const factsParams = options?.domain ? [options.domain, limit * 5] : [limit * 5];
+      factsResult = await this.deps.db.query(factsQuery, factsParams);
+      if (factsResult.rows.length >= 3) break;  // 至少 3 条才有价值
     }
 
-    // 构建提示词
-    const factsText = factsResult.rows.map(f => `${f.subject} - ${f.predicate}: ${f.object}`).join('\n');
-    const prompt = `Based on these facts, synthesize 3-5 valuable insights that would be useful for content creators:
+    if (factsResult.rows.length === 0) {
+      return {
+        insights: [],
+        summary: '内容库中暂无事实数据。请先导入素材并执行事实提取。',
+        error: 'NO_FACTS',
+        factsUsed: 0,
+      };
+    }
 
-${factsText}
+    // B5 fix: 中文 prompt
+    const factsText = factsResult.rows.map((f: any) =>
+      `- ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(Number(f.confidence) * 100)}%)`
+    ).join('\n');
 
-Format: each insight as a JSON object with:
-- text: the insight (concise, actionable)
-- sources: array of subject-predicate pairs this comes from
-- confidence: 0-1 score`;
+    const systemPrompt = `你是内容认知综合引擎。根据用户提供的结构化事实，综合提炼出 3~5 条有价值的洞察。
+每条洞察是一个完整的、可操作的结论性判断 (不是事实的简单重述)。
+严格输出 JSON 数组，不要 markdown 代码块，不要多余文字。
+格式: [{"text": "洞察内容 (一两句话)", "sources": ["主体·谓词"], "confidence": 0.0-1.0}]`;
+
+    const userPrompt = `以下是从内容库中提取的 ${factsResult.rows.length} 条高置信度事实:\n\n${factsText}\n\n请综合提炼洞察 (JSON 数组):`;
 
     try {
+      // B3 fix: maxTokens 2048
       const response = await this.deps.llm.completeWithSystem(
-        'You are a content synthesis engine. Output only JSON.',
-        prompt,
-        { temperature: 0.2, maxTokens: 500, responseFormat: 'json' }
+        systemPrompt,
+        userPrompt,
+        { temperature: 0.3, maxTokens: 2048, responseFormat: 'json' }
       );
 
-      // 简化解析（实际应该更健壮）
-      const insights = [];
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        insights.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+      // B4 fix: 双格式解析 — 先尝试 [...], 再尝试 {insights: [...]}
+      const insights: Array<{ text: string; sources: string[]; confidence: number }> = [];
+      let parsed: any;
+      try {
+        // 清理 markdown fence
+        let cleaned = response.trim();
+        const fence = /```(?:json)?\s*([\s\S]*?)```/i;
+        const fm = cleaned.match(fence);
+        if (fm) cleaned = fm[1].trim();
+
+        // 尝试 JSON.parse
+        parsed = JSON.parse(cleaned);
+      } catch {
+        // 尝试找到第一个 [ 或 {
+        const arrMatch = response.match(/\[[\s\S]*\]/);
+        const objMatch = response.match(/\{[\s\S]*\}/);
+        if (arrMatch) {
+          try { parsed = JSON.parse(arrMatch[0].replace(/,\s*([\]}])/g, '$1')); } catch { /* */ }
+        }
+        if (!parsed && objMatch) {
+          try { parsed = JSON.parse(objMatch[0].replace(/,\s*([\]}])/g, '$1')); } catch { /* */ }
+        }
       }
 
+      if (Array.isArray(parsed)) {
+        insights.push(...parsed);
+      } else if (parsed && Array.isArray(parsed.insights)) {
+        insights.push(...parsed.insights);
+      }
+
+      // 规范化
+      const normalized = insights
+        .filter(i => i && typeof i.text === 'string' && i.text.trim())
+        .map(i => ({
+          text: String(i.text).trim(),
+          sources: Array.isArray(i.sources) ? i.sources.map(String) : [],
+          confidence: typeof i.confidence === 'number' ? i.confidence : 0.5,
+        }))
+        .slice(0, limit);
+
       return {
-        insights: insights.slice(0, limit),
-        summary: `Synthesized ${insights.length} insights from ${factsResult.rows.length} facts`,
+        insights: normalized,
+        summary: `从 ${factsResult.rows.length} 条事实中综合提炼出 ${normalized.length} 条认知`,
+        factsUsed: factsResult.rows.length,
       };
     } catch (err) {
-      console.error('[ContentLibrary] Synthesis failed:', err);
-      return { insights: [], summary: 'Synthesis failed' };
+      // B6 fix: 错误透传
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[ContentLibrary] Synthesis failed:', errMsg);
+      return {
+        insights: [],
+        summary: `综合提炼失败: ${errMsg}`,
+        error: errMsg,
+        factsUsed: factsResult.rows.length,
+      };
     }
   }
 

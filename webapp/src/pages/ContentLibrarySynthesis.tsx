@@ -1,7 +1,8 @@
 // Content Library — ⑩ 有价值的认知综合
 // LLM 跨多篇内容的事实聚合提炼
+// v7.2: 修复空页面 + 自动加载 + 错误透传
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -11,16 +12,23 @@ interface Insight {
   confidence: number;
 }
 
+interface SynthResult {
+  insights: Insight[];
+  summary: string;
+  error?: string;
+  factsUsed?: number;
+}
+
 export function ContentLibrarySynthesis() {
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SynthResult | null>(null);
+  const [loading, setLoading] = useState(true);  // 默认 true, 自动加载
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [domain, setDomain] = useState('');
   const [subjects, setSubjects] = useState('');
 
   const synthesize = async () => {
     setLoading(true);
-    setError(null);
+    setFetchError(null);
     try {
       const res = await fetch(`${API_BASE}/synthesize`, {
         method: 'POST',
@@ -31,21 +39,31 @@ export function ContentLibrarySynthesis() {
           limit: 10,
         }),
       });
-      const data = await res.json();
-      setInsights(data.insights || []);
+      if (!res.ok) {
+        setFetchError(`HTTP ${res.status}: ${res.statusText}`);
+        return;
+      }
+      const data = (await res.json()) as SynthResult;
+      setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to synthesize insights');
+      setFetchError(err instanceof Error ? err.message : 'Failed to synthesize insights');
     } finally {
       setLoading(false);
     }
   };
+
+  // v7.2: 页面加载时自动触发一次
+  useEffect(() => { synthesize(); }, []);
+
+  const insights = result?.insights || [];
+  const hasError = fetchError || result?.error;
 
   return (
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">有价值的认知</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          LLM 跨多篇内容的事实聚合提炼，发现新的核心洞察
+          ⑩ LLM 跨多篇内容的事实聚合提炼，发现新的核心洞察
         </p>
       </div>
 
@@ -54,25 +72,25 @@ export function ContentLibrarySynthesis() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              领域（可选）
+              领域过滤（可选）
             </label>
             <input
               type="text"
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
-              placeholder="e.g., AI, 芯片"
+              placeholder="如: AI, 芯片, 新能源"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              主体（逗号分隔，可选）
+              主体限定（逗号分隔，可选）
             </label>
             <input
               type="text"
               value={subjects}
               onChange={(e) => setSubjects(e.target.value)}
-              placeholder="e.g., NVIDIA, OpenAI"
+              placeholder="如: NVIDIA, OpenAI, 芯片"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
             />
           </div>
@@ -80,52 +98,85 @@ export function ContentLibrarySynthesis() {
         <button
           onClick={synthesize}
           disabled={loading}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+          className="mt-4 px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm font-medium"
         >
-          {loading ? '综合中...' : '综合认知'}
+          {loading ? '综合提炼中...' : '重新提炼'}
         </button>
       </div>
 
-      {/* 结果展示 */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+      {/* 摘要行 */}
+      {result && (
+        <div className="mb-4 flex items-center gap-3 text-sm">
+          <span className="text-gray-600 dark:text-gray-300">{result.summary}</span>
+          {typeof result.factsUsed === 'number' && (
+            <span className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 px-2 py-0.5 rounded">
+              基于 {result.factsUsed} 条事实
+            </span>
+          )}
         </div>
       )}
 
-      <div className="space-y-4">
-        {insights.length === 0 && !loading && (
-          <div className="text-gray-500 text-center py-8">暂无洞察</div>
-        )}
-        {insights.map((insight, idx) => (
-          <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                  {insight.text}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    置信度: {(insight.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
+      {/* 错误展示 (v7.2: 不再静默) */}
+      {hasError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4 text-sm">
+          <p className="font-medium mb-1">提炼遇到问题</p>
+          <p className="text-red-600 dark:text-red-400">{fetchError || result?.error}</p>
+          {result?.error === 'NO_FACTS' && (
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              提示: 请先到素材库导入文档，内容库会自动提取事实三元组。
+              也可以到 <a href="/content-library/facts" className="text-indigo-600 underline">事实浏览器</a> 检查已有事实。
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 结果展示 */}
+      {loading ? (
+        <div className="text-center py-12 text-gray-500">
+          <div className="animate-pulse">LLM 综合提炼中，请稍候...</div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {insights.length === 0 && !hasError && (
+            <div className="text-gray-400 text-center py-8">
+              暂无认知洞察。请导入更多素材或调整领域/主体过滤条件后重试。
             </div>
-            {insight.sources.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">来源：</p>
-                <div className="flex flex-wrap gap-2">
-                  {insight.sources.map((source, i) => (
-                    <span key={i} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
-                      {source}
+          )}
+          {insights.map((insight, idx) => (
+            <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+              <div className="flex items-start gap-3">
+                <span className="text-lg shrink-0">💡</span>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900 dark:text-white mb-2 leading-relaxed">
+                    {insight.text}
+                  </p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                      insight.confidence >= 0.8 ? 'bg-green-100 text-green-700' :
+                      insight.confidence >= 0.5 ? 'bg-indigo-100 text-indigo-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      置信度 {(insight.confidence * 100).toFixed(0)}%
                     </span>
-                  ))}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+              {insight.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 ml-8">
+                  <p className="text-xs text-gray-500 font-medium mb-1.5">来源事实:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {insight.sources.map((source, i) => (
+                      <span key={i} className="text-xs bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">
+                        {source}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
