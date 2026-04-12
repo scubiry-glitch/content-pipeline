@@ -1,0 +1,13 @@
+---
+type: entity
+entityType: metric
+aliases:
+  - 国内生产总值增速
+updatedAt: "2026-04-11T19:02:16.482Z"
+---
+
+# GDP增速
+
+**别名**: 国内生产总值增速
+
+**类型**: `metric`

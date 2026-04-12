@@ -234,8 +234,11 @@ export class WikiGenerator {
   async readMarkdown(wikiRoot: string, relPath: string): Promise<string | null> {
     try {
       const safe = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '');
-      const full = path.join(wikiRoot, safe);
-      if (!full.startsWith(path.resolve(wikiRoot))) return null;  // 防越狱
+      const resolvedRoot = path.resolve(wikiRoot);
+      const full = path.resolve(resolvedRoot, safe);
+      // 必须在 wiki 根目录内（相对路径 + 绝对路径混用时，不能用 startsWith 比较未 resolve 的 full）
+      const rel = path.relative(resolvedRoot, full);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
       return await fs.readFile(full, 'utf8');
     } catch {
       return null;
