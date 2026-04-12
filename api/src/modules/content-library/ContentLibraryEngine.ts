@@ -280,6 +280,15 @@ export class ContentLibraryEngine {
       });
     }
 
+    // v7.3: Zep 可选双写 (无 Zep 时静默跳过)
+    try {
+      const { syncFactsToZep, syncEntitiesToZep } = await import('../../services/zep/index.js');
+      await Promise.all([
+        syncFactsToZep(compressedFacts),
+        syncEntitiesToZep(extraction.entities),
+      ]);
+    } catch { /* Zep 模块加载失败时忽略 */ }
+
     return { facts: compressedFacts, entities: extraction.entities };
   }
 
@@ -422,6 +431,12 @@ export class ContentLibraryEngine {
           }
           await this.storeFacts([compressed]);
         }
+
+        // v7.3: Zep 可选双写
+        try {
+          const { syncFactsToZep } = await import('../../services/zep/index.js');
+          await syncFactsToZep(highQuality);
+        } catch { /* ignore */ }
 
         // G1: 断点写入 — 每个 asset 处理完立即标记
         if (source === 'assets' && !options.dryRun) {

@@ -31,6 +31,8 @@ export function ContentLibraryCrossDomain() {
   const [domain, setDomain] = useState('');
   const [limit, setLimit] = useState(30);
   const [page, setPage] = useState(1);
+  // Zep 增强: 远距离关系
+  const [zepRelations, setZepRelations] = useState<Array<{ source: string; target: string; fact: string; validAt?: string }>>([]);
 
   const resolvedEntity = (() => {
     if (selectedEntityId) {
@@ -54,6 +56,11 @@ export function ContentLibraryCrossDomain() {
       const res = await fetch(`${API_BASE}/cross-domain/${encodeURIComponent(resolvedEntity)}?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
+      // Zep 增强: 图遍历发现远距离关联 (异步)
+      fetch(`${API_BASE}/zep/cross-domain/${encodeURIComponent(resolvedEntity)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setZepRelations(d?.relations?.length ? d.relations : []))
+        .catch(() => setZepRelations([]));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to discover');
     } finally {
@@ -193,6 +200,31 @@ export function ContentLibraryCrossDomain() {
       )}
       {!data && !loading && (
         <div className="text-gray-400 text-center py-12">选择实体，点击"发现跨域关联"</div>
+      )}
+
+      {/* Zep 增强: 远距离关联 */}
+      {zepRelations.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-3 flex items-center gap-1.5">
+            <span className="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 rounded">Zep</span>
+            图遍历发现的远距离关联 ({zepRelations.length})
+          </h2>
+          <div className="space-y-2">
+            {zepRelations.map((zr, i) => (
+              <div key={i} className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-purple-700 dark:text-purple-300">{zr.source}</span>
+                  <span className="text-purple-400">→</span>
+                  <span className="font-medium text-purple-700 dark:text-purple-300">{zr.target}</span>
+                </div>
+                <div className="text-xs text-purple-500 mt-1">
+                  {zr.fact}
+                  {zr.validAt && <span className="ml-2 text-purple-400">({zr.validAt})</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

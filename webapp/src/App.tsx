@@ -50,6 +50,7 @@ import { ContentLibraryCards } from './pages/ContentLibraryCards';
 import { ContentLibraryWiki } from './pages/ContentLibraryWiki';
 import { ContentLibraryBatchOps } from './pages/ContentLibraryBatchOps';
 import { ContentLibraryPipeline } from './pages/ContentLibraryPipeline';
+import { ContentLibraryMaterials } from './pages/ContentLibraryMaterials';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -145,6 +146,7 @@ function App() {
               <Route path="content-library/wiki" element={<ContentLibraryWiki />} />
               <Route path="content-library/batch-ops" element={<ContentLibraryBatchOps />} />
               <Route path="content-library/pipeline" element={<ContentLibraryPipeline />} />
+              <Route path="content-library/materials" element={<ContentLibraryMaterials />} />
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

@@ -28,6 +28,50 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     fastify.get('/stats/overview', async () => engine.getOverviewStats());
 
     // ============================================================
+    // v7.3: Zep 可选增强 API (无 Zep 时返回 null)
+    // ============================================================
+
+    fastify.get('/zep/status', async () => {
+      try {
+        const { getZepStatus } = await import('../../services/zep/index.js');
+        return getZepStatus();
+      } catch { return { enabled: false, connected: false, graphUserId: '' }; }
+    });
+
+    fastify.get('/zep/entities/:name/graph', async (request) => {
+      const { name } = request.params as any;
+      const q = request.query as any;
+      try {
+        const { enhanceEntityGraph } = await import('../../services/zep/index.js');
+        return await enhanceEntityGraph(decodeURIComponent(name), q.limit ? parseInt(q.limit) : 20) || { relations: [], source: 'none' };
+      } catch { return { relations: [], source: 'none' }; }
+    });
+
+    fastify.get('/zep/contradictions/:subject', async (request) => {
+      const { subject } = request.params as any;
+      try {
+        const { enhanceContradictions } = await import('../../services/zep/index.js');
+        return await enhanceContradictions(decodeURIComponent(subject)) || { temporalConflicts: [], source: 'none' };
+      } catch { return { temporalConflicts: [], source: 'none' }; }
+    });
+
+    fastify.get('/zep/beliefs/:proposition/timeline', async (request) => {
+      const { proposition } = request.params as any;
+      try {
+        const { enhanceBeliefTimeline } = await import('../../services/zep/index.js');
+        return await enhanceBeliefTimeline(decodeURIComponent(proposition)) || [];
+      } catch { return []; }
+    });
+
+    fastify.get('/zep/cross-domain/:entity', async (request) => {
+      const { entity } = request.params as any;
+      try {
+        const { enhanceCrossDomain } = await import('../../services/zep/index.js');
+        return await enhanceCrossDomain(decodeURIComponent(entity)) || { relations: [], source: 'none' };
+      } catch { return { relations: [], source: 'none' }; }
+    });
+
+    // ============================================================
     // 辅助查询: 下拉选项列表
     // ============================================================
 
