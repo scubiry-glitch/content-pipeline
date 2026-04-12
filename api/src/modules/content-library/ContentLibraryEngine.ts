@@ -901,36 +901,70 @@ export class ContentLibraryEngine {
     };
   }
 
-  /** ⑮ 跨领域关联 (Cross-domain reasoning) */
+  /**
+   * ⑮ 跨领域关联 (Cross-domain reasoning)
+   * v7.2: 用 Adamic-Adar 替代 COUNT(*)/10
+   * AA(u,v) = Σ 1/log(degree(w))，其中 w 是 u 和 v 的共同邻居
+   * 冷门共同邻居权重更高 — 共享稀有连接比共享热门连接更有意义
+   */
   async discoverCrossDomainInsights(options?: {
     entityId?: string;
     domain?: string;
     limit?: number;
-  }): Promise<{ associations: Array<{ entity1: string; entity2: string; relationship: string; strength: number; domains: string[] }>; count: number }> {
-    // 查询实体的跨域关联（通过共同出现的事实）
-    const associationQuery = `
-      SELECT DISTINCT
-        cf1.subject as entity1,
-        cf2.subject as entity2,
-        cf1.context->>'domain' as domain1,
-        cf2.context->>'domain' as domain2,
-        COUNT(*) as co_occurrence
-      FROM content_facts cf1
-      JOIN content_facts cf2 ON cf1.predicate = cf2.predicate AND cf1.object = cf2.object
-      WHERE cf1.is_current = true AND cf2.is_current = true
-      AND cf1.subject < cf2.subject
-      AND cf1.context->>'domain' != cf2.context->>'domain'
-      GROUP BY cf1.subject, cf2.subject, domain1, domain2
-      ORDER BY co_occurrence DESC
+  }): Promise<{ associations: Array<{ entity1: string; entity2: string; relationship: string; strength: number; adamicAdar: number; commonNeighbors: number; domains: string[] }>; count: number }> {
+    const aaQuery = `
+      WITH entity_neighbors AS (
+        SELECT DISTINCT subject AS entity, object AS neighbor
+        FROM content_facts WHERE is_current = true
+        UNION
+        SELECT DISTINCT object, subject FROM content_facts WHERE is_current = true
+      ),
+      neighbor_degree AS (
+        SELECT neighbor, COUNT(DISTINCT entity) AS degree
+        FROM entity_neighbors
+        GROUP BY neighbor
+      ),
+      pair_common_neighbors AS (
+        SELECT
+          en1.entity AS e1,
+          en2.entity AS e2,
+          en1.neighbor AS common_neighbor,
+          nd.degree
+        FROM entity_neighbors en1
+        JOIN entity_neighbors en2 ON en1.neighbor = en2.neighbor AND en1.entity < en2.entity
+        JOIN neighbor_degree nd ON nd.neighbor = en1.neighbor
+        WHERE nd.degree > 1
+      ),
+      aa_scores AS (
+        SELECT
+          e1, e2,
+          SUM(1.0 / GREATEST(LN(GREATEST(degree, 2)), 0.01)) AS aa_score,
+          COUNT(*) AS common_count
+        FROM pair_common_neighbors
+        GROUP BY e1, e2
+      )
+      SELECT
+        aa.e1 AS entity1, aa.e2 AS entity2,
+        ROUND(aa.aa_score::numeric, 3) AS aa_score,
+        aa.common_count,
+        ce1.taxonomy_domain_id AS domain1,
+        ce2.taxonomy_domain_id AS domain2
+      FROM aa_scores aa
+      LEFT JOIN content_entities ce1 ON ce1.canonical_name = aa.e1
+      LEFT JOIN content_entities ce2 ON ce2.canonical_name = aa.e2
+      WHERE ce1.taxonomy_domain_id IS DISTINCT FROM ce2.taxonomy_domain_id
+      ORDER BY aa.aa_score DESC
       LIMIT $1
     `;
-    const result = await this.deps.db.query(associationQuery, [options?.limit || 20]);
+    const result = await this.deps.db.query(aaQuery, [options?.limit || 20]);
 
-    const associations = result.rows.map(row => ({
+    const associations = result.rows.map((row: any) => ({
       entity1: row.entity1,
       entity2: row.entity2,
-      relationship: `co-occur in ${row.co_occurrence} facts`,
-      strength: Math.min(row.co_occurrence / 10, 1),
+      relationship: `${row.common_count} shared rare neighbors (AA=${row.aa_score})`,
+      strength: Math.min(Number(row.aa_score) / 5, 1),  // 归一化到 0-1
+      adamicAdar: Number(row.aa_score),
+      commonNeighbors: Number(row.common_count),
       domains: [row.domain1, row.domain2].filter(Boolean),
     }));
 
