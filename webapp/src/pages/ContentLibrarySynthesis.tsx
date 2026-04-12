@@ -28,6 +28,7 @@ export function ContentLibrarySynthesis() {
   const [domain, setDomain] = useState('');
   const [subjects, setSubjects] = useState('');
   const [selectedEntityId, setSelectedEntityId] = useState('');
+  const [insightLimit, setInsightLimit] = useState(10);
 
   const synthesize = async () => {
     setLoading(true);
@@ -39,7 +40,7 @@ export function ContentLibrarySynthesis() {
         body: JSON.stringify({
           domain: domain || undefined,
           subjects: subjects ? subjects.split(',').map(s => s.trim()) : undefined,
-          limit: 10,
+          limit: insightLimit,
         }),
       });
       if (!res.ok) {
@@ -109,6 +110,15 @@ export function ContentLibrarySynthesis() {
         >
           {loading ? '综合提炼中...' : '重新生成'}
         </button>
+        <label className="mt-4 flex items-center gap-2 text-xs text-gray-500">
+          结果条数
+          <select value={insightLimit} onChange={e => setInsightLimit(Number(e.target.value))}
+            className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs">
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+          </select>
+        </label>
       </div>
 
       {/* 摘要行 */}

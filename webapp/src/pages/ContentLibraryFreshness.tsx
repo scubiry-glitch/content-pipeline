@@ -1,10 +1,11 @@
 // 内容库 — ⑧ 事实保鲜度
+// v7.3: 分页 + 排序 (按天数/置信度/主体)
 import { useState, useEffect, useMemo } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
+const PAGE_SIZE = 30;
 
-/** 与 api ContentFact 对齐 (getStaleFacts 返回 ContentFact[]) */
 interface ContentFact {
   id: string;
   assetId: string;
@@ -17,8 +18,8 @@ interface ContentFact {
   createdAt: string;
 }
 
-/** 前端派生的保鲜度 */
 type Freshness = 'fresh' | 'aging' | 'stale';
+type SortKey = 'days' | 'confidence' | 'subject';
 
 function computeFreshness(createdAt: string, maxAgeDays: number): { freshness: Freshness; days: number } {
   const days = Math.round((Date.now() - new Date(createdAt).getTime()) / 86400000);
@@ -33,28 +34,44 @@ export function ContentLibraryFreshness() {
   const [loading, setLoading] = useState(true);
   const [maxAgeDays, setMaxAgeDays] = useState(90);
   const [domain, setDomain] = useState('');
+  const [sortBy, setSortBy] = useState<SortKey>('days');
+  const [page, setPage] = useState(1);
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ maxAgeDays: String(maxAgeDays), limit: '50' });
+      const params = new URLSearchParams({ maxAgeDays: String(maxAgeDays), limit: '500' });
       if (domain) params.set('domain', domain);
       const res = await fetch(`${API_BASE}/freshness/stale?${params}`);
       if (res.ok) {
         const data = await res.json();
         setFacts(Array.isArray(data) ? data : []);
+        setPage(1);
       }
     } catch { /* ignore */ }
     setLoading(false);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { load(); }, []);
 
-  /** 为每个 fact 派生 freshness 和 days */
   const withFreshness = useMemo(
     () => facts.map(f => ({ ...f, ...computeFreshness(f.createdAt, maxAgeDays) })),
     [facts, maxAgeDays]
   );
+
+  const sorted = useMemo(() => {
+    const arr = [...withFreshness];
+    switch (sortBy) {
+      case 'days': arr.sort((a, b) => b.days - a.days); break;
+      case 'confidence': arr.sort((a, b) => b.confidence - a.confidence); break;
+      case 'subject': arr.sort((a, b) => a.subject.localeCompare(b.subject)); break;
+    }
+    return arr;
+  }, [withFreshness, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safeP = Math.min(page, totalPages);
+  const pageItems = sorted.slice((safeP - 1) * PAGE_SIZE, safeP * PAGE_SIZE);
 
   const freshnessConfig: Record<string, { label: string; color: string; bg: string }> = {
     fresh: { label: '新鲜', color: 'text-green-700', bg: 'bg-green-100' },
@@ -71,7 +88,7 @@ export function ContentLibraryFreshness() {
       <p className="text-gray-500 dark:text-gray-400 mb-6">⑧ 检测需要更新或验证的过时事实</p>
       <ProductMetaBar productKey="freshness" />
 
-      <div className="flex gap-3 mb-6 items-center">
+      <div className="flex flex-wrap gap-3 mb-6 items-center">
         <label className="text-sm text-gray-600 dark:text-gray-400">最大天数：</label>
         <select value={maxAgeDays} onChange={e => setMaxAgeDays(Number(e.target.value))}
           className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
@@ -83,6 +100,13 @@ export function ContentLibraryFreshness() {
         </select>
         <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
           placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" />
+        <label className="text-sm text-gray-600 dark:text-gray-400">排序：</label>
+        <select value={sortBy} onChange={e => { setSortBy(e.target.value as SortKey); setPage(1); }}
+          className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+          <option value="days">按天数 (最旧优先)</option>
+          <option value="confidence">按置信度 (最高优先)</option>
+          <option value="subject">按主体 (A-Z)</option>
+        </select>
         <button onClick={load} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">查询</button>
       </div>
 
@@ -104,13 +128,28 @@ export function ContentLibraryFreshness() {
         </div>
       )}
 
+      {/* 分页 */}
+      {sorted.length > PAGE_SIZE && (
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
+          <button disabled={safeP <= 1} onClick={() => setPage(p => p - 1)}
+            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+            上一页
+          </button>
+          <span>第 {safeP} / {totalPages} 页（共 {sorted.length} 条）</span>
+          <button disabled={safeP >= totalPages} onClick={() => setPage(p => p + 1)}
+            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+            下一页
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-12 text-gray-500">加载中...</div>
-      ) : withFreshness.length === 0 ? (
+      ) : pageItems.length === 0 ? (
         <div className="text-center py-12 text-gray-400">所有事实都在保鲜期内，或暂无数据。</div>
       ) : (
         <div className="space-y-2">
-          {withFreshness.map(f => {
+          {pageItems.map(f => {
             const cfg = freshnessConfig[f.freshness] || freshnessConfig.stale;
             return (
               <div key={f.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3">

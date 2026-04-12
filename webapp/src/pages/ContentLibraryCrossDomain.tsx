@@ -29,6 +29,8 @@ export function ContentLibraryCrossDomain() {
   const [selectedEntityId, setSelectedEntityId] = useState('');
   const [entityInput, setEntityInput] = useState('');
   const [domain, setDomain] = useState('');
+  const [limit, setLimit] = useState(30);
+  const [page, setPage] = useState(1);
 
   const resolvedEntity = (() => {
     if (selectedEntityId) {
@@ -48,7 +50,7 @@ export function ContentLibraryCrossDomain() {
     try {
       const params = new URLSearchParams();
       if (domain) params.append('domain', domain);
-      params.append('limit', '30');
+      params.append('limit', String(limit));
       const res = await fetch(`${API_BASE}/cross-domain/${encodeURIComponent(resolvedEntity)}?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
@@ -97,26 +99,58 @@ export function ContentLibraryCrossDomain() {
             <DomainSelect value={domain} onChange={setDomain} domains={domains} />
           </div>
         </div>
-        <button
-          onClick={discover}
-          disabled={loading || !resolvedEntity}
-          className="mt-4 px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
-        >
-          {loading ? '发现中...' : '发现跨域关联'}
-        </button>
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            onClick={() => { setPage(1); discover(); }}
+            disabled={loading || !resolvedEntity}
+            className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+          >
+            {loading ? '发现中...' : '发现跨域关联'}
+          </button>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+            最大条数
+            <select value={limit} onChange={e => setLimit(Number(e.target.value))}
+              className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs">
+              <option value={10}>10</option>
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>
       )}
 
-      {data && data.associations.length > 0 && (
+      {data && data.associations.length > 0 && (() => {
+        const PAGE_SIZE = 10;
+        const totalPages = Math.max(1, Math.ceil(data.associations.length / PAGE_SIZE));
+        const safeP = Math.min(page, totalPages);
+        const pageItems = data.associations.slice((safeP - 1) * PAGE_SIZE, safeP * PAGE_SIZE);
+        return (
         <div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            发现 <span className="font-semibold">{data.count}</span> 个跨领域关联
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              发现 <span className="font-semibold">{data.count}</span> 个跨领域关联
+            </p>
+            {data.associations.length > PAGE_SIZE && (
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <button disabled={safeP <= 1} onClick={() => setPage(p => p - 1)}
+                  className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  上一页
+                </button>
+                <span>第 {safeP}/{totalPages} 页</span>
+                <button disabled={safeP >= totalPages} onClick={() => setPage(p => p + 1)}
+                  className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  下一页
+                </button>
+              </div>
+            )}
+          </div>
           <div className="space-y-4">
-            {data.associations.map((a, idx) => (
+            {pageItems.map((a, idx) => (
               <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4"
                 style={{ borderColor: a.strength > 0.7 ? '#ef4444' : a.strength > 0.4 ? '#eab308' : '#3b82f6' }}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -151,7 +185,8 @@ export function ContentLibraryCrossDomain() {
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {!loading && data && data.associations.length === 0 && (
         <div className="text-gray-400 text-center py-12">暂无跨领域关联数据</div>
