@@ -89,7 +89,7 @@ export const PRODUCT_META: Record<string, ProductMetaDef> = {
     id: '⑪', name: '素材组合推荐',
     upstream: ['⑤ 关键事实', 'assets 元数据 (quality_score, theme_id)', '任务上下文'],
     downstream: ['Writer Agent 素材注入', '任务创建预填素材'],
-    page: '/content-library/cards', phase: '写作',
+    page: '/content-library/materials', phase: '写作',
   },
   consensus: {
     id: '⑫', name: '专家共识图',

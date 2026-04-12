@@ -26,6 +26,8 @@ export function ContentLibraryBeliefs() {
   const [beliefId, setBeliefId] = useState('');
   const [subject, setSubject] = useState('');
   const [options, setOptions] = useState<BeliefOption[]>([]);
+  // Zep 增强: 时间版本链
+  const [zepTimeline, setZepTimeline] = useState<Array<{ fact: string; validAt?: string; invalidAt?: string }>>([]);
 
   useEffect(() => {
     fetch(`${API_BASE}/dropdown/beliefs`)
@@ -52,6 +54,12 @@ export function ContentLibraryBeliefs() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: BeliefTimeline = await res.json();
       setTimeline(data.timeline);
+      // Zep 增强: 获取时间版本链 (异步不阻塞)
+      const prop = subject || beliefId;
+      fetch(`${API_BASE}/zep/beliefs/${encodeURIComponent(prop)}/timeline`)
+        .then(r => r.ok ? r.json() : [])
+        .then(d => setZepTimeline(Array.isArray(d) ? d : []))
+        .catch(() => setZepTimeline([]));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch timeline');
     } finally {
@@ -190,6 +198,27 @@ export function ContentLibraryBeliefs() {
           </div>
         ))}
       </div>
+
+      {/* Zep 增强: 时间版本链 */}
+      {zepTimeline.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-3 flex items-center gap-1.5">
+            <span className="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 rounded">Zep</span>
+            时间版本链 ({zepTimeline.length})
+          </h3>
+          <div className="space-y-2">
+            {zepTimeline.map((zt, i) => (
+              <div key={i} className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800 flex items-center justify-between">
+                <span className="text-sm text-purple-800 dark:text-purple-200">{zt.fact}</span>
+                <div className="flex gap-3 text-xs text-purple-500 shrink-0 ml-3">
+                  {zt.validAt && <span>生效: {zt.validAt}</span>}
+                  {zt.invalidAt && <span className="text-red-500">失效: {zt.invalidAt}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 统计信息 */}
       {timeline.length > 0 && (

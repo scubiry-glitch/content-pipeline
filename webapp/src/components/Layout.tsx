@@ -58,6 +58,7 @@ const mainNavItems: NavItem[] = [
       { to: '/content-library/freshness', label: '⑧ 保鲜度', icon: '⏱️' },
       { to: '/content-library/cards', label: '⑨ 知识卡片', icon: '🃏' },
       { to: '/content-library/synthesis', label: '⑩ 认知综合', icon: '💡' },
+      { to: '/content-library/materials', label: '⑪ 素材推荐', icon: '📦' },
       { to: '/content-library/consensus', label: '⑫ 专家共识', icon: '🤝' },
       { to: '/content-library/contradictions', label: '⑬ 争议话题', icon: '⚡' },
       { to: '/content-library/beliefs', label: '⑭ 观点演化', icon: '🔀' },
