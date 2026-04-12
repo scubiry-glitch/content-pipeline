@@ -8,6 +8,17 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
 
     // ============================================================
+    // 辅助查询: 下拉选项列表
+    // ============================================================
+
+    fastify.get('/dropdown/domains', async () => engine.listDomains());
+    fastify.get('/dropdown/entities', async (request) => {
+      const q = request.query as any;
+      return engine.listEntitiesForDropdown(q.limit ? parseInt(q.limit) : 50);
+    });
+    fastify.get('/dropdown/beliefs', async () => engine.listBeliefSubjects());
+
+    // ============================================================
     // Layer 3: 混合检索
     // ============================================================
 

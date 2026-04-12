@@ -458,6 +458,45 @@ export class ContentLibraryEngine {
   }
 
   // ============================================================
+  // 辅助查询: 下拉选项列表
+  // ============================================================
+
+  /** 获取所有 distinct domain 列表 (用于下拉选择) */
+  async listDomains(): Promise<string[]> {
+    const result = await this.deps.db.query(
+      `SELECT DISTINCT context->>'domain' AS domain FROM content_facts
+       WHERE is_current = true AND context->>'domain' IS NOT NULL AND context->>'domain' != ''
+       ORDER BY domain`
+    );
+    return result.rows.map((r: any) => r.domain);
+  }
+
+  /** 获取所有 belief subjects 列表 (用于下拉选择) */
+  async listBeliefSubjects(): Promise<Array<{ id: string; subject: string; state: string }>> {
+    const result = await this.deps.db.query(
+      `SELECT id, COALESCE(proposition, '') AS subject, current_stance AS state
+       FROM content_beliefs ORDER BY last_updated DESC LIMIT 100`
+    );
+    return result.rows.map((r: any) => ({ id: r.id, subject: r.subject, state: r.state }));
+  }
+
+  /** 获取实体简要列表 (用于下拉选择, 按事实密度排序) */
+  async listEntitiesForDropdown(limit = 50): Promise<Array<{ id: string; name: string; type: string; factCount: number }>> {
+    const result = await this.deps.db.query(
+      `SELECT ce.id, ce.canonical_name, ce.entity_type, COUNT(cf.id) AS fact_count
+       FROM content_entities ce
+       LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
+       GROUP BY ce.id, ce.canonical_name, ce.entity_type
+       ORDER BY COUNT(cf.id) DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return result.rows.map((r: any) => ({
+      id: r.id, name: r.canonical_name, type: r.entity_type, factCount: Number(r.fact_count),
+    }));
+  }
+
+  // ============================================================
   // 产出物 API (15 类可消费产出物)
   // ============================================================
 

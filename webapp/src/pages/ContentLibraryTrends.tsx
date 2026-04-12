@@ -1,5 +1,6 @@
 // 内容库 — ② 趋势信号
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -54,6 +55,7 @@ export function ContentLibraryTrends() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">趋势信号</h1>
       <p className="text-gray-500 dark:text-gray-400 mb-6">② 追踪实体相关事实的时间演变方向</p>
+      <ProductMetaBar productKey="trends" />
 
       <div className="flex gap-3 mb-6">
         <input

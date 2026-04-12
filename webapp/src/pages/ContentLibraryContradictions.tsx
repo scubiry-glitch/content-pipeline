@@ -1,5 +1,6 @@
 // 内容库 — 争议话题看板
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -41,6 +42,7 @@ export function ContentLibraryContradictions() {
       <p className="text-gray-500 dark:text-gray-400 mb-6">
         同一主体的同一指标存在矛盾数据时自动检出
       </p>
+      <ProductMetaBar productKey="contradictions" />
 
       {loading ? (
         <div className="text-center py-12 text-gray-500">加载中...</div>

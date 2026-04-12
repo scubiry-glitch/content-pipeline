@@ -1,5 +1,6 @@
 // 内容库 — ⑦ 信息增量报告
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -84,6 +85,7 @@ export function ContentLibraryDelta() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">信息增量</h1>
       <p className="text-gray-500 dark:text-gray-400 mb-6">⑦ 内容库知识变化的增量报告</p>
+      <ProductMetaBar productKey="delta" />
 
       <div className="flex gap-3 mb-6 items-center flex-wrap">
         <label className="text-sm text-gray-600 dark:text-gray-400">起始日期：</label>

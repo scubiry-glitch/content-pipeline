@@ -1,5 +1,6 @@
 // 内容库 — 事实浏览器页面
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -100,6 +101,7 @@ export function ContentLibraryFacts() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">事实浏览器</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">浏览和搜索结构化事实三元组 (subject → predicate → object)</p>
+          <ProductMetaBar productKey="facts" />
         </div>
         <button
           onClick={() => setShowReextract(v => !v)}

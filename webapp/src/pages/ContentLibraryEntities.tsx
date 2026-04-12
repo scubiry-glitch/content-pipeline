@@ -1,5 +1,6 @@
 // 内容库 — 实体与图谱页面
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -58,6 +59,7 @@ export function ContentLibraryEntities() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">实体图谱</h1>
+      <ProductMetaBar productKey="entities" />
 
       <div className="flex gap-3 mb-6">
         <input

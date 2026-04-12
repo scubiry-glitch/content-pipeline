@@ -2,6 +2,7 @@
 // 追踪某个命题或信念的历史演变
 
 import { useState } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -75,6 +76,7 @@ export function ContentLibraryBeliefs() {
         <p className="text-gray-500 dark:text-gray-400 mt-1">
           追踪某个命题或信念的状态演变，展现认知发展历程
         </p>
+        <ProductMetaBar productKey="beliefs" />
       </div>
 
       {/* 查询参数 */}

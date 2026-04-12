@@ -1,5 +1,6 @@
 // 内容库 Wiki 页面 — 生成、浏览、预览物化的 markdown wiki (Obsidian 兼容)
 import { useState, useEffect } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -226,6 +227,7 @@ export function ContentLibraryWiki() {
           <p className="text-gray-500 dark:text-gray-400 mt-1">
             把内容库物化成 Markdown wiki (Obsidian 兼容)。受 <code className="text-xs">nashsu/llm_wiki</code> 启发。
           </p>
+          <ProductMetaBar productKey="wiki" />
         </div>
         <button
           onClick={() => setShowGen(v => !v)}

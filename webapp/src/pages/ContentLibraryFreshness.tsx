@@ -1,5 +1,6 @@
 // 内容库 — ⑧ 事实保鲜度
 import { useState, useEffect, useMemo } from 'react';
+import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -68,6 +69,7 @@ export function ContentLibraryFreshness() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">事实保鲜度</h1>
       <p className="text-gray-500 dark:text-gray-400 mb-6">⑧ 检测需要更新或验证的过时事实</p>
+      <ProductMetaBar productKey="freshness" />
 
       <div className="flex gap-3 mb-6 items-center">
         <label className="text-sm text-gray-600 dark:text-gray-400">最大天数：</label>

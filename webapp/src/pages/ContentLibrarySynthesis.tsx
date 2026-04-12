@@ -1,8 +1,9 @@
 // Content Library — ⑩ 有价值的认知综合
 // LLM 跨多篇内容的事实聚合提炼
-// v7.2: 修复空页面 + 自动加载 + 错误透传
+// v7.2: 修复空页面 + 自动加载 + 错误透传 + 下拉选择 + 上下游说明
 
 import { useState, useEffect } from 'react';
+import { ProductMetaBar, useDropdownOptions, DomainSelect, EntitySelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -23,8 +24,10 @@ export function ContentLibrarySynthesis() {
   const [result, setResult] = useState<SynthResult | null>(null);
   const [loading, setLoading] = useState(true);  // 默认 true, 自动加载
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const { domains, entities } = useDropdownOptions();
   const [domain, setDomain] = useState('');
   const [subjects, setSubjects] = useState('');
+  const [selectedEntityId, setSelectedEntityId] = useState('');
 
   const synthesize = async () => {
     setLoading(true);
@@ -60,38 +63,42 @@ export function ContentLibrarySynthesis() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">有价值的认知</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
           ⑩ LLM 跨多篇内容的事实聚合提炼，发现新的核心洞察
         </p>
       </div>
 
-      {/* 查询参数 */}
+      <ProductMetaBar productKey="synthesis" />
+
+      {/* 范围选择: 下拉领域 + 下拉/自由输入主体 */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              领域过滤（可选）
-            </label>
-            <input
-              type="text"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="如: AI, 芯片, 新能源"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤</label>
+            <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">聚焦实体 (下拉)</label>
+            <EntitySelect
+              value={selectedEntityId}
+              onChange={v => {
+                setSelectedEntityId(v);
+                const ent = entities.find(e => e.id === v);
+                if (ent) setSubjects(ent.name);
+              }}
+              entities={entities}
+              placeholder="选择实体..."
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              主体限定（逗号分隔，可选）
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">或自由输入主体 (逗号分隔)</label>
             <input
-              type="text"
-              value={subjects}
-              onChange={(e) => setSubjects(e.target.value)}
-              placeholder="如: NVIDIA, OpenAI, 芯片"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+              type="text" value={subjects}
+              onChange={e => { setSubjects(e.target.value); setSelectedEntityId(''); }}
+              placeholder="如: NVIDIA, OpenAI"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
             />
           </div>
         </div>
@@ -100,7 +107,7 @@ export function ContentLibrarySynthesis() {
           disabled={loading}
           className="mt-4 px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm font-medium"
         >
-          {loading ? '综合提炼中...' : '重新提炼'}
+          {loading ? '综合提炼中...' : '重新生成'}
         </button>
       </div>
 
