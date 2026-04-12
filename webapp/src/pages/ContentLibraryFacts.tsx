@@ -1,6 +1,6 @@
 // 内容库 — 事实浏览器页面
 import { useState, useEffect } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -34,6 +34,7 @@ export function ContentLibraryFacts() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [domain, setDomain] = useState('');
+  const { domains } = useDropdownOptions();
 
   // v7.1: 回填相关状态
   const [showReextract, setShowReextract] = useState(false);
@@ -204,13 +205,7 @@ export function ContentLibraryFacts() {
           placeholder="按主体搜索..."
           className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
-        <input
-          type="text"
-          value={domain}
-          onChange={e => setDomain(e.target.value)}
-          placeholder="领域过滤..."
-          className="w-40 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
+        <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <button
           type="button"
           onClick={() => { setFactsPage(1); void loadFacts(1); }}

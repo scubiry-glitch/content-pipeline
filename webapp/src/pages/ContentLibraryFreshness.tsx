@@ -1,7 +1,7 @@
 // 内容库 — ⑧ 事实保鲜度
 // v7.3: 分页 + 排序 (按天数/置信度/主体)
 import { useState, useEffect, useMemo } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 const PAGE_SIZE = 30;
@@ -34,6 +34,7 @@ export function ContentLibraryFreshness() {
   const [loading, setLoading] = useState(true);
   const [maxAgeDays, setMaxAgeDays] = useState(90);
   const [domain, setDomain] = useState('');
+  const { domains } = useDropdownOptions();
   const [sortBy, setSortBy] = useState<SortKey>('days');
   const [page, setPage] = useState(1);
 
@@ -98,8 +99,7 @@ export function ContentLibraryFreshness() {
           <option value={180}>180 天</option>
           <option value={365}>1 年</option>
         </select>
-        <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
-          placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" />
+        <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <label className="text-sm text-gray-600 dark:text-gray-400">排序：</label>
         <select value={sortBy} onChange={e => { setSortBy(e.target.value as SortKey); setPage(1); }}
           className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">

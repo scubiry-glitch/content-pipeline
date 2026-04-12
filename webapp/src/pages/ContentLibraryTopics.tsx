@@ -1,7 +1,7 @@
 // 内容库 — ① 议题推荐 + ③ 差异化角度 + ④ 知识空白
 // v7.2: 议题卡片从"一堆数字"变成"小简报"
 import { useState, useEffect } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -39,6 +39,7 @@ export function ContentLibraryTopics() {
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState('');
+  const { domains } = useDropdownOptions();
   const [tab, setTab] = useState<'topics' | 'gaps'>('topics');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [enriching, setEnriching] = useState(false);
@@ -133,10 +134,7 @@ export function ContentLibraryTopics() {
             ③④ 差异化 & 空白
           </button>
         </div>
-        <input
-          type="text" value={domain} onChange={e => setDomain(e.target.value)}
-          placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
-        />
+        <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <button type="button" onClick={() => void load()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
         {tab === 'topics' && topicsTotal > 0 && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
