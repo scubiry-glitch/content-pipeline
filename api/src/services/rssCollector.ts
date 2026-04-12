@@ -5,6 +5,7 @@
 import Parser from 'rss-parser';
 import crypto from 'crypto';
 import { query } from '../db/connection.js';
+import { isContentLibraryInitialized, getContentLibraryEngine } from '../modules/content-library/singleton.js';
 
 // ===== 类型定义 =====
 
@@ -391,6 +392,22 @@ export async function collectSingleFeed(
         await saveRSSItem(rssItem);
         await saveHotTopic(rssItem);
         imported++;
+
+        // v7.2 G4: RSS → Content Library 自动事实提取 (非阻塞)
+        if (isContentLibraryInitialized() && rssItem.content && rssItem.content.length > 100) {
+          Promise.resolve().then(async () => {
+            try {
+              const engine = getContentLibraryEngine();
+              await engine.extractFacts({
+                content: (rssItem.content || '').slice(0, 8000),
+                assetId: `rss_${rssItem.id || rssItem.guid || ''}`,
+              });
+              console.log(`[RSS→ContentLibrary] Auto-extract OK: ${rssItem.title?.slice(0, 40)}`);
+            } catch (err) {
+              console.warn(`[RSS→ContentLibrary] Auto-extract failed:`, (err as Error).message);
+            }
+          });
+        }
       } catch (saveError) {
         console.error(`[RSS] Save failed for item ${rssItem.title}:`, saveError);
         throw saveError;
