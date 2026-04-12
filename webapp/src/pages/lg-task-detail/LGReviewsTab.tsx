@@ -83,7 +83,7 @@ export function LGReviewsTab() {
 
   // 全局统计
   const allQuestions = rounds.flatMap((r: any) => r.questions || []);
-  const severityCounts = allQuestions.reduce((acc: Record<string, number>, q: any) => {
+  const severityCounts = allQuestions.reduce<Record<string, number>>((acc, q: any) => {
     acc[q.severity] = (acc[q.severity] || 0) + 1;
     return acc;
   }, {});

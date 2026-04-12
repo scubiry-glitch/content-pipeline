@@ -160,17 +160,19 @@ export function ContentLibraryBatchOps() {
 
   // Step 4: 知识图谱重算
   const triggerGraphRecompute = async () => {
-    setStep('graph', { status: 'running', message: '重算社区 + 边表...' });
+    setStep('graph', { status: 'running', message: '重算社区 + 边表 + 观点...' });
     try {
-      const [commRes, relRes] = await Promise.all([
+      const [commRes, relRes, beliefsRes] = await Promise.all([
         fetch(`${API}/communities/recompute`, { method: 'POST' }),
         fetch(`${API}/relations/recompute`, { method: 'POST' }),
+        fetch(`${API}/beliefs/recompute`, { method: 'POST' }),
       ]);
       const comm = commRes.ok ? await commRes.json() : null;
       const rel = relRes.ok ? await relRes.json() : null;
+      const beliefs = beliefsRes.ok ? await beliefsRes.json() : null;
       setStep('graph', {
         status: 'done',
-        message: `社区 ${comm?.communities || '?'} 个, 边 ${rel?.inserted || '?'} 条`,
+        message: `社区 ${comm?.communities || '?'} 个 · 边 ${rel?.inserted || '?'} 条 · 观点 ${beliefs?.total || '?'} 条`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {

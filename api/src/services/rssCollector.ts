@@ -23,6 +23,8 @@ export interface RSSSource {
 
 export interface RSSItem {
   id: string;
+  /** rss-parser 常见字段，用于 assetId 回退 */
+  guid?: string;
   sourceId: string;
   sourceName: string;
   title: string;

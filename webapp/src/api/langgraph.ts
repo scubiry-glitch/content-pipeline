@@ -93,6 +93,8 @@ export interface LGTaskDetail {
   currentNode: string;
   outline: any;
   evaluation: any;
+  /** 与 tasks.competitor_analysis 等对齐，供规划 Tab 展示 */
+  competitorAnalysis?: unknown;
   researchData: any;
   draftContent: string;
   blueTeamRounds: any[];

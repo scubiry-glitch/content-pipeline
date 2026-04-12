@@ -14,37 +14,33 @@ interface TrendSignal {
   significance: number;
 }
 
+interface EntityOption { id: string; name: string; factCount: number; }
+
 export function ContentLibraryTrends() {
   const [entityId, setEntityId] = useState('');
   const [trends, setTrends] = useState<TrendSignal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [recentEntities, setRecentEntities] = useState<Array<{ id: string; canonicalName: string }>>([]);
+  const [empty, setEmpty] = useState(false);
+  const [entityOptions, setEntityOptions] = useState<EntityOption[]>([]);
 
-  // 加载实体列表用于快速选择
   useEffect(() => {
-    fetch(`${API_BASE}/entities?limit=20&page=1`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data) {
-          setRecentEntities([]);
-          return;
-        }
-        const list = Array.isArray(data) ? data : (data.items ?? []);
-        setRecentEntities(
-          list.map((e: { id: string; canonicalName: string }) => ({ id: e.id, canonicalName: e.canonicalName }))
-        );
-      })
+    fetch(`${API_BASE}/dropdown/entities?limit=50`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: EntityOption[]) => setEntityOptions(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
 
-  const loadTrend = async (id: string) => {
-    if (!id) return;
+  const loadTrend = async (nameOrId: string) => {
+    if (!nameOrId) return;
     setLoading(true);
+    setEmpty(false);
     try {
-      const res = await fetch(`${API_BASE}/trends/${id}`);
+      const res = await fetch(`${API_BASE}/trends/${encodeURIComponent(nameOrId)}`);
       if (res.ok) {
         const data = await res.json();
-        setTrends(Array.isArray(data) ? data : [data]);
+        const list = Array.isArray(data) ? data : [data];
+        setTrends(list);
+        setEmpty(list.length === 0);
       }
     } catch { /* ignore */ }
     setLoading(false);
@@ -70,7 +66,7 @@ export function ContentLibraryTrends() {
         <input
           type="text" value={entityId} onChange={e => setEntityId(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && loadTrend(entityId)}
-          placeholder="输入实体 ID..." className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          placeholder="输入实体名称..." className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
         <button onClick={() => loadTrend(entityId)} disabled={!entityId || loading}
           className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
@@ -78,25 +74,31 @@ export function ContentLibraryTrends() {
         </button>
       </div>
 
-      {/* 快速选择实体 */}
-      {recentEntities.length > 0 && (
-        <div className="mb-6">
-          <p className="text-xs font-medium text-gray-500 mb-2">快速选择：</p>
-          <div className="flex gap-2 flex-wrap">
-            {recentEntities.slice(0, 10).map(e => (
-              <button key={e.id} onClick={() => { setEntityId(e.id); loadTrend(e.id); }}
-                className="px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-sm text-gray-700 dark:text-gray-300 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
-                {e.canonicalName}
-              </button>
+      {/* 下拉快速选择（仅含有 facts 的实体） */}
+      {entityOptions.length > 0 && (
+        <div className="mb-6 flex gap-3 items-center">
+          <select
+            value={entityId}
+            onChange={e => { setEntityId(e.target.value); if (e.target.value) loadTrend(e.target.value); }}
+            className="flex-1 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+          >
+            <option value="">— 从有数据的实体中选择（{entityOptions.length} 个）—</option>
+            {entityOptions.map(e => (
+              <option key={e.id} value={e.name}>{e.name}（{e.factCount} 条事实）</option>
             ))}
-          </div>
+          </select>
         </div>
       )}
 
       {loading ? (
         <div className="text-center py-12 text-gray-500">加载中...</div>
+      ) : empty ? (
+        <div className="text-center py-12 text-gray-400">
+          <p>「{entityId}」在知识库中暂无可追踪的趋势信号</p>
+          <p className="text-xs mt-2 text-gray-300">趋势信号需要同一指标有 2 条以上时间序列事实</p>
+        </div>
       ) : trends.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">选择一个实体查看趋势信号</div>
+        <div className="text-center py-12 text-gray-400">从下拉或输入框选择一个实体查看趋势信号</div>
       ) : (
         <div className="space-y-4">
           {trends.map((t, i) => {

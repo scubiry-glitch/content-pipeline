@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: organization
-updatedAt: "2026-04-11T19:02:16.431Z"
+updatedAt: "2026-04-12T13:26:20.642Z"
 ---
 
 # Euromonitor

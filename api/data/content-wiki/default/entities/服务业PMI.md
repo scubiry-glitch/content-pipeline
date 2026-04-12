@@ -2,12 +2,14 @@
 type: entity
 entityType: metric
 aliases:
+  - 服务业PMI
   - 采购经理指数
-updatedAt: "2026-04-11T19:02:16.482Z"
+  - PMI
+updatedAt: "2026-04-12T13:26:20.664Z"
 ---
 
 # 服务业PMI
 
-**别名**: 采购经理指数
+**别名**: 服务业PMI · 采购经理指数 · PMI
 
 **类型**: `metric`

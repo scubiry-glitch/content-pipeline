@@ -366,6 +366,37 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.recomputeEntityRelations();
     });
 
+    // 从 content_facts 批量生成/更新 content_beliefs
+    fastify.post('/beliefs/recompute', async (request, reply) => {
+      const result = await engine['deps'].db.query(`
+        INSERT INTO content_beliefs (proposition, current_stance, confidence, supporting_facts, contradicting_facts, last_updated)
+        SELECT
+          subject || ': ' || predicate AS proposition,
+          CASE
+            WHEN COUNT(DISTINCT object) > 1 THEN 'disputed'
+            WHEN AVG(confidence) >= 0.85 THEN 'confirmed'
+            WHEN AVG(confidence) >= 0.5 THEN 'evolving'
+            ELSE 'disputed'
+          END AS current_stance,
+          AVG(confidence) AS confidence,
+          ARRAY_AGG(id) FILTER (WHERE confidence >= 0.7) AS supporting_facts,
+          ARRAY_AGG(id) FILTER (WHERE confidence < 0.5) AS contradicting_facts,
+          NOW() AS last_updated
+        FROM content_facts
+        WHERE is_current = true
+        GROUP BY subject, predicate
+        HAVING COUNT(*) >= 1
+        ON CONFLICT (proposition) DO UPDATE SET
+          current_stance = EXCLUDED.current_stance,
+          confidence = EXCLUDED.confidence,
+          supporting_facts = EXCLUDED.supporting_facts,
+          contradicting_facts = EXCLUDED.contradicting_facts,
+          last_updated = NOW()
+      `);
+      const countResult = await engine['deps'].db.query(`SELECT COUNT(*) as total FROM content_beliefs`);
+      return reply.send({ ok: true, total: Number(countResult.rows[0]?.total || 0) });
+    });
+
     // ============================================================
     // v7.1: Wiki 生成层 (Obsidian 兼容物化视图)
     // ============================================================

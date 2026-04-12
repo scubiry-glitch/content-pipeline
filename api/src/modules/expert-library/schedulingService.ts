@@ -197,10 +197,13 @@ export class SchedulingService {
 
     const candidates = matchResult.domainExperts.map(e => ({
       expert: e.expert,
-      score: e.score,
+      score: e.matchScore,
     }));
     if (matchResult.seniorExpert) {
-      candidates.unshift({ expert: matchResult.seniorExpert.expert, score: matchResult.seniorExpert.score });
+      candidates.unshift({
+        expert: matchResult.seniorExpert.expert,
+        score: matchResult.seniorExpert.matchScore,
+      });
     }
 
     const results = await Promise.all(

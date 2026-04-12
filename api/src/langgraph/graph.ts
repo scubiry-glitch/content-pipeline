@@ -23,7 +23,8 @@ import { getCheckpointer } from './checkpointer.js';
  *                   └── planner                   └── writer                   └── writer
  */
 function buildGraph() {
-  const graph = new StateGraph(PipelineState);
+  // @langchain/langgraph 对自定义节点名的泛型推断过窄，运行时与 NODE_NAMES 一致
+  const graph = new StateGraph(PipelineState) as any;
 
   // 添加节点 (8 个)
   graph.addNode(NODE_NAMES.PLANNER, plannerNode);
@@ -88,7 +89,7 @@ export async function getCompiledGraph() {
   const checkpointer = await getCheckpointer();
 
   return graph.compile({
-    checkpointer,
+    checkpointer: checkpointer as any,
   });
 }
 

@@ -5,7 +5,7 @@ aliases:
   - 全球现金模型
   - Barclays Global Cash Model
   - Global Cash Model
-updatedAt: "2026-04-11T19:02:16.456Z"
+updatedAt: "2026-04-12T13:26:20.645Z"
 ---
 
 # Global Cash Model

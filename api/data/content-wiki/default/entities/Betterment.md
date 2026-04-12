@@ -5,7 +5,7 @@ sources:
   - asset_3bcef5d1
 domains:
   - 金融/财富管理
-updatedAt: "2026-04-11T19:02:16.470Z"
+updatedAt: "2026-04-12T13:26:20.654Z"
 ---
 
 # Betterment

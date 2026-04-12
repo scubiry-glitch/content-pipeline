@@ -256,14 +256,18 @@ export function LGWritingTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
               <div style={{
                 width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: (complianceResult.score ?? 0) >= 80 ? 'var(--success)' : (complianceResult.score ?? 0) >= 60 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)',
+                background: (complianceResult.overallScore ?? 0) >= 80 ? 'var(--success)' : (complianceResult.overallScore ?? 0) >= 60 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)',
                 color: '#fff', fontSize: '16px', fontWeight: 800,
               }}>
-                {complianceResult.score ?? '?'}
+                {complianceResult.overallScore ?? '?'}
               </div>
               <div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>
-                  {complianceResult.status === 'compliant' ? '合规通过' : complianceResult.status === 'warning' ? '存在风险' : '需要修正'}
+                  {complianceResult.passed && (complianceResult.overallScore ?? 0) >= 80
+                    ? '合规通过'
+                    : (complianceResult.overallScore ?? 0) >= 60
+                      ? '存在风险'
+                      : '需要修正'}
                 </div>
               </div>
             </div>

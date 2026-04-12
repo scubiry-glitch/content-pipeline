@@ -5,7 +5,7 @@ sources:
   - asset_30b7a3c0
 domains:
   - 支付与金融科技
-updatedAt: "2026-04-11T19:02:16.456Z"
+updatedAt: "2026-04-12T13:26:20.646Z"
 ---
 
 # Barclays European Payments & Fintech Conference

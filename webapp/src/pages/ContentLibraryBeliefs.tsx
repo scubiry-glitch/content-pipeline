@@ -1,7 +1,7 @@
 // Content Library — ⑭ 观点演化脉络
 // 追踪某个命题或信念的历史演变
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API_BASE = '/api/v1/content-library';
@@ -17,12 +17,22 @@ interface BeliefTimeline {
   summary: string;
 }
 
+interface BeliefOption { id: string; subject: string; state: string; }
+
 export function ContentLibraryBeliefs() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [beliefId, setBeliefId] = useState('');
   const [subject, setSubject] = useState('');
+  const [options, setOptions] = useState<BeliefOption[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/dropdown/beliefs`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: BeliefOption[]) => setOptions(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const fetchTimeline = async () => {
     if (!beliefId && !subject) {
@@ -84,33 +94,46 @@ export function ContentLibraryBeliefs() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              命题 ID
+              选择主体 {options.length > 0 && <span className="text-gray-400">({options.length} 个)</span>}
+            </label>
+            {options.length > 0 ? (
+              <select
+                value={subject}
+                onChange={(e) => { setSubject(e.target.value); setBeliefId(''); }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">-- 选择命题主体 --</option>
+                {options.map(o => (
+                  <option key={o.id} value={o.subject}>{o.subject}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g., ChatGPT 是否会失业"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+              />
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              或直接输入主体
             </label>
             <input
               type="text"
               value={beliefId}
-              onChange={(e) => setBeliefId(e.target.value)}
-              placeholder="e.g., belief-123"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              主体（或选择此项）
-            </label>
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g., ChatGPT 是否会失业"
+              onChange={(e) => { setBeliefId(e.target.value); if (e.target.value) setSubject(''); }}
+              placeholder="手动输入命题或实体名"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
             />
           </div>
         </div>
         <button
           onClick={fetchTimeline}
-          disabled={loading}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+          disabled={loading || (!subject && !beliefId)}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           {loading ? '查询中...' : '查询演化脉络'}
         </button>

@@ -611,17 +611,37 @@ export class ContentLibraryEngine {
 
   /** 获取所有 belief subjects 列表 (用于下拉选择) */
   async listBeliefSubjects(): Promise<Array<{ id: string; subject: string; state: string }>> {
-    const result = await this.deps.db.query(
+    // 优先从 content_beliefs 取，若空则用有事实的实体名作为 subject 列表
+    const fromBeliefs = await this.deps.db.query(
       `SELECT id, COALESCE(proposition, '') AS subject, current_stance AS state
        FROM content_beliefs ORDER BY last_updated DESC LIMIT 100`
     );
-    return result.rows.map((r: any) => ({ id: r.id, subject: r.subject, state: r.state }));
+    if (fromBeliefs.rows.length > 0) {
+      return fromBeliefs.rows.map((r: any) => ({ id: r.id, subject: r.subject, state: r.state }));
+    }
+    // Fallback: 用 content_entities 中有事实的实体名作候选
+    const fromEntities = await this.deps.db.query(
+      `SELECT ce.id, ce.canonical_name AS subject, 'entity' AS state
+       FROM content_entities ce
+       WHERE EXISTS (SELECT 1 FROM content_facts cf WHERE cf.subject = ce.canonical_name AND cf.is_current = true)
+       ORDER BY ce.canonical_name ASC LIMIT 100`
+    );
+    return fromEntities.rows.map((r: any) => ({ id: r.id, subject: r.subject, state: r.state }));
   }
 
   /** 获取实体简要列表 (用于下拉选择, 按事实密度排序) */
-  async listEntitiesForDropdown(limit = 50): Promise<Array<{ id: string; name: string; type: string; factCount: number }>> {
+  async listEntitiesForDropdown(limit = 50): Promise<Array<{ id: string; name: string; type: string; factCount: number; coreDataCount: number }>> {
     const result = await this.deps.db.query(
-      `SELECT ce.id, ce.canonical_name, ce.entity_type, COUNT(cf.id) AS fact_count
+      `SELECT
+         ce.id, ce.canonical_name, ce.entity_type,
+         COUNT(cf.id) AS fact_count,
+         COUNT(cf.id) FILTER (
+           WHERE
+             -- object 是数值 + 单位（如 "40亿人民币"、"200亿"、"30%"）
+             (cf.object ~ '\d' AND (cf.object ~ '[亿万元%增减]' OR cf.object ~ '^\d+\.?\d*$'))
+             -- 或谓词是典型财务/指标字段
+             OR cf.predicate ~ '(融资|估值|营收|净利|市值|总额|增速|占比|规模|体量|份额)'
+         ) AS core_data_count
        FROM content_entities ce
        LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
        GROUP BY ce.id, ce.canonical_name, ce.entity_type
@@ -630,7 +650,11 @@ export class ContentLibraryEngine {
       [limit]
     );
     return result.rows.map((r: any) => ({
-      id: r.id, name: r.canonical_name, type: r.entity_type, factCount: Number(r.fact_count),
+      id: r.id,
+      name: r.canonical_name,
+      type: r.entity_type,
+      factCount: Number(r.fact_count),
+      coreDataCount: Number(r.core_data_count),
     }));
   }
 
@@ -839,6 +863,8 @@ export class ContentLibraryEngine {
 
   /** ② 趋势信号 */
   async getTrendSignals(entityId: string): Promise<TrendSignal[]> {
+    // entityId 可能是 UUID 或实体名，兼容两种查询
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entityId);
     const result = await this.deps.db.query(`
       SELECT
         cf.subject,
@@ -848,7 +874,7 @@ export class ContentLibraryEngine {
         cf.created_at
       FROM content_facts cf
       JOIN content_entities ce ON cf.subject = ce.canonical_name
-      WHERE ce.id = $1 AND cf.is_current = true
+      WHERE ${isUuid ? 'ce.id = $1' : 'ce.canonical_name = $1'} AND cf.is_current = true
       ORDER BY cf.created_at ASC
     `, [entityId]);
 
@@ -1048,8 +1074,11 @@ export class ContentLibraryEngine {
 
   /** ⑨ 高密度知识卡片 */
   async getKnowledgeCard(entityId: string): Promise<KnowledgeCard> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entityId);
     const entityResult = await this.deps.db.query(
-      'SELECT * FROM content_entities WHERE id = $1', [entityId]
+      isUuid ? 'SELECT * FROM content_entities WHERE id = $1'
+             : 'SELECT * FROM content_entities WHERE canonical_name = $1',
+      [entityId]
     );
     if (entityResult.rows.length === 0) {
       throw new Error(`Entity not found: ${entityId}`);
@@ -1357,29 +1386,52 @@ export class ContentLibraryEngine {
     subject?: string;
     limit?: number;
   }): Promise<{ timeline: Array<{ date: string; state: string; sources: string[] }>; summary: string }> {
-    const queryCondition = options?.beliefId
-      ? 'id = $1'
-      : 'subject = $1';
-    const queryParam = options?.beliefId || options?.subject || '';
-
+    // proposition 可能包含 "主体: 谓词" 格式，支持精确匹配或前缀匹配
+    const searchTerm = options?.beliefId || options?.subject || '';
     const beliefQuery = `
-      SELECT id, subject, state, created_at, source_ids, metadata
+      SELECT id, proposition, current_stance, last_updated, supporting_facts, history
       FROM content_beliefs
-      WHERE ${queryCondition}
-      ORDER BY created_at DESC
-      LIMIT $2
+      WHERE proposition ILIKE $1 OR proposition ILIKE $2
+      ORDER BY last_updated DESC
+      LIMIT $3
     `;
-    const result = await this.deps.db.query(beliefQuery, [queryParam, options?.limit || 20]);
+    const result = await this.deps.db.query(beliefQuery, [
+      searchTerm,
+      `${searchTerm}%`,
+      options?.limit || 20,
+    ]);
+
+    // 如果 content_beliefs 没命中，从 content_facts 实时构建时间线
+    if (result.rows.length === 0 && searchTerm) {
+      const factsResult = await this.deps.db.query(
+        `SELECT created_at, context->>'source' AS source, confidence, object
+         FROM content_facts
+         WHERE subject = $1 AND is_current = true
+         ORDER BY created_at ASC LIMIT $2`,
+        [searchTerm, options?.limit || 20]
+      );
+      const timeline = factsResult.rows.map((row: any) => ({
+        date: new Date(row.created_at).toISOString(),
+        state: Number(row.confidence) >= 0.85 ? 'confirmed' : Number(row.confidence) >= 0.5 ? 'evolving' : 'disputed',
+        sources: row.source ? [row.source] : [],
+      }));
+      return {
+        timeline,
+        summary: `从 ${factsResult.rows.length} 条事实推断 "${searchTerm}" 的演化脉络`,
+      };
+    }
 
     const timeline = result.rows.map(row => ({
-      date: new Date(row.created_at).toISOString(),
-      state: row.state,
-      sources: row.source_ids || [],
+      date: new Date(row.last_updated).toISOString(),
+      state: row.current_stance || 'unknown',
+      sources: Array.isArray(row.supporting_facts) ? row.supporting_facts.slice(0, 3) : [],
     }));
 
     return {
       timeline,
-      summary: `${result.rows.length} state changes tracked for "${options?.subject || options?.beliefId}"`,
+      summary: timeline.length > 0
+        ? `"${searchTerm}" 的 ${timeline.length} 条观点记录`
+        : `知识库中暂无 "${searchTerm}" 的相关记录`,
     };
   }
 
@@ -1395,7 +1447,19 @@ export class ContentLibraryEngine {
     limit?: number;
   }): Promise<{ associations: Array<{ entity1: string; entity2: string; relationship: string; strength: number; adamicAdar: number; commonNeighbors: number; domains: string[] }>; count: number }> {
     const aaQuery = `
-      WITH entity_neighbors AS (
+      WITH entity_domains AS (
+        -- 从 content_facts 的 context 推断每个实体的主领域
+        SELECT
+          subject AS entity,
+          (SELECT context->>'domain'
+           FROM content_facts cf2
+           WHERE cf2.subject = cf.subject AND cf2.is_current = true AND cf2.context->>'domain' IS NOT NULL
+           GROUP BY context->>'domain' ORDER BY COUNT(*) DESC LIMIT 1) AS domain
+        FROM content_facts cf
+        WHERE is_current = true
+        GROUP BY subject
+      ),
+      entity_neighbors AS (
         SELECT DISTINCT subject AS entity, object AS neighbor
         FROM content_facts WHERE is_current = true
         UNION
@@ -1429,12 +1493,15 @@ export class ContentLibraryEngine {
         aa.e1 AS entity1, aa.e2 AS entity2,
         ROUND(aa.aa_score::numeric, 3) AS aa_score,
         aa.common_count,
-        ce1.taxonomy_domain_id AS domain1,
-        ce2.taxonomy_domain_id AS domain2
+        COALESCE(ed1.domain, '未分类') AS domain1,
+        COALESCE(ed2.domain, '未分类') AS domain2
       FROM aa_scores aa
-      LEFT JOIN content_entities ce1 ON ce1.canonical_name = aa.e1
-      LEFT JOIN content_entities ce2 ON ce2.canonical_name = aa.e2
-      WHERE ce1.taxonomy_domain_id IS DISTINCT FROM ce2.taxonomy_domain_id
+      LEFT JOIN entity_domains ed1 ON ed1.entity = aa.e1
+      LEFT JOIN entity_domains ed2 ON ed2.entity = aa.e2
+      WHERE (COALESCE(ed1.domain, '') != COALESCE(ed2.domain, '')
+         OR (ed1.domain IS NULL AND ed2.domain IS NOT NULL)
+         OR (ed1.domain IS NOT NULL AND ed2.domain IS NULL))
+        AND LENGTH(aa.e1) > 2 AND LENGTH(aa.e2) > 2
       ORDER BY aa.aa_score DESC
       LIMIT $1
     `;
