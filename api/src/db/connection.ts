@@ -1144,6 +1144,30 @@ async function setupContentLibrarySchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_domain ON content_entities(taxonomy_domain_id)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_aliases ON content_entities USING GIN(aliases)`).catch(() => {});
 
+  // v7.2 Louvain / getTopicRecommendations 依赖列（与 migrations/005-louvain-community.sql 对齐）
+  await query(`
+    ALTER TABLE content_entities
+      ADD COLUMN IF NOT EXISTS community_id VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS community_cohesion DECIMAL(4,3)
+  `).catch(() => {});
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_content_entities_community
+      ON content_entities(community_id) WHERE community_id IS NOT NULL
+  `).catch(() => {});
+
+  // 议题 LLM  enrichment 缓存（getTopicRecommendations enrich=true 写入）
+  await query(`
+    CREATE TABLE IF NOT EXISTS content_topic_enrichments (
+      entity_id UUID PRIMARY KEY,
+      reason TEXT,
+      title_suggestion TEXT,
+      narrative TEXT,
+      angle_matrix JSONB DEFAULT '[]',
+      suggested_angles JSONB DEFAULT '[]',
+      generated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+
   await query(`
     CREATE TABLE IF NOT EXISTS content_beliefs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

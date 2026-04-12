@@ -37,6 +37,7 @@ export function ContentLibraryTopics() {
   const [domain, setDomain] = useState('');
   const [tab, setTab] = useState<'topics' | 'gaps'>('topics');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [enriching, setEnriching] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -64,6 +65,17 @@ export function ContentLibraryTopics() {
       if (next.has(idx)) next.delete(idx); else next.add(idx);
       return next;
     });
+  };
+
+  const generateEnrichment = async () => {
+    setEnriching(true);
+    try {
+      const params = new URLSearchParams({ limit: '10' });
+      if (domain) params.set('domain', domain);
+      await fetch(`${API_BASE}/topics/enrich?${params}`, { method: 'POST' });
+      await load();
+    } catch { /* ignore */ }
+    setEnriching(false);
   };
 
   const copyToClipboard = (t: TopicRecommendation) => {
@@ -105,6 +117,11 @@ export function ContentLibraryTopics() {
           placeholder="领域过滤..." className="w-40 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
         />
         <button onClick={load} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
+        <button onClick={generateEnrichment} disabled={enriching}
+          className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 text-sm"
+          title="调用 LLM 生成议题标题/导语/角度，结果缓存到数据库">
+          {enriching ? '生成中...' : '✍️ 生成叙事'}
+        </button>
       </div>
 
       {loading ? (

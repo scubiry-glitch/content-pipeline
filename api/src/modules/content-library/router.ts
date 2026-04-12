@@ -180,6 +180,28 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.getTopicRecommendations({
         domain: query.domain,
         limit: query.limit ? parseInt(query.limit) : undefined,
+        enrich: query.enrich === 'true',
+      });
+    });
+
+    // 手动触发 topic enrichment 生成并缓存（供 batch-ops 调用）
+    fastify.post('/topics/enrich', async (request, reply) => {
+      const query = request.query as any;
+      const result = await engine.getTopicRecommendations({
+        domain: query.domain,
+        limit: query.limit ? parseInt(query.limit) : 10,
+        enrich: true,
+      });
+      const enriched = result.filter(t => t.reason || t.titleSuggestion);
+      return reply.send({ ok: true, total: result.length, enriched: enriched.length });
+    });
+
+    // 知识空白
+    fastify.get('/gaps', async (request, reply) => {
+      const query = request.query as any;
+      return engine.getKnowledgeGaps({
+        domain: query.domain,
+        limit: query.limit ? parseInt(query.limit) : 20,
       });
     });
 

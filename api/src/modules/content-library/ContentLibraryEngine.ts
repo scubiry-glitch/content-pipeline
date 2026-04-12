@@ -546,11 +546,10 @@ export class ContentLibraryEngine {
   async getTopicRecommendations(options?: {
     domain?: string;
     limit?: number;
-    enrich?: boolean;  // v7.2: 默认 true, 调用 LLM 生成叙事
+    enrich?: boolean;   // true = 强制重新生成并保存缓存；false/undefined = 仅读缓存
   }): Promise<TopicRecommendation[]> {
     const limit = options?.limit || 10;
-    const enrichLimit = Math.min(limit, 5);  // LLM 只处理 top 5
-    const doEnrich = options?.enrich !== false;
+    const forceEnrich = options?.enrich === true;
     const domainFilter = options?.domain ? `AND ce.taxonomy_domain_id = $2` : '';
     const params: any[] = [limit];
     if (options?.domain) params.push(options.domain);
@@ -582,7 +581,6 @@ export class ContentLibraryEngine {
       timeliness: this.calculateTimeliness(row.latest_fact),
       gapScore: 0,
       suggestedAngles: [] as string[],
-      // v7.2 字段 (LLM 增强后填充)
       reason: '',
       titleSuggestion: '',
       narrative: '',
@@ -592,12 +590,34 @@ export class ContentLibraryEngine {
       communityCohesion: row.community_cohesion ? Number(row.community_cohesion) : undefined,
     }));
 
-    if (!doEnrich || base.length === 0) return base;
+    if (base.length === 0) return base;
 
-    // LLM 增强: 对 top N 批量生成叙事
+    // 读取缓存
+    const entityIds = base.map(b => `'${b.entityId}'`).join(',');
+    try {
+      const cacheResult = await this.deps.db.query(
+        `SELECT entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles
+         FROM content_topic_enrichments WHERE entity_id IN (${entityIds})`
+      );
+      for (const row of cacheResult.rows) {
+        const item = base.find(b => b.entityId === row.entity_id);
+        if (item) {
+          item.reason = row.reason || '';
+          item.titleSuggestion = row.title_suggestion || '';
+          item.narrative = row.narrative || '';
+          item.angleMatrix = Array.isArray(row.angle_matrix) ? row.angle_matrix : [];
+          item.suggestedAngles = Array.isArray(row.suggested_angles) ? row.suggested_angles : [];
+        }
+      }
+    } catch { /* 缓存表不存在时忽略 */ }
+
+    if (!forceEnrich) return base;
+
+    // 强制重新生成：对 top 5 调 LLM，写回缓存
+    const enrichLimit = Math.min(limit, 5);
     const topItems = base.slice(0, enrichLimit);
 
-    // 加载每个实体的证据事实 (top 5)
+    // 加载证据事实
     for (const item of topItems) {
       try {
         const factsResult = await this.deps.db.query(
@@ -611,7 +631,6 @@ export class ContentLibraryEngine {
       } catch { /* ignore */ }
     }
 
-    // 批量 LLM 调用 (1 次 prompt 处理所有 topItems)
     try {
       const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
       const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
@@ -644,17 +663,41 @@ export class ContentLibraryEngine {
             t.entityName.includes(e.entityName) ||
             e.entityName?.includes(t.entityName)
           );
-          if (match) {
-            match.reason = String(e.reason || '');
-            match.titleSuggestion = String(e.titleSuggestion || '');
-            match.narrative = String(e.narrative || '');
-            if (Array.isArray(e.angleMatrix)) {
-              match.angleMatrix = e.angleMatrix.map((a: any) => ({
-                angle: String(a?.angle || ''),
-                rationale: String(a?.rationale || ''),
-              }));
-              match.suggestedAngles = match.angleMatrix.map((a: any) => a.angle).filter(Boolean);
-            }
+          if (!match) continue;
+          match.reason = String(e.reason || '');
+          match.titleSuggestion = String(e.titleSuggestion || '');
+          match.narrative = String(e.narrative || '');
+          if (Array.isArray(e.angleMatrix)) {
+            match.angleMatrix = e.angleMatrix.map((a: any) => ({
+              angle: String(a?.angle || ''),
+              rationale: String(a?.rationale || ''),
+            }));
+            match.suggestedAngles = (match.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
+          }
+          // 写入缓存
+          try {
+            await this.deps.db.query(
+              `INSERT INTO content_topic_enrichments
+                 (entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles, generated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())
+               ON CONFLICT (entity_id) DO UPDATE SET
+                 reason = EXCLUDED.reason,
+                 title_suggestion = EXCLUDED.title_suggestion,
+                 narrative = EXCLUDED.narrative,
+                 angle_matrix = EXCLUDED.angle_matrix,
+                 suggested_angles = EXCLUDED.suggested_angles,
+                 generated_at = NOW()`,
+              [
+                match.entityId,
+                match.reason,
+                match.titleSuggestion,
+                match.narrative,
+                JSON.stringify(match.angleMatrix),
+                JSON.stringify(match.suggestedAngles),
+              ]
+            );
+          } catch (saveErr) {
+            console.warn('[getTopicRecommendations] cache save failed:', saveErr);
           }
         }
       }
@@ -1351,5 +1394,54 @@ export class ContentLibraryEngine {
     if (daysSince < maxAgeDays * 0.3) return 'fresh';
     if (daysSince < maxAgeDays * 0.7) return 'aging';
     return 'stale';
+  }
+
+  async getKnowledgeGaps(options?: { domain?: string; limit?: number }): Promise<Array<{
+    topic: string;
+    type: 'blank' | 'differentiation';
+    description: string;
+    opportunity: string;
+  }>> {
+    const limit = options?.limit || 20;
+    const blankLimit = Math.ceil(limit * 0.6);
+    const sparseLimit = Math.ceil(limit * 0.4);
+
+    // 实体无任何事实 (覆盖空白)
+    const blankResult = await this.deps.db.query(`
+      SELECT ce.canonical_name as topic
+      FROM content_entities ce
+      WHERE NOT EXISTS (
+        SELECT 1 FROM content_facts cf
+        WHERE cf.subject = ce.canonical_name AND cf.is_current = true
+      )
+      ORDER BY ce.created_at DESC
+      LIMIT $1
+    `, [blankLimit]);
+
+    // 有事实但极度稀疏 (差异化空白: fact_count < 3)
+    const sparseResult = await this.deps.db.query(`
+      SELECT ce.canonical_name as topic, COUNT(cf.id) as fact_count
+      FROM content_entities ce
+      JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
+      GROUP BY ce.canonical_name
+      HAVING COUNT(cf.id) < 3
+      ORDER BY COUNT(cf.id) ASC
+      LIMIT $1
+    `, [sparseLimit]);
+
+    return [
+      ...blankResult.rows.map((r: any) => ({
+        topic: r.topic,
+        type: 'blank' as const,
+        description: `"${r.topic}"在知识库中尚无任何提炼事实`,
+        opportunity: '补充基础事实：定义、核心数据、关键事件',
+      })),
+      ...sparseResult.rows.map((r: any) => ({
+        topic: r.topic,
+        type: 'differentiation' as const,
+        description: `"${r.topic}"仅有 ${r.fact_count} 条事实，覆盖浅`,
+        opportunity: '深挖差异化角度：竞争对比、时序演变、因果关系',
+      })),
+    ];
   }
 }

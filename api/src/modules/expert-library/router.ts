@@ -16,6 +16,21 @@ import { AssetExpertService } from './assetExpertService.js';
 import { seedDefaultBuiltinExpertsToDb, getBuiltinSyncManifest, syncBuiltinExpertItem } from './expertSeed.js';
 import { researchAndGenerateProfile } from './researchService.js';
 
+/** JSONB / 脏字符串兼容，避免 JSON.parse 抛错导致 GET /experts/full 500 */
+function coerceJsonObject(val: unknown): Record<string, unknown> {
+  if (val == null) return {};
+  if (typeof val === 'object' && !Array.isArray(val)) return val as Record<string, unknown>;
+  if (typeof val === 'string') {
+    try {
+      const p = JSON.parse(val);
+      return typeof p === 'object' && p !== null && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 export function createRouter(engine: ExpertEngine) {
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
 
@@ -177,10 +192,10 @@ export function createRouter(engine: ExpertEngine) {
         );
 
         const experts = result.rows.map((row: any) => {
-          const dm = row.display_metadata || {};
-          const persona = typeof row.persona === 'string' ? JSON.parse(row.persona) : (row.persona || {});
-          const method = typeof row.method === 'string' ? JSON.parse(row.method) : (row.method || {});
-          const emm = typeof row.emm === 'string' ? JSON.parse(row.emm) : (row.emm || {});
+          const dm = coerceJsonObject(row.display_metadata);
+          const persona = coerceJsonObject(row.persona);
+          const method = coerceJsonObject(row.method);
+          const emm = coerceJsonObject(row.emm);
 
           return {
             id: row.expert_id,

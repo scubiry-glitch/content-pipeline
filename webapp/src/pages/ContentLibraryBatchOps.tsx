@@ -32,6 +32,7 @@ export function ContentLibraryBatchOps() {
     ai: { status: 'idle' },
     extract: { status: 'idle' },
     graph: { status: 'idle' },
+    topics: { status: 'idle' },
     wiki: { status: 'idle' },
   });
   const [extractJobId, setExtractJobId] = useState<string | null>(null);
@@ -162,7 +163,24 @@ export function ContentLibraryBatchOps() {
     }
   };
 
-  // Step 5: Wiki 重生成
+  // Step 5: 议题叙事预生成
+  const triggerTopicEnrich = async () => {
+    setStep('topics', { status: 'running', message: '调用 LLM 生成议题叙事并缓存...' });
+    try {
+      const res = await fetch(`${API}/topics/enrich?limit=10`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setStep('topics', {
+        status: 'done',
+        message: `${data.total || 0} 个议题, ${data.enriched || 0} 个成功生成叙事`,
+        lastRun: new Date().toISOString(),
+      });
+    } catch (err) {
+      setStep('topics', { status: 'error', message: (err as Error).message });
+    }
+  };
+
+  // Step 6: Wiki 重生成
   const triggerWikiGenerate = async () => {
     setStep('wiki', { status: 'running', message: '生成 Wiki...' });
     try {
@@ -310,11 +328,27 @@ export function ContentLibraryBatchOps() {
           {steps.graph.message && <p className="text-sm text-gray-500 mt-1">{steps.graph.message}</p>}
         </div>
 
-        {/* Step 5: Wiki */}
+        {/* Step 5: 议题叙事预生成 */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              {statusIcon(steps.wiki.status)} Step 5: Wiki 重生成
+              {statusIcon(steps.topics.status)} Step 5: 议题叙事预生成
+            </h3>
+            <button onClick={triggerTopicEnrich} disabled={steps.topics.status === 'running'}
+              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50">
+              ✍️ 生成叙事
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">LLM 为 Top 10 议题生成标题/导语/角度并缓存到数据库，打开议题页直接读取</p>
+          {steps.topics.message && <p className="text-sm text-gray-500 mt-1">{steps.topics.message}</p>}
+          {steps.topics.lastRun && <p className="text-xs text-gray-400 mt-1">上次生成: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
+        </div>
+
+        {/* Step 6: Wiki */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              {statusIcon(steps.wiki.status)} Step 6: Wiki 重生成
             </h3>
             <button onClick={triggerWikiGenerate} disabled={steps.wiki.status === 'running'}
               className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
