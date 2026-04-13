@@ -1,11 +1,12 @@
 // LG Planning Tab - 选题策划
-// 大纲结构化展示 + 选题评估 + 竞品分析 + 人工确认面板 + 三模式 Markdown 编辑器
+// 大纲结构化展示 + 选题评估 + 竞品分析 + 人工确认面板 + 三模式 Markdown 编辑器 + 多源发现
 
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { langgraphApi, type LGStateHistoryItem } from '../../api/langgraph';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
+import { hotTopicsApi, type HotTopic } from '../../api/client';
 
 type EditorMode = 'edit' | 'preview' | 'split';
 
@@ -121,6 +122,10 @@ export function LGPlanningTab() {
   const [comments, setComments] = useState<OutlineComment[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
   const [newCommentSection, setNewCommentSection] = useState<string>('');
+  const [showDiscovery, setShowDiscovery] = useState(false);
+  const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
 
   // 加载 checkpoint 历史
   useEffect(() => {
@@ -138,6 +143,34 @@ export function LGPlanningTab() {
     if (!detail?.threadId) return;
     setComments(loadComments(detail.threadId));
   }, [detail?.threadId]);
+
+  // 加载多源发现数据（折叠展开时按需加载）
+  useEffect(() => {
+    if (!showDiscovery || hotTopics.length > 0) return;
+    setDiscoveryLoading(true);
+    hotTopicsApi.getAll({ limit: 10 })
+      .then((res) => setHotTopics(res.items || []))
+      .catch(() => setHotTopics([]))
+      .finally(() => setDiscoveryLoading(false));
+  }, [showDiscovery, hotTopics.length]);
+
+  // AI 排名计算（基于话题与当前 detail.topic 的关键词重叠度）
+  const computeRelevance = (text: string): number => {
+    if (!detail?.topic) return 50;
+    const topicWords = detail.topic.toLowerCase().split(/[\s,，。\/]+/).filter(w => w.length >= 2);
+    const textLower = text.toLowerCase();
+    let matches = 0;
+    topicWords.forEach(w => { if (textLower.includes(w)) matches += 1; });
+    return Math.min(100, 30 + matches * 25);
+  };
+
+  const toggleTopicSelection = (id: string) => {
+    setSelectedTopics(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const addComment = () => {
     if (!newCommentText.trim() || !detail?.threadId) return;
@@ -441,6 +474,163 @@ export function LGPlanningTab() {
               大纲尚未生成
             </p>
           </div>
+        )}
+      </div>
+
+      {/* 多源发现 + AI 排名 (P1+P2) */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div
+            className="section-title"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowDiscovery(!showDiscovery)}
+          >
+            <span className="material-symbols-outlined">explore</span>
+            多源情报发现
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              {showDiscovery ? 'expand_less' : 'expand_more'}
+            </span>
+          </div>
+          <div className="section-desc">RSS / 热点话题 / 全网搜索 — 辅助选题决策</div>
+        </div>
+
+        {showDiscovery && (
+          <>
+            {discoveryLoading ? (
+              <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                正在加载情报数据...
+              </div>
+            ) : hotTopics.length === 0 ? (
+              <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                暂无情报数据，可在「内容情报中心」添加 RSS 源或刷新热点
+              </div>
+            ) : (
+              <>
+                {/* AI 排名摘要 */}
+                <div
+                  className="info-card full-width"
+                  style={{
+                    background: 'linear-gradient(90deg, hsla(199, 89%, 48%, 0.05), transparent)',
+                    borderLeft: '3px solid #3b82f6',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#3b82f6' }}>auto_awesome</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text)' }}>AI 排名引擎</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                        基于当前选题「{detail.topic}」与情报内容的关键词重叠度智能排序
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      已选 {selectedTopics.size} 项
+                    </span>
+                  </div>
+                </div>
+
+                {/* 热点话题列表 */}
+                <div className="info-card full-width">
+                  <div className="card-title">
+                    <span className="material-symbols-outlined">local_fire_department</span>
+                    热点话题（按 AI 相关度排序）
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {[...hotTopics]
+                      .map((t: any) => ({ ...t, _relevance: computeRelevance(t.name || t.topic || t.title || '') }))
+                      .sort((a, b) => b._relevance - a._relevance)
+                      .map((topic: any, i: number) => {
+                        const id = topic.id || `topic-${i}`;
+                        const isSelected = selectedTopics.has(id);
+                        const relevanceColor =
+                          topic._relevance >= 75 ? '#22c55e' : topic._relevance >= 55 ? '#3b82f6' : '#64748b';
+                        return (
+                          <div
+                            key={id}
+                            onClick={() => toggleTopicSelection(id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '8px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              background: isSelected ? 'hsla(210, 80%, 50%, 0.08)' : 'transparent',
+                              border: isSelected ? '1px solid #3b82f6' : '1px solid transparent',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              style={{ pointerEvents: 'none' }}
+                            />
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', width: '24px' }}>
+                              #{i + 1}
+                            </span>
+                            <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)' }}>
+                              {topic.name || topic.topic || topic.title}
+                            </span>
+                            {/* AI 相关度评分 */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '110px' }}>
+                              <div style={{ flex: 1, height: '4px', background: 'var(--surface-alt)', borderRadius: '2px' }}>
+                                <div
+                                  style={{
+                                    width: `${topic._relevance}%`,
+                                    height: '100%',
+                                    background: relevanceColor,
+                                    borderRadius: '2px',
+                                  }}
+                                />
+                              </div>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: relevanceColor, minWidth: '28px', textAlign: 'right' }}>
+                                {topic._relevance}%
+                              </span>
+                            </div>
+                            {topic.trend && (
+                              <span
+                                className="material-symbols-outlined"
+                                style={{
+                                  fontSize: '14px',
+                                  color: topic.trend === 'up' ? '#22c55e' : topic.trend === 'down' ? '#ef4444' : '#64748b',
+                                }}
+                              >
+                                {topic.trend === 'up' ? 'trending_up' : topic.trend === 'down' ? 'trending_down' : 'trending_flat'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* 已选项汇总 */}
+                {selectedTopics.size > 0 && (
+                  <div
+                    className="info-card full-width"
+                    style={{
+                      background: 'hsla(142, 45%, 45%, 0.05)',
+                      border: '1px solid hsla(142, 45%, 45%, 0.2)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        已选择 {selectedTopics.size} 个情报项作为下次大纲生成的参考素材
+                      </div>
+                      <button
+                        type="button"
+                        className="lg-btn lg-btn-secondary"
+                        onClick={() => setSelectedTopics(new Set())}
+                        style={{ fontSize: '11px', padding: '4px 10px' }}
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
 
