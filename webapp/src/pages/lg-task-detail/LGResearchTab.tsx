@@ -1,14 +1,79 @@
 // LG Research Tab - 深度研究
-// 数据包展示 + 分析摘要 + 关键洞察 + 引用可靠性 + 工具操作栏 + Stage 头部
+// 数据包展示 + 分析摘要 + 关键洞察 + 引用可靠性 + 工具操作栏 + Stage 头部 + 多源配置
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+
+interface ResearchConfig {
+  autoCollect: boolean;
+  maxResults: number;
+  minCredibility: number;
+  timeRange: '7d' | '30d' | '90d' | '1y';
+  keywords: string[];
+  excludeKeywords: string[];
+  sources: {
+    web: boolean;
+    rss: boolean;
+    assets: boolean;
+    hotTopics: boolean;
+  };
+}
+
+const DEFAULT_RESEARCH_CONFIG: ResearchConfig = {
+  autoCollect: true,
+  maxResults: 20,
+  minCredibility: 0.6,
+  timeRange: '30d',
+  keywords: [],
+  excludeKeywords: [],
+  sources: { web: true, rss: true, assets: true, hotTopics: false },
+};
+
+function loadResearchConfig(threadId: string): ResearchConfig {
+  try {
+    const raw = localStorage.getItem(`lg-research-config:${threadId}`);
+    if (raw) return { ...DEFAULT_RESEARCH_CONFIG, ...JSON.parse(raw) };
+  } catch {}
+  return DEFAULT_RESEARCH_CONFIG;
+}
+
+function saveResearchConfig(threadId: string, config: ResearchConfig) {
+  try {
+    localStorage.setItem(`lg-research-config:${threadId}`, JSON.stringify(config));
+  } catch {}
+}
 
 export function LGResearchTab() {
   const { detail, onRefresh } = useOutletContext<LGTaskContext>();
   const [showStrategy, setShowStrategy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState<ResearchConfig>(DEFAULT_RESEARCH_CONFIG);
+  const [keywordsInput, setKeywordsInput] = useState('');
+  const [excludeInput, setExcludeInput] = useState('');
+
+  // 加载配置
+  useEffect(() => {
+    if (!detail?.threadId) return;
+    const cfg = loadResearchConfig(detail.threadId);
+    setConfig(cfg);
+    setKeywordsInput(cfg.keywords.join(', '));
+    setExcludeInput(cfg.excludeKeywords.join(', '));
+  }, [detail?.threadId]);
+
+  // 保存配置
+  const handleSaveConfig = () => {
+    if (!detail?.threadId) return;
+    const next: ResearchConfig = {
+      ...config,
+      keywords: keywordsInput.split(',').map((k) => k.trim()).filter(Boolean),
+      excludeKeywords: excludeInput.split(',').map((k) => k.trim()).filter(Boolean),
+    };
+    setConfig(next);
+    saveResearchConfig(detail.threadId, next);
+    setShowConfig(false);
+  };
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -105,6 +170,23 @@ export function LGResearchTab() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             type="button"
+            onClick={() => setShowConfig(!showConfig)}
+            className="lg-btn lg-btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              fontSize: '12px',
+              background: showConfig ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+              color: showConfig ? '#3b82f6' : undefined,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>tune</span>
+            研究配置
+          </button>
+          <button
+            type="button"
             onClick={() => setShowStrategy(!showStrategy)}
             className="lg-btn lg-btn-secondary"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
@@ -116,6 +198,160 @@ export function LGResearchTab() {
           </button>
         </div>
       </div>
+
+      {/* 多源引擎配置面板 (Re1) */}
+      {showConfig && (
+        <div className="info-card full-width" style={{ marginBottom: '20px' }}>
+          <div className="card-title">
+            <span className="material-symbols-outlined">tune</span>
+            研究引擎配置
+          </div>
+
+          {/* 数据源开关 */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '8px' }}>
+              数据源
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {([
+                { key: 'web', label: '🌐 全网搜索', desc: 'Tavily AI' },
+                { key: 'rss', label: '📡 RSS 订阅', desc: '已订阅源' },
+                { key: 'assets', label: '📚 私有素材', desc: '向量库' },
+                { key: 'hotTopics', label: '🔥 热点话题', desc: '社区追踪' },
+              ] as const).map((s) => {
+                const active = config.sources[s.key];
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() =>
+                      setConfig({
+                        ...config,
+                        sources: { ...config.sources, [s.key]: !active },
+                      })
+                    }
+                    style={{
+                      flex: '1 1 140px',
+                      padding: '10px 12px',
+                      border: `1px solid ${active ? 'var(--primary)' : 'var(--divider)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: active ? 'var(--primary-alpha)' : 'var(--surface)',
+                      color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>{s.label}</div>
+                    <div style={{ fontSize: '10px', opacity: 0.7 }}>{s.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 参数配置 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                自动采集
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={config.autoCollect}
+                  onChange={(e) => setConfig({ ...config, autoCollect: e.target.checked })}
+                />
+                启用自动采集
+              </label>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                最大结果数
+              </label>
+              <input
+                type="number"
+                className="lg-input"
+                min={5}
+                max={50}
+                value={config.maxResults}
+                onChange={(e) => setConfig({ ...config, maxResults: Number(e.target.value) || 20 })}
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                最低可信度 ({Math.round(config.minCredibility * 100)}%)
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={config.minCredibility}
+                onChange={(e) => setConfig({ ...config, minCredibility: Number(e.target.value) })}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                时间范围
+              </label>
+              <select
+                className="lg-select"
+                value={config.timeRange}
+                onChange={(e) => setConfig({ ...config, timeRange: e.target.value as any })}
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              >
+                <option value="7d">近 7 天</option>
+                <option value="30d">近 30 天</option>
+                <option value="90d">近 90 天</option>
+                <option value="1y">近 1 年</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 关键词 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                关键词（逗号分隔）
+              </label>
+              <input
+                type="text"
+                className="lg-input"
+                value={keywordsInput}
+                onChange={(e) => setKeywordsInput(e.target.value)}
+                placeholder="例如：REITs, 保租房, 政策"
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                排除关键词
+              </label>
+              <input
+                type="text"
+                className="lg-input"
+                value={excludeInput}
+                onChange={(e) => setExcludeInput(e.target.value)}
+                placeholder="例如：广告, 宣传"
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button type="button" className="lg-btn lg-btn-secondary" onClick={() => setShowConfig(false)} style={{ fontSize: '12px' }}>
+              取消
+            </button>
+            <button type="button" className="lg-btn lg-btn-primary" onClick={handleSaveConfig} style={{ fontSize: '12px' }}>
+              保存配置
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 研究策略说明（折叠） */}
       {showStrategy && (
