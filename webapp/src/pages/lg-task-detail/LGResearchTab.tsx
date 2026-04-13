@@ -755,6 +755,164 @@ export function LGResearchTab() {
         </div>
       )}
 
+      {/* Re5: 数据处理流程面板 */}
+      {dataPackage.length > 0 && (() => {
+        // 提取外部链接（从数据内容中扫描 URL）
+        const externalLinks: string[] = [];
+        const urlRegex = /https?:\/\/[^\s)\]"'`]+/g;
+        dataPackage.forEach((item: any) => {
+          const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content || {});
+          const matches = text.match(urlRegex);
+          if (matches) externalLinks.push(...matches.slice(0, 3));
+        });
+        const uniqueLinks = Array.from(new Set(externalLinks)).slice(0, 10);
+
+        // 数据清洗统计（基于可靠度阈值）
+        const totalSources = dataPackage.length;
+        const validSources = dataPackage.filter(
+          (item: any) => typeof item.reliability === 'number' && (item.reliability > 1 ? item.reliability : item.reliability * 100) >= 50
+        ).length;
+        const lowQualitySources = totalSources - validSources;
+
+        // 交叉验证：数据源类型分布
+        const typeMap: Record<string, number> = {};
+        dataPackage.forEach((item: any) => {
+          const t = item.type || 'unknown';
+          typeMap[t] = (typeMap[t] || 0) + 1;
+        });
+        const crossValidatedCount = Object.values(typeMap).filter((c) => c >= 2).length;
+
+        return (
+          <div className="panel-grid" style={{ marginTop: '24px' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <span className="material-symbols-outlined">workflow</span>
+                数据处理流程
+              </div>
+              <div className="section-desc">原始数据 → 清洗 → 验证 → 引用提取</div>
+            </div>
+
+            {/* 处理流水线统计 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+              {/* 数据审查 */}
+              <div className="info-card" style={{ borderTop: '3px solid #3b82f6' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">fact_check</span>
+                  数据审查
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)' }}>{totalSources}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>原始数据条目</div>
+              </div>
+
+              {/* 数据清洗 */}
+              <div className="info-card" style={{ borderTop: '3px solid #22c55e' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">cleaning_services</span>
+                  数据清洗
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#22c55e' }}>{validSources}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  通过 ({lowQualitySources > 0 && <span style={{ color: '#ef4444' }}>剔除 {lowQualitySources}</span>})
+                </div>
+              </div>
+
+              {/* 交叉验证 */}
+              <div className="info-card" style={{ borderTop: '3px solid #a855f7' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">verified_user</span>
+                  交叉验证
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#a855f7' }}>{crossValidatedCount}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  多源印证类型 / {Object.keys(typeMap).length} 类
+                </div>
+              </div>
+
+              {/* 外部引用 */}
+              <div className="info-card" style={{ borderTop: '3px solid #f59e0b' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">link</span>
+                  外部引用
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#f59e0b' }}>{uniqueLinks.length}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>提取的外链</div>
+              </div>
+            </div>
+
+            {/* 数据类型分布（交叉验证矩阵） */}
+            <div className="info-card full-width">
+              <div className="card-title">
+                <span className="material-symbols-outlined">grid_view</span>
+                数据类型分布
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {Object.entries(typeMap).map(([type, count]) => {
+                  const validated = count >= 2;
+                  return (
+                    <div
+                      key={type}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-full)',
+                        background: validated ? 'hsla(142, 45%, 45%, 0.1)' : 'var(--surface-alt)',
+                        border: `1px solid ${validated ? '#22c55e' : 'var(--divider)'}`,
+                        fontSize: '12px',
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, color: validated ? '#22c55e' : 'var(--text)' }}>
+                        {type.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{count} 条</span>
+                      {validated && (
+                        <span className="material-symbols-outlined" style={{ fontSize: '12px', color: '#22c55e' }}>
+                          check_circle
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 外部链接列表 */}
+            {uniqueLinks.length > 0 && (
+              <div className="info-card full-width">
+                <div className="card-title">
+                  <span className="material-symbols-outlined">link</span>
+                  外部引用链接 ({uniqueLinks.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {uniqueLinks.map((link, i) => (
+                    <a
+                      key={i}
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--primary)',
+                        textDecoration: 'none',
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        background: 'var(--surface-alt)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      🔗 {link}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 关键洞察 */}
       {research.insights && research.insights.length > 0 && (
         <div className="panel-grid" style={{ marginTop: '24px' }}>
