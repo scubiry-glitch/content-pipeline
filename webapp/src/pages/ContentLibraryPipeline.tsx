@@ -84,6 +84,67 @@ const STEP_COLORS: Record<string, string> = {
   step6:  'hsl(270, 40%, 50%)',
 };
 
+// ============================================================
+// 应用场景定义 (第 4 列)
+// ============================================================
+interface AppDef {
+  key: string;
+  label: string;
+  icon: string;
+  description: string;
+  /** 相对路径 (对应系统内已有页面) */
+  href: string;
+  /** 消费的产出物 key 列表 (连线目标) */
+  consumes: string[];
+  /** 连线颜色 */
+  color: string;
+}
+
+const APPLICATIONS: AppDef[] = [
+  {
+    key: 'expert-chat', label: '专家对话', icon: '👥',
+    description: 'AI Agent 检索专家观点 + 实体关系',
+    href: '/expert-chat',
+    consumes: ['entities', 'cards', 'synthesis', 'consensus'],
+    color: 'hsl(260, 50%, 55%)',
+  },
+  {
+    key: 'enterprise-report', label: '企业研报', icon: '📊',
+    description: '自动生成研究报告草稿',
+    href: '/tasks',
+    consumes: ['facts', 'delta', 'cards', 'synthesis', 'materials'],
+    color: 'hsl(200, 55%, 50%)',
+  },
+  {
+    key: 'ppt-minutes', label: 'PPT/会议纪要/内部汇报', icon: '📑',
+    description: '会议要点 + 观点对比 + 内部汇报材料',
+    href: '/tasks',
+    consumes: ['cards', 'synthesis', 'consensus'],
+    color: 'hsl(180, 45%, 45%)',
+  },
+  {
+    key: 'knowledge-base', label: '知识库/客服', icon: '🤖',
+    description: 'RAG 检索问答, 客户服务知识检索',
+    href: '/content-library',
+    consumes: ['facts', 'entities', 'cards', 'wiki'],
+    color: 'hsl(160, 50%, 40%)',
+  },
+  {
+    key: 'topic-decision', label: '选题决策', icon: '🎯',
+    description: '编辑部选题会参考',
+    href: '/hot-topics',
+    consumes: ['topics', 'trends', 'angles', 'gaps', 'delta'],
+    color: 'hsl(40, 60%, 50%)',
+  },
+  {
+    key: 'risk-audit', label: '风控审核/舆情监控', icon: '🛡️',
+    description: '发布前风险检查 + 情感倾向监测',
+    href: '/sentiment',
+    consumes: ['freshness', 'contradictions', 'beliefs', 'crossDomain'],
+    color: 'hsl(0, 55%, 55%)',
+  },
+];
+
 /** 步骤分组定义 (按步骤视图用) */
 const STEP_GROUPS = [
   { stepKey: 'step2',  label: 'Step 2: AI 分析',   color: STEP_COLORS.step2 },
@@ -117,6 +178,7 @@ export function ContentLibraryPipeline() {
   const flowRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const outputRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const appRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [lines, setLines] = useState<Array<{ x1: number; y1: number; x2: number; y2: number; color: string; key: string }>>([]);
 
   const computeLines = useCallback(() => {
@@ -124,6 +186,7 @@ export function ContentLibraryPipeline() {
     if (!container) return;
     const rect = container.getBoundingClientRect();
     const newLines: typeof lines = [];
+    // 步骤 → 产出物 连线 (第 2 列 → 第 3 列)
     for (const [stepKey, outputKeys] of Object.entries(STEP_OUTPUTS)) {
       const stepEl = stepRefs.current[stepKey];
       if (!stepEl) continue;
@@ -138,6 +201,22 @@ export function ContentLibraryPipeline() {
         const ox = oRect.left - rect.left;
         const oy = oRect.top + oRect.height / 2 - rect.top;
         newLines.push({ x1: sx, y1: sy, x2: ox, y2: oy, color, key: `${stepKey}-${ok}` });
+      }
+    }
+    // 产出物 → 应用场景 连线 (第 3 列 → 第 4 列)
+    for (const app of APPLICATIONS) {
+      const appEl = appRefs.current[app.key];
+      if (!appEl) continue;
+      const aRect = appEl.getBoundingClientRect();
+      const ax = aRect.left - rect.left;
+      const ay = aRect.top + aRect.height / 2 - rect.top;
+      for (const outKey of app.consumes) {
+        const outEl = outputRefs.current[outKey];
+        if (!outEl) continue;
+        const oRect = outEl.getBoundingClientRect();
+        const ox = oRect.right - rect.left;
+        const oy = oRect.top + oRect.height / 2 - rect.top;
+        newLines.push({ x1: ox, y1: oy, x2: ax, y2: ay, color: app.color, key: `${outKey}-${app.key}` });
       }
     }
     setLines(newLines);
@@ -434,11 +513,18 @@ export function ContentLibraryPipeline() {
             按步骤
           </button>
         </div>
-        <div className="flex gap-3 text-[10px] text-gray-400">
-          <span>连线颜色 = 步骤颜色</span>
+        <div className="flex gap-3 text-[10px] text-gray-400 flex-wrap">
+          <span>步骤连线:</span>
           <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step3 }} /> S3</span>
           <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step4 }} /> S4</span>
           <span className="flex items-center gap-1"><span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: STEP_COLORS.step5a }} /> S5</span>
+          <span className="ml-2">应用连线:</span>
+          {APPLICATIONS.map(a => (
+            <span key={a.key} className="flex items-center gap-1" title={a.label}>
+              <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: a.color }} />
+              {a.icon}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -586,6 +672,30 @@ export function ContentLibraryPipeline() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* 列 4: 应用场景 */}
+            <div>
+              <div className="pipeline-col-label">应用场景</div>
+              <div className="pipeline-apps">
+                {APPLICATIONS.map(app => (
+                  <div
+                    key={app.key}
+                    ref={el => { appRefs.current[app.key] = el; }}
+                    className="app-node"
+                    style={{ borderLeftColor: app.color, borderLeftWidth: 3 }}
+                    onClick={() => navigate(app.href)}
+                    title={`${app.description} → ${app.href}`}
+                  >
+                    <div className="app-header">
+                      <span className="app-icon">{app.icon}</span>
+                      <span className="app-label">{app.label}</span>
+                    </div>
+                    <div className="app-desc">{app.description}</div>
+                    <div className="app-link">{app.href} →</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
