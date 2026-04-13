@@ -1,9 +1,12 @@
 // LangGraph Tasks Page
-// 任务列表页 — 状态筛选侧边栏 + 增强卡片 + 删除/刷新 + API 状态同步
+// 任务列表页 — 状态筛选侧边栏 + 增强卡片 + 删除/刷新 + API 状态同步 + 智能推荐
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { langgraphApi, type LGTaskCreateInput, type LGTaskCreateResult } from '../api/langgraph';
+import { assetsApi, type Asset } from '../api/client';
+import { matchExperts } from '../services/expertService';
+import type { Expert } from '../types';
 import './LangGraphTasks.css';
 
 interface LGThread {
@@ -89,6 +92,11 @@ export function LangGraphTasks() {
   const [context, setContext] = useState('');
   const [maxRounds, setMaxRounds] = useState(2);
 
+  // 智能推荐：素材 + 专家
+  const [recommendedAssets, setRecommendedAssets] = useState<Asset[]>([]);
+  const [matchedExperts, setMatchedExperts] = useState<Expert[]>([]);
+  const [searchingRecs, setSearchingRecs] = useState(false);
+
   // 从 API 同步所有任务的最新状态
   const syncStatuses = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -129,6 +137,35 @@ export function LangGraphTasks() {
     const interval = setInterval(() => syncStatuses(true), 30000);
     return () => clearInterval(interval);
   }, [syncStatuses]);
+
+  // 智能推荐：根据 topic 防抖搜索素材 + 匹配专家
+  useEffect(() => {
+    if (!showCreate || !topic.trim() || topic.trim().length < 3) {
+      setRecommendedAssets([]);
+      setMatchedExperts([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearchingRecs(true);
+      try {
+        const [assetRes] = await Promise.allSettled([
+          assetsApi.search(topic.trim().split(/[\s,]+/)[0] || ''),
+        ]);
+        if (assetRes.status === 'fulfilled') {
+          setRecommendedAssets((assetRes.value.items || []).slice(0, 3));
+        }
+        try {
+          const expertResult = matchExperts({ topic: topic.trim(), importance: 0.7 });
+          const experts: Expert[] = [...expertResult.domainExperts.slice(0, 2)];
+          if (expertResult.seniorExpert) experts.unshift(expertResult.seniorExpert);
+          setMatchedExperts(experts);
+        } catch {}
+      } finally {
+        setSearchingRecs(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [showCreate, topic]);
 
   const handleCreate = useCallback(async () => {
     if (!topic.trim()) return;
@@ -405,6 +442,99 @@ export function LangGraphTasks() {
                 <option value={3}>3 轮</option>
               </select>
             </div>
+
+            {/* 智能推荐区域 */}
+            {topic.trim().length >= 3 && (
+              <>
+                {searchingRecs && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+                    🔍 正在匹配相关素材和专家...
+                  </div>
+                )}
+
+                {recommendedAssets.length > 0 && (
+                  <div className="lg-form-group">
+                    <label className="lg-label">📎 推荐素材</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflow: 'auto' }}>
+                      {recommendedAssets.map((asset) => (
+                        <div
+                          key={asset.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 10px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--surface-alt)',
+                            fontSize: '11px',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--primary)' }}>
+                            article
+                          </span>
+                          <span style={{ flex: 1, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {asset.title}
+                          </span>
+                          {asset.quality_score && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: asset.quality_score >= 70 ? '#22c55e' : '#f59e0b' }}>
+                              {asset.quality_score}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {matchedExperts.length > 0 && (
+                  <div className="lg-form-group">
+                    <label className="lg-label">🎯 智能匹配专家</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {matchedExperts.map((expert) => (
+                        <div
+                          key={expert.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            borderRadius: 'var(--radius-full)',
+                            background:
+                              expert.level === 'senior' ? 'hsla(45, 90%, 50%, 0.1)' : 'var(--surface-alt)',
+                            border: `1px solid ${expert.level === 'senior' ? '#f59e0b' : 'var(--divider)'}`,
+                            fontSize: '11px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background:
+                                expert.level === 'senior'
+                                  ? 'linear-gradient(135deg, #f59e0b, #f97316)'
+                                  : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {expert.name.charAt(0)}
+                          </div>
+                          <span style={{ color: 'var(--text)', fontWeight: 600 }}>{expert.name}</span>
+                          {expert.level === 'senior' && (
+                            <span style={{ color: '#f59e0b', fontSize: '9px', fontWeight: 700 }}>★</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
             {error && <div className="lg-error">{error}</div>}
 
