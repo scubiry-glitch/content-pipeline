@@ -1,11 +1,14 @@
 // LG Research Tab - 深度研究
-// 数据包展示 + 分析摘要 + 关键洞察
+// 数据包展示 + 分析摘要 + 关键洞察 + 引用可靠性 + 工具操作栏 + Stage 头部
 
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 
 export function LGResearchTab() {
-  const { detail } = useOutletContext<LGTaskContext>();
+  const { detail, onRefresh } = useOutletContext<LGTaskContext>();
+  const [showStrategy, setShowStrategy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -34,8 +37,144 @@ export function LGResearchTab() {
     );
   }
 
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try { await onRefresh(); } finally { setRefreshing(false); }
+  };
+
+  // 计算可靠度等级 A/B/C/D
+  const getReliabilityGrade = (raw?: number): { grade: string; color: string } => {
+    if (typeof raw !== 'number') return { grade: '-', color: 'var(--text-muted)' };
+    const pct = raw > 1 ? raw : raw * 100;
+    if (pct >= 85) return { grade: 'A', color: '#22c55e' };
+    if (pct >= 70) return { grade: 'B', color: '#3b82f6' };
+    if (pct >= 50) return { grade: 'C', color: '#f59e0b' };
+    return { grade: 'D', color: '#ef4444' };
+  };
+
+  // 引用统计
+  const reliabilityStats = dataPackage.reduce(
+    (acc, item) => {
+      const { grade } = getReliabilityGrade(item.reliability);
+      if (grade !== '-') acc[grade] = (acc[grade] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
   return (
     <div className="tab-panel">
+      {/* Re8: Stage 标题头部 */}
+      <div
+        className="info-card full-width"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          background: 'linear-gradient(90deg, hsla(199, 89%, 48%, 0.05), transparent)',
+          borderLeft: '4px solid var(--primary)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+            }}
+          >
+            STAGE 2
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>
+              深度研究
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+              基于大纲展开多维度数据采集与洞察提炼
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => setShowStrategy(!showStrategy)}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+              {showStrategy ? 'visibility_off' : 'visibility'}
+            </span>
+            {showStrategy ? '隐藏策略' : '查看策略'}
+          </button>
+        </div>
+      </div>
+
+      {/* 研究策略说明（折叠） */}
+      {showStrategy && (
+        <div className="info-card full-width" style={{ marginBottom: '20px', background: 'var(--surface-alt)' }}>
+          <div className="card-title">
+            <span className="material-symbols-outlined">tune</span>
+            研究策略
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            <li>多源数据采集：行业报告、公开新闻、市场研究、社区话题</li>
+            <li>事实交叉验证：通过多源比对剔除孤立信息</li>
+            <li>洞察提炼：识别趋势、风险、机会三类核心结论</li>
+            <li>可信度评级：A 级 ≥85%，B 级 ≥70%，C 级 ≥50%，D 级 &lt;50%</li>
+          </ul>
+        </div>
+      )}
+
+      {/* Re7: 工具操作栏 */}
+      <div
+        className="info-card full-width"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '12px 16px',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>storage</span>
+            数据来源：<strong style={{ color: 'var(--text)' }}>{dataPackage.length}</strong>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>psychology</span>
+            洞察：<strong style={{ color: 'var(--text)' }}>{research.insights?.length || 0}</strong>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>verified</span>
+            A 级来源：<strong style={{ color: '#22c55e' }}>{reliabilityStats.A || 0}</strong>
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>refresh</span>
+            {refreshing ? '刷新中...' : '刷新数据'}
+          </button>
+        </div>
+      </div>
+
       {/* 分析摘要 */}
       {research.analysis && (
         <div className="panel-grid">
@@ -98,6 +237,29 @@ export function LGResearchTab() {
               <span className="material-symbols-outlined">storage</span>
               数据来源 ({dataPackage.length})
             </div>
+            {/* Re6: 引用可靠性分级摘要 */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['A', 'B', 'C', 'D'] as const).map((g) => {
+                const count = reliabilityStats[g] || 0;
+                const colorMap: Record<string, string> = { A: '#22c55e', B: '#3b82f6', C: '#f59e0b', D: '#ef4444' };
+                return (
+                  <span
+                    key={g}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: `${colorMap[g]}15`,
+                      color: colorMap[g],
+                      border: `1px solid ${colorMap[g]}40`,
+                    }}
+                  >
+                    {g}: {count}
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
           <div className="info-card full-width">
@@ -108,30 +270,53 @@ export function LGResearchTab() {
                     <th style={{ width: '120px' }}>来源</th>
                     <th style={{ width: '80px' }}>类型</th>
                     <th>内容摘要</th>
+                    <th style={{ width: '50px' }}>等级</th>
                     <th style={{ width: '100px' }}>可靠度</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dataPackage.map((item: any, i: number) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{item.source || '未知'}</td>
-                      <td>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                          fontSize: '11px', fontWeight: 600,
-                          background: 'var(--primary-alpha)', color: 'var(--primary)',
-                        }}>
-                          {item.type || 'data'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                        {formatDataPackageContent(item)}
-                      </td>
-                      <td>
-                        <ReliabilityBar value={item.reliability} />
-                      </td>
-                    </tr>
-                  ))}
+                  {dataPackage.map((item: any, i: number) => {
+                    const { grade, color } = getReliabilityGrade(item.reliability);
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{item.source || '未知'}</td>
+                        <td>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                            fontSize: '11px', fontWeight: 600,
+                            background: 'var(--primary-alpha)', color: 'var(--primary)',
+                          }}>
+                            {item.type || 'data'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '400px' }}>
+                          {formatDataPackageContent(item)}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              background: grade === '-' ? 'var(--surface-alt)' : `${color}15`,
+                              color,
+                              border: grade === '-' ? '1px dashed var(--divider)' : `1px solid ${color}40`,
+                            }}
+                          >
+                            {grade}
+                          </span>
+                        </td>
+                        <td>
+                          <ReliabilityBar value={item.reliability} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
