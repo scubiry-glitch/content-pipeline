@@ -101,8 +101,8 @@ export class ExpertEngine {
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     }
 
-    // Step 6: 输出格式化
-    const formatted = await formatOutput(rawOutput, expert, this.deps.llm);
+    // Step 6: 输出格式化（Phase 7: 传入 taskType 以便 generation 任务跑 expressionDNA linter）
+    const formatted = await formatOutput(rawOutput, expert, this.deps.llm, { taskType: request.task_type });
 
     // Step 7: 记录调用（异步，不阻塞返回）
     this.recordInvocation(invokeId, request, expert, inputAnalysis, emmResult, formatted.sections)

@@ -2,6 +2,7 @@
 // 多轮 JSON 验证 + 后处理恢复 + 风格漂移检测 + anti_patterns 检查
 
 import type { ExpertProfile, OutputSection, LLMAdapter } from './types.js';
+import { validateExpressionDNA } from './expressionDnaLinter.js';
 
 const MAX_FORMAT_RETRIES = 2;
 
@@ -10,16 +11,20 @@ const MAX_FORMAT_RETRIES = 2;
  * 1. 解析输出为结构化 sections
  * 2. 验证是否包含所有必要 sections
  * 3. 检查 anti_patterns
- * 4. 不通过则带错误反馈重试
+ * 4. (Phase 7) generation 任务额外跑 expressionDNA linter
+ * 5. 不通过则带错误反馈重试
  */
 export async function formatOutput(
   rawOutput: string,
   expert: ExpertProfile,
-  llm: LLMAdapter
+  llm: LLMAdapter,
+  options?: { taskType?: string },
 ): Promise<{ sections: OutputSection[]; valid: boolean; issues: string[] }> {
   let output = rawOutput;
   let attempt = 0;
   let issues: string[] = [];
+
+  const isGeneration = options?.taskType === 'generation';
 
   while (attempt <= MAX_FORMAT_RETRIES) {
     // Step 1: 解析为 sections
@@ -31,6 +36,14 @@ export async function formatOutput(
     // Step 3: 检查 anti_patterns
     const antiPatternViolations = checkAntiPatterns(output, expert.anti_patterns);
     issues.push(...antiPatternViolations);
+
+    // Step 4: Phase 7 — generation 任务额外跑 expressionDNA linter
+    if (isGeneration && expert.persona.expressionDNA) {
+      const dnaResult = validateExpressionDNA(output, expert.persona.expressionDNA);
+      if (!dnaResult.pass) {
+        issues.push(...dnaResult.issues.map(i => `[DNA] ${i}`));
+      }
+    }
 
     // 通过 → 返回
     if (issues.length === 0) {
