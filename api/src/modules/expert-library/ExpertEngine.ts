@@ -11,6 +11,7 @@ import { processInput } from './inputProcessor.js';
 import { emmGateCheck } from './emmGate.js';
 import { formatOutput } from './outputFormatter.js';
 import { analyzeThenJudge } from './analyzeThenJudge.js';
+import { matchHeuristics } from './heuristicsMatcher.js';
 
 export class ExpertEngine {
   private deps: ExpertLibraryDeps;
@@ -68,11 +69,19 @@ export class ExpertEngine {
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     } else {
       // Analysis / Generation 使用标准 prompt 流程
+      // Phase 3: 根据输入内容激活最相关的 heuristics（最多 3 条）
+      const activeHeuristics = matchHeuristics(
+        request.input_data,
+        expert.persona.cognition?.heuristics,
+        3,
+      );
+
       const systemPrompt = buildSystemPrompt(expert, {
         taskType: request.task_type,
         inputAnalysis,
         knowledgeContext: knowledgeContext || undefined,
         params: request.params,
+        activeHeuristics: activeHeuristics.length > 0 ? activeHeuristics : undefined,
       });
 
       const userPrompt = buildUserPrompt(request);
