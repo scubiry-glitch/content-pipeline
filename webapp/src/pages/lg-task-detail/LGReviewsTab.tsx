@@ -209,31 +209,171 @@ export function LGReviewsTab() {
   return (
     <div className="tab-panel">
       {/* 最终审批面板 */}
-      {pendingAction === 'final_approval' && (
-        <div className="lg-action-panel" style={{ marginBottom: '24px' }}>
-          <h3 className="lg-action-title">最终审批</h3>
-          <p className="lg-action-desc">
-            内容已通过蓝军评审（{rounds.length} 轮），请最终确认发布
-          </p>
-          <div className="lg-form-group">
-            <textarea
-              className="lg-textarea"
-              placeholder="审批意见（可选）"
-              value={feedback}
-              onChange={e => setFeedback(e.target.value)}
-              rows={2}
-            />
+      {pendingAction === 'final_approval' && (() => {
+        // 计算未决策的严重问题数量
+        const undecidedHighSeverity = rounds.reduce((acc, round: any) => {
+          (round.questions || []).forEach((q: any, j: number) => {
+            if (q.severity === 'high') {
+              const key = getQuestionKey(round.round, j, q.question);
+              if (!decisions[key]) acc += 1;
+            }
+          });
+          return acc;
+        }, 0);
+        const canStandardApprove = undecidedHighSeverity === 0;
+
+        return (
+          <div className="lg-action-panel" style={{ marginBottom: '24px' }}>
+            <h3 className="lg-action-title">最终审批</h3>
+            <p className="lg-action-desc">
+              内容已通过蓝军评审（{rounds.length} 轮，{allQuestions.length} 条意见），请最终确认发布
+            </p>
+
+            {/* 决策检查摘要 */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                padding: '12px',
+                marginBottom: '12px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-alt)',
+                fontSize: '12px',
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>已接受</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{decisionStats.accepted}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>已忽略</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#6b7280' }}>{decisionStats.ignored}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>待处理</div>
+                <div
+                  style={{
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    color: decisionStats.pending > 0 ? '#f59e0b' : 'var(--text-muted)',
+                  }}
+                >
+                  {decisionStats.pending}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>未决策严重问题</div>
+                <div
+                  style={{
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    color: undecidedHighSeverity > 0 ? '#ef4444' : '#22c55e',
+                  }}
+                >
+                  {undecidedHighSeverity}
+                </div>
+              </div>
+            </div>
+
+            {/* 警告：未决策严重问题 */}
+            {undecidedHighSeverity > 0 && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  marginBottom: '12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'hsla(0, 72%, 51%, 0.08)',
+                  borderLeft: '3px solid #ef4444',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#ef4444' }}>
+                  warning
+                </span>
+                <div>
+                  <strong>{undecidedHighSeverity}</strong> 个严重问题尚未决策。建议先在评审列表中接受或忽略这些问题，
+                  或使用「强制批准」跳过此检查。
+                </div>
+              </div>
+            )}
+
+            <div className="lg-form-group">
+              <textarea
+                className="lg-textarea"
+                placeholder="审批意见（可选）"
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="lg-action-buttons" style={{ flexWrap: 'wrap', gap: '8px' }}>
+              <button className="lg-btn lg-btn-danger" onClick={handleReject} disabled={resuming}>
+                {resuming ? '处理中...' : '打回修改'}
+              </button>
+
+              {/* 手动 override：批量标记所有待处理为已忽略后批准 */}
+              {decisionStats.pending > 0 && (
+                <button
+                  type="button"
+                  className="lg-btn lg-btn-secondary"
+                  onClick={async () => {
+                    // 将所有 pending 标记为 ignored
+                    const next = { ...decisions };
+                    rounds.forEach((round: any) => {
+                      (round.questions || []).forEach((q: any, j: number) => {
+                        const key = getQuestionKey(round.round, j, q.question);
+                        if (!next[key] && q.severity !== 'praise') {
+                          next[key] = 'ignored';
+                        }
+                      });
+                    });
+                    setDecisions(next);
+                    if (detail?.threadId) saveDecisions(detail.threadId, next);
+                  }}
+                  disabled={resuming}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>edit</span>
+                  手动标记全部为已忽略
+                </button>
+              )}
+
+              {/* 强制批准 */}
+              <button
+                type="button"
+                className="lg-btn lg-btn-secondary"
+                onClick={handleApprove}
+                disabled={resuming || undecidedHighSeverity === 0}
+                style={{
+                  display: undecidedHighSeverity > 0 ? 'flex' : 'none',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderColor: '#f59e0b',
+                  color: '#f59e0b',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>warning</span>
+                强制批准
+              </button>
+
+              {/* 标准批准 */}
+              <button
+                className="lg-btn lg-btn-primary"
+                onClick={handleApprove}
+                disabled={resuming || !canStandardApprove}
+                title={!canStandardApprove ? '存在未决策的严重问题，请先处理' : undefined}
+              >
+                {resuming ? '处理中...' : canStandardApprove ? '批准发布' : '请先处理严重问题'}
+              </button>
+            </div>
           </div>
-          <div className="lg-action-buttons">
-            <button className="lg-btn lg-btn-danger" onClick={handleReject} disabled={resuming}>
-              {resuming ? '处理中...' : '打回修改'}
-            </button>
-            <button className="lg-btn lg-btn-primary" onClick={handleApprove} disabled={resuming}>
-              {resuming ? '处理中...' : '批准发布'}
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 评审概览 + 配置按钮 */}
       <div className="panel-grid">
