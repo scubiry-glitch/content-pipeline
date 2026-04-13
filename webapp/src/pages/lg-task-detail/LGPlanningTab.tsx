@@ -7,6 +7,8 @@ import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { langgraphApi, type LGStateHistoryItem } from '../../api/langgraph';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import { hotTopicsApi, type HotTopic } from '../../api/client';
+import { matchExperts, generateExpertOpinion } from '../../services/expertService';
+import type { Expert, ExpertReview } from '../../types';
 
 type EditorMode = 'edit' | 'preview' | 'split';
 
@@ -126,6 +128,10 @@ export function LGPlanningTab() {
   const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [showExpertReview, setShowExpertReview] = useState(false);
+  const [matchedExperts, setMatchedExperts] = useState<Expert[]>([]);
+  const [expertReviews, setExpertReviews] = useState<ExpertReview[]>([]);
+  const [generatingReviews, setGeneratingReviews] = useState(false);
 
   // 加载 checkpoint 历史
   useEffect(() => {
@@ -170,6 +176,33 @@ export function LGPlanningTab() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  // 触发专家评审 — 匹配专家 + 生成观点
+  const runExpertReview = async () => {
+    if (!detail?.topic || !detail?.outline) return;
+    setGeneratingReviews(true);
+    try {
+      const result = matchExperts({ topic: detail.topic, importance: 0.7 });
+      const allExperts: Expert[] = [...result.domainExperts];
+      if (result.seniorExpert) allExperts.unshift(result.seniorExpert);
+      setMatchedExperts(allExperts);
+
+      // 为每个专家生成观点
+      const outlineText = outlineToMarkdown(detail.outline.sections || [], detail.outline.title);
+      const reviews: ExpertReview[] = [];
+      for (const expert of allExperts.slice(0, 5)) {
+        try {
+          const review = generateExpertOpinion(expert, outlineText, 'outline', { importance: 0.7 });
+          reviews.push(review);
+        } catch (e) {
+          // skip
+        }
+      }
+      setExpertReviews(reviews);
+    } finally {
+      setGeneratingReviews(false);
+    }
   };
 
   const addComment = () => {
@@ -633,6 +666,166 @@ export function LGPlanningTab() {
           </>
         )}
       </div>
+
+      {/* 专家评审面板 (P7) */}
+      {detail.outline && (
+        <div className="panel-grid" style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div
+              className="section-title"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowExpertReview(!showExpertReview)}
+            >
+              <span className="material-symbols-outlined">school</span>
+              专家评审
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                {showExpertReview ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+            <div className="section-desc">基于专家库智能匹配并生成大纲评审意见</div>
+          </div>
+
+          {showExpertReview && (
+            <>
+              {/* 触发按钮 */}
+              {expertReviews.length === 0 && !generatingReviews && (
+                <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '12px' }}>
+                    点击下方按钮，系统将基于当前选题智能匹配专家并生成大纲评审意见
+                  </p>
+                  <button type="button" className="lg-btn lg-btn-primary" onClick={runExpertReview}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '6px' }}>
+                      auto_awesome
+                    </span>
+                    生成专家评审
+                  </button>
+                </div>
+              )}
+
+              {generatingReviews && (
+                <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  正在匹配专家并生成评审意见...
+                </div>
+              )}
+
+              {/* 匹配的专家列表 */}
+              {matchedExperts.length > 0 && (
+                <div className="info-card full-width">
+                  <div className="card-title">
+                    <span className="material-symbols-outlined">groups</span>
+                    匹配专家 ({matchedExperts.length})
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {matchedExperts.map((expert) => (
+                      <div
+                        key={expert.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: expert.level === 'senior' ? 'hsla(45, 90%, 50%, 0.08)' : 'var(--surface-alt)',
+                          border: `1px solid ${expert.level === 'senior' ? '#f59e0b' : 'var(--divider)'}`,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background:
+                              expert.level === 'senior'
+                                ? 'linear-gradient(135deg, #f59e0b, #f97316)'
+                                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {expert.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>{expert.name}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                            {expert.level === 'senior' ? '特级专家' : '领域专家'} · 采纳率 {Math.round(expert.acceptanceRate * 100)}%
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="button" className="lg-btn lg-btn-secondary" style={{ fontSize: '11px', padding: '4px 12px' }} onClick={runExpertReview}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '13px', verticalAlign: 'middle', marginRight: '2px' }}>refresh</span>
+                      重新生成
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 专家评审意见列表 */}
+              {expertReviews.map((review) => (
+                <div key={review.id} className="info-card full-width">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#3b82f6' }}>person</span>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{review.expertName}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      置信度 {Math.round(review.confidence * 100)}%
+                    </span>
+                    {review.differentiationTags && review.differentiationTags.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                        {review.differentiationTags.slice(0, 2).map((tag, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              padding: '1px 8px',
+                              borderRadius: 'var(--radius-full)',
+                              fontSize: '10px',
+                              background: 'var(--primary-alpha)',
+                              color: 'var(--primary)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: '13px', color: 'var(--text)', lineHeight: 1.6, margin: '0 0 10px' }}>
+                    {review.opinion}
+                  </p>
+
+                  {review.suggestions && review.suggestions.length > 0 && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--surface-alt)',
+                        borderLeft: '3px solid var(--primary)',
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                        改进建议
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                        {review.suggestions.map((s, i) => (
+                          <li key={i} style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', lineHeight: 1.5 }}>
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {/* 评论/反馈系统 (P5) */}
       {detail.outline && (
