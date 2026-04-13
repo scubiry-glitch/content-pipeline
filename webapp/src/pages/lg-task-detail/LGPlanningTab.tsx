@@ -9,6 +9,29 @@ import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 
 type EditorMode = 'edit' | 'preview' | 'split';
 
+// 评论类型
+interface OutlineComment {
+  id: string;
+  sectionTitle: string;  // 关联的章节标题（可为空表示通用评论）
+  author: string;
+  content: string;
+  createdAt: string;
+}
+
+function loadComments(threadId: string): OutlineComment[] {
+  try {
+    return JSON.parse(localStorage.getItem(`lg-outline-comments:${threadId}`) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveComments(threadId: string, comments: OutlineComment[]) {
+  try {
+    localStorage.setItem(`lg-outline-comments:${threadId}`, JSON.stringify(comments));
+  } catch {}
+}
+
 // 大纲 sections → Markdown 文本
 function outlineToMarkdown(sections: any[], titleParam?: string): string {
   const lines: string[] = [];
@@ -95,6 +118,9 @@ export function LGPlanningTab() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  const [comments, setComments] = useState<OutlineComment[]>([]);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [newCommentSection, setNewCommentSection] = useState<string>('');
 
   // 加载 checkpoint 历史
   useEffect(() => {
@@ -106,6 +132,47 @@ export function LGPlanningTab() {
       .catch(() => setHistory([]))
       .finally(() => setLoadingHistory(false));
   }, [detail?.threadId]);
+
+  // 加载评论
+  useEffect(() => {
+    if (!detail?.threadId) return;
+    setComments(loadComments(detail.threadId));
+  }, [detail?.threadId]);
+
+  const addComment = () => {
+    if (!newCommentText.trim() || !detail?.threadId) return;
+    const next: OutlineComment = {
+      id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sectionTitle: newCommentSection,
+      author: 'You',
+      content: newCommentText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [next, ...comments];
+    setComments(updated);
+    saveComments(detail.threadId, updated);
+    setNewCommentText('');
+    setNewCommentSection('');
+  };
+
+  const deleteComment = (id: string) => {
+    if (!detail?.threadId) return;
+    const updated = comments.filter((c) => c.id !== id);
+    setComments(updated);
+    saveComments(detail.threadId, updated);
+  };
+
+  // 收集所有 outline section title 作为下拉选项
+  const sectionTitles: string[] = [];
+  if (detail?.outline?.sections) {
+    const collect = (secs: any[]) => {
+      secs.forEach((s) => {
+        if (s.title) sectionTitles.push(s.title);
+        if (Array.isArray(s.subsections)) collect(s.subsections);
+      });
+    };
+    collect(detail.outline.sections);
+  }
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -376,6 +443,114 @@ export function LGPlanningTab() {
           </div>
         )}
       </div>
+
+      {/* 评论/反馈系统 (P5) */}
+      {detail.outline && (
+        <div className="panel-grid" style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div className="section-title">
+              <span className="material-symbols-outlined">forum</span>
+              评论与反馈
+            </div>
+            <div className="section-desc">{comments.length} 条评论 · 本地保存</div>
+          </div>
+          <div className="info-card full-width">
+            {/* 添加评论表单 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+              <select
+                className="lg-select"
+                value={newCommentSection}
+                onChange={(e) => setNewCommentSection(e.target.value)}
+                style={{ fontSize: '12px' }}
+              >
+                <option value="">通用评论（不关联章节）</option>
+                {sectionTitles.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <textarea
+                  className="lg-textarea"
+                  placeholder="输入评论或反馈意见..."
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  rows={2}
+                  style={{ flex: 1, fontSize: '12px' }}
+                />
+                <button
+                  type="button"
+                  className="lg-btn lg-btn-primary"
+                  onClick={addComment}
+                  disabled={!newCommentText.trim()}
+                  style={{ alignSelf: 'flex-end', padding: '6px 14px', fontSize: '12px' }}
+                >
+                  发布
+                </button>
+              </div>
+            </div>
+
+            {/* 评论列表 */}
+            {comments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                暂无评论，输入上方文本框开始反馈
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {comments.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface-alt)',
+                      borderLeft: '3px solid var(--primary)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', fontSize: '11px' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--text)' }}>{c.author}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>·</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{new Date(c.createdAt).toLocaleString('zh-CN')}</span>
+                      {c.sectionTitle && (
+                        <>
+                          <span style={{ color: 'var(--text-muted)' }}>·</span>
+                          <span
+                            style={{
+                              padding: '1px 8px',
+                              borderRadius: 'var(--radius-full)',
+                              background: 'var(--primary-alpha)',
+                              color: 'var(--primary)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {c.sectionTitle}
+                          </span>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => deleteComment(c.id)}
+                        style={{
+                          marginLeft: 'auto',
+                          padding: '2px 8px',
+                          fontSize: '10px',
+                          border: '1px solid var(--divider)',
+                          borderRadius: '3px',
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        删除
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.5 }}>{c.content}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pipeline 版本历史 (Checkpoints) */}
       {history.length > 0 && (
