@@ -54,6 +54,7 @@ export class ExpertEngine {
     let rawOutput: string;
     let emmResult: EMMGateResult;
     let rubricScores: import('./types.js').RubricScore[] | undefined;
+    let modelApplications: import('./types.js').ModelApplication[] | undefined;
 
     if (request.task_type === 'evaluation') {
       // Evaluation 使用 Analyze-then-Judge 范式
@@ -91,6 +92,11 @@ export class ExpertEngine {
         maxTokens: request.params?.depth === 'deep' ? 4000 : 2000,
       });
 
+      // Phase 5: 如果 analysis 任务且专家有 mentalModels，解析结构化 model_applications
+      if (request.task_type === 'analysis' && expert.persona.cognition?.mentalModels?.length) {
+        modelApplications = parseModelApplications(rawOutput, expert.persona.cognition.mentalModels);
+      }
+
       // Step 5: EMM 门控验证
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     }
@@ -116,6 +122,7 @@ export class ExpertEngine {
         processing_time_ms: Date.now() - startTime,
         invoke_id: invokeId,
         rubric_scores: rubricScores,
+        model_applications: modelApplications,
       },
     };
   }
@@ -448,4 +455,43 @@ function dbRowToProfile(row: any): ExpertProfile {
     anti_patterns: row.anti_patterns || [],
     signature_phrases: row.signature_phrases || [],
   };
+}
+
+/**
+ * Phase 5: 从 analysis 任务的 LLM 输出中解析结构化 model_applications JSON 块
+ * 与 analyzeThenJudge.ts 的 parseRubricScores 类似的容错解析
+ * @returns 解析成功返回数组，失败返回 undefined（不抛错）
+ */
+function parseModelApplications(
+  output: string,
+  mentalModels: import('./types.js').MentalModel[],
+): import('./types.js').ModelApplication[] | undefined {
+  if (!mentalModels || mentalModels.length === 0) return undefined;
+
+  const codeBlockMatch = output.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidates: string[] = [];
+  if (codeBlockMatch) candidates.push(codeBlockMatch[1]);
+  const lastBrace = output.lastIndexOf('{');
+  if (lastBrace >= 0) candidates.push(output.substring(lastBrace));
+
+  const validNames = new Set(mentalModels.map(m => m.name));
+
+  for (const cand of candidates) {
+    try {
+      const parsed = JSON.parse(cand.trim());
+      const arr = parsed?.model_applications;
+      if (!Array.isArray(arr)) continue;
+      const cleaned: import('./types.js').ModelApplication[] = arr
+        .filter((x: any) => x && typeof x === 'object' && validNames.has(x.modelName))
+        .map((x: any) => ({
+          modelName: String(x.modelName),
+          application: typeof x.application === 'string' ? x.application : '',
+          conclusion: typeof x.conclusion === 'string' ? x.conclusion : '',
+        }));
+      if (cleaned.length > 0) return cleaned;
+    } catch {
+      // try next
+    }
+  }
+  return undefined;
 }

@@ -220,6 +220,16 @@ export interface RubricScore {
   rationale: string;           // 一句话评分依据
 }
 
+/**
+ * 心智模型应用记录 — 结构化 analysis 输出的骨架
+ * 让 LLM 明确说明"哪个结论用了哪个心智模型"
+ */
+export interface ModelApplication {
+  modelName: string;           // 对应 MentalModel.name
+  application: string;         // 如何应用到当前主题（具体推理过程）
+  conclusion: string;          // 由该模型得出的子结论
+}
+
 // ============================================================
 // Request / Response (调用接口)
 // ============================================================
@@ -258,6 +268,8 @@ export interface ExpertResponse {
     invoke_id: string;
     /** 结构化 rubric 评分（仅 evaluation 任务且专家配置了 rubrics 时填充）*/
     rubric_scores?: RubricScore[];
+    /** 心智模型应用记录（仅 analysis 任务且专家配置了 mentalModels 时填充）*/
+    model_applications?: ModelApplication[];
   };
 }
 

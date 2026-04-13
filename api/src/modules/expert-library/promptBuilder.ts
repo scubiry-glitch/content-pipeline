@@ -348,6 +348,26 @@ function buildTaskPersonalization(expert: ExpertProfile, taskType?: string): str
     if (persona.cognition?.riskAttitude) {
       lines.push(`你的风险态度：${persona.cognition.riskAttitude}`);
     }
+    // Phase 5: 要求 LLM 按心智模型产出结构化骨架
+    const mentalModels = persona.cognition?.mentalModels;
+    if (mentalModels && mentalModels.length > 0) {
+      lines.push('');
+      lines.push('### 结构化输出要求（心智模型骨架）');
+      lines.push('你必须从以下心智模型中挑选 2-3 个最适用的，分别应用于本主题：');
+      mentalModels.slice(0, 5).forEach((m, i) => {
+        lines.push(`${i + 1}. **${m.name}** — ${m.summary}`);
+      });
+      lines.push('');
+      lines.push('完成文字分析之后，**额外输出一段 ```json ... ``` 代码块**，格式：');
+      lines.push('```json');
+      lines.push('{');
+      lines.push('  "model_applications": [');
+      lines.push('    { "modelName": "<所选模型名>", "application": "<具体如何应用到本主题的推理过程>", "conclusion": "<由该模型得出的子结论>" }');
+      lines.push('  ]');
+      lines.push('}');
+      lines.push('```');
+      lines.push('每个 modelName 必须严格从上述清单中选择，不得生造。');
+    }
   } else if (taskType === 'evaluation') {
     // 评估任务 — 强调评审镜头和杀手锏
     if (method.reviewLens?.firstGlance) {
