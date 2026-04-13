@@ -72,6 +72,9 @@ export function LGReviewsTab() {
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [batchMode, setBatchMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [revisionFeedback, setRevisionFeedback] = useState('');
+  const [submittingRevision, setSubmittingRevision] = useState(false);
 
   // 加载决策状态（threadId 变化时）
   useEffect(() => {
@@ -194,6 +197,52 @@ export function LGReviewsTab() {
       }
     });
   });
+
+  // 收集所有"已接受"的问题（用于批量修订指令）
+  type AcceptedItem = { key: string; round: number; severity: string; question: string; suggestion?: string; expert: string };
+  const acceptedItems: AcceptedItem[] = [];
+  rounds.forEach((round: any) => {
+    (round.questions || []).forEach((q: any, j: number) => {
+      const key = getQuestionKey(round.round, j, q.question);
+      if (decisions[key] === 'accepted') {
+        acceptedItems.push({
+          key,
+          round: round.round,
+          severity: q.severity,
+          question: q.question,
+          suggestion: q.suggestion,
+          expert: q.expertName || q.role || 'Expert',
+        });
+      }
+    });
+  });
+
+  // 提交批量修订请求（通过 onResume(false, feedback) 触发下一轮评审）
+  const submitBatchRevision = async () => {
+    if (acceptedItems.length === 0) return;
+    setSubmittingRevision(true);
+    try {
+      // 自动生成修订指令文本
+      const instructions = [
+        `# 修订指令（共 ${acceptedItems.length} 条已接受问题）`,
+        '',
+        revisionFeedback.trim() || '（无额外说明）',
+        '',
+        '## 已接受的修改建议',
+        ...acceptedItems.map((item, i) => {
+          const lines = [`${i + 1}. [第 ${item.round} 轮 · ${item.severity}] ${item.question}`];
+          if (item.suggestion) lines.push(`   建议：${item.suggestion}`);
+          return lines.join('\n');
+        }),
+      ].join('\n');
+
+      await onResume(false, instructions);
+      setShowRevisionModal(false);
+      setRevisionFeedback('');
+    } finally {
+      setSubmittingRevision(false);
+    }
+  };
 
   // 将 LGAnnotation 转为 InlineAnnotationArea 格式
   const annotationItems = annotations.map(a => ({
@@ -382,10 +431,29 @@ export function LGReviewsTab() {
             <span className="material-symbols-outlined">fact_check</span>
             蓝军评审
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <div className="section-desc">
               共 {rounds.length} 轮评审，{allQuestions.length} 条意见
             </div>
+            {acceptedItems.length > 0 && (
+              <button
+                type="button"
+                className="lg-btn lg-btn-secondary"
+                onClick={() => setShowRevisionModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderColor: '#22c55e',
+                  color: '#22c55e',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>edit_note</span>
+                生成修订指令 ({acceptedItems.length})
+              </button>
+            )}
             {selectableKeys.length > 0 && (
               <button
                 className="lg-btn lg-btn-secondary"
@@ -795,6 +863,150 @@ export function LGReviewsTab() {
           color: 'var(--text)', zIndex: 1000,
         }}>
           保存配置中...
+        </div>
+      )}
+
+      {/* 批量修订 Modal (R5) */}
+      {showRevisionModal && (
+        <div
+          className="lg-modal-overlay"
+          onClick={() => !submittingRevision && setShowRevisionModal(false)}
+        >
+          <div
+            className="lg-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '640px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+          >
+            <h2 className="lg-modal-title">生成修订指令</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: '4px 0 16px' }}>
+              将基于 <strong>{acceptedItems.length}</strong> 条已接受的修改建议生成修订指令，
+              提交后任务将打回到写作阶段，进入下一轮修订。
+            </p>
+
+            {/* 统计行 */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                padding: '12px',
+                marginBottom: '12px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-alt)',
+                fontSize: '12px',
+              }}
+            >
+              {(['high', 'medium', 'low'] as const).map((sev) => {
+                const count = acceptedItems.filter((i) => i.severity === sev).length;
+                const colors: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6' };
+                const labels: Record<string, string> = { high: '严重', medium: '中等', low: '轻微' };
+                return (
+                  <div key={sev} style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>{labels[sev]}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: colors[sev] }}>{count}</div>
+                  </div>
+                );
+              })}
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>总计</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>{acceptedItems.length}</div>
+              </div>
+            </div>
+
+            {/* 已接受问题列表 */}
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                border: '1px solid var(--divider)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '8px',
+                marginBottom: '12px',
+                maxHeight: '300px',
+              }}
+            >
+              {acceptedItems.map((item, i) => (
+                <div
+                  key={item.key}
+                  style={{
+                    padding: '8px',
+                    borderBottom: i < acceptedItems.length - 1 ? '1px solid var(--divider)' : 'none',
+                    fontSize: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>R{item.round}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{item.expert}</span>
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: 'var(--radius-full)',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        background:
+                          item.severity === 'high'
+                            ? 'hsla(0, 72%, 51%, 0.1)'
+                            : item.severity === 'medium'
+                              ? 'hsla(30, 80%, 50%, 0.1)'
+                              : 'hsla(210, 80%, 50%, 0.1)',
+                        color:
+                          item.severity === 'high'
+                            ? '#ef4444'
+                            : item.severity === 'medium'
+                              ? '#f59e0b'
+                              : '#3b82f6',
+                      }}
+                    >
+                      {item.severity}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text)', lineHeight: 1.5 }}>{item.question}</div>
+                  {item.suggestion && (
+                    <div
+                      style={{
+                        marginTop: '4px',
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        background: 'var(--surface)',
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      💡 {item.suggestion}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 额外说明 */}
+            <div className="lg-form-group">
+              <label className="lg-label">补充修订说明（可选）</label>
+              <textarea
+                className="lg-textarea"
+                placeholder="例如：请重点优化数据准确性，参考最新行业报告..."
+                value={revisionFeedback}
+                onChange={(e) => setRevisionFeedback(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div className="lg-modal-actions">
+              <button
+                className="lg-btn lg-btn-secondary"
+                onClick={() => setShowRevisionModal(false)}
+                disabled={submittingRevision}
+              >
+                取消
+              </button>
+              <button
+                className="lg-btn lg-btn-primary"
+                onClick={submitBatchRevision}
+                disabled={submittingRevision || acceptedItems.length === 0}
+              >
+                {submittingRevision ? '提交中...' : `提交修订（${acceptedItems.length} 条）`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
