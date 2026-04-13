@@ -70,6 +70,8 @@ export function LGReviewsTab() {
   const [configSaving, setConfigSaving] = useState(false);
   const [showDraftViewer, setShowDraftViewer] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   // 加载决策状态（threadId 变化时）
   useEffect(() => {
@@ -88,6 +90,44 @@ export function LGReviewsTab() {
     }
     setDecisions(next);
     saveDecisions(detail.threadId, next);
+  };
+
+  // 批量决策操作
+  const batchUpdate = (decision: Decision) => {
+    if (!detail?.threadId || selectedKeys.size === 0) return;
+    const next = { ...decisions };
+    selectedKeys.forEach((key) => {
+      if (decision === 'pending') {
+        delete next[key];
+      } else {
+        next[key] = decision;
+      }
+    });
+    setDecisions(next);
+    saveDecisions(detail.threadId, next);
+    setSelectedKeys(new Set());
+  };
+
+  // 选择切换
+  const toggleSelection = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // 全选 / 清空（仅对非 praise 的问题）
+  const selectAll = (allKeys: string[]) => {
+    setSelectedKeys(new Set(allKeys));
+  };
+
+  const clearSelection = () => {
+    setSelectedKeys(new Set());
   };
 
   // 加载标注（每当评审轮次变化时重新拉取）
@@ -145,6 +185,16 @@ export function LGReviewsTab() {
     { accepted: 0, ignored: 0, pending: 0 } as Record<Decision, number>
   );
 
+  // 所有可选 key（非 praise 类型）
+  const selectableKeys: string[] = [];
+  rounds.forEach((round: any) => {
+    (round.questions || []).forEach((q: any, j: number) => {
+      if (q.severity !== 'praise') {
+        selectableKeys.push(getQuestionKey(round.round, j, q.question));
+      }
+    });
+  });
+
   // 将 LGAnnotation 转为 InlineAnnotationArea 格式
   const annotationItems = annotations.map(a => ({
     id: a.id,
@@ -196,6 +246,29 @@ export function LGReviewsTab() {
             <div className="section-desc">
               共 {rounds.length} 轮评审，{allQuestions.length} 条意见
             </div>
+            {selectableKeys.length > 0 && (
+              <button
+                className="lg-btn lg-btn-secondary"
+                onClick={() => {
+                  setBatchMode(!batchMode);
+                  if (batchMode) clearSelection();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  background: batchMode ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+                  color: batchMode ? '#3b82f6' : undefined,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                  {batchMode ? 'check_box' : 'check_box_outline_blank'}
+                </span>
+                {batchMode ? '退出批量' : '批量决策'}
+              </button>
+            )}
             <button
               className="lg-btn lg-btn-secondary"
               onClick={() => setConfigOpen(true)}
@@ -206,6 +279,90 @@ export function LGReviewsTab() {
             </button>
           </div>
         </div>
+
+        {/* 批量操作工具栏 */}
+        {batchMode && (
+          <div
+            className="info-card full-width"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              padding: '12px 16px',
+              background: 'hsla(210, 80%, 50%, 0.05)',
+              border: '1px solid hsla(210, 80%, 50%, 0.2)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <input
+                type="checkbox"
+                checked={selectedKeys.size === selectableKeys.length && selectableKeys.length > 0}
+                onChange={(e) => (e.target.checked ? selectAll(selectableKeys) : clearSelection())}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
+                已选 {selectedKeys.size} / {selectableKeys.length} 条
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => batchUpdate('accepted')}
+                disabled={selectedKeys.size === 0}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: selectedKeys.size === 0 ? 'not-allowed' : 'pointer',
+                  border: '1px solid #22c55e',
+                  background: selectedKeys.size === 0 ? 'var(--surface)' : 'hsla(142, 45%, 45%, 0.1)',
+                  color: '#22c55e',
+                  opacity: selectedKeys.size === 0 ? 0.5 : 1,
+                }}
+              >
+                ✓ 批量接受
+              </button>
+              <button
+                type="button"
+                onClick={() => batchUpdate('ignored')}
+                disabled={selectedKeys.size === 0}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: selectedKeys.size === 0 ? 'not-allowed' : 'pointer',
+                  border: '1px solid #6b7280',
+                  background: selectedKeys.size === 0 ? 'var(--surface)' : 'hsla(0, 0%, 50%, 0.1)',
+                  color: '#6b7280',
+                  opacity: selectedKeys.size === 0 ? 0.5 : 1,
+                }}
+              >
+                ✕ 批量忽略
+              </button>
+              <button
+                type="button"
+                onClick={() => batchUpdate('pending')}
+                disabled={selectedKeys.size === 0}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  cursor: selectedKeys.size === 0 ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--divider)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  opacity: selectedKeys.size === 0 ? 0.5 : 1,
+                }}
+              >
+                批量重置
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="info-card">
           <div className="card-title">
@@ -339,6 +496,9 @@ export function LGReviewsTab() {
                         ? { bg: 'hsla(0, 0%, 50%, 0.12)', color: '#6b7280', label: '已忽略' }
                         : null;
 
+                  const isSelectable = q.severity !== 'praise';
+                  const isSelected = selectedKeys.has(qKey);
+
                   return (
                     <div
                       key={j}
@@ -347,9 +507,18 @@ export function LGReviewsTab() {
                         borderLeftWidth: '3px',
                         borderLeftColor: severity.color,
                         opacity: decision === 'ignored' ? 0.6 : 1,
+                        boxShadow: isSelected ? '0 0 0 2px hsla(210, 80%, 50%, 0.3)' : undefined,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                        {batchMode && isSelectable && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelection(qKey)}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                        )}
                         <span style={{ fontSize: '18px' }}>{expert.icon}</span>
                         <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>
                           {q.expertName || expert.label}
