@@ -1,16 +1,96 @@
 // LG Planning Tab - 选题策划
-// 大纲结构化展示 + 选题评估 + 竞品分析 + 人工确认面板
+// 大纲结构化展示 + 选题评估 + 竞品分析 + 人工确认面板 + 三模式 Markdown 编辑器
 
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { langgraphApi, type LGStateHistoryItem } from '../../api/langgraph';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
+
+type EditorMode = 'edit' | 'preview' | 'split';
+
+// 大纲 sections → Markdown 文本
+function outlineToMarkdown(sections: any[], titleParam?: string): string {
+  const lines: string[] = [];
+  if (titleParam) lines.push(`# ${titleParam}\n`);
+
+  const renderSection = (section: any, depth: number) => {
+    const level = Math.min(depth + 1, 6);
+    const heading = '#'.repeat(level);
+    lines.push(`${heading} ${section.title || '(无标题)'}`);
+    if (section.content) {
+      lines.push(section.content);
+    }
+    lines.push('');
+    if (Array.isArray(section.subsections)) {
+      section.subsections.forEach((sub: any) => renderSection(sub, depth + 1));
+    }
+  };
+
+  sections.forEach((s) => renderSection(s, 1));
+  return lines.join('\n').trim();
+}
+
+// Markdown 文本 → 大纲 sections（基于 # 标题层级）
+function markdownToOutline(md: string): { title?: string; sections: any[] } {
+  const lines = md.split('\n');
+  let title: string | undefined;
+  const root: any[] = [];
+  const stack: Array<{ level: number; section: any }> = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine;
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const heading = headingMatch[2].trim();
+      if (level === 1 && !title && root.length === 0) {
+        // 第一个 # 当作总标题
+        title = heading;
+        continue;
+      }
+      const newSection: any = { title: heading, level, content: '', subsections: [] };
+      // 弹出所有比当前 level >= 的栈顶
+      while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+        stack.pop();
+      }
+      if (stack.length === 0) {
+        root.push(newSection);
+      } else {
+        stack[stack.length - 1].section.subsections.push(newSection);
+      }
+      stack.push({ level, section: newSection });
+    } else if (line.trim()) {
+      // 内容行，添加到当前栈顶 section
+      if (stack.length > 0) {
+        const cur = stack[stack.length - 1].section;
+        cur.content = cur.content ? `${cur.content}\n${line}` : line;
+      }
+    }
+  }
+
+  // 清理空 subsections
+  const clean = (sec: any) => {
+    if (!sec.subsections || sec.subsections.length === 0) {
+      delete sec.subsections;
+    } else {
+      sec.subsections.forEach(clean);
+    }
+    if (!sec.content) delete sec.content;
+    delete sec.level;
+  };
+  root.forEach(clean);
+
+  return { title, sections: root };
+}
 
 export function LGPlanningTab() {
   const { detail, pendingAction, onResume, resuming } = useOutletContext<LGTaskContext>();
   const [feedback, setFeedback] = useState('');
   const [editing, setEditing] = useState(false);
   const [editedOutlineText, setEditedOutlineText] = useState('');
+  const [editorMode, setEditorMode] = useState<EditorMode>('split');
+  const [editorFormat, setEditorFormat] = useState<'json' | 'markdown'>('markdown');
   const [history, setHistory] = useState<LGStateHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
@@ -34,9 +114,35 @@ export function LGPlanningTab() {
   // 开始编辑大纲
   const startEditing = () => {
     if (detail?.outline) {
-      setEditedOutlineText(JSON.stringify(detail.outline.sections || [], null, 2));
+      if (editorFormat === 'json') {
+        setEditedOutlineText(JSON.stringify(detail.outline.sections || [], null, 2));
+      } else {
+        setEditedOutlineText(outlineToMarkdown(detail.outline.sections || [], detail.outline.title));
+      }
     }
     setEditing(true);
+  };
+
+  // 切换编辑格式时转换文本
+  const switchFormat = (newFormat: 'json' | 'markdown') => {
+    if (newFormat === editorFormat) return;
+    try {
+      let next = '';
+      if (newFormat === 'markdown') {
+        // JSON → MD
+        const parsed = JSON.parse(editedOutlineText || '[]');
+        next = outlineToMarkdown(Array.isArray(parsed) ? parsed : parsed.sections || [], detail?.outline?.title);
+      } else {
+        // MD → JSON
+        const { sections } = markdownToOutline(editedOutlineText || '');
+        next = JSON.stringify(sections, null, 2);
+      }
+      setEditedOutlineText(next);
+      setEditorFormat(newFormat);
+    } catch {
+      // 转换失败仅切换格式，不动文本
+      setEditorFormat(newFormat);
+    }
   };
 
   const handleConfirm = async () => {
@@ -44,8 +150,13 @@ export function LGPlanningTab() {
     let editedOutline: any = undefined;
     if (editing && editedOutlineText.trim()) {
       try {
-        const parsed = JSON.parse(editedOutlineText);
-        editedOutline = { sections: parsed, title: detail?.outline?.title };
+        if (editorFormat === 'json') {
+          const parsed = JSON.parse(editedOutlineText);
+          editedOutline = { sections: parsed, title: detail?.outline?.title };
+        } else {
+          const { title, sections } = markdownToOutline(editedOutlineText);
+          editedOutline = { sections, title: title || detail?.outline?.title };
+        }
       } catch {
         // parse failed, ignore edit
       }
@@ -55,6 +166,17 @@ export function LGPlanningTab() {
     setFeedback('');
     setEditing(false);
   };
+
+  // 计算预览内容（markdown 格式时）
+  const previewMarkdown = (() => {
+    if (editorFormat === 'markdown') return editedOutlineText;
+    try {
+      const parsed = JSON.parse(editedOutlineText || '[]');
+      return outlineToMarkdown(Array.isArray(parsed) ? parsed : parsed.sections || [], detail?.outline?.title);
+    } catch {
+      return '_无效的 JSON 格式_';
+    }
+  })();
 
   const handleReject = async () => {
     await onResume(false, feedback);
@@ -74,19 +196,119 @@ export function LGPlanningTab() {
               : `选题评分 ${detail.evaluation?.score || '?'} 分，建议调整角度后再继续`
             }
           </p>
-          {/* 编辑大纲模式 */}
+          {/* 编辑大纲模式 — 三模式 */}
           {editing && (
             <div className="lg-form-group">
-              <label className="lg-label">编辑大纲结构 (JSON)</label>
-              <textarea
-                className="lg-textarea"
-                value={editedOutlineText}
-                onChange={e => setEditedOutlineText(e.target.value)}
-                rows={12}
-                style={{ fontFamily: 'monospace', fontSize: '12px' }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <label className="lg-label" style={{ margin: 0 }}>编辑大纲结构</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* 格式切换 */}
+                  <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--divider)' }}>
+                    {(['markdown', 'json'] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => switchFormat(f)}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '11px',
+                          border: 'none',
+                          background: editorFormat === f ? 'var(--primary)' : 'var(--surface)',
+                          color: editorFormat === f ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 视图模式切换 */}
+                  <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--divider)' }}>
+                    {(['edit', 'split', 'preview'] as const).map((m) => {
+                      const labels = { edit: '编辑', split: '分屏', preview: '预览' };
+                      const icons = { edit: 'edit', split: 'splitscreen', preview: 'visibility' };
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setEditorMode(m)}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '11px',
+                            border: 'none',
+                            background: editorMode === m ? 'var(--primary)' : 'var(--surface)',
+                            color: editorMode === m ? '#fff' : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
+                            {icons[m]}
+                          </span>
+                          {labels[m]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    editorMode === 'split' ? '1fr 1fr' : '1fr',
+                  gap: '12px',
+                  border: '1px solid var(--divider)',
+                  borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
+                }}
+              >
+                {/* 编辑区 */}
+                {(editorMode === 'edit' || editorMode === 'split') && (
+                  <textarea
+                    className="lg-textarea"
+                    value={editedOutlineText}
+                    onChange={e => setEditedOutlineText(e.target.value)}
+                    rows={16}
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      border: 'none',
+                      borderRadius: 0,
+                      resize: 'vertical',
+                      minHeight: '300px',
+                    }}
+                  />
+                )}
+
+                {/* 预览区 */}
+                {(editorMode === 'preview' || editorMode === 'split') && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      maxHeight: '400px',
+                      overflow: 'auto',
+                      background: 'var(--surface-alt)',
+                      borderLeft: editorMode === 'split' ? '1px solid var(--divider)' : 'none',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <MarkdownRenderer content={previewMarkdown} />
+                  </div>
+                )}
+              </div>
+
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                编辑后的大纲将随确认一起提交。格式：JSON 数组，每项包含 title, level, content 字段。
+                {editorFormat === 'markdown'
+                  ? '使用 Markdown 标题语法 (#, ##, ###) 表示章节层级。提交时自动转换为 LangGraph outline 结构。'
+                  : 'JSON 数组格式，每项包含 title, content, subsections 字段。'}
               </div>
             </div>
           )}
