@@ -12,6 +12,7 @@ import { emmGateCheck } from './emmGate.js';
 import { formatOutput } from './outputFormatter.js';
 import { analyzeThenJudge } from './analyzeThenJudge.js';
 import { matchHeuristics } from './heuristicsMatcher.js';
+import { retrieveKnowledge as retrieveKnowledgeTopicAware } from './knowledgeService.js';
 
 export class ExpertEngine {
   private deps: ExpertLibraryDeps;
@@ -48,7 +49,29 @@ export class ExpertEngine {
     );
 
     // Step 3: 检索相关知识源
-    const knowledgeContext = await this.retrieveKnowledge(request.expert_id, request.input_data);
+    // Phase 9: 若专家 method.agenticProtocol.requiresResearch=true，
+    //   走主题感知的语义检索（knowledgeService.retrieveKnowledge），limit 从 5 提到 10
+    //   否则保持原有"最新 5 条"的简单检索
+    const agenticMode = expert.method.agenticProtocol?.requiresResearch === true;
+    let knowledgeContext: string | null;
+    if (agenticMode) {
+      console.log(`[ExpertEngine] Agentic protocol active for ${expert.expert_id}, running topic-aware knowledge retrieval`);
+      knowledgeContext = await retrieveKnowledgeTopicAware(
+        request.expert_id,
+        request.input_data,
+        this.deps,
+        10,
+      );
+      // 在 context 前追加 researchSteps 作为"调研指令"提醒 LLM 如何组织回答
+      const steps = expert.method.agenticProtocol?.researchSteps;
+      if (knowledgeContext && steps && steps.length > 0) {
+        const stepsBlock = '\n\n### 调研步骤（本专家的 agenticProtocol 要求）\n' +
+          steps.map((s, i) => `${i + 1}. ${s}`).join('\n');
+        knowledgeContext = knowledgeContext + stepsBlock;
+      }
+    } else {
+      knowledgeContext = await this.retrieveKnowledge(request.expert_id, request.input_data);
+    }
 
     // Step 4: 根据 task_type 选择执行路径
     let rawOutput: string;
@@ -123,6 +146,7 @@ export class ExpertEngine {
         invoke_id: invokeId,
         rubric_scores: rubricScores,
         model_applications: modelApplications,
+        agentic_research_performed: agenticMode || undefined,
       },
     };
   }

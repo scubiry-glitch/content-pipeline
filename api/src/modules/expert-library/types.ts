@@ -270,6 +270,8 @@ export interface ExpertResponse {
     rubric_scores?: RubricScore[];
     /** 心智模型应用记录（仅 analysis 任务且专家配置了 mentalModels 时填充）*/
     model_applications?: ModelApplication[];
+    /** Phase 9: 是否执行了 agenticProtocol 的主题感知知识检索 */
+    agentic_research_performed?: boolean;
   };
 }
 
