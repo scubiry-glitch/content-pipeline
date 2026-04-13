@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { TasksProvider } from './contexts/TasksContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -129,24 +129,26 @@ function App() {
               <Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />
               <Route path="expert-scheduling" element={<ExpertScheduling />} />
               <Route path="expert-debate" element={<ExpertDebate />} />
-              {/* 内容库模块 (v7.0) */}
-              <Route path="content-library" element={<ContentLibrary />} />
-              <Route path="content-library/facts" element={<ContentLibraryFacts />} />
-              <Route path="content-library/entities" element={<ContentLibraryEntities />} />
-              <Route path="content-library/contradictions" element={<ContentLibraryContradictions />} />
-              <Route path="content-library/synthesis" element={<ContentLibrarySynthesis />} />
-              <Route path="content-library/consensus" element={<ContentLibraryConsensus />} />
-              <Route path="content-library/beliefs" element={<ContentLibraryBeliefs />} />
-              <Route path="content-library/cross-domain" element={<ContentLibraryCrossDomain />} />
-              <Route path="content-library/topics" element={<ContentLibraryTopics />} />
-              <Route path="content-library/trends" element={<ContentLibraryTrends />} />
-              <Route path="content-library/delta" element={<ContentLibraryDelta />} />
-              <Route path="content-library/freshness" element={<ContentLibraryFreshness />} />
-              <Route path="content-library/cards" element={<ContentLibraryCards />} />
-              <Route path="content-library/wiki" element={<ContentLibraryWiki />} />
-              <Route path="content-library/batch-ops" element={<ContentLibraryBatchOps />} />
-              <Route path="content-library/pipeline" element={<ContentLibraryPipeline />} />
-              <Route path="content-library/materials" element={<ContentLibraryMaterials />} />
+              {/* 内容库模块 (v7.0) — 嵌套路由，保证 /content-library/* 子路径稳定匹配 Outlet */}
+              <Route path="content-library" element={<Outlet />}>
+                <Route index element={<ContentLibrary />} />
+                <Route path="facts" element={<ContentLibraryFacts />} />
+                <Route path="entities" element={<ContentLibraryEntities />} />
+                <Route path="contradictions" element={<ContentLibraryContradictions />} />
+                <Route path="synthesis" element={<ContentLibrarySynthesis />} />
+                <Route path="consensus" element={<ContentLibraryConsensus />} />
+                <Route path="beliefs" element={<ContentLibraryBeliefs />} />
+                <Route path="cross-domain" element={<ContentLibraryCrossDomain />} />
+                <Route path="topics" element={<ContentLibraryTopics />} />
+                <Route path="trends" element={<ContentLibraryTrends />} />
+                <Route path="delta" element={<ContentLibraryDelta />} />
+                <Route path="freshness" element={<ContentLibraryFreshness />} />
+                <Route path="cards" element={<ContentLibraryCards />} />
+                <Route path="wiki" element={<ContentLibraryWiki />} />
+                <Route path="batch-ops" element={<ContentLibraryBatchOps />} />
+                <Route path="pipeline" element={<ContentLibraryPipeline />} />
+                <Route path="materials" element={<ContentLibraryMaterials />} />
+              </Route>
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />

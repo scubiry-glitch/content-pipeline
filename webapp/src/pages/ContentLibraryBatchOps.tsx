@@ -4,7 +4,6 @@
 // Step 4: 知识图谱重算 | Step 5: AI 产出物预生成 | Step 6: Wiki
 
 import { useState, useEffect, useRef } from 'react';
-import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 
 const API = '/api/v1/content-library';
 const API_AI = '/api/v1/ai/assets';

@@ -67,6 +67,21 @@ export async function enhanceEntityGraph(
   }
 }
 
+/** 将 Zep 返回的 facts 转为 relations（复用） */
+function factsToRelations(
+  facts: NonNullable<ZepSearchResult['facts']>
+): ZepEnhancedRelations['relations'] {
+  return facts
+    .filter((f) => f.source_node?.name && f.target_node?.name && f.source_node.name !== f.target_node.name)
+    .map((f) => ({
+      source: f.source_node?.name || '',
+      target: f.target_node?.name || '',
+      fact: f.fact || f.name || '',
+      validAt: f.valid_at,
+      invalidAt: f.invalid_at,
+    }));
+}
+
 /** 增强矛盾检测: 查找时间性矛盾 */
 export async function enhanceContradictions(
   subject: string,
@@ -79,6 +94,7 @@ export async function enhanceContradictions(
       query: subject,
       scope: 'edges',
       maxFacts: limit * 2,
+      reranker: 'episode_mentions',
     });
     if (!result?.facts?.length) return null;
 
@@ -124,6 +140,7 @@ export async function enhanceBeliefTimeline(
       query: proposition,
       scope: 'edges',
       maxFacts: limit,
+      reranker: 'episode_mentions',
     });
     if (!result?.facts?.length) return null;
     return result.facts
@@ -136,33 +153,33 @@ export async function enhanceBeliefTimeline(
   }
 }
 
-/** 增强跨域关联: Zep 图遍历发现远距离关系 */
+/** 增强跨域关联: Zep 图遍历发现远距离关系
+ *  回填内容为中文事实，英文 query「cross-domain connections of X」对中文实体几乎命中不了；
+ *  与实体图谱页一致：优先 getEntityEdges(episode_mentions)，再尝试中文语义补充检索。
+ */
 export async function enhanceCrossDomain(
   entityName: string,
   limit = 15
 ): Promise<ZepEnhancedRelations | null> {
   if (!isZepEnabled()) return null;
   try {
-    // Zep graph search 天然支持 N 跳, 可以发现远距离关联
-    const result = await searchGraph({
+    const primary = await getEntityEdges(SYSTEM_USER, entityName, limit);
+    if (primary?.facts?.length) {
+      return { relations: factsToRelations(primary.facts), source: 'zep' };
+    }
+
+    const fallback = await searchGraph({
       userId: SYSTEM_USER,
-      query: `cross-domain connections of ${entityName}`,
+      query: `与「${entityName}」相关的事实、实体关联与跨领域关系`,
       scope: 'edges',
       maxFacts: limit,
+      reranker: 'episode_mentions',
     });
-    if (!result?.facts?.length) return null;
-    return {
-      relations: result.facts
-        .filter(f => f.source_node?.name !== f.target_node?.name)
-        .map(f => ({
-          source: f.source_node?.name || '',
-          target: f.target_node?.name || '',
-          fact: f.fact || f.name || '',
-          validAt: f.valid_at,
-          invalidAt: f.invalid_at,
-        })),
-      source: 'zep',
-    };
+    if (fallback?.facts?.length) {
+      return { relations: factsToRelations(fallback.facts), source: 'zep' };
+    }
+
+    return null;
   } catch (err) {
     console.warn('[ZepAdapter] enhanceCrossDomain failed:', err);
     return null;

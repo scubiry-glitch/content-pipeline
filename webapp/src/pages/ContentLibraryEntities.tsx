@@ -1,6 +1,7 @@
 // 内容库 — 实体与图谱页面
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -56,21 +57,28 @@ export function ContentLibraryEntities() {
 
   useEffect(() => { void loadEntities(entitiesPage); }, [entitiesPage]);
 
+  const zepStatus = useZepStatus();
   const [zepRelations, setZepRelations] = useState<Array<{ source: string; target: string; fact: string }>>([]);
+  const [zepLoading, setZepLoading] = useState(false);
 
   const loadGraph = async (entityId: string) => {
     setZepRelations([]);
+    setZepLoading(false);
     try {
       const res = await fetch(`${API_BASE}/entities/${entityId}/graph`);
       if (res.ok) {
         const data = await res.json();
         setSelected(data.center);
         setRelations(data.relations);
-        // Zep 增强: 获取 N 跳关系 (异步, 不阻塞本地数据)
-        fetch(`${API_BASE}/zep/entities/${encodeURIComponent(data.center?.canonicalName || entityId)}/graph`)
-          .then(r => r.ok ? r.json() : null)
-          .then(zep => { if (zep?.relations?.length) setZepRelations(zep.relations); })
-          .catch(() => {});
+        const zepName = data.center?.canonicalName || entityId;
+        setZepLoading(true);
+        fetch(`${API_BASE}/zep/entities/${encodeURIComponent(zepName)}/graph`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((zep) => {
+            setZepRelations(zep?.relations?.length ? zep.relations : []);
+          })
+          .catch(() => setZepRelations([]))
+          .finally(() => setZepLoading(false));
       }
     } catch { /* ignore */ }
   };
@@ -208,27 +216,27 @@ export function ContentLibraryEntities() {
                 </div>
               )}
 
-              {/* Zep 增强: N 跳关系 */}
-              {zepRelations.length > 0 && (
-                <div className="mt-4">
-                  <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2 flex items-center gap-1.5">
-                    <span className="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 rounded">Zep</span>
-                    图遍历发现的关系 ({zepRelations.length})
-                  </h3>
-                  <div className="space-y-1.5">
-                    {zepRelations.map((zr, i) => (
-                      <div key={i} className="p-2.5 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800 text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-purple-700 dark:text-purple-300">{zr.source}</span>
-                          <span className="text-purple-400">→</span>
-                          <span className="font-medium text-purple-700 dark:text-purple-300">{zr.target}</span>
-                        </div>
-                        <div className="text-xs text-purple-500 mt-0.5">{zr.fact}</div>
-                      </div>
-                    ))}
+              <ZepEnhancementPanel
+                visible={!!selected}
+                zepStatus={zepStatus}
+                loading={zepLoading}
+                hasData={zepRelations.length > 0}
+                title="N 跳关系（图遍历）"
+              >
+                <h3 className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">
+                  共 {zepRelations.length} 条
+                </h3>
+                {zepRelations.map((zr, i) => (
+                  <div key={i} className="p-2.5 bg-white/80 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-purple-700 dark:text-purple-300">{zr.source}</span>
+                      <span className="text-purple-400">→</span>
+                      <span className="font-medium text-purple-700 dark:text-purple-300">{zr.target}</span>
+                    </div>
+                    <div className="text-xs text-purple-500 mt-0.5">{zr.fact}</div>
                   </div>
-                </div>
-              )}
+                ))}
+              </ZepEnhancementPanel>
             </div>
           ) : (
             <p className="text-gray-400 text-center py-8">点击左侧实体查看关联关系</p>

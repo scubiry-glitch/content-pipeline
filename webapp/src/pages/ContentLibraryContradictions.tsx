@@ -2,6 +2,7 @@
 // v7.3: 分页 + severity/domain/subject 筛选
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
 
 const API_BASE = '/api/v1/content-library';
 const PAGE_SIZE = 20;
@@ -23,10 +24,27 @@ export function ContentLibraryContradictions() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   // 分页
   const [page, setPage] = useState(1);
-  // Zep 增强: 时间性矛盾
+  const zepStatus = useZepStatus();
   const [zepConflicts, setZepConflicts] = useState<Array<{ fact: string; validAt?: string; invalidAt?: string; source: string; target: string }>>([]);
+  const [zepLoading, setZepLoading] = useState(false);
 
   useEffect(() => { loadData(); }, []);
+
+  /** 争议列表与 Zep 分离：搜索框输入即拉 Zep（无需再点刷新） */
+  useEffect(() => {
+    const q = searchSubject.trim();
+    if (!q) {
+      setZepConflicts([]);
+      setZepLoading(false);
+      return;
+    }
+    setZepLoading(true);
+    fetch(`${API_BASE}/zep/contradictions/${encodeURIComponent(q)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setZepConflicts(d?.temporalConflicts?.length ? d.temporalConflicts : []))
+      .catch(() => setZepConflicts([]))
+      .finally(() => setZepLoading(false));
+  }, [searchSubject]);
 
   const loadData = async () => {
     setLoading(true);
@@ -38,13 +56,6 @@ export function ContentLibraryContradictions() {
       }
     } catch { /* ignore */ }
     setLoading(false);
-    // Zep 增强: 查询时间性矛盾 (异步不阻塞)
-    if (searchSubject) {
-      fetch(`${API_BASE}/zep/contradictions/${encodeURIComponent(searchSubject)}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d?.temporalConflicts?.length) setZepConflicts(d.temporalConflicts); else setZepConflicts([]); })
-        .catch(() => setZepConflicts([]));
-    }
   };
 
   // 客户端筛选
@@ -152,27 +163,24 @@ export function ContentLibraryContradictions() {
         </div>
       )}
 
-      {/* Zep 增强: 时间性矛盾 */}
-      {zepConflicts.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-3 flex items-center gap-1.5">
-            <span className="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 rounded">Zep</span>
-            时间性矛盾 ({zepConflicts.length})
-          </h2>
-          <div className="space-y-2">
-            {zepConflicts.map((tc, i) => (
-              <div key={i} className="p-4 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800">
-                <div className="text-sm text-purple-800 dark:text-purple-200 font-medium">{tc.fact}</div>
-                <div className="flex gap-4 mt-2 text-xs text-purple-600 dark:text-purple-400">
-                  <span>{tc.source} → {tc.target}</span>
-                  {tc.validAt && <span>生效: {tc.validAt}</span>}
-                  {tc.invalidAt && <span>失效: {tc.invalidAt}</span>}
-                </div>
-              </div>
-            ))}
+      <ZepEnhancementPanel
+        visible={!!searchSubject.trim()}
+        zepStatus={zepStatus}
+        loading={zepLoading}
+        hasData={zepConflicts.length > 0}
+        title="时间性矛盾（valid_at / invalid_at）"
+      >
+        {zepConflicts.map((tc, i) => (
+          <div key={i} className="p-4 bg-white/80 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <div className="text-sm text-purple-800 dark:text-purple-200 font-medium">{tc.fact}</div>
+            <div className="flex flex-wrap gap-4 mt-2 text-xs text-purple-600 dark:text-purple-400">
+              <span>{tc.source} → {tc.target}</span>
+              {tc.validAt && <span>生效: {tc.validAt}</span>}
+              {tc.invalidAt && <span>失效: {tc.invalidAt}</span>}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </ZepEnhancementPanel>
     </div>
   );
 }
