@@ -213,6 +213,13 @@ export interface RubricLevel {
   description: string;         // 客观可检验的准则
 }
 
+/** 结构化 rubric 评分 — LLM 输出可被 ExpertEngine 解析存入 metadata */
+export interface RubricScore {
+  dimension: string;           // 对应 EvaluationRubric.dimension
+  score: number;               // 1-5
+  rationale: string;           // 一句话评分依据
+}
+
 // ============================================================
 // Request / Response (调用接口)
 // ============================================================
@@ -249,6 +256,8 @@ export interface ExpertResponse {
     confidence: number;
     processing_time_ms: number;
     invoke_id: string;
+    /** 结构化 rubric 评分（仅 evaluation 任务且专家配置了 rubrics 时填充）*/
+    rubric_scores?: RubricScore[];
   };
 }
 
@@ -320,6 +329,8 @@ export interface VerdictResult {
   overall_score?: number;
   sections: OutputSection[];
   evidence_chain: string[];
+  /** 按 expert.output_schema.rubrics 维度的评分（仅当 rubrics 存在时）*/
+  rubric_scores?: RubricScore[];
 }
 
 // ============================================================

@@ -52,6 +52,7 @@ export class ExpertEngine {
     // Step 4: 根据 task_type 选择执行路径
     let rawOutput: string;
     let emmResult: EMMGateResult;
+    let rubricScores: import('./types.js').RubricScore[] | undefined;
 
     if (request.task_type === 'evaluation') {
       // Evaluation 使用 Analyze-then-Judge 范式
@@ -63,6 +64,7 @@ export class ExpertEngine {
         request.context
       );
       rawOutput = analysisResult.verdict.sections.map(s => `## ${s.title}\n${s.content}`).join('\n\n');
+      rubricScores = analysisResult.verdict.rubric_scores;
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     } else {
       // Analysis / Generation 使用标准 prompt 流程
@@ -104,6 +106,7 @@ export class ExpertEngine {
         confidence: calculateConfidence(emmResult, formatted.valid),
         processing_time_ms: Date.now() - startTime,
         invoke_id: invokeId,
+        rubric_scores: rubricScores,
       },
     };
   }
