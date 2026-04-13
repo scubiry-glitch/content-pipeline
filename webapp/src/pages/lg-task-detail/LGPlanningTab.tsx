@@ -13,6 +13,8 @@ export function LGPlanningTab() {
   const [editedOutlineText, setEditedOutlineText] = useState('');
   const [history, setHistory] = useState<LGStateHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [compareSelection, setCompareSelection] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
 
   // 加载 checkpoint 历史
   useEffect(() => {
@@ -161,8 +163,44 @@ export function LGPlanningTab() {
               <span className="material-symbols-outlined">history</span>
               Pipeline 版本历史
             </div>
-            <div className="section-desc">LangGraph checkpoint 快照 ({history.length} 条)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="section-desc">{history.length} 条快照</div>
+              <button
+                type="button"
+                className="lg-btn lg-btn-secondary"
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: showCompare ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+                  color: showCompare ? '#3b82f6' : undefined,
+                }}
+                onClick={() => {
+                  setShowCompare(!showCompare);
+                  if (showCompare) setCompareSelection([]);
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>compare_arrows</span>
+                {showCompare ? '退出对比' : '版本对比'}
+              </button>
+            </div>
           </div>
+          {showCompare && (
+            <div
+              className="info-card full-width"
+              style={{
+                background: 'hsla(210, 80%, 50%, 0.05)',
+                border: '1px solid hsla(210, 80%, 50%, 0.2)',
+                marginBottom: '12px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              💡 已选择 {compareSelection.length}/2 个 checkpoint。点击下方 checkpoint 卡片即可加入对比。
+            </div>
+          )}
           <div className="info-card full-width">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {history.map((item, i) => {
@@ -170,12 +208,44 @@ export function LGPlanningTab() {
                   planner: '选题策划', human_outline: '大纲确认', researcher: '数据研究',
                   writer: '内容写作', blue_team: '蓝军评审', human_approve: '最终审批', output: '输出发布',
                 };
+                const cpId = item.checkpoint_id || `idx-${i}`;
+                const isSelected = compareSelection.includes(cpId);
+                const handleClick = () => {
+                  if (!showCompare) return;
+                  if (isSelected) {
+                    setCompareSelection(compareSelection.filter((id) => id !== cpId));
+                  } else if (compareSelection.length < 2) {
+                    setCompareSelection([...compareSelection, cpId]);
+                  }
+                };
                 return (
-                  <div key={item.checkpoint_id || i} style={{
-                    display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)', background: i === 0 ? 'var(--primary-alpha)' : 'transparent',
-                    border: i === 0 ? '1px solid var(--primary)' : '1px solid transparent',
-                  }}>
+                  <div
+                    key={item.checkpoint_id || i}
+                    onClick={handleClick}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '8px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: isSelected
+                        ? 'hsla(210, 80%, 50%, 0.12)'
+                        : i === 0
+                          ? 'var(--primary-alpha)'
+                          : 'transparent',
+                      border: isSelected
+                        ? '1px solid #3b82f6'
+                        : i === 0
+                          ? '1px solid var(--primary)'
+                          : '1px solid transparent',
+                      cursor: showCompare ? 'pointer' : 'default',
+                    }}
+                  >
+                    {showCompare && (
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: isSelected ? '#3b82f6' : 'var(--text-muted)' }}>
+                        {isSelected ? 'check_box' : 'check_box_outline_blank'}
+                      </span>
+                    )}
                     <span className="material-symbols-outlined" style={{ fontSize: '16px', color: i === 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
                       {i === 0 ? 'radio_button_checked' : 'radio_button_unchecked'}
                     </span>
@@ -196,7 +266,23 @@ export function LGPlanningTab() {
             </div>
             {loadingHistory && <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '8px' }}>加载中...</p>}
           </div>
+
+          {/* 版本对比面板 */}
+          {showCompare && compareSelection.length === 2 && (
+            <CheckpointComparePanel
+              history={history}
+              selectedIds={compareSelection}
+            />
+          )}
         </div>
+      )}
+
+      {/* 大纲编辑实时 Diff（编辑模式时） */}
+      {editing && detail.outline && (
+        <OutlineEditDiffPanel
+          original={detail.outline.sections || []}
+          editedText={editedOutlineText}
+        />
       )}
 
       {/* 选题评估 */}
@@ -443,4 +529,190 @@ function normalizeSuggestions(input: any): string[] {
   if (Array.isArray(input)) return input.map(x => String(x)).filter(Boolean);
   if (typeof input === 'string') return [input];
   return [];
+}
+
+// Checkpoint 对比面板：side-by-side 展示两个 checkpoint 的状态字段差异
+function CheckpointComparePanel({
+  history,
+  selectedIds,
+}: {
+  history: LGStateHistoryItem[];
+  selectedIds: string[];
+}) {
+  const cp1 = history.find((h) => (h.checkpoint_id || '') === selectedIds[0]);
+  const cp2 = history.find((h) => (h.checkpoint_id || '') === selectedIds[1]);
+  if (!cp1 || !cp2) return null;
+
+  const fields: Array<{ key: keyof LGStateHistoryItem['values']; label: string }> = [
+    { key: 'currentNode', label: '当前节点' },
+    { key: 'status', label: '状态' },
+    { key: 'progress', label: '进度 %' },
+    { key: 'outlineApproved', label: '大纲已批准' },
+    { key: 'reviewPassed', label: '评审通过' },
+    { key: 'hasOutline', label: '已生成大纲' },
+    { key: 'hasDraft', label: '已生成草稿' },
+    { key: 'blueTeamRoundsCount', label: '评审轮数' },
+  ];
+
+  const formatVal = (v: any) => {
+    if (v === true) return '✓';
+    if (v === false) return '✗';
+    if (v == null || v === '') return '-';
+    return String(v);
+  };
+
+  return (
+    <div className="info-card full-width" style={{ marginTop: '12px' }}>
+      <div className="card-title">
+        <span className="material-symbols-outlined">compare_arrows</span>
+        Checkpoint 对比
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+        <div style={{ padding: '8px 12px', background: 'var(--surface-alt)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid #3b82f6' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>Checkpoint A</div>
+          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{cp1.checkpoint_id?.slice(0, 16)}...</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>{new Date(cp1.createdAt).toLocaleString('zh-CN')}</div>
+        </div>
+        <div style={{ padding: '8px 12px', background: 'var(--surface-alt)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid #22c55e' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>Checkpoint B</div>
+          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{cp2.checkpoint_id?.slice(0, 16)}...</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>{new Date(cp2.createdAt).toLocaleString('zh-CN')}</div>
+        </div>
+      </div>
+      <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--divider)' }}>
+            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>字段</th>
+            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#3b82f6', fontWeight: 600 }}>A</th>
+            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#22c55e', fontWeight: 600 }}>B</th>
+            <th style={{ textAlign: 'center', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600, width: '60px' }}>变更</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((f) => {
+            const v1 = (cp1.values as any)[f.key];
+            const v2 = (cp2.values as any)[f.key];
+            const changed = v1 !== v2;
+            return (
+              <tr
+                key={f.key}
+                style={{
+                  borderBottom: '1px solid var(--divider)',
+                  background: changed ? 'hsla(45, 90%, 50%, 0.05)' : undefined,
+                }}
+              >
+                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>{f.label}</td>
+                <td style={{ padding: '6px 8px', color: 'var(--text)' }}>{formatVal(v1)}</td>
+                <td style={{ padding: '6px 8px', color: 'var(--text)' }}>{formatVal(v2)}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                  {changed ? (
+                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>●</span>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>-</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// 大纲编辑实时 Diff 面板
+function OutlineEditDiffPanel({
+  original,
+  editedText,
+}: {
+  original: any[];
+  editedText: string;
+}) {
+  let edited: any[] = [];
+  let parseError: string | null = null;
+  try {
+    if (editedText.trim()) {
+      edited = JSON.parse(editedText);
+    }
+  } catch (e: any) {
+    parseError = 'JSON 解析失败：' + (e.message || 'invalid JSON');
+  }
+
+  const originalTitles = original.map((s) => s?.title || '').filter(Boolean);
+  const editedTitles = edited.map((s) => s?.title || '').filter(Boolean);
+
+  // 计算差异（基于 title 集合）
+  const added = editedTitles.filter((t) => !originalTitles.includes(t));
+  const removed = originalTitles.filter((t) => !editedTitles.includes(t));
+  const kept = editedTitles.filter((t) => originalTitles.includes(t));
+
+  return (
+    <div className="panel-grid" style={{ marginTop: '24px' }}>
+      <div className="section-header">
+        <div className="section-title">
+          <span className="material-symbols-outlined">difference</span>
+          编辑 Diff
+        </div>
+        <div className="section-desc">实时显示你的编辑相对原大纲的变化</div>
+      </div>
+      <div className="info-card full-width">
+        {parseError ? (
+          <div style={{ color: '#ef4444', fontSize: '12px', padding: '8px' }}>{parseError}</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add_circle</span>
+                新增 ({added.length})
+              </div>
+              {added.length > 0 ? (
+                added.map((t, i) => (
+                  <div key={i} style={{ fontSize: '11px', color: 'var(--text)', padding: '4px 6px', background: 'hsla(142, 45%, 45%, 0.08)', borderRadius: '3px', marginBottom: '3px' }}>
+                    + {t}
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>无</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>remove_circle</span>
+                删除 ({removed.length})
+              </div>
+              {removed.length > 0 ? (
+                removed.map((t, i) => (
+                  <div key={i} style={{ fontSize: '11px', color: 'var(--text)', padding: '4px 6px', background: 'hsla(0, 72%, 51%, 0.08)', borderRadius: '3px', marginBottom: '3px' }}>
+                    - {t}
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>无</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#3b82f6', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>radio_button_checked</span>
+                保留 ({kept.length})
+              </div>
+              {kept.length > 0 ? (
+                kept.slice(0, 5).map((t, i) => (
+                  <div key={i} style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '4px 6px', marginBottom: '3px' }}>
+                    {t}
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>无</div>
+              )}
+              {kept.length > 5 && (
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  以及 {kept.length - 5} 个其他章节...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
