@@ -36,6 +36,30 @@ function mapAnnotationSeverity(s: string): 'critical' | 'warning' | 'info' | 'pr
   return 'info';
 }
 
+// 问题决策状态类型
+type Decision = 'accepted' | 'ignored' | 'pending';
+
+// 决策持久化工具（localStorage 按 threadId 分组）
+function loadDecisions(threadId: string): Record<string, Decision> {
+  try {
+    return JSON.parse(localStorage.getItem(`lg-review-decisions:${threadId}`) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveDecisions(threadId: string, decisions: Record<string, Decision>) {
+  try {
+    localStorage.setItem(`lg-review-decisions:${threadId}`, JSON.stringify(decisions));
+  } catch {}
+}
+
+// 生成稳定的问题 key（round + 索引 + question 前 20 字符）
+function getQuestionKey(round: number, index: number, question: string): string {
+  const hash = (question || '').slice(0, 20).replace(/\s/g, '_');
+  return `r${round}_i${index}_${hash}`;
+}
+
 export function LGReviewsTab() {
   const { detail, reviewConfig, onSaveReviewConfig, pendingAction, onResume, resuming } =
     useOutletContext<LGTaskContext>();
@@ -45,6 +69,26 @@ export function LGReviewsTab() {
   const [annotations, setAnnotations] = useState<LGAnnotation[]>([]);
   const [configSaving, setConfigSaving] = useState(false);
   const [showDraftViewer, setShowDraftViewer] = useState(false);
+  const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+
+  // 加载决策状态（threadId 变化时）
+  useEffect(() => {
+    if (!detail?.threadId) return;
+    setDecisions(loadDecisions(detail.threadId));
+  }, [detail?.threadId]);
+
+  // 决策操作
+  const updateDecision = (key: string, decision: Decision) => {
+    if (!detail?.threadId) return;
+    const next = { ...decisions };
+    if (decision === 'pending') {
+      delete next[key];
+    } else {
+      next[key] = decision;
+    }
+    setDecisions(next);
+    saveDecisions(detail.threadId, next);
+  };
 
   // 加载标注（每当评审轮次变化时重新拉取）
   const blueTeamRoundsCount = detail?.blueTeamRounds?.length ?? 0;
@@ -87,6 +131,19 @@ export function LGReviewsTab() {
     acc[q.severity] = (acc[q.severity] || 0) + 1;
     return acc;
   }, {});
+
+  // 决策统计
+  const decisionStats = rounds.reduce(
+    (acc, round: any) => {
+      (round.questions || []).forEach((q: any, j: number) => {
+        const key = getQuestionKey(round.round, j, q.question);
+        const d = decisions[key] || 'pending';
+        acc[d] = (acc[d] || 0) + 1;
+      });
+      return acc;
+    },
+    { accepted: 0, ignored: 0, pending: 0 } as Record<Decision, number>
+  );
 
   // 将 LGAnnotation 转为 InlineAnnotationArea 格式
   const annotationItems = annotations.map(a => ({
@@ -173,6 +230,51 @@ export function LGReviewsTab() {
 
         <div className="info-card">
           <div className="card-title">
+            <span className="material-symbols-outlined">checklist</span>
+            决策进度
+          </div>
+          <div className="info-item">
+            <span className="label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                padding: '1px 8px', borderRadius: 'var(--radius-full)',
+                fontSize: '11px', fontWeight: 600,
+                background: 'hsla(142, 45%, 45%, 0.1)', color: '#22c55e',
+              }}>已接受</span>
+            </span>
+            <span className="value">{decisionStats.accepted}</span>
+          </div>
+          <div className="info-item">
+            <span className="label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                padding: '1px 8px', borderRadius: 'var(--radius-full)',
+                fontSize: '11px', fontWeight: 600,
+                background: 'hsla(0, 0%, 50%, 0.1)', color: '#6b7280',
+              }}>已忽略</span>
+            </span>
+            <span className="value">{decisionStats.ignored}</span>
+          </div>
+          <div className="info-item">
+            <span className="label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                padding: '1px 8px', borderRadius: 'var(--radius-full)',
+                fontSize: '11px', fontWeight: 600,
+                background: 'hsla(45, 90%, 50%, 0.1)', color: '#f59e0b',
+              }}>待处理</span>
+            </span>
+            <span className="value">{decisionStats.pending}</span>
+          </div>
+          {allQuestions.length > 0 && (
+            <div className="info-item">
+              <span className="label">完成率</span>
+              <span className="value">
+                {Math.round(((decisionStats.accepted + decisionStats.ignored) / allQuestions.length) * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="info-card">
+          <div className="card-title">
             <span className="material-symbols-outlined">pie_chart</span>
             问题分布
           </div>
@@ -228,10 +330,26 @@ export function LGReviewsTab() {
                 {(round.questions || []).map((q: any, j: number) => {
                   const severity = SEVERITY_STYLES[q.severity] || SEVERITY_STYLES.low;
                   const expert = EXPERT_STYLES[q.role || q.expertId] || { icon: '🎓', label: q.expertName || q.role || 'Expert' };
+                  const qKey = getQuestionKey(round.round, j, q.question);
+                  const decision = decisions[qKey] || 'pending';
+                  const decisionStyle =
+                    decision === 'accepted'
+                      ? { bg: 'hsla(142, 45%, 45%, 0.12)', color: '#22c55e', label: '已接受' }
+                      : decision === 'ignored'
+                        ? { bg: 'hsla(0, 0%, 50%, 0.12)', color: '#6b7280', label: '已忽略' }
+                        : null;
 
                   return (
-                    <div key={j} className="info-card" style={{ borderLeftWidth: '3px', borderLeftColor: severity.color }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <div
+                      key={j}
+                      className="info-card"
+                      style={{
+                        borderLeftWidth: '3px',
+                        borderLeftColor: severity.color,
+                        opacity: decision === 'ignored' ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '18px' }}>{expert.icon}</span>
                         <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>
                           {q.expertName || expert.label}
@@ -243,6 +361,15 @@ export function LGReviewsTab() {
                         }}>
                           {severity.label}
                         </span>
+                        {decisionStyle && (
+                          <span style={{
+                            padding: '2px 10px', borderRadius: 'var(--radius-full)',
+                            fontSize: '11px', fontWeight: 600,
+                            background: decisionStyle.bg, color: decisionStyle.color,
+                          }}>
+                            ✓ {decisionStyle.label}
+                          </span>
+                        )}
                       </div>
 
                       <p style={{ fontSize: '13px', color: 'var(--text)', lineHeight: 1.6, margin: '0 0 8px' }}>
@@ -254,8 +381,66 @@ export function LGReviewsTab() {
                           padding: '8px 12px', borderRadius: 'var(--radius-sm)',
                           background: 'var(--surface-alt)', fontSize: '12px',
                           color: 'var(--text-secondary)', lineHeight: 1.5,
+                          marginBottom: '10px',
                         }}>
                           <span style={{ fontWeight: 600 }}>建议：</span>{q.suggestion}
+                        </div>
+                      )}
+
+                      {/* 决策按钮 */}
+                      {q.severity !== 'praise' && (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => updateDecision(qKey, decision === 'accepted' ? 'pending' : 'accepted')}
+                            style={{
+                              padding: '4px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: decision === 'accepted' ? '1px solid #22c55e' : '1px solid var(--divider)',
+                              background: decision === 'accepted' ? 'hsla(142, 45%, 45%, 0.1)' : 'var(--surface)',
+                              color: decision === 'accepted' ? '#22c55e' : 'var(--text-secondary)',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            ✓ 接受
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateDecision(qKey, decision === 'ignored' ? 'pending' : 'ignored')}
+                            style={{
+                              padding: '4px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: decision === 'ignored' ? '1px solid #6b7280' : '1px solid var(--divider)',
+                              background: decision === 'ignored' ? 'hsla(0, 0%, 50%, 0.1)' : 'var(--surface)',
+                              color: decision === 'ignored' ? '#6b7280' : 'var(--text-secondary)',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            ✕ 忽略
+                          </button>
+                          {decision !== 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => updateDecision(qKey, 'pending')}
+                              style={{
+                                padding: '4px 12px',
+                                borderRadius: 'var(--radius-sm)',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                border: '1px solid var(--divider)',
+                                background: 'transparent',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              重置
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
