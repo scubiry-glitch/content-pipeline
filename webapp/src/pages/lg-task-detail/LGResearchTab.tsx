@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+import { hotTopicsApi, rssSourcesApi, assetsApi, type Asset } from '../../api/client';
 
 interface ResearchConfig {
   autoCollect: boolean;
@@ -52,6 +53,13 @@ export function LGResearchTab() {
   const [config, setConfig] = useState<ResearchConfig>(DEFAULT_RESEARCH_CONFIG);
   const [keywordsInput, setKeywordsInput] = useState('');
   const [excludeInput, setExcludeInput] = useState('');
+  const [showMultiSource, setShowMultiSource] = useState(false);
+  const [rssCount, setRssCount] = useState<number>(0);
+  const [hotTopicsList, setHotTopicsList] = useState<any[]>([]);
+  const [recommendedAssets, setRecommendedAssets] = useState<Asset[]>([]);
+  const [multiSourceLoading, setMultiSourceLoading] = useState(false);
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
 
   // 加载配置
   useEffect(() => {
@@ -61,6 +69,51 @@ export function LGResearchTab() {
     setKeywordsInput(cfg.keywords.join(', '));
     setExcludeInput(cfg.excludeKeywords.join(', '));
   }, [detail?.threadId]);
+
+  // 加载多源数据（按需）
+  useEffect(() => {
+    if (!showMultiSource) return;
+    setMultiSourceLoading(true);
+    Promise.allSettled([
+      rssSourcesApi.getAll().catch(() => ({ items: [] })),
+      hotTopicsApi.getAll({ limit: 8 }).catch(() => ({ items: [] })),
+      detail?.topic
+        ? assetsApi.search(detail.topic.split(/[\s,]+/)[0] || '').catch(() => ({ items: [], total: 0 }))
+        : Promise.resolve({ items: [], total: 0 }),
+    ]).then(([rss, topics, assets]) => {
+      if (rss.status === 'fulfilled') {
+        setRssCount(((rss.value as any).items || []).length);
+      }
+      if (topics.status === 'fulfilled') {
+        setHotTopicsList((topics.value as any).items || []);
+      }
+      if (assets.status === 'fulfilled') {
+        setRecommendedAssets(((assets.value as any).items || []).slice(0, 5));
+      }
+      setMultiSourceLoading(false);
+    });
+  }, [showMultiSource, detail?.topic]);
+
+  // 搜索资产
+  const handleAssetSearch = async () => {
+    if (!assetSearchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const result = await assetsApi.search(assetSearchQuery.trim());
+      setRecommendedAssets(result.items || []);
+    } catch {} finally {
+      setSearching(false);
+    }
+  };
+
+  // 计算资产可信度（基于 quality_score 转 A/B/C/D）
+  const getAssetCredibility = (asset: Asset): { grade: string; color: string; pct: number } => {
+    const score = asset.quality_score || 50;
+    if (score >= 85) return { grade: 'A', color: '#22c55e', pct: score };
+    if (score >= 70) return { grade: 'B', color: '#3b82f6', pct: score };
+    if (score >= 50) return { grade: 'C', color: '#f59e0b', pct: score };
+    return { grade: 'D', color: '#ef4444', pct: score };
+  };
 
   // 保存配置
   const handleSaveConfig = () => {
@@ -464,6 +517,148 @@ export function LGResearchTab() {
           )}
         </div>
       )}
+
+      {/* Re2-Re4: 多源引擎 + 语义搜索 + 可信度 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div
+            className="section-title"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowMultiSource(!showMultiSource)}
+          >
+            <span className="material-symbols-outlined">device_hub</span>
+            多源数据引擎
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              {showMultiSource ? 'expand_less' : 'expand_more'}
+            </span>
+          </div>
+          <div className="section-desc">RSS / 全网搜索 / 私有素材库 — 跨源数据采集</div>
+        </div>
+
+        {showMultiSource && (
+          <>
+            {multiSourceLoading ? (
+              <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                正在加载多源数据...
+              </div>
+            ) : (
+              <>
+                {/* 三数据源摘要卡片 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                  <div className="info-card" style={{ borderTop: '3px solid #3b82f6' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">rss_feed</span>
+                      RSS 订阅源
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#3b82f6' }}>{rssCount}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>已配置订阅源</div>
+                  </div>
+                  <div className="info-card" style={{ borderTop: '3px solid #ef4444' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">local_fire_department</span>
+                      热点话题
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#ef4444' }}>{hotTopicsList.length}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>实时热点追踪</div>
+                  </div>
+                  <div className="info-card" style={{ borderTop: '3px solid #22c55e' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">inventory_2</span>
+                      私有素材
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#22c55e' }}>{recommendedAssets.length}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>语义匹配结果</div>
+                  </div>
+                </div>
+
+                {/* 语义搜索框 */}
+                <div className="info-card full-width">
+                  <div className="card-title">
+                    <span className="material-symbols-outlined">search</span>
+                    语义搜索素材
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      className="lg-input"
+                      placeholder="输入关键词，搜索相关素材..."
+                      value={assetSearchQuery}
+                      onChange={(e) => setAssetSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAssetSearch()}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="lg-btn lg-btn-primary"
+                      onClick={handleAssetSearch}
+                      disabled={searching || !assetSearchQuery.trim()}
+                    >
+                      {searching ? '搜索中...' : '搜索'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 可信度评级的素材列表 */}
+                {recommendedAssets.length > 0 && (
+                  <div className="info-card full-width">
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">verified</span>
+                      推荐素材（带可信度评级）
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {recommendedAssets.map((asset) => {
+                        const cred = getAssetCredibility(asset);
+                        return (
+                          <div
+                            key={asset.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '10px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              background: 'var(--surface-alt)',
+                              borderLeft: `3px solid ${cred.color}`,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                fontWeight: 800,
+                                background: `${cred.color}15`,
+                                color: cred.color,
+                                border: `1px solid ${cred.color}40`,
+                              }}
+                            >
+                              {cred.grade}
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {asset.title}
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {asset.content_type && <span>{asset.content_type.toUpperCase()}</span>}
+                                <span>· 可信度 {cred.pct}%</span>
+                                {asset.tags && asset.tags.length > 0 && <span>· {asset.tags.slice(0, 2).join(', ')}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       {/* 数据包 */}
       {dataPackage.length > 0 && (
