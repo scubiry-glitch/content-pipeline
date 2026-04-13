@@ -124,5 +124,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/invoke \
 
 - Phase 4 ExpertMatcher 认知互补：同样用 token 匹配思路，但用在 mentalModels 上
 - Phase 7 ExpressionDNA linter：可以检查 LLM 输出是否真的应用了激活的 heuristics
-</content>
-</invoke>

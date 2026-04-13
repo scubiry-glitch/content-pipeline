@@ -123,5 +123,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/invoke \
 
 - Phase 5 会把同样的"结构化输出"思路扩展到 analysis 任务的 `model_applications`
 - Phase 6 会利用本 Phase 的 `rubric_scores` 做 feedbackLoop 按维度校准
-</content>
-</invoke>

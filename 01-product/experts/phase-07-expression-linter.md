@@ -131,5 +131,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/invoke \
 
 - Phase 8 跨专家 mentalModel 图：可以聚合"哪些专家的 expressionDNA 最独特/最通用"
 - Phase 10 Mental Model Catalog：catalog 可以附带每个模型的 expressionDNA 样例
-</content>
-</invoke>

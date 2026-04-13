@@ -105,5 +105,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/debate \
 
 - Phase 4 ExpertMatcher 认知互补：为 debate 挑选 mentalModel 互补的专家对，让本 Phase 的效果最大化
 - Phase 5 mentalModels 骨架：为 analysis 任务做类似的"结构化应用"改造
-</content>
-</invoke>

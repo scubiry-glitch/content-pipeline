@@ -30,5 +30,3 @@
 - Commit 消息格式：`feat(experts): Phase N - {简短描述}`
 - 每个 Phase 产出一份对应的 Markdown 报告
 - 所有改动必须通过 `cd api && npx tsc --noEmit` 类型检查
-</content>
-</invoke>

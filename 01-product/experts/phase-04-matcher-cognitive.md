@@ -107,5 +107,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/match \
 
 - Phase 8 跨专家 mentalModel 索引图：复用本 Phase 的 mentalModel 抽取思路，构建反向索引
 - Phase 10 Mental Model Catalog：把 mentalModels 提升为一等公民的平台化目录
-</content>
-</invoke>

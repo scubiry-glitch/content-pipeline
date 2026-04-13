@@ -121,5 +121,3 @@ curl -X POST http://localhost:3006/api/v1/expert-library/invoke \
 
 - Phase 8 跨专家 mentalModel 索引图：可以把本 Phase 的 application 记录反向聚合——"飞轮效应在近 30 天的所有 analysis 调用中被应用了多少次"
 - Phase 10 Mental Model Catalog：把 model_applications 累积数据作为"模型热度"指标
-</content>
-</invoke>

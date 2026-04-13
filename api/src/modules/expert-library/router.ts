@@ -15,6 +15,13 @@ import { HotTopicExpertService } from './hotTopicExpertService.js';
 import { AssetExpertService } from './assetExpertService.js';
 import { seedDefaultBuiltinExpertsToDb, getBuiltinSyncManifest, syncBuiltinExpertItem } from './expertSeed.js';
 import { researchAndGenerateProfile } from './researchService.js';
+import {
+  buildMentalModelGraph,
+  findExpertsByModel,
+  listSharedModels,
+  listAllModels,
+  type MentalModelGraphEntry,
+} from './mentalModelGraph.js';
 
 /** JSONB / 脏字符串兼容，避免 JSON.parse 抛错导致 GET /experts/full 500 */
 function coerceJsonObject(val: unknown): Record<string, unknown> {
@@ -32,6 +39,21 @@ function coerceJsonObject(val: unknown): Record<string, unknown> {
 }
 
 export function createRouter(engine: ExpertEngine) {
+  // Phase 8: mental model 图谱缓存 — lazy build + 可刷新
+  let cachedMmGraph: Map<string, MentalModelGraphEntry> | null = null;
+  let cachedMmGraphAt = 0;
+  const MM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+
+  async function getMmGraph(): Promise<Map<string, MentalModelGraphEntry>> {
+    const now = Date.now();
+    if (cachedMmGraph && now - cachedMmGraphAt < MM_CACHE_TTL_MS) {
+      return cachedMmGraph;
+    }
+    cachedMmGraph = await buildMentalModelGraph(engine);
+    cachedMmGraphAt = now;
+    return cachedMmGraph;
+  }
+
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
 
     // ===== 核心调用接口 =====
@@ -747,6 +769,57 @@ export function createRouter(engine: ExpertEngine) {
         return reply.send(result);
       } catch (error: any) {
         return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== Phase 8: Mental Model Graph 接口 =====
+
+    /** GET /mental-models — 列出所有心智模型（查询参数 ?shared=true 仅返回共享） */
+    fastify.get('/mental-models', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { shared } = request.query as { shared?: string };
+        const graph = await getMmGraph();
+        const models = shared === 'true' ? listSharedModels(graph) : listAllModels(graph);
+        return reply.send({
+          total: models.length,
+          shared_count: listSharedModels(graph).length,
+          models: models.map(m => ({
+            name: m.name,
+            expertCount: m.expertCount,
+            isShared: m.isShared,
+            experts: m.experts.map(e => ({ expert_id: e.expert_id, name: e.expert_name })),
+          })),
+        });
+      } catch (error: any) {
+        console.error('[ExpertLibrary] /mental-models error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /mental-models/:name — 查询某个心智模型的所有使用专家详情 */
+    fastify.get('/mental-models/:name', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { name } = request.params as { name: string };
+        const graph = await getMmGraph();
+        const entry = findExpertsByModel(graph, decodeURIComponent(name));
+        if (!entry) {
+          return reply.status(404).send({ error: `Mental model not found: ${name}` });
+        }
+        return reply.send(entry);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /mental-models/refresh — 强制重建图谱缓存（专家 profile 更新后调用） */
+    fastify.post('/mental-models/refresh', async (_request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        cachedMmGraph = null;
+        cachedMmGraphAt = 0;
+        const graph = await getMmGraph();
+        return reply.send({ ok: true, total: graph.size });
+      } catch (error: any) {
+        return reply.status(500).send({ ok: false, error: error.message });
       }
     });
   };
