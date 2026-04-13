@@ -1,7 +1,7 @@
 // LG Reviews Tab - 蓝军评审
-// 评审轮次 Timeline + 专家问题卡片 + 专家配置弹窗 + 右侧标注卡片侧边栏
+// 评审轮次 Timeline + 专家问题卡片 + 专家配置弹窗 + DocumentEditor (R1) + 流式更新 (R2)
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
@@ -75,6 +75,10 @@ export function LGReviewsTab() {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [submittingRevision, setSubmittingRevision] = useState(false);
+  const [showDocEditor, setShowDocEditor] = useState(false);
+  const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
+  const [streamingPulse, setStreamingPulse] = useState(false);
+  const lastProgressRef = useRef<number>(-1);
 
   // 加载决策状态（threadId 变化时）
   useEffect(() => {
@@ -135,12 +139,26 @@ export function LGReviewsTab() {
 
   // 加载标注（每当评审轮次变化时重新拉取）
   const blueTeamRoundsCount = detail?.blueTeamRounds?.length ?? 0;
+  const currentProgress = detail?.progress ?? 0;
   useEffect(() => {
     if (!detail?.threadId) return;
     langgraphApi.getAnnotations(detail.threadId)
       .then(setAnnotations)
       .catch(() => {});
   }, [detail?.threadId, blueTeamRoundsCount]);
+
+  // R2: 流式更新 — 检测 progress 变化时触发 pulse 动画
+  useEffect(() => {
+    if (lastProgressRef.current !== -1 && lastProgressRef.current !== currentProgress) {
+      setStreamingPulse(true);
+      const t = setTimeout(() => setStreamingPulse(false), 1500);
+      return () => clearTimeout(t);
+    }
+    lastProgressRef.current = currentProgress;
+  }, [currentProgress]);
+
+  // 是否处于"实时评审中"状态
+  const isLiveReviewing = detail?.status === 'reviewing';
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -423,6 +441,61 @@ export function LGReviewsTab() {
           </div>
         );
       })()}
+
+      {/* R2: 流式更新指示器 */}
+      {isLiveReviewing && (
+        <div
+          className="info-card full-width"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 16px',
+            marginBottom: '16px',
+            background: 'linear-gradient(90deg, hsla(199, 89%, 48%, 0.08), transparent)',
+            border: '1px solid hsla(199, 89%, 48%, 0.3)',
+          }}
+        >
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
+            <div
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: '#3b82f6',
+                animation: streamingPulse ? 'pulse 1.5s ease-out' : 'none',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                width: '20px',
+                height: '20px',
+                borderRadius: '50%',
+                border: '2px solid #3b82f6',
+                opacity: streamingPulse ? 0.8 : 0.3,
+                transform: streamingPulse ? 'scale(1.2)' : 'scale(1)',
+                transition: 'all 0.4s',
+              }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#3b82f6' }}>
+              实时评审中{streamingPulse && ' · 正在更新'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              进度：{currentProgress}% · 当前节点：{detail.currentNode || '处理中'}
+            </div>
+          </div>
+          <style>{`
+            @keyframes pulse {
+              0% { transform: scale(1); opacity: 1; }
+              50% { transform: scale(1.4); opacity: 0.6; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
 
       {/* 评审概览 + 配置按钮 */}
       <div className="panel-grid">
@@ -1010,22 +1083,99 @@ export function LGReviewsTab() {
         </div>
       )}
 
-      {/* 草稿文档查看器 */}
+      {/* R1: DocumentEditor — 评审文档编辑器 */}
       {detail.draftContent && rounds.length > 0 && (
         <div style={{ marginTop: '24px' }}>
           <div className="section-header">
-            <div className="section-title" style={{ cursor: 'pointer' }} onClick={() => setShowDraftViewer(!showDraftViewer)}>
-              <span className="material-symbols-outlined">description</span>
-              评审文档查看
+            <div className="section-title" style={{ cursor: 'pointer' }} onClick={() => setShowDocEditor(!showDocEditor)}>
+              <span className="material-symbols-outlined">edit_document</span>
+              文档编辑器
               <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                {showDraftViewer ? 'expand_less' : 'expand_more'}
+                {showDocEditor ? 'expand_less' : 'expand_more'}
               </span>
             </div>
-            <div className="section-desc">查看被评审的草稿内容</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="section-desc">查看草稿与评审标注</div>
+              {showDocEditor && (
+                <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--divider)' }}>
+                  {(['preview', 'source'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setDocViewMode(m); }}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '11px',
+                        border: 'none',
+                        background: docViewMode === m ? 'var(--primary)' : 'var(--surface)',
+                        color: docViewMode === m ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {m === 'preview' ? '预览' : '源码'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          {showDraftViewer && (
-            <div className="info-card full-width" style={{ maxHeight: '500px', overflow: 'auto' }}>
-              <MarkdownRenderer content={detail.draftContent} />
+
+          {showDocEditor && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: annotationItems.length > 0 ? '2fr 1fr' : '1fr',
+                gap: '16px',
+              }}
+            >
+              {/* 文档主区 */}
+              <div className="info-card full-width" style={{ maxHeight: '600px', overflow: 'auto' }}>
+                {/* 文档头部信息 */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    paddingBottom: '8px',
+                    marginBottom: '8px',
+                    borderBottom: '1px solid var(--divider)',
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>article</span>
+                  <span>{(detail.draftContent || '').replace(/\s/g, '').length.toLocaleString()} 字</span>
+                  <span>·</span>
+                  <span>第 {rounds.length} 轮</span>
+                  <span>·</span>
+                  <span>{annotationItems.length} 条标注</span>
+                </div>
+
+                {docViewMode === 'preview' ? (
+                  <MarkdownRenderer content={detail.draftContent} />
+                ) : (
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      color: 'var(--text)',
+                      lineHeight: 1.6,
+                      margin: 0,
+                    }}
+                  >
+                    {detail.draftContent}
+                  </pre>
+                )}
+              </div>
+
+              {/* 右侧标注侧边栏 */}
+              {annotationItems.length > 0 && (
+                <div style={{ position: 'sticky', top: '24px', alignSelf: 'start' }}>
+                  <InlineAnnotationArea annotations={annotationItems} title="评审标注" />
+                </div>
+              )}
             </div>
           )}
         </div>
