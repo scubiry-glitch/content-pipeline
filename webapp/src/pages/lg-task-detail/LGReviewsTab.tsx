@@ -78,6 +78,7 @@ export function LGReviewsTab() {
   const [showDocEditor, setShowDocEditor] = useState(false);
   const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
   const [streamingPulse, setStreamingPulse] = useState(false);
+  const [reviewView, setReviewView] = useState<'parallel' | 'sequential'>('parallel');
   const lastProgressRef = useRef<number>(-1);
 
   // 加载决策状态（threadId 变化时）
@@ -736,8 +737,54 @@ export function LGReviewsTab() {
         </div>
       </div>
 
+      {/* R7: 视图切换 — 并行/顺序 */}
+      {rounds.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginTop: '24px',
+            marginBottom: '12px',
+            paddingBottom: '8px',
+            borderBottom: '1px solid var(--divider)',
+          }}
+        >
+          {(['parallel', 'sequential'] as const).map((v) => {
+            const labels = { parallel: '并行评审', sequential: '顺序评审' };
+            const icons = { parallel: 'view_module', sequential: 'view_stream' };
+            const isActive = reviewView === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setReviewView(v)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
+                  marginBottom: '-9px',
+                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{icons[v]}</span>
+                {labels[v]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* 主体：左侧评审轮次 + 右侧标注卡片 */}
-      <div style={{ display: 'grid', gridTemplateColumns: annotationItems.length > 0 ? '1fr 340px' : '1fr', gap: '24px', marginTop: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: annotationItems.length > 0 ? '1fr 340px' : '1fr', gap: '24px', marginTop: '0' }}>
         {/* 左：评审轮次 Timeline */}
         <div>
           {rounds.length === 0 && (
@@ -752,7 +799,142 @@ export function LGReviewsTab() {
             </div>
           )}
 
-          {rounds.map((round: any, i: number) => (
+          {/* 顺序评审视图 */}
+          {reviewView === 'sequential' && rounds.length > 0 && (() => {
+            // 将所有问题展平并按 expert 分组
+            type SeqItem = { round: number; index: number; q: any; expert: string };
+            const allItems: SeqItem[] = [];
+            rounds.forEach((round: any) => {
+              (round.questions || []).forEach((q: any, j: number) => {
+                allItems.push({
+                  round: round.round,
+                  index: j,
+                  q,
+                  expert: q.expertName || q.role || q.expertId || 'Expert',
+                });
+              });
+            });
+
+            // 按 expert 分组
+            const byExpert: Record<string, SeqItem[]> = {};
+            allItems.forEach((it) => {
+              if (!byExpert[it.expert]) byExpert[it.expert] = [];
+              byExpert[it.expert].push(it);
+            });
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {Object.entries(byExpert).map(([expert, items]) => {
+                  const expertMeta = EXPERT_STYLES[items[0]?.q?.role || items[0]?.q?.expertId] || { icon: '🎓', label: expert };
+                  return (
+                    <div key={expert}>
+                      {/* 专家头部 */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 14px',
+                          marginBottom: '8px',
+                          background: 'linear-gradient(90deg, var(--primary-alpha), transparent)',
+                          borderLeft: '3px solid var(--primary)',
+                          borderRadius: 'var(--radius-sm)',
+                        }}
+                      >
+                        <span style={{ fontSize: '20px' }}>{expertMeta.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{expert}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {items.length} 条意见 · 跨 {new Set(items.map((i) => i.round)).size} 轮评审
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 该专家的问题列表 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '20px' }}>
+                        {items.map((it, idx) => {
+                          const sev = SEVERITY_STYLES[it.q.severity] || SEVERITY_STYLES.low;
+                          const qKey = getQuestionKey(it.round, it.index, it.q.question);
+                          const decision = decisions[qKey] || 'pending';
+                          return (
+                            <div
+                              key={`${expert}-${idx}`}
+                              className="info-card"
+                              style={{
+                                borderLeftWidth: '3px',
+                                borderLeftColor: sev.color,
+                                opacity: decision === 'ignored' ? 0.6 : 1,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', fontSize: '11px' }}>
+                                <span
+                                  style={{
+                                    padding: '1px 8px',
+                                    borderRadius: 'var(--radius-full)',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    background: 'var(--surface-alt)',
+                                    color: 'var(--text-secondary)',
+                                  }}
+                                >
+                                  R{it.round}
+                                </span>
+                                <span
+                                  style={{
+                                    padding: '1px 8px',
+                                    borderRadius: 'var(--radius-full)',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    background: sev.bg,
+                                    color: sev.color,
+                                  }}
+                                >
+                                  {sev.label}
+                                </span>
+                                {decision !== 'pending' && (
+                                  <span
+                                    style={{
+                                      padding: '1px 8px',
+                                      borderRadius: 'var(--radius-full)',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      background: decision === 'accepted' ? 'hsla(142, 45%, 45%, 0.12)' : 'hsla(0, 0%, 50%, 0.12)',
+                                      color: decision === 'accepted' ? '#22c55e' : '#6b7280',
+                                    }}
+                                  >
+                                    {decision === 'accepted' ? '✓ 已接受' : '✕ 已忽略'}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ fontSize: '13px', color: 'var(--text)', lineHeight: 1.6, margin: '0 0 6px' }}>
+                                {it.q.question}
+                              </p>
+                              {it.q.suggestion && (
+                                <div
+                                  style={{
+                                    padding: '6px 10px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: 'var(--surface-alt)',
+                                    fontSize: '11px',
+                                    color: 'var(--text-secondary)',
+                                  }}
+                                >
+                                  💡 {it.q.suggestion}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* 并行评审视图 */}
+          {reviewView === 'parallel' && rounds.map((round: any, i: number) => (
             <div key={i} style={{ marginBottom: '24px' }}>
               <div className="section-header">
                 <div className="section-title">
