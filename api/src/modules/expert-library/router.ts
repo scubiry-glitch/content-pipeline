@@ -822,5 +822,41 @@ export function createRouter(engine: ExpertEngine) {
         return reply.status(500).send({ ok: false, error: error.message });
       }
     });
+
+    /** Phase 10: GET /mental-models/catalog — 可查询目录（含所有字段：evidence/context/failureCondition） */
+    fastify.get('/mental-models/catalog', async (_request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const graph = await getMmGraph();
+        const all = listAllModels(graph);
+        // 收集所有专家作为目录 header
+        const expertSet = new Set<string>();
+        const experts: Array<{ expert_id: string; name: string }> = [];
+        for (const entry of all) {
+          for (const e of entry.experts) {
+            if (!expertSet.has(e.expert_id)) {
+              expertSet.add(e.expert_id);
+              experts.push({ expert_id: e.expert_id, name: e.expert_name });
+            }
+          }
+        }
+
+        return reply.send({
+          generatedAt: new Date().toISOString(),
+          totalModels: all.length,
+          sharedCount: all.filter(m => m.isShared).length,
+          expertCount: expertSet.size,
+          experts,
+          models: all.map(m => ({
+            name: m.name,
+            expertCount: m.expertCount,
+            isShared: m.isShared,
+            variants: m.experts,  // 完整字段，含 evidence/context/failureCondition
+          })),
+        });
+      } catch (error: any) {
+        console.error('[ExpertLibrary] /mental-models/catalog error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
   };
 }

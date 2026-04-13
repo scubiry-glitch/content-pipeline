@@ -13,16 +13,16 @@
 | # | Phase | 标题 | 优先级 | 状态 |
 |---|---|---|---|---|
 | 0 | [phase-00-setup](./phase-00-setup.md) | 拉取 main + 准备目录 | — | ✅ |
-| 1 | [phase-01-rubric-scoring](./phase-01-rubric-scoring.md) | Rubrics 驱动的结构化评分输出 | ★★★★★ | ⏳ |
-| 2 | [phase-02-debate-contradictions](./phase-02-debate-contradictions.md) | DebateEngine 用 contradictions 生成交叉质询 | ★★★★★ | ⏳ |
-| 3 | [phase-03-heuristics-trigger](./phase-03-heuristics-trigger.md) | Heuristics trigger 匹配，激活最相关规则 | ★★★★ | ⏳ |
-| 4 | [phase-04-matcher-cognitive](./phase-04-matcher-cognitive.md) | ExpertMatcher 认知互补匹配 | ★★★★ | ⏳ |
-| 5 | [phase-05-mentalmodels-skeleton](./phase-05-mentalmodels-skeleton.md) | mentalModels 作为分析框架显式骨架 | ★★★★ | ⏳ |
-| 6 | [phase-06-feedback-dimension](./phase-06-feedback-dimension.md) | feedbackLoop 按 rubric 维度校准 | ★★★ | ⏳ |
-| 7 | [phase-07-expression-linter](./phase-07-expression-linter.md) | ExpressionDNA linter 后置校验 | ★★★ | ⏳ |
-| 8 | [phase-08-model-graph](./phase-08-model-graph.md) | 跨专家 MentalModel 索引图 | ★★★ | ⏳ |
-| 9 | [phase-09-agentic-tool](./phase-09-agentic-tool.md) | agenticProtocol 真实工具调用 | ★★★ | ⏳ |
-| 10 | [phase-10-model-catalog](./phase-10-model-catalog.md) | Mental Model Library 可查询目录 | ★★ | ⏳ |
+| 1 | [phase-01-rubric-scoring](./phase-01-rubric-scoring.md) | Rubrics 驱动的结构化评分输出 | ★★★★★ | ✅ |
+| 2 | [phase-02-debate-contradictions](./phase-02-debate-contradictions.md) | DebateEngine 用 contradictions 生成交叉质询 | ★★★★★ | ✅ |
+| 3 | [phase-03-heuristics-trigger](./phase-03-heuristics-trigger.md) | Heuristics trigger 匹配，激活最相关规则 | ★★★★ | ✅ |
+| 4 | [phase-04-matcher-cognitive](./phase-04-matcher-cognitive.md) | ExpertMatcher 认知互补匹配 | ★★★★ | ✅ |
+| 5 | [phase-05-mentalmodels-skeleton](./phase-05-mentalmodels-skeleton.md) | mentalModels 作为分析框架显式骨架 | ★★★★ | ✅ |
+| 6 | [phase-06-feedback-dimension](./phase-06-feedback-dimension.md) | feedbackLoop 按 rubric 维度校准 | ★★★ | ✅ |
+| 7 | [phase-07-expression-linter](./phase-07-expression-linter.md) | ExpressionDNA linter 后置校验 | ★★★ | ✅ |
+| 8 | [phase-08-model-graph](./phase-08-model-graph.md) | 跨专家 MentalModel 索引图 | ★★★ | ✅ |
+| 9 | [phase-09-agentic-tool](./phase-09-agentic-tool.md) | agenticProtocol 真实工具调用 | ★★★ | ✅ |
+| 10 | [phase-10-model-catalog](./phase-10-model-catalog.md) | Mental Model Library 可查询目录 | ★★ | ✅ |
 
 ## 执行约定
 
