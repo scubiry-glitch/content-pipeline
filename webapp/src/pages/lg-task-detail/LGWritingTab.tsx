@@ -40,6 +40,9 @@ export function LGWritingTab() {
   const [showRefs, setShowRefs] = useState(false);
   const [complianceResult, setComplianceResult] = useState<ComplianceCheckResult | null>(null);
   const [checkingCompliance, setCheckingCompliance] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSelection, setCompareSelection] = useState<number[]>([]);
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -295,6 +298,273 @@ export function LGWritingTab() {
           <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>点击「执行检查」对当前草稿进行合规分析</p>
         )}
       </div>
+
+      {/* W3: 修订时间线 + W4: 版本对比 */}
+      {blueTeamRounds.length > 0 && (
+        <div className="info-card full-width" style={{ marginBottom: '24px' }}>
+          <div
+            className="card-title"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="material-symbols-outlined">timeline</span>
+              修订时间线
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                className="lg-btn lg-btn-secondary"
+                style={{
+                  fontSize: '11px',
+                  padding: '4px 10px',
+                  background: showTimeline ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+                  color: showTimeline ? '#3b82f6' : undefined,
+                }}
+                onClick={() => setShowTimeline(!showTimeline)}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '13px', verticalAlign: 'middle', marginRight: '2px' }}>
+                  {showTimeline ? 'expand_less' : 'expand_more'}
+                </span>
+                {showTimeline ? '收起' : '展开'}
+              </button>
+              <button
+                type="button"
+                className="lg-btn lg-btn-secondary"
+                style={{
+                  fontSize: '11px',
+                  padding: '4px 10px',
+                  background: compareMode ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+                  color: compareMode ? '#3b82f6' : undefined,
+                }}
+                onClick={() => {
+                  setCompareMode(!compareMode);
+                  if (compareMode) setCompareSelection([]);
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '13px', verticalAlign: 'middle', marginRight: '2px' }}>
+                  compare_arrows
+                </span>
+                {compareMode ? '退出对比' : '版本对比'}
+              </button>
+            </div>
+          </div>
+
+          {showTimeline && (
+            <div style={{ position: 'relative', paddingLeft: '24px' }}>
+              {/* 垂直时间线 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '8px',
+                  top: '8px',
+                  bottom: '8px',
+                  width: '2px',
+                  background: 'linear-gradient(180deg, var(--primary), var(--divider))',
+                }}
+              />
+              {/* 初稿节点 */}
+              <div style={{ position: 'relative', marginBottom: '14px' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '-22px',
+                    top: '4px',
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '50%',
+                    background: '#22c55e',
+                    border: '2px solid var(--surface)',
+                  }}
+                />
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>初稿</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {(draftContent || '').replace(/\s/g, '').length.toLocaleString()} 字
+                </div>
+              </div>
+              {/* 各轮修订 */}
+              {blueTeamRounds.map((round: any, i: number) => {
+                const isSelected = compareSelection.includes(i);
+                const handleSelect = () => {
+                  if (!compareMode) return;
+                  if (isSelected) {
+                    setCompareSelection(compareSelection.filter((x) => x !== i));
+                  } else if (compareSelection.length < 2) {
+                    setCompareSelection([...compareSelection, i]);
+                  }
+                };
+                const wc = (round.revisionContent || '').replace(/\s/g, '').length;
+                return (
+                  <div key={i} style={{ position: 'relative', marginBottom: '14px' }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '-22px',
+                        top: '4px',
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
+                        background: round.passed ? '#22c55e' : '#f59e0b',
+                        border: isSelected ? '2px solid #3b82f6' : '2px solid var(--surface)',
+                      }}
+                    />
+                    <div
+                      onClick={handleSelect}
+                      style={{
+                        cursor: compareMode ? 'pointer' : 'default',
+                        padding: compareMode ? '6px 10px' : '0',
+                        borderRadius: 'var(--radius-sm)',
+                        background: isSelected ? 'hsla(210, 80%, 50%, 0.08)' : 'transparent',
+                        border: isSelected ? '1px solid #3b82f6' : '1px solid transparent',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>第 {round.round} 轮</span>
+                        {round.passed && (
+                          <span
+                            style={{
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-full)',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              background: 'hsla(142, 45%, 45%, 0.1)',
+                              color: '#22c55e',
+                            }}
+                          >
+                            通过
+                          </span>
+                        )}
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {wc > 0 ? `${wc.toLocaleString()} 字` : ''}
+                        </span>
+                      </div>
+                      {round.revisionSummary && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.5 }}>
+                          {round.revisionSummary.substring(0, 150)}
+                          {round.revisionSummary.length > 150 ? '...' : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* W4: 版本对比面板 */}
+          {compareMode && compareSelection.length === 2 && (() => {
+            const [a, b] = compareSelection.sort((x, y) => x - y);
+            const ra = blueTeamRounds[a];
+            const rb = blueTeamRounds[b];
+            const ca = ra?.revisionContent || '';
+            const cb = rb?.revisionContent || '';
+            const wcA = ca.replace(/\s/g, '').length;
+            const wcB = cb.replace(/\s/g, '').length;
+            const delta = wcB - wcA;
+
+            return (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--surface-alt)',
+                  border: '1px solid var(--divider)',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                  <div style={{ flex: 1, padding: '8px 12px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid #3b82f6' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>版本 A</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>第 {ra?.round} 轮</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{wcA.toLocaleString()} 字</div>
+                  </div>
+                  <div style={{ flex: 1, padding: '8px 12px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid #22c55e' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>版本 B</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>第 {rb?.round} 轮</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {wcB.toLocaleString()} 字
+                      {delta !== 0 && (
+                        <span style={{ marginLeft: '6px', color: delta > 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                          ({delta > 0 ? '+' : ''}{delta})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 简单 side-by-side 内容预览（前 500 字） */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div
+                    style={{
+                      padding: '10px',
+                      background: 'var(--surface)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      maxHeight: '200px',
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {ca.substring(0, 500)}{ca.length > 500 ? '\n...' : ''}
+                  </div>
+                  <div
+                    style={{
+                      padding: '10px',
+                      background: 'var(--surface)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      maxHeight: '200px',
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {cb.substring(0, 500)}{cb.length > 500 ? '\n...' : ''}
+                  </div>
+                </div>
+
+                {/* 回滚按钮 */}
+                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="lg-btn lg-btn-secondary"
+                    style={{ fontSize: '11px', padding: '4px 12px' }}
+                    onClick={() => setSelectedRound(a)}
+                  >
+                    查看版本 A
+                  </button>
+                  <button
+                    type="button"
+                    className="lg-btn lg-btn-secondary"
+                    style={{ fontSize: '11px', padding: '4px 12px' }}
+                    onClick={() => setSelectedRound(b)}
+                  >
+                    查看版本 B
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {compareMode && compareSelection.length < 2 && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '8px 12px',
+                fontSize: '11px',
+                color: 'var(--text-secondary)',
+                background: 'hsla(210, 80%, 50%, 0.05)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid hsla(210, 80%, 50%, 0.2)',
+              }}
+            >
+              💡 已选 {compareSelection.length}/2 个版本。点击时间线上的版本节点添加到对比。
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Markdown 预览 */}
       <LivePreviewMarkdown
