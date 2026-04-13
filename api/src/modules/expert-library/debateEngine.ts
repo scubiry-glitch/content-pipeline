@@ -295,6 +295,8 @@ ${content}
 
   /**
    * Round 2: 交叉质疑
+   * 升级版：利用 target 的 contradictions（已知内部矛盾）+ attacker 的 mentalModels
+   * 构造针对性质询，从"自由发挥"升级为"击中对方认知软肋"。
    */
   private async crossExamination(
     experts: ExpertProfile[],
@@ -310,19 +312,12 @@ ${content}
         const targetExpert = experts[targetIndex];
         const targetOpinion = previousRound.opinions[targetIndex];
 
-        const systemPrompt = `你是 ${expert.name}，${expert.domain.join('/')} 领域专家。
-风格: ${expert.persona.style}
-语气: ${expert.persona.tone}
-
-你正在一场研讨会中，需要对 ${targetExpert.name} 的观点进行质疑和讨论。
-要求：指出对方观点中的漏洞或不足，提出你的反驳或补充。200字以内。`;
-
-        const userPrompt = `议题: ${topic}
-
-${targetExpert.name} 的观点:
-${targetOpinion.content}
-
-请对以上观点进行质疑或补充:`;
+        const { systemPrompt, userPrompt } = this.buildCrossExamPrompt(
+          expert,
+          targetExpert,
+          topic,
+          targetOpinion.content,
+        );
 
         const reply = await this.safeCompleteWithSystem(
           systemPrompt,
@@ -341,6 +336,75 @@ ${targetOpinion.content}
     );
 
     return { round: roundNumber, phase: 'cross_examination', opinions };
+  }
+
+  /**
+   * 构造 cross_examination 轮次的 prompt
+   * - target 的 contradictions: 作为"可追击的认知软肋"提示给 attacker
+   * - target 的 blindSpots.knownBias / weakDomains: 补充弱点
+   * - attacker 的 mentalModels[0-2]: 作为反驳武器视角
+   *
+   * 任何字段缺失都优雅降级为通用质询提示（保留向后兼容）
+   */
+  private buildCrossExamPrompt(
+    attacker: ExpertProfile,
+    target: ExpertProfile,
+    topic: string,
+    targetOpinionText: string,
+  ): { systemPrompt: string; userPrompt: string } {
+    // 提取 attacker 的 mentalModels 作为质询武器
+    const attackerModels = attacker.persona.cognition?.mentalModels ?? [];
+    const modelsBlock = attackerModels.slice(0, 3).length > 0
+      ? `\n\n你可以用以下自己的心智模型作为质询武器（不必全部使用，选最相关的）：\n` +
+        attackerModels
+          .slice(0, 3)
+          .map((m, i) => `${i + 1}. 【${m.name}】${m.summary}`)
+          .join('\n')
+      : '';
+
+    // 提取 target 的 contradictions 作为认知软肋
+    const targetContradictions = target.persona.contradictions ?? [];
+    const contradictionsBlock = targetContradictions.length > 0
+      ? `\n\n对方（${target.name}）有以下**已知的认知矛盾**，可在场景契合时针对性追问：\n` +
+        targetContradictions
+          .slice(0, 3)
+          .map((c, i) => `${i + 1}. ${c.tension}（场景：${c.context}；通常解释：${c.resolution}）`)
+          .join('\n') +
+        `\n\n如果当前议题触及上述任一矛盾，请明确指出并追问对方"在这个具体场景下你会倒向哪一边"。`
+      : '';
+
+    // 提取 target 的 blindSpots 作为额外攻击面
+    const targetBlindSpots = target.persona.blindSpots;
+    const blindSpotsBlock = targetBlindSpots && (targetBlindSpots.knownBias?.length || targetBlindSpots.weakDomains?.length)
+      ? `\n\n对方公开承认的偏见/弱项：\n` +
+        (targetBlindSpots.knownBias?.length
+          ? `- 已知偏见：${targetBlindSpots.knownBias.join('、')}\n`
+          : '') +
+        (targetBlindSpots.weakDomains?.length
+          ? `- 薄弱领域：${targetBlindSpots.weakDomains.join('、')}`
+          : '')
+      : '';
+
+    const systemPrompt = `你是 ${attacker.name}，${attacker.domain.join('/')} 领域专家。
+风格: ${attacker.persona.style}
+语气: ${attacker.persona.tone}
+
+你正在一场研讨会中，需要对 ${target.name} 的观点进行**精准质疑**。
+要求：
+1. 不要泛泛而谈，找到对方论证中最具体的软肋
+2. 优先针对对方已知的认知矛盾或盲区发起追问
+3. 用你自己的心智模型作为反驳框架
+4. 250字以内，论据+质问两段式${modelsBlock}${contradictionsBlock}${blindSpotsBlock}`;
+
+    const userPrompt = `议题: ${topic}
+
+${target.name} 在第一轮的观点:
+${targetOpinionText}
+
+请对以上观点进行精准质疑——优先针对上面 system prompt 中提到的认知矛盾或盲区，
+用你自己的心智模型框架发起反驳:`;
+
+    return { systemPrompt, userPrompt };
   }
 
   /**
