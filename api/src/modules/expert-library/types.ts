@@ -370,8 +370,10 @@ export interface KnowledgeSource {
 export interface ExpertFeedback {
   expert_id: string;
   invoke_id: string;
-  human_score?: number;        // 1-5
+  human_score?: number;        // 1-5 (overall)
   human_notes?: string;
+  /** Phase 6: 按 rubric 维度分别打分；key 为 dimension 名，value 为 1-5 */
+  rubric_scores?: Record<string, number>;
   actual_outcome?: {
     metric_name: string;
     predicted_value?: number;

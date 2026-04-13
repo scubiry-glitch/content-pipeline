@@ -580,6 +580,23 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS authority_score DECIMAL(4,3) DEFAULT 0.500`).catch(() => {});
 
+  // Phase 6: expert_feedback 兼容创建（未经迁移的旧环境） + rubric_scores 列
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_feedback (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      expert_id VARCHAR(50) NOT NULL,
+      invoke_id UUID,
+      human_score SMALLINT CHECK (human_score BETWEEN 1 AND 5),
+      human_notes TEXT,
+      actual_outcome JSONB,
+      comparison JSONB,
+      rubric_scores JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+  await query(`ALTER TABLE expert_feedback ADD COLUMN IF NOT EXISTS rubric_scores JSONB`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_feedback_expert ON expert_feedback(expert_id, created_at DESC)`).catch(() => {});
+
   // Seed default experts for BlueTeam if none exist
   const expertCount = await query(`SELECT COUNT(*) FROM expert_library WHERE is_active = true`);
   if (parseInt(expertCount.rows[0].count) === 0) {

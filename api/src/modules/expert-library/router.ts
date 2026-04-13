@@ -451,17 +451,40 @@ export function createRouter(engine: ExpertEngine) {
 
     // ===== 反馈接口 =====
 
-    /** POST /feedback — 提交反馈 */
+    /** POST /feedback — 提交反馈（Phase 6 支持 rubric_scores） */
     fastify.post('/feedback', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison } = request.body as any;
+        const {
+          expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison, rubric_scores,
+        } = request.body as any;
 
         if (!expert_id || !invoke_id) {
           return reply.status(400).send({ error: 'Missing required fields: expert_id, invoke_id' });
         }
 
+        // Phase 6: 校验 rubric_scores 格式（可选 Record<string, 1-5>）
+        let cleanedRubricScores: Record<string, number> | undefined;
+        if (rubric_scores && typeof rubric_scores === 'object' && !Array.isArray(rubric_scores)) {
+          cleanedRubricScores = {};
+          for (const [dim, val] of Object.entries(rubric_scores)) {
+            const num = Number(val);
+            if (Number.isFinite(num) && num >= 1 && num <= 5) {
+              cleanedRubricScores[dim] = Math.round(num);
+            }
+          }
+          if (Object.keys(cleanedRubricScores).length === 0) cleanedRubricScores = undefined;
+        }
+
         await submitFeedback(
-          { expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison },
+          {
+            expert_id,
+            invoke_id,
+            human_score,
+            human_notes,
+            actual_outcome,
+            comparison,
+            rubric_scores: cleanedRubricScores,
+          },
           engine['deps']
         );
 
