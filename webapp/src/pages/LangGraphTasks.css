@@ -8,6 +8,108 @@
   margin: 0 auto;
 }
 
+/* === Two-column layout with sidebar === */
+.lg-tasks-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.lg-tasks-sidebar {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  background: var(--surface, white);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius-md, 8px);
+  padding: 16px;
+  height: fit-content;
+}
+
+.lg-tasks-main {
+  min-width: 0;
+}
+
+.lg-sidebar-section {
+  margin-bottom: 20px;
+}
+
+.lg-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted, #999);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.lg-filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lg-filter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  font-size: 13px;
+  color: var(--text, #333);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.lg-filter-item:hover {
+  background: var(--surface-alt, #f5f5f5);
+}
+
+.lg-filter-item.active {
+  background: var(--primary-alpha, rgba(212, 102, 72, 0.1));
+  color: var(--primary, #D46648);
+  font-weight: 600;
+  border-color: var(--primary, #D46648);
+}
+
+.lg-filter-count {
+  font-size: 11px;
+  background: var(--surface-alt, #f5f5f5);
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: var(--text-muted, #999);
+  font-weight: 600;
+}
+
+.lg-filter-item.active .lg-filter-count {
+  background: var(--primary, #D46648);
+  color: #fff;
+}
+
+/* === Enhanced task card === */
+.lg-task-card-enhanced {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.lg-task-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .lg-tasks-header {
   display: flex;
   align-items: flex-start;

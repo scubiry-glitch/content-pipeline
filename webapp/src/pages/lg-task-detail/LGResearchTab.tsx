@@ -1,11 +1,132 @@
 // LG Research Tab - 深度研究
-// 数据包展示 + 分析摘要 + 关键洞察
+// 数据包展示 + 分析摘要 + 关键洞察 + 引用可靠性 + 工具操作栏 + Stage 头部 + 多源配置
 
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
+import { hotTopicsApi, rssSourcesApi, assetsApi, type Asset } from '../../api/client';
+
+interface ResearchConfig {
+  autoCollect: boolean;
+  maxResults: number;
+  minCredibility: number;
+  timeRange: '7d' | '30d' | '90d' | '1y';
+  keywords: string[];
+  excludeKeywords: string[];
+  sources: {
+    web: boolean;
+    rss: boolean;
+    assets: boolean;
+    hotTopics: boolean;
+  };
+}
+
+const DEFAULT_RESEARCH_CONFIG: ResearchConfig = {
+  autoCollect: true,
+  maxResults: 20,
+  minCredibility: 0.6,
+  timeRange: '30d',
+  keywords: [],
+  excludeKeywords: [],
+  sources: { web: true, rss: true, assets: true, hotTopics: false },
+};
+
+function loadResearchConfig(threadId: string): ResearchConfig {
+  try {
+    const raw = localStorage.getItem(`lg-research-config:${threadId}`);
+    if (raw) return { ...DEFAULT_RESEARCH_CONFIG, ...JSON.parse(raw) };
+  } catch {}
+  return DEFAULT_RESEARCH_CONFIG;
+}
+
+function saveResearchConfig(threadId: string, config: ResearchConfig) {
+  try {
+    localStorage.setItem(`lg-research-config:${threadId}`, JSON.stringify(config));
+  } catch {}
+}
 
 export function LGResearchTab() {
-  const { detail } = useOutletContext<LGTaskContext>();
+  const { detail, onRefresh } = useOutletContext<LGTaskContext>();
+  const [showStrategy, setShowStrategy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState<ResearchConfig>(DEFAULT_RESEARCH_CONFIG);
+  const [keywordsInput, setKeywordsInput] = useState('');
+  const [excludeInput, setExcludeInput] = useState('');
+  const [showMultiSource, setShowMultiSource] = useState(false);
+  const [rssCount, setRssCount] = useState<number>(0);
+  const [hotTopicsList, setHotTopicsList] = useState<any[]>([]);
+  const [recommendedAssets, setRecommendedAssets] = useState<Asset[]>([]);
+  const [multiSourceLoading, setMultiSourceLoading] = useState(false);
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  // 加载配置
+  useEffect(() => {
+    if (!detail?.threadId) return;
+    const cfg = loadResearchConfig(detail.threadId);
+    setConfig(cfg);
+    setKeywordsInput(cfg.keywords.join(', '));
+    setExcludeInput(cfg.excludeKeywords.join(', '));
+  }, [detail?.threadId]);
+
+  // 加载多源数据（按需）
+  useEffect(() => {
+    if (!showMultiSource) return;
+    setMultiSourceLoading(true);
+    Promise.allSettled([
+      rssSourcesApi.getAll().catch(() => ({ items: [] })),
+      hotTopicsApi.getAll({ limit: 8 }).catch(() => ({ items: [] })),
+      detail?.topic
+        ? assetsApi.search(detail.topic.split(/[\s,]+/)[0] || '').catch(() => ({ items: [], total: 0 }))
+        : Promise.resolve({ items: [], total: 0 }),
+    ]).then(([rss, topics, assets]) => {
+      if (rss.status === 'fulfilled') {
+        setRssCount(((rss.value as any).items || []).length);
+      }
+      if (topics.status === 'fulfilled') {
+        setHotTopicsList((topics.value as any).items || []);
+      }
+      if (assets.status === 'fulfilled') {
+        setRecommendedAssets(((assets.value as any).items || []).slice(0, 5));
+      }
+      setMultiSourceLoading(false);
+    });
+  }, [showMultiSource, detail?.topic]);
+
+  // 搜索资产
+  const handleAssetSearch = async () => {
+    if (!assetSearchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const result = await assetsApi.search(assetSearchQuery.trim());
+      setRecommendedAssets(result.items || []);
+    } catch {} finally {
+      setSearching(false);
+    }
+  };
+
+  // 计算资产可信度（基于 quality_score 转 A/B/C/D）
+  const getAssetCredibility = (asset: Asset): { grade: string; color: string; pct: number } => {
+    const score = asset.quality_score || 50;
+    if (score >= 85) return { grade: 'A', color: '#22c55e', pct: score };
+    if (score >= 70) return { grade: 'B', color: '#3b82f6', pct: score };
+    if (score >= 50) return { grade: 'C', color: '#f59e0b', pct: score };
+    return { grade: 'D', color: '#ef4444', pct: score };
+  };
+
+  // 保存配置
+  const handleSaveConfig = () => {
+    if (!detail?.threadId) return;
+    const next: ResearchConfig = {
+      ...config,
+      keywords: keywordsInput.split(',').map((k) => k.trim()).filter(Boolean),
+      excludeKeywords: excludeInput.split(',').map((k) => k.trim()).filter(Boolean),
+    };
+    setConfig(next);
+    saveResearchConfig(detail.threadId, next);
+    setShowConfig(false);
+  };
 
   if (!detail) {
     return <div className="tab-panel"><p style={{ color: 'var(--text-muted)' }}>暂无任务数据</p></div>;
@@ -34,8 +155,315 @@ export function LGResearchTab() {
     );
   }
 
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try { await onRefresh(); } finally { setRefreshing(false); }
+  };
+
+  // 计算可靠度等级 A/B/C/D
+  const getReliabilityGrade = (raw?: number): { grade: string; color: string } => {
+    if (typeof raw !== 'number') return { grade: '-', color: 'var(--text-muted)' };
+    const pct = raw > 1 ? raw : raw * 100;
+    if (pct >= 85) return { grade: 'A', color: '#22c55e' };
+    if (pct >= 70) return { grade: 'B', color: '#3b82f6' };
+    if (pct >= 50) return { grade: 'C', color: '#f59e0b' };
+    return { grade: 'D', color: '#ef4444' };
+  };
+
+  // 引用统计
+  const reliabilityStats = dataPackage.reduce(
+    (acc, item) => {
+      const { grade } = getReliabilityGrade(item.reliability);
+      if (grade !== '-') acc[grade] = (acc[grade] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
   return (
     <div className="tab-panel">
+      {/* Re8: Stage 标题头部 */}
+      <div
+        className="info-card full-width"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          background: 'linear-gradient(90deg, hsla(199, 89%, 48%, 0.05), transparent)',
+          borderLeft: '4px solid var(--primary)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+            }}
+          >
+            STAGE 2
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>
+              深度研究
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+              基于大纲展开多维度数据采集与洞察提炼
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => setShowConfig(!showConfig)}
+            className="lg-btn lg-btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              fontSize: '12px',
+              background: showConfig ? 'hsla(210, 80%, 50%, 0.1)' : undefined,
+              color: showConfig ? '#3b82f6' : undefined,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>tune</span>
+            研究配置
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowStrategy(!showStrategy)}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+              {showStrategy ? 'visibility_off' : 'visibility'}
+            </span>
+            {showStrategy ? '隐藏策略' : '查看策略'}
+          </button>
+        </div>
+      </div>
+
+      {/* 多源引擎配置面板 (Re1) */}
+      {showConfig && (
+        <div className="info-card full-width" style={{ marginBottom: '20px' }}>
+          <div className="card-title">
+            <span className="material-symbols-outlined">tune</span>
+            研究引擎配置
+          </div>
+
+          {/* 数据源开关 */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '8px' }}>
+              数据源
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {([
+                { key: 'web', label: '🌐 全网搜索', desc: 'Tavily AI' },
+                { key: 'rss', label: '📡 RSS 订阅', desc: '已订阅源' },
+                { key: 'assets', label: '📚 私有素材', desc: '向量库' },
+                { key: 'hotTopics', label: '🔥 热点话题', desc: '社区追踪' },
+              ] as const).map((s) => {
+                const active = config.sources[s.key];
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() =>
+                      setConfig({
+                        ...config,
+                        sources: { ...config.sources, [s.key]: !active },
+                      })
+                    }
+                    style={{
+                      flex: '1 1 140px',
+                      padding: '10px 12px',
+                      border: `1px solid ${active ? 'var(--primary)' : 'var(--divider)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: active ? 'var(--primary-alpha)' : 'var(--surface)',
+                      color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>{s.label}</div>
+                    <div style={{ fontSize: '10px', opacity: 0.7 }}>{s.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 参数配置 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                自动采集
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={config.autoCollect}
+                  onChange={(e) => setConfig({ ...config, autoCollect: e.target.checked })}
+                />
+                启用自动采集
+              </label>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                最大结果数
+              </label>
+              <input
+                type="number"
+                className="lg-input"
+                min={5}
+                max={50}
+                value={config.maxResults}
+                onChange={(e) => setConfig({ ...config, maxResults: Number(e.target.value) || 20 })}
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                最低可信度 ({Math.round(config.minCredibility * 100)}%)
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={config.minCredibility}
+                onChange={(e) => setConfig({ ...config, minCredibility: Number(e.target.value) })}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                时间范围
+              </label>
+              <select
+                className="lg-select"
+                value={config.timeRange}
+                onChange={(e) => setConfig({ ...config, timeRange: e.target.value as any })}
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              >
+                <option value="7d">近 7 天</option>
+                <option value="30d">近 30 天</option>
+                <option value="90d">近 90 天</option>
+                <option value="1y">近 1 年</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 关键词 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                关键词（逗号分隔）
+              </label>
+              <input
+                type="text"
+                className="lg-input"
+                value={keywordsInput}
+                onChange={(e) => setKeywordsInput(e.target.value)}
+                placeholder="例如：REITs, 保租房, 政策"
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                排除关键词
+              </label>
+              <input
+                type="text"
+                className="lg-input"
+                value={excludeInput}
+                onChange={(e) => setExcludeInput(e.target.value)}
+                placeholder="例如：广告, 宣传"
+                style={{ fontSize: '12px', padding: '6px 8px' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button type="button" className="lg-btn lg-btn-secondary" onClick={() => setShowConfig(false)} style={{ fontSize: '12px' }}>
+              取消
+            </button>
+            <button type="button" className="lg-btn lg-btn-primary" onClick={handleSaveConfig} style={{ fontSize: '12px' }}>
+              保存配置
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 研究策略说明（折叠） */}
+      {showStrategy && (
+        <div className="info-card full-width" style={{ marginBottom: '20px', background: 'var(--surface-alt)' }}>
+          <div className="card-title">
+            <span className="material-symbols-outlined">tune</span>
+            研究策略
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            <li>多源数据采集：行业报告、公开新闻、市场研究、社区话题</li>
+            <li>事实交叉验证：通过多源比对剔除孤立信息</li>
+            <li>洞察提炼：识别趋势、风险、机会三类核心结论</li>
+            <li>可信度评级：A 级 ≥85%，B 级 ≥70%，C 级 ≥50%，D 级 &lt;50%</li>
+          </ul>
+        </div>
+      )}
+
+      {/* Re7: 工具操作栏 */}
+      <div
+        className="info-card full-width"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '12px 16px',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>storage</span>
+            数据来源：<strong style={{ color: 'var(--text)' }}>{dataPackage.length}</strong>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>psychology</span>
+            洞察：<strong style={{ color: 'var(--text)' }}>{research.insights?.length || 0}</strong>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-muted)' }}>verified</span>
+            A 级来源：<strong style={{ color: '#22c55e' }}>{reliabilityStats.A || 0}</strong>
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>refresh</span>
+            {refreshing ? '刷新中...' : '刷新数据'}
+          </button>
+        </div>
+      </div>
+
       {/* 分析摘要 */}
       {research.analysis && (
         <div className="panel-grid">
@@ -90,6 +518,148 @@ export function LGResearchTab() {
         </div>
       )}
 
+      {/* Re2-Re4: 多源引擎 + 语义搜索 + 可信度 */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div
+            className="section-title"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowMultiSource(!showMultiSource)}
+          >
+            <span className="material-symbols-outlined">device_hub</span>
+            多源数据引擎
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              {showMultiSource ? 'expand_less' : 'expand_more'}
+            </span>
+          </div>
+          <div className="section-desc">RSS / 全网搜索 / 私有素材库 — 跨源数据采集</div>
+        </div>
+
+        {showMultiSource && (
+          <>
+            {multiSourceLoading ? (
+              <div className="info-card full-width" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                正在加载多源数据...
+              </div>
+            ) : (
+              <>
+                {/* 三数据源摘要卡片 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                  <div className="info-card" style={{ borderTop: '3px solid #3b82f6' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">rss_feed</span>
+                      RSS 订阅源
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#3b82f6' }}>{rssCount}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>已配置订阅源</div>
+                  </div>
+                  <div className="info-card" style={{ borderTop: '3px solid #ef4444' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">local_fire_department</span>
+                      热点话题
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#ef4444' }}>{hotTopicsList.length}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>实时热点追踪</div>
+                  </div>
+                  <div className="info-card" style={{ borderTop: '3px solid #22c55e' }}>
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">inventory_2</span>
+                      私有素材
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#22c55e' }}>{recommendedAssets.length}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>语义匹配结果</div>
+                  </div>
+                </div>
+
+                {/* 语义搜索框 */}
+                <div className="info-card full-width">
+                  <div className="card-title">
+                    <span className="material-symbols-outlined">search</span>
+                    语义搜索素材
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      className="lg-input"
+                      placeholder="输入关键词，搜索相关素材..."
+                      value={assetSearchQuery}
+                      onChange={(e) => setAssetSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAssetSearch()}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="lg-btn lg-btn-primary"
+                      onClick={handleAssetSearch}
+                      disabled={searching || !assetSearchQuery.trim()}
+                    >
+                      {searching ? '搜索中...' : '搜索'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 可信度评级的素材列表 */}
+                {recommendedAssets.length > 0 && (
+                  <div className="info-card full-width">
+                    <div className="card-title">
+                      <span className="material-symbols-outlined">verified</span>
+                      推荐素材（带可信度评级）
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {recommendedAssets.map((asset) => {
+                        const cred = getAssetCredibility(asset);
+                        return (
+                          <div
+                            key={asset.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '10px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              background: 'var(--surface-alt)',
+                              borderLeft: `3px solid ${cred.color}`,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                fontWeight: 800,
+                                background: `${cred.color}15`,
+                                color: cred.color,
+                                border: `1px solid ${cred.color}40`,
+                              }}
+                            >
+                              {cred.grade}
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {asset.title}
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {asset.content_type && <span>{asset.content_type.toUpperCase()}</span>}
+                                <span>· 可信度 {cred.pct}%</span>
+                                {asset.tags && asset.tags.length > 0 && <span>· {asset.tags.slice(0, 2).join(', ')}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
       {/* 数据包 */}
       {dataPackage.length > 0 && (
         <div className="panel-grid" style={{ marginTop: '24px' }}>
@@ -97,6 +667,29 @@ export function LGResearchTab() {
             <div className="section-title">
               <span className="material-symbols-outlined">storage</span>
               数据来源 ({dataPackage.length})
+            </div>
+            {/* Re6: 引用可靠性分级摘要 */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['A', 'B', 'C', 'D'] as const).map((g) => {
+                const count = reliabilityStats[g] || 0;
+                const colorMap: Record<string, string> = { A: '#22c55e', B: '#3b82f6', C: '#f59e0b', D: '#ef4444' };
+                return (
+                  <span
+                    key={g}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: `${colorMap[g]}15`,
+                      color: colorMap[g],
+                      border: `1px solid ${colorMap[g]}40`,
+                    }}
+                  >
+                    {g}: {count}
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -108,36 +701,217 @@ export function LGResearchTab() {
                     <th style={{ width: '120px' }}>来源</th>
                     <th style={{ width: '80px' }}>类型</th>
                     <th>内容摘要</th>
+                    <th style={{ width: '50px' }}>等级</th>
                     <th style={{ width: '100px' }}>可靠度</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dataPackage.map((item: any, i: number) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{item.source || '未知'}</td>
-                      <td>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                          fontSize: '11px', fontWeight: 600,
-                          background: 'var(--primary-alpha)', color: 'var(--primary)',
-                        }}>
-                          {item.type || 'data'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                        {formatDataPackageContent(item)}
-                      </td>
-                      <td>
-                        <ReliabilityBar value={item.reliability} />
-                      </td>
-                    </tr>
-                  ))}
+                  {dataPackage.map((item: any, i: number) => {
+                    const { grade, color } = getReliabilityGrade(item.reliability);
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{item.source || '未知'}</td>
+                        <td>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                            fontSize: '11px', fontWeight: 600,
+                            background: 'var(--primary-alpha)', color: 'var(--primary)',
+                          }}>
+                            {item.type || 'data'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '400px' }}>
+                          {formatDataPackageContent(item)}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              background: grade === '-' ? 'var(--surface-alt)' : `${color}15`,
+                              color,
+                              border: grade === '-' ? '1px dashed var(--divider)' : `1px solid ${color}40`,
+                            }}
+                          >
+                            {grade}
+                          </span>
+                        </td>
+                        <td>
+                          <ReliabilityBar value={item.reliability} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
       )}
+
+      {/* Re5: 数据处理流程面板 */}
+      {dataPackage.length > 0 && (() => {
+        // 提取外部链接（从数据内容中扫描 URL）
+        const externalLinks: string[] = [];
+        const urlRegex = /https?:\/\/[^\s)\]"'`]+/g;
+        dataPackage.forEach((item: any) => {
+          const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content || {});
+          const matches = text.match(urlRegex);
+          if (matches) externalLinks.push(...matches.slice(0, 3));
+        });
+        const uniqueLinks = Array.from(new Set(externalLinks)).slice(0, 10);
+
+        // 数据清洗统计（基于可靠度阈值）
+        const totalSources = dataPackage.length;
+        const validSources = dataPackage.filter(
+          (item: any) => typeof item.reliability === 'number' && (item.reliability > 1 ? item.reliability : item.reliability * 100) >= 50
+        ).length;
+        const lowQualitySources = totalSources - validSources;
+
+        // 交叉验证：数据源类型分布
+        const typeMap: Record<string, number> = {};
+        dataPackage.forEach((item: any) => {
+          const t = item.type || 'unknown';
+          typeMap[t] = (typeMap[t] || 0) + 1;
+        });
+        const crossValidatedCount = Object.values(typeMap).filter((c) => c >= 2).length;
+
+        return (
+          <div className="panel-grid" style={{ marginTop: '24px' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <span className="material-symbols-outlined">workflow</span>
+                数据处理流程
+              </div>
+              <div className="section-desc">原始数据 → 清洗 → 验证 → 引用提取</div>
+            </div>
+
+            {/* 处理流水线统计 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+              {/* 数据审查 */}
+              <div className="info-card" style={{ borderTop: '3px solid #3b82f6' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">fact_check</span>
+                  数据审查
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)' }}>{totalSources}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>原始数据条目</div>
+              </div>
+
+              {/* 数据清洗 */}
+              <div className="info-card" style={{ borderTop: '3px solid #22c55e' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">cleaning_services</span>
+                  数据清洗
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#22c55e' }}>{validSources}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  通过 ({lowQualitySources > 0 && <span style={{ color: '#ef4444' }}>剔除 {lowQualitySources}</span>})
+                </div>
+              </div>
+
+              {/* 交叉验证 */}
+              <div className="info-card" style={{ borderTop: '3px solid #a855f7' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">verified_user</span>
+                  交叉验证
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#a855f7' }}>{crossValidatedCount}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  多源印证类型 / {Object.keys(typeMap).length} 类
+                </div>
+              </div>
+
+              {/* 外部引用 */}
+              <div className="info-card" style={{ borderTop: '3px solid #f59e0b' }}>
+                <div className="card-title">
+                  <span className="material-symbols-outlined">link</span>
+                  外部引用
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#f59e0b' }}>{uniqueLinks.length}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>提取的外链</div>
+              </div>
+            </div>
+
+            {/* 数据类型分布（交叉验证矩阵） */}
+            <div className="info-card full-width">
+              <div className="card-title">
+                <span className="material-symbols-outlined">grid_view</span>
+                数据类型分布
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {Object.entries(typeMap).map(([type, count]) => {
+                  const validated = count >= 2;
+                  return (
+                    <div
+                      key={type}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-full)',
+                        background: validated ? 'hsla(142, 45%, 45%, 0.1)' : 'var(--surface-alt)',
+                        border: `1px solid ${validated ? '#22c55e' : 'var(--divider)'}`,
+                        fontSize: '12px',
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, color: validated ? '#22c55e' : 'var(--text)' }}>
+                        {type.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{count} 条</span>
+                      {validated && (
+                        <span className="material-symbols-outlined" style={{ fontSize: '12px', color: '#22c55e' }}>
+                          check_circle
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 外部链接列表 */}
+            {uniqueLinks.length > 0 && (
+              <div className="info-card full-width">
+                <div className="card-title">
+                  <span className="material-symbols-outlined">link</span>
+                  外部引用链接 ({uniqueLinks.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {uniqueLinks.map((link, i) => (
+                    <a
+                      key={i}
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--primary)',
+                        textDecoration: 'none',
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        background: 'var(--surface-alt)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      🔗 {link}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 关键洞察 */}
       {research.insights && research.insights.length > 0 && (

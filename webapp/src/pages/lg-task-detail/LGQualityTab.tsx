@@ -17,11 +17,20 @@ const PIPELINE_NODES = [
   { id: 'output', label: '输出发布', icon: 'publish' },
 ];
 
+// 维度图标 + 标签映射
+const DIMENSION_META: Record<string, { label: string; icon: string; color: string }> = {
+  dataAvailability: { label: '数据可用性', icon: 'storage', color: '#3b82f6' },
+  topicHeat: { label: '话题热度', icon: 'local_fire_department', color: '#ef4444' },
+  differentiation: { label: '差异化', icon: 'auto_awesome', color: '#a855f7' },
+  timeliness: { label: '时效性', icon: 'schedule', color: '#22c55e' },
+};
+
 export function LGQualityTab() {
-  const { detail, state } = useOutletContext<LGTaskContext>();
+  const { detail, state, onRefresh } = useOutletContext<LGTaskContext>();
   const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
   const [sentiment, setSentiment] = useState<{ positive: number; negative: number; neutral: number } | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
 
   // 加载热点话题 + 情感分析
   useEffect(() => {
@@ -77,8 +86,112 @@ export function LGQualityTab() {
     return 'pending';
   };
 
+  // Q7: 工具操作栏处理函数
+  const handleRefresh = async () => {
+    if (onRefresh) {
+      await onRefresh();
+    }
+    // 同时刷新热点和情感
+    try {
+      const [topicsRes, sentimentRes] = await Promise.allSettled([
+        hotTopicsApi.getAll({ limit: 5 }).catch(() => ({ items: [] })),
+        sentimentApi.getStats().catch(() => null),
+      ]);
+      if (topicsRes.status === 'fulfilled' && topicsRes.value) {
+        setHotTopics((topicsRes.value as any).items || []);
+      }
+      if (sentimentRes.status === 'fulfilled' && sentimentRes.value) {
+        const s = sentimentRes.value as any;
+        setSentiment({ positive: s.positive || 0, negative: s.negative || 0, neutral: s.neutral || 0 });
+      }
+    } catch {}
+  };
+
+  const handleExportReport = () => {
+    // 生成质量分析报告 (Markdown)
+    const lines: string[] = [];
+    lines.push(`# 质量分析报告 — ${detail.topic}`);
+    lines.push(`\n生成时间：${new Date().toLocaleString('zh-CN')}\n`);
+    lines.push(`## 任务信息`);
+    lines.push(`- 任务 ID：${detail.taskId}`);
+    lines.push(`- 状态：${detail.status}`);
+    lines.push(`- 进度：${detail.progress}%\n`);
+    if (detail.evaluation) {
+      lines.push(`## 选题评估`);
+      lines.push(`- 综合评分：${detail.evaluation.score}`);
+      lines.push(`- 评估结果：${detail.evaluation.passed ? '通过' : '建议调整'}`);
+      if (detail.evaluation.dimensions) {
+        lines.push(`### 维度分析`);
+        Object.entries(detail.evaluation.dimensions).forEach(([key, val]) => {
+          const meta = DIMENSION_META[key] || { label: key };
+          lines.push(`- ${meta.label}：${val}`);
+        });
+      }
+    }
+    lines.push(`\n## 草稿质量`);
+    lines.push(`- 字数：${draftWordCount.toLocaleString()}`);
+    lines.push(`- 修订轮数：${rounds.length}`);
+    lines.push(`- 评审结果：${detail.reviewPassed ? '通过' : '修订中'}`);
+    if (allQuestions.length > 0) {
+      lines.push(`\n## 评审分析`);
+      lines.push(`- 总意见数：${allQuestions.length}`);
+      Object.entries(severityCounts).forEach(([sev, count]) => {
+        lines.push(`- ${sev}：${count}`);
+      });
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `quality-report-${detail.taskId}-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="tab-panel">
+      {/* Q7: 工具操作栏 */}
+      <div
+        className="info-card full-width"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '12px 16px',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>analytics</span>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>质量分析中心</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            实时监控任务各阶段健康度
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '13px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>refresh</span>
+            刷新数据
+          </button>
+          <button
+            type="button"
+            onClick={handleExportReport}
+            className="lg-btn lg-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '13px' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
+            导出报告
+          </button>
+        </div>
+      </div>
+
       {/* Pipeline 状态总览 */}
       <div className="panel-grid">
         <div className="section-header">
@@ -173,9 +286,6 @@ export function LGQualityTab() {
                   value={detail.evaluation.passed ? '通过' : '建议调整'}
                   valueColor={detail.evaluation.passed ? 'var(--success)' : 'var(--warning, #f59e0b)'}
                 />
-              {detail.evaluation.dimensions && Object.entries(detail.evaluation.dimensions).map(([key, val]) => (
-                <KVRow key={key} label={key} value={String(val as number)} />
-              ))}
               </div>
             </>
           ) : (
@@ -183,6 +293,142 @@ export function LGQualityTab() {
           )}
         </div>
       </div>
+
+      {/* 维度分析柱状图 (Q3) */}
+      {detail.evaluation?.dimensions && Object.keys(detail.evaluation.dimensions).length > 0 && (
+        <div className="panel-grid" style={{ marginTop: '24px' }}>
+          <div className="section-header">
+            <div className="section-title">
+              <span className="material-symbols-outlined">bar_chart</span>
+              维度分析
+            </div>
+            <div className="section-desc">选题各维度评分（满分 100）</div>
+          </div>
+          <div className="info-card full-width">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+              {Object.entries(detail.evaluation.dimensions).map(([key, val]) => {
+                const meta = DIMENSION_META[key] || { label: key, icon: 'analytics', color: '#64748b' };
+                const score = Number(val) || 0;
+                const pct = Math.min(Math.max(score, 0), 100);
+                return (
+                  <div key={key} style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'var(--surface-alt)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px', color: meta.color }}>{meta.icon}</span>
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{meta.label}</span>
+                      <span style={{ fontSize: '14px', fontWeight: 800, color: meta.color }}>{pct}</span>
+                    </div>
+                    <div style={{ height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${pct}%`, height: '100%', background: meta.color, borderRadius: '4px',
+                        transition: 'width 0.4s ease',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 质量告警 (Q4) */}
+      {(() => {
+        const alerts: Array<{ type: string; severity: 'high' | 'warning' | 'low'; title: string; suggestion: string; icon: string }> = [];
+
+        if (detail.evaluation && detail.evaluation.score < 60) {
+          alerts.push({
+            type: 'evaluation',
+            severity: 'high',
+            title: `选题评分偏低（${detail.evaluation.score} 分）`,
+            suggestion: '建议调整选题角度或寻找差异化切入点',
+            icon: 'warning',
+          });
+        }
+        if (rounds.length > 0 && (severityCounts['high'] || 0) >= 3) {
+          alerts.push({
+            type: 'review',
+            severity: 'high',
+            title: `蓝军评审存在 ${severityCounts['high']} 个严重问题`,
+            suggestion: '建议优先处理严重问题再进入下一轮评审',
+            icon: 'error',
+          });
+        }
+        if (draftWordCount > 0 && draftWordCount < 2000) {
+          alerts.push({
+            type: 'quality',
+            severity: 'warning',
+            title: `草稿字数偏少（${draftWordCount} 字）`,
+            suggestion: '建议补充内容至 5000 字以上以达到深度报告标准',
+            icon: 'format_size',
+          });
+        }
+        if (detail.errors && detail.errors.length > 0) {
+          alerts.push({
+            type: 'freshness',
+            severity: 'high',
+            title: `Pipeline 存在 ${detail.errors.length} 个错误`,
+            suggestion: '请查看下方错误日志并尝试重启相应阶段',
+            icon: 'bug_report',
+          });
+        }
+        if (detail.reviewPassed && !detail.finalApproved) {
+          alerts.push({
+            type: 'info',
+            severity: 'low',
+            title: '内容已通过评审，等待最终审批',
+            suggestion: '请前往蓝军评审 Tab 完成最终审批',
+            icon: 'info',
+          });
+        }
+
+        if (alerts.length === 0) return null;
+
+        const severityColors = { high: '#ef4444', warning: '#f59e0b', low: '#3b82f6' };
+
+        return (
+          <div className="panel-grid" style={{ marginTop: '24px' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <span className="material-symbols-outlined">notifications_active</span>
+                质量告警
+              </div>
+              <div className="section-desc">{alerts.length} 项需要关注</div>
+            </div>
+            <div className="info-card full-width">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {alerts.map((alert, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      gap: '12px',
+                      padding: '12px',
+                      borderRadius: 'var(--radius-sm)',
+                      borderLeft: `3px solid ${severityColors[alert.severity]}`,
+                      background: `${severityColors[alert.severity]}08`,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: severityColors[alert.severity] }}>
+                      {alert.icon}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                        {alert.title}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--warning, #f59e0b)' }}>
+                          lightbulb
+                        </span>
+                        {alert.suggestion}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 评审质量详情 */}
       {allQuestions.length > 0 && (
@@ -470,6 +716,214 @@ export function LGQualityTab() {
         </div>
       </div>
 
+      {/* Q6: 深度分析面板 (DeepAnalysisPanel) */}
+      <div className="panel-grid" style={{ marginTop: '24px' }}>
+        <div className="section-header">
+          <div
+            className="section-title"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowDeepAnalysis(!showDeepAnalysis)}
+          >
+            <span className="material-symbols-outlined">psychology</span>
+            AI 深度诊断
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              {showDeepAnalysis ? 'expand_less' : 'expand_more'}
+            </span>
+          </div>
+          <div className="section-desc">基于多维度数据的综合质量诊断</div>
+        </div>
+
+        {showDeepAnalysis && (() => {
+          // 计算综合分数（多维加权）
+          const dimensions = [
+            {
+              key: 'topic',
+              label: '选题质量',
+              score: detail.evaluation?.score || 0,
+              weight: 0.25,
+              icon: 'lightbulb',
+            },
+            {
+              key: 'research',
+              label: '研究深度',
+              score: Math.min(100, dataPackageCount(detail.researchData) * 15),
+              weight: 0.2,
+              icon: 'search',
+            },
+            {
+              key: 'writing',
+              label: '文稿质量',
+              score: draftWordCount > 0 ? Math.min(100, Math.floor(draftWordCount / 100)) : 0,
+              weight: 0.25,
+              icon: 'edit_note',
+            },
+            {
+              key: 'review',
+              label: '评审完成度',
+              score: rounds.length > 0 ? (detail.reviewPassed ? 90 : 60) : 0,
+              weight: 0.2,
+              icon: 'fact_check',
+            },
+            {
+              key: 'approval',
+              label: '审批就绪度',
+              score: detail.finalApproved ? 100 : detail.reviewPassed ? 70 : 30,
+              weight: 0.1,
+              icon: 'gavel',
+            },
+          ];
+
+          const overallScore = Math.round(
+            dimensions.reduce((acc, d) => acc + d.score * d.weight, 0)
+          );
+
+          // 智能诊断结论
+          let diagnosis: { level: 'excellent' | 'good' | 'normal' | 'risk'; title: string; advice: string };
+          if (overallScore >= 85) {
+            diagnosis = { level: 'excellent', title: '优秀', advice: '当前任务质量优异，可以推进至发布阶段。建议加快最终审批流程。' };
+          } else if (overallScore >= 70) {
+            diagnosis = { level: 'good', title: '良好', advice: '整体质量达到发布标准，建议根据低分维度做最后优化。' };
+          } else if (overallScore >= 50) {
+            diagnosis = { level: 'normal', title: '一般', advice: '存在明显短板，建议在最低分维度上重点改进后再推进。' };
+          } else {
+            diagnosis = { level: 'risk', title: '存在风险', advice: '多个维度未达标，建议重新评估任务方向或回退到前一阶段重做。' };
+          }
+
+          const levelColors = {
+            excellent: '#22c55e',
+            good: '#3b82f6',
+            normal: '#f59e0b',
+            risk: '#ef4444',
+          };
+
+          // 找到最低分维度
+          const weakest = [...dimensions].sort((a, b) => a.score - b.score)[0];
+          const strongest = [...dimensions].sort((a, b) => b.score - a.score)[0];
+
+          return (
+            <>
+              {/* 综合诊断结论 */}
+              <div
+                className="info-card full-width"
+                style={{
+                  background: `linear-gradient(135deg, ${levelColors[diagnosis.level]}15, transparent)`,
+                  borderLeft: `4px solid ${levelColors[diagnosis.level]}`,
+                }}
+              >
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                      background: levelColors[diagnosis.level],
+                      color: '#fff',
+                    }}
+                  >
+                    <div style={{ fontSize: '24px', fontWeight: 800, lineHeight: 1 }}>{overallScore}</div>
+                    <div style={{ fontSize: '10px', opacity: 0.9 }}>综合分</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '18px', fontWeight: 800, color: levelColors[diagnosis.level] }}>
+                        {diagnosis.title}
+                      </span>
+                      <span
+                        style={{
+                          padding: '2px 10px',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          background: `${levelColors[diagnosis.level]}15`,
+                          color: levelColors[diagnosis.level],
+                          border: `1px solid ${levelColors[diagnosis.level]}40`,
+                        }}
+                      >
+                        AI 诊断
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                      {diagnosis.advice}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 维度雷达（柱状图替代） */}
+              <div className="info-card full-width">
+                <div className="card-title">
+                  <span className="material-symbols-outlined">analytics</span>
+                  维度评分（加权）
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {dimensions.map((d) => {
+                    const color =
+                      d.score >= 80 ? '#22c55e' : d.score >= 60 ? '#3b82f6' : d.score >= 40 ? '#f59e0b' : '#ef4444';
+                    return (
+                      <div key={d.key}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px', color }}>{d.icon}</span>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', flex: 1 }}>
+                            {d.label}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>权重 {Math.round(d.weight * 100)}%</span>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color, minWidth: '36px', textAlign: 'right' }}>
+                            {d.score}
+                          </span>
+                        </div>
+                        <div style={{ height: '6px', background: 'var(--surface-alt)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${d.score}%`,
+                              height: '100%',
+                              background: color,
+                              borderRadius: '3px',
+                              transition: 'width 0.5s',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 强弱项分析 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="info-card" style={{ borderLeft: '3px solid #22c55e' }}>
+                  <div className="card-title">
+                    <span className="material-symbols-outlined" style={{ color: '#22c55e' }}>stars</span>
+                    优势维度
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
+                    {strongest.label} ({strongest.score} 分)
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
+                    任务在此维度表现突出，可作为亮点输出
+                  </p>
+                </div>
+                <div className="info-card" style={{ borderLeft: '3px solid #ef4444' }}>
+                  <div className="card-title">
+                    <span className="material-symbols-outlined" style={{ color: '#ef4444' }}>warning</span>
+                    短板维度
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
+                    {weakest.label} ({weakest.score} 分)
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
+                    建议优先改进此维度以提升整体质量
+                  </p>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+
       {/* LangGraph 状态信息 */}
       {state && (
         <div style={{ marginTop: '24px' }}>
@@ -490,6 +944,13 @@ export function LGQualityTab() {
       )}
     </div>
   );
+}
+
+function dataPackageCount(researchData: any): number {
+  if (!researchData?.dataPackage) return 0;
+  if (Array.isArray(researchData.dataPackage)) return researchData.dataPackage.length;
+  if (typeof researchData.dataPackage === 'object') return Object.keys(researchData.dataPackage).length;
+  return 0;
 }
 
 function KVRow({
