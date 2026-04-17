@@ -138,10 +138,10 @@ function buildCatalog(): Catalog {
 async function main() {
   const catalog = buildCatalog();
 
-  // 输出路径：相对于 api/ 目录向上一级是仓库根
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const repoRoot = path.resolve(__dirname, '../../../');
+  // 输出路径：脚本所在目录向上解析到仓库根（与 tsx / 编译产物路径一致）
+  // @ts-ignore - import.meta is available at runtime with tsx
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(scriptDir, '../../../');
   const outDir = path.join(repoRoot, '01-product/experts');
   const outFile = path.join(outDir, 'mental-model-catalog.json');
 

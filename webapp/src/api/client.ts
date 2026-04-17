@@ -1576,15 +1576,39 @@ export const expertLibraryApi = {
   matchExperts: (topic: string, industry?: string, taskType?: string, importance?: number) =>
     client.post('/expert-library/match', { topic, industry, taskType, importance }) as Promise<any>,
 
-  // 反馈（回流到专家校准系统）
-  submitFeedback: (expertId: string, invokeId: string, action: string, note?: string) =>
-    client.post('/expert-library/feedback', {
-      expert_id: expertId,
-      invoke_id: invokeId,
-      human_score: action === 'accepted' ? 4 : action === 'ignored' ? 2 : 3,
-      human_notes: note || `Review decision: ${action}`,
-      actual_outcome: action,
-    }) as Promise<any>,
+  // 反馈（回流到专家校准系统；支持完整 body 或旧式 review 回流四参数）
+  submitFeedback: (
+    expertIdOrBody:
+      | string
+      | {
+          expert_id: string;
+          invoke_id: string;
+          human_score?: number;
+          human_notes?: string;
+          rubric_scores?: Record<string, number>;
+          actual_outcome?: any;
+          comparison?: any;
+        },
+    invokeId?: string,
+    action?: string,
+    note?: string
+  ) => {
+    const body =
+      typeof expertIdOrBody === 'string'
+        ? {
+            expert_id: expertIdOrBody,
+            invoke_id: invokeId as string,
+            human_score: action === 'accepted' ? 4 : action === 'ignored' ? 2 : 3,
+            human_notes: note || `Review decision: ${action}`,
+            actual_outcome: action,
+          }
+        : expertIdOrBody;
+    return client.post('/expert-library/feedback', body) as Promise<{
+      status: string;
+      expert_id: string;
+      invoke_id: string;
+    }>;
+  },
 
   // 专家列表
   getExperts: (domain?: string) =>
@@ -1637,22 +1661,6 @@ export const expertLibraryApi = {
   // ============================================
   // Phase 1-10 优化相关扩展接口
   // ============================================
-
-  /** 提交反馈（Phase 6: 支持 rubric_scores 按维度打分） */
-  submitFeedback: (body: {
-    expert_id: string;
-    invoke_id: string;
-    human_score?: number;
-    human_notes?: string;
-    rubric_scores?: Record<string, number>;
-    actual_outcome?: any;
-    comparison?: any;
-  }) =>
-    client.post('/expert-library/feedback', body) as Promise<{
-      status: string;
-      expert_id: string;
-      invoke_id: string;
-    }>,
 
   /** 应用校准（Phase 6: 返回 dimensionAverages） */
   applyCalibration: (expertId: string) =>
