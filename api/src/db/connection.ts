@@ -580,6 +580,24 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
   await query(`ALTER TABLE expert_profiles ADD COLUMN IF NOT EXISTS authority_score DECIMAL(4,3) DEFAULT 0.500`).catch(() => {});
 
+  // expert_invocations 兼容创建（调用历史记录）
+  await query(`
+    CREATE TABLE IF NOT EXISTS expert_invocations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      expert_id VARCHAR(50) NOT NULL,
+      task_type VARCHAR(50) NOT NULL,
+      input_type VARCHAR(50) NOT NULL,
+      input_summary TEXT,
+      output_sections JSONB,
+      input_analysis JSONB,
+      emm_gates_passed TEXT[],
+      confidence FLOAT,
+      params JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_invocations_expert ON expert_invocations(expert_id, created_at DESC)`).catch(() => {});
+
   // Phase 6: expert_feedback 兼容创建（未经迁移的旧环境） + rubric_scores 列
   await query(`
     CREATE TABLE IF NOT EXISTS expert_feedback (
