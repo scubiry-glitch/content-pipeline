@@ -94,6 +94,11 @@ export function ExpertAdmin() {
   const [fbScore, setFbScore]   = useState(3);
   const [fbNotes, setFbNotes]   = useState('');
   const [fbSent, setFbSent]     = useState(false);
+  // Phase 6: 按 rubric 维度打分（key=dimension, value=1-5）
+  const [fbRubricScores, setFbRubricScores] = useState<Record<string, number>>({});
+  // Phase 6: 校准返回的维度平均分
+  const [calibrationResult, setCalibrationResult] = useState<any>(null);
+  const [calibrating, setCalibrating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // AI Research Enhance
@@ -259,17 +264,42 @@ export function ExpertAdmin() {
     }
   };
 
-  // ── Feedback submit ────────────────────────────────────────────────────────
+  // ── Feedback submit (Phase 6: 支持 rubric_scores 维度打分) ────────────────
   const submitFeedback = async () => {
     if (!expertId) return;
+    // 从最新 testResult 中提取 invoke_id，若无则用占位符
+    const invokeId = testResult?.metadata?.invoke_id || '00000000-0000-0000-0000-000000000000';
+    const rubricScoresPayload = Object.keys(fbRubricScores).length > 0 ? fbRubricScores : undefined;
     await fetch(`${API}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expert_id: expertId, invoke_id: '00000000-0000-0000-0000-000000000000', human_score: fbScore, human_notes: fbNotes }),
+      body: JSON.stringify({
+        expert_id: expertId,
+        invoke_id: invokeId,
+        human_score: fbScore,
+        human_notes: fbNotes,
+        rubric_scores: rubricScoresPayload,
+      }),
     });
     setFbSent(true);
     setFbNotes('');
+    setFbRubricScores({});
     setTimeout(() => setFbSent(false), 3000);
+  };
+
+  // Phase 6: 应用校准 — 展示维度平均分和建议
+  const runCalibration = async () => {
+    if (!expertId || calibrating) return;
+    setCalibrating(true);
+    setCalibrationResult(null);
+    try {
+      const r = await fetch(`${API}/calibrate/${expertId}`, { method: 'POST' });
+      setCalibrationResult(await r.json());
+    } catch (e: any) {
+      setCalibrationResult({ status: 'error', suggestions: [e.message] });
+    } finally {
+      setCalibrating(false);
+    }
   };
 
   // ── Export JSON ────────────────────────────────────────────────────────────
@@ -816,6 +846,7 @@ export function ExpertAdmin() {
 
                 {/* Feedback form */}
                 <span className="ea-field-label ea-mt">SUBMIT FEEDBACK</span>
+                <div style={{ fontSize: 11, color: '#888', margin: '4px 0 8px' }}>总体评分</div>
                 <div className="ea-score-row ea-mb-sm">
                   {[1, 2, 3, 4, 5].map(n => (
                     <button
@@ -825,6 +856,42 @@ export function ExpertAdmin() {
                     >{n}</button>
                   ))}
                 </div>
+
+                {/* Phase 6: 按 rubric 维度打分（仅当专家配置了 rubrics 时显示） */}
+                {expert.output_schema.rubrics && expert.output_schema.rubrics.length > 0 && (
+                  <div style={{ margin: '8px 0 12px', padding: 10, background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', borderRadius: 4 }}>
+                    <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600, marginBottom: 6 }}>
+                      📊 按维度打分 (Phase 6)
+                    </div>
+                    {expert.output_schema.rubrics.map((rubric, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, flex: 1 }}>{rubric.dimension}</span>
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <button
+                              key={n}
+                              className={`ea-score-btn ${fbRubricScores[rubric.dimension] === n ? 'active' : ''}`}
+                              style={{ minWidth: 24, padding: '2px 6px', fontSize: 11 }}
+                              onClick={() => setFbRubricScores(s => ({ ...s, [rubric.dimension]: n }))}
+                            >{n}</button>
+                          ))}
+                          {fbRubricScores[rubric.dimension] && (
+                            <button
+                              style={{ minWidth: 20, padding: '2px 4px', fontSize: 10, color: '#aaa' }}
+                              onClick={() => setFbRubricScores(s => {
+                                const next = { ...s };
+                                delete next[rubric.dimension];
+                                return next;
+                              })}
+                              title="清除"
+                            >×</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <textarea
                   className="ea-textarea ea-mb-sm"
                   rows={2}
@@ -832,9 +899,52 @@ export function ExpertAdmin() {
                   value={fbNotes}
                   onChange={e => setFbNotes(e.target.value)}
                 />
-                <button className="ea-secondary-btn" onClick={submitFeedback}>
-                  {fbSent ? '✓ RECEIVED' : 'SUBMIT FEEDBACK'}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="ea-secondary-btn" onClick={submitFeedback}>
+                    {fbSent ? '✓ RECEIVED' : 'SUBMIT FEEDBACK'}
+                  </button>
+                  <button
+                    className="ea-secondary-btn"
+                    onClick={runCalibration}
+                    disabled={calibrating}
+                    style={{ background: calibrating ? undefined : '#f59e0b', color: calibrating ? undefined : '#fff' }}
+                  >
+                    {calibrating ? '◌ CALIBRATING...' : '⚖ RUN CALIBRATION'}
+                  </button>
+                </div>
+
+                {/* Phase 6: 校准结果展示 */}
+                {calibrationResult && (
+                  <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>
+                      ⚖ 校准结果: {calibrationResult.status}
+                    </div>
+                    {calibrationResult.dimensionAverages && Object.keys(calibrationResult.dimensionAverages).length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, color: '#92400e', marginBottom: 4 }}>维度平均分：</div>
+                        {Object.entries(calibrationResult.dimensionAverages as Record<string, { avg: number; count: number }>).map(([dim, v]) => (
+                          <div key={dim} style={{ fontSize: 11, display: 'flex', gap: 6, marginBottom: 2 }}>
+                            <span style={{ flex: 1 }}>{dim}</span>
+                            <span style={{ fontWeight: 600, color: v.avg < 3 ? '#ef4444' : v.avg >= 4 ? '#059669' : '#f59e0b' }}>
+                              {v.avg.toFixed(2)}
+                            </span>
+                            <span style={{ color: '#aaa', minWidth: 30 }}>n={v.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {Array.isArray(calibrationResult.suggestions) && calibrationResult.suggestions.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, color: '#92400e', marginBottom: 4 }}>建议：</div>
+                        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
+                          {calibrationResult.suggestions.map((s: string, i: number) => (
+                            <li key={i} style={{ marginBottom: 2 }}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -848,20 +958,84 @@ export function ExpertAdmin() {
                     <span className="ea-result-meta">
                       confidence: {(testResult.metadata.confidence * 100).toFixed(0)}% ·
                       EMM: {testResult.metadata.emm_gates_passed?.join(', ') || '—'}
+                      {testResult.metadata.agentic_research_performed && (
+                        <span style={{
+                          marginLeft: 8,
+                          padding: '2px 8px',
+                          background: '#7c3aed',
+                          color: '#fff',
+                          borderRadius: 4,
+                          fontSize: 11,
+                        }} title="该专家 agenticProtocol.requiresResearch=true，已执行主题感知知识检索">
+                          🔍 AGENTIC
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
                 {testResult.error ? (
                   <p className="ea-result-error">{testResult.error}</p>
                 ) : (
-                  <div className="ea-result-sections">
-                    {testResult.output?.sections?.map((s: any, i: number) => (
-                      <div key={i} className="ea-result-section">
-                        <div className="ea-result-section-title">{s.title}</div>
-                        <p className="ea-result-section-body">{s.content}</p>
+                  <>
+                    {/* Phase 1: Rubric scores 雷达/柱状 */}
+                    {Array.isArray(testResult.metadata?.rubric_scores) && testResult.metadata.rubric_scores.length > 0 && (
+                      <div style={{ margin: '12px 0', padding: 12, background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', borderRadius: 4 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#3b82f6', marginBottom: 8 }}>
+                          📊 RUBRIC SCORES (Phase 1)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                          {testResult.metadata.rubric_scores.map((rs: any, i: number) => (
+                            <div key={i} style={{ padding: '6px 8px', background: '#fff', borderRadius: 4, border: '1px solid rgba(0,0,0,0.06)' }}>
+                              <div style={{ fontSize: 11, color: '#666' }}>{rs.dimension}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0' }}>
+                                <span style={{ fontSize: 18, fontWeight: 600 }}>{rs.score}</span>
+                                <span style={{ fontSize: 12, color: '#aaa' }}>/5</span>
+                                <div style={{ flex: 1, height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{ width: `${rs.score * 20}%`, height: '100%', background: rs.score >= 4 ? '#10b981' : rs.score >= 3 ? '#f59e0b' : '#ef4444' }} />
+                                </div>
+                              </div>
+                              {rs.rationale && <div style={{ fontSize: 11, color: '#555', lineHeight: 1.4 }}>{rs.rationale}</div>}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {/* Phase 5: Model applications 推理链追溯 */}
+                    {Array.isArray(testResult.metadata?.model_applications) && testResult.metadata.model_applications.length > 0 && (
+                      <div style={{ margin: '12px 0', padding: 12, background: 'rgba(124, 58, 237, 0.05)', borderLeft: '3px solid #7c3aed', borderRadius: 4 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed', marginBottom: 8 }}>
+                          🧠 心智模型应用 (Phase 5, {testResult.metadata.model_applications.length})
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {testResult.metadata.model_applications.map((ma: any, i: number) => (
+                            <div key={i} style={{ padding: '8px 10px', background: '#fff', borderRadius: 4, border: '1px solid rgba(0,0,0,0.06)' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>【{ma.modelName}】</div>
+                              {ma.application && (
+                                <div style={{ fontSize: 12, color: '#555', margin: '4px 0' }}>
+                                  <strong>应用：</strong>{ma.application}
+                                </div>
+                              )}
+                              {ma.conclusion && (
+                                <div style={{ fontSize: 12, color: '#059669' }}>
+                                  <strong>结论：</strong>{ma.conclusion}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="ea-result-sections">
+                      {testResult.output?.sections?.map((s: any, i: number) => (
+                        <div key={i} className="ea-result-section">
+                          <div className="ea-result-section-title">{s.title}</div>
+                          <p className="ea-result-section-body">{s.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
