@@ -42,7 +42,15 @@ const mainNavItems: NavItem[] = [
     to: '/expert-library',
     label: '专家体系',
     icon: '👥',
-    matchPrefixes: ['/expert-library', '/expert-chat', '/expert-comparison', '/expert-network', '/expert-scheduling', '/expert-debate', '/expert-knowledge-graph', '/expert-admin'],
+    matchPrefixes: ['/expert-library', '/expert-chat', '/expert-comparison', '/expert-network', '/expert-scheduling', '/expert-debate', '/expert-knowledge-graph', '/expert-admin', '/mental-models'],
+    children: [
+      { to: '/expert-library', label: '专家库', icon: '👥' },
+      { to: '/mental-models', label: '心智模型目录', icon: '🧠' },
+      { to: '/expert-debate', label: '多专家辩论', icon: '⚔️' },
+      { to: '/expert-comparison', label: '专家对比', icon: '🔍' },
+      { to: '/expert-network', label: '专家网络', icon: '🕸️' },
+      { to: '/expert-scheduling', label: '专家调度', icon: '📅' },
+    ],
   },
   {
     to: '/content-library',
