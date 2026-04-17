@@ -13,23 +13,8 @@ import {
 } from '../services/expertService';
 import { expertLibraryApi } from '../api/client';
 import type { Expert } from '../types';
+import { EXPERT_DOMAINS as DOMAINS, findDomainByCode } from '../config/expertDomains';
 import './ExpertLibrary.css';
-
-const DOMAINS = [
-  { code: 'S', name: '特级专家', color: '#f59e0b', icon: '⭐' },
-  { code: 'E01', name: '宏观经济', color: '#6366f1', icon: '📊' },
-  { code: 'E02', name: '金融科技', color: '#8b5cf6', icon: '💰' },
-  { code: 'E03', name: '新能源', color: '#22c55e', icon: '⚡' },
-  { code: 'E04', name: '医疗健康', color: '#ef4444', icon: '🏥' },
-  { code: 'E05', name: '消费零售', color: '#ec4899', icon: '🛍️' },
-  { code: 'E06', name: '半导体', color: '#14b8a6', icon: '🔷' },
-  { code: 'E07', name: '人工智能', color: '#3b82f6', icon: '🤖' },
-  { code: 'E08', name: '房地产', color: '#f97316', icon: '🏢' },
-  { code: 'E09', name: '文化传媒', color: '#a855f7', icon: '🎬' },
-  { code: 'E10', name: '先进制造', color: '#64748b', icon: '🏭' },
-  { code: 'E11', name: 'ESG可持续', color: '#10b981', icon: '🌱' },
-  { code: 'E12', name: '跨境出海', color: '#0ea5e9', icon: '🚢' },
-];
 
 export function ExpertLibrary() {
   const navigate = useNavigate();
@@ -127,9 +112,7 @@ export function ExpertLibrary() {
     return level === 'senior' ? '#f59e0b' : '#6366f1';
   };
 
-  const getDomainByCode = (code: string) => {
-    return DOMAINS.find((d) => d.code === code) || DOMAINS[0];
-  };
+  const getDomainByCode = findDomainByCode;
 
   const getAngleLabel = (angle: string) => {
     const labels: Record<string, string> = {
