@@ -75,6 +75,8 @@ export function LGReviewsTab() {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [submittingRevision, setSubmittingRevision] = useState(false);
+  const [revisionSubmitted, setRevisionSubmitted] = useState(false);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
   const [showDocEditor, setShowDocEditor] = useState(false);
   const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
   const [streamingPulse, setStreamingPulse] = useState(false);
@@ -237,31 +239,50 @@ export function LGReviewsTab() {
   });
 
   // 提交批量修订请求（通过 onResume(false, feedback) 触发下一轮评审）
+  // 立即关闭 Modal，后台执行，用进度横幅替代等待
   const submitBatchRevision = async () => {
     if (acceptedItems.length === 0) return;
     setSubmittingRevision(true);
-    try {
-      // 自动生成修订指令文本
-      const instructions = [
-        `# 修订指令（共 ${acceptedItems.length} 条已接受问题）`,
-        '',
-        revisionFeedback.trim() || '（无额外说明）',
-        '',
-        '## 已接受的修改建议',
-        ...acceptedItems.map((item, i) => {
-          const lines = [`${i + 1}. [第 ${item.round} 轮 · ${item.severity}] ${item.question}`];
-          if (item.suggestion) lines.push(`   建议：${item.suggestion}`);
-          return lines.join('\n');
-        }),
-      ].join('\n');
+    setRevisionError(null);
 
+    const instructions = [
+      `# 修订指令（共 ${acceptedItems.length} 条已接受问题）`,
+      '',
+      revisionFeedback.trim() || '（无额外说明）',
+      '',
+      '## 已接受的修改建议',
+      ...acceptedItems.map((item, i) => {
+        const lines = [`${i + 1}. [第 ${item.round} 轮 · ${item.severity}] ${item.question}`];
+        if (item.suggestion) lines.push(`   建议：${item.suggestion}`);
+        return lines.join('\n');
+      }),
+    ].join('\n');
+
+    // 立即关闭 Modal + 显示进度横幅
+    setShowRevisionModal(false);
+    setRevisionFeedback('');
+    setRevisionSubmitted(true);
+    setSubmittingRevision(false);
+
+    // 后台执行 resume（不阻塞 UI）
+    try {
       await onResume(false, instructions);
-      setShowRevisionModal(false);
-      setRevisionFeedback('');
+      // resume 完成 → SSE/polling 会自动更新 detail
+    } catch (err: any) {
+      setRevisionError(err.message || '修订请求失败');
     } finally {
-      setSubmittingRevision(false);
+      // 不在这里 setRevisionSubmitted(false)，等 detail.status 变化时自动消除
     }
   };
+
+  // 当 detail 状态变化且不再是 reviewing 时，自动清除修订进度横幅
+  useEffect(() => {
+    if (revisionSubmitted && detail?.status && detail.status !== 'reviewing') {
+      // 留一个短延迟让用户看到最终状态
+      const t = setTimeout(() => setRevisionSubmitted(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [revisionSubmitted, detail?.status]);
 
   // 将 LGAnnotation 转为 InlineAnnotationArea 格式
   const annotationItems = annotations.map(a => ({
@@ -495,6 +516,89 @@ export function LGReviewsTab() {
               100% { transform: scale(1); opacity: 1; }
             }
           `}</style>
+        </div>
+      )}
+
+      {/* 修订进度横幅 — 提交修订后持续显示直到状态变化 */}
+      {revisionSubmitted && (
+        <div
+          className="info-card full-width"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '14px 20px',
+            marginBottom: '16px',
+            background: 'linear-gradient(90deg, hsla(45, 90%, 50%, 0.08), transparent)',
+            border: '1px solid hsla(45, 90%, 50%, 0.3)',
+          }}
+        >
+          {/* 旋转加载图标 */}
+          <div style={{ position: 'relative', width: '32px', height: '32px', flexShrink: 0 }}>
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: '32px',
+                color: '#f59e0b',
+                animation: 'spin 1.5s linear infinite',
+              }}
+            >
+              autorenew
+            </span>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>
+              修订进行中...
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              已提交 {acceptedItems.length} 条修改建议。Pipeline 正在执行：重写草稿 → 蓝军重评审。
+              当前进度 {currentProgress}%
+              {detail?.currentNode && <span> · 节点：{detail.currentNode}</span>}
+            </div>
+            {/* 进度条 */}
+            <div style={{ marginTop: '8px', height: '4px', background: 'hsla(45, 90%, 50%, 0.15)', borderRadius: '2px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: `${currentProgress}%`,
+                  height: '100%',
+                  background: '#f59e0b',
+                  borderRadius: '2px',
+                  transition: 'width 0.5s ease',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 修订错误提示 */}
+      {revisionError && (
+        <div
+          className="info-card full-width"
+          style={{
+            padding: '12px 16px',
+            marginBottom: '16px',
+            background: 'hsla(0, 72%, 51%, 0.08)',
+            border: '1px solid hsla(0, 72%, 51%, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#ef4444' }}>error</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#ef4444' }}>修订请求失败</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{revisionError}</div>
+          </div>
+          <button
+            type="button"
+            className="lg-btn lg-btn-secondary"
+            style={{ fontSize: '11px', padding: '4px 10px' }}
+            onClick={() => setRevisionError(null)}
+          >
+            关闭
+          </button>
         </div>
       )}
 
