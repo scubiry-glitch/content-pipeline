@@ -77,7 +77,7 @@ export function LGReviewsTab() {
   const [submittingRevision, setSubmittingRevision] = useState(false);
   const [revisionSubmitted, setRevisionSubmitted] = useState(false);
   const [revisionError, setRevisionError] = useState<string | null>(null);
-  const [showDocEditor, setShowDocEditor] = useState(false);
+  const [showDocEditor, setShowDocEditor] = useState(true);
   const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
   const [streamingPulse, setStreamingPulse] = useState(false);
   const [reviewView, setReviewView] = useState<'parallel' | 'sequential'>('parallel');
@@ -357,39 +357,53 @@ export function LGReviewsTab() {
     }
 
     // 兜底：从 blueTeamRounds questions 中提取关键短语在 draft 中搜索
+    const usedPositions = new Set<number>();
+
     rounds.forEach((round: any) => {
       (round.questions || []).forEach((q: any, j: number) => {
         const id = `syn-r${round.round}-q${j}`;
         const color = colorMap[q.severity] || 'blue';
+        if (items.some(it => it.id === id)) return;
 
-        // 策略 1：用 suggestion 搜索（建议通常引用了原文片段）
-        if (q.suggestion) {
-          const sugTerms = q.suggestion.replace(/[。？！，、；：""''【】（）建议：]/g, '').split(/[\s,，]+/).filter((w: string) => w.length >= 4);
-          for (const term of sugTerms.slice(0, 3)) {
-            const idx = draft.indexOf(term);
-            if (idx >= 0) {
-              const start = Math.max(0, idx - 10);
-              const text = draft.slice(start, start + Math.min(term.length + 40, 80)).trim();
-              if (text && !items.some(it => it.text === text)) {
-                items.push({ id, text, color });
-                break;
-              }
-            }
+        // 收集候选搜索词：从 question 和 suggestion 中提取 ≥2 字符的中文词组
+        const candidates: string[] = [];
+        const extractTerms = (text: string) => {
+          if (!text) return;
+          // 提取引号内容（通常是原文引用）
+          const quoted = text.match(/["""](.*?)["""]/g);
+          if (quoted) {
+            quoted.forEach(q => candidates.push(q.replace(/["""]/g, '').trim()));
           }
-        }
+          // 提取 ≥3 字符连续中文
+          const zhPhrases = text.match(/[\u4e00-\u9fff]{3,15}/g);
+          if (zhPhrases) candidates.push(...zhPhrases);
+          // 提取英文专有名词 / 数字
+          const enTerms = text.match(/[A-Z][a-zA-Z]{2,}|[a-zA-Z]{4,}|\d+[%％万亿]+/g);
+          if (enTerms) candidates.push(...enTerms);
+        };
+        extractTerms(q.question);
+        extractTerms(q.suggestion);
 
-        // 策略 2：用 question 中的关键短语搜索
-        if (!items.some(it => it.id === id) && q.question) {
-          const qTerms = q.question.replace(/[。？！，、；：""''【】（）]/g, '').split(/[\s,，]+/).filter((w: string) => w.length >= 4);
-          for (const term of qTerms.slice(0, 5)) {
-            const idx = draft.indexOf(term);
-            if (idx >= 0) {
-              const start = Math.max(0, idx - 10);
-              const text = draft.slice(start, start + Math.min(term.length + 40, 80)).trim();
-              if (text && !items.some(it => it.text === text)) {
-                items.push({ id, text, color });
-                break;
-              }
+        // 去重并按长度降序（长词优先命中）
+        const uniqueCandidates = Array.from(new Set(candidates))
+          .filter(c => c.length >= 3)
+          .sort((a, b) => b.length - a.length);
+
+        for (const term of uniqueCandidates.slice(0, 8)) {
+          const idx = draft.indexOf(term);
+          if (idx >= 0 && !usedPositions.has(idx)) {
+            // 从匹配位置向两端扩展到完整句子（最多 60 字符）
+            let start = idx;
+            let end = idx + term.length;
+            // 向左扩展到句号/换行（最多 20 字符）
+            while (start > 0 && start > idx - 20 && !'\n。！？'.includes(draft[start - 1])) start--;
+            // 向右扩展到句号/换行（最多 40 字符）
+            while (end < draft.length && end < idx + term.length + 40 && !'\n'.includes(draft[end])) end++;
+            const text = draft.slice(start, end).trim();
+            if (text.length >= 6) {
+              items.push({ id, text, color });
+              usedPositions.add(idx);
+              break;
             }
           }
         }
@@ -1045,9 +1059,8 @@ export function LGReviewsTab() {
         </div>
       )}
 
-      {/* 主体：左侧评审轮次 + 右侧标注卡片 */}
-      <div style={{ display: 'grid', gridTemplateColumns: annotationItems.length > 0 ? '1fr 340px' : '1fr', gap: '24px', marginTop: '0' }}>
-        {/* 左：评审轮次 Timeline */}
+      {/* 主体：评审轮次 Timeline */}
+      <div style={{ marginTop: '0' }}>
         <div>
           {rounds.length === 0 && (
             <div className="info-card full-width" style={{ textAlign: 'center', padding: '48px 24px' }}>
@@ -1345,15 +1358,6 @@ export function LGReviewsTab() {
           ))}
         </div>
 
-        {/* 右：标注卡片侧边栏（仅当有标注时显示） */}
-        {annotationItems.length > 0 && (
-          <div style={{ position: 'sticky', top: '24px', alignSelf: 'start' }}>
-            <InlineAnnotationArea
-              annotations={annotationItems}
-              title="评审标注"
-            />
-          </div>
-        )}
       </div>
 
       {/* 专家配置弹窗 */}
@@ -1647,16 +1651,16 @@ export function LGReviewsTab() {
                   <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     评审标注 ({annotationItems.length})
                   </div>
-                  <div style={{ position: 'relative', minHeight: `${Math.max(400, annotationItems.length * 140)}px` }}>
+                  <div style={{ position: 'relative', minHeight: `${Math.max(400, annotationItems.length * 150)}px` }}>
                     {(() => {
-                      // 计算每个卡片的 Y 位置（有高亮坐标的用坐标，否则按序排列）
                       const cardHeight = 130;
-                      const gap = 12;
+                      const gap = 14;
+                      const hasAnyHighlightPos = Object.keys(highlightPositions).length > 0;
                       const occupiedRanges: Array<[number, number]> = [];
 
                       const getAvailableTop = (desiredTop: number): number => {
                         let top = Math.max(0, desiredTop);
-                        for (let attempt = 0; attempt < 20; attempt++) {
+                        for (let attempt = 0; attempt < 30; attempt++) {
                           const overlaps = occupiedRanges.some(
                             ([start, end]) => !(top + cardHeight + gap <= start || top >= end + gap)
                           );
@@ -1667,20 +1671,23 @@ export function LGReviewsTab() {
                         return top;
                       };
 
-                      // 按高亮位置排序，无位置的排后面
-                      const sorted = [...annotationItems].sort((a, b) => {
-                        const pa = highlightPositions[a.id];
-                        const pb = highlightPositions[b.id];
-                        if (pa != null && pb != null) return pa - pb;
-                        if (pa != null) return -1;
-                        if (pb != null) return 1;
-                        return 0;
-                      });
+                      // 如果没有任何高亮坐标，按序紧凑排列（不用 absolute 定位）
+                      const sorted = hasAnyHighlightPos
+                        ? [...annotationItems].sort((a, b) => {
+                            const pa = highlightPositions[a.id];
+                            const pb = highlightPositions[b.id];
+                            if (pa != null && pb != null) return pa - pb;
+                            if (pa != null) return -1;
+                            if (pb != null) return 1;
+                            return 0;
+                          })
+                        : annotationItems;
 
                       return sorted.map((ann, idx) => {
                         const hlPos = highlightPositions[ann.id];
+                        const useAbsolute = hasAnyHighlightPos;
                         const desiredTop = hlPos ?? idx * (cardHeight + gap);
-                        const top = getAvailableTop(desiredTop);
+                        const top = useAbsolute ? getAvailableTop(desiredTop) : 0;
                         const hasHighlight = hlPos != null;
                         const isHovered = hoveredAnnotation === ann.id;
                         const severityColors: Record<string, string> = {
@@ -1695,10 +1702,11 @@ export function LGReviewsTab() {
                             onMouseEnter={() => setHoveredAnnotation(ann.id)}
                             onMouseLeave={() => setHoveredAnnotation(null)}
                             style={{
-                              position: 'absolute',
-                              top: `${top}px`,
-                              left: '16px',
-                              right: '0',
+                              position: useAbsolute ? 'absolute' : 'relative',
+                              top: useAbsolute ? `${top}px` : undefined,
+                              left: useAbsolute ? '16px' : undefined,
+                              right: useAbsolute ? '0' : undefined,
+                              marginBottom: useAbsolute ? undefined : `${gap}px`,
                               padding: '10px 12px',
                               background: isHovered ? 'var(--surface)' : 'var(--surface)',
                               borderLeft: `3px solid ${borderColor}`,
