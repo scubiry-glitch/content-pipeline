@@ -159,11 +159,15 @@ export function LGTaskDetailLayout() {
   }, [detail?.status, threadId, loadData]);
 
   // 判断当前需要的人工交互
+  // status 是最权威的信号（后端已明确标记为人工等待），优先判断
+  // state.next 作为兜底（status 尚未更新但 next 节点已指向 human_*）
   const getPendingAction = useCallback((): 'outline_review' | 'final_approval' | null => {
+    if (detail?.status === 'outline_pending') return 'outline_review';
+    if (detail?.status === 'awaiting_approval') return 'final_approval';
     if (!state?.next || state.next.length === 0) return null;
     const nextNode = state.next[0];
-    if (detail?.status === 'outline_pending' || nextNode === 'human_outline') return 'outline_review';
-    if (detail?.status === 'awaiting_approval' || nextNode === 'human_approve') return 'final_approval';
+    if (nextNode === 'human_outline') return 'outline_review';
+    if (nextNode === 'human_approve') return 'final_approval';
     return null;
   }, [state, detail]);
 
