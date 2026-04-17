@@ -213,6 +213,23 @@ export interface RubricLevel {
   description: string;         // 客观可检验的准则
 }
 
+/** 结构化 rubric 评分 — LLM 输出可被 ExpertEngine 解析存入 metadata */
+export interface RubricScore {
+  dimension: string;           // 对应 EvaluationRubric.dimension
+  score: number;               // 1-5
+  rationale: string;           // 一句话评分依据
+}
+
+/**
+ * 心智模型应用记录 — 结构化 analysis 输出的骨架
+ * 让 LLM 明确说明"哪个结论用了哪个心智模型"
+ */
+export interface ModelApplication {
+  modelName: string;           // 对应 MentalModel.name
+  application: string;         // 如何应用到当前主题（具体推理过程）
+  conclusion: string;          // 由该模型得出的子结论
+}
+
 // ============================================================
 // Request / Response (调用接口)
 // ============================================================
@@ -249,6 +266,12 @@ export interface ExpertResponse {
     confidence: number;
     processing_time_ms: number;
     invoke_id: string;
+    /** 结构化 rubric 评分（仅 evaluation 任务且专家配置了 rubrics 时填充）*/
+    rubric_scores?: RubricScore[];
+    /** 心智模型应用记录（仅 analysis 任务且专家配置了 mentalModels 时填充）*/
+    model_applications?: ModelApplication[];
+    /** Phase 9: 是否执行了 agenticProtocol 的主题感知知识检索 */
+    agentic_research_performed?: boolean;
   };
 }
 
@@ -320,6 +343,8 @@ export interface VerdictResult {
   overall_score?: number;
   sections: OutputSection[];
   evidence_chain: string[];
+  /** 按 expert.output_schema.rubrics 维度的评分（仅当 rubrics 存在时）*/
+  rubric_scores?: RubricScore[];
 }
 
 // ============================================================
@@ -347,8 +372,10 @@ export interface KnowledgeSource {
 export interface ExpertFeedback {
   expert_id: string;
   invoke_id: string;
-  human_score?: number;        // 1-5
+  human_score?: number;        // 1-5 (overall)
   human_notes?: string;
+  /** Phase 6: 按 rubric 维度分别打分；key 为 dimension 名，value 为 1-5 */
+  rubric_scores?: Record<string, number>;
   actual_outcome?: {
     metric_name: string;
     predicted_value?: number;

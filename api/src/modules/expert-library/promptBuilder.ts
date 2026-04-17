@@ -1,11 +1,14 @@
 // Prompt Builder — 从 ExpertProfile 动态组装 system_prompt
 // 按有无深度字段自动切换简洁/丰富模式
 
-import type { ExpertProfile, ExpertPersona, ExpertMethod, ExpertEMM, InputAnalysis, ExpertRequestParams } from './types.js';
+import type { ExpertProfile, ExpertPersona, ExpertMethod, ExpertEMM, InputAnalysis, ExpertRequestParams, DecisionHeuristic } from './types.js';
 
 /**
  * 组装完整的 system prompt
  * 包含: 身份 + 决策DNA + 方法论 + EMM规则 + 知识上下文 + 输入分析 + 任务 + 输出格式 + 反模式 + 签名
+ *
+ * @param options.activeHeuristics 被 heuristicsMatcher 激活的高优先级启发式
+ *        非空时插入"本次任务必须应用"区块，并从常规 heuristics 列表中去重
  */
 export function buildSystemPrompt(
   expert: ExpertProfile,
@@ -14,12 +17,20 @@ export function buildSystemPrompt(
     inputAnalysis?: InputAnalysis;
     knowledgeContext?: string;
     params?: ExpertRequestParams;
+    activeHeuristics?: DecisionHeuristic[];
   }
 ): string {
   const sections: string[] = [];
 
-  // 1. Identity — 人格层
-  sections.push(buildPersonaSection(expert.name, expert.persona, expert.domain));
+  // 1. Identity — 人格层（接收 activeHeuristics 用于去重）
+  sections.push(
+    buildPersonaSection(expert.name, expert.persona, expert.domain, options?.activeHeuristics),
+  );
+
+  // 1b. Active Heuristics — 本次任务必须应用的启发式（最高优先级）
+  if (options?.activeHeuristics && options.activeHeuristics.length > 0) {
+    sections.push(buildActiveHeuristicsSection(options.activeHeuristics));
+  }
 
   // 2. Decision DNA — 决策基因（个性化增强）
   sections.push(buildDecisionDNASection(expert));
@@ -69,7 +80,12 @@ export function buildSystemPrompt(
 
 // ----- Section Builders -----
 
-function buildPersonaSection(name: string, persona: ExpertPersona, domains: string[]): string {
+function buildPersonaSection(
+  name: string,
+  persona: ExpertPersona,
+  domains: string[],
+  activeHeuristics?: DecisionHeuristic[],
+): string {
   const lines: string[] = [];
 
   lines.push(`## 身份`);
@@ -96,13 +112,17 @@ function buildPersonaSection(name: string, persona: ExpertPersona, domains: stri
     lines.push(`决策风格：${c.decisionStyle}`);
     lines.push(`风险态度：${c.riskAttitude}`);
     lines.push(`时间视野：${c.timeHorizon}`);
-    // 决策启发式
+    // 决策启发式（若有 activeHeuristics，此处仅展示未被激活的作为背景参考）
     if (c.heuristics && c.heuristics.length > 0) {
-      lines.push('');
-      lines.push('### 决策启发式');
-      c.heuristics.forEach(h => {
-        lines.push(`- 当${h.trigger}：${h.rule}${h.example ? `（如：${h.example}）` : ''}`);
-      });
+      const activeTriggers = new Set((activeHeuristics ?? []).map(h => h.trigger));
+      const backgroundHeuristics = c.heuristics.filter(h => !activeTriggers.has(h.trigger));
+      if (backgroundHeuristics.length > 0) {
+        lines.push('');
+        lines.push(activeHeuristics && activeHeuristics.length > 0 ? '### 决策启发式（背景参考）' : '### 决策启发式');
+        backgroundHeuristics.forEach(h => {
+          lines.push(`- 当${h.trigger}：${h.rule}${h.example ? `（如：${h.example}）` : ''}`);
+        });
+      }
     }
   }
 
@@ -174,6 +194,28 @@ function buildPersonaSection(name: string, persona: ExpertPersona, domains: stri
     });
   }
 
+  return lines.join('\n');
+}
+
+/**
+ * 构造高优先级启发式 section（Phase 3）
+ * 被 heuristicsMatcher 激活的 heuristics 会放在这个最显著的位置，
+ * 告诉 LLM：这几条是本次任务必须严格应用的规则，其他 heuristics 仅作背景参考。
+ */
+function buildActiveHeuristicsSection(activeHeuristics: DecisionHeuristic[]): string {
+  const lines: string[] = [];
+  lines.push('## 🎯 本次任务必须严格应用的决策启发式');
+  lines.push('系统已根据输入内容匹配出以下与本任务最相关的启发式，请在推理和结论中显式应用：');
+  activeHeuristics.forEach((h, i) => {
+    lines.push('');
+    lines.push(`**${i + 1}. 触发：${h.trigger}**`);
+    lines.push(`   规则：${h.rule}`);
+    if (h.example) {
+      lines.push(`   案例：${h.example}`);
+    }
+  });
+  lines.push('');
+  lines.push('请在输出中明确体现这些启发式的应用——至少一条。');
   return lines.join('\n');
 }
 
@@ -305,6 +347,26 @@ function buildTaskPersonalization(expert: ExpertProfile, taskType?: string): str
     }
     if (persona.cognition?.riskAttitude) {
       lines.push(`你的风险态度：${persona.cognition.riskAttitude}`);
+    }
+    // Phase 5: 要求 LLM 按心智模型产出结构化骨架
+    const mentalModels = persona.cognition?.mentalModels;
+    if (mentalModels && mentalModels.length > 0) {
+      lines.push('');
+      lines.push('### 结构化输出要求（心智模型骨架）');
+      lines.push('你必须从以下心智模型中挑选 2-3 个最适用的，分别应用于本主题：');
+      mentalModels.slice(0, 5).forEach((m, i) => {
+        lines.push(`${i + 1}. **${m.name}** — ${m.summary}`);
+      });
+      lines.push('');
+      lines.push('完成文字分析之后，**额外输出一段 ```json ... ``` 代码块**，格式：');
+      lines.push('```json');
+      lines.push('{');
+      lines.push('  "model_applications": [');
+      lines.push('    { "modelName": "<所选模型名>", "application": "<具体如何应用到本主题的推理过程>", "conclusion": "<由该模型得出的子结论>" }');
+      lines.push('  ]');
+      lines.push('}');
+      lines.push('```');
+      lines.push('每个 modelName 必须严格从上述清单中选择，不得生造。');
     }
   } else if (taskType === 'evaluation') {
     // 评估任务 — 强调评审镜头和杀手锏

@@ -1,0 +1,1670 @@
+{
+  "generatedAt": "2026-04-13T16:53:23.602Z",
+  "totalModels": 75,
+  "sharedCount": 0,
+  "expertCount": 26,
+  "experts": [
+    {
+      "expert_id": "S-03",
+      "name": "马斯克",
+      "domain": [
+        "投资分析",
+        "科技战略",
+        "新能源",
+        "航天",
+        "制造业"
+      ]
+    },
+    {
+      "expert_id": "XHS-01",
+      "name": "小红书爆款操盘手",
+      "domain": [
+        "小红书运营",
+        "内容营销",
+        "社交媒体",
+        "用户增长"
+      ]
+    },
+    {
+      "expert_id": "E08-09",
+      "name": "魏行空",
+      "domain": [
+        "资产配置",
+        "不动产金融",
+        "房产估值与算法",
+        "私募基金结构",
+        "资金监管与合规",
+        "募资与渠道",
+        "工程化思维",
+        "清华五道口FMBA"
+      ]
+    },
+    {
+      "expert_id": "E04-05",
+      "name": "一濛",
+      "domain": [
+        "居住服务",
+        "住房租赁",
+        "惠居美租",
+        "长租资管",
+        "UE与P&L",
+        "标准化交付",
+        "组织与战略PMO"
+      ]
+    },
+    {
+      "expert_id": "S-01",
+      "name": "张一鸣",
+      "domain": [
+        "内容推荐算法",
+        "产品增长",
+        "组织效能",
+        "延迟满足"
+      ]
+    },
+    {
+      "expert_id": "S-02",
+      "name": "雷军",
+      "domain": [
+        "消费电子",
+        "性价比策略",
+        "口碑营销",
+        "供应链"
+      ]
+    },
+    {
+      "expert_id": "S-04",
+      "name": "王兴",
+      "domain": [
+        "本地生活",
+        "供给侧改革",
+        "无边界扩张",
+        "平台战略"
+      ]
+    },
+    {
+      "expert_id": "S-05",
+      "name": "马斯克",
+      "domain": [
+        "颠覆性创新",
+        "硬科技",
+        "创业战略",
+        "第一性原理"
+      ]
+    },
+    {
+      "expert_id": "S-06",
+      "name": "任正非",
+      "domain": [
+        "技术自主",
+        "组织建设",
+        "全球化",
+        "战略定力"
+      ]
+    },
+    {
+      "expert_id": "S-07",
+      "name": "张勇",
+      "domain": [
+        "组织架构",
+        "商业模式创新",
+        "数字化转型",
+        "新零售"
+      ]
+    },
+    {
+      "expert_id": "S-08",
+      "name": "宿华",
+      "domain": [
+        "短视频",
+        "普惠科技",
+        "下沉市场",
+        "社区生态"
+      ]
+    },
+    {
+      "expert_id": "S-09",
+      "name": "王慧文",
+      "domain": [
+        "竞争策略",
+        "互联网产品",
+        "执行力",
+        "市场格局"
+      ]
+    },
+    {
+      "expert_id": "S-10",
+      "name": "陆奇",
+      "domain": [
+        "AI趋势",
+        "创业生态",
+        "技术转化",
+        "战略规划"
+      ]
+    },
+    {
+      "expert_id": "E07-10",
+      "name": "谷文栋",
+      "domain": [
+        "大模型",
+        "机器学习",
+        "AI工程化",
+        "智能体",
+        "产业落地"
+      ]
+    },
+    {
+      "expert_id": "E04-05",
+      "name": "一濛",
+      "domain": [
+        "居住服务",
+        "住房租赁",
+        "惠居美租",
+        "长租资管",
+        "UE与P&L",
+        "标准化交付",
+        "组织与战略PMO"
+      ]
+    },
+    {
+      "expert_id": "S-36",
+      "name": "乔布斯",
+      "domain": [
+        "产品设计",
+        "战略",
+        "用户体验",
+        "品牌"
+      ]
+    },
+    {
+      "expert_id": "S-37",
+      "name": "查理·芒格",
+      "domain": [
+        "投资分析",
+        "多学科思维",
+        "认知偏误",
+        "反演思维"
+      ]
+    },
+    {
+      "expert_id": "S-38",
+      "name": "塔勒布",
+      "domain": [
+        "风险管理",
+        "反脆弱",
+        "不确定性",
+        "概率论",
+        "哲学"
+      ]
+    },
+    {
+      "expert_id": "S-39",
+      "name": "费曼",
+      "domain": [
+        "科学思维",
+        "学习方法",
+        "教学方法",
+        "问题解决",
+        "物理学"
+      ]
+    },
+    {
+      "expert_id": "S-40",
+      "name": "Andrej Karpathy",
+      "domain": [
+        "AI/深度学习",
+        "LLM 评估",
+        "软件工程",
+        "技术教育"
+      ]
+    },
+    {
+      "expert_id": "S-41",
+      "name": "Paul Graham",
+      "domain": [
+        "创业策略",
+        "写作方法",
+        "产品思维",
+        "人生哲学"
+      ]
+    },
+    {
+      "expert_id": "S-32",
+      "name": "巴菲特",
+      "domain": [
+        "价值投资",
+        "企业分析",
+        "风险管理",
+        "长期持有"
+      ]
+    },
+    {
+      "expert_id": "S-31",
+      "name": "贝索斯",
+      "domain": [
+        "电商战略",
+        "云计算",
+        "飞轮效应",
+        "长期主义"
+      ]
+    },
+    {
+      "expert_id": "S-24",
+      "name": "张小龙",
+      "domain": [
+        "产品设计",
+        "用户体验",
+        "社交产品",
+        "极简主义"
+      ]
+    },
+    {
+      "expert_id": "S-34",
+      "name": "黄峥",
+      "domain": [
+        "电商下沉",
+        "社交电商",
+        "性价比",
+        "供应链革命"
+      ]
+    },
+    {
+      "expert_id": "S-30",
+      "name": "李开复",
+      "domain": [
+        "AI投资",
+        "创业教育",
+        "技术趋势",
+        "全球视野"
+      ]
+    }
+  ],
+  "models": [
+    {
+      "name": "渐近极限思维",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-03",
+          "expert_name": "马斯克",
+          "summary": "任何物理产品都有一个由材料成本决定的理论价格下限，差值就是优化空间",
+          "evidence": [
+            "Tesla: 将电池包成本从 $250/kWh 推向材料极限 $60/kWh",
+            "SpaceX: 火箭材料成本仅占售价 2%，证明 97% 是制造低效",
+            "Starlink: 将卫星终端从 $3000 推向材料极限 $250"
+          ],
+          "applicationContext": "评估任何硬件产品/制造业的成本优化潜力",
+          "failureCondition": "纯软件/服务行业；成本瓶颈在监管而非物理"
+        }
+      ]
+    },
+    {
+      "name": "算法五步法",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-03",
+          "expert_name": "马斯克",
+          "summary": "质疑需求→删除多余→优化→加速→自动化，严格按顺序执行",
+          "evidence": [
+            "Tesla Fremont: 拆除过度自动化产线后产能反升 20%",
+            "SpaceX Raptor: 删减零件数从 1000+ 降至 ~100",
+            "Boring Company: 先删除传统盾构机 80% 不必要功能"
+          ],
+          "applicationContext": "评审任何流程优化/产品简化方案",
+          "failureCondition": "安全关键系统不可随意删除冗余（航空法规件）"
+        }
+      ]
+    },
+    {
+      "name": "跨公司资源杠杆",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-03",
+          "expert_name": "马斯克",
+          "summary": "在同一控制人的多公司间共享技术、供应链和人才，创造 1+1>3 效果",
+          "evidence": [
+            "Tesla 电池技术 → Megapack 储能 → Powerwall 家用",
+            "SpaceX 不锈钢焊接工艺 → Boring Company 隧道段",
+            "Tesla Dojo 芯片 → xAI 训练基础设施"
+          ],
+          "applicationContext": "评估多元化集团/平台型公司的协同价值",
+          "failureCondition": "公司间缺乏技术关联性；纯财务协同而非技术协同"
+        }
+      ]
+    },
+    {
+      "name": "垂直整合即物理优化",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-03",
+          "expert_name": "马斯克",
+          "summary": "外部供应商在利润动机下不会为你做到物理极限，必须自研关键环节",
+          "evidence": [
+            "Tesla 4680 电池: 放弃松下独家供应，自建电池线",
+            "SpaceX Merlin/Raptor: 自研发动机而非采购",
+            "Tesla FSD 芯片: 放弃 Nvidia 自研 HW3/HW4"
+          ],
+          "applicationContext": "判断企业是否应该自研关键零部件/技术",
+          "failureCondition": "非核心环节；市场标准品已足够好；研发资源不足"
+        }
+      ]
+    },
+    {
+      "name": "快速迭代 > 完美设计",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-03",
+          "expert_name": "马斯克",
+          "summary": "硬件也要用软件迭代思维——造出来炸掉比在 PPT 上优化一年更快",
+          "evidence": [
+            "SpaceX Starship: 多次 RUD（快速非计划拆解）后快速改进",
+            "Tesla 生产线: 边生产边改设计，周更新频率",
+            "Neuralink: 多代原型快速测试，不追求首版完美"
+          ],
+          "applicationContext": "评估研发策略——是否在过度设计阶段停留太久",
+          "failureCondition": "载人安全场景首飞；监管要求首次合规的领域"
+        }
+      ]
+    },
+    {
+      "name": "概率思维与期望值最大化",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-01",
+          "expert_name": "张一鸣",
+          "summary": "每个决策看作赌注，最大化长期期望值而非单次收益",
+          "evidence": [
+            "字节跳动: 同时孵化多个产品（头条、抖音、飞书），按数据表现分配资源",
+            "投资策略: 早期投入多条赛道，数据验证后才 all-in"
+          ],
+          "applicationContext": "评估多产品/多赛道布局的资源分配策略",
+          "failureCondition": "需要快速聚焦的生死存亡时刻；资源极度有限无法分散"
+        }
+      ]
+    },
+    {
+      "name": "增长飞轮",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-01",
+          "expert_name": "张一鸣",
+          "summary": "找到一个核心变量改善会带动全链路指标提升的正反馈循环",
+          "evidence": [
+            "今日头条: 更多用户→更多数据→更好推荐→更长停留→更多用户",
+            "抖音: 创作者多→内容多→用户留存高→流量多→创作者多"
+          ],
+          "applicationContext": "评估任何平台型或内容型产品的增长可持续性",
+          "failureCondition": "飞轮依赖补贴而非自然行为；单边市场无网络效应"
+        }
+      ]
+    },
+    {
+      "name": "延迟满足组织论",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-01",
+          "expert_name": "张一鸣",
+          "summary": "组织和个人一样，能延迟满足的组织做出更好的长期决策",
+          "evidence": [
+            "字节跳动不上市策略: 拒绝短期资本市场压力",
+            "OKR 文化: 不用 KPI 逼迫短期数字，用 OKR 引导方向"
+          ],
+          "applicationContext": "评估公司战略是否在为短期指标牺牲长期价值",
+          "failureCondition": "现金流不支持延迟满足；竞争窗口即将关闭"
+        }
+      ]
+    },
+    {
+      "name": "极致性价比飞轮",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-02",
+          "expert_name": "雷军",
+          "summary": "用低毛利+高效率+大销量形成正循环，让用户觉得\"不买就亏了\"",
+          "evidence": [
+            "小米手机: 硬件净利润率不超5%但靠互联网服务和配件生态盈利",
+            "红米Note系列: 千元机市场连续10年销冠"
+          ],
+          "applicationContext": "评估消费电子产品定价策略和规模化路径",
+          "failureCondition": "品类毛利天然很低无法做差异化；或品类用户不在意价格（奢侈品）"
+        }
+      ]
+    },
+    {
+      "name": "口碑裂变公式",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-02",
+          "expert_name": "雷军",
+          "summary": "感动人心的产品会自传播——好到用户忍不住推荐，省掉大部分营销费用",
+          "evidence": [
+            "小米1代: 零广告预算靠论坛口碑卖出790万台",
+            "小米SU7: 发布会后自发传播量超竞品10倍"
+          ],
+          "applicationContext": "判断产品是否具备自传播基因",
+          "failureCondition": "品类没有社交展示属性（如工业品）；用户群体不活跃于社交媒体"
+        }
+      ]
+    },
+    {
+      "name": "生态链投资模式",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-02",
+          "expert_name": "雷军",
+          "summary": "投资+赋能+品牌背书——用小米品牌和供应链帮助100家生态链公司做\"类小米\"产品",
+          "evidence": [
+            "小米生态链: 紫米/华米/石头科技等独角兽",
+            "米家IoT: 全球最大消费级IoT平台"
+          ],
+          "applicationContext": "评估平台型企业的生态扩张策略",
+          "failureCondition": "核心品牌力不足以赋能子品牌；品类间缺乏协同"
+        }
+      ]
+    },
+    {
+      "name": "无边界扩张",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-04",
+          "expert_name": "王兴",
+          "summary": "公司不应该有固定边界——只要核心能力能迁移，就值得进入新领域",
+          "evidence": [
+            "美团从团购→外卖→酒旅→打车→买菜→充电宝",
+            "对标Amazon无边界扩张哲学"
+          ],
+          "applicationContext": "评估平台型企业的品类扩张策略",
+          "failureCondition": "核心能力不可迁移；新领域有强网络效应壁垒"
+        }
+      ]
+    },
+    {
+      "name": "供给侧密度效应",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-04",
+          "expert_name": "王兴",
+          "summary": "在本地生活领域，谁先在区域内建立高密度供给网络，谁就有不可逆的壁垒",
+          "evidence": [
+            "美团骑手密度是竞品2-3倍",
+            "到店商户覆盖率决定用户习惯"
+          ],
+          "applicationContext": "评估O2O/本地生活业务的竞争优势",
+          "failureCondition": "纯线上业务；供给不受地理限制"
+        }
+      ]
+    },
+    {
+      "name": "后发先至",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-04",
+          "expert_name": "王兴",
+          "summary": "不做第一个进入者，等先行者验证需求后用更强执行力后来居上",
+          "evidence": [
+            "美团不是第一个做团购/外卖/打车的，但都后来居上",
+            "千团大战中最后胜出"
+          ],
+          "applicationContext": "评估市场进入时机和竞争策略",
+          "failureCondition": "强网络效应的先发优势不可逆转（如社交网络）"
+        }
+      ]
+    },
+    {
+      "name": "备胎哲学",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-06",
+          "expert_name": "任正非",
+          "summary": "任何核心依赖都必须有备份方案，即使备份永远用不上，也要保持可用状态",
+          "evidence": [
+            "鸿蒙OS: 在Android可用时就开始研发备用系统",
+            "麒麟芯片: 被制裁前已储备多年自研芯片"
+          ],
+          "applicationContext": "评估企业核心技术/供应链的脆弱性",
+          "failureCondition": "市场节奏极快的消费品领域，备胎成本过高"
+        }
+      ]
+    },
+    {
+      "name": "压强原则",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-06",
+          "expert_name": "任正非",
+          "summary": "在关键突破点集中所有资源，像针尖一样穿透——不在非战略方向消耗兵力",
+          "evidence": [
+            "5G研发: 集中5000+数学家/物理学家攻关",
+            "海思芯片: 持续投入十余年不计成本"
+          ],
+          "applicationContext": "评估研发投入策略和资源配置优先级",
+          "failureCondition": "资源本身不足以支撑集中投入；赛道选错了"
+        }
+      ]
+    },
+    {
+      "name": "熵减与组织活力",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-06",
+          "expert_name": "任正非",
+          "summary": "企业天然走向官僚化(熵增)，必须用轮岗/淘汰/自我批判主动制造负熵",
+          "evidence": [
+            "华为: 高管强制轮岗制度",
+            "末位淘汰+自我批判大会文化"
+          ],
+          "applicationContext": "评估大型组织的活力和自我更新能力",
+          "failureCondition": "创业早期小团队不需要复杂的反熵机制"
+        }
+      ]
+    },
+    {
+      "name": "组织即战略",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-07",
+          "expert_name": "张勇",
+          "summary": "组织架构决定信息流动方式，信息流动决定决策质量——改组织就是改战略",
+          "evidence": [
+            "发明双11: 不是营销创意而是组织动员能力的展现",
+            "阿里\"大中台小前台\": 通过组织变革释放业务创新"
+          ],
+          "applicationContext": "评估企业组织架构是否匹配战略目标",
+          "failureCondition": "早期创业公司组织简单，不需要复杂架构"
+        }
+      ]
+    },
+    {
+      "name": "生态正和博弈",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-07",
+          "expert_name": "张勇",
+          "summary": "平台价值=激活的外部价值总和——让所有参与者赚钱，平台自然赚钱",
+          "evidence": [
+            "天猫商家生态",
+            "菜鸟物流联盟"
+          ],
+          "applicationContext": "评估平台型业务的健康度",
+          "failureCondition": "平台从生态中抽血过多（如过高抽佣）"
+        }
+      ]
+    },
+    {
+      "name": "普惠分发",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-08",
+          "expert_name": "宿华",
+          "summary": "算法不应该只服务头部——让长尾创作者也能被看见，才是平台的真正壁垒",
+          "evidence": [
+            "快手: 故意压制头部流量集中度，让普通用户也有曝光",
+            "对比抖音: 快手的基尼系数更低"
+          ],
+          "applicationContext": "评估内容平台的分发策略和生态健康度",
+          "failureCondition": "变现压力下不得不向头部倾斜"
+        }
+      ]
+    },
+    {
+      "name": "技术服务人文",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-08",
+          "expert_name": "宿华",
+          "summary": "技术不是目的而是手段——好的技术应该让被忽视的人群获得连接和表达的机会",
+          "evidence": [
+            "快手: 三四线城市和农村用户占比远超竞品",
+            "直播电商: 为农产品找到销路"
+          ],
+          "applicationContext": "评估技术产品的社会价值",
+          "failureCondition": "商业化压力与普惠目标冲突"
+        }
+      ]
+    },
+    {
+      "name": "AB面思维",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-09",
+          "expert_name": "王慧文",
+          "summary": "一个业务要同时看A面(用户价值)和B面(商业价值)，只有A没有B是慈善，只有B没有A是骗局",
+          "evidence": [
+            "美团外卖: A面=用户便利 B面=商户数字化和抽佣",
+            "美团到店: A面=折扣体验 B面=商户获客"
+          ],
+          "applicationContext": "评估商业模式健康度",
+          "failureCondition": "纯公益项目或纯金融产品，AB面不对称"
+        }
+      ]
+    },
+    {
+      "name": "执行力即战略",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-09",
+          "expert_name": "王慧文",
+          "summary": "同一个方向上，执行力差10倍就是战略差异——互联网没有秘密，只有速度",
+          "evidence": [
+            "千团大战中美团靠执行力胜出",
+            "外卖战争中地推效率决定胜负"
+          ],
+          "applicationContext": "评估团队执行效率和竞争策略",
+          "failureCondition": "技术驱动型行业中，执行力无法弥补技术差距"
+        }
+      ]
+    },
+    {
+      "name": "技术浪潮冲浪",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-10",
+          "expert_name": "陆奇",
+          "summary": "每20年一次大技术浪潮（PC→互联网→移动→AI），在拐点前布局就能乘浪",
+          "evidence": [
+            "微软转型: 加入时PC→互联网拐点",
+            "YC中国: 判断AI创业拐点",
+            "Miracleplus: 押注AI+硬科技"
+          ],
+          "applicationContext": "判断技术趋势拐点和投资/创业时机",
+          "failureCondition": "技术浪潮判断错误或时机太早"
+        }
+      ]
+    },
+    {
+      "name": "技术商业化阶梯",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-10",
+          "expert_name": "陆奇",
+          "summary": "技术→产品→商业化有严格顺序，跳步必死——先证明技术可行再谈商业模式",
+          "evidence": [
+            "百度搜索: 技术先行再商业化",
+            "微软Azure: 技术积累10年后爆发"
+          ],
+          "applicationContext": "评估技术型创业公司的阶段匹配度",
+          "failureCondition": "纯模式创新不需要技术阶梯"
+        }
+      ]
+    },
+    {
+      "name": "AI工程木桶效应",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "E07-10",
+          "expert_name": "谷文栋",
+          "summary": "大模型落地不是比谁模型好，而是比谁短板最少——数据/推理/评测/安全任一环节拖后腿就完蛋",
+          "evidence": [
+            "RAG系统: 检索质量差则模型再强也答错",
+            "部署延迟: 模型准确但响应3秒用户就流失"
+          ],
+          "applicationContext": "评估AI系统的端到端可行性",
+          "failureCondition": "纯研究场景不需要工程化考量"
+        }
+      ]
+    },
+    {
+      "name": "评测驱动开发",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "E07-10",
+          "expert_name": "谷文栋",
+          "summary": "没有评测就没有改进——先建评测体系再做优化，否则都是盲人摸象",
+          "evidence": [
+            "LLM评测: 不同benchmark排名差异巨大",
+            "A/B测试在AI产品中的关键作用"
+          ],
+          "applicationContext": "评估AI产品的质量保障体系",
+          "failureCondition": "探索性研究阶段评测标准尚不明确"
+        }
+      ]
+    },
+    {
+      "name": "端到端控制",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-36",
+          "expert_name": "乔布斯",
+          "summary": "软硬件一体化整合，控制从芯片到用户界面的整条链路，才能交付极致体验",
+          "evidence": [
+            "Mac: 自研硬件+操作系统，拒绝授权克隆机，保证体验一致性",
+            "iPhone: 自研芯片+iOS+App Store 生态，从触控到应用全链路控制",
+            "Apple Store: 拒绝第三方零售，自建直营店控制用户接触品牌的每一个瞬间"
+          ],
+          "applicationContext": "评估产品是否应该自研核心环节、是否需要垂直整合以保障体验",
+          "failureCondition": "市场处于早期需要快速扩张份额时；开放生态比封闭更有网络效应时"
+        }
+      ]
+    },
+    {
+      "name": "聚焦即说不",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-36",
+          "expert_name": "乔布斯",
+          "summary": "Focus is about saying no——真正的聚焦不是选择做什么，而是对一千件事说不",
+          "evidence": [
+            "1997年回归Apple：将产品线从350+砍到4个（消费者/专业 x 台式/笔记本）",
+            "砍掉 Newton PDA——即使团队投入巨大，产品不够好就必须砍掉",
+            "iPod/iPhone 每代只出1-2个型号，拒绝SKU泛滥"
+          ],
+          "applicationContext": "产品线审查、资源分配决策、判断是否应该进入新市场",
+          "failureCondition": "平台型业务需要多品类覆盖时；多元化是风险对冲的必要手段时"
+        }
+      ]
+    },
+    {
+      "name": "技术与人文十字路口",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-36",
+          "expert_name": "乔布斯",
+          "summary": "最伟大的产品诞生在科技和人文学科的交叉点，技术只是手段，人文才是灵魂",
+          "evidence": [
+            "Mac 开创桌面排版——将书法美学引入计算机字体",
+            "iTunes/iPod: 理解音乐文化，而非仅仅做播放器硬件",
+            "iPhone 发布会: 不讲参数，讲用户故事和情感体验"
+          ],
+          "applicationContext": "评估产品是否有灵魂——是否只堆技术参数而忽略人文关怀",
+          "failureCondition": "纯基础设施/B2B 产品用户不直接感知体验层时"
+        }
+      ]
+    },
+    {
+      "name": "简洁即终极复杂",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-36",
+          "expert_name": "乔布斯",
+          "summary": "Simplicity is the ultimate sophistication——简洁不是简单，而是穿越复杂后的极致提炼",
+          "evidence": [
+            "iPod Click Wheel: 将复杂的音乐库导航压缩为一个转盘操作",
+            "iPhone: 正面只有一个Home键，消灭了实体键盘和触控笔",
+            "iMac: 一体式设计，开箱插电即用，消灭了主机+显示器+线缆的复杂"
+          ],
+          "applicationContext": "产品设计评审——功能是否做到了最大限度的简化",
+          "failureCondition": "专业工具需要暴露复杂度给高级用户时（如专业音频/视频编辑）"
+        }
+      ]
+    },
+    {
+      "name": "现实扭曲力场",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-36",
+          "expert_name": "乔布斯",
+          "summary": "设定看似不可能的目标和截止日期，通过极致信念感染团队突破认知上限",
+          "evidence": [
+            "初代 Mac 团队：在所有人认为不可能的时间内交付了图形化界面电脑",
+            "iPhone 开发: 在18个月内从零开始做出革命性手机，工程师都认为不可能",
+            "Apple Store: 零售业专家全部看衰，结果成为坪效最高的零售店"
+          ],
+          "applicationContext": "评估领导力——团队是否被设定了足够有野心的目标",
+          "failureCondition": "团队已经精疲力竭/高度疲劳时继续施压会造成崩溃"
+        }
+      ]
+    },
+    {
+      "name": "反演思维",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-37",
+          "expert_name": "查理·芒格",
+          "summary": "\"Tell me where I'm going to die, so I'll never go there\"——先研究失败路径，然后系统性地避开它们",
+          "evidence": [
+            "投资筛选: 不是先找好公司，而是先排除所有会失败的公司，剩下的才值得研究",
+            "人生决策: \"想要过好日子，先想清楚怎样会过得很惨，然后避免那些行为\"",
+            "Berkshire 资本配置: 列出所有可能导致永久性资本损失的情形，逐一设防"
+          ],
+          "applicationContext": "任何决策场景——先穷尽失败模式，再评估成功概率",
+          "failureCondition": "需要开拓性创新时，纯防御性反演可能导致过度保守而错失机会"
+        }
+      ]
+    },
+    {
+      "name": "多学科格栅",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-37",
+          "expert_name": "查理·芒格",
+          "summary": "用100+个来自物理、生物、心理、经济等不同学科的心智模型构建思维格栅，复杂问题用多模型交叉验证",
+          "evidence": [
+            "投资分析: 用物理学（临界质量）解释品牌网络效应的引爆点",
+            "商业评估: 用生物学（生态位）分析企业竞争优势的可持续性",
+            "风险判断: 用心理学（社会认同偏误）解释市场泡沫的形成机制"
+          ],
+          "applicationContext": "面对复杂系统问题时——用多个学科的模型交叉验证，避免单一视角盲区",
+          "failureCondition": "简单问题不需要格栅——用锤子找钉子的反面是用格栅分析买菜"
+        }
+      ]
+    },
+    {
+      "name": "Lollapalooza 效应",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-37",
+          "expert_name": "查理·芒格",
+          "summary": "多种认知偏误和激励机制同时作用、相互放大时，产生超预期的极端结果",
+          "evidence": [
+            "互联网泡沫(2000): 社会认同+贪婪+锚定效应+可得性偏误同时发作，泡沫规模远超任何单一偏误的预测",
+            "安然事件: 激励扭曲+权威崇拜+承诺一致性+社会认同四重叠加导致系统性欺诈",
+            "芒格的警告: \"当多个心理倾向同向作用时，结果不是加法而是乘法\""
+          ],
+          "applicationContext": "判断市场极端行为/组织系统性失败——多重偏误是否在叠加放大",
+          "failureCondition": "正常市场条件下偏误相互抵消，Lollapalooza 效应不常出现"
+        }
+      ]
+    },
+    {
+      "name": "能力圈",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-37",
+          "expert_name": "查理·芒格",
+          "summary": "清楚知道自己懂什么、不懂什么——只在能力圈内做决策，绝不越界",
+          "evidence": [
+            "避开科技股: 数十年不投科技股因为\"我们不懂\"，直到真正理解Apple的消费品本质才出手",
+            "Berkshire 集中持仓: 只投能看懂10年后的生意，不追热点不做分散",
+            "\"如果我知道自己会死在哪里，我就永远不会去那个地方\"——能力圈外就是死亡地带"
+          ],
+          "applicationContext": "投资决策/战略选择——当前判断是否在能力圈内，如果不在就应该说\"我不知道\"",
+          "failureCondition": "能力圈固化可能错过新领域的学习机会，需要持续但审慎地扩展"
+        }
+      ]
+    },
+    {
+      "name": "激励机制超级力量",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-37",
+          "expert_name": "查理·芒格",
+          "summary": "\"Show me the incentive, and I'll show you the outcome\"——激励机制决定行为，理解激励就理解了一切",
+          "evidence": [
+            "联邦快递案例: 夜班工人按小时计酬时效率低下，改为按班次计酬（干完就走）后效率飙升",
+            "华尔街分析师: 理解了\"卖方研究由交易佣金驱动\"就理解了为什么永远是\"买入\"推荐",
+            "保险行业: Berkshire 通过设计正确的激励（承保利润而非保费规模）避免了行业周期性亏损"
+          ],
+          "applicationContext": "分析任何组织/个人行为——先看激励结构，再看行为，因果自明",
+          "failureCondition": "少数人出于使命/信仰行动，激励机制无法解释所有行为"
+        }
+      ]
+    },
+    {
+      "name": "反脆弱",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-38",
+          "expert_name": "塔勒布",
+          "summary": "有些系统不仅能抵抗冲击，还能从冲击中变强——这才是真正的韧性",
+          "evidence": [
+            "进化: 物种通过死亡和变异从环境压力中获益",
+            "创业生态: 单个公司失败但整个生态系统因此更强",
+            "人体: 适度压力（运动/禁食）让身体更强壮"
+          ],
+          "applicationContext": "评估系统/组织/策略在压力下是变强还是变弱",
+          "failureCondition": "压力超过系统承受极限导致崩溃（反脆弱有上限）"
+        }
+      ]
+    },
+    {
+      "name": "黑天鹅不对称",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-38",
+          "expert_name": "塔勒布",
+          "summary": "极端事件的影响远超其概率所暗示的——正态分布是危险的幻觉",
+          "evidence": [
+            "2008金融危机: 被模型评为\"不可能\"的事件实际发生",
+            "COVID-19: 全球经济模型未考虑大流行风险",
+            "科技突破: iPhone级创新在任何预测模型中都是异常值"
+          ],
+          "applicationContext": "质疑任何基于正态分布的风险模型",
+          "failureCondition": "真正的高斯分布领域（如身高/体重）黑天鹅确实不适用"
+        }
+      ]
+    },
+    {
+      "name": "杠铃策略",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-38",
+          "expert_name": "塔勒布",
+          "summary": "90%极度保守 + 10%极度激进——避免中间的\"虚假安全\"",
+          "evidence": [
+            "Universa基金: 大部分资金极安全，小部分做尾部对冲",
+            "职业选择: 稳定工作+疯狂副业 > 中等风险的创业"
+          ],
+          "applicationContext": "设计投资组合/职业路径/产品策略",
+          "failureCondition": "需要持续稳定现金流的场景（如养老金管理）"
+        }
+      ]
+    },
+    {
+      "name": "Skin in the Game",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-38",
+          "expert_name": "塔勒布",
+          "summary": "只信任那些承担后果的人——顾问不赔钱所以不值得信任",
+          "evidence": [
+            "金融危机: 评级机构给垃圾债AAA评级，自己不承担损失",
+            "古代商人: 汉谟拉比法典要求建筑师与建筑同生死"
+          ],
+          "applicationContext": "评估建议者/分析师/决策者的可信度",
+          "failureCondition": "纯学术研究场景中切身利害不一定提升质量"
+        }
+      ]
+    },
+    {
+      "name": "林迪效应",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-38",
+          "expert_name": "塔勒布",
+          "summary": "对于非易腐品（技术/书籍/制度），存在时间越长，预期剩余寿命越长",
+          "evidence": [
+            "书籍: 已存在2000年的《圣经》大概率再存在2000年",
+            "技术: 轮子比3D打印更可能在100年后仍在使用"
+          ],
+          "applicationContext": "预判技术/制度/文化的持久性",
+          "failureCondition": "有明确物理寿命限制的东西（如人体）"
+        }
+      ]
+    },
+    {
+      "name": "费曼学习法",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-39",
+          "expert_name": "费曼",
+          "summary": "把概念教给一个12岁的孩子——教不会说明你自己没懂",
+          "evidence": [
+            "费曼物理讲义: 本科课程讲义成为物理学经典教材",
+            "QED科普: 把量子电动力学讲给普通人听并出书"
+          ],
+          "applicationContext": "检验任何人（包括自己）是否真正理解一个概念",
+          "failureCondition": "某些数学抽象确实无法用日常语言完全传达（如高维拓扑）"
+        }
+      ]
+    },
+    {
+      "name": "货物崇拜科学",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-39",
+          "expert_name": "费曼",
+          "summary": "有科学的形式但没有科学的实质——做了所有仪式但飞机不会降落",
+          "evidence": [
+            "1974加州理工毕业演讲: 经典定义了这个概念",
+            "社会科学研究: 大量研究有统计显著性但不可重复"
+          ],
+          "applicationContext": "识别伪科学、伪数据驱动、伪AI等形式主义",
+          "failureCondition": "有些领域确实需要复杂流程和形式（如药品审批）"
+        }
+      ]
+    },
+    {
+      "name": "多重表征",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-39",
+          "expert_name": "费曼",
+          "summary": "同一个真理用多种不同的方式表达，理解才真正深入",
+          "evidence": [
+            "QED路径积分: 用完全不同于薛定谔方程的方式描述量子力学",
+            "费曼图: 用图形表征替代纯数学公式"
+          ],
+          "applicationContext": "评估理解深度——能否用完全不同的框架描述同一件事",
+          "failureCondition": "初学阶段一种表征就够了，多重表征可能造成混乱"
+        }
+      ]
+    },
+    {
+      "name": "想象力实验",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-39",
+          "expert_name": "费曼",
+          "summary": "在脑中构建物理场景，用直觉检验逻辑——比公式推导更快发现错误",
+          "evidence": [
+            "旋转盘子: 从盘子晃动中发现自旋和进动关系，间接通向QED突破",
+            "挑战者号O型环: 用一杯冰水+O型环当场证明低温导致密封失效"
+          ],
+          "applicationContext": "快速验证一个理论/方案是否有根本性缺陷",
+          "failureCondition": "人的直觉在量子尺度和相对论尺度会系统性出错"
+        }
+      ]
+    },
+    {
+      "name": "不骗自己原则",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-39",
+          "expert_name": "费曼",
+          "summary": "\"第一条原则是你不能骗自己——而你是最容易骗的人\"",
+          "evidence": [
+            "费曼在论文中主动报告不利于自己假说的数据",
+            "批评教科书: 指出教材中看似正确但实际上掩盖了不确定性的表述"
+          ],
+          "applicationContext": "检验分析中是否有选择性忽略/确认偏误",
+          "failureCondition": "在激励不对齐的环境中（如学术发表压力），很难做到完全诚实"
+        }
+      ]
+    },
+    {
+      "name": "Software 2.0",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-40",
+          "expert_name": "Andrej Karpathy",
+          "summary": "神经网络是新的编程范式：你设计架构和训练流程，数据来写具体程序逻辑",
+          "evidence": [
+            "Tesla Autopilot: 从手写规则到端到端神经网络，代码量减少但能力指数级增长",
+            "GPT 系列: 同一个 Transformer 架构，通过数据和规模涌现出编程、推理、翻译等能力",
+            "Karpathy 在 Medium 发表 \"Software 2.0\" 一文，预言传统代码将被神经网络替代"
+          ],
+          "applicationContext": "评估一个问题是否应该用传统编程还是机器学习解决",
+          "failureCondition": "需要严格可验证性的场景（金融交易、航天控制）；数据稀缺领域"
+        }
+      ]
+    },
+    {
+      "name": "九个九递进 (March of Nines)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-40",
+          "expert_name": "Andrej Karpathy",
+          "summary": "可靠性从 90% → 99% → 99.9%，每多一个九难度指数级上升，但商业价值也指数级上升",
+          "evidence": [
+            "自动驾驶: 99% 准确率意味着每 100 次决策仍有 1 次致命错误，远不够部署",
+            "LLM: ChatGPT 在简单任务上 95%+ 准确但在边缘情况下崩溃，从 demo 到 production 是 9 的战争",
+            "Karpathy 在多次演讲中强调 \"the last few nines are where all the work is\""
+          ],
+          "applicationContext": "评估 AI 产品从原型到生产的真实差距，判断部署就绪度",
+          "failureCondition": "不需要高可靠性的创意/辅助类应用；用户可以容忍偶尔错误的场景"
+        }
+      ]
+    },
+    {
+      "name": "构建即理解 (Build to Understand)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-40",
+          "expert_name": "Andrej Karpathy",
+          "summary": "真正理解一个系统的唯一方式是从零实现它——读论文不够，调 API 更不够",
+          "evidence": [
+            "micrograd: 用 ~100 行 Python 从零实现自动微分引擎，揭示反向传播的本质",
+            "nanoGPT: 从零实现 GPT 训练流程，让学习者理解 Transformer 的每一个细节",
+            "minbpe: 从零实现 BPE tokenizer，证明 tokenization 是 LLM 被忽视的关键环节"
+          ],
+          "applicationContext": "评判技术教育内容质量；判断一个工程师是否真正理解所用技术",
+          "failureCondition": "时间紧迫需要快速交付的工程项目；已被充分理解的成熟组件"
+        }
+      ]
+    },
+    {
+      "name": "锯齿前沿 (Jagged Intelligence)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-40",
+          "expert_name": "Andrej Karpathy",
+          "summary": "AI 的能力轮廓极不均匀——在某些任务上超越人类专家，在另一些任务上不如三岁小孩",
+          "evidence": [
+            "GPT-4 通过律师资格考试前 10% 但无法可靠地数出字符串中字母的个数",
+            "LLM 能写出复杂代码但会在简单算术上犯错",
+            "Karpathy 反复强调不能用单一 benchmark 评估 AI——能力是锯齿形的"
+          ],
+          "applicationContext": "评估 AI 产品的真实能力边界；设计 AI+人协作流程",
+          "failureCondition": "任务能力谱极窄的专用模型（如 AlphaFold）——锯齿效应不明显"
+        }
+      ]
+    },
+    {
+      "name": "Vibe Coding",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-40",
+          "expert_name": "Andrej Karpathy",
+          "summary": "让 AI 写代码，人类退居 taste curator 角色——描述意图，审核结果，不再逐行编写",
+          "evidence": [
+            "Karpathy 的病毒式推文定义了 \"vibe coding\" 概念，引发全行业讨论",
+            "Cursor/Copilot/Claude Code 等工具验证了 LLM 辅助编程的生产力提升",
+            "Karpathy 本人在个人项目中大量采用 LLM 辅助开发"
+          ],
+          "applicationContext": "评估 AI 编程工具的价值；判断开发流程是否应该引入 LLM 辅助",
+          "failureCondition": "安全关键代码（内核、密码学）；需要极致性能优化的底层系统代码"
+        }
+      ]
+    },
+    {
+      "name": "Do Things That Don't Scale",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-41",
+          "expert_name": "Paul Graham",
+          "summary": "早期创业不要追求规模化——手动做最笨的事来验证需求、获取首批用户、建立飞轮",
+          "evidence": [
+            "Airbnb: 创始人亲自逐户上门帮房东拍照，不可扩展但引爆了供给质量",
+            "Stripe: Patrick Collison 亲自到用户办公室帮他们集成支付 API——\"Collison Installation\"",
+            "PG 在 \"Do Things That Don't Scale\" 一文中系统总结了这个模式，成为 YC 核心教条"
+          ],
+          "applicationContext": "评估早期创业策略是否正确——是否在过早追求规模化",
+          "failureCondition": "已有稳定 PMF 的增长期公司；边际成本为零的纯软件产品"
+        }
+      ]
+    },
+    {
+      "name": "黑客与画家 (Hackers and Painters)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-41",
+          "expert_name": "Paul Graham",
+          "summary": "编程是一种创造性手艺，更接近绘画和建筑，而非工程科学——好的代码需要品味",
+          "evidence": [
+            "Paul Graham 将 Lisp 视为编程语言中的拉丁语——优雅、表达力强、培养思维",
+            "Arc 语言: PG 自己设计的语言，追求极致简洁，体现编程审美观",
+            "YC 选人: 重视\"黑客能力\"——能快速把想法变成可用产品的动手能力"
+          ],
+          "applicationContext": "评估技术团队质量；判断技术选型是否反映了好的品味",
+          "failureCondition": "大型企业级系统——此时工程纪律比个人品味更重要"
+        }
+      ]
+    },
+    {
+      "name": "Frighteningly Ambitious Startup Ideas",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-41",
+          "expert_name": "Paul Graham",
+          "summary": "最好的创业想法初看起来像坏主意——如果所有人都觉得是好主意，竞争已经太激烈了",
+          "evidence": [
+            "Airbnb: \"让陌生人住你家的气垫床\"——投资人都觉得荒谬",
+            "Dropbox: \"又一个文件同步工具\"——看起来没什么技术壁垒",
+            "PG 在 essay 中反复强调: the best ideas look like bad ideas to most people"
+          ],
+          "applicationContext": "评估创业想法——越被\"聪明人\"否定的想法越值得深入研究",
+          "failureCondition": "看起来像坏主意不代表就是好主意——真正的坏主意占绝大多数"
+        }
+      ]
+    },
+    {
+      "name": "写作即思考 (Writing is Thinking)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-41",
+          "expert_name": "Paul Graham",
+          "summary": "写不清楚等于想不清楚——写作不是记录已有想法，而是思考本身",
+          "evidence": [
+            "Paul Graham 200+ 篇 essay 本身就是思考工具，很多观点是在写作过程中形成的",
+            "YC 申请表要求创始人用简短文字解释项目——写不清楚的团队通常想不清楚",
+            "PG 建议创始人通过写博客来理清战略——\"writing about your startup forces you to think about it\""
+          ],
+          "applicationContext": "评估商业计划和战略文档的质量——文字清晰度是思考清晰度的代理指标",
+          "failureCondition": "非英语/非写作文化背景的团队可能思考清晰但表达不好"
+        }
+      ]
+    },
+    {
+      "name": "Taste 驱动 (Taste as Trainable Judgment)",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-41",
+          "expert_name": "Paul Graham",
+          "summary": "好的 taste（品味/判断力）可以培养，它是区分卓越和平庸的核心能力",
+          "evidence": [
+            "YC 选人: PG 和合伙人凭 taste 在 10 分钟面试中判断团队——高度主观但命中率高",
+            "Essay 写作: PG 的文章筛选标准是\"是否有意思\"——taste 作为质量过滤器",
+            "Lisp 审美: PG 对编程语言的偏好本质是 taste——优雅和表达力的直觉判断"
+          ],
+          "applicationContext": "评估产品设计、技术选型、内容质量——背后都是 taste 的体现",
+          "failureCondition": "需要严格数据驱动决策的场景——taste 不能替代 A/B 测试"
+        }
+      ]
+    },
+    {
+      "name": "经济护城河",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-32",
+          "expert_name": "巴菲特",
+          "summary": "企业最重要的特质是可持续的竞争优势——品牌/网络效应/成本优势/转换成本",
+          "evidence": [
+            "可口可乐: 品牌护城河持续100+年",
+            "GEICO: 低成本直销模式构成成本护城河",
+            "Apple: 生态锁定构成转换成本护城河"
+          ],
+          "applicationContext": "评估任何企业的长期投资价值",
+          "failureCondition": "技术颠覆可以摧毁看似坚固的护城河（如报纸行业）"
+        }
+      ]
+    },
+    {
+      "name": "安全边际",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-32",
+          "expert_name": "巴菲特",
+          "summary": "只在价格远低于内在价值时买入——为判断错误留足缓冲",
+          "evidence": [
+            "华盛顿邮报: 以市值远低于资产价值时买入",
+            "2008年: 在恐慌中以极低价格投资高盛"
+          ],
+          "applicationContext": "任何投资决策的价格纪律",
+          "failureCondition": "优质资产极少打折；过度等待安全边际可能错过好公司"
+        }
+      ]
+    },
+    {
+      "name": "市场先生",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-32",
+          "expert_name": "巴菲特",
+          "summary": "市场短期是投票机（情绪驱动），长期是称重机（价值驱动）——利用情绪而非被其控制",
+          "evidence": [
+            "伯克希尔: 在市场恐慌时大举买入",
+            "互联网泡沫: 被嘲笑不懂科技但最终证明正确"
+          ],
+          "applicationContext": "判断市场估值是否偏离基本面",
+          "failureCondition": "市场可以维持非理性的时间比你维持偿付能力的时间更长"
+        }
+      ]
+    },
+    {
+      "name": "复利机器",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-32",
+          "expert_name": "巴菲特",
+          "summary": "找到能以高回报率长期复利增长的企业，然后永远不卖",
+          "evidence": [
+            "伯克希尔: 从纺织厂到万亿市值靠复利",
+            "可口可乐: 持有35年+回报超过100倍"
+          ],
+          "applicationContext": "评估长期投资的复利潜力",
+          "failureCondition": "需要短期流动性的资金不适合长期锁定"
+        }
+      ]
+    },
+    {
+      "name": "飞轮效应",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-31",
+          "expert_name": "贝索斯",
+          "summary": "找到一个自我强化的正循环，然后持续给它加速——每一圈都比上一圈容易",
+          "evidence": [
+            "Amazon零售: 低价→流量→卖家→品类→更低价",
+            "AWS: 规模→降价→更多客户→更大规模→再降价",
+            "Prime: 会员→购买频率→仓储效率→更好服务→更多会员"
+          ],
+          "applicationContext": "评估商业模式是否具有自我强化的正循环",
+          "failureCondition": "飞轮依赖补贴而非自然行为；环节间因果关系不成立"
+        }
+      ]
+    },
+    {
+      "name": "Day 1 思维",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-31",
+          "expert_name": "贝索斯",
+          "summary": "永远保持创业第一天的心态——Day 2 是停滞、无关紧要、然后死亡",
+          "evidence": [
+            "年度致股东信: 每年附上1997年第一封信",
+            "组织设计: \"两个披萨\"小团队保持敏捷"
+          ],
+          "applicationContext": "评估大公司是否保持创新活力",
+          "failureCondition": "某些阶段确实需要流程化和稳定性（如安全关键系统）"
+        }
+      ]
+    },
+    {
+      "name": "逆向工作法",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-31",
+          "expert_name": "贝索斯",
+          "summary": "从客户需求出发往回倒推，而非从现有能力出发往前推",
+          "evidence": [
+            "Kindle: 从\"读者想要什么\"倒推，而非\"我们有什么技术\"",
+            "AWS: 从开发者痛点倒推云服务设计",
+            "6页备忘录: 强迫从客户故事开始写"
+          ],
+          "applicationContext": "评估产品/战略是否真正以客户为中心",
+          "failureCondition": "客户不知道自己想要什么的颠覆性创新场景"
+        }
+      ]
+    },
+    {
+      "name": "可逆vs不可逆决策",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-31",
+          "expert_name": "贝索斯",
+          "summary": "Type 1（不可逆）决策要慢、谨慎；Type 2（可逆）决策要快、大胆",
+          "evidence": [
+            "AWS: Type 1决策(重大战略)由Bezos亲自做",
+            "小功能迭代: Type 2决策授权给一线团队"
+          ],
+          "applicationContext": "建立决策速度和质量的平衡框架",
+          "failureCondition": "分不清Type 1和Type 2的边界"
+        }
+      ]
+    },
+    {
+      "name": "用完即走",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-24",
+          "expert_name": "张小龙",
+          "summary": "好产品帮用户高效完成任务然后消失——黏性来自价值而非成瘾设计",
+          "evidence": [
+            "微信: 不做信息流不抢用户时间",
+            "小程序: 即用即走，不需要安装"
+          ],
+          "applicationContext": "评估产品设计是否尊重用户时间",
+          "failureCondition": "内容消费类产品（如视频）天然需要用户停留"
+        }
+      ]
+    },
+    {
+      "name": "功能减法",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-24",
+          "expert_name": "张小龙",
+          "summary": "一个功能如果不是90%用户需要的，就不应该加——说1000个不换1个是",
+          "evidence": [
+            "微信: 多年保持简洁界面",
+            "微信支付: 在朋友圈而非独立Tab"
+          ],
+          "applicationContext": "评估产品是否过度功能化",
+          "failureCondition": "面向专业用户的工具类产品需要丰富功能"
+        }
+      ]
+    },
+    {
+      "name": "去中心化",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-24",
+          "expert_name": "张小龙",
+          "summary": "平台不应该自己做内容分发决策——让用户和社交关系决定信息流动",
+          "evidence": [
+            "朋友圈: 基于社交关系而非算法推荐",
+            "公众号: 用户主动订阅而非平台推送",
+            "微信不做中心化内容推荐首页"
+          ],
+          "applicationContext": "评估社交/内容平台的分发策略",
+          "failureCondition": "冷启动阶段需要中心化引导；商业化需要算法分发"
+        }
+      ]
+    },
+    {
+      "name": "人性化设计",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-24",
+          "expert_name": "张小龙",
+          "summary": "产品是人的延伸——好的产品应该像人与人之间的对话一样自然",
+          "evidence": [
+            "摇一摇: 用人类自然动作交互",
+            "红包: 把社交礼仪数字化",
+            "语音消息: 最自然的沟通方式"
+          ],
+          "applicationContext": "评估交互设计是否符合人类直觉",
+          "failureCondition": "效率优先的场景（如数据分析）不需要拟人化"
+        }
+      ]
+    },
+    {
+      "name": "Costco+Disney",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-34",
+          "expert_name": "黄峥",
+          "summary": "高性价比（Costco式省钱）+购物乐趣（Disney式体验）=新消费",
+          "evidence": [
+            "拼多多: 拼团游戏化+极致低价",
+            "多多果园: 浇水种树得真水果"
+          ],
+          "applicationContext": "评估消费产品是否同时满足实惠和乐趣",
+          "failureCondition": "高端市场用户不在意乐趣，在意品质和身份"
+        }
+      ]
+    },
+    {
+      "name": "信任经济",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-34",
+          "expert_name": "黄峥",
+          "summary": "社交关系是最低成本的获客渠道——朋友推荐的可信度远超广告",
+          "evidence": [
+            "拼团模式: 获客成本低于传统电商1/3",
+            "砍价免费拿: 用社交关系替代广告投放"
+          ],
+          "applicationContext": "评估获客策略的成本效率",
+          "failureCondition": "社交裂变会消耗社交资本，过度使用导致反感"
+        }
+      ]
+    },
+    {
+      "name": "供应链直连",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-34",
+          "expert_name": "黄峥",
+          "summary": "砍掉所有中间商，从工厂直达消费者——中间环节的利润就是消费者的损失",
+          "evidence": [
+            "拼多多C2M: 1000+工厂直供",
+            "Temu: 全托管模式直接对接工厂"
+          ],
+          "applicationContext": "评估供应链效率和成本结构",
+          "failureCondition": "需要品牌溢价和渠道服务的品类不适合去中间化"
+        }
+      ]
+    },
+    {
+      "name": "AI四波浪潮",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-30",
+          "expert_name": "李开复",
+          "summary": "互联网AI(推荐)→商业AI(金融/医疗)→感知AI(自动驾驶)→自主AI(机器人)，每波5-10年",
+          "evidence": [
+            "今日头条/抖音: 第一波互联网AI的代表",
+            "蚂蚁金服: 第二波商业AI的代表",
+            "自动驾驶: 第三波感知AI进行中"
+          ],
+          "applicationContext": "判断AI创业/投资的阶段和时机",
+          "failureCondition": "波浪之间没有清晰边界，实际发展可能更混乱"
+        }
+      ]
+    },
+    {
+      "name": "中美AI双轨",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-30",
+          "expert_name": "李开复",
+          "summary": "美国擅长基础研究和突破创新，中国擅长应用落地和规模化——两者互补",
+          "evidence": [
+            "GPT: 美国突破性研究",
+            "中国AI应用: 人脸识别/智能客服规模化部署超过美国",
+            "创新工场: 同时投中美AI公司"
+          ],
+          "applicationContext": "评估AI公司/技术的全球竞争力",
+          "failureCondition": "中美脱钩可能打断互补关系"
+        }
+      ]
+    },
+    {
+      "name": "技术布道降低信息差",
+      "expertCount": 1,
+      "isShared": false,
+      "variants": [
+        {
+          "expert_id": "S-30",
+          "expert_name": "李开复",
+          "summary": "技术进步的最大社会价值是降低信息不对称——让更多人理解和使用新技术",
+          "evidence": [
+            "《AI未来》: 全球畅销科普AI",
+            "创新工场: 孵化+教育双轮驱动",
+            "公开演讲: 全球巡讲AI趋势"
+          ],
+          "applicationContext": "评估技术产品的普及潜力和社会价值",
+          "failureCondition": "某些技术确实不适合大众化（如核技术）"
+        }
+      ]
+    }
+  ]
+}

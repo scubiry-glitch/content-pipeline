@@ -15,6 +15,13 @@ import { HotTopicExpertService } from './hotTopicExpertService.js';
 import { AssetExpertService } from './assetExpertService.js';
 import { seedDefaultBuiltinExpertsToDb, getBuiltinSyncManifest, syncBuiltinExpertItem } from './expertSeed.js';
 import { researchAndGenerateProfile } from './researchService.js';
+import {
+  buildMentalModelGraph,
+  findExpertsByModel,
+  listSharedModels,
+  listAllModels,
+  type MentalModelGraphEntry,
+} from './mentalModelGraph.js';
 
 /** JSONB / 脏字符串兼容，避免 JSON.parse 抛错导致 GET /experts/full 500 */
 function coerceJsonObject(val: unknown): Record<string, unknown> {
@@ -32,6 +39,21 @@ function coerceJsonObject(val: unknown): Record<string, unknown> {
 }
 
 export function createRouter(engine: ExpertEngine) {
+  // Phase 8: mental model 图谱缓存 — lazy build + 可刷新
+  let cachedMmGraph: Map<string, MentalModelGraphEntry> | null = null;
+  let cachedMmGraphAt = 0;
+  const MM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+
+  async function getMmGraph(): Promise<Map<string, MentalModelGraphEntry>> {
+    const now = Date.now();
+    if (cachedMmGraph && now - cachedMmGraphAt < MM_CACHE_TTL_MS) {
+      return cachedMmGraph;
+    }
+    cachedMmGraph = await buildMentalModelGraph(engine);
+    cachedMmGraphAt = now;
+    return cachedMmGraph;
+  }
+
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
 
     // ===== 核心调用接口 =====
@@ -451,17 +473,40 @@ export function createRouter(engine: ExpertEngine) {
 
     // ===== 反馈接口 =====
 
-    /** POST /feedback — 提交反馈 */
+    /** POST /feedback — 提交反馈（Phase 6 支持 rubric_scores） */
     fastify.post('/feedback', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison } = request.body as any;
+        const {
+          expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison, rubric_scores,
+        } = request.body as any;
 
         if (!expert_id || !invoke_id) {
           return reply.status(400).send({ error: 'Missing required fields: expert_id, invoke_id' });
         }
 
+        // Phase 6: 校验 rubric_scores 格式（可选 Record<string, 1-5>）
+        let cleanedRubricScores: Record<string, number> | undefined;
+        if (rubric_scores && typeof rubric_scores === 'object' && !Array.isArray(rubric_scores)) {
+          cleanedRubricScores = {};
+          for (const [dim, val] of Object.entries(rubric_scores)) {
+            const num = Number(val);
+            if (Number.isFinite(num) && num >= 1 && num <= 5) {
+              cleanedRubricScores[dim] = Math.round(num);
+            }
+          }
+          if (Object.keys(cleanedRubricScores).length === 0) cleanedRubricScores = undefined;
+        }
+
         await submitFeedback(
-          { expert_id, invoke_id, human_score, human_notes, actual_outcome, comparison },
+          {
+            expert_id,
+            invoke_id,
+            human_score,
+            human_notes,
+            actual_outcome,
+            comparison,
+            rubric_scores: cleanedRubricScores,
+          },
           engine['deps']
         );
 
@@ -723,6 +768,93 @@ export function createRouter(engine: ExpertEngine) {
         const result = await service.assessCredibility(assetId, assetTitle, assetContent, expertIds);
         return reply.send(result);
       } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    // ===== Phase 8: Mental Model Graph 接口 =====
+
+    /** GET /mental-models — 列出所有心智模型（查询参数 ?shared=true 仅返回共享） */
+    fastify.get('/mental-models', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { shared } = request.query as { shared?: string };
+        const graph = await getMmGraph();
+        const models = shared === 'true' ? listSharedModels(graph) : listAllModels(graph);
+        return reply.send({
+          total: models.length,
+          shared_count: listSharedModels(graph).length,
+          models: models.map(m => ({
+            name: m.name,
+            expertCount: m.expertCount,
+            isShared: m.isShared,
+            experts: m.experts.map(e => ({ expert_id: e.expert_id, name: e.expert_name })),
+          })),
+        });
+      } catch (error: any) {
+        console.error('[ExpertLibrary] /mental-models error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /mental-models/:name — 查询某个心智模型的所有使用专家详情 */
+    fastify.get('/mental-models/:name', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { name } = request.params as { name: string };
+        const graph = await getMmGraph();
+        const entry = findExpertsByModel(graph, decodeURIComponent(name));
+        if (!entry) {
+          return reply.status(404).send({ error: `Mental model not found: ${name}` });
+        }
+        return reply.send(entry);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** POST /mental-models/refresh — 强制重建图谱缓存（专家 profile 更新后调用） */
+    fastify.post('/mental-models/refresh', async (_request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        cachedMmGraph = null;
+        cachedMmGraphAt = 0;
+        const graph = await getMmGraph();
+        return reply.send({ ok: true, total: graph.size });
+      } catch (error: any) {
+        return reply.status(500).send({ ok: false, error: error.message });
+      }
+    });
+
+    /** Phase 10: GET /mental-models/catalog — 可查询目录（含所有字段：evidence/context/failureCondition） */
+    fastify.get('/mental-models/catalog', async (_request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const graph = await getMmGraph();
+        const all = listAllModels(graph);
+        // 收集所有专家作为目录 header
+        const expertSet = new Set<string>();
+        const experts: Array<{ expert_id: string; name: string }> = [];
+        for (const entry of all) {
+          for (const e of entry.experts) {
+            if (!expertSet.has(e.expert_id)) {
+              expertSet.add(e.expert_id);
+              experts.push({ expert_id: e.expert_id, name: e.expert_name });
+            }
+          }
+        }
+
+        return reply.send({
+          generatedAt: new Date().toISOString(),
+          totalModels: all.length,
+          sharedCount: all.filter(m => m.isShared).length,
+          expertCount: expertSet.size,
+          experts,
+          models: all.map(m => ({
+            name: m.name,
+            expertCount: m.expertCount,
+            isShared: m.isShared,
+            variants: m.experts,  // 完整字段，含 evidence/context/failureCondition
+          })),
+        });
+      } catch (error: any) {
+        console.error('[ExpertLibrary] /mental-models/catalog error:', error);
         return reply.status(500).send({ error: error.message });
       }
     });

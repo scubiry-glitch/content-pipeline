@@ -11,6 +11,8 @@ import { processInput } from './inputProcessor.js';
 import { emmGateCheck } from './emmGate.js';
 import { formatOutput } from './outputFormatter.js';
 import { analyzeThenJudge } from './analyzeThenJudge.js';
+import { matchHeuristics } from './heuristicsMatcher.js';
+import { retrieveKnowledge as retrieveKnowledgeTopicAware } from './knowledgeService.js';
 
 export class ExpertEngine {
   private deps: ExpertLibraryDeps;
@@ -47,11 +49,35 @@ export class ExpertEngine {
     );
 
     // Step 3: 检索相关知识源
-    const knowledgeContext = await this.retrieveKnowledge(request.expert_id, request.input_data);
+    // Phase 9: 若专家 method.agenticProtocol.requiresResearch=true，
+    //   走主题感知的语义检索（knowledgeService.retrieveKnowledge），limit 从 5 提到 10
+    //   否则保持原有"最新 5 条"的简单检索
+    const agenticMode = expert.method.agenticProtocol?.requiresResearch === true;
+    let knowledgeContext: string | null;
+    if (agenticMode) {
+      console.log(`[ExpertEngine] Agentic protocol active for ${expert.expert_id}, running topic-aware knowledge retrieval`);
+      knowledgeContext = await retrieveKnowledgeTopicAware(
+        request.expert_id,
+        request.input_data,
+        this.deps,
+        10,
+      );
+      // 在 context 前追加 researchSteps 作为"调研指令"提醒 LLM 如何组织回答
+      const steps = expert.method.agenticProtocol?.researchSteps;
+      if (knowledgeContext && steps && steps.length > 0) {
+        const stepsBlock = '\n\n### 调研步骤（本专家的 agenticProtocol 要求）\n' +
+          steps.map((s, i) => `${i + 1}. ${s}`).join('\n');
+        knowledgeContext = knowledgeContext + stepsBlock;
+      }
+    } else {
+      knowledgeContext = await this.retrieveKnowledge(request.expert_id, request.input_data);
+    }
 
     // Step 4: 根据 task_type 选择执行路径
     let rawOutput: string;
     let emmResult: EMMGateResult;
+    let rubricScores: import('./types.js').RubricScore[] | undefined;
+    let modelApplications: import('./types.js').ModelApplication[] | undefined;
 
     if (request.task_type === 'evaluation') {
       // Evaluation 使用 Analyze-then-Judge 范式
@@ -63,14 +89,23 @@ export class ExpertEngine {
         request.context
       );
       rawOutput = analysisResult.verdict.sections.map(s => `## ${s.title}\n${s.content}`).join('\n\n');
+      rubricScores = analysisResult.verdict.rubric_scores;
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     } else {
       // Analysis / Generation 使用标准 prompt 流程
+      // Phase 3: 根据输入内容激活最相关的 heuristics（最多 3 条）
+      const activeHeuristics = matchHeuristics(
+        request.input_data,
+        expert.persona.cognition?.heuristics,
+        3,
+      );
+
       const systemPrompt = buildSystemPrompt(expert, {
         taskType: request.task_type,
         inputAnalysis,
         knowledgeContext: knowledgeContext || undefined,
         params: request.params,
+        activeHeuristics: activeHeuristics.length > 0 ? activeHeuristics : undefined,
       });
 
       const userPrompt = buildUserPrompt(request);
@@ -80,12 +115,17 @@ export class ExpertEngine {
         maxTokens: request.params?.depth === 'deep' ? 4000 : 2000,
       });
 
+      // Phase 5: 如果 analysis 任务且专家有 mentalModels，解析结构化 model_applications
+      if (request.task_type === 'analysis' && expert.persona.cognition?.mentalModels?.length) {
+        modelApplications = parseModelApplications(rawOutput, expert.persona.cognition.mentalModels);
+      }
+
       // Step 5: EMM 门控验证
       emmResult = await emmGateCheck(rawOutput, expert.emm, this.deps.llm);
     }
 
-    // Step 6: 输出格式化
-    const formatted = await formatOutput(rawOutput, expert, this.deps.llm);
+    // Step 6: 输出格式化（Phase 7: 传入 taskType 以便 generation 任务跑 expressionDNA linter）
+    const formatted = await formatOutput(rawOutput, expert, this.deps.llm, { taskType: request.task_type });
 
     // Step 7: 记录调用（异步，不阻塞返回）
     this.recordInvocation(invokeId, request, expert, inputAnalysis, emmResult, formatted.sections)
@@ -104,6 +144,9 @@ export class ExpertEngine {
         confidence: calculateConfidence(emmResult, formatted.valid),
         processing_time_ms: Date.now() - startTime,
         invoke_id: invokeId,
+        rubric_scores: rubricScores,
+        model_applications: modelApplications,
+        agentic_research_performed: agenticMode || undefined,
       },
     };
   }
@@ -436,4 +479,43 @@ function dbRowToProfile(row: any): ExpertProfile {
     anti_patterns: row.anti_patterns || [],
     signature_phrases: row.signature_phrases || [],
   };
+}
+
+/**
+ * Phase 5: 从 analysis 任务的 LLM 输出中解析结构化 model_applications JSON 块
+ * 与 analyzeThenJudge.ts 的 parseRubricScores 类似的容错解析
+ * @returns 解析成功返回数组，失败返回 undefined（不抛错）
+ */
+function parseModelApplications(
+  output: string,
+  mentalModels: import('./types.js').MentalModel[],
+): import('./types.js').ModelApplication[] | undefined {
+  if (!mentalModels || mentalModels.length === 0) return undefined;
+
+  const codeBlockMatch = output.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidates: string[] = [];
+  if (codeBlockMatch) candidates.push(codeBlockMatch[1]);
+  const lastBrace = output.lastIndexOf('{');
+  if (lastBrace >= 0) candidates.push(output.substring(lastBrace));
+
+  const validNames = new Set(mentalModels.map(m => m.name));
+
+  for (const cand of candidates) {
+    try {
+      const parsed = JSON.parse(cand.trim());
+      const arr = parsed?.model_applications;
+      if (!Array.isArray(arr)) continue;
+      const cleaned: import('./types.js').ModelApplication[] = arr
+        .filter((x: any) => x && typeof x === 'object' && validNames.has(x.modelName))
+        .map((x: any) => ({
+          modelName: String(x.modelName),
+          application: typeof x.application === 'string' ? x.application : '',
+          conclusion: typeof x.conclusion === 'string' ? x.conclusion : '',
+        }));
+      if (cleaned.length > 0) return cleaned;
+    } catch {
+      // try next
+    }
+  }
+  return undefined;
 }

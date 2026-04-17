@@ -20,6 +20,9 @@ export class ExpertMatcher {
 
   /**
    * 根据任务信息匹配最合适的专家
+   * Phase 4 升级：
+   *   - calculateMatchScore 新增 mentalModels.applicationContext 匹配（+0-30）
+   *   - domainExperts 选取改为"相关度 top N + 认知互补"两步走
    */
   async match(request: ExpertMatchRequest): Promise<ExpertMatchResult> {
     const { topic, industry, taskType, importance = 0.5 } = request;
@@ -40,7 +43,9 @@ export class ExpertMatcher {
     });
 
     scoredDomain.sort((a, b) => b.matchScore - a.matchScore);
-    const topDomain = scoredDomain.filter(s => s.matchScore > 0).slice(0, 3);
+    // Phase 4: 先取相关度 top N（N=6）做候选池，再用认知互补挑 3
+    const candidates = scoredDomain.filter(s => s.matchScore > 0).slice(0, 6);
+    const topDomain = this.selectComplementarySet(candidates, 3);
 
     // 匹配特级专家（仅高重要性任务）
     let seniorMatch: ExpertMatchResult['seniorExpert'] | undefined;
@@ -58,7 +63,7 @@ export class ExpertMatcher {
     // 生成匹配原因说明
     const matchReasons: string[] = [];
     if (topDomain.length > 0) {
-      matchReasons.push(`基于主题「${topic}」匹配了 ${topDomain.length} 位领域专家`);
+      matchReasons.push(`基于主题「${topic}」匹配了 ${topDomain.length} 位领域专家（认知互补优先）`);
     }
     if (seniorMatch) {
       matchReasons.push(`任务重要性 ${(importance * 100).toFixed(0)}%，推荐特级专家 ${seniorMatch.expert.name}`);
@@ -72,6 +77,57 @@ export class ExpertMatcher {
       seniorExpert: seniorMatch,
       matchReasons,
     };
+  }
+
+  /**
+   * Phase 4: 认知互补选择
+   * 从候选池中挑出 count 个专家，最大化 mentalModel 多样性
+   *
+   * 贪心算法：先选相关度最高的，然后每次从剩余候选中选一个与已选集合
+   * "mental model 重叠度最低"的，避免同质化匹配。
+   *
+   * 对于没有 mentalModels 的旧专家（如 E 系列），退化为按相关度直接选。
+   */
+  private selectComplementarySet<T extends { expert: ExpertProfile; matchScore: number; matchReason: string }>(
+    candidates: T[],
+    count: number,
+  ): T[] {
+    if (candidates.length === 0) return [];
+    if (candidates.length <= count) return candidates;
+
+    const selected: T[] = [];
+    const remaining = [...candidates];
+
+    // 第 1 位：相关度最高的
+    selected.push(remaining.shift()!);
+
+    while (selected.length < count && remaining.length > 0) {
+      // 已选集合中的所有 mental model 名称
+      const selectedModels = new Set<string>();
+      for (const s of selected) {
+        const models = s.expert.persona.cognition?.mentalModels ?? [];
+        for (const m of models) selectedModels.add(m.name);
+      }
+
+      // 对每个候选算一个综合分：相关度（主）+ 认知新颖度（次）
+      // 新颖度 = 该候选的 mentalModels 中有多少是已选集合里没有的
+      let best: { idx: number; combined: number } | null = null;
+      for (let i = 0; i < remaining.length; i++) {
+        const cand = remaining[i];
+        const candModels = cand.expert.persona.cognition?.mentalModels ?? [];
+        const novelCount = candModels.filter(m => !selectedModels.has(m.name)).length;
+        // 权重：相关度 0.6，认知新颖度 0.4（按 10 分满分归一化）
+        const combined = cand.matchScore * 0.6 + novelCount * 10 * 0.4;
+        if (!best || combined > best.combined) {
+          best = { idx: i, combined };
+        }
+      }
+
+      if (!best) break;
+      selected.push(remaining.splice(best.idx, 1)[0]);
+    }
+
+    return selected;
   }
 
   /**
@@ -146,8 +202,33 @@ export class ExpertMatcher {
       }
     }
 
+    // 6. Phase 4: Mental model applicationContext 匹配 (0-30分)
+    //    借助 nuwa 增强字段，判断专家的心智模型是否适用于当前主题
+    const mentalModels = expert.persona.cognition?.mentalModels;
+    if (mentalModels && mentalModels.length > 0) {
+      const mmMatches: string[] = [];
+      for (const m of mentalModels) {
+        const contextLower = (m.applicationContext || '').toLowerCase();
+        // 主题词 vs applicationContext
+        for (const w of topicWords) {
+          if (contextLower.includes(w)) {
+            if (!mmMatches.includes(m.name)) mmMatches.push(m.name);
+          }
+        }
+        // 主题整体 vs applicationContext
+        if (contextLower && topicLower.includes(contextLower.slice(0, 6))) {
+          if (!mmMatches.includes(m.name)) mmMatches.push(m.name);
+        }
+      }
+      if (mmMatches.length > 0) {
+        const mmScore = Math.min(30, mmMatches.length * 10);
+        score += mmScore;
+        reasons.push(`心智模型可套用: ${mmMatches.slice(0, 2).join('、')}`);
+      }
+    }
+
     return {
-      score: Math.min(100, score),
+      score: Math.min(130, score),  // 因新增 mentalModels 维度，上限拉到 130
       reason: reasons.join('；') || '通用匹配',
     };
   }
