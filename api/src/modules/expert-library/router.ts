@@ -384,6 +384,97 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
+    /** GET /experts/:id/invocations — 调用历史（分页） */
+    fastify.get('/experts/:id/invocations', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const { limit = '20', offset = '0' } = request.query as any;
+        const lim = Math.min(100, Math.max(1, parseInt(limit) || 20));
+        const off = Math.max(0, parseInt(offset) || 0);
+
+        const result = await engine['deps'].db.query(
+          `SELECT id, expert_id, task_type, input_type, input_summary,
+                  output_sections, confidence, created_at
+           FROM expert_invocations
+           WHERE expert_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2 OFFSET $3`,
+          [id, lim, off]
+        );
+
+        const countRes = await engine['deps'].db.query(
+          `SELECT COUNT(*) as cnt FROM expert_invocations WHERE expert_id = $1`,
+          [id]
+        );
+        const total = parseInt(countRes.rows[0]?.cnt || '0');
+
+        return reply.send({
+          expert_id: id,
+          total,
+          limit: lim,
+          offset: off,
+          invocations: result.rows.map((row: any) => ({
+            invoke_id: row.id,
+            task_type: row.task_type,
+            input_type: row.input_type,
+            input_summary: row.input_summary,
+            output_sections: typeof row.output_sections === 'string'
+              ? JSON.parse(row.output_sections) : row.output_sections,
+            confidence: row.confidence,
+            created_at: row.created_at,
+          })),
+        });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /experts/:id/feedback-history — 反馈历史（分页） */
+    fastify.get('/experts/:id/feedback-history', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const { limit = '20', offset = '0' } = request.query as any;
+        const lim = Math.min(100, Math.max(1, parseInt(limit) || 20));
+        const off = Math.max(0, parseInt(offset) || 0);
+
+        const result = await engine['deps'].db.query(
+          `SELECT id, expert_id, invoke_id, human_score, human_notes,
+                  rubric_scores, actual_outcome, comparison, created_at
+           FROM expert_feedback
+           WHERE expert_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2 OFFSET $3`,
+          [id, lim, off]
+        );
+
+        const countRes = await engine['deps'].db.query(
+          `SELECT COUNT(*) as cnt FROM expert_feedback WHERE expert_id = $1`,
+          [id]
+        );
+        const total = parseInt(countRes.rows[0]?.cnt || '0');
+
+        return reply.send({
+          expert_id: id,
+          total,
+          limit: lim,
+          offset: off,
+          feedback: result.rows.map((row: any) => ({
+            feedback_id: row.id,
+            invoke_id: row.invoke_id,
+            human_score: row.human_score,
+            human_notes: row.human_notes,
+            rubric_scores: typeof row.rubric_scores === 'string'
+              ? JSON.parse(row.rubric_scores) : row.rubric_scores,
+            actual_outcome: typeof row.actual_outcome === 'string'
+              ? JSON.parse(row.actual_outcome) : row.actual_outcome,
+            created_at: row.created_at,
+          })),
+        });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
     // ===== 知识源管理 =====
 
     /** GET /experts/:id/knowledge — 列出知识源 */
