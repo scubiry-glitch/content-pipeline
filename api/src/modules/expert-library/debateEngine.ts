@@ -188,30 +188,33 @@ export class DebateEngine {
 
     // 持久化：expert_invocations.expert_id 外键要求行必须存在于 expert_profiles；
     // 仅用内存 register 的专家未入库时 INSERT 会失败，故先补齐 profiles。
-    await this.persistDebate(experts, result);
+    const savedId = await this.persistDebate(experts, result);
+    if (savedId) result.id = savedId;
 
     return result;
   }
 
   /**
    * 将参与辩论的专家写入 expert_profiles（已存在则跳过），再保存 invocation。
+   * 返回生成的 UUID（持久化失败时返回 undefined）。
    */
   private async persistDebate(
     experts: ExpertProfile[],
     result: DebateResult
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     try {
       await this.ensureExpertsInDb(experts);
       const primaryExpertId = experts[0]?.expert_id;
       if (!primaryExpertId) {
         console.warn('[DebateEngine] persistDebate: empty experts');
-        return;
+        return undefined;
       }
-      await this.saveDebate(result, primaryExpertId);
+      return await this.saveDebate(result, primaryExpertId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : '';
       console.warn('[DebateEngine] Failed to persist debate:', msg, stack || '');
+      return undefined;
     }
   }
 
@@ -576,17 +579,19 @@ ${allContent}
 
   /**
    * 保存辩论记录到数据库（primaryExpertId 须已在 expert_profiles 中存在）
+   * 返回生成的 UUID。
    */
   private async saveDebate(
     result: DebateResult,
     primaryExpertId: string
-  ): Promise<void> {
+  ): Promise<string> {
     const { randomUUID } = await import('crypto');
+    const id = randomUUID();
     await this.deps.db.query(
       `INSERT INTO expert_invocations (id, expert_id, task_type, input_type, input_summary, output_sections, params)
        VALUES ($1, $2, 'debate', 'text', $3, $4, $5)`,
       [
-        randomUUID(),
+        id,
         primaryExpertId,
         result.topic.substring(0, 500),
         JSON.stringify(result),
@@ -596,6 +601,7 @@ ${allContent}
         }),
       ]
     );
+    return id;
   }
 
   /**

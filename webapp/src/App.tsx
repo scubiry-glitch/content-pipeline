@@ -34,6 +34,7 @@ import { ExpertNetwork } from './pages/ExpertNetwork';
 import { ExpertKnowledgeGraph } from './pages/ExpertKnowledgeGraph';
 import { ExpertScheduling } from './pages/ExpertScheduling';
 import { ExpertDebate } from './pages/ExpertDebate';
+import { ExpertDebateDetail } from './pages/ExpertDebateDetail';
 import { MentalModels } from './pages/MentalModels';
 import { ContentLibrary } from './pages/ContentLibrary';
 import { ContentLibraryFacts } from './pages/ContentLibraryFacts';
@@ -130,6 +131,7 @@ function App() {
               <Route path="expert-knowledge-graph" element={<ExpertKnowledgeGraph />} />
               <Route path="expert-scheduling" element={<ExpertScheduling />} />
               <Route path="expert-debate" element={<ExpertDebate />} />
+              <Route path="expert-debate/:id" element={<ExpertDebateDetail />} />
               <Route path="mental-models" element={<MentalModels />} />
               {/* 内容库模块 (v7.0) — 嵌套路由，保证 /content-library/* 子路径稳定匹配 Outlet */}
               <Route path="content-library" element={<Outlet />}>

@@ -1,5 +1,6 @@
 // 专家辩论 — 多专家协作辩论 + 对比分析
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { expertLibraryApi } from '../api/client';
 
 interface DebateRound {
@@ -9,6 +10,7 @@ interface DebateRound {
 }
 
 interface DebateResult {
+  id?: string;
   topic: string;
   rounds: DebateRound[];
   consensus: string[];
@@ -18,6 +20,7 @@ interface DebateResult {
 }
 
 export function ExpertDebate() {
+  const navigate = useNavigate();
   const [experts, setExperts] = useState<any[]>([]);
   const [selectedExperts, setSelectedExperts] = useState<string[]>([]);
   const [topic, setTopic] = useState('');
@@ -46,16 +49,8 @@ export function ExpertDebate() {
     finally { setHistoryLoading(false); }
   };
 
-  const viewHistoryDebate = async (debate: any) => {
-    if (debate.result) {
-      setResult(debate.result);
-      setShowHistory(false);
-    } else {
-      try {
-        const detail = await expertLibraryApi.getDebate(debate.id);
-        if (detail) { setResult(detail); setShowHistory(false); }
-      } catch { /* ignore */ }
-    }
+  const viewHistoryDebate = (debate: any) => {
+    window.open(`/expert-debate/${debate.id}`, '_blank');
   };
 
   const toggleExpert = (id: string) => {
@@ -72,6 +67,11 @@ export function ExpertDebate() {
       const res = await expertLibraryApi.debate(topic, content, selectedExperts, rounds, temperature);
       setResult(res);
       loadHistory(); // 刷新历史列表
+      // 若后端返回了持久化 ID，跳转到独立详情页
+      if (res?.id) {
+        navigate(`/expert-debate/${res.id}`);
+        return;
+      }
     } catch (error) {
       console.error('Debate failed:', error);
       alert('辩论启动失败');

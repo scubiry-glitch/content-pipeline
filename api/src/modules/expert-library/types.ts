@@ -473,6 +473,7 @@ export interface DebateRound {
 }
 
 export interface DebateResult {
+  id?: string;                   // 持久化后的 UUID
   topic: string;
   rounds: DebateRound[];
   consensus: string[];           // 共识点
