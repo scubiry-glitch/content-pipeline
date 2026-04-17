@@ -1633,6 +1633,95 @@ export const expertLibraryApi = {
       phase2_synthesis: any;
       phase3_profile: any;
     }>,
+
+  // ============================================
+  // Phase 1-10 优化相关扩展接口
+  // ============================================
+
+  /** 提交反馈（Phase 6: 支持 rubric_scores 按维度打分） */
+  submitFeedback: (body: {
+    expert_id: string;
+    invoke_id: string;
+    human_score?: number;
+    human_notes?: string;
+    rubric_scores?: Record<string, number>;
+    actual_outcome?: any;
+    comparison?: any;
+  }) =>
+    client.post('/expert-library/feedback', body) as Promise<{
+      status: string;
+      expert_id: string;
+      invoke_id: string;
+    }>,
+
+  /** 应用校准（Phase 6: 返回 dimensionAverages） */
+  applyCalibration: (expertId: string) =>
+    client.post(`/expert-library/calibrate/${expertId}`) as Promise<{
+      expertId: string;
+      status: string;
+      suggestions: string[];
+      weightChanges?: Record<string, { before: number; after: number }>;
+      dimensionAverages?: Record<string, { avg: number; count: number }>;
+    }>,
+
+  /** Phase 8/10: 列出所有心智模型（?shared=true 仅返回共享） */
+  listMentalModels: (params?: { shared?: boolean }) =>
+    client.get('/expert-library/mental-models', { params }) as Promise<{
+      total: number;
+      shared_count: number;
+      models: Array<{
+        name: string;
+        expertCount: number;
+        isShared: boolean;
+        experts: Array<{ expert_id: string; name: string }>;
+      }>;
+    }>,
+
+  /** Phase 8: 查询单个心智模型的所有使用专家详情 */
+  getMentalModel: (name: string) =>
+    client.get(`/expert-library/mental-models/${encodeURIComponent(name)}`) as Promise<{
+      name: string;
+      expertCount: number;
+      isShared: boolean;
+      experts: Array<{
+        expert_id: string;
+        expert_name: string;
+        summary: string;
+        evidence: string[];
+        applicationContext: string;
+        failureCondition: string;
+      }>;
+    }>,
+
+  /** Phase 10: 完整 mental model catalog（含 variants 全字段） */
+  getMentalModelCatalog: () =>
+    client.get('/expert-library/mental-models/catalog') as Promise<{
+      generatedAt: string;
+      totalModels: number;
+      sharedCount: number;
+      expertCount: number;
+      experts: Array<{ expert_id: string; name: string }>;
+      models: Array<{
+        name: string;
+        expertCount: number;
+        isShared: boolean;
+        variants: Array<{
+          expert_id: string;
+          expert_name: string;
+          summary: string;
+          evidence: string[];
+          applicationContext: string;
+          failureCondition: string;
+        }>;
+      }>;
+    }>,
+
+  /** Phase 8: 强制刷新图谱缓存 */
+  refreshMentalModels: () =>
+    client.post('/expert-library/mental-models/refresh') as Promise<{
+      ok: boolean;
+      total: number;
+    }>,
 };
 
 // ============================================
