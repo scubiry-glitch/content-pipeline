@@ -1,6 +1,5 @@
 // 专家 1v1 对话 — 左侧专家列表，右侧对话记录
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExpertTabs } from './ExpertLibrary';
 import './ExpertChat.css';
 
 interface Expert {
@@ -169,8 +168,6 @@ export function ExpertChat() {
 
   return (
     <div className="expert-chat-page">
-      <ExpertTabs />
-
       <div className="expert-chat-layout">
         {/* ===== 左侧：专家列表 ===== */}
         <aside className="expert-chat-sidebar">

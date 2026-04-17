@@ -1,6 +1,5 @@
 // 专家辩论 — 多专家协作辩论 + 对比分析
 import { useState, useEffect } from 'react';
-import { ExpertTabs } from './ExpertLibrary';
 import { expertLibraryApi } from '../api/client';
 
 interface DebateRound {
@@ -89,8 +88,6 @@ export function ExpertDebate() {
 
   return (
     <div className="min-h-screen bg-surface p-6">
-      <ExpertTabs />
-
       <div className="max-w-7xl mx-auto mt-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-on-surface flex items-center gap-2">

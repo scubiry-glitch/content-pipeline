@@ -9,7 +9,6 @@ import {
   getExpertFeedbackStats,
 } from '../services/expertService';
 import type { Expert } from '../types';
-import { ExpertTabs } from './ExpertLibrary';
 import './ExpertNetwork.css';
 
 interface NetworkNode {
@@ -295,9 +294,6 @@ export function ExpertNetwork() {
         <h1>🕸️ 专家协作网络</h1>
         <p className="subtitle">可视化展示专家影响力关系和领域协作</p>
       </div>
-
-      {/* Tab导航 */}
-      <ExpertTabs />
 
       {/* 视图控制 */}
       <div className="view-controls">
