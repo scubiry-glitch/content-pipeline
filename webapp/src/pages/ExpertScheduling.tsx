@@ -1,6 +1,5 @@
 // 专家调度 — 工作量仪表盘 + 任务分配
 import { useState, useEffect, useCallback } from 'react';
-import { ExpertTabs } from './ExpertLibrary';
 import { expertLibraryApi } from '../api/client';
 
 interface Workload {
@@ -84,8 +83,6 @@ export function ExpertScheduling() {
 
   return (
     <div className="min-h-screen bg-surface p-6">
-      <ExpertTabs />
-
       <div className="max-w-7xl mx-auto mt-6">
         <h1 className="text-2xl font-bold text-on-surface mb-6 flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">schedule</span>

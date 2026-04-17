@@ -1,8 +1,8 @@
-// 专家库 v5.2 - Expert Library with Tab Navigation
-// 整合专家库列表、对比、网络、知识图谱
+// 专家库 v5.2 - Expert Library
+// 专家档案列表；其余子页面通过二级导航进入
 
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   getAllExperts,
   getExpertFeedbackStats,
@@ -30,40 +30,6 @@ const DOMAINS = [
   { code: 'E11', name: 'ESG可持续', color: '#10b981', icon: '🌱' },
   { code: 'E12', name: '跨境出海', color: '#0ea5e9', icon: '🚢' },
 ];
-
-const TABS = [
-  { id: 'list', label: '👥 专家列表', path: '/expert-library', description: '浏览专家的详细信息' },
-  { id: 'chat', label: '💬 专家对话', path: '/expert-chat', description: '与专家一对一深度对话' },
-  { id: 'comparison', label: '⚖️ 专家对比', path: '/expert-comparison', description: '多专家横向对比分析' },
-  { id: 'network', label: '🕸️ 协作网络', path: '/expert-network', description: '专家协作关系与网络结构' },
-  { id: 'scheduling', label: '📋 专家调度', path: '/expert-scheduling', description: '工作量管理与任务分配' },
-  { id: 'debate', label: '🔥 专家辩论', path: '/expert-debate', description: '多专家协作辩论与对比分析' },
-  { id: 'knowledge', label: '🧠 知识图谱', path: '/expert-knowledge-graph', description: '探索专家知识体系与概念关联' },
-];
-
-// Tab navigation component used across expert library pages
-export function ExpertTabs() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const currentPath = location.pathname;
-
-  return (
-    <div className="expert-tabs">
-      <div className="tabs-nav">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-btn ${currentPath === tab.path ? 'active' : ''}`}
-            onClick={() => navigate(tab.path)}
-            title={tab.description}
-          >
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function ExpertLibrary() {
   const navigate = useNavigate();
@@ -305,7 +271,6 @@ export function ExpertLibrary() {
 
   return (
     <div className="expert-library-page">
-      <ExpertTabs />
       {/* 页面标题 */}
       <div className="page-header expert-library-page-header">
         <div className="page-header-main">
