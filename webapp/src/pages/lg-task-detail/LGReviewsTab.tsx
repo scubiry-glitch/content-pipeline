@@ -289,46 +289,113 @@ export function LGReviewsTab() {
   }, [revisionSubmitted, detail?.status]);
 
   // 将 LGAnnotation 转为 InlineAnnotationArea 格式
-  const annotationItems = annotations.map(a => ({
-    id: a.id,
-    content: a.comment,
-    severity: mapAnnotationSeverity(a.severity),
-    author: a.expertName,
-    location: a.location,
-    suggestion: a.suggestion,
-    resolved: a.resolved,
-  }));
+  // 如果 API 没返回 annotations，从 blueTeamRounds 的 questions 合成
+  const annotationItems = (() => {
+    if (annotations.length > 0) {
+      return annotations.map(a => ({
+        id: a.id,
+        content: a.comment,
+        severity: mapAnnotationSeverity(a.severity),
+        author: a.expertName,
+        location: a.location,
+        suggestion: a.suggestion,
+        resolved: a.resolved,
+      }));
+    }
+    // 兜底：从 blueTeamRounds questions 合成 annotation items
+    const synthetic: Array<{
+      id: string; content: string;
+      severity: 'critical' | 'warning' | 'info' | 'praise';
+      author: string; location: string;
+      suggestion?: string; resolved: boolean;
+    }> = [];
+    rounds.forEach((round: any) => {
+      (round.questions || []).forEach((q: any, j: number) => {
+        synthetic.push({
+          id: `syn-r${round.round}-q${j}`,
+          content: q.question,
+          severity: mapAnnotationSeverity(q.severity),
+          author: q.expertName || q.role || 'Expert',
+          location: `第 ${round.round} 轮`,
+          suggestion: q.suggestion,
+          resolved: false,
+        });
+      });
+    });
+    return synthetic;
+  })();
 
   // 构造 HighlightItem[]：从 draftContent 提取高亮文本片段
   const highlightItems: HighlightItem[] = (() => {
-    if (!detail?.draftContent || annotations.length === 0) return [];
+    if (!detail?.draftContent) return [];
     const draft = detail.draftContent;
     const items: HighlightItem[] = [];
-    annotations.forEach((a) => {
-      // 优先使用 startOffset/endOffset
-      if (typeof a.startOffset === 'number' && typeof a.endOffset === 'number' && a.endOffset > a.startOffset) {
-        const text = draft.slice(a.startOffset, Math.min(a.endOffset, a.startOffset + 120));
-        if (text.trim()) {
-          const colorMap: Record<string, 'red' | 'orange' | 'blue'> = {
-            high: 'red', medium: 'orange', low: 'blue', praise: 'blue',
-          };
-          items.push({ id: a.id, text: text.trim(), color: colorMap[a.severity] || 'blue' });
-        }
-      } else if (a.comment) {
-        // 兜底：用 comment 前 30 字符搜索 draft 中匹配的片段
-        const searchTerm = a.comment.replace(/[。？！，、；：""''【】（）]/g, '').slice(0, 30);
-        if (searchTerm.length >= 6) {
-          const idx = draft.indexOf(searchTerm);
-          if (idx >= 0) {
-            const text = draft.slice(idx, idx + Math.min(searchTerm.length + 20, 80));
-            const colorMap: Record<string, 'red' | 'orange' | 'blue'> = {
-              high: 'red', medium: 'orange', low: 'blue', praise: 'blue',
-            };
+    const colorMap: Record<string, 'red' | 'orange' | 'blue'> = {
+      high: 'red', medium: 'orange', low: 'blue', praise: 'blue',
+    };
+
+    // 优先从 API annotations 生成（有 startOffset/endOffset）
+    if (annotations.length > 0) {
+      annotations.forEach((a) => {
+        if (typeof a.startOffset === 'number' && typeof a.endOffset === 'number' && a.endOffset > a.startOffset) {
+          const text = draft.slice(a.startOffset, Math.min(a.endOffset, a.startOffset + 120));
+          if (text.trim()) {
             items.push({ id: a.id, text: text.trim(), color: colorMap[a.severity] || 'blue' });
           }
+        } else if (a.comment) {
+          const searchTerm = a.comment.replace(/[。？！，、；：""''【】（）]/g, '').slice(0, 30);
+          if (searchTerm.length >= 6) {
+            const idx = draft.indexOf(searchTerm);
+            if (idx >= 0) {
+              const text = draft.slice(idx, idx + Math.min(searchTerm.length + 20, 80));
+              items.push({ id: a.id, text: text.trim(), color: colorMap[a.severity] || 'blue' });
+            }
+          }
         }
-      }
+      });
+      return items;
+    }
+
+    // 兜底：从 blueTeamRounds questions 中提取关键短语在 draft 中搜索
+    rounds.forEach((round: any) => {
+      (round.questions || []).forEach((q: any, j: number) => {
+        const id = `syn-r${round.round}-q${j}`;
+        const color = colorMap[q.severity] || 'blue';
+
+        // 策略 1：用 suggestion 搜索（建议通常引用了原文片段）
+        if (q.suggestion) {
+          const sugTerms = q.suggestion.replace(/[。？！，、；：""''【】（）建议：]/g, '').split(/[\s,，]+/).filter((w: string) => w.length >= 4);
+          for (const term of sugTerms.slice(0, 3)) {
+            const idx = draft.indexOf(term);
+            if (idx >= 0) {
+              const start = Math.max(0, idx - 10);
+              const text = draft.slice(start, start + Math.min(term.length + 40, 80)).trim();
+              if (text && !items.some(it => it.text === text)) {
+                items.push({ id, text, color });
+                break;
+              }
+            }
+          }
+        }
+
+        // 策略 2：用 question 中的关键短语搜索
+        if (!items.some(it => it.id === id) && q.question) {
+          const qTerms = q.question.replace(/[。？！，、；：""''【】（）]/g, '').split(/[\s,，]+/).filter((w: string) => w.length >= 4);
+          for (const term of qTerms.slice(0, 5)) {
+            const idx = draft.indexOf(term);
+            if (idx >= 0) {
+              const start = Math.max(0, idx - 10);
+              const text = draft.slice(start, start + Math.min(term.length + 40, 80)).trim();
+              if (text && !items.some(it => it.text === text)) {
+                items.push({ id, text, color });
+                break;
+              }
+            }
+          }
+        }
+      });
     });
+
     return items;
   })();
 
