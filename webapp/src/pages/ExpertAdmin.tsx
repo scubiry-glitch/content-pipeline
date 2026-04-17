@@ -54,6 +54,7 @@ const NAV_ITEMS = [
   { id: 'methodology', icon: 'architecture',      label: 'METHODOLOGY' },
   { id: 'emm',         icon: 'gavel',             label: 'EMM GATE' },
   { id: 'calibrate',   icon: 'science',           label: 'CALIBRATE' },
+  { id: 'history',     icon: 'history',            label: 'HISTORY' },
   { id: 'materials',   icon: 'library_books',     label: 'MATERIALS' },
   { id: 'signature',   icon: 'draw',              label: 'SIGNATURE' },
 ];
@@ -99,6 +100,13 @@ export function ExpertAdmin() {
   // Phase 6: 校准返回的维度平均分
   const [calibrationResult, setCalibrationResult] = useState<any>(null);
   const [calibrating, setCalibrating] = useState(false);
+
+  // HISTORY tab state
+  const [invocationHistory, setInvocationHistory] = useState<any[]>([]);
+  const [feedbackHistory, setFeedbackHistory] = useState<any[]>([]);
+  const [historyTotal, setHistoryTotal] = useState({ invocations: 0, feedback: 0 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedInvokeId, setExpandedInvokeId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // AI Research Enhance
@@ -301,6 +309,29 @@ export function ExpertAdmin() {
       setCalibrating(false);
     }
   };
+
+  // ── Load history ───────────────────────────────────────────────────────────
+  const loadHistory = useCallback(async () => {
+    if (!expertId || historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      const [invRes, fbRes] = await Promise.all([
+        fetch(`${API}/experts/${expertId}/invocations?limit=20`).then(r => r.ok ? r.json() : null),
+        fetch(`${API}/experts/${expertId}/feedback-history?limit=20`).then(r => r.ok ? r.json() : null),
+      ]);
+      setInvocationHistory(invRes?.invocations || []);
+      setFeedbackHistory(fbRes?.feedback || []);
+      setHistoryTotal({
+        invocations: invRes?.total || 0,
+        feedback: fbRes?.total || 0,
+      });
+    } catch {
+      setInvocationHistory([]);
+      setFeedbackHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [expertId, historyLoading]);
 
   // ── Export JSON ────────────────────────────────────────────────────────────
   const exportJSON = () => {
@@ -1101,6 +1132,123 @@ export function ExpertAdmin() {
                 </div>
               )}
             </div>
+          </section>
+
+          {/* ═══ HISTORY ═════════════════════════════════════════════════════ */}
+          <section id="history" ref={el => { sectionRefs.current['history'] = el; }} className="ea-section">
+            <div className="ea-section-header">
+              <span className="material-symbols-outlined ea-section-icon">history</span>
+              <h2 className="ea-section-title">INVOCATION & FEEDBACK HISTORY</h2>
+              <button className="ea-add-btn" onClick={loadHistory}>
+                {historyLoading ? '◌ LOADING...' : '🔄 LOAD HISTORY'}
+              </button>
+            </div>
+
+            {historyTotal.invocations === 0 && historyTotal.feedback === 0 && !historyLoading && invocationHistory.length === 0 && (
+              <p style={{ color: '#888', fontSize: 13 }}>点击 LOAD HISTORY 加载调用和反馈记录</p>
+            )}
+
+            {/* Invocation History */}
+            {invocationHistory.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <span className="ea-field-label">INVOCATIONS ({historyTotal.invocations} total)</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {invocationHistory.map((inv: any) => {
+                    const isExpanded = expandedInvokeId === inv.invoke_id;
+                    return (
+                      <div key={inv.invoke_id} style={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, overflow: 'hidden' }}>
+                        <div
+                          onClick={() => setExpandedInvokeId(isExpanded ? null : inv.invoke_id)}
+                          style={{
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            background: isExpanded ? 'rgba(59,130,246,0.04)' : '#fff',
+                          }}
+                        >
+                          <span style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            fontWeight: 600,
+                            background: inv.task_type === 'evaluation' ? '#dbeafe' : inv.task_type === 'analysis' ? '#f3e8ff' : '#d1fae5',
+                            color: inv.task_type === 'evaluation' ? '#1d4ed8' : inv.task_type === 'analysis' ? '#7c3aed' : '#059669',
+                          }}>
+                            {inv.task_type?.toUpperCase()}
+                          </span>
+                          <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {inv.input_summary?.substring(0, 80) || '(no summary)'}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>
+                            {inv.confidence ? `${(inv.confidence * 100).toFixed(0)}%` : '—'}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap' }}>
+                            {inv.created_at ? new Date(inv.created_at).toLocaleString() : ''}
+                          </span>
+                          <span style={{ color: '#aaa' }}>{isExpanded ? '▼' : '▶'}</span>
+                        </div>
+                        {isExpanded && inv.output_sections && (
+                          <div style={{ padding: '0 14px 12px', background: 'rgba(0,0,0,0.01)' }}>
+                            {(Array.isArray(inv.output_sections) ? inv.output_sections : []).map((s: any, i: number) => (
+                              <div key={i} style={{ marginTop: 8, borderLeft: '3px solid #3b82f6', paddingLeft: 10 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#333' }}>{s.title}</div>
+                                <div style={{ fontSize: 12, color: '#555', whiteSpace: 'pre-wrap', maxHeight: 150, overflow: 'auto' }}>{s.content}</div>
+                              </div>
+                            ))}
+                            <div style={{ marginTop: 8, fontSize: 10, color: '#aaa' }}>
+                              invoke_id: {inv.invoke_id}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Feedback History */}
+            {feedbackHistory.length > 0 && (
+              <div>
+                <span className="ea-field-label">FEEDBACK ({historyTotal.feedback} total)</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {feedbackHistory.map((fb: any) => (
+                    <div key={fb.feedback_id} style={{
+                      padding: '10px 14px',
+                      border: '1px solid rgba(0,0,0,0.08)',
+                      borderRadius: 6,
+                      borderLeft: `4px solid ${fb.human_score >= 4 ? '#10b981' : fb.human_score >= 3 ? '#f59e0b' : '#ef4444'}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 18, fontWeight: 600 }}>{fb.human_score ?? '—'}<span style={{ fontSize: 12, color: '#aaa' }}>/5</span></span>
+                        <span style={{ flex: 1, fontSize: 12, color: '#555' }}>{fb.human_notes || '(no notes)'}</span>
+                        <span style={{ fontSize: 11, color: '#aaa' }}>{fb.created_at ? new Date(fb.created_at).toLocaleString() : ''}</span>
+                      </div>
+                      {fb.rubric_scores && Object.keys(fb.rubric_scores).length > 0 && (
+                        <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
+                          {Object.entries(fb.rubric_scores as Record<string, number>).map(([dim, score]) => (
+                            <span key={dim} style={{
+                              fontSize: 11,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: score >= 4 ? '#d1fae5' : score >= 3 ? '#fef3c7' : '#fce7f3',
+                              color: score >= 4 ? '#065f46' : score >= 3 ? '#92400e' : '#9d174d',
+                            }}>
+                              {dim}: {score}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {fb.invoke_id && (
+                        <div style={{ fontSize: 10, color: '#ccc', marginTop: 4 }}>invoke: {fb.invoke_id}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ═══ MATERIALS ══════════════════════════════════════════════════ */}

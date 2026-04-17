@@ -1722,6 +1722,42 @@ export const expertLibraryApi = {
       ok: boolean;
       total: number;
     }>,
+
+  /** 调用历史（分页） */
+  getInvocationHistory: (expertId: string, params?: { limit?: number; offset?: number }) =>
+    client.get(`/expert-library/experts/${expertId}/invocations`, { params }) as Promise<{
+      expert_id: string;
+      total: number;
+      limit: number;
+      offset: number;
+      invocations: Array<{
+        invoke_id: string;
+        task_type: string;
+        input_type: string;
+        input_summary: string;
+        output_sections: any[];
+        confidence: number;
+        created_at: string;
+      }>;
+    }>,
+
+  /** 反馈历史（分页） */
+  getFeedbackHistory: (expertId: string, params?: { limit?: number; offset?: number }) =>
+    client.get(`/expert-library/experts/${expertId}/feedback-history`, { params }) as Promise<{
+      expert_id: string;
+      total: number;
+      limit: number;
+      offset: number;
+      feedback: Array<{
+        feedback_id: string;
+        invoke_id: string;
+        human_score: number | null;
+        human_notes: string | null;
+        rubric_scores: Record<string, number> | null;
+        actual_outcome: any;
+        created_at: string;
+      }>;
+    }>,
 };
 
 // ============================================
