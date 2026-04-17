@@ -1,7 +1,9 @@
 // 专家辩论 — 多专家协作辩论 + 对比分析
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { expertLibraryApi } from '../api/client';
+import { useExperts, useDebateHistory } from '../hooks/useExpertApi';
+import { ROUTES } from '../config/routes';
 
 interface DebateRound {
   round: number;
@@ -21,7 +23,8 @@ interface DebateResult {
 
 export function ExpertDebate() {
   const navigate = useNavigate();
-  const [experts, setExperts] = useState<any[]>([]);
+  const { experts } = useExperts();
+  const { debates: debateHistory, isLoading: historyLoading, refresh: refreshHistory } = useDebateHistory(20);
   const [selectedExperts, setSelectedExperts] = useState<string[]>([]);
   const [topic, setTopic] = useState('');
   const [content, setContent] = useState('');
@@ -29,28 +32,10 @@ export function ExpertDebate() {
   const [temperature, setTemperature] = useState(0.7);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DebateResult | null>(null);
-
-  // 辩论历史
-  const [debateHistory, setDebateHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
-  useEffect(() => {
-    expertLibraryApi.getExperts().then(r => setExperts(r.experts || [])).catch(() => {});
-    loadHistory();
-  }, []);
-
-  const loadHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await expertLibraryApi.listDebates(20);
-      setDebateHistory(res.debates || []);
-    } catch { /* ignore */ }
-    finally { setHistoryLoading(false); }
-  };
 
   const viewHistoryDebate = (debate: any) => {
-    window.open(`/expert-debate/${debate.id}`, '_blank');
+    window.open(ROUTES.expert.debateDetail(debate.id), '_blank');
   };
 
   const toggleExpert = (id: string) => {
@@ -66,10 +51,10 @@ export function ExpertDebate() {
     try {
       const res = await expertLibraryApi.debate(topic, content, selectedExperts, rounds, temperature);
       setResult(res);
-      loadHistory(); // 刷新历史列表
+      refreshHistory(); // 刷新历史列表
       // 若后端返回了持久化 ID，跳转到独立详情页
       if (res?.id) {
-        navigate(`/expert-debate/${res.id}`);
+        navigate(ROUTES.expert.debateDetail(res.id));
         return;
       }
     } catch (error) {

@@ -1,14 +1,11 @@
 // 专家协作网络分析 - Expert Collaboration Network
 // 可视化展示专家影响力网络和领域关联
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
-import {
-  getAllExperts,
-  getExpertFeedbackStats,
-} from '../services/expertService';
-import type { Expert } from '../types';
+import { getExpertFeedbackStats } from '../services/expertService';
+import { useExperts } from '../hooks/useExpertApi';
 import './ExpertNetwork.css';
 
 interface NetworkNode {
@@ -76,21 +73,9 @@ const DOMAIN_NAMES: Record<string, string> = {
 
 export function ExpertNetwork() {
   const navigate = useNavigate();
-  const [experts, setExperts] = useState<Expert[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { experts, isLoading: loading } = useExperts();
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
   const [viewMode, setViewMode] = useState<'all' | 'senior' | 'domain'>('all');
-
-  useEffect(() => {
-    loadExperts();
-  }, []);
-
-  const loadExperts = () => {
-    setLoading(true);
-    const allExperts = getAllExperts();
-    setExperts(allExperts);
-    setLoading(false);
-  };
 
   // 构建网络图数据
   const { nodes, links, categories } = useMemo(() => {

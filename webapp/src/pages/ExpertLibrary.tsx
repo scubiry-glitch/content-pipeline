@@ -4,21 +4,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  getAllExperts,
   getExpertFeedbackStats,
   getExpertWorkload,
   getExpertReviewHistory,
-  initExpertsFromApi,
   type ExpertReviewHistory,
 } from '../services/expertService';
 import { expertLibraryApi } from '../api/client';
+import { useExperts } from '../hooks/useExpertApi';
 import type { Expert } from '../types';
 import { EXPERT_DOMAINS as DOMAINS, findDomainByCode } from '../config/expertDomains';
 import './ExpertLibrary.css';
 
 export function ExpertLibrary() {
   const navigate = useNavigate();
-  const [experts, setExperts] = useState<Expert[]>([]);
+  const { experts, isLoading: expertsLoading, refresh: refreshExperts } = useExperts();
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
@@ -37,7 +36,7 @@ export function ExpertLibrary() {
   } | null>(null);
   const [selectedExpertHistory, setSelectedExpertHistory] = useState<ExpertReviewHistory[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const loading = expertsLoading;
   const [syncingBuiltins, setSyncingBuiltins] = useState(false);
   const [syncBuiltinMessage, setSyncBuiltinMessage] = useState<string | null>(null);
   const [syncProgress, setSyncProgress] = useState<{
@@ -71,13 +70,6 @@ export function ExpertLibrary() {
       .then(data => setCdtProfile(data))
       .catch(() => setCdtProfile(null));
   };
-
-  useEffect(() => {
-    const allExperts = getAllExperts();
-    setExperts(allExperts);
-    setFilteredExperts(allExperts);
-    setLoading(false);
-  }, []);
 
   useEffect(() => {
     let result = experts;
@@ -133,9 +125,7 @@ export function ExpertLibrary() {
   };
 
   const refreshExpertsList = async () => {
-    await initExpertsFromApi();
-    const allExperts = getAllExperts();
-    setExperts(allExperts);
+    await refreshExperts();
   };
 
   const resolveDuplicateChoice = (choice: 'skip' | 'overwrite', applyToRest?: boolean) => {

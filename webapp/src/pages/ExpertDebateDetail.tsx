@@ -1,7 +1,7 @@
 // 专家辩论详情页 — 独立路由 /expert-debate/:id
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { expertLibraryApi } from '../api/client';
+import { useDebate } from '../hooks/useExpertApi';
+import { ROUTES } from '../config/routes';
 
 interface DebateRound {
   round: number;
@@ -28,21 +28,13 @@ const phaseLabel = (phase: string) => {
 export function ExpertDebateDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [result, setResult] = useState<DebateResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    expertLibraryApi.getDebate(id)
-      .then(data => {
-        if (data) setResult(data);
-        else setError('辩论记录不存在');
-      })
-      .catch(() => setError('加载失败，请检查网络或数据库连接'))
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { data, error: fetchError, isLoading: loading } = useDebate(id ?? null);
+  const result = data as DebateResult | null;
+  const error = fetchError
+    ? '加载失败，请检查网络或数据库连接'
+    : !loading && !result
+      ? '辩论记录不存在'
+      : '';
 
   if (loading) {
     return (
@@ -57,7 +49,7 @@ export function ExpertDebateDetail() {
       <div className="min-h-screen bg-surface p-6 flex flex-col items-center justify-center gap-4">
         <p className="text-on-surface-variant">{error || '未找到辩论记录'}</p>
         <button
-          onClick={() => navigate('/expert-debate')}
+          onClick={() => navigate(ROUTES.expert.debate)}
           className="text-sm px-4 py-2 bg-primary text-on-primary rounded-lg"
         >
           返回辩论列表
@@ -72,7 +64,7 @@ export function ExpertDebateDetail() {
         {/* 顶部导航 */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => navigate('/expert-debate')}
+            onClick={() => navigate(ROUTES.expert.debate)}
             className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>

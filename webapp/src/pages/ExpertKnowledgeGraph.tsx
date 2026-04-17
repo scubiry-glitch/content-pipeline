@@ -1,14 +1,10 @@
 // 专家知识图谱 - Expert Knowledge Graph
 // 可视化展示专家、领域、话题、观点之间的关系
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
-import {
-  getAllExperts,
-  generateExpertOpinion,
-} from '../services/expertService';
-import type { Expert } from '../types';
+import { useExperts } from '../hooks/useExpertApi';
 import './ExpertKnowledgeGraph.css';
 
 interface KnowledgeNode {
@@ -73,22 +69,10 @@ const HOT_TOPICS = [
 
 export function ExpertKnowledgeGraph() {
   const navigate = useNavigate();
-  const [experts, setExperts] = useState<Expert[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { experts, isLoading: loading } = useExperts();
   const [selectedNode, setSelectedNode] = useState<KnowledgeNode | null>(null);
   const [filterDomain, setFilterDomain] = useState<string>('all');
   const [viewType, setViewType] = useState<'full' | 'domain' | 'topic'>('full');
-
-  useEffect(() => {
-    loadExperts();
-  }, []);
-
-  const loadExperts = () => {
-    setLoading(true);
-    const allExperts = getAllExperts();
-    setExperts(allExperts);
-    setLoading(false);
-  };
 
   // 构建知识图谱数据
   const { nodes, links, categories } = useMemo(() => {
