@@ -1,5 +1,6 @@
 // 专家 1v1 对话 — 左侧专家列表，右侧对话记录
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useExperts } from '../hooks/useExpertApi';
 import './ExpertChat.css';
 
 interface Expert {
@@ -25,31 +26,22 @@ interface Conversation {
 const API_BASE = '/api/v1/expert-library';
 
 export function ExpertChat() {
-  const [experts, setExperts] = useState<Expert[]>([]);
+  const { experts: rawExperts, isLoading: expertsLoading } = useExperts();
+  const experts = rawExperts as unknown as Expert[];
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
   const [conversations, setConversations] = useState<Record<string, Conversation>>({});
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [expertsLoading, setExpertsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [chatTemperature, setChatTemperature] = useState(0.6);
   const [historyLimit, setHistoryLimit] = useState(10);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 加载专家列表
+  // 专家列表就绪时默认选中第一位
   useEffect(() => {
-    setExpertsLoading(true);
-    fetch(`${API_BASE}/experts`)
-      .then(r => r.json())
-      .then(data => {
-        const list: Expert[] = data.experts || data;
-        setExperts(list);
-        if (list.length > 0) setSelectedExpert(list[0]);
-      })
-      .catch(err => console.error('加载专家失败:', err))
-      .finally(() => setExpertsLoading(false));
-  }, []);
+    if (!selectedExpert && experts.length > 0) setSelectedExpert(experts[0]);
+  }, [experts, selectedExpert]);
 
   // 滚动到最新消息
   useEffect(() => {

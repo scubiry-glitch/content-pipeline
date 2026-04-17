@@ -4,10 +4,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  getAllExperts,
   getExpertFeedbackStats,
   generateExpertOpinion,
 } from '../services/expertService';
+import { useExperts } from '../hooks/useExpertApi';
 import type { Expert, ExpertReview } from '../types';
 import './ExpertComparison.css';
 
@@ -31,18 +31,15 @@ const TOPICS = [
 export function ExpertComparison() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [experts, setExperts] = useState<Expert[]>([]);
+  const { experts } = useExperts();
   const [selectedExperts, setSelectedExperts] = useState<string[]>([]);
   const [comparisonData, setComparisonData] = useState<ComparisonExpert[]>([]);
   const [selectedTopic, setSelectedTopic] = useState(TOPICS[0]);
   const [loading, setLoading] = useState(false);
   const [showSelector, setShowSelector] = useState(true);
 
+  // 从URL参数加载预选专家
   useEffect(() => {
-    const allExperts = getAllExperts();
-    setExperts(allExperts);
-
-    // 从URL参数加载预选专家
     const expertIds = searchParams.get('experts')?.split(',').filter(Boolean) || [];
     if (expertIds.length >= 2 && expertIds.length <= 3) {
       setSelectedExperts(expertIds);

@@ -1,6 +1,7 @@
 // 专家调度 — 工作量仪表盘 + 任务分配
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { expertLibraryApi } from '../api/client';
+import { useExpertWorkloads } from '../hooks/useExpertApi';
 
 interface Workload {
   expertId: string;
@@ -23,27 +24,13 @@ interface Recommendation {
 }
 
 export function ExpertScheduling() {
-  const [workloads, setWorkloads] = useState<Workload[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { workloads: rawWorkloads, isLoading: loading, refresh: reloadWorkloads } = useExpertWorkloads();
+  const workloads = rawWorkloads as Workload[];
   const [selectedExpert, setSelectedExpert] = useState<Workload | null>(null);
   // 智能推荐
   const [recommendTopic, setRecommendTopic] = useState('');
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recommendLoading, setRecommendLoading] = useState(false);
-
-  const loadWorkloads = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await expertLibraryApi.getWorkloads();
-      setWorkloads(result.workloads || []);
-    } catch (error) {
-      console.error('Failed to load workloads:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadWorkloads(); }, [loadWorkloads]);
 
   const handleRecommend = async () => {
     if (!recommendTopic.trim()) return;
@@ -59,7 +46,7 @@ export function ExpertScheduling() {
     const next = current === 'available' ? 'busy' : current === 'busy' ? 'unavailable' : 'available';
     try {
       await expertLibraryApi.updateAvailability(expertId, next as any);
-      loadWorkloads();
+      reloadWorkloads();
     } catch { /* ignore */ }
   };
 
@@ -169,7 +156,7 @@ export function ExpertScheduling() {
           <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between">
             <h2 className="font-bold text-on-surface">专家工作量</h2>
             <button
-              onClick={loadWorkloads}
+              onClick={reloadWorkloads}
               className="text-xs px-3 py-1 border border-outline-variant rounded-lg hover:bg-surface-container text-on-surface-variant"
             >
               刷新
