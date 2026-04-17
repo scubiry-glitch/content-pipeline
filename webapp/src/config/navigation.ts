@@ -1,0 +1,121 @@
+// 主导航/系统菜单配置 — 全局唯一的导航数据源
+// Layout 组件只消费此配置，新增/调整导航项在此处修改
+
+import { ROUTES } from './routes';
+
+export interface NavItem {
+  to: string;
+  label: string;
+  icon?: string;
+  children?: NavItem[];
+  matchPrefixes?: string[]; // 额外的路径前缀匹配（用于无 children 但需高亮的导航组）
+}
+
+export const mainNavItems: NavItem[] = [
+  { to: ROUTES.dashboard, label: '仪表盘', icon: '📊' },
+  {
+    to: ROUTES.tasks.list,
+    label: '任务中心',
+    icon: '📋',
+    children: [
+      { to: ROUTES.tasks.list, label: '任务列表', icon: '📋' },
+      { to: ROUTES.tasks.langGraph, label: 'LangGraph任务', icon: '🧠' },
+    ],
+  },
+  {
+    to: ROUTES.assets.library,
+    label: '内容资产',
+    icon: '📚',
+    children: [
+      { to: ROUTES.assets.library, label: '素材库', icon: '📁' },
+      { to: ROUTES.assets.reports, label: '研报', icon: '📊' },
+      { to: ROUTES.assets.popular, label: '热门素材', icon: '🔥' },
+      { to: ROUTES.assets.rss, label: 'RSS订阅', icon: '📡' },
+      { to: ROUTES.assets.bindings, label: '目录绑定', icon: '📂' },
+    ],
+  },
+  {
+    to: ROUTES.expert.library,
+    label: '专家体系',
+    icon: '👥',
+    matchPrefixes: [
+      ROUTES.expert.library,
+      ROUTES.expert.chat,
+      ROUTES.expert.comparison,
+      ROUTES.expert.network,
+      ROUTES.expert.scheduling,
+      ROUTES.expert.debate,
+      ROUTES.expert.knowledgeGraph,
+      '/expert-admin',
+      ROUTES.mentalModels,
+    ],
+    children: [
+      { to: ROUTES.expert.library, label: '专家库', icon: '👥' },
+      { to: ROUTES.expert.chat, label: '专家对话', icon: '💬' },
+      { to: ROUTES.expert.comparison, label: '专家对比', icon: '⚖️' },
+      { to: ROUTES.expert.debate, label: '专家辩论', icon: '🔥' },
+      { to: ROUTES.expert.network, label: '专家网络', icon: '🕸️' },
+      { to: ROUTES.expert.scheduling, label: '专家调度', icon: '📋' },
+      { to: ROUTES.expert.knowledgeGraph, label: '知识图谱', icon: '🧠' },
+      { to: ROUTES.mentalModels, label: '心智模型', icon: '🧩' },
+    ],
+  },
+  {
+    to: ROUTES.contentLibrary.overview,
+    label: '内容库',
+    icon: '📚',
+    children: [
+      { to: ROUTES.contentLibrary.overview, label: '产出物总览', icon: '📊' },
+      { to: ROUTES.contentLibrary.topics, label: '①③④ 议题推荐', icon: '🎯' },
+      { to: ROUTES.contentLibrary.trends, label: '② 趋势信号', icon: '📈' },
+      { to: ROUTES.contentLibrary.facts, label: '⑤ 事实浏览', icon: '📋' },
+      { to: ROUTES.contentLibrary.entities, label: '⑥ 实体图谱', icon: '🔗' },
+      { to: ROUTES.contentLibrary.delta, label: '⑦ 信息增量', icon: '🔄' },
+      { to: ROUTES.contentLibrary.freshness, label: '⑧ 保鲜度', icon: '⏱️' },
+      { to: ROUTES.contentLibrary.cards, label: '⑨ 知识卡片', icon: '🃏' },
+      { to: ROUTES.contentLibrary.synthesis, label: '⑩ 认知综合', icon: '💡' },
+      { to: ROUTES.contentLibrary.materials, label: '⑪ 素材推荐', icon: '📦' },
+      { to: ROUTES.contentLibrary.consensus, label: '⑫ 专家共识', icon: '🤝' },
+      { to: ROUTES.contentLibrary.contradictions, label: '⑬ 争议话题', icon: '⚡' },
+      { to: ROUTES.contentLibrary.beliefs, label: '⑭ 观点演化', icon: '🔀' },
+      { to: ROUTES.contentLibrary.crossDomain, label: '⑮ 跨域关联', icon: '🌐' },
+      { to: ROUTES.contentLibrary.wiki, label: 'Wiki 物化', icon: '📖' },
+      { to: ROUTES.contentLibrary.batchOps, label: '批量操作', icon: '⚡' },
+      { to: ROUTES.contentLibrary.pipeline, label: '生产流水线', icon: '🔀' },
+    ],
+  },
+  {
+    to: ROUTES.hotTopics.list,
+    label: '热点洞察',
+    icon: '🔥',
+    children: [
+      { to: ROUTES.hotTopics.list, label: '热点列表', icon: '📋' },
+      { to: ROUTES.hotTopics.insights, label: '洞察分析', icon: '💡' },
+    ],
+  },
+  {
+    to: ROUTES.aiRecommendations,
+    label: 'AI推荐',
+    icon: '🤖',
+  },
+];
+
+export const systemNavItems: NavItem[] = [
+  { to: ROUTES.system.settings, label: '设置', icon: '⚙️' },
+  { to: ROUTES.system.notifications, label: '通知', icon: '🔔' },
+  { to: ROUTES.system.copilot, label: 'Copilot', icon: '🤖' },
+  { to: ROUTES.system.compliance, label: '合规', icon: '🛡️' },
+  { to: ROUTES.system.i18n, label: '国际化', icon: '🌍' },
+];
+
+// 检查当前路径是否匹配导航项
+export function isActivePath(pathname: string, item: NavItem): boolean {
+  if (pathname === item.to) return true;
+  if (item.children) {
+    return item.children.some((child) => pathname.startsWith(child.to));
+  }
+  if (item.matchPrefixes) {
+    return item.matchPrefixes.some((prefix) => pathname.startsWith(prefix));
+  }
+  return false;
+}
