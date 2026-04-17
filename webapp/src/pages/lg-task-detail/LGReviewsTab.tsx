@@ -1,13 +1,13 @@
 // LG Reviews Tab - 蓝军评审
 // 评审轮次 Timeline + 专家问题卡片 + 专家配置弹窗 + DocumentEditor (R1) + 流式更新 (R2)
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { LGTaskContext } from '../LGTaskDetailLayout';
 import { ReviewConfigPanel } from '../../components/ReviewConfigPanel';
 import { InlineAnnotationArea } from '../../components/content/InlineAnnotationArea';
 import { langgraphApi, type LGAnnotation } from '../../api/langgraph';
-import { MarkdownRenderer } from '../../components/MarkdownRenderer';
+import { MarkdownRenderer, type HighlightItem } from '../../components/MarkdownRenderer';
 
 // severity 配色
 const SEVERITY_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -81,6 +81,10 @@ export function LGReviewsTab() {
   const [docViewMode, setDocViewMode] = useState<'preview' | 'source'>('preview');
   const [streamingPulse, setStreamingPulse] = useState(false);
   const [reviewView, setReviewView] = useState<'parallel' | 'sequential'>('parallel');
+  const [highlightPositions, setHighlightPositions] = useState<Record<string, number>>({});
+  const [hoveredAnnotation, setHoveredAnnotation] = useState<string | null>(null);
+  const docContainerRef = useRef<HTMLDivElement>(null);
+  const highlightPositionsRef = useRef<Record<string, number>>({});
   const lastProgressRef = useRef<number>(-1);
 
   // 加载决策状态（threadId 变化时）
@@ -294,6 +298,93 @@ export function LGReviewsTab() {
     suggestion: a.suggestion,
     resolved: a.resolved,
   }));
+
+  // 构造 HighlightItem[]：从 draftContent 提取高亮文本片段
+  const highlightItems: HighlightItem[] = (() => {
+    if (!detail?.draftContent || annotations.length === 0) return [];
+    const draft = detail.draftContent;
+    const items: HighlightItem[] = [];
+    annotations.forEach((a) => {
+      // 优先使用 startOffset/endOffset
+      if (typeof a.startOffset === 'number' && typeof a.endOffset === 'number' && a.endOffset > a.startOffset) {
+        const text = draft.slice(a.startOffset, Math.min(a.endOffset, a.startOffset + 120));
+        if (text.trim()) {
+          const colorMap: Record<string, 'red' | 'orange' | 'blue'> = {
+            high: 'red', medium: 'orange', low: 'blue', praise: 'blue',
+          };
+          items.push({ id: a.id, text: text.trim(), color: colorMap[a.severity] || 'blue' });
+        }
+      } else if (a.comment) {
+        // 兜底：用 comment 前 30 字符搜索 draft 中匹配的片段
+        const searchTerm = a.comment.replace(/[。？！，、；：""''【】（）]/g, '').slice(0, 30);
+        if (searchTerm.length >= 6) {
+          const idx = draft.indexOf(searchTerm);
+          if (idx >= 0) {
+            const text = draft.slice(idx, idx + Math.min(searchTerm.length + 20, 80));
+            const colorMap: Record<string, 'red' | 'orange' | 'blue'> = {
+              high: 'red', medium: 'orange', low: 'blue', praise: 'blue',
+            };
+            items.push({ id: a.id, text: text.trim(), color: colorMap[a.severity] || 'blue' });
+          }
+        }
+      }
+    });
+    return items;
+  })();
+
+  // 追踪高亮元素的 Y 坐标（用于飘窗评论定位）
+  const updateHighlightPositions = useCallback(() => {
+    const container = docContainerRef.current;
+    if (!container) return;
+    const commentsContainer = document.querySelector('[data-lg-comments-container]');
+    if (!commentsContainer) return;
+
+    const refRect = commentsContainer.getBoundingClientRect();
+    const positions: Record<string, number> = {};
+    annotations.forEach((a) => {
+      const el = document.querySelector(`[data-highlight-id="${a.id}"]`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        positions[a.id] = rect.top - refRect.top;
+      }
+    });
+
+    const prev = highlightPositionsRef.current;
+    const keys = Object.keys(positions);
+    const changed = keys.length !== Object.keys(prev).length ||
+      keys.some(k => Math.abs((positions[k] || 0) - (prev[k] || 0)) > 2);
+    if (changed) {
+      highlightPositionsRef.current = positions;
+      setHighlightPositions(positions);
+    }
+  }, [annotations]);
+
+  // ResizeObserver + MutationObserver 自动重新计算位置
+  useEffect(() => {
+    if (!showDocEditor || docViewMode !== 'preview') return;
+    const container = docContainerRef.current;
+    if (!container) return;
+
+    // 初始计算（等 DOM 渲染后）
+    const initialTimeout = setTimeout(updateHighlightPositions, 200);
+
+    const ro = new ResizeObserver(() => updateHighlightPositions());
+    ro.observe(container);
+
+    const mo = new MutationObserver(() => updateHighlightPositions());
+    mo.observe(container, { childList: true, subtree: true });
+
+    // 滚动时也需要重新计算
+    const onScroll = () => updateHighlightPositions();
+    container.addEventListener('scroll', onScroll, { passive: true });
+
+    return () => {
+      clearTimeout(initialTimeout);
+      ro.disconnect();
+      mo.disconnect();
+      container.removeEventListener('scroll', onScroll);
+    };
+  }, [showDocEditor, docViewMode, updateHighlightPositions]);
 
   return (
     <div className="tab-panel">
@@ -1411,12 +1502,25 @@ export function LGReviewsTab() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: annotationItems.length > 0 ? '2fr 1fr' : '1fr',
-                gap: '16px',
+                gridTemplateColumns: annotationItems.length > 0 ? '8fr 4fr' : '1fr',
+                gap: '0',
+                border: '1px solid var(--divider)',
+                borderRadius: 'var(--radius)',
+                overflow: 'hidden',
               }}
             >
-              {/* 文档主区 */}
-              <div className="info-card full-width" style={{ maxHeight: '600px', overflow: 'auto' }}>
+              {/* 左侧：文档主区（带高亮） */}
+              <div
+                ref={docContainerRef}
+                className="info-card"
+                style={{
+                  maxHeight: '700px',
+                  overflow: 'auto',
+                  borderRadius: 0,
+                  border: 'none',
+                  borderRight: annotationItems.length > 0 ? '1px solid var(--divider)' : 'none',
+                }}
+              >
                 {/* 文档头部信息 */}
                 <div
                   style={{
@@ -1435,11 +1539,16 @@ export function LGReviewsTab() {
                   <span>·</span>
                   <span>第 {rounds.length} 轮</span>
                   <span>·</span>
-                  <span>{annotationItems.length} 条标注</span>
+                  <span style={{ color: highlightItems.length > 0 ? 'var(--primary)' : undefined }}>
+                    {highlightItems.length} 处高亮 / {annotationItems.length} 条标注
+                  </span>
                 </div>
 
                 {docViewMode === 'preview' ? (
-                  <MarkdownRenderer content={detail.draftContent} />
+                  <MarkdownRenderer
+                    content={detail.draftContent}
+                    highlights={highlightItems}
+                  />
                 ) : (
                   <pre
                     style={{
@@ -1456,10 +1565,135 @@ export function LGReviewsTab() {
                 )}
               </div>
 
-              {/* 右侧标注侧边栏 */}
+              {/* 右侧：浮动评论卡片（coordinate-tracked） */}
               {annotationItems.length > 0 && (
-                <div style={{ position: 'sticky', top: '24px', alignSelf: 'start' }}>
-                  <InlineAnnotationArea annotations={annotationItems} title="评审标注" />
+                <div
+                  data-lg-comments-container
+                  style={{
+                    position: 'relative',
+                    maxHeight: '700px',
+                    overflow: 'auto',
+                    background: 'var(--surface-alt)',
+                    padding: '12px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    评审标注 ({annotationItems.length})
+                  </div>
+                  <div style={{ position: 'relative', minHeight: `${Math.max(400, annotationItems.length * 140)}px` }}>
+                    {(() => {
+                      // 计算每个卡片的 Y 位置（有高亮坐标的用坐标，否则按序排列）
+                      const cardHeight = 130;
+                      const gap = 12;
+                      const occupiedRanges: Array<[number, number]> = [];
+
+                      const getAvailableTop = (desiredTop: number): number => {
+                        let top = Math.max(0, desiredTop);
+                        for (let attempt = 0; attempt < 20; attempt++) {
+                          const overlaps = occupiedRanges.some(
+                            ([start, end]) => !(top + cardHeight + gap <= start || top >= end + gap)
+                          );
+                          if (!overlaps) break;
+                          top += cardHeight + gap;
+                        }
+                        occupiedRanges.push([top, top + cardHeight]);
+                        return top;
+                      };
+
+                      // 按高亮位置排序，无位置的排后面
+                      const sorted = [...annotationItems].sort((a, b) => {
+                        const pa = highlightPositions[a.id];
+                        const pb = highlightPositions[b.id];
+                        if (pa != null && pb != null) return pa - pb;
+                        if (pa != null) return -1;
+                        if (pb != null) return 1;
+                        return 0;
+                      });
+
+                      return sorted.map((ann, idx) => {
+                        const hlPos = highlightPositions[ann.id];
+                        const desiredTop = hlPos ?? idx * (cardHeight + gap);
+                        const top = getAvailableTop(desiredTop);
+                        const hasHighlight = hlPos != null;
+                        const isHovered = hoveredAnnotation === ann.id;
+                        const severityColors: Record<string, string> = {
+                          critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6', praise: '#22c55e',
+                        };
+                        const borderColor = severityColors[ann.severity] || '#3b82f6';
+
+                        return (
+                          <div
+                            key={ann.id}
+                            data-annotation-id={ann.id}
+                            onMouseEnter={() => setHoveredAnnotation(ann.id)}
+                            onMouseLeave={() => setHoveredAnnotation(null)}
+                            style={{
+                              position: 'absolute',
+                              top: `${top}px`,
+                              left: '16px',
+                              right: '0',
+                              padding: '10px 12px',
+                              background: isHovered ? 'var(--surface)' : 'var(--surface)',
+                              borderLeft: `3px solid ${borderColor}`,
+                              borderRadius: 'var(--radius-sm)',
+                              boxShadow: isHovered
+                                ? `0 4px 16px rgba(0,0,0,0.12), -2px 0 0 ${borderColor}`
+                                : '0 1px 4px rgba(0,0,0,0.06)',
+                              transition: 'box-shadow 0.15s, transform 0.15s',
+                              transform: isHovered ? 'translateX(-2px)' : 'none',
+                              zIndex: isHovered ? 10 : 1,
+                            }}
+                          >
+                            {/* 连接线（从卡片到左侧高亮） */}
+                            {hasHighlight && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  left: '-16px',
+                                  top: '18px',
+                                  width: '16px',
+                                  height: '2px',
+                                  background: borderColor,
+                                  opacity: isHovered ? 0.8 : 0.4,
+                                }}
+                              />
+                            )}
+
+                            {/* 头部：专家 + severity */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)' }}>
+                                {ann.author}
+                              </span>
+                              <span
+                                style={{
+                                  padding: '1px 6px',
+                                  borderRadius: 'var(--radius-full)',
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  background: `${borderColor}15`,
+                                  color: borderColor,
+                                }}
+                              >
+                                {ann.severity === 'critical' ? '严重' : ann.severity === 'warning' ? '中等' : ann.severity === 'praise' ? '优点' : '轻微'}
+                              </span>
+                            </div>
+
+                            {/* 评论内容 */}
+                            <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.5, marginBottom: ann.suggestion ? '6px' : 0 }}>
+                              {ann.content.length > 100 ? ann.content.slice(0, 100) + '...' : ann.content}
+                            </div>
+
+                            {/* 建议 */}
+                            {ann.suggestion && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--surface-alt)', padding: '4px 8px', borderRadius: '3px' }}>
+                                💡 {ann.suggestion.length > 80 ? ann.suggestion.slice(0, 80) + '...' : ann.suggestion}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
