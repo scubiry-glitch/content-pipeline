@@ -3350,6 +3350,19 @@ export function loadExpertsData(): Expert[] {
       reviewDimensions: ['平台能力', 'IP储备', '生态协同'],
       status: 'active', totalReviews: 167, acceptanceRate: 0.84, avgResponseTime: 8,
     },
+    {
+      id: 'E09-09',
+      name: '李白',
+      code: 'E09-09',
+      level: 'domain',
+      domainCode: 'E09',
+      domainName: '文化传媒',
+      profile: { title: '诗歌与品牌叙事专家', background: '以高意象密度与强节奏表达见长，擅长把抽象观点转成可传播的语言资产', personality: '豪放浪漫，创意先行但尊重事实边界' },
+      philosophy: { core: ['先让人记住再让人信服', '情绪感染力与事实可信度并重', '一句话主张 + 三证据结构'], quotes: ['好内容要有月光，也要有路标'] },
+      achievements: [{ title: '高传播内容方法', description: '形成“情绪锚点-画面意象-观点落点”三段式表达框架', date: '长期', impact: '提升内容记忆度与二次传播能力' }],
+      reviewDimensions: ['表达感染力', '事实可信度', '结构完整性', '传播复用性'],
+      status: 'active', totalReviews: 0, acceptanceRate: 0.9, avgResponseTime: 7,
+    },
     // ==================== E09: 文化传媒 (5位) ====================
     {
       id: 'E09-01',

@@ -796,21 +796,6 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
-    /** GET /mental-models/:name — 查询某个心智模型的所有使用专家详情 */
-    fastify.get('/mental-models/:name', async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const { name } = request.params as { name: string };
-        const graph = await getMmGraph();
-        const entry = findExpertsByModel(graph, decodeURIComponent(name));
-        if (!entry) {
-          return reply.status(404).send({ error: `Mental model not found: ${name}` });
-        }
-        return reply.send(entry);
-      } catch (error: any) {
-        return reply.status(500).send({ error: error.message });
-      }
-    });
-
     /** POST /mental-models/refresh — 强制重建图谱缓存（专家 profile 更新后调用） */
     fastify.post('/mental-models/refresh', async (_request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -823,7 +808,7 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
-    /** Phase 10: GET /mental-models/catalog — 可查询目录（含所有字段：evidence/context/failureCondition） */
+    /** GET /mental-models/catalog — 必须在 /:name 之前，否则 Fastify 把 `catalog` 当成 name */
     fastify.get('/mental-models/catalog', async (_request: FastifyRequest, reply: FastifyReply) => {
       try {
         const graph = await getMmGraph();
@@ -855,6 +840,21 @@ export function createRouter(engine: ExpertEngine) {
         });
       } catch (error: any) {
         console.error('[ExpertLibrary] /mental-models/catalog error:', error);
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** GET /mental-models/:name — 查询某个心智模型的所有使用专家详情 */
+    fastify.get('/mental-models/:name', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { name } = request.params as { name: string };
+        const graph = await getMmGraph();
+        const entry = findExpertsByModel(graph, decodeURIComponent(name));
+        if (!entry) {
+          return reply.status(404).send({ error: `Mental model not found: ${name}` });
+        }
+        return reply.send(entry);
+      } catch (error: any) {
         return reply.status(500).send({ error: error.message });
       }
     });
