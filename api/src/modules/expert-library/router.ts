@@ -629,12 +629,15 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
-    /** GET /debates — 辩论历史列表 */
+    /** GET /debates — 辩论历史列表（?include_hidden=true 显示已隐藏的） */
     fastify.get('/debates', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { limit } = request.query as any;
+        const { limit, include_hidden } = request.query as any;
         const debateEngine = new DebateEngine(engine, engine['deps']);
-        const debates = await debateEngine.listDebates(parseInt(limit) || 20);
+        const debates = await debateEngine.listDebates(
+          parseInt(limit) || 20,
+          include_hidden === 'true',
+        );
         return reply.send({ total: debates.length, debates });
       } catch (error: any) {
         return reply.status(500).send({ error: error.message });
@@ -649,6 +652,70 @@ export function createRouter(engine: ExpertEngine) {
         const result = await debateEngine.getDebate(id);
         if (!result) return reply.status(404).send({ error: 'Debate not found' });
         return reply.send(result);
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** PATCH /debates/:id/hide — 隐藏/取消隐藏辩论 */
+    fastify.patch('/debates/:id/hide', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const { hidden } = request.body as { hidden?: boolean };
+        const isHidden = hidden !== false;
+        await engine['deps'].db.query(
+          `UPDATE expert_invocations SET is_hidden = $1 WHERE id = $2 AND task_type = 'debate'`,
+          [isHidden, id]
+        );
+        return reply.send({ ok: true, id, is_hidden: isHidden });
+      } catch (error: any) {
+        return reply.status(500).send({ error: error.message });
+      }
+    });
+
+    /** PATCH /debates/:id/rate — 辩论打分（1-5），同时反馈给参与专家的 feedbackLoop */
+    fastify.patch('/debates/:id/rate', async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as any;
+        const { rating } = request.body as { rating?: number };
+        if (!rating || rating < 1 || rating > 5) {
+          return reply.status(400).send({ error: 'rating must be 1-5' });
+        }
+        const score = Math.round(rating);
+
+        // 更新辩论记录的 user_rating
+        await engine['deps'].db.query(
+          `UPDATE expert_invocations SET user_rating = $1, rated_at = NOW() WHERE id = $2 AND task_type = 'debate'`,
+          [score, id]
+        );
+
+        // 从辩论记录中提取参与专家，将评分反馈给每位专家的 feedbackLoop
+        try {
+          const debateRow = await engine['deps'].db.query(
+            `SELECT expert_id, params FROM expert_invocations WHERE id = $1 AND task_type = 'debate'`,
+            [id]
+          );
+          if (debateRow.rows.length > 0) {
+            const row = debateRow.rows[0];
+            const params = typeof row.params === 'string' ? JSON.parse(row.params) : (row.params || {});
+            const expertIds: string[] = params.expertIds || [row.expert_id];
+            for (const eid of expertIds) {
+              await submitFeedback(
+                {
+                  expert_id: eid,
+                  invoke_id: id,
+                  human_score: score,
+                  human_notes: `辩论评分 ${score}/5`,
+                },
+                engine['deps']
+              ).catch(err => console.warn(`[Debate rate] feedback for ${eid} failed:`, err));
+            }
+          }
+        } catch (fbErr) {
+          console.warn('[Debate rate] feedback submission failed:', fbErr);
+        }
+
+        return reply.send({ ok: true, id, rating: score });
       } catch (error: any) {
         return reply.status(500).send({ error: error.message });
       }

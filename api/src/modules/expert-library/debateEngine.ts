@@ -630,18 +630,28 @@ ${allContent}
   /**
    * 查询辩论历史
    */
-  async listDebates(limit = 20): Promise<Array<{ id: string; topic: string; expertNames: string[]; createdAt: string; result: DebateResult }>> {
+  async listDebates(limit = 20, includeHidden = false): Promise<Array<{
+    id: string;
+    topic: string;
+    expertNames: string[];
+    createdAt: string;
+    userRating: number | null;
+    isHidden: boolean;
+    result: DebateResult;
+  }>> {
     try {
+      const hiddenFilter = includeHidden ? '' : 'AND (is_hidden IS NULL OR is_hidden = false)';
       const res = await this.deps.db.query(
-        `SELECT id, input_summary as topic, output_sections, created_at
+        `SELECT id, input_summary as topic, output_sections, created_at,
+                COALESCE(user_rating, NULL) as user_rating,
+                COALESCE(is_hidden, false) as is_hidden
          FROM expert_invocations
-         WHERE task_type = 'debate'
+         WHERE task_type = 'debate' ${hiddenFilter}
          ORDER BY created_at DESC
          LIMIT $1`,
         [limit]
       );
       return res.rows.map((row: any) => {
-        // output_sections 为 jsonb，pg 已自动反序列化为对象；兼容历史可能是字符串的情况
         const raw = row.output_sections;
         const result: DebateResult = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
         return {
@@ -649,6 +659,8 @@ ${allContent}
           topic: row.topic || result.topic || '',
           expertNames: (result.participantSummary || []).map((p: any) => p.expertName),
           createdAt: row.created_at,
+          userRating: row.user_rating != null ? Number(row.user_rating) : null,
+          isHidden: !!row.is_hidden,
           result,
         };
       });

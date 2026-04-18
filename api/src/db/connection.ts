@@ -597,6 +597,10 @@ async function setupMVPSchema(): Promise<void> {
     )
   `).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_invocations_expert ON expert_invocations(expert_id, created_at DESC)`).catch(() => {});
+  // 辩论隐藏 + 打分列
+  await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false`).catch(() => {});
+  await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS user_rating SMALLINT`).catch(() => {});
+  await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS rated_at TIMESTAMPTZ`).catch(() => {});
 
   // Phase 6: expert_feedback 兼容创建（未经迁移的旧环境） + rubric_scores 列
   await query(`

@@ -1766,6 +1766,18 @@ export const expertLibraryApi = {
         created_at: string;
       }>;
     }>,
+
+  /** 隐藏/取消隐藏辩论 */
+  hideDebate: (debateId: string, hidden = true) =>
+    client.patch(`/expert-library/debates/${debateId}/hide`, { hidden }) as Promise<{
+      ok: boolean; id: string; is_hidden: boolean;
+    }>,
+
+  /** 辩论打分（1-5），会同时反馈给参与专家 */
+  rateDebate: (debateId: string, rating: number) =>
+    client.patch(`/expert-library/debates/${debateId}/rate`, { rating }) as Promise<{
+      ok: boolean; id: string; rating: number;
+    }>,
 };
 
 // ============================================
