@@ -1,7 +1,10 @@
 // 专家辩论详情页 — 独立路由 /expert-debate/:id
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDebate } from '../hooks/useExpertApi';
 import { ROUTES } from '../config/routes';
+
+const API = '/api/v1/expert-library';
 
 interface DebateRound {
   round: number;
@@ -36,6 +39,40 @@ export function ExpertDebateDetail() {
       ? '辩论记录不存在'
       : '';
 
+  // 隐藏 + 打分状态
+  const [isHidden, setIsHidden] = useState(false);
+  const [rating, setRating] = useState<number | null>(null);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [hiding, setHiding] = useState(false);
+
+  const handleHide = async () => {
+    if (!id || hiding) return;
+    setHiding(true);
+    try {
+      await fetch(`${API}/debates/${id}/hide`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden: !isHidden }),
+      });
+      setIsHidden(!isHidden);
+    } catch { /* ignore */ }
+    setHiding(false);
+  };
+
+  const handleRate = async (score: number) => {
+    if (!id) return;
+    setRating(score);
+    try {
+      await fetch(`${API}/debates/${id}/rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: score }),
+      });
+      setRatingSubmitted(true);
+      setTimeout(() => setRatingSubmitted(false), 3000);
+    } catch { /* ignore */ }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -61,7 +98,7 @@ export function ExpertDebateDetail() {
   return (
     <div className="min-h-screen bg-surface p-6">
       <div className="max-w-5xl mx-auto mt-6 space-y-6">
-        {/* 顶部导航 */}
+        {/* 顶部导航 + 操作 */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate(ROUTES.expert.debate)}
@@ -74,7 +111,51 @@ export function ExpertDebateDetail() {
             <span className="material-symbols-outlined text-primary">forum</span>
             {result.topic}
           </h1>
-          <div className="text-xs text-on-surface-variant">{id?.slice(0, 8)}…</div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleHide}
+              disabled={hiding}
+              className="text-xs px-3 py-1.5 rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low transition-colors flex items-center gap-1"
+              title={isHidden ? '取消隐藏' : '隐藏此辩论'}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {isHidden ? 'visibility' : 'visibility_off'}
+              </span>
+              {isHidden ? '已隐藏' : '隐藏'}
+            </button>
+            <div className="text-xs text-on-surface-variant">{id?.slice(0, 8)}…</div>
+          </div>
+        </div>
+
+        {/* 辩论打分 */}
+        <div className="flex items-center gap-3 bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4">
+          <span className="text-sm font-medium text-on-surface">辩论质量评分：</span>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map(n => (
+              <button
+                key={n}
+                onClick={() => handleRate(n)}
+                className="transition-all"
+                style={{
+                  fontSize: 22,
+                  color: rating && n <= rating ? '#f59e0b' : '#d1d5db',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                }}
+                title={`${n} 分`}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+          {rating && (
+            <span className="text-sm text-on-surface-variant">
+              {rating}/5
+              {ratingSubmitted && <span className="text-green-600 ml-2">✓ 已反馈给专家库</span>}
+            </span>
+          )}
         </div>
 
         {/* 各轮展示 */}
