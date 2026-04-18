@@ -10,6 +10,7 @@ import type {
   DebateResult,
 } from './types.js';
 import { expertProfileToDbParams } from './expertProfileDb.js';
+import { getModelsForExpert } from './mentalModelGraph.js';
 
 /** 从 LLM 输出中提取 JSON 对象，兼容代码块和裸 JSON */
 function extractJSON(raw: string): any {
@@ -325,7 +326,7 @@ ${content}
         const reply = await this.safeCompleteWithSystem(
           systemPrompt,
           userPrompt,
-          { temperature: Math.max(0.1, temperature - 0.1), maxTokens: 600 },
+          { temperature: Math.min(1.0, temperature + 0.1), maxTokens: 600 },
           `【降级输出】${expert.name} 暂时无法完成交叉质疑。`
         );
 
@@ -356,7 +357,8 @@ ${content}
     targetOpinionText: string,
   ): { systemPrompt: string; userPrompt: string } {
     // 提取 attacker 的 mentalModels 作为质询武器
-    const attackerModels = attacker.persona.cognition?.mentalModels ?? [];
+    // 优先用自有模型；没有时从 canonical 共享模型中按 domain 匹配获取
+    const attackerModels = getModelsForExpert(attacker);
     const modelsBlock = attackerModels.slice(0, 3).length > 0
       ? `\n\n你可以用以下自己的心智模型作为质询武器（不必全部使用，选最相关的）：\n` +
         attackerModels
@@ -367,14 +369,35 @@ ${content}
 
     // 提取 target 的 contradictions 作为认知软肋
     const targetContradictions = target.persona.contradictions ?? [];
-    const contradictionsBlock = targetContradictions.length > 0
-      ? `\n\n对方（${target.name}）有以下**已知的认知矛盾**，可在场景契合时针对性追问：\n` +
+    let contradictionsBlock = '';
+    if (targetContradictions.length > 0) {
+      contradictionsBlock = `\n\n对方（${target.name}）有以下**已知的认知矛盾**，可在场景契合时针对性追问：\n` +
         targetContradictions
           .slice(0, 3)
           .map((c, i) => `${i + 1}. ${c.tension}（场景：${c.context}；通常解释：${c.resolution}）`)
           .join('\n') +
-        `\n\n如果当前议题触及上述任一矛盾，请明确指出并追问对方"在这个具体场景下你会倒向哪一边"。`
-      : '';
+        `\n\n如果当前议题触及上述任一矛盾，请明确指出并追问对方"在这个具体场景下你会倒向哪一边"。`;
+    } else {
+      // Fallback：从基础字段合成攻击面（所有专家都有 bias/values/emm）
+      const attackSurfaces: string[] = [];
+      if (target.persona.values?.dealbreakers?.length) {
+        attackSurfaces.push(`对方的底线是"${target.persona.values.dealbreakers[0]}"——检查对方自己的论证是否触犯了这条底线`);
+      }
+      if (target.method.reviewLens?.killShot) {
+        attackSurfaces.push(`对方的一票否决标准是"${target.method.reviewLens.killShot}"——反问对方自己的方案是否达标`);
+      }
+      if (target.emm?.veto_rules?.length) {
+        attackSurfaces.push(`对方的EMM否决规则包括"${target.emm.veto_rules[0]}"——用对方自己的规则审视对方的论证`);
+      }
+      if (target.persona.bias?.length) {
+        attackSurfaces.push(`对方核心偏好是"${target.persona.bias.join('、')}"——这种偏好是否导致了盲区`);
+      }
+      if (attackSurfaces.length > 0) {
+        contradictionsBlock = `\n\n对方（${target.name}）没有公开承认的认知矛盾，但以下是从其档案中提取的**可攻击面**：\n` +
+          attackSurfaces.map((s, i) => `${i + 1}. ${s}`).join('\n') +
+          `\n\n请用以上至少一条作为质疑的切入点。`;
+      }
+    }
 
     // 提取 target 的 blindSpots 作为额外攻击面
     const targetBlindSpots = target.persona.blindSpots;
