@@ -641,7 +641,9 @@ ${allContent}
         [limit]
       );
       return res.rows.map((row: any) => {
-        const result = JSON.parse(row.output_sections || '{}');
+        // output_sections 为 jsonb，pg 已自动反序列化为对象；兼容历史可能是字符串的情况
+        const raw = row.output_sections;
+        const result: DebateResult = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
         return {
           id: row.id,
           topic: row.topic || result.topic || '',
@@ -650,8 +652,9 @@ ${allContent}
           result,
         };
       });
-    } catch {
-      return [];
+    } catch (err) {
+      console.error('[DebateEngine] listDebates failed:', err);
+      throw err;
     }
   }
 
@@ -665,9 +668,11 @@ ${allContent}
         [debateId]
       );
       if (res.rows.length === 0) return null;
-      return JSON.parse(res.rows[0].output_sections || '{}');
-    } catch {
-      return null;
+      const raw = res.rows[0].output_sections;
+      return typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || null);
+    } catch (err) {
+      console.error('[DebateEngine] getDebate failed:', err);
+      throw err;
     }
   }
 }

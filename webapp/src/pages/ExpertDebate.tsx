@@ -145,27 +145,34 @@ export function ExpertDebate() {
                 选择辩论专家 ({selectedExperts.length}/4)
               </h2>
               <div className="grid grid-cols-3 gap-3">
-                {experts.map((e: any) => (
-                  <div
-                    key={e.expert_id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedExperts.includes(e.expert_id)
-                        ? 'border-primary bg-primary/10'
-                        : 'border-outline-variant/30 hover:border-primary/50'
-                    }`}
-                    onClick={() => toggleExpert(e.expert_id)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-                        {e.name?.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-on-surface">{e.name}</div>
-                        <div className="text-xs text-on-surface-variant">{e.domain?.slice(0, 2).join('/')}</div>
+                {experts.map((e: any) => {
+                  // /experts/full 返回 id，/experts 返回 expert_id，兼容两种
+                  const expertId = e.expert_id ?? e.id;
+                  const domains: string[] = Array.isArray(e.domain)
+                    ? e.domain
+                    : (e.domainName ? [e.domainName] : []);
+                  return (
+                    <div
+                      key={expertId}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                        selectedExperts.includes(expertId)
+                          ? 'border-primary bg-primary/10'
+                          : 'border-outline-variant/30 hover:border-primary/50'
+                      }`}
+                      onClick={() => expertId && toggleExpert(expertId)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                          {e.name?.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-on-surface">{e.name}</div>
+                          <div className="text-xs text-on-surface-variant">{domains.slice(0, 2).join('/')}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
