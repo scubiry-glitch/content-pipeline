@@ -28,6 +28,7 @@ import { HotTopics } from './pages/HotTopics';
 import { HotTopicDetail } from './pages/HotTopicDetail';
 import { HotTopicInsights } from './pages/HotTopicInsights';
 import { ExpertChat } from './pages/ExpertChat';
+import { ExpertLibraryPanorama } from './pages/ExpertLibraryPanorama';
 import { ExpertAdmin } from './pages/ExpertAdmin';
 import { ExpertComparison } from './pages/ExpertComparison';
 import { ExpertNetwork } from './pages/ExpertNetwork';
@@ -120,6 +121,7 @@ function App() {
               
               <Route path="experts" element={<Experts />} />
               <Route path="expert-library" element={<ExpertLibrary />} />
+              <Route path="expert-panorama" element={<ExpertLibraryPanorama />} />
               <Route path="hot-topics" element={<HotTopics />} />
               <Route path="hot-topics/insights" element={<HotTopicInsights />} />
               <Route path="hot-topics/insights/:topicId" element={<HotTopicInsights />} />

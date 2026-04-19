@@ -40,6 +40,7 @@ export const mainNavItems: NavItem[] = [
     icon: '👥',
     matchPrefixes: [
       ROUTES.expert.library,
+      ROUTES.expert.panorama,
       ROUTES.expert.chat,
       ROUTES.expert.comparison,
       ROUTES.expert.network,
@@ -51,6 +52,7 @@ export const mainNavItems: NavItem[] = [
     ],
     children: [
       { to: ROUTES.expert.library, label: '专家库', icon: '👥' },
+      { to: ROUTES.expert.panorama, label: '专家全景图', icon: '🗺️' },
       { to: ROUTES.expert.chat, label: '专家对话', icon: '💬' },
       { to: ROUTES.expert.comparison, label: '专家对比', icon: '⚖️' },
       { to: ROUTES.expert.debate, label: '专家辩论', icon: '🔥' },
