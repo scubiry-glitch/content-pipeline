@@ -22,6 +22,7 @@ import {
   listAllModels,
   type MentalModelGraphEntry,
 } from './mentalModelGraph.js';
+import { getExpertOverviewStats } from './statsService.js';
 
 /** JSONB / 脏字符串兼容，避免 JSON.parse 抛错导致 GET /experts/full 500 */
 function coerceJsonObject(val: unknown): Record<string, unknown> {
@@ -55,6 +56,9 @@ export function createRouter(engine: ExpertEngine) {
   }
 
   return async function expertLibraryRoutes(fastify: FastifyInstance) {
+
+    // ===== 全景图统一统计 (供 /expert-library/panorama 页面) =====
+    fastify.get('/stats/overview', async () => getExpertOverviewStats(engine.getDeps()));
 
     // ===== 核心调用接口 =====
 

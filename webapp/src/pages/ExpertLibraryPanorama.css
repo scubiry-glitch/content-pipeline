@@ -1,0 +1,289 @@
+/* 专家体系全景图 — 样式镜像 ContentLibraryPipeline.css，选择器前缀改为 panorama-* */
+
+.panorama-page { padding: 24px; }
+
+.panorama-flow {
+  position: relative;
+  background: white;
+  border: 1px solid hsl(30 20% 88%);
+  border-radius: 10px;
+  padding: 24px;
+  overflow-x: auto;
+  min-height: 560px;
+}
+.panorama-svg-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+.panorama-flow-inner {
+  display: grid;
+  grid-template-columns: 140px 200px 1fr 220px;
+  gap: 24px;
+  min-width: 1100px;
+  align-items: start;
+  position: relative;
+  z-index: 2;
+}
+
+.panorama-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(30 20% 55%);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid hsl(30 20% 90%);
+}
+
+/* 数据源 */
+.panorama-source { display: flex; flex-direction: column; gap: 12px; }
+.source-node {
+  background: hsl(40 30% 96%);
+  border: 1.5px solid hsl(30 25% 80%);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.source-node:hover { border-color: hsl(30 50% 55%); box-shadow: 0 2px 8px hsl(30 30% 80% / 0.4); }
+.source-icon { font-size: 18px; display: block; margin-bottom: 2px; }
+.source-label { font-size: 12px; font-weight: 600; color: hsl(20 30% 30%); display: block; }
+.source-count { font-size: 11px; color: hsl(30 20% 55%); }
+
+/* 加工步骤 */
+.panorama-steps { display: flex; flex-direction: column; gap: 10px; }
+.step-node {
+  background: white;
+  border: 2px solid hsl(220 40% 75%);
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.step-node:hover { border-color: hsl(220 50% 55%); box-shadow: 0 2px 8px hsl(220 30% 80% / 0.4); }
+.step-node.parallel-hint::after {
+  content: '⇅ 可并行';
+  position: absolute;
+  right: -4px;
+  top: -8px;
+  font-size: 9px;
+  color: hsl(150 50% 40%);
+  background: hsl(150 40% 95%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid hsl(150 30% 80%);
+}
+.step-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.step-number {
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+  background: hsl(220 50% 55%);
+  border-radius: 4px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+}
+.step-label { font-size: 12px; font-weight: 600; color: hsl(220 40% 25%); }
+.step-desc { font-size: 10px; color: hsl(220 20% 55%); margin-top: 2px; }
+.step-stat { font-size: 10px; color: hsl(220 30% 50%); margin-top: 4px; font-weight: 500; }
+
+/* 产出物 */
+.panorama-outputs { display: flex; flex-direction: column; gap: 14px; }
+.phase-group {
+  border-radius: 8px;
+  padding: 10px;
+  border: 1.5px dashed;
+}
+.phase-group.phase-profile   { border-color: hsl(210 40% 75%); background: hsl(210 40% 98%); }
+.phase-group.phase-match     { border-color: hsl(140 35% 70%); background: hsl(140 30% 98%); }
+.phase-group.phase-output    { border-color: hsl(30 45% 70%);  background: hsl(30 40% 98%);  }
+.phase-group.phase-collab    { border-color: hsl(260 40% 75%); background: hsl(260 30% 98%); }
+.phase-group.phase-feedback  { border-color: hsl(0 40% 75%);   background: hsl(0 35% 98%);   }
+.phase-label {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+}
+.phase-profile  .phase-label { color: hsl(210 50% 40%); }
+.phase-match    .phase-label { color: hsl(140 45% 35%); }
+.phase-output   .phase-label { color: hsl(30 55% 35%);  }
+.phase-collab   .phase-label { color: hsl(260 45% 40%); }
+.phase-feedback .phase-label { color: hsl(0 50% 40%);   }
+.phase-items { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.output-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: white;
+  border: 1px solid hsl(30 20% 85%);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px;
+}
+.output-node:hover { border-color: hsl(250 50% 55%); box-shadow: 0 1px 6px hsl(250 30% 70% / 0.3); }
+.output-id { font-weight: 700; color: hsl(250 40% 50%); }
+.output-name { color: hsl(20 30% 25%); font-weight: 500; }
+.output-count {
+  font-size: 10px;
+  color: white;
+  background: hsl(250 45% 55%);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 2px;
+  font-weight: 600;
+}
+.output-step-tag {
+  font-size: 9px;
+  color: hsl(220 40% 55%);
+  background: hsl(220 30% 94%);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.output-mode-badge {
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 700;
+}
+.precomputed-badge { color: hsl(140 50% 30%); background: hsl(140 40% 92%); }
+.querytime-badge   { color: hsl(30 60% 40%);  background: hsl(30 50% 92%);  }
+.output-precomputed { border-color: hsl(140 35% 70%); }
+.output-precomputed:hover { border-color: hsl(140 50% 50%); }
+.output-querytime { border-style: dashed; }
+
+.flow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: hsl(220 30% 70%);
+  padding: 4px 0;
+}
+
+/* 弹窗 */
+.panorama-modal .modal-content { max-width: 520px; width: 95vw; }
+.panorama-modal .modal-header { background: hsl(250 30% 97%); }
+.panorama-modal-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.panorama-stat-card {
+  background: hsl(40 30% 97%);
+  border: 1px solid hsl(30 20% 90%);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.panorama-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: hsl(250 45% 45%);
+}
+.panorama-stat-label {
+  font-size: 11px;
+  color: hsl(30 20% 50%);
+  margin-top: 2px;
+}
+.panorama-modal-section { margin-bottom: 14px; }
+.panorama-modal-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.section-upstream h4 { color: hsl(210 50% 40%); }
+.section-downstream h4 { color: hsl(140 45% 35%); }
+.panorama-modal-section ul {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: hsl(20 20% 40%);
+}
+.panorama-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid hsl(30 20% 92%);
+}
+.panorama-modal-actions a {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid hsl(30 20% 85%);
+  transition: all 0.15s;
+}
+.panorama-modal-actions .action-primary {
+  background: hsl(250 45% 55%);
+  color: white !important;
+  border-color: hsl(250 45% 55%) !important;
+}
+.panorama-modal-actions .action-primary:hover { background: hsl(250 45% 48%); }
+
+/* 应用场景 */
+.panorama-apps { display: flex; flex-direction: column; gap: 10px; }
+.app-node {
+  padding: 10px 12px;
+  background: white;
+  border: 1.5px solid hsl(260 30% 85%);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.app-node:hover {
+  border-color: hsl(260 50% 55%);
+  box-shadow: 0 2px 8px hsl(260 30% 80% / 0.4);
+  transform: translateX(2px);
+}
+.app-header { display: flex; align-items: center; gap: 6px; }
+.app-icon { font-size: 16px; }
+.app-label { font-size: 12px; font-weight: 600; color: hsl(20 30% 25%); }
+.app-desc {
+  font-size: 10px;
+  color: hsl(30 20% 55%);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.app-link {
+  font-size: 9px;
+  color: hsl(250 40% 55%);
+  margin-top: 4px;
+  font-family: monospace;
+}
+
+/* 暗色模式 */
+@media (prefers-color-scheme: dark) {
+  .panorama-flow { background: hsl(220 15% 12%); border-color: hsl(220 15% 22%); }
+  .source-node { background: hsl(220 15% 16%); border-color: hsl(220 15% 28%); }
+  .source-label { color: hsl(30 20% 85%); }
+  .step-node { background: hsl(220 15% 16%); }
+  .output-node { background: hsl(220 15% 16%); border-color: hsl(220 15% 28%); }
+  .output-name { color: hsl(30 20% 85%); }
+  .phase-group.phase-profile  { background: hsl(210 20% 13%); }
+  .phase-group.phase-match    { background: hsl(140 15% 13%); }
+  .phase-group.phase-output   { background: hsl(30 20% 13%);  }
+  .phase-group.phase-collab   { background: hsl(260 15% 13%); }
+  .phase-group.phase-feedback { background: hsl(0 15% 13%);   }
+  .panorama-stat-card { background: hsl(220 15% 16%); border-color: hsl(220 15% 25%); }
+  .app-node { background: hsl(220 15% 16%); border-color: hsl(220 15% 28%); }
+  .app-label { color: hsl(30 20% 85%); }
+  .app-desc { color: hsl(30 15% 60%); }
+}
