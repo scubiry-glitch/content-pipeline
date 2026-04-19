@@ -161,7 +161,7 @@ export const tasksApi = {
 
 // 素材相关 API
 export const assetsApi = {
-  getAll: (params?: { limit?: number; theme_id?: string }) =>
+  getAll: (params?: { limit?: number; theme_id?: string; domain?: string; asset_type?: string; type?: string }) =>
     client.get('/assets', { params }) as Promise<{ items: Asset[]; total: number }>,
 
   getById: (id: string) =>
