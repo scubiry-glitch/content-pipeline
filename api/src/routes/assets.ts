@@ -9,19 +9,28 @@ import { query } from '../db/connection.js';
 import { getDirectoryWatcherService } from '../services/directoryWatcher.js';
 import { v4 as uuidv4 } from 'uuid';
 
+const ASSET_TYPES = [
+  'file','report','quote','data','rss_item',
+  'chart','insight',
+  'meeting_minutes','briefing','interview','transcript'
+] as const;
+
 const updateAssetSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   source: z.string().max(255).optional(),
   tags: z.array(z.string()).optional(),
   content: z.string().optional(),
-  theme_id: z.string().nullable().optional()
+  theme_id: z.string().nullable().optional(),
+  domain: z.string().max(100).nullable().optional(),
+  asset_type: z.enum(ASSET_TYPES).optional()
 });
 
 const createThemeSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().optional(),
   color: z.string().optional(),
-  icon: z.string().optional()
+  icon: z.string().optional(),
+  domain: z.string().max(100).optional()
 });
 
 export async function assetRoutes(fastify: FastifyInstance) {
@@ -61,7 +70,10 @@ export async function assetRoutes(fastify: FastifyInstance) {
         mimetype: data.mimetype,
         title: fields.title || data.filename.replace(/\.[^/.]+$/, ''),
         source: fields.source,
-        tags: fields.tags ? fields.tags.split(',').map((t: string) => t.trim()) : []
+        tags: fields.tags ? fields.tags.split(',').map((t: string) => t.trim()) : [],
+        domain: fields.domain,
+        asset_type: fields.asset_type || fields.type,
+        theme_id: fields.theme_id
       });
 
       reply.status(201);
@@ -75,23 +87,27 @@ export async function assetRoutes(fastify: FastifyInstance) {
 
   // Search assets
   fastify.get('/', { preHandler: authenticate }, async (request) => {
-    const { q, tags, limit = '10' } = request.query as any;
+    const { q, tags, limit = '10', domain, type, asset_type } = request.query as any;
 
     return await assetService.search({
       query: q,
       tags: tags ? tags.split(',') : undefined,
-      limit: parseInt(limit)
+      limit: parseInt(limit),
+      domain: domain || undefined,
+      asset_type: asset_type || type || undefined
     });
   });
 
   // Search assets (alias for frontend compatibility)
   fastify.get('/search', { preHandler: authenticate }, async (request) => {
-    const { q, tags, limit = '10' } = request.query as any;
+    const { q, tags, limit = '10', domain, type, asset_type } = request.query as any;
 
     return await assetService.search({
       query: q,
       tags: tags ? tags.split(',') : undefined,
-      limit: parseInt(limit)
+      limit: parseInt(limit),
+      domain: domain || undefined,
+      asset_type: asset_type || type || undefined
     });
   });
 

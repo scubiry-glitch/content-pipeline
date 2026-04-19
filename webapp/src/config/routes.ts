@@ -19,6 +19,7 @@ export const ROUTES = {
 
   expert: {
     library: '/expert-library',
+    panorama: '/expert-panorama',
     chat: '/expert-chat',
     comparison: '/expert-comparison',
     debate: '/expert-debate',
