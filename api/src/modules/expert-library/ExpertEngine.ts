@@ -329,18 +329,17 @@ export class ExpertEngine {
   /**
    * 1v1 对话接口 — 支持多轮会话
    */
-  async chat(request: {
+  /** 构建对话的 system/user prompt（供 chat 和 chatStream 共用） */
+  async buildChatPrompts(request: {
     expert_id: string;
     message: string;
     history?: Array<{ role: 'user' | 'expert'; content: string }>;
-    conversation_id?: string;
-  }): Promise<{ reply: string; expert_name: string; conversation_id: string }> {
+  }): Promise<{ expert: ExpertProfile; systemPrompt: string; userPrompt: string }> {
     const expert = await this.loadExpert(request.expert_id);
     if (!expert) {
       throw new Error(`Expert not found: ${request.expert_id}`);
     }
 
-    // 构建对话专用 system prompt（更精简，突出人格而非结构化输出）
     const systemPrompt = `你是 ${expert.name}。直接以 ${expert.name} 的身份回答，不要解释你的思路，不要说"作为AI"，不要重述问题。
 
 风格: ${expert.persona.style}
@@ -355,7 +354,6 @@ ${expert.method.analysis_steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 ${expert.anti_patterns.map(p => `- ${p}`).join('\n')}
 ${expert.signature_phrases.length > 0 ? `标志性句式: ${expert.signature_phrases.join(' / ')}` : ''}`;
 
-    // 格式化历史记录
     const historyText = (request.history || [])
       .map(m => `${m.role === 'user' ? '用户' : expert.name}: ${m.content}`)
       .join('\n\n');
@@ -364,10 +362,33 @@ ${expert.signature_phrases.length > 0 ? `标志性句式: ${expert.signature_phr
       ? `${historyText}\n\n用户: ${request.message}\n\n${expert.name}:`
       : `用户: ${request.message}\n\n${expert.name}:`;
 
-    const reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
-      temperature: 0.6,
-      maxTokens: 1500,
-    });
+    return { expert, systemPrompt, userPrompt };
+  }
+
+  async chat(request: {
+    expert_id: string;
+    message: string;
+    history?: Array<{ role: 'user' | 'expert'; content: string }>;
+    conversation_id?: string;
+  }): Promise<{ reply: string; reasoning?: string; expert_name: string; conversation_id: string }> {
+    const { expert, systemPrompt, userPrompt } = await this.buildChatPrompts(request);
+
+    // 优先使用 detailed 接口，可同时拿到 reasoning；否则回退到普通接口
+    let reply: string;
+    let reasoning: string | undefined;
+    if (this.deps.llm.completeWithSystemDetailed) {
+      const out = await this.deps.llm.completeWithSystemDetailed(systemPrompt, userPrompt, {
+        temperature: 0.6,
+        maxTokens: 4000,
+      });
+      reply = out.content;
+      reasoning = out.reasoning;
+    } else {
+      reply = await this.deps.llm.completeWithSystem(systemPrompt, userPrompt, {
+        temperature: 0.6,
+        maxTokens: 4000,
+      });
+    }
 
     const conversationId = request.conversation_id || uuidv4();
 
@@ -378,7 +399,7 @@ ${expert.signature_phrases.length > 0 ? `标志性句式: ${expert.signature_phr
       [uuidv4(), expert.expert_id, request.message.substring(0, 200), JSON.stringify({ conversation_id: conversationId })]
     ).catch(() => {});
 
-    return { reply, expert_name: expert.name, conversation_id: conversationId };
+    return { reply, reasoning, expert_name: expert.name, conversation_id: conversationId };
   }
 
   /**

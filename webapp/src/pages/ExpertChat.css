@@ -51,6 +51,53 @@
   font-weight: 500;
 }
 
+.sidebar-search {
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #1f2937;
+  outline: none;
+}
+
+.sidebar-search-input:focus {
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.sidebar-search-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  padding-left: 2px;
+}
+
+.expert-list-empty {
+  list-style: none;
+  padding: 24px 16px !important;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+  cursor: default;
+  border-left: none !important;
+}
+
+.expert-list-empty:hover {
+  background: transparent !important;
+}
+
 /* 骨架屏 */
 .sidebar-loading {
   padding: 12px;
@@ -90,6 +137,7 @@
   padding: 8px 0;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .expert-item {
@@ -185,6 +233,7 @@
 /* ===== 右侧对话区域 ===== */
 .expert-chat-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -193,6 +242,8 @@
 
 /* 对话头部 */
 .chat-header {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -200,6 +251,8 @@
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .chat-header-info {
@@ -238,6 +291,137 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.chat-settings-toggle {
+  font-size: 16px !important;
+  line-height: 1;
+}
+
+/* 对话设置浮层 */
+.chat-settings-popover {
+  position: absolute;
+  right: 16px;
+  top: calc(100% + 4px);
+  z-index: 60;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.chat-settings-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.chat-settings-popover-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.chat-settings-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-settings-close:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.chat-settings-hint {
+  margin: 0;
+  padding: 8px 14px 0;
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.chat-settings-section {
+  padding: 12px 14px;
+}
+
+.chat-settings-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.chat-settings-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-settings-pill {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.chat-settings-pill.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.chat-settings-range {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.chat-settings-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.chat-settings-footer {
+  padding: 10px 14px 14px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.chat-settings-done {
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #3b82f6;
+  color: #fff;
+}
+
+.chat-settings-done:hover {
+  background: #2563eb;
 }
 
 .clear-btn {
@@ -274,6 +458,8 @@
 /* 消息列表 */
 .chat-messages {
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 24px;
   display: flex;
@@ -353,10 +539,19 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.message-wrapper.expert-side {
+  flex-direction: row;
+  justify-content: flex-start;
 }
 
 .message-wrapper.user-side {
-  flex-direction: row-reverse;
+  flex-direction: row;
+  justify-content: flex-end;
 }
 
 .message-avatar.expert-avatar-sm {
@@ -376,11 +571,20 @@
 }
 
 .message-bubble {
-  max-width: 70%;
+  max-width: min(720px, 85%);
   padding: 12px 16px;
   border-radius: 16px;
   position: relative;
   word-break: break-word;
+  overflow-wrap: break-word;
+  /* 禁止在 flex 行里被压成极窄条，否则 overflow-wrap:anywhere 会逐字断行 */
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.message-wrapper.user-side .message-bubble {
+  width: fit-content;
+  max-width: min(560px, calc(100% - 16px));
 }
 
 .expert-bubble {
@@ -526,4 +730,70 @@
   justify-content: center;
   color: #9ca3af;
   font-size: 14px;
+}
+
+/* 推理过程（折叠） */
+.reasoning-details {
+  margin-bottom: 8px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.04);
+  overflow: hidden;
+}
+
+.reasoning-summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #7c3aed;
+  font-weight: 500;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning-summary::before {
+  content: '▶';
+  font-size: 9px;
+  transition: transform 0.15s;
+  color: #a78bfa;
+}
+
+.reasoning-details[open] .reasoning-summary::before {
+  transform: rotate(90deg);
+}
+
+.reasoning-summary:hover {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.reasoning-content {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #6b7280;
+  white-space: pre-wrap;
+  border-top: 1px dashed #e5e7eb;
+  background: #fafafa;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  .reasoning-details {
+    border-color: #4b5563;
+    background: rgba(139, 92, 246, 0.08);
+  }
+  .reasoning-content {
+    background: #1f2937;
+    color: #9ca3af;
+    border-top-color: #374151;
+  }
 }

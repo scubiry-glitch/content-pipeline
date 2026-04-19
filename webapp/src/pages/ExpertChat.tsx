@@ -1,19 +1,27 @@
 // 专家 1v1 对话 — 左侧专家列表，右侧对话记录
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useExperts } from '../hooks/useExpertApi';
 import './ExpertChat.css';
 
+/** 与 GET /experts/full 一致：列表项主键在 `id`，chat 接口字段名为 `expert_id` */
 interface Expert {
-  expert_id: string;
+  id?: string;
+  expert_id?: string;
   name: string;
-  domain: string[];
-  persona: { style: string; tone: string };
-  method: { frameworks: string[] };
+  domain?: string[];
+  persona?: { style?: string; tone?: string };
+  method?: { frameworks?: string[] };
+}
+
+function expertKey(e: Expert): string {
+  return (e.expert_id ?? e.id ?? '').trim();
 }
 
 interface ChatMessage {
   role: 'user' | 'expert';
   content: string;
+  /** 推理模型的内部思考过程（默认折叠） */
+  reasoning?: string;
   timestamp: string;
 }
 
@@ -35,8 +43,20 @@ export function ExpertChat() {
   const [showSettings, setShowSettings] = useState(false);
   const [chatTemperature, setChatTemperature] = useState(0.6);
   const [historyLimit, setHistoryLimit] = useState(10);
+  const [expertSearch, setExpertSearch] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+
+  const filteredExperts = useMemo(() => {
+    const q = expertSearch.trim().toLowerCase();
+    if (!q) return experts;
+    return experts.filter(e => {
+      const name = (e.name || '').toLowerCase();
+      const id = expertKey(e).toLowerCase();
+      return name.includes(q) || id.includes(q);
+    });
+  }, [experts, expertSearch]);
 
   // 专家列表就绪时默认选中第一位
   useEffect(() => {
@@ -48,7 +68,27 @@ export function ExpertChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations, selectedExpert]);
 
-  const currentConv = selectedExpert ? conversations[selectedExpert.expert_id] : null;
+  // 点击面板外或按 Esc 关闭设置（⚙ 仍用于开关）
+  useEffect(() => {
+    if (!showSettings) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (settingsPanelRef.current?.contains(t)) return;
+      if ((e.target as HTMLElement).closest('[data-chat-settings-toggle]')) return;
+      setShowSettings(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSettings(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showSettings]);
+
+  const currentConv = selectedExpert ? conversations[expertKey(selectedExpert)] : null;
   const messages = currentConv?.messages || [];
 
   const handleSelectExpert = (expert: Expert) => {
@@ -65,25 +105,51 @@ export function ExpertChat() {
       timestamp: new Date().toISOString(),
     };
 
-    // 乐观更新
-    const expertId = selectedExpert.expert_id;
+    // 乐观更新：先追加用户消息 + 空的 expert 占位消息（流式累积到它上面）
+    const expertId = expertKey(selectedExpert);
+    if (!expertId) return;
+    const placeholderTs = new Date().toISOString();
     setConversations(prev => {
       const conv = prev[expertId] || { expert_id: expertId, conversation_id: `conv-${Date.now()}`, messages: [] };
       return {
         ...prev,
-        [expertId]: { ...conv, messages: [...conv.messages, userMessage] },
+        [expertId]: {
+          ...conv,
+          messages: [
+            ...conv.messages,
+            userMessage,
+            { role: 'expert', content: '', reasoning: '', timestamp: placeholderTs },
+          ],
+        },
       };
     });
     setInput('');
     setLoading(true);
 
+    // 流式增量追加到最后一条 expert 消息
+    const appendDelta = (patch: { content?: string; reasoning?: string }) => {
+      setConversations(prev => {
+        const c = prev[expertId];
+        if (!c || c.messages.length === 0) return prev;
+        const msgs = [...c.messages];
+        const last = msgs[msgs.length - 1];
+        if (last.role !== 'expert' || last.timestamp !== placeholderTs) return prev;
+        msgs[msgs.length - 1] = {
+          ...last,
+          content: last.content + (patch.content || ''),
+          reasoning: (last.reasoning || '') + (patch.reasoning || ''),
+        };
+        return { ...prev, [expertId]: { ...c, messages: msgs } };
+      });
+    };
+
     try {
       const conv = conversations[expertId];
       const history = (conv?.messages || []).slice(-historyLimit);
 
-      const res = await fetch(`${API_BASE}/chat`, {
+      const res = await fetch(`${API_BASE}/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify({
           expert_id: expertId,
           message: userMessage.content,
@@ -93,49 +159,65 @@ export function ExpertChat() {
         }),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || '请求失败');
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(errText || `HTTP ${res.status}`);
       }
 
-      const data = await res.json();
-      const expertMessage: ChatMessage = {
-        role: 'expert',
-        content: data.reply,
-        timestamp: new Date().toISOString(),
-      };
-
-      setConversations(prev => {
-        const c = prev[expertId];
-        return {
-          ...prev,
-          [expertId]: {
-            ...c,
-            conversation_id: data.conversation_id || c.conversation_id,
-            messages: [...c.messages, expertMessage],
-          },
-        };
-      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let currentEvent = 'message';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() || '';
+        for (const block of parts) {
+          const lines = block.split('\n');
+          let ev = 'message';
+          let dataStr = '';
+          for (const ln of lines) {
+            if (ln.startsWith('event:')) ev = ln.slice(6).trim();
+            else if (ln.startsWith('data:')) dataStr += ln.slice(5).trim();
+          }
+          currentEvent = ev;
+          if (!dataStr) continue;
+          try {
+            const payload = JSON.parse(dataStr);
+            if (ev === 'reasoning') appendDelta({ reasoning: payload.delta });
+            else if (ev === 'content') appendDelta({ content: payload.delta });
+            else if (ev === 'meta') {
+              // 更新 conversation_id
+              setConversations(prev => {
+                const c = prev[expertId];
+                if (!c) return prev;
+                return { ...prev, [expertId]: { ...c, conversation_id: payload.conversation_id || c.conversation_id } };
+              });
+            } else if (ev === 'error') {
+              appendDelta({ content: `\n\n[错误] ${payload.message}` });
+            }
+          } catch { /* ignore malformed */ }
+        }
+      }
     } catch (err: any) {
-      // 显示错误消息
       setConversations(prev => {
         const c = prev[expertId];
-        return {
-          ...prev,
-          [expertId]: {
-            ...c,
-            messages: [...c.messages, {
-              role: 'expert',
-              content: `[错误] ${err.message}`,
-              timestamp: new Date().toISOString(),
-            }],
-          },
-        };
+        if (!c) return prev;
+        const msgs = [...c.messages];
+        const last = msgs[msgs.length - 1];
+        if (last?.role === 'expert' && last.timestamp === placeholderTs) {
+          msgs[msgs.length - 1] = { ...last, content: `[错误] ${err.message}` };
+        } else {
+          msgs.push({ role: 'expert', content: `[错误] ${err.message}`, timestamp: new Date().toISOString() });
+        }
+        return { ...prev, [expertId]: { ...c, messages: msgs } };
       });
     } finally {
       setLoading(false);
     }
-  }, [input, selectedExpert, loading, conversations]);
+  }, [input, selectedExpert, loading, conversations, historyLimit, chatTemperature]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -148,7 +230,7 @@ export function ExpertChat() {
     if (!selectedExpert) return;
     setConversations(prev => {
       const next = { ...prev };
-      delete next[selectedExpert.expert_id];
+      delete next[expertKey(selectedExpert)];
       return next;
     });
   };
@@ -167,6 +249,21 @@ export function ExpertChat() {
             <h2>选择专家</h2>
             <span className="expert-count">{experts.length}</span>
           </div>
+          <div className="sidebar-search">
+            <input
+              type="search"
+              className="sidebar-search-input"
+              placeholder="按名称或 ID 筛选…"
+              value={expertSearch}
+              onChange={e => setExpertSearch(e.target.value)}
+              aria-label="筛选专家"
+            />
+            {expertSearch.trim() ? (
+              <span className="sidebar-search-meta">
+                {filteredExperts.length} / {experts.length}
+              </span>
+            ) : null}
+          </div>
 
           {expertsLoading ? (
             <div className="sidebar-loading">
@@ -179,30 +276,37 @@ export function ExpertChat() {
             </div>
           ) : (
             <ul className="expert-list">
-              {experts.map(expert => {
-                const hasConv = !!(conversations[expert.expert_id]?.messages.length);
-                const msgCount = conversations[expert.expert_id]?.messages.filter(m => m.role === 'expert').length || 0;
-                const isActive = selectedExpert?.expert_id === expert.expert_id;
+              {!expertsLoading && filteredExperts.length === 0 ? (
+                <li className="expert-list-empty">
+                  {experts.length === 0 ? '暂无专家数据' : '无匹配专家，请调整关键词'}
+                </li>
+              ) : null}
+              {filteredExperts.map(expert => {
+                const eid = expertKey(expert);
+                const convMsgs = conversations[eid]?.messages ?? [];
+                const hasConv = convMsgs.length > 0;
+                const msgCount = convMsgs.filter(m => m.role === 'expert').length;
+                const isActive = !!eid && !!selectedExpert && expertKey(selectedExpert) === eid;
 
                 return (
                   <li
-                    key={expert.expert_id}
+                    key={eid || `expert-${expert.name || 'unknown'}`}
                     className={`expert-item ${isActive ? 'active' : ''}`}
                     onClick={() => handleSelectExpert(expert)}
                   >
                     <div className="expert-avatar">
-                      {expert.name.charAt(0)}
+                      {(expert.name || '?').charAt(0)}
                     </div>
                     <div className="expert-info">
                       <div className="expert-name-row">
-                        <span className="expert-name">{expert.name}</span>
+                        <span className="expert-name">{expert.name || eid || '专家'}</span>
                         {hasConv && (
                           <span className="conv-badge">{msgCount}</span>
                         )}
                       </div>
-                      <p className="expert-style">{expert.persona.style}</p>
+                      <p className="expert-style">{expert.persona?.style ?? '—'}</p>
                       <div className="expert-domains">
-                        {expert.domain.slice(0, 2).map(d => (
+                        {(expert.domain ?? []).slice(0, 2).map(d => (
                           <span key={d} className="domain-tag">{d}</span>
                         ))}
                       </div>
@@ -221,10 +325,10 @@ export function ExpertChat() {
               {/* 对话头部 */}
               <div className="chat-header">
                 <div className="chat-header-info">
-                  <div className="chat-expert-avatar">{selectedExpert.name.charAt(0)}</div>
+                  <div className="chat-expert-avatar">{(selectedExpert.name || '?').charAt(0)}</div>
                   <div>
-                    <h3>{selectedExpert.name}</h3>
-                    <p className="chat-expert-tone">{selectedExpert.persona.tone}</p>
+                    <h3>{selectedExpert.name || expertKey(selectedExpert) || '专家'}</h3>
+                    <p className="chat-expert-tone">{selectedExpert.persona?.tone ?? '—'}</p>
                   </div>
                 </div>
                 <div className="chat-header-actions">
@@ -234,64 +338,82 @@ export function ExpertChat() {
                     </button>
                   )}
                   <button
-                    className="clear-btn"
-                    onClick={() => setShowSettings(!showSettings)}
+                    type="button"
+                    className="clear-btn chat-settings-toggle"
+                    data-chat-settings-toggle
+                    onClick={() => setShowSettings(v => !v)}
                     title="对话设置"
-                    style={{ fontSize: '16px' }}
+                    aria-expanded={showSettings}
+                    aria-controls="expert-chat-settings-panel"
                   >
                     ⚙
                   </button>
                   <div className="frameworks-pills">
-                    {selectedExpert.method.frameworks.slice(0, 2).map(f => (
+                    {(selectedExpert.method?.frameworks ?? []).slice(0, 2).map(f => (
                       <span key={f} className="framework-pill">{f}</span>
                     ))}
                   </div>
                 </div>
                 {/* 对话设置面板 */}
                 {showSettings && (
-                  <div style={{
-                    position: 'absolute', right: '16px', top: '60px', zIndex: 50,
-                    background: 'var(--md-sys-color-surface-container-lowest, white)',
-                    border: '1px solid var(--md-sys-color-outline-variant, #e0e0e0)',
-                    borderRadius: '12px', padding: '16px', width: '280px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>对话设置</div>
-                    <div style={{ marginBottom: '12px' }}>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
-                        历史上下文: {historyLimit} 轮
+                  <div
+                    id="expert-chat-settings-panel"
+                    ref={settingsPanelRef}
+                    className="chat-settings-popover"
+                    role="dialog"
+                    aria-modal="false"
+                    aria-labelledby="expert-chat-settings-title"
+                  >
+                    <div className="chat-settings-popover-header">
+                      <div id="expert-chat-settings-title" className="chat-settings-popover-title">
+                        对话设置
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="chat-settings-close"
+                        onClick={() => setShowSettings(false)}
+                        aria-label="关闭"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <p className="chat-settings-hint">修改后立即生效，无需单独保存。</p>
+                    <div className="chat-settings-section">
+                      <div className="chat-settings-label">历史上下文: {historyLimit} 轮</div>
+                      <div className="chat-settings-pills">
                         {[5, 10, 20].map(n => (
                           <button
+                            type="button"
                             key={n}
+                            className={`chat-settings-pill ${historyLimit === n ? 'active' : ''}`}
                             onClick={() => setHistoryLimit(n)}
-                            style={{
-                              padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
-                              border: 'none', cursor: 'pointer',
-                              background: historyLimit === n ? 'var(--md-sys-color-primary, #6750A4)' : '#f0f0f0',
-                              color: historyLimit === n ? 'white' : '#333',
-                            }}
                           >
                             {n}轮
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
-                        创造性: {chatTemperature.toFixed(1)}
-                      </div>
+                    <div className="chat-settings-section">
+                      <div className="chat-settings-label">创造性: {chatTemperature.toFixed(1)}</div>
                       <input
                         type="range"
-                        min="0.1" max="1.0" step="0.1"
+                        min="0.1"
+                        max="1.0"
+                        step="0.1"
                         value={chatTemperature}
                         onChange={e => setChatTemperature(parseFloat(e.target.value))}
-                        style={{ width: '100%' }}
+                        className="chat-settings-range"
                       />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#999' }}>
-                        <span>精确</span><span>平衡</span><span>创造</span>
+                      <div className="chat-settings-range-labels">
+                        <span>精确</span>
+                        <span>平衡</span>
+                        <span>创造</span>
                       </div>
+                    </div>
+                    <div className="chat-settings-footer">
+                      <button type="button" className="chat-settings-done" onClick={() => setShowSettings(false)}>
+                        完成
+                      </button>
                     </div>
                   </div>
                 )}
@@ -301,9 +423,9 @@ export function ExpertChat() {
               <div className="chat-messages">
                 {messages.length === 0 ? (
                   <div className="chat-empty">
-                    <div className="chat-empty-avatar">{selectedExpert.name.charAt(0)}</div>
-                    <h4>{selectedExpert.name} 准备就绪</h4>
-                    <p>{selectedExpert.persona.style}</p>
+                    <div className="chat-empty-avatar">{(selectedExpert.name || '?').charAt(0)}</div>
+                    <h4>{selectedExpert.name || expertKey(selectedExpert) || '专家'} 准备就绪</h4>
+                    <p>{selectedExpert.persona?.style ?? '—'}</p>
                     <div className="suggested-prompts">
                       {getPrompts(selectedExpert).map((prompt, i) => (
                         <button
@@ -327,10 +449,18 @@ export function ExpertChat() {
                     >
                       {msg.role === 'expert' && (
                         <div className="message-avatar expert-avatar-sm">
-                          {selectedExpert.name.charAt(0)}
+                          {(selectedExpert.name || '?').charAt(0)}
                         </div>
                       )}
                       <div className={`message-bubble ${msg.role === 'user' ? 'user-bubble' : 'expert-bubble'}`}>
+                        {msg.role === 'expert' && msg.reasoning && (
+                          <details className="reasoning-details">
+                            <summary className="reasoning-summary">
+                              💭 思考过程 ({msg.reasoning.length} 字)
+                            </summary>
+                            <div className="reasoning-content">{msg.reasoning}</div>
+                          </details>
+                        )}
                         <div className="message-content">{msg.content}</div>
                         <span className="message-time">{formatTime(msg.timestamp)}</span>
                       </div>
@@ -342,7 +472,7 @@ export function ExpertChat() {
                 {loading && (
                   <div className="message-wrapper expert-side">
                     <div className="message-avatar expert-avatar-sm">
-                      {selectedExpert.name.charAt(0)}
+                      {(selectedExpert.name || '?').charAt(0)}
                     </div>
                     <div className="message-bubble expert-bubble typing-bubble">
                       <span className="typing-dot" />
@@ -452,7 +582,7 @@ const EXPERT_PROMPTS: Record<string, string[]> = {
 };
 
 function getPrompts(expert: Expert): string[] {
-  return EXPERT_PROMPTS[expert.expert_id] ?? [
+  return EXPERT_PROMPTS[expertKey(expert)] ?? [
     `请介绍一下你的分析框架`,
     `你最关注的行业趋势是什么？`,
     `如何用你的视角分析当前市场机会？`,

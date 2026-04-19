@@ -106,6 +106,79 @@ export function createRouter(engine: ExpertEngine) {
       }
     });
 
+    /** POST /chat/stream — 两阶段流式对话：reasoning 与 content 分别增量推送 */
+    fastify.post('/chat/stream', async (request: FastifyRequest, reply: FastifyReply) => {
+      const { expert_id, message, history, conversation_id } = request.body as any;
+      if (!expert_id || !message) {
+        return reply.status(400).send({ error: 'Missing required fields: expert_id, message' });
+      }
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      const write = (event: string, data: unknown) => {
+        try { reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ }
+      };
+
+      try {
+        const { expert, systemPrompt, userPrompt } = await engine.buildChatPrompts({ expert_id, message, history });
+        const convId = conversation_id || `conv-${Date.now()}`;
+        write('meta', { expert_name: expert.name, conversation_id: convId });
+
+        const { streamOpenAICompatible } = await import('../../services/llm.js');
+        const volcanoKey = process.env.VOLCANO_API_KEY;
+        const volcanoModel = process.env.VOLCANO_MODEL || 'deepseek-v3-2-251201';
+        if (!volcanoKey) throw new Error('VOLCANO_API_KEY not configured');
+
+        let reasoningFull = '';
+        let contentFull = '';
+        const stream = streamOpenAICompatible(
+          'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+          volcanoKey,
+          {
+            model: volcanoModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 4000,
+            temperature: 0.6,
+          }
+        );
+
+        const aborted = { v: false };
+        request.raw.on('close', () => { aborted.v = true; });
+
+        for await (const chunk of stream) {
+          if (aborted.v) break;
+          if (chunk.type === 'reasoning') {
+            reasoningFull += chunk.delta;
+            write('reasoning', { delta: chunk.delta });
+          } else if (chunk.type === 'content') {
+            contentFull += chunk.delta;
+            write('content', { delta: chunk.delta });
+          } else if (chunk.type === 'done') {
+            break;
+          }
+        }
+
+        write('done', {
+          expert_name: expert.name,
+          conversation_id: convId,
+          reply: contentFull,
+          reasoning: reasoningFull || undefined,
+        });
+        reply.raw.end();
+      } catch (error: any) {
+        console.error('[ExpertLibrary] Chat stream error:', error);
+        write('error', { message: error.message || String(error) });
+        reply.raw.end();
+      }
+    });
+
     // ===== 专家管理 =====
 
     /** GET /experts — 列出专家 */

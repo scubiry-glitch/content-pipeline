@@ -117,6 +117,8 @@ export interface GenerateOptions {
 
 export interface GenerateResult {
   content: string;
+  /** 推理模型的内部思考过程（kimi-for-coding 等），前端可展开查看 */
+  reasoning?: string;
   model: string;
   usage?: {
     inputTokens: number;
@@ -238,12 +240,25 @@ export async function generateWithKimi(
 
     const response = await kimiRequest('/chat/completions', body, apiKey, baseURL);
 
-    // Kimi for Coding 模型可能返回 reasoning_content 而非 content
+    // kimi-for-coding 是推理模型：reasoning_content = 内部 CoT，content = 最终答案
+    // 两个字段都保留：content 默认展示，reasoning 供前端展开查看
     const message = response.choices?.[0]?.message || {};
-    const content = message.content || message.reasoning_content || '';
+    const raw: string = message.content || '';
+    // 从 content 里额外抽出 <think> 块（有些模型把思考嵌在 content 里）
+    const thinkMatches: string[] = [];
+    const stripped = raw.replace(/<think>([\s\S]*?)<\/think>/gi, (_m, inner) => {
+      thinkMatches.push(String(inner).trim());
+      return '';
+    }).trim();
+    const reasoningParts = [
+      ...(message.reasoning_content ? [String(message.reasoning_content).trim()] : []),
+      ...thinkMatches,
+    ].filter(Boolean);
+    const reasoning = reasoningParts.length > 0 ? reasoningParts.join('\n\n') : undefined;
 
     return {
-      content,
+      content: stripped,
+      reasoning,
       model: response.model || model,
       usage: {
         inputTokens: response.usage?.prompt_tokens || 0,
@@ -253,6 +268,94 @@ export async function generateWithKimi(
   } catch (error: any) {
     console.error('[LLM] Kimi generation failed:', error.message);
     throw error;
+  }
+}
+
+/** 流式输出的增量事件 */
+export type StreamChunk =
+  | { type: 'reasoning'; delta: string }
+  | { type: 'content'; delta: string }
+  | { type: 'done'; model?: string };
+
+/**
+ * OpenAI 兼容端点的 SSE 流式生成（volcano-engine / kimi / siliconflow 通用）
+ * 自动区分 delta.reasoning_content 和 delta.content，分别推送
+ */
+export async function* streamOpenAICompatible(
+  endpoint: string,
+  apiKey: string,
+  body: Record<string, any>,
+  headers?: Record<string, string>
+): AsyncGenerator<StreamChunk> {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'text/event-stream',
+      ...(headers || {}),
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Stream API error ${res.status}: ${text.slice(0, 500)}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let inThink = false; // 追踪 <think>...</think> 跨 chunk 状态
+  let modelSeen: string | undefined;
+
+  const emitFromContent = function* (raw: string): Generator<StreamChunk> {
+    // 逐字符处理 <think>...</think> 边界
+    let i = 0;
+    let reasoningBuf = '';
+    let contentBuf = '';
+    while (i < raw.length) {
+      if (!inThink && raw.substring(i, i + 7).toLowerCase() === '<think>') {
+        inThink = true; i += 7; continue;
+      }
+      if (inThink && raw.substring(i, i + 8).toLowerCase() === '</think>') {
+        inThink = false; i += 8; continue;
+      }
+      if (inThink) reasoningBuf += raw[i];
+      else contentBuf += raw[i];
+      i++;
+    }
+    if (reasoningBuf) yield { type: 'reasoning', delta: reasoningBuf };
+    if (contentBuf) yield { type: 'content', delta: contentBuf };
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === '[DONE]') { yield { type: 'done', model: modelSeen }; return; }
+        try {
+          const json = JSON.parse(payload);
+          modelSeen = modelSeen || json.model;
+          const delta = json.choices?.[0]?.delta || {};
+          if (delta.reasoning_content) {
+            yield { type: 'reasoning', delta: String(delta.reasoning_content) };
+          }
+          if (delta.content) {
+            yield* emitFromContent(String(delta.content));
+          }
+        } catch { /* ignore malformed chunk */ }
+      }
+    }
+    yield { type: 'done', model: modelSeen };
+  } finally {
+    try { reader.releaseLock(); } catch { /* ignore */ }
   }
 }
 

@@ -58,6 +58,19 @@ export function createPipelineLLMAdapter(): LLMAdapter {
       );
       return result.content;
     },
+    async completeWithSystemDetailed(
+      systemPrompt: string,
+      userPrompt: string,
+      options?: LLMOptions
+    ): Promise<{ content: string; reasoning?: string }> {
+      const router = getLLMRouter();
+      const result = await router.generate(
+        userPrompt,
+        'expert_library',
+        expertLibraryRouterParams(options, systemPrompt)
+      );
+      return { content: result.content, reasoning: result.reasoning };
+    },
   };
 }
 

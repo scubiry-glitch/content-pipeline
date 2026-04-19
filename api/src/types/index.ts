@@ -131,6 +131,8 @@ export interface GenerationParams {
 
 export interface GenerationResult {
   content: string;
+  /** 推理模型的内部思考过程（可选，前端可展开查看） */
+  reasoning?: string;
   model: string;
   usage?: {
     inputTokens: number;

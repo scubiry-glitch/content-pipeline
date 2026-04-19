@@ -12,6 +12,8 @@ export interface DatabaseAdapter {
 export interface LLMAdapter {
   complete(prompt: string, options?: LLMOptions): Promise<string>;
   completeWithSystem(systemPrompt: string, userPrompt: string, options?: LLMOptions): Promise<string>;
+  /** 返回完整结构（含 reasoning），用于需要展示思考过程的场景 */
+  completeWithSystemDetailed?(systemPrompt: string, userPrompt: string, options?: LLMOptions): Promise<{ content: string; reasoning?: string }>;
   /** 可选：文本向量化，用于语义检索 */
   embed?(text: string): Promise<number[]>;
 }

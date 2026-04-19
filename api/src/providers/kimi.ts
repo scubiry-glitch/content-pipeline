@@ -25,6 +25,7 @@ export class KimiProvider extends LLMProvider {
 
     return {
       content: result.content,
+      reasoning: result.reasoning,
       model: result.model,
       usage: result.usage,
     };
