@@ -426,6 +426,7 @@ async function setupMVPSchema(): Promise<void> {
       description TEXT,
       color VARCHAR(20) DEFAULT '#6366f1',
       icon VARCHAR(50) DEFAULT '📁',
+      domain VARCHAR(100),
       sort_order INTEGER DEFAULT 0,
       is_pinned BOOLEAN DEFAULT FALSE,
       pinned_at TIMESTAMP WITH TIME ZONE,

@@ -1,5 +1,6 @@
 // Assets.tsx
 // v3.2.0: 素材库页面 - 集成 v6.2 AI 分析功能
+// v7.x: 领域分类与 /content-library 对齐；新增内容类型（会议纪要/述职材料/访谈实录/音视频转录）
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -13,10 +14,10 @@ import {
 import { assetsAiApi } from '../api/assetsAi';
 import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
 import { LazyImage } from '../components/LazyImage';
+import { useDropdownOptions } from '../components/ContentLibraryProductMeta';
+import { ASSET_TYPE_META, ASSET_TYPES, type AssetType } from '../types';
 import './Assets.css';
 
-// 扩展 Asset 类型
-type AssetType = 'file' | 'report' | 'quote' | 'data' | 'rss_item';
 type FilterTab = 'all' | 'my' | 'shared';
 type AssetStatus = 'research' | 'draft' | 'final';
 
@@ -43,8 +44,13 @@ export function Assets() {
 
   // UI状态
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<AssetType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 统一的领域下拉（与 /content-library 共享同一数据源 /dropdown/domains）
+  const { domains } = useDropdownOptions();
 
   // 弹窗状态
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -86,12 +92,15 @@ export function Assets() {
     source: '',
     themeId: '',
     tags: '',
+    assetType: 'file' as AssetType,
+    domain: '',
   });
   const [themeForm, setThemeForm] = useState({
     name: '',
     description: '',
     icon: '📁',
     color: '#6366f1',
+    domain: '',
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -111,20 +120,26 @@ export function Assets() {
       // 转换数据类型
       const extendedAssets: ExtendedAsset[] = (assetsRes.items || []).map((a, index) => {
         // 计算真实字数：优先使用 metadata.wordCount，其次使用 content.length
-        const wordCount = (a as any).metadata?.wordCount 
+        const wordCount = (a as any).metadata?.wordCount
           || (a.content?.length > 100 ? Math.round(a.content.length / 2) : 0)
           || (a as any).ai_quality_score || 0;
-        
+
+        const rawType = (a as any).asset_type || (a as any).type || 'file';
+        const assetType: AssetType = (ASSET_TYPES as readonly string[]).includes(rawType)
+          ? (rawType as AssetType)
+          : 'file';
+
         return {
           ...a,
-          asset_type: 'file' as AssetType,
+          asset_type: assetType,
+          domain: (a as any).domain,
           status: index % 3 === 0 ? 'research' : index % 3 === 1 ? 'draft' : 'final',
           word_count: wordCount,
-          fact_check_score: (a as any).ai_quality_score 
+          fact_check_score: (a as any).ai_quality_score
             ? Math.min((a as any).ai_quality_score + 80, 98)
             : Math.floor(Math.random() * 20) + 80,
-          quality_score: typeof a.quality_score === 'string' 
-            ? parseFloat(a.quality_score) 
+          quality_score: typeof a.quality_score === 'string'
+            ? parseFloat(a.quality_score)
             : a.quality_score,
           content: a.content || (a as any).content_preview || '',
         };
@@ -138,19 +153,41 @@ export function Assets() {
     }
   };
 
+  // theme.id -> theme 查找
+  const themesById = Object.fromEntries(themes.map((t) => [t.id, t])) as Record<string, AssetTheme>;
+
+  // 判断 asset 是否属于某 domain（直接 domain 字段 或 theme 绑定的 domain）
+  const assetBelongsToDomain = (asset: ExtendedAsset, domain: string): boolean => {
+    if (asset.domain === domain) return true;
+    if (asset.theme_id) {
+      const t = themesById[asset.theme_id];
+      if (t && (t.domain === domain || (!t.domain && t.name === domain))) return true;
+    }
+    return false;
+  };
+
+  const countByDomain = (domain: string) =>
+    assets.filter((a) => assetBelongsToDomain(a, domain)).length;
+
   // 筛选素材
   const filteredAssets = assets.filter((asset) => {
     // Tab筛选
     if (filterTab === 'my') return asset.created_by === 'current_user';
     if (filterTab === 'shared') return asset.is_shared;
 
-    // AI 分析状态筛选
+    // AI 分析状态筛选（互斥：选了 AI 状态就只按 AI 状态过滤）
     if (selectedTheme === 'ai-completed') return asset.ai_processing_status === 'completed';
     if (selectedTheme === 'ai-pending') return !asset.ai_processing_status || asset.ai_processing_status === 'pending';
 
+    // 领域筛选
+    if (selectedDomain && !assetBelongsToDomain(asset, selectedDomain)) return false;
+
     // 主题筛选
-    if (selectedTheme === 'uncategorized') return !asset.theme_id;
-    if (selectedTheme) return asset.theme_id === selectedTheme;
+    if (selectedTheme === 'uncategorized' && asset.theme_id) return false;
+    if (selectedTheme && selectedTheme !== 'uncategorized' && asset.theme_id !== selectedTheme) return false;
+
+    // 类型筛选
+    if (selectedType && asset.asset_type !== selectedType) return false;
 
     return true;
   }).filter((asset) => {
@@ -163,6 +200,11 @@ export function Assets() {
       asset.source?.toLowerCase().includes(query)
     );
   });
+
+  // 当前选中领域下可见的主题（未选领域则全部）
+  const visibleThemes = selectedDomain
+    ? themes.filter((t) => (t.domain || t.name) === selectedDomain)
+    : themes;
 
   // 处理文件选择
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,11 +228,16 @@ export function Assets() {
     formData.append('source', uploadForm.source);
     if (uploadForm.themeId) formData.append('theme_id', uploadForm.themeId);
     if (uploadForm.tags) formData.append('tags', uploadForm.tags);
+    formData.append('asset_type', uploadForm.assetType);
+    // 若未显式填 domain，回退到所选主题的 domain
+    const effectiveDomain = uploadForm.domain
+      || (uploadForm.themeId ? (themesById[uploadForm.themeId]?.domain || themesById[uploadForm.themeId]?.name || '') : '');
+    if (effectiveDomain) formData.append('domain', effectiveDomain);
 
     try {
       await assetsApi.create(formData);
       setShowUploadModal(false);
-      setUploadForm({ file: null, title: '', source: '', themeId: '', tags: '' });
+      setUploadForm({ file: null, title: '', source: '', themeId: '', tags: '', assetType: 'file', domain: '' });
       loadData();
     } catch (err) {
       alert('上传失败: ' + (err instanceof Error ? err.message : '未知错误'));
@@ -215,7 +262,9 @@ export function Assets() {
         theme_id: editingAsset.theme_id,
         tags: editingAsset.tags,
         content: editingAsset.content,
-      });
+        asset_type: editingAsset.asset_type,
+        domain: editingAsset.domain,
+      } as Partial<Asset>);
       setShowEditModal(false);
       setEditingAsset(null);
       loadData();
@@ -335,14 +384,27 @@ export function Assets() {
         description: themeForm.description,
         icon: themeForm.icon,
         color: themeForm.color,
+        domain: themeForm.domain || themeForm.name, // 默认 domain = name
       });
       setShowCreateThemeModal(false);
-      setThemeForm({ name: '', description: '', icon: '📁', color: '#6366f1' });
+      setThemeForm({ name: '', description: '', icon: '📁', color: '#6366f1', domain: '' });
       loadData();
     } catch (err) {
       alert('创建失败: ' + (err instanceof Error ? err.message : '未知错误'));
     }
   };
+
+  // 类型 chip 样式
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    padding: '4px 10px',
+    borderRadius: 16,
+    fontSize: 12,
+    border: `1px solid ${active ? '#6366f1' : '#e5e7eb'}`,
+    background: active ? '#eef2ff' : '#fff',
+    color: active ? '#4338ca' : '#374151',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  });
 
   // 获取状态配置
   const getStatusConfig = (status?: AssetStatus) => {
@@ -542,19 +604,47 @@ export function Assets() {
         </div>
       </div>
 
+      {/* 类型筛选 chips */}
+      <div className="asset-type-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 12px' }}>
+        <button
+          className={`type-chip ${selectedType === null ? 'active' : ''}`}
+          onClick={() => setSelectedType(null)}
+          style={chipStyle(selectedType === null)}
+        >
+          全部类型
+        </button>
+        {ASSET_TYPES.map((t) => {
+          const meta = ASSET_TYPE_META[t];
+          const count = assets.filter((a) => a.asset_type === t).length;
+          return (
+            <button
+              key={t}
+              className={`type-chip ${selectedType === t ? 'active' : ''}`}
+              onClick={() => setSelectedType(selectedType === t ? null : t)}
+              style={chipStyle(selectedType === t)}
+              title={`${meta.label}（${count}）`}
+            >
+              <span style={{ marginRight: 4 }}>{meta.icon}</span>
+              {meta.label}
+              <span style={{ marginLeft: 4, opacity: 0.6 }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="assets-layout-v2">
-        {/* 左侧主题导航 */}
+        {/* 左侧领域 + 主题导航 */}
         <aside className="theme-sidebar-v2">
           <div className="sidebar-header-v2">
-            <span className="sidebar-title">主题分类</span>
-            <button className="btn-add-theme" onClick={() => setShowCreateThemeModal(true)}>
+            <span className="sidebar-title">领域分类</span>
+            <button className="btn-add-theme" onClick={() => setShowCreateThemeModal(true)} title="新建主题">
               <span className="material-icon">add</span>
             </button>
           </div>
           <nav className="theme-nav">
             <div
-              className={`theme-nav-item ${selectedTheme === null ? 'active' : ''}`}
-              onClick={() => setSelectedTheme(null)}
+              className={`theme-nav-item ${selectedDomain === null && selectedTheme === null ? 'active' : ''}`}
+              onClick={() => { setSelectedDomain(null); setSelectedTheme(null); }}
             >
               <span className="theme-nav-icon">📚</span>
               <span className="theme-nav-name">全部素材</span>
@@ -562,7 +652,7 @@ export function Assets() {
             </div>
             <div
               className={`theme-nav-item ${selectedTheme === 'uncategorized' ? 'active' : ''}`}
-              onClick={() => setSelectedTheme('uncategorized')}
+              onClick={() => { setSelectedTheme('uncategorized'); setSelectedDomain(null); }}
             >
               <span className="theme-nav-icon">📂</span>
               <span className="theme-nav-name">未分类</span>
@@ -571,12 +661,31 @@ export function Assets() {
               </span>
             </div>
 
+            {/* 领域（与 /content-library 同源 /dropdown/domains） */}
+            {domains.length > 0 && (
+              <div className="sidebar-section">
+                <span className="sidebar-section-title">领域</span>
+                {domains.map((d) => (
+                  <div
+                    key={d}
+                    className={`theme-nav-item ${selectedDomain === d ? 'active' : ''}`}
+                    onClick={() => { setSelectedDomain(selectedDomain === d ? null : d); setSelectedTheme(null); }}
+                    title={`领域：${d}`}
+                  >
+                    <span className="theme-nav-icon">🏷️</span>
+                    <span className="theme-nav-name">{d}</span>
+                    <span className="theme-nav-count">{countByDomain(d)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* AI 分析状态筛选 */}
             <div className="sidebar-section">
               <span className="sidebar-section-title">AI 分析</span>
               <div
                 className={`theme-nav-item ${selectedTheme === 'ai-completed' ? 'active' : ''}`}
-                onClick={() => setSelectedTheme('ai-completed')}
+                onClick={() => setSelectedTheme(selectedTheme === 'ai-completed' ? null : 'ai-completed')}
               >
                 <span className="theme-nav-icon">✅</span>
                 <span className="theme-nav-name">已完成</span>
@@ -586,7 +695,7 @@ export function Assets() {
               </div>
               <div
                 className={`theme-nav-item ${selectedTheme === 'ai-pending' ? 'active' : ''}`}
-                onClick={() => setSelectedTheme('ai-pending')}
+                onClick={() => setSelectedTheme(selectedTheme === 'ai-pending' ? null : 'ai-pending')}
               >
                 <span className="theme-nav-icon">⏳</span>
                 <span className="theme-nav-name">待分析</span>
@@ -596,19 +705,27 @@ export function Assets() {
               </div>
             </div>
 
-            {themes.map((theme) => (
-              <div
-                key={theme.id}
-                className={`theme-nav-item ${selectedTheme === theme.id ? 'active' : ''}`}
-                onClick={() => setSelectedTheme(theme.id)}
-              >
-                <span className="theme-nav-icon">{theme.icon}</span>
-                <span className="theme-nav-name">{theme.name}</span>
-                <span className="theme-nav-count">
-                  {assets.filter((a) => a.theme_id === theme.id).length}
+            {/* 主题：全部 or 选定领域下的主题 */}
+            {visibleThemes.length > 0 && (
+              <div className="sidebar-section">
+                <span className="sidebar-section-title">
+                  {selectedDomain ? `${selectedDomain} · 主题` : '我的主题'}
                 </span>
+                {visibleThemes.map((theme) => (
+                  <div
+                    key={theme.id}
+                    className={`theme-nav-item ${selectedTheme === theme.id ? 'active' : ''}`}
+                    onClick={() => setSelectedTheme(selectedTheme === theme.id ? null : theme.id)}
+                  >
+                    <span className="theme-nav-icon">{theme.icon}</span>
+                    <span className="theme-nav-name">{theme.name}</span>
+                    <span className="theme-nav-count">
+                      {assets.filter((a) => a.theme_id === theme.id).length}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </nav>
         </aside>
 
@@ -678,6 +795,32 @@ export function Assets() {
                 />
               </div>
               <div className="form-group">
+                <label>内容类型</label>
+                <select
+                  value={uploadForm.assetType}
+                  onChange={(e) => setUploadForm((p) => ({ ...p, assetType: e.target.value as AssetType }))}
+                >
+                  {ASSET_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {ASSET_TYPE_META[t].icon} {ASSET_TYPE_META[t].label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>领域</label>
+                <input
+                  type="text"
+                  list="asset-domain-options"
+                  value={uploadForm.domain}
+                  onChange={(e) => setUploadForm((p) => ({ ...p, domain: e.target.value }))}
+                  placeholder="选择或输入领域（留空则沿用所选主题的领域）"
+                />
+                <datalist id="asset-domain-options">
+                  {domains.map((d) => <option key={d} value={d} />)}
+                </datalist>
+              </div>
+              <div className="form-group">
                 <label>主题</label>
                 <select
                   value={uploadForm.themeId}
@@ -743,6 +886,32 @@ export function Assets() {
                   value={editingAsset.source || ''}
                   onChange={(e) => setEditingAsset((p) => p ? ({ ...p, source: e.target.value }) : null)}
                 />
+              </div>
+              <div className="form-group">
+                <label>内容类型</label>
+                <select
+                  value={editingAsset.asset_type || 'file'}
+                  onChange={(e) => setEditingAsset((p) => p ? ({ ...p, asset_type: e.target.value as AssetType }) : null)}
+                >
+                  {ASSET_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {ASSET_TYPE_META[t].icon} {ASSET_TYPE_META[t].label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>领域</label>
+                <input
+                  type="text"
+                  list="asset-edit-domain-options"
+                  value={editingAsset.domain || ''}
+                  onChange={(e) => setEditingAsset((p) => p ? ({ ...p, domain: e.target.value || undefined }) : null)}
+                  placeholder="选择或输入领域"
+                />
+                <datalist id="asset-edit-domain-options">
+                  {domains.map((d) => <option key={d} value={d} />)}
+                </datalist>
               </div>
               <div className="form-group">
                 <label>主题</label>
@@ -816,6 +985,19 @@ export function Assets() {
                   onChange={(e) => setThemeForm((p) => ({ ...p, description: e.target.value }))}
                   placeholder="主题描述（可选）"
                 />
+              </div>
+              <div className="form-group">
+                <label>领域</label>
+                <input
+                  type="text"
+                  list="theme-domain-options"
+                  value={themeForm.domain}
+                  onChange={(e) => setThemeForm((p) => ({ ...p, domain: e.target.value }))}
+                  placeholder="从 /content-library 领域中选或自由输入（留空则沿用主题名）"
+                />
+                <datalist id="theme-domain-options">
+                  {domains.map((d) => <option key={d} value={d} />)}
+                </datalist>
               </div>
               <div className="form-group">
                 <label>图标</label>

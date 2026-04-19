@@ -12,6 +12,9 @@ export interface UploadAssetInput {
   title: string;
   source?: string;
   tags: string[];
+  domain?: string;
+  asset_type?: string;
+  theme_id?: string;
 }
 
 export interface UpdateAssetInput {
@@ -20,6 +23,8 @@ export interface UpdateAssetInput {
   tags?: string[];
   content?: string;
   theme_id?: string | null;
+  domain?: string | null;
+  asset_type?: string;
 }
 
 export interface CreateThemeInput {
@@ -27,6 +32,7 @@ export interface CreateThemeInput {
   description?: string;
   color?: string;
   icon?: string;
+  domain?: string;
 }
 
 export class AssetService {
@@ -49,8 +55,9 @@ export class AssetService {
       `INSERT INTO assets (
         id, title, content, content_type, filename,
         source, tags, auto_tags, quality_score, embedding,
+        type, domain, theme_id,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, NOW(), NOW())`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, NOW(), NOW())`,
       [
         assetId,
         input.title,
@@ -61,7 +68,10 @@ export class AssetService {
         JSON.stringify(input.tags),
         JSON.stringify(autoTags),
         qualityScore,
-        `[${embedding.join(',')}]`
+        `[${embedding.join(',')}]`,
+        input.asset_type || 'file',
+        input.domain || null,
+        input.theme_id || null
       ]
     );
 
@@ -69,6 +79,9 @@ export class AssetService {
       id: assetId,
       title: input.title,
       content_type: this.getContentType(input.mimetype),
+      asset_type: input.asset_type || 'file',
+      domain: input.domain || null,
+      theme_id: input.theme_id || null,
       tags: input.tags,
       auto_tags: autoTags,
       quality_score: qualityScore,
@@ -101,6 +114,14 @@ export class AssetService {
     if (input.theme_id !== undefined) {
       updates.push(`theme_id = $${paramIndex++}`);
       params.push(input.theme_id);
+    }
+    if (input.domain !== undefined) {
+      updates.push(`domain = $${paramIndex++}`);
+      params.push(input.domain);
+    }
+    if (input.asset_type !== undefined) {
+      updates.push(`type = $${paramIndex++}`);
+      params.push(input.asset_type);
     }
 
     if (updates.length === 0) {
@@ -170,15 +191,18 @@ export class AssetService {
     );
     const sortOrder = maxOrderResult.rows[0].next_order;
 
+    const domain = input.domain || input.name;
+
     await query(
-      `INSERT INTO asset_themes (id, name, description, color, icon, sort_order, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      `INSERT INTO asset_themes (id, name, description, color, icon, domain, sort_order, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
       [
         themeId,
         input.name,
         input.description || null,
         input.color || '#6366f1',
         input.icon || '📁',
+        domain,
         sortOrder
       ]
     );
@@ -189,6 +213,7 @@ export class AssetService {
       description: input.description,
       color: input.color || '#6366f1',
       icon: input.icon || '📁',
+      domain,
       sort_order: sortOrder
     };
   }
@@ -206,6 +231,7 @@ export class AssetService {
       description: row.description,
       color: row.color,
       icon: row.icon,
+      domain: row.domain || row.name,
       sort_order: row.sort_order,
       is_pinned: row.is_pinned,
       pinned_at: row.pinned_at
@@ -233,6 +259,10 @@ export class AssetService {
     if (input.icon !== undefined) {
       updates.push(`icon = $${paramIndex++}`);
       params.push(input.icon);
+    }
+    if (input.domain !== undefined) {
+      updates.push(`domain = $${paramIndex++}`);
+      params.push(input.domain);
     }
 
     if (updates.length === 0) {
@@ -290,6 +320,7 @@ export class AssetService {
       description: row.description,
       color: row.color,
       icon: row.icon,
+      domain: row.domain || row.name,
       sort_order: row.sort_order,
       is_pinned: row.is_pinned,
       pinned_at: row.pinned_at
@@ -302,7 +333,8 @@ export class AssetService {
 
     let sql = `
       SELECT id, title, content_type, content, tags, auto_tags, source,
-             quality_score, is_pinned, pinned_at, theme_id, created_at, updated_at
+             quality_score, is_pinned, pinned_at, theme_id, domain, type,
+             created_at, updated_at
       FROM assets
       WHERE 1=1
     `;
@@ -346,25 +378,28 @@ export class AssetService {
         is_pinned: row.is_pinned,
         pinned_at: row.pinned_at,
         theme_id: row.theme_id,
+        domain: row.domain,
+        asset_type: row.type,
         created_at: row.created_at,
         updated_at: row.updated_at
       }))
     };
   }
 
-  async search(options: { query?: string; tags?: string[]; limit: number }) {
-    const { query: searchQuery, tags, limit } = options;
+  async search(options: { query?: string; tags?: string[]; limit: number; domain?: string; asset_type?: string }) {
+    const { query: searchQuery, tags, limit, domain, asset_type } = options;
 
     // 如果有搜索词，使用向量相似度搜索
     if (searchQuery) {
       const queryEmbedding = await generateEmbedding(searchQuery);
-      return this.vectorSearch(queryEmbedding, tags, limit);
+      return this.vectorSearch(queryEmbedding, tags, limit, { domain, asset_type });
     }
 
     // 否则使用普通标签搜索
     let sql = `
-      SELECT id, title, content_type, content, tags, auto_tags, source, quality_score, 
-             ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, is_pinned, created_at
+      SELECT id, title, content_type, content, tags, auto_tags, source, quality_score,
+             ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, type,
+             is_pinned, created_at
       FROM assets
       WHERE 1=1
     `;
@@ -374,6 +409,16 @@ export class AssetService {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
       sql += ` AND tags ?| ARRAY[${tagPlaceholders}]`;
       params.push(...tags);
+    }
+
+    if (domain) {
+      params.push(domain);
+      sql += ` AND domain = $${params.length}`;
+    }
+
+    if (asset_type) {
+      params.push(asset_type);
+      sql += ` AND type = $${params.length}`;
     }
 
     sql += ` ORDER BY quality_score DESC, created_at DESC LIMIT $${params.length + 1}`;
@@ -392,6 +437,8 @@ export class AssetService {
         source: row.source,
         quality_score: row.quality_score,
         theme_id: row.theme_id,
+        domain: row.domain,
+        asset_type: row.type,
         is_pinned: row.is_pinned,
         ai_quality_score: row.ai_quality_score,
         ai_processing_status: row.ai_processing_status,
@@ -405,14 +452,16 @@ export class AssetService {
   private async vectorSearch(
     queryEmbedding: number[],
     tags?: string[],
-    limit: number = 10
+    limit: number = 10,
+    extra: { domain?: string; asset_type?: string } = {}
   ) {
     const vectorStr = `[${queryEmbedding.join(',')}]`;
 
     let sql = `
       SELECT
-        id, title, content_type, content, tags, auto_tags, source, quality_score, 
-        ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, is_pinned, created_at,
+        id, title, content_type, content, tags, auto_tags, source, quality_score,
+        ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, type,
+        is_pinned, created_at,
         1 - (embedding <=> $1::vector) as similarity
       FROM assets
       WHERE embedding IS NOT NULL
@@ -420,9 +469,19 @@ export class AssetService {
     const params: any[] = [vectorStr];
 
     if (tags && tags.length > 0) {
-      const tagPlaceholders = tags.map((_, i) => `$${i + 2}`).join(',');
+      const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
       sql += ` AND tags ?| ARRAY[${tagPlaceholders}]`;
       params.push(...tags);
+    }
+
+    if (extra.domain) {
+      params.push(extra.domain);
+      sql += ` AND domain = $${params.length}`;
+    }
+
+    if (extra.asset_type) {
+      params.push(extra.asset_type);
+      sql += ` AND type = $${params.length}`;
     }
 
     sql += ` ORDER BY embedding <=> $1::vector LIMIT $${params.length + 1}`;
@@ -441,6 +500,8 @@ export class AssetService {
         source: row.source,
         quality_score: row.quality_score,
         theme_id: row.theme_id,
+        domain: row.domain,
+        asset_type: row.type,
         is_pinned: row.is_pinned,
         ai_quality_score: row.ai_quality_score,
         ai_processing_status: row.ai_processing_status,

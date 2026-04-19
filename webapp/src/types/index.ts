@@ -178,7 +178,27 @@ export interface DifferentiationSuggestion {
 }
 
 // 资产类型
-export type AssetType = 'file' | 'report' | 'quote' | 'data' | 'rss_item';
+export type AssetType =
+  | 'file' | 'report' | 'quote' | 'data' | 'rss_item'
+  | 'chart' | 'insight'
+  | 'meeting_minutes' | 'briefing' | 'interview' | 'transcript';
+
+// 资产类型展示元数据：中文名 + icon，供 UI 下拉/筛选/卡片复用
+export const ASSET_TYPE_META: Record<AssetType, { label: string; icon: string }> = {
+  file: { label: '文件', icon: '📄' },
+  report: { label: '研报', icon: '📊' },
+  quote: { label: '引用', icon: '💬' },
+  data: { label: '数据', icon: '📈' },
+  rss_item: { label: 'RSS', icon: '📡' },
+  chart: { label: '图表', icon: '📉' },
+  insight: { label: '洞察', icon: '💡' },
+  meeting_minutes: { label: '会议纪要', icon: '📝' },
+  briefing: { label: '述职材料', icon: '📋' },
+  interview: { label: '访谈实录', icon: '🎤' },
+  transcript: { label: '音视频转录', icon: '🎧' },
+};
+
+export const ASSET_TYPES: AssetType[] = Object.keys(ASSET_TYPE_META) as AssetType[];
 
 // 资产基础接口
 export interface Asset {
@@ -198,6 +218,7 @@ export interface Asset {
   is_pinned: boolean;
   pinned_at?: string;
   theme_id?: string;
+  domain?: string; // v7.x 领域字段，与 /content-library 的 domain 对齐
   view_count?: number;
   influence_score?: number;
   asset_type: AssetType; // 资产类型区分
@@ -240,6 +261,7 @@ export interface AssetTheme {
   description?: string;
   color: string;
   icon: string;
+  domain?: string; // 领域绑定，为空时回退到 name
   sort_order: number;
   is_pinned: boolean;
   pinned_at?: string;

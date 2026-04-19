@@ -2,7 +2,24 @@
 import { query } from '../db/connection.js';
 import { v4 as uuidv4 } from 'uuid';
 
-export type AssetType = 'chart' | 'quote' | 'data' | 'insight';
+export type AssetType =
+  | 'file' | 'report' | 'quote' | 'data' | 'rss_item'
+  | 'chart' | 'insight'
+  | 'meeting_minutes' | 'briefing' | 'interview' | 'transcript';
+
+export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  file: '文件',
+  report: '研报',
+  quote: '引用',
+  data: '数据',
+  rss_item: 'RSS',
+  chart: '图表',
+  insight: '洞察',
+  meeting_minutes: '会议纪要',
+  briefing: '述职材料',
+  interview: '访谈实录',
+  transcript: '音视频转录',
+};
 
 export interface Asset {
   id: string;
@@ -14,6 +31,7 @@ export interface Asset {
   tags: string[];
   qualityScore: number;
   usageCount: number;
+  domain?: string;
   metadata: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -27,12 +45,14 @@ export interface CreateAssetDTO {
   sourceId?: string;
   tags?: string[];
   qualityScore?: number;
+  domain?: string;
   metadata?: Record<string, any>;
 }
 
 export interface AssetFilters {
   type?: AssetType;
   sourceId?: string;
+  domain?: string;
   search?: string;
   page?: number;
   limit?: number;
@@ -43,8 +63,8 @@ export class AssetService {
   async createAsset(data: CreateAssetDTO): Promise<Asset> {
     const id = uuidv4();
     const result = await query(
-      `INSERT INTO assets (id, type, title, content, source, source_id, tags, quality_score, metadata, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      `INSERT INTO assets (id, type, title, content, source, source_id, tags, quality_score, domain, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
        RETURNING *`,
       [
         id,
@@ -55,6 +75,7 @@ export class AssetService {
         data.sourceId || null,
         JSON.stringify(data.tags || []),
         data.qualityScore || 0,
+        data.domain || null,
         JSON.stringify(data.metadata || {})
       ]
     );
@@ -101,7 +122,7 @@ export class AssetService {
 
   // 获取素材列表
   async getAssets(filters: AssetFilters = {}): Promise<{ items: Asset[]; total: number }> {
-    const { type, sourceId, search, page = 1, limit = 20 } = filters;
+    const { type, sourceId, domain, search, page = 1, limit = 20 } = filters;
 
     let sql = `SELECT * FROM assets WHERE 1=1`;
     let countSql = `SELECT COUNT(*) FROM assets WHERE 1=1`;
@@ -117,6 +138,12 @@ export class AssetService {
       params.push(sourceId);
       sql += ` AND source_id = $${params.length}`;
       countSql += ` AND source_id = $${params.length}`;
+    }
+
+    if (domain) {
+      params.push(domain);
+      sql += ` AND domain = $${params.length}`;
+      countSql += ` AND domain = $${params.length}`;
     }
 
     if (search) {
@@ -215,6 +242,14 @@ export class AssetService {
         return `💡 ${asset.content}${sourceRef}`;
       case 'chart':
         return `📊 ${asset.title}${sourceRef}\n[图表]`;
+      case 'meeting_minutes':
+        return `📝 ${asset.title}\n${asset.content}${sourceRef}`;
+      case 'briefing':
+        return `📋 ${asset.title}\n${asset.content}${sourceRef}`;
+      case 'interview':
+        return `🎤 ${asset.title}\n${asset.content}${sourceRef}`;
+      case 'transcript':
+        return `🎧 ${asset.title}\n${asset.content}${sourceRef}`;
       default:
         return `${asset.content}${sourceRef}`;
     }
@@ -222,13 +257,7 @@ export class AssetService {
 
   // 获取类型标签
   private getTypeLabel(type: AssetType): string {
-    const labels: Record<AssetType, string> = {
-      chart: '图表',
-      quote: '引用',
-      data: '数据',
-      insight: '观点'
-    };
-    return labels[type] || type;
+    return ASSET_TYPE_LABELS[type] || type;
   }
 
   // 格式化素材数据
@@ -243,6 +272,7 @@ export class AssetService {
       tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags || [],
       qualityScore: row.quality_score || 0,
       usageCount: row.usage_count || 0,
+      domain: row.domain || undefined,
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
       createdAt: row.created_at,
       updatedAt: row.updated_at
