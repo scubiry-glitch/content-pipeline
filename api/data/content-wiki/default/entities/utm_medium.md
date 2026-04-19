@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: concept
-updatedAt: "2026-04-19T17:39:05.065Z"
+updatedAt: "2026-04-19T19:25:40.155Z"
 ---
 
 # utm_medium

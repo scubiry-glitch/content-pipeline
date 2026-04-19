@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: organization
-updatedAt: "2026-04-19T17:39:05.031Z"
+updatedAt: "2026-04-19T19:25:40.102Z"
 ---
 
 # Fastdata极数

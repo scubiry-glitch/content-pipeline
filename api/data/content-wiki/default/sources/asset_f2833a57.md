@@ -3,7 +3,7 @@ type: source
 assetId: asset_f2833a57
 factCount: 38
 entityCount: 30
-updatedAt: "2026-04-19T17:39:05.119Z"
+updatedAt: "2026-04-19T19:25:40.210Z"
 ---
 
 # asset_f2833a57

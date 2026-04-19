@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: metric
-updatedAt: "2026-04-19T17:39:05.030Z"
+updatedAt: "2026-04-19T19:25:40.102Z"
 ---
 
 # ABS发行规模

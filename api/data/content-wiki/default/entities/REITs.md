@@ -10,7 +10,7 @@ sources:
   - asset_c600de18
 domains:
   - 房地产/租赁
-updatedAt: "2026-04-19T17:39:05.058Z"
+updatedAt: "2026-04-19T19:25:40.146Z"
 ---
 
 # REITs

@@ -4,7 +4,7 @@ entityType: metric
 aliases:
   - 租金规模
   - 租金总交易额
-updatedAt: "2026-04-19T17:39:05.058Z"
+updatedAt: "2026-04-19T19:25:40.146Z"
 ---
 
 # 租金GMV

@@ -1,14 +1,14 @@
 ---
 type: source
 assetId: asset_bb211e13
-factCount: 39
+factCount: 38
 entityCount: 30
-updatedAt: "2026-04-19T17:39:05.116Z"
+updatedAt: "2026-04-19T19:25:40.205Z"
 ---
 
 # asset_bb211e13
 
-**贡献**: 39 条事实 / 30 个实体
+**贡献**: 38 条事实 / 30 个实体
 
 ## 涉及实体
 

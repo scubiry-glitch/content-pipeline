@@ -5,7 +5,7 @@ aliases:
   - BCI
   - Barclays Capital Inc.
   - Barclays
-updatedAt: "2026-04-19T17:39:05.072Z"
+updatedAt: "2026-04-19T19:25:40.159Z"
 ---
 
 # Barclays Capital Inc.

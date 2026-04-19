@@ -3,7 +3,7 @@ type: entity
 entityType: product
 aliases:
   - 交易所交易基金
-updatedAt: "2026-04-19T17:39:05.022Z"
+updatedAt: "2026-04-19T19:25:40.093Z"
 ---
 
 # ETF

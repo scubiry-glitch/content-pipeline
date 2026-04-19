@@ -3,7 +3,7 @@ type: entity
 entityType: concept
 aliases:
   - 机构化运营
-updatedAt: "2026-04-19T17:39:05.058Z"
+updatedAt: "2026-04-19T19:25:40.146Z"
 ---
 
 # B2C

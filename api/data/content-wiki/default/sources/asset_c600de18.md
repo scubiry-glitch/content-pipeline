@@ -3,7 +3,7 @@ type: source
 assetId: asset_c600de18
 factCount: 47
 entityCount: 30
-updatedAt: "2026-04-19T17:39:05.116Z"
+updatedAt: "2026-04-19T19:25:40.206Z"
 ---
 
 # asset_c600de18

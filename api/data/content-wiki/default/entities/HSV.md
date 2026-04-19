@@ -4,7 +4,7 @@ entityType: organization
 aliases:
   - 美国知名的酒店咨询机构
   - 美国酒店咨询机构
-updatedAt: "2026-04-19T17:39:05.060Z"
+updatedAt: "2026-04-19T19:25:40.149Z"
 ---
 
 # HSV

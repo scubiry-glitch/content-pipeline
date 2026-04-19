@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: person
-updatedAt: "2026-04-19T17:39:05.070Z"
+updatedAt: "2026-04-19T19:25:40.158Z"
 ---
 
 # Hiral Patel

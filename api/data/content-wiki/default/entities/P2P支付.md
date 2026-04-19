@@ -3,7 +3,7 @@ type: entity
 entityType: concept
 aliases:
   - person-to-person payments
-updatedAt: "2026-04-19T17:39:05.066Z"
+updatedAt: "2026-04-19T19:25:40.155Z"
 ---
 
 # P2P支付

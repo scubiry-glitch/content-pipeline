@@ -3,7 +3,7 @@ type: entity
 entityType: event
 aliases:
   - Apple WWDC
-updatedAt: "2026-04-19T17:39:05.063Z"
+updatedAt: "2026-04-19T19:25:40.153Z"
 ---
 
 # WWDC

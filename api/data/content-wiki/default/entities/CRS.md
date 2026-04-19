@@ -3,7 +3,7 @@ type: entity
 entityType: concept
 aliases:
   - 中央预订系统
-updatedAt: "2026-04-19T17:39:05.061Z"
+updatedAt: "2026-04-19T19:25:40.151Z"
 ---
 
 # CRS

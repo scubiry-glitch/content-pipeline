@@ -5,7 +5,7 @@ sources:
   - asset_5f15a6c0
 domains:
   - 金融/资产管理
-updatedAt: "2026-04-19T17:39:05.017Z"
+updatedAt: "2026-04-19T19:25:40.090Z"
 ---
 
 # 建信易盛郑商所能源化工ETF

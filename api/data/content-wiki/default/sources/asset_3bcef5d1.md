@@ -3,7 +3,7 @@ type: source
 assetId: asset_3bcef5d1
 factCount: 40
 entityCount: 30
-updatedAt: "2026-04-19T17:39:05.116Z"
+updatedAt: "2026-04-19T19:25:40.205Z"
 ---
 
 # asset_3bcef5d1

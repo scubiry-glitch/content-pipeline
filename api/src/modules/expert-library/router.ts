@@ -129,17 +129,21 @@ export function createRouter(engine: ExpertEngine) {
         write('meta', { expert_name: expert.name, conversation_id: convId });
 
         const { streamOpenAICompatible } = await import('../../services/llm.js');
+        // 使用 Volcano Engine DeepSeek R1：推理模型，原生返回 reasoning_content delta
+        // 供前端折叠展示思考过程；content delta 是最终答案（干净不含 CoT）
         const volcanoKey = process.env.VOLCANO_API_KEY;
-        const volcanoModel = process.env.VOLCANO_MODEL || 'deepseek-v3-2-251201';
+        const model = process.env.VOLCANO_REASONING_MODEL || 'deepseek-r1-250528';
+        const endpoint = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
         if (!volcanoKey) throw new Error('VOLCANO_API_KEY not configured');
+        const apiKey = volcanoKey;
 
         let reasoningFull = '';
         let contentFull = '';
         const stream = streamOpenAICompatible(
-          'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-          volcanoKey,
+          endpoint,
+          apiKey,
           {
-            model: volcanoModel,
+            model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
