@@ -33,7 +33,7 @@ export class LLMRouter {
     { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'writing', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'content_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
-    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'kimi', fallbackProvider: 'volcano-engine' },
     { taskType: 'summarization', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'tagging', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'siliconflow' },

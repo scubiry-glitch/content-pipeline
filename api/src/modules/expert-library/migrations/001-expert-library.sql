@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS expert_invocations (
   emm_gates_passed TEXT[],
   confidence FLOAT,
   params JSONB DEFAULT '{}',
+  is_hidden BOOLEAN DEFAULT false,
+  user_rating SMALLINT,
+  rated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

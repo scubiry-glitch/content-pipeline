@@ -593,11 +593,14 @@ async function setupMVPSchema(): Promise<void> {
       emm_gates_passed TEXT[],
       confidence FLOAT,
       params JSONB DEFAULT '{}',
+      is_hidden BOOLEAN DEFAULT false,
+      user_rating SMALLINT,
+      rated_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_invocations_expert ON expert_invocations(expert_id, created_at DESC)`).catch(() => {});
-  // 辩论隐藏 + 打分列
+  // 辩论隐藏 + 打分列（旧库补列）
   await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false`).catch(() => {});
   await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS user_rating SMALLINT`).catch(() => {});
   await query(`ALTER TABLE expert_invocations ADD COLUMN IF NOT EXISTS rated_at TIMESTAMPTZ`).catch(() => {});
