@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: company
-updatedAt: "2026-04-12T13:26:20.608Z"
+updatedAt: "2026-04-19T17:39:05.037Z"
 ---
 
 # V领地

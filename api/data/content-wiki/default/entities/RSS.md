@@ -4,7 +4,7 @@ entityType: technology
 aliases:
   - Really Simple Syndication
   - RSS
-updatedAt: "2026-04-12T13:26:20.642Z"
+updatedAt: "2026-04-19T17:39:05.066Z"
 ---
 
 # RSS

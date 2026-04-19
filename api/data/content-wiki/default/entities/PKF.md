@@ -8,7 +8,7 @@ sources:
   - asset_5ff63ade
 domains:
   - 酒店行业
-updatedAt: "2026-04-12T13:26:20.637Z"
+updatedAt: "2026-04-19T17:39:05.060Z"
 ---
 
 # PKF

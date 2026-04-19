@@ -3,7 +3,7 @@ type: entity
 entityType: concept
 aliases:
   - 外包首席投资官
-updatedAt: "2026-04-12T13:26:20.652Z"
+updatedAt: "2026-04-19T17:39:05.079Z"
 ---
 
 # OCIO

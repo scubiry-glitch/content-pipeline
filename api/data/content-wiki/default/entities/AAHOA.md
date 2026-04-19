@@ -13,7 +13,7 @@ sources:
   - asset_ccba0c59
 domains:
   - 酒店行业
-updatedAt: "2026-04-12T13:26:20.656Z"
+updatedAt: "2026-04-19T17:39:05.093Z"
 ---
 
 # AAHOA

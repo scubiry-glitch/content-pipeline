@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: person
-updatedAt: "2026-04-12T13:26:20.647Z"
+updatedAt: "2026-04-19T17:39:05.071Z"
 ---
 
 # Corey Gayle

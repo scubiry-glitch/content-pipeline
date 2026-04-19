@@ -3,7 +3,7 @@ type: entity
 entityType: product
 aliases:
   - "FINTECH & PAYMENTS PRIMER VOL. 14: CASH IS KING NO LONGER"
-updatedAt: "2026-04-12T13:26:20.645Z"
+updatedAt: "2026-04-19T17:39:05.069Z"
 ---
 
 # Fintech & Payments Primer Vol. 14

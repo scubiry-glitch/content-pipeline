@@ -4,7 +4,7 @@ entityType: 市场模式
 aliases:
   - 机构化租赁
   - 企业对消费者机构化
-updatedAt: "2026-04-12T13:26:20.631Z"
+updatedAt: "2026-04-19T17:39:05.053Z"
 ---
 
 # B2C机构化

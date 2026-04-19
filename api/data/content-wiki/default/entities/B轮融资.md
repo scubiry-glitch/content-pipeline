@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: event
-updatedAt: "2026-04-12T13:26:20.624Z"
+updatedAt: "2026-04-19T17:39:05.045Z"
 ---
 
 # B轮融资

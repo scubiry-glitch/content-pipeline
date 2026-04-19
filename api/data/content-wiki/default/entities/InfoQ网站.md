@@ -3,7 +3,7 @@ type: entity
 entityType: organization
 aliases:
   - "https://www.infoq.cn"
-updatedAt: "2026-04-12T13:26:20.641Z"
+updatedAt: "2026-04-19T17:39:05.064Z"
 ---
 
 # InfoQ网站

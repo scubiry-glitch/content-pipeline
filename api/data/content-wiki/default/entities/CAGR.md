@@ -3,7 +3,7 @@ type: entity
 entityType: metric
 aliases:
   - 复合年增长率
-updatedAt: "2026-04-12T13:26:20.666Z"
+updatedAt: "2026-04-19T17:39:05.100Z"
 ---
 
 # CAGR

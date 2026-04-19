@@ -3,7 +3,7 @@ type: source
 assetId: asset_02aa6241
 factCount: 60
 entityCount: 30
-updatedAt: "2026-04-12T13:26:20.691Z"
+updatedAt: "2026-04-19T17:39:05.118Z"
 ---
 
 # asset_02aa6241

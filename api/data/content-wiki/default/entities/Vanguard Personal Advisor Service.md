@@ -3,7 +3,7 @@ type: entity
 entityType: product
 aliases:
   - PAS
-updatedAt: "2026-04-12T13:26:20.661Z"
+updatedAt: "2026-04-19T17:39:05.097Z"
 ---
 
 # Vanguard Personal Advisor Service

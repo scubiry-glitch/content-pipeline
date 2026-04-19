@@ -1,7 +1,7 @@
 ---
 type: entity
 entityType: company
-updatedAt: "2026-04-12T13:26:20.628Z"
+updatedAt: "2026-04-19T17:39:05.050Z"
 ---
 
 # 寓见Home

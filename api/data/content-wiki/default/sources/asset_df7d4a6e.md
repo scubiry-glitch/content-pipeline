@@ -3,7 +3,7 @@ type: source
 assetId: asset_df7d4a6e
 factCount: 1
 entityCount: 2
-updatedAt: "2026-04-12T13:26:20.692Z"
+updatedAt: "2026-04-19T17:39:05.118Z"
 ---
 
 # asset_df7d4a6e

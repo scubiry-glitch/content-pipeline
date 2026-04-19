@@ -3,7 +3,7 @@ type: entity
 entityType: organization
 aliases:
   - 在线旅游平台
-updatedAt: "2026-04-12T13:26:20.638Z"
+updatedAt: "2026-04-19T17:39:05.061Z"
 ---
 
 # OTA

@@ -5,7 +5,7 @@ sources:
   - asset_40e3a8d4
 domains:
   - 移动互联网/住房租赁
-updatedAt: "2026-04-12T13:26:20.598Z"
+updatedAt: "2026-04-19T17:39:05.033Z"
 ---
 
 # 租房类App渗透率

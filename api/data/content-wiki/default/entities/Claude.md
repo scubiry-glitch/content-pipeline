@@ -3,7 +3,7 @@ type: entity
 entityType: product
 aliases:
   - Claude 3
-updatedAt: "2026-04-12T13:26:20.640Z"
+updatedAt: "2026-04-19T17:39:05.063Z"
 ---
 
 # Claude

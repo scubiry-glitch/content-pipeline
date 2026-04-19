@@ -1,9 +1,14 @@
 ---
 type: entity
 entityType: organization
-updatedAt: "2026-04-12T13:26:20.643Z"
+aliases:
+  - FINRA
+  - 美国金融监管局
+updatedAt: "2026-04-19T17:39:05.067Z"
 ---
 
 # FINRA
+
+**别名**: FINRA · 美国金融监管局
 
 **类型**: `organization`

@@ -5,7 +5,7 @@ aliases:
   - 服务业PMI
   - 采购经理指数
   - PMI
-updatedAt: "2026-04-12T13:26:20.664Z"
+updatedAt: "2026-04-19T17:39:05.099Z"
 ---
 
 # 服务业PMI
