@@ -3,6 +3,8 @@
 
 import { useState } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect, EntitySelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
 
 const API_BASE = '/api/v1/content-library';
@@ -30,6 +32,7 @@ export function ContentLibraryCrossDomain() {
   const [selectedEntityId, setSelectedEntityId] = useState('');
   const [entityInput, setEntityInput] = useState('');
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const [limit, setLimit] = useState(30);
   const [page, setPage] = useState(1);
   const zepStatus = useZepStatus();
@@ -64,7 +67,9 @@ export function ContentLibraryCrossDomain() {
     setDiscoverDone(true);
     try {
       const params = new URLSearchParams();
-      if (domain) params.append('domain', domain);
+      const taxCode = selectionToCode(taxonomy);
+      if (taxCode) params.append('taxonomy_code', taxCode);
+      else if (domain) params.append('domain', domain);
       params.append('limit', String(limit));
       const res = await fetch(`${API_BASE}/cross-domain/${encodeURIComponent(resolvedEntity)}?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -118,8 +123,11 @@ export function ContentLibraryCrossDomain() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤</label>
-            <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤（级联）</label>
+            <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
+            <div className="mt-2">
+              <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3 mt-4">

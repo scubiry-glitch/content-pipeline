@@ -463,6 +463,7 @@ export class ContentLibraryEngine {
     subject?: string;
     predicate?: string;
     domain?: string;
+    taxonomy_code?: string;
     currentOnly?: boolean;
   }): { where: string; params: any[]; nextIdx: number } {
     const conditions: string[] = [];
@@ -480,7 +481,11 @@ export class ContentLibraryEngine {
     if (options.currentOnly !== false) {
       conditions.push('is_current = true');
     }
-    if (options.domain) {
+    if (options.taxonomy_code) {
+      const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+      conditions.push(`context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${idx++}`);
+      params.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+    } else if (options.domain) {
       conditions.push(`context->>'domain' = $${idx++}`);
       params.push(options.domain);
     }
@@ -523,6 +528,7 @@ export class ContentLibraryEngine {
     predicate?: string;
     entityId?: string;
     domain?: string;
+    taxonomy_code?: string;
     currentOnly?: boolean;
     limit?: number;
   }): Promise<ContentFact[]> {
@@ -542,6 +548,7 @@ export class ContentLibraryEngine {
     subject?: string;
     predicate?: string;
     domain?: string;
+    taxonomy_code?: string;
     currentOnly?: boolean;
     limit?: number;
     offset?: number;
@@ -711,6 +718,7 @@ export class ContentLibraryEngine {
    */
   async getTopicRecommendations(options?: {
     domain?: string;
+    taxonomy_code?: string;
     limit?: number;
     /** 从 0 开始的跳过条数 */
     offset?: number;
@@ -727,19 +735,31 @@ export class ContentLibraryEngine {
       offset = (options.page - 1) * limit;
     }
     const forceEnrich = options?.enrich === true;
-    const domainFilter = options?.domain ? `AND ce.taxonomy_domain_id = $3` : '';
-    const listParams: any[] = options?.domain ? [limit, offset, options.domain] : [limit, offset];
+    // Prefer taxonomy_code (L1 -> LIKE prefix); fall back to legacy domain exact match.
+    const tcode = options?.taxonomy_code;
+    const useTaxCode = !!tcode;
+    const taxIsL1 = useTaxCode && /^E\d{2}$/.test(tcode!);
+    const taxValue = useTaxCode ? (taxIsL1 ? `${tcode}%` : tcode!) : null;
+    const taxOp = taxIsL1 ? 'LIKE' : '=';
+    const hasFilter = useTaxCode || !!options?.domain;
+    const domainFilter = hasFilter
+      ? (useTaxCode
+          ? `AND ce.taxonomy_domain_id ${taxOp} $3`
+          : `AND ce.taxonomy_domain_id = $3`)
+      : '';
+    const filterValue = useTaxCode ? taxValue : options?.domain;
+    const listParams: any[] = hasFilter ? [limit, offset, filterValue] : [limit, offset];
 
     const countSql = `
       SELECT COUNT(*)::int AS total FROM (
         SELECT ce.id
         FROM content_entities ce
         LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
-        WHERE 1=1 ${options?.domain ? 'AND ce.taxonomy_domain_id = $1' : ''}
+        WHERE 1=1 ${hasFilter ? (useTaxCode ? `AND ce.taxonomy_domain_id ${taxOp} $1` : 'AND ce.taxonomy_domain_id = $1') : ''}
         GROUP BY ce.id
         HAVING COUNT(cf.id) > 0
       ) sub`;
-    const countParams = options?.domain ? [options.domain] : [];
+    const countParams = hasFilter ? [filterValue] : [];
     let total = 0;
     try {
       const countResult = await this.deps.db.query(countSql, countParams);
@@ -953,6 +973,7 @@ export class ContentLibraryEngine {
   async getKeyFacts(options: {
     subject?: string;
     domain?: string;
+    taxonomy_code?: string;
     limit?: number;
   }): Promise<ContentFact[]> {
     return this.queryFacts({
@@ -1095,13 +1116,21 @@ export class ContentLibraryEngine {
   async getStaleFacts(options?: {
     maxAgeDays?: number;
     domain?: string;
+    taxonomy_code?: string;
     limit?: number;
   }): Promise<ContentFact[]> {
     const maxAge = options?.maxAgeDays || 90;
     const limit = options?.limit || 50;
-    const domainFilter = options?.domain ? `AND context->>'domain' = $3` : '';
+    let domainFilter = '';
     const params: any[] = [maxAge, limit];
-    if (options?.domain) params.push(options.domain);
+    if (options?.taxonomy_code) {
+      const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+      domainFilter = `AND context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $3`;
+      params.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+    } else if (options?.domain) {
+      domainFilter = `AND context->>'domain' = $3`;
+      params.push(options.domain);
+    }
 
     const result = await this.deps.db.query(`
       SELECT * FROM content_facts
@@ -1847,7 +1876,7 @@ export class ContentLibraryEngine {
     return 'stale';
   }
 
-  async getKnowledgeGaps(options?: { domain?: string; limit?: number }): Promise<Array<{
+  async getKnowledgeGaps(options?: { domain?: string; taxonomy_code?: string; limit?: number }): Promise<Array<{
     topic: string;
     type: 'blank' | 'differentiation';
     description: string;

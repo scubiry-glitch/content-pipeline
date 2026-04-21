@@ -2,6 +2,8 @@
 // 基于生产经验 (content_production_log) 推荐高质量素材组合
 import { useState } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -36,6 +38,7 @@ export function ContentLibraryMaterials() {
   const [error, setError] = useState<string | null>(null);
   const [taskType, setTaskType] = useState('research');
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const [limit, setLimit] = useState(10);
   // 分页
   const [page, setPage] = useState(1);
@@ -47,7 +50,9 @@ export function ContentLibraryMaterials() {
     setPage(1);
     try {
       const params = new URLSearchParams();
-      if (domain) params.set('domain', domain);
+      const taxCode = selectionToCode(taxonomy);
+      if (taxCode) params.set('taxonomy_code', taxCode);
+      else if (domain) params.set('domain', domain);
       params.set('limit', String(limit));
       const res = await fetch(`${API_BASE}/recommendations/${taskType}?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -93,8 +98,11 @@ export function ContentLibraryMaterials() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤</label>
-            <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤（级联）</label>
+            <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
+            <div className="mt-2">
+              <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">最大条数</label>

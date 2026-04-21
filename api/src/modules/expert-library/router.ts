@@ -188,8 +188,12 @@ export function createRouter(engine: ExpertEngine) {
     /** GET /experts — 列出专家 */
     fastify.get('/experts', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { domain } = request.query as any;
-        const experts = await engine.listExperts(domain ? { domain } : undefined);
+        const { domain, taxonomy_code } = request.query as any;
+        // taxonomy_code takes precedence over legacy domain. For level-1 (e.g. E07)
+        // we rely on the engine's existing prefix matching; for level-2 we pass
+        // the full "E07.LLM" string so downstream string-compare paths can match.
+        const filter = taxonomy_code ? taxonomy_code : domain;
+        const experts = await engine.listExperts(filter ? { domain: filter } : undefined);
 
         return reply.send({
           total: experts.length,
@@ -288,7 +292,10 @@ export function createRouter(engine: ExpertEngine) {
     /** GET /experts/full — 前端兼容的完整专家列表（含 display_metadata） */
     fastify.get('/experts/full', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { domain } = request.query as any;
+        const { domain, taxonomy_code } = request.query as any;
+        // Accept taxonomy_code as a superset of domain. Level-1 codes (E07) match by
+        // prefix; level-2 codes (E07.LLM) match exactly against domainCode.
+        const filterCode = taxonomy_code || domain;
         // 直接从 DB 查询含 display_metadata 的数据
         const result = await engine['deps'].db.query(
           `SELECT * FROM expert_profiles WHERE is_active = true ORDER BY name`
@@ -326,9 +333,16 @@ export function createRouter(engine: ExpertEngine) {
           };
         });
 
-        // 前端 domain 过滤
-        const filtered = domain
-          ? experts.filter((e: any) => e.domainCode === domain || e.domainName === domain)
+        // 前端 domain 过滤（支持 taxonomy_code 前缀匹配）
+        const filtered = filterCode
+          ? experts.filter((e: any) => {
+              if (!filterCode) return true;
+              if (e.domainCode === filterCode || e.domainName === filterCode) return true;
+              // Level-1 prefix match: filter "E07" matches "E07.LLM"
+              if (/^E\d{2}$/.test(filterCode) && typeof e.domainCode === 'string'
+                  && e.domainCode.startsWith(`${filterCode}.`)) return true;
+              return false;
+            })
           : experts;
 
         return reply.send({ total: filtered.length, experts: filtered });
