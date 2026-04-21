@@ -13,6 +13,8 @@ import { expertLibraryApi } from '../api/client';
 import { useExperts } from '../hooks/useExpertApi';
 import type { Expert } from '../types';
 import { EXPERT_DOMAINS as DOMAINS, findDomainByCode } from '../config/expertDomains';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 import './ExpertLibrary.css';
 
 export function ExpertLibrary() {
@@ -20,6 +22,8 @@ export function ExpertLibrary() {
   const { experts, isLoading: expertsLoading, refresh: refreshExperts } = useExperts();
   const [filteredExperts, setFilteredExperts] = useState<Expert[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
+  // 二级子领域（可选）：当 taxonomy.l2 设置时，精确匹配 domainCode；当仅 l1 设置时，同步 selectedDomain 按钮状态
+  const [selectedTaxonomy, setSelectedTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
   const [selectedExpertIds, setSelectedExpertIds] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
@@ -73,7 +77,17 @@ export function ExpertLibrary() {
 
   useEffect(() => {
     let result = experts;
-    if (selectedDomain !== 'all') {
+    const taxCode = selectionToCode(selectedTaxonomy);
+    if (taxCode) {
+      // 二级 code 精确匹配；一级 code 作前缀匹配
+      result = result.filter((e) => {
+        if (!e.domainCode) return false;
+        if (/^E\d{2}$/.test(taxCode)) {
+          return e.domainCode === taxCode || e.domainCode.startsWith(`${taxCode}.`);
+        }
+        return e.domainCode === taxCode;
+      });
+    } else if (selectedDomain !== 'all') {
       result = result.filter((e) => e.domainCode === selectedDomain);
     }
     if (searchQuery) {
@@ -87,7 +101,7 @@ export function ExpertLibrary() {
       );
     }
     setFilteredExperts(result);
-  }, [experts, selectedDomain, searchQuery]);
+  }, [experts, selectedDomain, selectedTaxonomy, searchQuery]);
 
   const stats = {
     total: experts.length,
@@ -364,8 +378,8 @@ export function ExpertLibrary() {
       <div className="filter-section">
         <div className="domain-filters" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
-            className={`domain-btn ${selectedDomain === 'all' ? 'active' : ''}`}
-            onClick={() => setSelectedDomain('all')}
+            className={`domain-btn ${selectedDomain === 'all' && !selectedTaxonomy.l1 ? 'active' : ''}`}
+            onClick={() => { setSelectedDomain('all'); setSelectedTaxonomy({ l1: null, l2: null }); }}
           >
             全部
           </button>
@@ -373,7 +387,7 @@ export function ExpertLibrary() {
             <button
               key={domain.code}
               className={`domain-btn ${selectedDomain === domain.code ? 'active' : ''}`}
-              onClick={() => setSelectedDomain(domain.code)}
+              onClick={() => { setSelectedDomain(domain.code); setSelectedTaxonomy({ l1: null, l2: null }); }}
               style={{
                 borderColor: selectedDomain === domain.code ? domain.color : undefined,
                 background: selectedDomain === domain.code ? `${domain.color}20` : undefined,
@@ -383,6 +397,13 @@ export function ExpertLibrary() {
               <span>{domain.name}</span>
             </button>
           ))}
+        </div>
+        <div className="sub-domain-cascade" style={{ marginTop: 8 }}>
+          <DomainCascadeSelect
+            value={selectedTaxonomy}
+            onChange={(t) => { setSelectedTaxonomy(t); setSelectedDomain('all'); }}
+            compact
+          />
         </div>
         <div className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <input

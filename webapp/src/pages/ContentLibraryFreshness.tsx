@@ -2,6 +2,8 @@
 // v7.3: 分页 + 排序 (按天数/置信度/主体)
 import { useState, useEffect, useMemo } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 const PAGE_SIZE = 30;
@@ -34,6 +36,7 @@ export function ContentLibraryFreshness() {
   const [loading, setLoading] = useState(true);
   const [maxAgeDays, setMaxAgeDays] = useState(90);
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const { domains } = useDropdownOptions();
   const [sortBy, setSortBy] = useState<SortKey>('days');
   const [page, setPage] = useState(1);
@@ -42,7 +45,9 @@ export function ContentLibraryFreshness() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ maxAgeDays: String(maxAgeDays), limit: '500' });
-      if (domain) params.set('domain', domain);
+      const taxCode = selectionToCode(taxonomy);
+      if (taxCode) params.set('taxonomy_code', taxCode);
+      else if (domain) params.set('domain', domain);
       const res = await fetch(`${API_BASE}/freshness/stale?${params}`);
       if (res.ok) {
         const data = await res.json();
@@ -99,6 +104,7 @@ export function ContentLibraryFreshness() {
           <option value={180}>180 天</option>
           <option value={365}>1 年</option>
         </select>
+        <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
         <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <label className="text-sm text-gray-600 dark:text-gray-400">排序：</label>
         <select value={sortBy} onChange={e => { setSortBy(e.target.value as SortKey); setPage(1); }}

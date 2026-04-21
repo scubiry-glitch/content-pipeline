@@ -69,6 +69,8 @@ import { llmRoutes } from './routes/llm.js';
 import { langgraphRoutes } from './routes/langgraph.js';
 import { aiProcessingRoutes } from './routes/ai-processing.js';
 import { assetsAIProcessingRoutes } from './routes/assets-ai-processing.js';
+import { taxonomyRoutes } from './routes/taxonomy.js';
+import { ensureTaxonomySchema, sync as taxonomySync } from './services/taxonomyService.js';
 import { setupAuth } from './middleware/auth.js';
 // RSS 自动采集已整合到 rssCollector.ts，不再使用 rssCrawler.js
 import { errorHandler } from './middleware/errorHandler.js';
@@ -227,6 +229,9 @@ async function main() {
   // v6.2: Assets AI 批量处理路由
   await fastify.register(assetsAIProcessingRoutes, { prefix: '/api/v1/ai/assets' });
 
+  // 统一领域 taxonomy 路由（/assets + /content-library + /expert-library 共用）
+  await fastify.register(taxonomyRoutes, { prefix: '/api/v1/taxonomy' });
+
   fastify.setErrorHandler(errorHandler);
 
   fastify.setNotFoundHandler(async (request, reply) => {
@@ -251,6 +256,14 @@ async function main() {
         console.log('[Server] Running database migrations / schema setup…');
         await initDatabase();
         console.log('✓ Database connected');
+
+        try {
+          await ensureTaxonomySchema();
+          const { upserted } = await taxonomySync('boot');
+          console.log(`🏷  Taxonomy ready (${upserted} nodes seeded/updated)`);
+        } catch (err) {
+          console.warn('[Server] Taxonomy bootstrap skipped:', (err as Error).message);
+        }
       }
     } catch (e) {
       console.error('[Server] Database init failed:', e);

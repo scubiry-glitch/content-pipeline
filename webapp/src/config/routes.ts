@@ -69,4 +69,8 @@ export const ROUTES = {
     compliance: '/compliance',
     i18n: '/i18n',
   },
+
+  admin: {
+    taxonomy: '/admin/taxonomy',
+  },
 } as const;

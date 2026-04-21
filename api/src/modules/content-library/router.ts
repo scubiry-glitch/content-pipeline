@@ -269,6 +269,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         subject: query.subject,
         predicate: query.predicate,
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         currentOnly: query.currentOnly !== 'false',
         limit: query.limit ? parseInt(query.limit, 10) : undefined,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
@@ -297,6 +298,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       return engine.getTopicRecommendations({
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : undefined,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
@@ -309,6 +311,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       const result = await engine.getTopicRecommendations({
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : 10,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
@@ -323,6 +326,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       return engine.getKnowledgeGaps({
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit) : 20,
       });
     });
@@ -339,6 +343,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.getKeyFacts({
         subject: query.subject,
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit) : undefined,
       });
     });
@@ -362,6 +367,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.getStaleFacts({
         maxAgeDays: query.maxAgeDays ? parseInt(query.maxAgeDays) : undefined,
         domain: query.domain,
+        taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit) : undefined,
       });
     });

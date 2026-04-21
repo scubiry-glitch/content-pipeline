@@ -1,6 +1,8 @@
 // 内容库 — 事实浏览器页面
 import { useState, useEffect } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -34,6 +36,7 @@ export function ContentLibraryFacts() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const { domains } = useDropdownOptions();
 
   // v7.1: 回填相关状态
@@ -50,7 +53,9 @@ export function ContentLibraryFacts() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('subject', search);
-      if (domain) params.set('domain', domain);
+      const taxCode = selectionToCode(taxonomy);
+      if (taxCode) params.set('taxonomy_code', taxCode);
+      else if (domain) params.set('domain', domain);
       params.set('limit', String(FACTS_PAGE_SIZE));
       params.set('page', String(page));
       const res = await fetch(`${API_BASE}/facts?${params}`);
@@ -205,6 +210,7 @@ export function ContentLibraryFacts() {
           placeholder="按主体搜索..."
           className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
+        <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
         <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <button
           type="button"

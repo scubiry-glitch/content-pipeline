@@ -14,6 +14,8 @@
     "content-library:extract-top10": "tsx src/scripts/content-library-extract-from-asset.ts --top=10",
     "content-library:extract-top10:fast": "CONTENT_LIBRARY_SKIP_SCHEMA=1 tsx src/scripts/content-library-extract-from-asset.ts --top=10",
     "db:migrate:v6.2": "tsx src/scripts/migrate-v6.2-assets-ai.ts",
+    "taxonomy:sync": "tsx src/scripts/taxonomy-sync.ts",
+    "taxonomy:backfill": "tsx src/scripts/backfill-taxonomy.ts",
     "test:file-parser": "tsx src/scripts/test-file-parser.ts",
     "test:dashboard-llm": "tsx src/scripts/test-dashboard-llm-embedding.ts",
     "test:siliconflow": "tsx src/scripts/test-siliconflow-embedding.ts",

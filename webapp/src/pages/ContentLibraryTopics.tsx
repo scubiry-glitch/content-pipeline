@@ -2,6 +2,8 @@
 // v7.2: 议题卡片从"一堆数字"变成"小简报"
 import { useState, useEffect } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -39,6 +41,7 @@ export function ContentLibraryTopics() {
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const { domains } = useDropdownOptions();
   const [tab, setTab] = useState<'topics' | 'gaps'>('topics');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -48,13 +51,16 @@ export function ContentLibraryTopics() {
     const page = pageArg ?? topicsPage;
     setLoading(true);
     try {
+      const taxCode = selectionToCode(taxonomy);
       const topicParams = new URLSearchParams();
-      if (domain) topicParams.set('domain', domain);
+      if (taxCode) topicParams.set('taxonomy_code', taxCode);
+      else if (domain) topicParams.set('domain', domain);
       topicParams.set('limit', String(TOPICS_PAGE_SIZE));
       topicParams.set('page', String(page));
 
       const gapParams = new URLSearchParams();
-      if (domain) gapParams.set('domain', domain);
+      if (taxCode) gapParams.set('taxonomy_code', taxCode);
+      else if (domain) gapParams.set('domain', domain);
       gapParams.set('limit', '10');
 
       const [topicsRes, gapsRes] = await Promise.allSettled([
@@ -93,7 +99,9 @@ export function ContentLibraryTopics() {
     setEnriching(true);
     try {
       const params = new URLSearchParams({ limit: String(TOPICS_PAGE_SIZE), page: String(topicsPage) });
-      if (domain) params.set('domain', domain);
+      const taxCode = selectionToCode(taxonomy);
+      if (taxCode) params.set('taxonomy_code', taxCode);
+      else if (domain) params.set('domain', domain);
       await fetch(`${API_BASE}/topics/enrich?${params}`, { method: 'POST' });
       await load(topicsPage);
     } catch { /* ignore */ }
@@ -134,6 +142,7 @@ export function ContentLibraryTopics() {
             ③④ 差异化 & 空白
           </button>
         </div>
+        <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
         <DomainSelect value={domain} onChange={setDomain} domains={domains} />
         <button type="button" onClick={() => void load()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
         {tab === 'topics' && topicsTotal > 0 && (

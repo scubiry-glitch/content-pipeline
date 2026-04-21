@@ -13,6 +13,7 @@ export interface UploadAssetInput {
   source?: string;
   tags: string[];
   domain?: string;
+  taxonomy_code?: string;
   asset_type?: string;
   theme_id?: string;
 }
@@ -24,6 +25,7 @@ export interface UpdateAssetInput {
   content?: string;
   theme_id?: string | null;
   domain?: string | null;
+  taxonomy_code?: string | null;
   asset_type?: string;
 }
 
@@ -33,6 +35,7 @@ export interface CreateThemeInput {
   color?: string;
   icon?: string;
   domain?: string;
+  taxonomy_code?: string;
 }
 
 export class AssetService {
@@ -55,9 +58,9 @@ export class AssetService {
       `INSERT INTO assets (
         id, title, content, content_type, filename,
         source, tags, auto_tags, quality_score, embedding,
-        type, domain, theme_id,
+        type, domain, taxonomy_code, theme_id,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, NOW(), NOW())`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, $14, NOW(), NOW())`,
       [
         assetId,
         input.title,
@@ -71,6 +74,7 @@ export class AssetService {
         `[${embedding.join(',')}]`,
         input.asset_type || 'file',
         input.domain || null,
+        input.taxonomy_code || null,
         input.theme_id || null
       ]
     );
@@ -81,6 +85,7 @@ export class AssetService {
       content_type: this.getContentType(input.mimetype),
       asset_type: input.asset_type || 'file',
       domain: input.domain || null,
+      taxonomy_code: input.taxonomy_code || null,
       theme_id: input.theme_id || null,
       tags: input.tags,
       auto_tags: autoTags,
@@ -118,6 +123,10 @@ export class AssetService {
     if (input.domain !== undefined) {
       updates.push(`domain = $${paramIndex++}`);
       params.push(input.domain);
+    }
+    if (input.taxonomy_code !== undefined) {
+      updates.push(`taxonomy_code = $${paramIndex++}`);
+      params.push(input.taxonomy_code);
     }
     if (input.asset_type !== undefined) {
       updates.push(`type = $${paramIndex++}`);
@@ -192,10 +201,11 @@ export class AssetService {
     const sortOrder = maxOrderResult.rows[0].next_order;
 
     const domain = input.domain || input.name;
+    const taxonomyCode = input.taxonomy_code || null;
 
     await query(
-      `INSERT INTO asset_themes (id, name, description, color, icon, domain, sort_order, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      `INSERT INTO asset_themes (id, name, description, color, icon, domain, taxonomy_code, sort_order, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
       [
         themeId,
         input.name,
@@ -203,6 +213,7 @@ export class AssetService {
         input.color || '#6366f1',
         input.icon || '📁',
         domain,
+        taxonomyCode,
         sortOrder
       ]
     );
@@ -214,6 +225,7 @@ export class AssetService {
       color: input.color || '#6366f1',
       icon: input.icon || '📁',
       domain,
+      taxonomy_code: taxonomyCode,
       sort_order: sortOrder
     };
   }
@@ -232,6 +244,7 @@ export class AssetService {
       color: row.color,
       icon: row.icon,
       domain: row.domain || row.name,
+      taxonomy_code: row.taxonomy_code || null,
       sort_order: row.sort_order,
       is_pinned: row.is_pinned,
       pinned_at: row.pinned_at
@@ -263,6 +276,10 @@ export class AssetService {
     if (input.domain !== undefined) {
       updates.push(`domain = $${paramIndex++}`);
       params.push(input.domain);
+    }
+    if (input.taxonomy_code !== undefined) {
+      updates.push(`taxonomy_code = $${paramIndex++}`);
+      params.push(input.taxonomy_code);
     }
 
     if (updates.length === 0) {
@@ -321,6 +338,7 @@ export class AssetService {
       color: row.color,
       icon: row.icon,
       domain: row.domain || row.name,
+      taxonomy_code: row.taxonomy_code || null,
       sort_order: row.sort_order,
       is_pinned: row.is_pinned,
       pinned_at: row.pinned_at
@@ -386,19 +404,19 @@ export class AssetService {
     };
   }
 
-  async search(options: { query?: string; tags?: string[]; limit: number; domain?: string; asset_type?: string }) {
-    const { query: searchQuery, tags, limit, domain, asset_type } = options;
+  async search(options: { query?: string; tags?: string[]; limit: number; domain?: string; taxonomy_code?: string; asset_type?: string }) {
+    const { query: searchQuery, tags, limit, domain, taxonomy_code, asset_type } = options;
 
     // 如果有搜索词，使用向量相似度搜索
     if (searchQuery) {
       const queryEmbedding = await generateEmbedding(searchQuery);
-      return this.vectorSearch(queryEmbedding, tags, limit, { domain, asset_type });
+      return this.vectorSearch(queryEmbedding, tags, limit, { domain, taxonomy_code, asset_type });
     }
 
     // 否则使用普通标签搜索
     let sql = `
       SELECT id, title, content_type, content, tags, auto_tags, source, quality_score,
-             ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, type,
+             ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, taxonomy_code, type,
              is_pinned, created_at
       FROM assets
       WHERE 1=1
@@ -411,7 +429,12 @@ export class AssetService {
       params.push(...tags);
     }
 
-    if (domain) {
+    if (taxonomy_code) {
+      // Level-1 (e.g. E07) -> prefix match so sub-codes are included.
+      const isL1 = /^E\d{2}$/.test(taxonomy_code);
+      params.push(isL1 ? `${taxonomy_code}%` : taxonomy_code);
+      sql += ` AND taxonomy_code ${isL1 ? 'LIKE' : '='} $${params.length}`;
+    } else if (domain) {
       params.push(domain);
       sql += ` AND domain = $${params.length}`;
     }
@@ -438,6 +461,7 @@ export class AssetService {
         quality_score: row.quality_score,
         theme_id: row.theme_id,
         domain: row.domain,
+        taxonomy_code: row.taxonomy_code,
         asset_type: row.type,
         is_pinned: row.is_pinned,
         ai_quality_score: row.ai_quality_score,
@@ -453,14 +477,14 @@ export class AssetService {
     queryEmbedding: number[],
     tags?: string[],
     limit: number = 10,
-    extra: { domain?: string; asset_type?: string } = {}
+    extra: { domain?: string; taxonomy_code?: string; asset_type?: string } = {}
   ) {
     const vectorStr = `[${queryEmbedding.join(',')}]`;
 
     let sql = `
       SELECT
         id, title, content_type, content, tags, auto_tags, source, quality_score,
-        ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, type,
+        ai_quality_score, ai_processing_status, ai_analyzed_at, theme_id, domain, taxonomy_code, type,
         is_pinned, created_at,
         1 - (embedding <=> $1::vector) as similarity
       FROM assets
@@ -474,7 +498,11 @@ export class AssetService {
       params.push(...tags);
     }
 
-    if (extra.domain) {
+    if (extra.taxonomy_code) {
+      const isL1 = /^E\d{2}$/.test(extra.taxonomy_code);
+      params.push(isL1 ? `${extra.taxonomy_code}%` : extra.taxonomy_code);
+      sql += ` AND taxonomy_code ${isL1 ? 'LIKE' : '='} $${params.length}`;
+    } else if (extra.domain) {
       params.push(extra.domain);
       sql += ` AND domain = $${params.length}`;
     }
@@ -501,6 +529,7 @@ export class AssetService {
         quality_score: row.quality_score,
         theme_id: row.theme_id,
         domain: row.domain,
+        taxonomy_code: row.taxonomy_code,
         asset_type: row.type,
         is_pinned: row.is_pinned,
         ai_quality_score: row.ai_quality_score,

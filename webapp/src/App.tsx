@@ -73,6 +73,7 @@ import { Notifications } from './pages/Notifications';
 import { LangGraphTasks } from './pages/LangGraphTasks';
 import { LGTaskDetailLayout } from './pages/LGTaskDetailLayout';
 import { LGOverviewTab, LGPlanningTab, LGResearchTab, LGWritingTab, LGReviewsTab, LGQualityTab, LGPortalTab } from './pages/lg-task-detail';
+import { AdminTaxonomy } from './pages/AdminTaxonomy';
 
 import './App.css';
 
@@ -169,6 +170,7 @@ function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="ai-task-recommendations" element={<AITaskRecommendations />} />
+              <Route path="admin/taxonomy" element={<AdminTaxonomy />} />
               {/* LangGraph 流水线独立页面 */}
               <Route path="lg-tasks" element={<LangGraphTasks />} />
               <Route path="lg-tasks/:threadId" element={<LGTaskDetailLayout />}>

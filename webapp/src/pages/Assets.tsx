@@ -15,6 +15,9 @@ import { assetsAiApi } from '../api/assetsAi';
 import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
 import { LazyImage } from '../components/LazyImage';
 import { useDropdownOptions } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode, codeToSelection } from '../components/DomainCascadeSelect';
+import { useTaxonomy } from '../hooks/useTaxonomy';
+import type { TaxonomySelection } from '../types/taxonomy';
 import { ASSET_TYPE_META, ASSET_TYPES, type AssetType } from '../types';
 import './Assets.css';
 
@@ -45,12 +48,14 @@ export function Assets() {
   // UI状态
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [selectedTaxonomy, setSelectedTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<AssetType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // 统一的领域下拉（与 /content-library 共享同一数据源 /dropdown/domains）
   const { domains } = useDropdownOptions();
+  const { tree: taxonomyTree, nameOf: taxNameOf } = useTaxonomy();
 
   // 弹窗状态
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -94,6 +99,7 @@ export function Assets() {
     tags: '',
     assetType: 'file' as AssetType,
     domain: '',
+    taxonomy: { l1: null, l2: null } as TaxonomySelection,
   });
   const [themeForm, setThemeForm] = useState({
     name: '',
@@ -101,6 +107,7 @@ export function Assets() {
     icon: '📁',
     color: '#6366f1',
     domain: '',
+    taxonomy: { l1: null, l2: null } as TaxonomySelection,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,6 +140,7 @@ export function Assets() {
           ...a,
           asset_type: assetType,
           domain: (a as any).domain,
+          taxonomy_code: (a as any).taxonomy_code,
           status: index % 3 === 0 ? 'research' : index % 3 === 1 ? 'draft' : 'final',
           word_count: wordCount,
           fact_check_score: (a as any).ai_quality_score
@@ -169,6 +177,26 @@ export function Assets() {
   const countByDomain = (domain: string) =>
     assets.filter((a) => assetBelongsToDomain(a, domain)).length;
 
+  // taxonomy_code 匹配（level-1 做前缀匹配；asset 仅 domain 的老数据通过名称兜底）
+  const assetMatchesTaxonomy = (asset: ExtendedAsset, sel: TaxonomySelection): boolean => {
+    const code = selectionToCode(sel);
+    if (!code) return true;
+    const own = (asset as any).taxonomy_code as string | undefined;
+    if (own) {
+      if (/^E\d{2}$/.test(code)) return own === code || own.startsWith(`${code}.`);
+      return own === code;
+    }
+    // 无 taxonomy_code 的老数据：用 domain name → 当前选中节点的名称比较
+    const targetName = taxNameOf(code);
+    if (targetName && assetBelongsToDomain(asset, targetName)) return true;
+    return false;
+  };
+
+  const countByTaxonomy = (code: string): number => {
+    const sel = codeToSelection(code);
+    return assets.filter(a => assetMatchesTaxonomy(a, sel)).length;
+  };
+
   // 筛选素材
   const filteredAssets = assets.filter((asset) => {
     // Tab筛选
@@ -179,8 +207,12 @@ export function Assets() {
     if (selectedTheme === 'ai-completed') return asset.ai_processing_status === 'completed';
     if (selectedTheme === 'ai-pending') return !asset.ai_processing_status || asset.ai_processing_status === 'pending';
 
-    // 领域筛选
-    if (selectedDomain && !assetBelongsToDomain(asset, selectedDomain)) return false;
+    // 领域筛选：优先 taxonomy 级联；未选中则退回旧 domain 字符串
+    if (selectedTaxonomy.l1 || selectedTaxonomy.l2) {
+      if (!assetMatchesTaxonomy(asset, selectedTaxonomy)) return false;
+    } else if (selectedDomain && !assetBelongsToDomain(asset, selectedDomain)) {
+      return false;
+    }
 
     // 主题筛选
     if (selectedTheme === 'uncategorized' && asset.theme_id) return false;
@@ -202,9 +234,22 @@ export function Assets() {
   });
 
   // 当前选中领域下可见的主题（未选领域则全部）
-  const visibleThemes = selectedDomain
-    ? themes.filter((t) => (t.domain || t.name) === selectedDomain)
-    : themes;
+  const activeCode = selectionToCode(selectedTaxonomy);
+  const activeL1Name = activeCode ? taxNameOf(activeCode.split('.')[0]) : null;
+  const visibleThemes = activeCode
+    ? themes.filter((t) => {
+        const tcode = (t as any).taxonomy_code as string | undefined;
+        if (tcode) {
+          if (/^E\d{2}$/.test(activeCode)) return tcode === activeCode || tcode.startsWith(`${activeCode}.`);
+          return tcode === activeCode;
+        }
+        // 老主题：按 name/domain 字段名字兜底
+        const nm = t.domain || t.name;
+        return nm === activeL1Name || nm === taxNameOf(activeCode);
+      })
+    : selectedDomain
+      ? themes.filter((t) => (t.domain || t.name) === selectedDomain)
+      : themes;
 
   // 处理文件选择
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,11 +278,14 @@ export function Assets() {
     const effectiveDomain = uploadForm.domain
       || (uploadForm.themeId ? (themesById[uploadForm.themeId]?.domain || themesById[uploadForm.themeId]?.name || '') : '');
     if (effectiveDomain) formData.append('domain', effectiveDomain);
+    const taxCode = selectionToCode(uploadForm.taxonomy)
+      || (uploadForm.themeId ? ((themesById[uploadForm.themeId] as any)?.taxonomy_code || '') : '');
+    if (taxCode) formData.append('taxonomy_code', taxCode);
 
     try {
       await assetsApi.create(formData);
       setShowUploadModal(false);
-      setUploadForm({ file: null, title: '', source: '', themeId: '', tags: '', assetType: 'file', domain: '' });
+      setUploadForm({ file: null, title: '', source: '', themeId: '', tags: '', assetType: 'file', domain: '', taxonomy: { l1: null, l2: null } });
       loadData();
     } catch (err) {
       alert('上传失败: ' + (err instanceof Error ? err.message : '未知错误'));
@@ -264,6 +312,7 @@ export function Assets() {
         content: editingAsset.content,
         asset_type: editingAsset.asset_type,
         domain: editingAsset.domain,
+        taxonomy_code: (editingAsset as any).taxonomy_code,
       } as Partial<Asset>);
       setShowEditModal(false);
       setEditingAsset(null);
@@ -379,15 +428,17 @@ export function Assets() {
   // 创建主题
   const handleCreateTheme = async () => {
     try {
+      const taxCode = selectionToCode(themeForm.taxonomy);
       await themesApi.create({
         name: themeForm.name,
         description: themeForm.description,
         icon: themeForm.icon,
         color: themeForm.color,
         domain: themeForm.domain || themeForm.name, // 默认 domain = name
-      });
+        ...(taxCode ? { taxonomy_code: taxCode } : {}),
+      } as any);
       setShowCreateThemeModal(false);
-      setThemeForm({ name: '', description: '', icon: '📁', color: '#6366f1', domain: '' });
+      setThemeForm({ name: '', description: '', icon: '📁', color: '#6366f1', domain: '', taxonomy: { l1: null, l2: null } });
       loadData();
     } catch (err) {
       alert('创建失败: ' + (err instanceof Error ? err.message : '未知错误'));
@@ -643,8 +694,12 @@ export function Assets() {
           </div>
           <nav className="theme-nav">
             <div
-              className={`theme-nav-item ${selectedDomain === null && selectedTheme === null ? 'active' : ''}`}
-              onClick={() => { setSelectedDomain(null); setSelectedTheme(null); }}
+              className={`theme-nav-item ${selectedDomain === null && !selectedTaxonomy.l1 && selectedTheme === null ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedDomain(null);
+                setSelectedTaxonomy({ l1: null, l2: null });
+                setSelectedTheme(null);
+              }}
             >
               <span className="theme-nav-icon">📚</span>
               <span className="theme-nav-name">全部素材</span>
@@ -652,7 +707,11 @@ export function Assets() {
             </div>
             <div
               className={`theme-nav-item ${selectedTheme === 'uncategorized' ? 'active' : ''}`}
-              onClick={() => { setSelectedTheme('uncategorized'); setSelectedDomain(null); }}
+              onClick={() => {
+                setSelectedTheme('uncategorized');
+                setSelectedDomain(null);
+                setSelectedTaxonomy({ l1: null, l2: null });
+              }}
             >
               <span className="theme-nav-icon">📂</span>
               <span className="theme-nav-name">未分类</span>
@@ -661,10 +720,46 @@ export function Assets() {
               </span>
             </div>
 
-            {/* 领域（与 /content-library 同源 /dropdown/domains） */}
-            {domains.length > 0 && (
+            {/* 二级领域级联（taxonomy_code，单一真源） */}
+            <div className="sidebar-section">
+              <span className="sidebar-section-title">领域（级联）</span>
+              <div className="px-2 py-1">
+                <DomainCascadeSelect
+                  value={selectedTaxonomy}
+                  onChange={(next) => {
+                    setSelectedTaxonomy(next);
+                    setSelectedDomain(null);
+                    setSelectedTheme(null);
+                  }}
+                  compact
+                />
+              </div>
+              {taxonomyTree.length > 0 && !selectedTaxonomy.l1 && (
+                <div className="mt-1">
+                  {taxonomyTree.map((n) => {
+                    const c = countByTaxonomy(n.code);
+                    if (c === 0) return null;
+                    return (
+                      <div
+                        key={n.code}
+                        className="theme-nav-item"
+                        onClick={() => setSelectedTaxonomy({ l1: n.code, l2: null })}
+                        title={`${n.code} · ${n.name}`}
+                      >
+                        <span className="theme-nav-icon">{n.icon || '🏷️'}</span>
+                        <span className="theme-nav-name">{n.name}</span>
+                        <span className="theme-nav-count">{c}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 兼容旧 /dropdown/domains（仅在没有选中 taxonomy 时显示，作为过渡期的备份入口） */}
+            {!selectedTaxonomy.l1 && domains.length > 0 && (
               <div className="sidebar-section">
-                <span className="sidebar-section-title">领域</span>
+                <span className="sidebar-section-title">旧领域标签</span>
                 {domains.map((d) => (
                   <div
                     key={d}
@@ -808,13 +903,20 @@ export function Assets() {
                 </select>
               </div>
               <div className="form-group">
-                <label>领域</label>
+                <label>领域分类（级联）</label>
+                <DomainCascadeSelect
+                  value={uploadForm.taxonomy}
+                  onChange={(t) => setUploadForm((p) => ({ ...p, taxonomy: t }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>领域（自由文本，向后兼容）</label>
                 <input
                   type="text"
                   list="asset-domain-options"
                   value={uploadForm.domain}
                   onChange={(e) => setUploadForm((p) => ({ ...p, domain: e.target.value }))}
-                  placeholder="选择或输入领域（留空则沿用所选主题的领域）"
+                  placeholder="可留空；上方级联为准"
                 />
                 <datalist id="asset-domain-options">
                   {domains.map((d) => <option key={d} value={d} />)}
@@ -901,13 +1003,22 @@ export function Assets() {
                 </select>
               </div>
               <div className="form-group">
-                <label>领域</label>
+                <label>领域分类（级联）</label>
+                <DomainCascadeSelect
+                  value={codeToSelection((editingAsset as any).taxonomy_code)}
+                  onChange={(t) => setEditingAsset((p) =>
+                    p ? ({ ...p, taxonomy_code: selectionToCode(t) ?? undefined } as any) : null,
+                  )}
+                />
+              </div>
+              <div className="form-group">
+                <label>领域（自由文本）</label>
                 <input
                   type="text"
                   list="asset-edit-domain-options"
                   value={editingAsset.domain || ''}
                   onChange={(e) => setEditingAsset((p) => p ? ({ ...p, domain: e.target.value || undefined }) : null)}
-                  placeholder="选择或输入领域"
+                  placeholder="可留空，以级联为准"
                 />
                 <datalist id="asset-edit-domain-options">
                   {domains.map((d) => <option key={d} value={d} />)}
@@ -987,13 +1098,20 @@ export function Assets() {
                 />
               </div>
               <div className="form-group">
-                <label>领域</label>
+                <label>领域分类（级联）</label>
+                <DomainCascadeSelect
+                  value={themeForm.taxonomy}
+                  onChange={(t) => setThemeForm((p) => ({ ...p, taxonomy: t }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>领域（自由文本）</label>
                 <input
                   type="text"
                   list="theme-domain-options"
                   value={themeForm.domain}
                   onChange={(e) => setThemeForm((p) => ({ ...p, domain: e.target.value }))}
-                  placeholder="从 /content-library 领域中选或自由输入（留空则沿用主题名）"
+                  placeholder="可留空；上方级联为准"
                 />
                 <datalist id="theme-domain-options">
                   {domains.map((d) => <option key={d} value={d} />)}
