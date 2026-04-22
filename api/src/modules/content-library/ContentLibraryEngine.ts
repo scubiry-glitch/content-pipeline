@@ -34,6 +34,16 @@ import { EntityResolver } from './consolidation/entityResolver.js';
 import { DeltaCompressor } from './consolidation/deltaCompressor.js';
 import { WikiGenerator } from './wiki/wikiGenerator.js';
 import { CommunityDetector } from './reasoning/communityDetector.js';
+import {
+  dedupeDataPoints,
+  shouldKeepAsTrend,
+  computeDynamics,
+} from './reasoning/trendSignalQuality.js';
+import {
+  detectEvolutionPatterns,
+  buildConfidenceDeltas,
+  type EvolutionPattern,
+} from './reasoning/beliefPatternDetector.js';
 
 export class ContentLibraryEngine {
   private deps: ContentLibraryDeps;
@@ -954,7 +964,7 @@ export class ContentLibraryEngine {
       ORDER BY cf.created_at ASC
     `, [entityId]);
 
-    // 按 predicate 分组，检测方向性变化
+    // 按 predicate 分组
     const grouped = new Map<string, typeof result.rows>();
     for (const row of result.rows) {
       const key = row.predicate;
@@ -963,19 +973,29 @@ export class ContentLibraryEngine {
     }
 
     const signals: TrendSignal[] = [];
-    for (const [metric, dataPoints] of grouped) {
-      if (dataPoints.length < 2) continue;
+    for (const [metric, rawRows] of grouped) {
+      // 去重 + 时间校验
+      const cleaned = dedupeDataPoints(rawRows as any);
+      // 静态指标 / 单点 / 单一值 直接跳过
+      if (!shouldKeepAsTrend(metric, cleaned)) continue;
+
+      const dynamics = computeDynamics(cleaned);
       signals.push({
         entityId,
-        entityName: dataPoints[0].subject,
+        entityName: rawRows[0].subject,
         metric,
-        direction: this.detectDirection(dataPoints),
-        dataPoints: dataPoints.map(dp => ({
-          time: dp.context?.time || dp.created_at.toISOString(),
-          value: dp.object,
-          source: dp.context?.source || 'unknown',
+        direction: dynamics.direction,
+        dataPoints: cleaned.map(dp => ({
+          time: dp.time,
+          value: dp.value,
+          source: dp.source,
+          citationCount: dp.citationCount,
         })),
-        significance: dataPoints.length / 10,
+        significance: dynamics.significance,
+        velocity: dynamics.velocity,
+        velocityLabel: dynamics.velocityLabel,
+        acceleration: dynamics.acceleration,
+        forecastNote: dynamics.forecastNote,
       });
     }
 
@@ -1750,16 +1770,28 @@ export class ContentLibraryEngine {
     };
   }
 
-  /** ⑭ 观点演化 (BeliefTracker 时间线) */
+  /** ⑭ 观点演化 (BeliefTracker 时间线 + 组合模式) */
   async getBeliefEvolution(options?: {
     beliefId?: string;
     subject?: string;
     limit?: number;
-  }): Promise<{ timeline: Array<{ date: string; state: string; sources: string[] }>; summary: string }> {
-    // proposition 可能包含 "主体: 谓词" 格式，支持精确匹配或前缀匹配
+  }): Promise<{
+    timeline: Array<{
+      date: string;
+      state: string;
+      sources: Array<{ id: string; label: string }>;
+      reason?: string;
+      confidence?: number;
+      confidenceDelta?: number;
+    }>;
+    patterns: EvolutionPattern[];
+    summary: string;
+    currentConfidence?: number;
+  }> {
     const searchTerm = options?.beliefId || options?.subject || '';
     const beliefQuery = `
-      SELECT id, proposition, current_stance, last_updated, supporting_facts, history
+      SELECT id, proposition, current_stance, confidence, last_updated,
+             supporting_facts, contradicting_facts, history
       FROM content_beliefs
       WHERE proposition ILIKE $1 OR proposition ILIKE $2
       ORDER BY last_updated DESC
@@ -1771,38 +1803,134 @@ export class ContentLibraryEngine {
       options?.limit || 20,
     ]);
 
-    // 如果 content_beliefs 没命中，从 content_facts 实时构建时间线
+    // 回退：如果 content_beliefs 没命中，从 content_facts 实时构建时间线
     if (result.rows.length === 0 && searchTerm) {
       const factsResult = await this.deps.db.query(
-        `SELECT created_at, context->>'source' AS source, confidence, object
+        `SELECT id, created_at, context->>'source' AS source, confidence, predicate, object
          FROM content_facts
          WHERE subject = $1 AND is_current = true
          ORDER BY created_at ASC LIMIT $2`,
-        [searchTerm, options?.limit || 20]
+        [searchTerm, options?.limit || 20],
       );
-      const timeline = factsResult.rows.map((row: any) => ({
-        date: new Date(row.created_at).toISOString(),
-        state: Number(row.confidence) >= 0.85 ? 'confirmed' : Number(row.confidence) >= 0.5 ? 'evolving' : 'disputed',
-        sources: row.source ? [row.source] : [],
-      }));
+      const timeline = factsResult.rows.map((row: any, idx: number, arr: any[]) => {
+        const conf = Number(row.confidence);
+        const prevConf = idx > 0 ? Number(arr[idx - 1].confidence) : undefined;
+        return {
+          date: new Date(row.created_at).toISOString(),
+          state: conf >= 0.85 ? 'confirmed' : conf >= 0.5 ? 'evolving' : 'disputed',
+          sources: row.source
+            ? [{ id: row.id, label: `${row.predicate}=${row.object}` }]
+            : [],
+          reason: row.source ? `来自 ${row.source}` : undefined,
+          confidence: conf,
+          confidenceDelta: prevConf === undefined ? undefined : conf - prevConf,
+        };
+      });
       return {
         timeline,
+        patterns: [],
         summary: `从 ${factsResult.rows.length} 条事实推断 "${searchTerm}" 的演化脉络`,
       };
     }
 
-    const timeline = result.rows.map(row => ({
-      date: new Date(row.last_updated).toISOString(),
-      state: row.current_stance || 'unknown',
-      sources: Array.isArray(row.supporting_facts) ? row.supporting_facts.slice(0, 3) : [],
-    }));
+    // 优先使用首条匹配的 belief 的 history 字段（信息最全）
+    const primary = result.rows[0];
+    const history: any[] = Array.isArray(primary?.history) ? primary.history : [];
+
+    // 汇总所有匹配 belief 的 supporting_facts，去重后解析为可读片段
+    const allSupportIds = new Set<string>();
+    for (const row of result.rows) {
+      if (Array.isArray(row.supporting_facts)) {
+        for (const id of row.supporting_facts) allSupportIds.add(id);
+      }
+    }
+    const factLabelById = await this.resolveFactLabels(Array.from(allSupportIds));
+
+    let timeline: Array<{
+      date: string;
+      state: string;
+      sources: Array<{ id: string; label: string }>;
+      reason?: string;
+      confidence?: number;
+      confidenceDelta?: number;
+    }>;
+
+    if (history.length > 0) {
+      // 走 history 路径 — 每条 history entry 成为一个时间线节点
+      const deltas = buildConfidenceDeltas(
+        history.map(h => ({
+          stance: h.stance,
+          confidence: Number(h.confidence),
+          reason: h.reason || '',
+          timestamp: new Date(h.timestamp),
+        })),
+      );
+      const sortedHistory = [...history].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const supportingLabels = (Array.isArray(primary.supporting_facts) ? primary.supporting_facts : [])
+        .map((id: string) => ({ id, label: factLabelById.get(id) || id }))
+        .slice(0, 3);
+      timeline = sortedHistory.map((h, idx) => ({
+        date: new Date(h.timestamp).toISOString(),
+        state: h.stance || 'unknown',
+        sources: idx === sortedHistory.length - 1 ? supportingLabels : [],
+        reason: h.reason || undefined,
+        confidence: Number(h.confidence),
+        confidenceDelta: idx === 0 ? undefined : deltas[idx],
+      }));
+    } else {
+      // 回退：history 缺失时用 row-per-belief 模型
+      timeline = result.rows.map(row => {
+        const ids = Array.isArray(row.supporting_facts) ? row.supporting_facts.slice(0, 3) : [];
+        return {
+          date: new Date(row.last_updated).toISOString(),
+          state: row.current_stance || 'unknown',
+          sources: ids.map((id: string) => ({ id, label: factLabelById.get(id) || id })),
+          confidence: row.confidence !== undefined ? Number(row.confidence) : undefined,
+        };
+      });
+    }
+
+    const patterns = detectEvolutionPatterns({
+      history: history.map(h => ({
+        stance: h.stance,
+        confidence: Number(h.confidence),
+        reason: h.reason || '',
+        timestamp: new Date(h.timestamp),
+      })),
+      supportingFactCount: Array.isArray(primary?.supporting_facts) ? primary.supporting_facts.length : 0,
+      contradictingFactCount: Array.isArray(primary?.contradicting_facts) ? primary.contradicting_facts.length : 0,
+    });
 
     return {
       timeline,
+      patterns,
+      currentConfidence: primary?.confidence !== undefined ? Number(primary.confidence) : undefined,
       summary: timeline.length > 0
-        ? `"${searchTerm}" 的 ${timeline.length} 条观点记录`
+        ? `"${searchTerm}" 共 ${timeline.length} 次变更 · 识别出 ${patterns.length} 个模式`
         : `知识库中暂无 "${searchTerm}" 的相关记录`,
     };
+  }
+
+  /** 把 fact UUID 解析为 "predicate=object" 人读片段 */
+  private async resolveFactLabels(ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (ids.length === 0) return out;
+    try {
+      const res = await this.deps.db.query(
+        `SELECT id, predicate, object FROM content_facts WHERE id = ANY($1::uuid[])`,
+        [ids],
+      );
+      for (const row of res.rows) {
+        const label = [row.predicate, row.object].filter(Boolean).join('=');
+        out.set(row.id, label.length > 40 ? label.slice(0, 38) + '…' : label);
+      }
+    } catch (err) {
+      // 保底：解析失败就让调用方回退到原 UUID 显示
+      console.warn('[resolveFactLabels] failed:', err);
+    }
+    return out;
   }
 
   /**
