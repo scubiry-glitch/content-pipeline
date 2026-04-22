@@ -211,6 +211,7 @@ export class AssetsAIBatchProcessor {
           asset,
           qualityResult.quality,
           classificationResult.classification,
+          this.config.expertStrategy,
         );
       } catch (error) {
         console.error(`[AssetsAIBatchProcessor] Deep analysis failed for ${asset.id}:`, error);

@@ -16,6 +16,8 @@ export interface SynthesisJobState {
   completedAt?: string;
   currentEntity?: string;
   errorMessages: string[];
+  /** Round 2: 深度模式标记 */
+  deep?: boolean;
 }
 
 export interface SynthesisJobOptions {
@@ -23,6 +25,14 @@ export interface SynthesisJobOptions {
   domain?: string;      // 限定领域
   overwrite?: boolean;  // true = 覆盖已有缓存；false = 跳过
   minFacts?: number;    // 至少有多少条事实的实体才生成，默认 3
+  /** Round 2: 深度模式 — 每个实体用 CDT 专家综合，cache_key 独立命名空间 */
+  enableDeep?: boolean;
+  /** Round 2: 专家应用策略配置 */
+  expertStrategy?: {
+    preset?: 'lite' | 'standard' | 'max' | 'custom';
+    default?: string;
+    perDeliverable?: Record<string, string>;
+  };
 }
 
 type SSEListener = (event: string, data: any) => void;
@@ -53,6 +63,7 @@ export function startSynthesisJob(
   const overwrite = options.overwrite ?? false;
   const limit = options.limit ?? 50;
   const minFacts = options.minFacts ?? 3;
+  const enableDeep = options.enableDeep === true;
 
   const state: SynthesisJobState = {
     jobId,
@@ -65,6 +76,7 @@ export function startSynthesisJob(
     overwrite,
     startedAt: new Date().toISOString(),
     errorMessages: [],
+    deep: enableDeep,
   };
   jobs.set(jobId, state);
 
@@ -87,7 +99,7 @@ export function startSynthesisJob(
 
       const entities: Array<{ name: string; fact_count: number }> = entitiesResult.rows;
       state.total = entities.length;
-      emit(jobId, 'total', { total: state.total });
+      emit(jobId, 'total', { total: state.total, deep: state.deep });
 
       // 2. 逐实体生成
       for (const entity of entities) {
@@ -99,7 +111,9 @@ export function startSynthesisJob(
         state.currentEntity = entity.name;
         emit(jobId, 'progress', { ...progressSnapshot(state), currentEntity: entity.name });
 
-        const cacheKey = `entity:${entity.name}`;
+        // Round 2: 深度模式用独立 cache_key namespace，避免污染泛型缓存
+        const cacheKey = enableDeep ? `entity:${entity.name}:deep` : `entity:${entity.name}`;
+        const scopeType = enableDeep ? 'entity_deep' : 'entity';
 
         // 断点续传：检查缓存是否已存在
         if (!overwrite) {
@@ -116,23 +130,29 @@ export function startSynthesisJob(
         }
 
         try {
-          // 调用 synthesizeInsights（内部走 LLM）
-          const result = await (engine as any).synthesizeInsightsRaw({
-            subjects: [entity.name],
-            limit: 5,
-          });
+          // Round 2: 深度模式走 synthesizeInsightsDeep (CDT 专家综合)；否则走 Raw
+          const result = enableDeep
+            ? await (engine as any).synthesizeInsightsDeep({
+                subjects: [entity.name],
+                limit: 5,
+                expertStrategy: options.expertStrategy,
+              })
+            : await (engine as any).synthesizeInsightsRaw({
+                subjects: [entity.name],
+                limit: 5,
+              });
 
           if (result && result.insights && result.insights.length > 0) {
             await db.query(`
               INSERT INTO content_synthesis_cache
                 (cache_key, scope_type, scope_value, insights, summary, facts_used, generated_at)
-              VALUES ($1, 'entity', $2, $3, $4, $5, NOW())
+              VALUES ($1, $2, $3, $4, $5, $6, NOW())
               ON CONFLICT (cache_key) DO UPDATE SET
                 insights = EXCLUDED.insights,
                 summary = EXCLUDED.summary,
                 facts_used = EXCLUDED.facts_used,
                 generated_at = NOW()
-            `, [cacheKey, entity.name, JSON.stringify(result.insights), result.summary || '', result.factsUsed || 0]);
+            `, [cacheKey, scopeType, entity.name, JSON.stringify(result.insights), result.summary || '', result.factsUsed || 0]);
             state.generated++;
           } else {
             state.errors++;

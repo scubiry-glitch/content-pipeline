@@ -10,6 +10,8 @@ import type { ExpertProfile } from '../../modules/expert-library/types.js';
 import type { ContentLibraryEngine } from '../../modules/content-library/ContentLibraryEngine.js';
 import type { Contradiction } from '../../modules/content-library/types.js';
 import type { ControversyAnalysis, ExpertInvocationTrace } from './types.js';
+import { createStrategyResolver, resolveSpecString } from '../expert-application/index.js';
+import type { ExpertStrategySpec, ExpertApplicationStrategy } from '../expert-application/index.js';
 
 export interface ControversyDeepAnalyzerDeps {
   contentEngine: ContentLibraryEngine;
@@ -22,6 +24,8 @@ export interface ControversyRunOptions {
   expert: ExpertProfile;
   /** 可选：同样跑一遍互补专家交叉分析 */
   complementaryExpert?: ExpertProfile;
+  /** Round 2: 专家应用策略配置 */
+  expertStrategy?: ExpertStrategySpec;
 }
 
 export class ControversyDeepAnalyzer {
@@ -43,14 +47,18 @@ export class ControversyDeepAnalyzer {
       return { controversies: [], traces };
     }
 
+    const resolveStrategy = createStrategyResolver(options.expertStrategy);
+    const specStr = resolveSpecString(options.expertStrategy, '⑬controversy');
+    const expertsForStrategy = [options.expert, ...(options.complementaryExpert ? [options.complementaryExpert] : [])];
+
     const controversies: ControversyAnalysis[] = [];
     for (const c of contradictions) {
       // 300ms throttle（参考 synthesisJob.ts 的节流模式）
       await new Promise((resolve) => setTimeout(resolve, 300));
       try {
-        const result = await this.analyzeOne(c, options.expert);
+        const result = await this.analyzeOne(c, options.expert, expertsForStrategy, resolveStrategy, specStr);
         controversies.push(result.analysis);
-        traces.push(result.trace);
+        traces.push(...result.traces);
       } catch (err) {
         console.warn(`[ControversyDeepAnalyzer] Analysis failed for ${c.id}:`, (err as Error).message);
       }
@@ -62,16 +70,21 @@ export class ControversyDeepAnalyzer {
   private async analyzeOne(
     contradiction: Contradiction,
     expert: ExpertProfile,
-  ): Promise<{ analysis: ControversyAnalysis; trace: ExpertInvocationTrace }> {
+    expertsForStrategy: ExpertProfile[],
+    resolveStrategy: (deliverable: string) => ExpertApplicationStrategy,
+    specStr: string,
+  ): Promise<{ analysis: ControversyAnalysis; traces: ExpertInvocationTrace[] }> {
     const inputData = this.buildContradictionNarrative(contradiction);
-    const started = Date.now();
 
-    const response = await this.deps.expertEngine.invoke({
-      expert_id: expert.expert_id,
-      task_type: 'analysis',
-      input_type: 'text',
-      input_data: inputData,
-      context: '这是一次争议话题深度剖析任务。请以你作为领域专家的视角，按照指定 JSON 结构输出，不要 markdown 代码块。',
+    const strategy = resolveStrategy('⑬controversy');
+    const result = await strategy.apply({
+      expertEngine: this.deps.expertEngine,
+      deps: this.deps.expertEngine.getDeps(),
+      experts: expertsForStrategy,
+      inputData,
+      taskType: 'analysis',
+      deliverable: '⑬controversy',
+      contextHint: '这是一次争议话题深度剖析任务。请以你作为领域专家的视角，按照指定 JSON 结构输出，不要 markdown 代码块。',
       params: {
         depth: 'deep',
         output_format: CONTROVERSY_OUTPUT_SCHEMA_HINT,
@@ -87,8 +100,14 @@ export class ControversyDeepAnalyzer {
       },
     });
 
-    const rawText = response.output.sections.map((s) => s.content).join('\n');
+    const rawText = result.output.sections.map((s) => s.content).join('\n');
     const parsed = this.parseControversyJson(rawText);
+
+    // 从 traces 中找出主 invoke_id（第一条，通常是 base strategy 的主调用）
+    const primaryInvokeId =
+      result.traces.find((t) => !t.stage || t.stage === 'positionA' || t.stage === 'solo')?.invokeId ||
+      result.traces[0]?.invokeId ||
+      '';
 
     const analysis: ControversyAnalysis = {
       contradictionId: contradiction.id,
@@ -116,19 +135,21 @@ export class ControversyDeepAnalyzer {
       resolution: parsed.resolution ?? '',
       residualUncertainty: parsed.residualUncertainty,
       analyzedByExpertId: expert.expert_id,
-      expertInvokeId: response.metadata.invoke_id,
+      expertInvokeId: primaryInvokeId,
     };
 
-    const trace: ExpertInvocationTrace = {
+    const traces: ExpertInvocationTrace[] = result.traces.map((t) => ({
       deliverable: '⑬controversy',
-      expertId: expert.expert_id,
-      invokeId: response.metadata.invoke_id,
-      emmPass: response.metadata.emm_result?.passed ?? false,
-      confidence: response.metadata.confidence,
-      durationMs: Date.now() - started,
-    };
+      expertId: t.expertId,
+      invokeId: t.invokeId,
+      emmPass: t.emmPass,
+      confidence: t.confidence,
+      durationMs: t.durationMs,
+      strategy: specStr,
+      stage: t.stage,
+    }));
 
-    return { analysis, trace };
+    return { analysis, traces };
   }
 
   private buildContradictionNarrative(c: Contradiction): string {

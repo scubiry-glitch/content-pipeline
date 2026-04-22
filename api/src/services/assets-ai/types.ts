@@ -230,6 +230,10 @@ export interface ExpertInvocationTrace {
   emmPass: boolean;
   confidence?: number;
   durationMs?: number;
+  /** Round 2: 本次调用的策略 spec 串，如 "evidence_anchored|emm_iterative|debate" */
+  strategy?: string;
+  /** Round 2: 组合策略内的阶段标签，如 "positionA"/"judge"/"synthesis" */
+  stage?: string;
 }
 
 export interface ControversyStakeholder {
@@ -301,6 +305,12 @@ export interface AssetsBatchProcessingConfig {
   chunkOverlap: number;
   /** v7.4: 开启后跑完标签化再调用 ContentLibraryEngine 15 个 deliverable + 专家库 EMM */
   enableDeepAnalysis?: boolean;
+  /** Round 2: 专家应用策略配置（preset 选择 + per-deliverable 覆盖） */
+  expertStrategy?: {
+    preset?: 'lite' | 'standard' | 'max' | 'custom';
+    default?: string;
+    perDeliverable?: Record<string, string>;
+  };
 }
 
 export interface AssetsBatchProcessResult {

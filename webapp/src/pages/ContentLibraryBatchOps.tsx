@@ -4,6 +4,7 @@
 // Step 4: 知识图谱重算 | Step 5: AI 产出物预生成 | Step 6: Wiki
 
 import { useState, useEffect, useRef } from 'react';
+import { StrategyPanel, useStrategySpec } from '../components/StrategyPanel';
 
 const API = '/api/v1/content-library';
 const API_AI = '/api/v1/ai/assets';
@@ -73,6 +74,14 @@ export function ContentLibraryBatchOps() {
   const [aiSourceBinding, setAiSourceBinding] = useState(true);
   /** v7.4: Step 2 深度分析开关 — 勾选后跑 15 产出物 + 专家库 EMM */
   const [enableDeepAnalysis, setEnableDeepAnalysis] = useState(false);
+  /** Round 2: Step 3 / 5 / topics 的 deep 开关 + 策略配置 */
+  const [extractDeep, setExtractDeep] = useState(false);
+  const [synthesisDeep, setSynthesisDeep] = useState(false);
+  const [topicsDeep, setTopicsDeep] = useState(false);
+  const [step2Strategy, setStep2Strategy] = useStrategySpec('step2');
+  const [step3Strategy, setStep3Strategy] = useStrategySpec('step3');
+  const [step5Strategy, setStep5Strategy] = useStrategySpec('step5');
+  const [topicsStrategy, setTopicsStrategy] = useStrategySpec('topics');
   // 确认弹窗状态
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
@@ -208,6 +217,7 @@ export function ContentLibraryBatchOps() {
           retryFailed,
           sources: sources.length > 0 ? sources : undefined,
           enableDeepAnalysis,
+          expertStrategy: enableDeepAnalysis ? step2Strategy : undefined,
           ...(assetIds ? { assetIds } : {}),
         }),
       });
@@ -257,6 +267,8 @@ export function ContentLibraryBatchOps() {
           onlyUnprocessed: true,
           source: extractSource,
           minQualityScore: extractMinQuality > 0 ? extractMinQuality : undefined,
+          enableDeep: extractDeep,
+          expertStrategy: extractDeep ? step3Strategy : undefined,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -395,12 +407,19 @@ export function ContentLibraryBatchOps() {
   const triggerTopicEnrich = async () => {
     setStep('topics', { status: 'running', message: '调用 LLM 生成议题叙事并缓存...' });
     try {
-      const res = await fetch(`${API}/topics/enrich?limit=10`, { method: 'POST' });
+      const res = await fetch(`${API}/topics/enrich?limit=10`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enableDeep: topicsDeep,
+          expertStrategy: topicsDeep ? topicsStrategy : undefined,
+        }),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setStep('topics', {
         status: 'done',
-        message: `${data.total || 0} 个议题, ${data.enriched || 0} 个成功生成叙事`,
+        message: `${data.total || 0} 个议题, ${data.enriched || 0} 个成功生成叙事${data.deep ? ' (深度)' : ''}`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {
@@ -425,7 +444,13 @@ export function ContentLibraryBatchOps() {
       const res = await fetch(`${API}/synthesize/pregenerate/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: synthesisLimit, overwrite: synthesisOverwrite, minFacts: 3 }),
+        body: JSON.stringify({
+          limit: synthesisLimit,
+          overwrite: synthesisOverwrite,
+          minFacts: 3,
+          enableDeep: synthesisDeep,
+          expertStrategy: synthesisDeep ? step5Strategy : undefined,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { jobId } = await res.json();
@@ -645,6 +670,9 @@ export function ContentLibraryBatchOps() {
                 </span>
               </span>
             </label>
+            {enableDeepAnalysis && (
+              <StrategyPanel stepId="step2" value={step2Strategy} onChange={setStep2Strategy} />
+            )}
           </div>
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
             📡 RSS 条目 (1116 条) 存储在独立表，不经过此步 → 直接在 Step 3 选「RSS 源」提取事实
@@ -688,7 +716,17 @@ export function ContentLibraryBatchOps() {
                 className="w-12 px-1 py-0.5 border rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
               {extractMinQuality > 0 && <span className="text-amber-500 text-[10px]">跳过 &lt;{extractMinQuality} 分</span>}
             </label>
+            <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+              <input type="checkbox" checked={extractDeep}
+                onChange={e => setExtractDeep(e.target.checked)}
+                className="rounded accent-amber-600" />
+              <span className="text-amber-700 dark:text-amber-400 font-medium">🧬 深度模式</span>
+              <span className="text-[10px] text-gray-400">（CDT 专家第 3 段审定，慢 ~1.5x）</span>
+            </label>
           </div>
+          {extractDeep && (
+            <StrategyPanel stepId="step3" value={step3Strategy} onChange={setStep3Strategy} />
+          )}
           {progress && (
             <div className="mt-3">
               <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -803,6 +841,13 @@ export function ContentLibraryBatchOps() {
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.topics.status)} 5a · 议题叙事</span>
               </div>
               <p className="text-xs text-gray-400">Top 10 议题 → 标题/导语/角度矩阵，缓存至 DB</p>
+              <label className="flex items-center gap-1 text-xs cursor-pointer select-none mt-1">
+                <input type="checkbox" checked={topicsDeep}
+                  onChange={e => setTopicsDeep(e.target.checked)}
+                  className="rounded accent-rose-600" />
+                <span className="text-rose-700 dark:text-rose-400 font-medium">🧬 深度模式</span>
+                <span className="text-[10px] text-gray-400">（CDT 专家替代泛型编辑 prompt；独立 mode=deep 缓存）</span>
+              </label>
               {steps.topics.message && <p className="text-xs text-gray-500 mt-0.5">{steps.topics.message}</p>}
               {steps.topics.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
             </div>
@@ -811,6 +856,9 @@ export function ContentLibraryBatchOps() {
               ✍️ 生成叙事
             </button>
           </div>
+          {topicsDeep && (
+            <StrategyPanel stepId="topics" value={topicsStrategy} onChange={setTopicsStrategy} />
+          )}
 
           {/* 5b: 认知综合 */}
           <div className="pt-3">
@@ -856,7 +904,17 @@ export function ContentLibraryBatchOps() {
                 覆盖已有缓存
                 {!synthesisOverwrite && <span className="text-[10px] text-green-600 ml-0.5">(断点续传)</span>}
               </label>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                <input type="checkbox" checked={synthesisDeep}
+                  onChange={e => setSynthesisDeep(e.target.checked)}
+                  className="rounded accent-indigo-600" />
+                <span className="text-indigo-700 dark:text-indigo-400 font-medium">🧬 深度模式</span>
+                <span className="text-[10px] text-gray-400">（CDT 专家综合，独立 entity:X:deep 缓存）</span>
+              </label>
             </div>
+            {synthesisDeep && (
+              <StrategyPanel stepId="step5" value={step5Strategy} onChange={setStep5Strategy} />
+            )}
 
             {/* 进度条 */}
             {synthesisProgress && synthesisProgress.total > 0 && (
@@ -888,6 +946,11 @@ export function ContentLibraryBatchOps() {
             )}
             {steps.synthesis.lastRun && (
               <p className="text-[10px] text-gray-400">上次: {new Date(steps.synthesis.lastRun).toLocaleString()}</p>
+            )}
+            {(enableDeepAnalysis || extractDeep || synthesisDeep || topicsDeep) && (
+              <p className="text-[10px] text-gray-400 mt-2 pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                💡 跑完后进入任意 asset 详情页的「🧬 深度分析」tab，可查看 15 个 deliverable + ⑬ 争议结构化卡片 + 专家调用痕迹 (带策略标签)。
+              </p>
             )}
           </div>
         </div>

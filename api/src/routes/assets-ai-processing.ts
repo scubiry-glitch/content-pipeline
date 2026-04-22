@@ -44,6 +44,12 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       sources?: string[];
       /** v7.4: 深度分析开关 — 勾选后调用 ContentLibraryEngine 15 deliverable + 专家库 EMM */
       enableDeepAnalysis?: boolean;
+      /** Round 2: 专家应用策略配置 */
+      expertStrategy?: {
+        preset?: 'lite' | 'standard' | 'max' | 'custom';
+        default?: string;
+        perDeliverable?: Record<string, string>;
+      };
       config?: {
         batchSize?: number;
         qualityThreshold?: number;
@@ -75,11 +81,17 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       }
 
       // 更新配置
-      if (body.config || body.enableDeepAnalysis !== undefined || body.includeEmbedding !== undefined) {
+      if (
+        body.config ||
+        body.enableDeepAnalysis !== undefined ||
+        body.includeEmbedding !== undefined ||
+        body.expertStrategy !== undefined
+      ) {
         assetsBatchProcessor.updateConfig({
           ...(body.config || {}),
           enableVectorization: body.includeEmbedding !== false,
           enableDeepAnalysis: body.enableDeepAnalysis === true,
+          expertStrategy: body.expertStrategy,
         });
       }
 

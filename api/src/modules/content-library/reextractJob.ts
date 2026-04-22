@@ -18,6 +18,8 @@ export interface ReextractJobState {
   completedAt?: string;
   currentAssetId?: string;
   errorMessages: string[];
+  /** Round 2: 深度模式标记 */
+  deep?: boolean;
 }
 
 export interface ReextractJobOptions {
@@ -28,6 +30,14 @@ export interface ReextractJobOptions {
   source?: 'assets' | 'rss';
   /** v7.3 调整1: 利用 Step 2 质量分过滤低质素材 */
   minQualityScore?: number;
+  /** Round 2: 深度模式 — 走第 3 段 CDT 专家审定 */
+  enableDeep?: boolean;
+  /** Round 2: 专家应用策略配置 */
+  expertStrategy?: {
+    preset?: 'lite' | 'standard' | 'max' | 'custom';
+    default?: string;
+    perDeliverable?: Record<string, string>;
+  };
 }
 
 type SSEListener = (event: string, data: any) => void;
@@ -75,6 +85,7 @@ export function startReextractJob(
     tokenEstimate: 0,
     startedAt: new Date().toISOString(),
     errorMessages: [],
+    deep: options.enableDeep === true,
   };
   jobs.set(jobId, state);
 
@@ -89,7 +100,7 @@ export function startReextractJob(
       });
       state.total = dryResult.processed + dryResult.skipped;
       state.tokenEstimate = dryResult.tokenEstimate;
-      emit(jobId, 'total', { total: state.total, tokenEstimate: state.tokenEstimate });
+      emit(jobId, 'total', { total: state.total, tokenEstimate: state.tokenEstimate, deep: state.deep });
 
       // 逐个处理 (用 limit=1 循环，每次处理 1 个 asset)
       let remaining = options.limit || 200;
