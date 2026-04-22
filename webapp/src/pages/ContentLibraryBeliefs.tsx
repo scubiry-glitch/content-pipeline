@@ -63,6 +63,61 @@ function stateMeta(state: string) {
   return STATE_META[state] || { dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-800 border-gray-300', text: 'text-gray-700', label: state };
 }
 
+function normalizeText(v?: string | null): string {
+  return String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeDate(date?: string): string {
+  if (!date) return '';
+  const datePartMatch = /^(\d{4}-\d{2}-\d{2})/.exec(date);
+  if (datePartMatch) return datePartMatch[1];
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return normalizeText(date);
+  return d.toISOString().slice(0, 10);
+}
+
+function sourceSignature(src: SourceItem): string {
+  return [
+    normalizeText(src.id),
+    normalizeText(src.assetId),
+    normalizeText(src.assetUrl),
+    normalizeText(src.assetTitle),
+    normalizeText(src.label),
+    normalizeText(src.passage),
+  ].join('||');
+}
+
+function dedupeSources(sources: SourceItem[]): SourceItem[] {
+  const seen = new Set<string>();
+  const deduped: SourceItem[] = [];
+  for (const src of sources || []) {
+    const sig = sourceSignature(src);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    deduped.push(src);
+  }
+  return deduped;
+}
+
+function dedupeTimelineEntries(entries: TimelineEntry[]): TimelineEntry[] {
+  const seen = new Set<string>();
+  const deduped: TimelineEntry[] = [];
+  for (const entry of entries || []) {
+    const uniqueSources = dedupeSources(Array.isArray(entry.sources) ? entry.sources : []);
+    const sourcesSig = uniqueSources.map(sourceSignature).sort().join('###');
+    const sig = [
+      normalizeDate(entry.date),
+      normalizeText(entry.state),
+      normalizeText(entry.reason),
+      sourcesSig,
+    ].join('@@@');
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    deduped.push({ ...entry, sources: uniqueSources });
+  }
+  return deduped;
+}
+
 const SEVERITY_STYLE: Record<PatternSeverity, { wrap: string; tag: string; icon: string }> = {
   alert:  { wrap: 'bg-red-50 border-red-300 dark:bg-red-900/20 dark:border-red-700',      tag: 'bg-red-500 text-white',    icon: '⚠' },
   notice: { wrap: 'bg-yellow-50 border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700', tag: 'bg-yellow-500 text-white', icon: '◈' },
@@ -108,7 +163,8 @@ export function ContentLibraryBeliefs() {
       const res = await fetch(`${API_BASE}${endpoint}?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: BeliefTimeline = await res.json();
-      setTimeline(Array.isArray(data.timeline) ? data.timeline : []);
+      const rawTimeline = Array.isArray(data.timeline) ? data.timeline : [];
+      setTimeline(dedupeTimelineEntries(rawTimeline));
       setPatterns(Array.isArray(data.patterns) ? data.patterns : []);
       setCurrentConfidence(data.currentConfidence);
       setBeliefZepQueried(true);

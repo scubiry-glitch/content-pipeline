@@ -24,6 +24,9 @@ export function AssetDetail() {
   const [step3Status, setStep3Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [step4Status, setStep4Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [step5Status, setStep5Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
+  const [step3Result, setStep3Result] = useState<any>(null);
+  const [step4State, setStep4State] = useState<any>(null);
+  const [step5State, setStep5State] = useState<any>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [deepRunning, setDeepRunning] = useState(false);
   const [deepProgress, setDeepProgress] = useState<string>('');
@@ -197,8 +200,14 @@ export function AssetDetail() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+      setStep3Result(data);
       setPipelineLog(`Step 3 完成：${JSON.stringify(data).slice(0, 300)}`);
       setStep3Status('success');
+      // Step3 产出的是事实层，自动触发一次深度分析把新事实同步到本页可视化
+      if (!deepRunning) {
+        setPipelineLog('Step 3 完成，正在自动触发重新分析...');
+        await triggerDeepAnalysis();
+      }
     } catch (err) {
       setPipelineLog(`Step 3 失败：${(err as Error).message}`);
       setStep3Status('failed');
@@ -274,6 +283,7 @@ export function AssetDetail() {
         if (!res.ok) return;
         const state = await res.json();
         if (stopped || !state) return;
+        setStep4State(state);
         const status = state.status || 'unknown';
         const total = Number(state.total ?? 0);
         const done = Number(state.synced ?? 0) + Number(state.skipped ?? 0) + Number(state.errors ?? 0);
@@ -308,6 +318,7 @@ export function AssetDetail() {
         if (!res.ok) return;
         const state = await res.json();
         if (stopped || !state) return;
+        setStep5State(state);
         const status = state.status || 'unknown';
         const total = Number(state.total ?? 0);
         const done = Number(state.processed ?? 0);
@@ -803,6 +814,37 @@ export function AssetDetail() {
                     </pre>
                   ) : null}
                 </Section>
+
+                {(step3Result || step4State || step5State) && (
+                  <Section title="📦 手动流水线产物预览">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {step3Result && (
+                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Step3 两段式事实提取</div>
+                          <div style={{ fontSize: 12, color: '#334155' }}>
+                            处理 {step3Result.processed ?? 0} 条，新增事实 {step3Result.newFacts ?? 0}，更新事实 {step3Result.updatedFacts ?? 0}，跳过 {step3Result.skipped ?? 0}，错误 {step3Result.errors ?? 0}
+                          </div>
+                        </div>
+                      )}
+                      {step4State && (
+                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Step4 知识图谱 / Zep 增强</div>
+                          <div style={{ fontSize: 12, color: '#334155' }}>
+                            状态 {step4State.status || 'unknown'}，同步 {step4State.synced ?? 0}/{step4State.total ?? 0}，跳过 {step4State.skipped ?? 0}，错误 {step4State.errors ?? 0}
+                          </div>
+                        </div>
+                      )}
+                      {step5State && (
+                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Step5 AI 产出物预生成</div>
+                          <div style={{ fontSize: 12, color: '#334155' }}>
+                            状态 {step5State.status || 'unknown'}，完成 {step5State.processed ?? 0}/{step5State.total ?? 0}，成功 {step5State.success ?? 0}，失败 {step5State.failed ?? 0}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Section>
+                )}
 
                 {/* 关键事实 */}
                 <DeliverableSection num="⑤" title="关键事实" data={deepAnalysis.keyFacts} />

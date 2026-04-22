@@ -34,9 +34,79 @@ interface Draft extends SearchResult {
 
 function isoToInput(iso?: string): string {
   if (!iso) return '';
+  // 优先保留原始日期部分，避免时区换算导致日期偏移
+  const datePartMatch = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
+  if (datePartMatch) return datePartMatch[1];
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
+}
+
+function inputDateToIso(dateInput?: string): string | undefined {
+  if (!dateInput) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    // 以 UTC 零点持久化，保证“看到的日期”与“写入的日期”一致
+    return `${dateInput}T00:00:00.000Z`;
+  }
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+function normalizeDetectedDate(y: string, m: string, d: string): string | null {
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (year < 1990 || year > 2100) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function detectResultDate(result: SearchResult): string {
+  const fromPublishedAt = isoToInput(result.publishedAt);
+  if (fromPublishedAt) return fromPublishedAt;
+
+  const text = [result.snippet, result.title, result.url].filter(Boolean).join(' ');
+  const patterns = [
+    /(?:19|20)\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?/g,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = text.match(pattern) || [];
+    for (const raw of matches) {
+      const nums = raw.match(/\d+/g);
+      if (!nums || nums.length < 3) continue;
+      const normalized = normalizeDetectedDate(nums[0], nums[1], nums[2]);
+      if (normalized) return normalized;
+    }
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+function detectTrendValue(result: SearchResult): string {
+  const text = [result.title, result.snippet].filter(Boolean).join(' ');
+  if (!text) return '';
+
+  // 优先抓“更像指标取值”的格式（百分比/金额/人数/倍数）
+  const patterns = [
+    /\d+(?:\.\d+)?\s*%/,
+    /(?:约|近|超|超过|达|达到|突破)?\s*\d+(?:\.\d+)?\s*(?:万亿|千亿|百亿|十亿|亿元|亿元人民币|亿|千万|百万|万|元|美元|US\$|\$)/i,
+    /(?:约|近|超|超过|达|达到|突破)?\s*\d+(?:\.\d+)?\s*(?:万人|人次|万人次|亿人|人)/,
+    /\d+(?:\.\d+)?\s*(?:倍|x|X)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[0]) {
+      return match[0].replace(/\s+/g, '').trim();
+    }
+  }
+
+  // 兜底：取第一个纯数字（含小数）
+  const fallback = text.match(/\d+(?:\.\d+)?/);
+  return fallback?.[0] || '';
 }
 
 export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppended, apiBase }: Props) {
@@ -74,8 +144,8 @@ export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppend
       setDrafts(results.map((r) => ({
         ...r,
         selected: false,
-        editableDate: isoToInput(r.publishedAt) || new Date().toISOString().slice(0, 10),
-        editableValue: '',
+        editableDate: detectResultDate(r),
+        editableValue: mode === 'trend' ? detectTrendValue(r) : '',
       })));
     } catch (e: any) {
       setError(e?.message || '搜索失败');
@@ -86,6 +156,13 @@ export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppend
 
   const toggle = (i: number) => {
     setDrafts(d => d.map((x, idx) => idx === i ? { ...x, selected: !x.selected } : x));
+  };
+
+  const toggleAll = () => {
+    setDrafts((prev) => {
+      const shouldSelectAll = prev.some((item) => !item.selected);
+      return prev.map((item) => ({ ...item, selected: shouldSelectAll }));
+    });
   };
 
   const updateField = (i: number, key: 'editableDate' | 'editableValue', v: string) => {
@@ -113,7 +190,7 @@ export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppend
           title: p.title,
           snippet: p.snippet,
           url: p.url,
-          publishedAt: p.editableDate ? new Date(p.editableDate).toISOString() : undefined,
+          publishedAt: inputDateToIso(p.editableDate),
           value: mode === 'trend' ? p.editableValue : undefined,
           source: p.source,
         })),
@@ -138,6 +215,7 @@ export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppend
   };
 
   const selectedCount = drafts.filter(d => d.selected).length;
+  const allSelected = drafts.length > 0 && selectedCount === drafts.length;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -194,6 +272,17 @@ export function SearchSuggestPanel({ mode, subject, predicate, onClose, onAppend
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded">{error}</div>
+          )}
+          {!loading && drafts.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>共 {drafts.length} 条搜索结果</span>
+              <button
+                onClick={toggleAll}
+                className="text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                {allSelected ? '取消全选' : '全选'}
+              </button>
+            </div>
           )}
           {!loading && drafts.length === 0 && !error && (
             <div className="text-center text-gray-400 py-12 text-sm">
