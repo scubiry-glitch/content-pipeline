@@ -1250,6 +1250,7 @@ export class ContentLibraryEngine {
 
   /** ⑩ 有价值的认知 — 先读缓存，命中直接返回；未命中调用 LLM 并写缓存 */
   async synthesizeInsights(options?: {
+    assetId?: string;
     subjects?: string[];
     domain?: string;
     taxonomy_code?: string;
@@ -1258,7 +1259,9 @@ export class ContentLibraryEngine {
   }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string; error?: string; factsUsed?: number; fromCache?: boolean }> {
     // 构建 cache_key
     let cacheKey: string;
-    if (options?.subjects && options.subjects.length === 1) {
+    if (options?.assetId) {
+      cacheKey = `asset:${options.assetId}`;
+    } else if (options?.subjects && options.subjects.length === 1) {
       cacheKey = `entity:${options.subjects[0]}`;
     } else if (!options?.subjects?.length && options?.domain) {
       cacheKey = `domain:${options.domain}`;
@@ -1301,7 +1304,7 @@ export class ContentLibraryEngine {
         `, [
           cacheKey,
           cacheKey.startsWith('entity:') ? 'entity' : cacheKey.startsWith('domain:') ? 'domain' : 'global',
-          options?.subjects?.[0] ?? options?.domain ?? null,
+          options?.assetId ?? options?.subjects?.[0] ?? options?.domain ?? null,
           JSON.stringify(result.insights),
           result.summary || '',
           result.factsUsed || 0,
@@ -1314,6 +1317,7 @@ export class ContentLibraryEngine {
 
   /** ⑩ 内部：直接调 LLM，不经过缓存（供 synthesisJob 调用） */
   async synthesizeInsightsRaw(options?: {
+    assetId?: string;
     subjects?: string[];
     domain?: string;
     taxonomy_code?: string;
@@ -1331,6 +1335,10 @@ export class ContentLibraryEngine {
       if (options?.subjects && options.subjects.length > 0) {
         params.push(options.subjects);
         conditions.push(`subject = ANY($${params.length})`);
+      }
+      if (options?.assetId) {
+        params.push(options.assetId);
+        conditions.push(`asset_id = $${params.length}`);
       }
       if (options?.domain) {
         params.push(options.domain);
@@ -1662,6 +1670,7 @@ export class ContentLibraryEngine {
 
   /** ⑫ 专家共识图 (集成专家库) */
   async getExpertConsensus(options?: {
+    assetId?: string;
     topic?: string;
     taxonomy_code?: string;
     domain?: string;
@@ -1672,7 +1681,10 @@ export class ContentLibraryEngine {
     // 首先尝试从 content_facts 中聚合共识
     const consensusParams: any[] = [];
     let domainCond = '';
-    if (options?.taxonomy_code) {
+    if (options?.assetId) {
+      consensusParams.push(options.assetId);
+      domainCond = `AND asset_id = $${consensusParams.length}`;
+    } else if (options?.taxonomy_code) {
       const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
       consensusParams.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
       domainCond = `AND context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${consensusParams.length}`;
@@ -1705,7 +1717,10 @@ export class ContentLibraryEngine {
     // 查找分歧（相同主体和谓词，但对象不同）
     const divParams: any[] = [];
     let divDomainCond = '';
-    if (options?.taxonomy_code) {
+    if (options?.assetId) {
+      divParams.push(options.assetId);
+      divDomainCond = `AND cf1.asset_id = $${divParams.length} AND cf2.asset_id = $${divParams.length}`;
+    } else if (options?.taxonomy_code) {
       const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
       divParams.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
       divDomainCond = `AND cf1.context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${divParams.length}`;

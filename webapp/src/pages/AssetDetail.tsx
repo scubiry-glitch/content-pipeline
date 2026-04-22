@@ -21,9 +21,15 @@ export function AssetDetail() {
   const [pipelineLog, setPipelineLog] = useState<string>('');
   const [step4JobId, setStep4JobId] = useState<string | null>(null);
   const [step5JobId, setStep5JobId] = useState<string | null>(null);
+  const [step3Status, setStep3Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
+  const [step4Status, setStep4Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
+  const [step5Status, setStep5Status] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [deepLoading, setDeepLoading] = useState(false);
   const [deepRunning, setDeepRunning] = useState(false);
   const [deepProgress, setDeepProgress] = useState<string>('');
+  const [deepProgressPct, setDeepProgressPct] = useState(0);
+  const [step4ProgressPct, setStep4ProgressPct] = useState(0);
+  const [step5ProgressPct, setStep5ProgressPct] = useState(0);
 
   useEffect(() => {
     if (id) {
@@ -117,6 +123,7 @@ export function AssetDetail() {
 
   const triggerDeepAnalysis = async () => {
     setDeepRunning(true);
+    setDeepProgressPct(3);
     setDeepProgress('正在启动深度分析…');
     try {
       const res = await fetch('/api/v1/ai/assets/batch-process', {
@@ -127,8 +134,12 @@ export function AssetDetail() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       // 轮询直到深度分析结果写入
       const deadline = Date.now() + 10 * 60 * 1000;
+      const startedAt = Date.now();
       const poll = setInterval(async () => {
         setDeepProgress(`分析中… ${Math.round((Date.now() % 60000) / 1000)}s`);
+        const elapsed = Date.now() - startedAt;
+        const pct = Math.min(95, Math.max(5, Math.round((elapsed / (10 * 60 * 1000)) * 100)));
+        setDeepProgressPct(pct);
         const r = await fetch(`/api/v1/ai/assets/assets/${id}/deep-analysis`);
         if (r.ok) {
           const data = await r.json();
@@ -137,17 +148,20 @@ export function AssetDetail() {
             setDeepAnalysis(data);
             setDeepRunning(false);
             setDeepProgress('');
+            setDeepProgressPct(100);
           }
         }
         if (Date.now() > deadline) {
           clearInterval(poll);
           setDeepRunning(false);
           setDeepProgress('超时，请稍后刷新');
+          setDeepProgressPct(100);
         }
       }, 5000);
     } catch (err) {
       setDeepProgress(`启动失败：${(err as Error).message}`);
       setDeepRunning(false);
+      setDeepProgressPct(100);
     }
   };
 
@@ -167,6 +181,7 @@ export function AssetDetail() {
 
   const runStep3Reextract = async () => {
     if (!id) return;
+    setStep3Status('running');
     setPipelineBusy('step3');
     setPipelineLog('Step 3 执行中：两段式事实提取...');
     try {
@@ -183,14 +198,18 @@ export function AssetDetail() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
       setPipelineLog(`Step 3 完成：${JSON.stringify(data).slice(0, 300)}`);
+      setStep3Status('success');
     } catch (err) {
       setPipelineLog(`Step 3 失败：${(err as Error).message}`);
+      setStep3Status('failed');
     } finally {
       setPipelineBusy(null);
     }
   };
 
   const runStep4ZepSync = async () => {
+    setStep4Status('running');
+    setStep4ProgressPct(3);
     setPipelineBusy('step4');
     setPipelineLog('Step 4 执行中：知识图谱 / Zep 同步...');
     try {
@@ -210,12 +229,16 @@ export function AssetDetail() {
       setPipelineLog(`Step 4 已启动：jobId=${jobId || 'unknown'}（开始轮询进度）`);
     } catch (err) {
       setPipelineLog(`Step 4 失败：${(err as Error).message}`);
+      setStep4Status('failed');
+      setStep4ProgressPct(100);
     } finally {
       setPipelineBusy(null);
     }
   };
 
   const runStep5Pregenerate = async () => {
+    setStep5Status('running');
+    setStep5ProgressPct(3);
     setPipelineBusy('step5');
     setPipelineLog('Step 5 执行中：AI 产出物预生成...');
     try {
@@ -235,6 +258,8 @@ export function AssetDetail() {
       setPipelineLog(`Step 5 已启动：jobId=${jobId || 'unknown'}（开始轮询进度）`);
     } catch (err) {
       setPipelineLog(`Step 5 失败：${(err as Error).message}`);
+      setStep5Status('failed');
+      setStep5ProgressPct(100);
     } finally {
       setPipelineBusy(null);
     }
@@ -250,12 +275,18 @@ export function AssetDetail() {
         const state = await res.json();
         if (stopped || !state) return;
         const status = state.status || 'unknown';
+        const total = Number(state.total ?? 0);
+        const done = Number(state.synced ?? 0) + Number(state.skipped ?? 0) + Number(state.errors ?? 0);
+        const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (status === 'running' ? 10 : 100);
+        setStep4ProgressPct(pct);
         setPipelineLog(
           `Step 4 进度：status=${status} synced=${state.synced ?? 0}/${state.total ?? 0} skipped=${state.skipped ?? 0} errors=${state.errors ?? 0}`
         );
         if (status !== 'running') {
           clearInterval(timer);
           setStep4JobId(null);
+          setStep4Status(status === 'completed' ? 'success' : 'failed');
+          setStep4ProgressPct(100);
           setPipelineBusy((prev) => (prev === 'step4' ? null : prev));
         }
       } catch {
@@ -278,12 +309,18 @@ export function AssetDetail() {
         const state = await res.json();
         if (stopped || !state) return;
         const status = state.status || 'unknown';
+        const total = Number(state.total ?? 0);
+        const done = Number(state.processed ?? 0);
+        const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (status === 'running' ? 10 : 100);
+        setStep5ProgressPct(pct);
         setPipelineLog(
           `Step 5 进度：status=${status} done=${state.processed ?? 0}/${state.total ?? 0} success=${state.success ?? 0} failed=${state.failed ?? 0}`
         );
         if (status !== 'running') {
           clearInterval(timer);
           setStep5JobId(null);
+          setStep5Status(status === 'completed' ? 'success' : 'failed');
+          setStep5ProgressPct(100);
           setPipelineBusy((prev) => (prev === 'step5' ? null : prev));
         }
       } catch {
@@ -314,6 +351,24 @@ export function AssetDetail() {
     };
     return map[type] || type;
   };
+
+  const hasFailed = step3Status === 'failed' || step4Status === 'failed' || step5Status === 'failed' || deepProgress.startsWith('启动失败') || deepProgress.startsWith('超时');
+  const hasRunning = deepRunning || step3Status === 'running' || step4Status === 'running' || step5Status === 'running';
+  const overallStatus: 'running' | 'success' | 'failed' | 'idle' = hasRunning ? 'running' : hasFailed ? 'failed' : deepAnalysis ? 'success' : 'idle';
+  const overallStatusText = overallStatus === 'running'
+    ? '生成中'
+    : overallStatus === 'success'
+      ? '成功'
+      : overallStatus === 'failed'
+        ? '失败'
+        : '待开始';
+  const overallProgressPct = Math.max(
+    deepRunning ? deepProgressPct : deepAnalysis ? 100 : 0,
+    step4Status === 'running' || step4Status === 'success' || step4Status === 'failed' ? step4ProgressPct : 0,
+    step5Status === 'running' || step5Status === 'success' || step5Status === 'failed' ? step5ProgressPct : 0,
+    step3Status === 'success' || step3Status === 'failed' ? 100 : step3Status === 'running' ? 50 : 0,
+  );
+  const statusColor = overallStatus === 'running' ? '#f59e0b' : overallStatus === 'success' ? '#16a34a' : overallStatus === 'failed' ? '#dc2626' : '#64748b';
 
   if (loading) {
     return <div className="asset-detail loading">加载中...</div>;
@@ -670,6 +725,19 @@ export function AssetDetail() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+                      <strong style={{ fontSize: 13 }}>全局状态：{overallStatusText}</strong>
+                    </div>
+                    <span style={{ color: '#64748b', fontSize: 12 }}>{overallProgressPct}%</span>
+                  </div>
+                  <div style={{ height: 8, width: '100%', background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ width: `${overallProgressPct}%`, height: '100%', background: statusColor, transition: 'width 0.25s ease' }} />
+                  </div>
+                </div>
+
                 {/* 操作栏 */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#999', fontSize: 12 }}>

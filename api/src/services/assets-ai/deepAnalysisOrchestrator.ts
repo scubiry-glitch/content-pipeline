@@ -103,6 +103,7 @@ export async function runDeepAnalysis(
   // Step 4 — Serial block C: 重 LLM 调用
   const insights = await safely('⑩insights', () =>
     contentEngine.synthesizeInsights({
+      assetId: asset.id,
       subjects: candidateSubjects.length > 0 ? candidateSubjects.slice(0, 3) : [subjectForFacts],
       domain: industry || undefined,
       taxonomy_code: primaryTaxonomyCode,
@@ -111,7 +112,7 @@ export async function runDeepAnalysis(
   );
 
   const expertConsensus = await safely('⑫consensus', () =>
-    contentEngine.getExpertConsensus({ topic: primaryTheme, taxonomy_code: primaryTaxonomyCode, domain: industry, limit: 10 }),
+    contentEngine.getExpertConsensus({ assetId: asset.id, topic: primaryTheme, taxonomy_code: primaryTaxonomyCode, domain: industry, limit: 10 }),
   );
 
   // 如果有匹配到的专家，再让专家补一段"专家视角判断"，挂在 insights 上
