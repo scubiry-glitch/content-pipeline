@@ -36,6 +36,7 @@ import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
 import { rssRoutes } from './routes/rss.js';
+import { meetingNotesRoutes } from './routes/meetingNotes.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
 import { researchRoutes } from './routes/research.js';
@@ -151,6 +152,7 @@ async function main() {
   await fastify.register(assetRoutes, { prefix: '/api/v1/assets' });
   await fastify.register(outputRoutes, { prefix: '/api/v1/outputs' });
   await fastify.register(rssRoutes, { prefix: '/api/v1/quality' });
+  await fastify.register(meetingNotesRoutes, { prefix: '/api/v1/quality' });
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
