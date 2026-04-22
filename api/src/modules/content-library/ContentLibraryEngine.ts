@@ -1770,7 +1770,7 @@ export class ContentLibraryEngine {
     };
   }
 
-  /** ⑭ 观点演化 (BeliefTracker 时间线 + 组合模式) */
+  /** ⑭ 观点演化 (BeliefTracker 时间线 + 组合模式 + 完整来源) */
   async getBeliefEvolution(options?: {
     beliefId?: string;
     subject?: string;
@@ -1779,7 +1779,16 @@ export class ContentLibraryEngine {
     timeline: Array<{
       date: string;
       state: string;
-      sources: Array<{ id: string; label: string }>;
+      sources: Array<{
+        id: string;
+        label: string;
+        assetId?: string | null;
+        assetTitle?: string;
+        assetUrl?: string;
+        passage?: string;
+        domain?: string;
+        sourceHint?: string;
+      }>;
       reason?: string;
       confidence?: number;
       confidenceDelta?: number;
@@ -1803,25 +1812,39 @@ export class ContentLibraryEngine {
       options?.limit || 20,
     ]);
 
-    // 回退：如果 content_beliefs 没命中，从 content_facts 实时构建时间线
+    // 回退：如果 content_beliefs 没命中，从 content_facts 实时构建时间线（直接 JOIN assets）
     if (result.rows.length === 0 && searchTerm) {
       const factsResult = await this.deps.db.query(
-        `SELECT id, created_at, context->>'source' AS source, confidence, predicate, object
-         FROM content_facts
-         WHERE subject = $1 AND is_current = true
-         ORDER BY created_at ASC LIMIT $2`,
+        `SELECT
+           cf.id, cf.created_at, cf.confidence, cf.predicate, cf.object,
+           cf.asset_id, cf.context,
+           a.title AS asset_title, a.source AS asset_source, a.content AS asset_content
+         FROM content_facts cf
+         LEFT JOIN assets a ON cf.asset_id::text = a.id::text
+         WHERE cf.subject = $1 AND cf.is_current = true
+         ORDER BY cf.created_at ASC LIMIT $2`,
         [searchTerm, options?.limit || 20],
       );
       const timeline = factsResult.rows.map((row: any, idx: number, arr: any[]) => {
         const conf = Number(row.confidence);
         const prevConf = idx > 0 ? Number(arr[idx - 1].confidence) : undefined;
+        const ctx = row.context || {};
+        const passage = ctx.passage || ctx.snippet || (row.asset_content ? String(row.asset_content).slice(0, 400) : undefined);
+        const label = [row.predicate, row.object].filter(Boolean).join('=');
         return {
           date: new Date(row.created_at).toISOString(),
           state: conf >= 0.85 ? 'confirmed' : conf >= 0.5 ? 'evolving' : 'disputed',
-          sources: row.source
-            ? [{ id: row.id, label: `${row.predicate}=${row.object}` }]
-            : [],
-          reason: row.source ? `来自 ${row.source}` : undefined,
+          sources: [{
+            id: row.id,
+            label: label.length > 40 ? label.slice(0, 38) + '…' : label,
+            assetId: row.asset_id || null,
+            assetTitle: row.asset_title || ctx.title || undefined,
+            assetUrl: ctx.source_url || row.asset_source || undefined,
+            passage: passage ? String(passage).slice(0, 400) : undefined,
+            domain: ctx.domain || undefined,
+            sourceHint: ctx.source || undefined,
+          }],
+          reason: ctx.source ? `来自 ${ctx.source}` : undefined,
           confidence: conf,
           confidenceDelta: prevConf === undefined ? undefined : conf - prevConf,
         };
@@ -1833,30 +1856,28 @@ export class ContentLibraryEngine {
       };
     }
 
-    // 优先使用首条匹配的 belief 的 history 字段（信息最全）
     const primary = result.rows[0];
     const history: any[] = Array.isArray(primary?.history) ? primary.history : [];
 
-    // 汇总所有匹配 belief 的 supporting_facts，去重后解析为可读片段
+    // 汇总所有匹配 belief 的 supporting_facts，去重后解析为完整来源
     const allSupportIds = new Set<string>();
     for (const row of result.rows) {
       if (Array.isArray(row.supporting_facts)) {
         for (const id of row.supporting_facts) allSupportIds.add(id);
       }
     }
-    const factLabelById = await this.resolveFactLabels(Array.from(allSupportIds));
+    const factSources = await this.resolveFactSources(Array.from(allSupportIds));
 
     let timeline: Array<{
       date: string;
       state: string;
-      sources: Array<{ id: string; label: string }>;
+      sources: Array<any>;
       reason?: string;
       confidence?: number;
       confidenceDelta?: number;
     }>;
 
     if (history.length > 0) {
-      // 走 history 路径 — 每条 history entry 成为一个时间线节点
       const deltas = buildConfidenceDeltas(
         history.map(h => ({
           stance: h.stance,
@@ -1868,25 +1889,24 @@ export class ContentLibraryEngine {
       const sortedHistory = [...history].sort(
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
       );
-      const supportingLabels = (Array.isArray(primary.supporting_facts) ? primary.supporting_facts : [])
-        .map((id: string) => ({ id, label: factLabelById.get(id) || id }))
-        .slice(0, 3);
+      const supportingSources = (Array.isArray(primary.supporting_facts) ? primary.supporting_facts : [])
+        .map((id: string) => factSources.get(id) || { id, label: id })
+        .slice(0, 5);
       timeline = sortedHistory.map((h, idx) => ({
         date: new Date(h.timestamp).toISOString(),
         state: h.stance || 'unknown',
-        sources: idx === sortedHistory.length - 1 ? supportingLabels : [],
+        sources: idx === sortedHistory.length - 1 ? supportingSources : [],
         reason: h.reason || undefined,
         confidence: Number(h.confidence),
         confidenceDelta: idx === 0 ? undefined : deltas[idx],
       }));
     } else {
-      // 回退：history 缺失时用 row-per-belief 模型
       timeline = result.rows.map(row => {
-        const ids = Array.isArray(row.supporting_facts) ? row.supporting_facts.slice(0, 3) : [];
+        const ids = Array.isArray(row.supporting_facts) ? row.supporting_facts.slice(0, 5) : [];
         return {
           date: new Date(row.last_updated).toISOString(),
           state: row.current_stance || 'unknown',
-          sources: ids.map((id: string) => ({ id, label: factLabelById.get(id) || id })),
+          sources: ids.map((id: string) => factSources.get(id) || { id, label: id }),
           confidence: row.confidence !== undefined ? Number(row.confidence) : undefined,
         };
       });
@@ -1913,24 +1933,157 @@ export class ContentLibraryEngine {
     };
   }
 
-  /** 把 fact UUID 解析为 "predicate=object" 人读片段 */
-  private async resolveFactLabels(ids: string[]): Promise<Map<string, string>> {
-    const out = new Map<string, string>();
+  /** 把 fact UUID 解析为完整来源信息（含 asset 标题、原文片段、URL） */
+  private async resolveFactSources(
+    ids: string[],
+  ): Promise<Map<string, {
+    id: string;
+    label: string;
+    assetId?: string | null;
+    assetTitle?: string;
+    assetUrl?: string;
+    passage?: string;
+    domain?: string;
+    sourceHint?: string;
+  }>> {
+    const out = new Map<string, any>();
     if (ids.length === 0) return out;
     try {
       const res = await this.deps.db.query(
-        `SELECT id, predicate, object FROM content_facts WHERE id = ANY($1::uuid[])`,
+        `SELECT
+           cf.id,
+           cf.predicate,
+           cf.object,
+           cf.asset_id,
+           cf.context,
+           a.title AS asset_title,
+           a.source AS asset_source,
+           a.content AS asset_content
+         FROM content_facts cf
+         LEFT JOIN assets a ON cf.asset_id::text = a.id::text
+         WHERE cf.id = ANY($1::uuid[])`,
         [ids],
       );
       for (const row of res.rows) {
         const label = [row.predicate, row.object].filter(Boolean).join('=');
-        out.set(row.id, label.length > 40 ? label.slice(0, 38) + '…' : label);
+        const ctx = row.context || {};
+        const passage = ctx.passage || ctx.snippet || (row.asset_content ? String(row.asset_content).slice(0, 400) : undefined);
+        out.set(row.id, {
+          id: row.id,
+          label: label.length > 40 ? label.slice(0, 38) + '…' : label,
+          assetId: row.asset_id || null,
+          assetTitle: row.asset_title || ctx.title || undefined,
+          assetUrl: ctx.source_url || row.asset_source || undefined,
+          passage: passage ? String(passage).slice(0, 400) : undefined,
+          domain: ctx.domain || undefined,
+          sourceHint: ctx.source || undefined,
+        });
       }
     } catch (err) {
-      // 保底：解析失败就让调用方回退到原 UUID 显示
-      console.warn('[resolveFactLabels] failed:', err);
+      console.warn('[resolveFactSources] failed:', err);
     }
     return out;
+  }
+
+  /** (legacy) 兼容旧调用，返回 id → label */
+  private async resolveFactLabels(ids: string[]): Promise<Map<string, string>> {
+    const sources = await this.resolveFactSources(ids);
+    const out = new Map<string, string>();
+    for (const [id, s] of sources) out.set(id, s.label);
+    return out;
+  }
+
+  /**
+   * 从 TAVILY 搜索结果追加为 content_facts，用于观点演化 / 趋势信号的手动补全
+   * 每条 item 写一行 fact，asset_id 用 "tavily:<hash>" 前缀占位，原文信息存 context。
+   */
+  async appendFactsFromSearch(params: {
+    subject: string;
+    predicate: string;
+    items: Array<{
+      title?: string;
+      snippet?: string;
+      url: string;
+      publishedAt?: string;
+      value?: string;        // 趋势模式的取值
+      sourceHost?: string;
+    }>;
+    mode: 'belief' | 'trend';
+    domain?: string;
+  }): Promise<{ appendedCount: number; factIds: string[] }> {
+    const factIds: string[] = [];
+    const now = new Date();
+    for (const item of params.items) {
+      const objectText = (params.mode === 'trend' ? item.value : item.title) || item.snippet || item.url;
+      const when = item.publishedAt ? this.tryParseDate(item.publishedAt) : null;
+      const createdAt = when || now;
+      const host = item.sourceHost || (() => {
+        try { return new URL(item.url).hostname; } catch { return 'web'; }
+      })();
+      const assetIdMarker = `tavily:${this.shortHash(item.url)}`;
+      const context = {
+        source: host,
+        source_url: item.url,
+        title: item.title,
+        passage: item.snippet,
+        time: when ? when.toISOString() : undefined,
+        domain: params.domain,
+        from_search: true,
+      };
+      try {
+        const res = await this.deps.db.query(
+          `INSERT INTO content_facts (asset_id, subject, predicate, object, context, confidence, is_current, created_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, true, $7)
+           RETURNING id`,
+          [assetIdMarker, params.subject, params.predicate, objectText, JSON.stringify(context), 0.5, createdAt],
+        );
+        if (res.rows[0]?.id) factIds.push(res.rows[0].id);
+      } catch (err) {
+        console.warn('[appendFactsFromSearch] insert failed:', err);
+      }
+    }
+
+    // 若已有对应 belief 行，追加 supporting_facts + history 条目
+    if (params.mode === 'belief' && factIds.length > 0) {
+      try {
+        await this.deps.db.query(
+          `UPDATE content_beliefs
+           SET supporting_facts = (COALESCE(supporting_facts, '{}'::uuid[]) || $1::uuid[]),
+               history = COALESCE(history, '[]'::jsonb) || $2::jsonb,
+               last_updated = NOW()
+           WHERE proposition ILIKE $3 OR proposition ILIKE $4`,
+          [
+            factIds,
+            JSON.stringify([{
+              stance: 'evolving',
+              confidence: 0.5,
+              reason: `网络搜索补全 ${factIds.length} 条证据`,
+              timestamp: now.toISOString(),
+            }]),
+            params.subject,
+            `${params.subject}%`,
+          ],
+        );
+      } catch (err) {
+        console.warn('[appendFactsFromSearch] belief update failed:', err);
+      }
+    }
+
+    return { appendedCount: factIds.length, factIds };
+  }
+
+  private tryParseDate(raw: string): Date | null {
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private shortHash(s: string): string {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h).toString(36).slice(0, 10);
   }
 
   /**

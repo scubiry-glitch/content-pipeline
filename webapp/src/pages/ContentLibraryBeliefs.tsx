@@ -4,10 +4,20 @@
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
+import { SearchSuggestPanel } from '../components/SearchSuggestPanel';
 
 const API_BASE = '/api/v1/content-library';
 
-interface SourceItem { id: string; label: string; }
+interface SourceItem {
+  id: string;
+  label: string;
+  assetId?: string | null;
+  assetTitle?: string;
+  assetUrl?: string;
+  passage?: string;
+  domain?: string;
+  sourceHint?: string;
+}
 
 interface TimelineEntry {
   date: string;
@@ -72,6 +82,9 @@ export function ContentLibraryBeliefs() {
   const [zepTimeline, setZepTimeline] = useState<Array<{ fact: string; validAt?: string; invalidAt?: string }>>([]);
   const [zepLoading, setZepLoading] = useState(false);
   const [beliefZepQueried, setBeliefZepQueried] = useState(false);
+  const [expandedSource, setExpandedSource] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [appendBanner, setAppendBanner] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/dropdown/beliefs`)
@@ -165,14 +178,31 @@ export function ContentLibraryBeliefs() {
             />
           </div>
         </div>
-        <button
-          onClick={fetchTimeline}
-          disabled={loading || (!subject && !beliefId)}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          {loading ? '查询中...' : '查询演化脉络'}
-        </button>
+        <div className="mt-4 flex items-center gap-2 flex-wrap">
+          <button
+            onClick={fetchTimeline}
+            disabled={loading || (!subject && !beliefId)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {loading ? '查询中...' : '查询演化脉络'}
+          </button>
+          <button
+            onClick={() => setSearchOpen(true)}
+            disabled={!subject && !beliefId}
+            className="px-4 py-2 border border-indigo-500 text-indigo-600 dark:text-indigo-300 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+            title="通过 TAVILY 搜索网络证据，勾选后作为新的时间点写入"
+          >
+            🔍 搜索补全
+          </button>
+        </div>
       </div>
+
+      {appendBanner && (
+        <div className="bg-green-50 border border-green-300 text-green-800 text-sm px-4 py-2 rounded mb-4 flex items-center justify-between">
+          <span>{appendBanner}</span>
+          <button onClick={() => setAppendBanner(null)} className="text-green-600 hover:text-green-800">×</button>
+        </div>
+      )}
 
       {/* 错误提示 */}
       {error && (
@@ -260,19 +290,72 @@ export function ContentLibraryBeliefs() {
                 )}
 
                 {entry.sources.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">依据：</p>
-                    <div className="flex flex-wrap gap-1">
-                      {entry.sources.map((src, i) => (
-                        <span
-                          key={i}
-                          title={src.id}
-                          className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded"
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">依据（{entry.sources.length} 项）：</p>
+                    {entry.sources.map((src, i) => {
+                      const key = `${idx}-${i}-${src.id}`;
+                      const isOpen = expandedSource === key;
+                      const hasDetail = src.assetTitle || src.passage || src.assetUrl;
+                      return (
+                        <div
+                          key={key}
+                          className="border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800/40"
                         >
-                          {src.label}
-                        </span>
-                      ))}
-                    </div>
+                          <button
+                            onClick={() => setExpandedSource(isOpen ? null : key)}
+                            className="w-full text-left px-3 py-2 flex items-start justify-between gap-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                                {src.assetTitle || src.label}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                                {src.sourceHint && <span>{src.sourceHint}</span>}
+                                {src.domain && <span className="px-1.5 bg-gray-100 dark:bg-gray-700 rounded">{src.domain}</span>}
+                                <span className="text-gray-400">{src.label}</span>
+                              </div>
+                            </div>
+                            {hasDetail && (
+                              <span className="text-xs text-indigo-600 dark:text-indigo-400 shrink-0">
+                                {isOpen ? '收起' : '展开'}
+                              </span>
+                            )}
+                          </button>
+                          {isOpen && hasDetail && (
+                            <div className="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-700">
+                              {src.passage && (
+                                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                  {src.passage}
+                                </p>
+                              )}
+                              <div className="mt-2 flex items-center gap-3 text-xs">
+                                {src.assetUrl && (
+                                  <a
+                                    href={src.assetUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                                  >
+                                    打开原文 ↗
+                                  </a>
+                                )}
+                                {src.assetId && !String(src.assetId).startsWith('tavily:') && (
+                                  <a
+                                    href={`/assets/${src.assetId}`}
+                                    className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                  >
+                                    素材详情
+                                  </a>
+                                )}
+                                <span className="text-gray-400 font-mono" title={src.id}>
+                                  fact {String(src.id).slice(0, 8)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -308,6 +391,21 @@ export function ContentLibraryBeliefs() {
             {currentConfidence !== undefined && <> · 当前置信 <span className="font-semibold">{currentConfidence.toFixed(2)}</span></>}
           </p>
         </div>
+      )}
+
+      {searchOpen && (
+        <SearchSuggestPanel
+          mode="belief"
+          subject={subject || beliefId}
+          predicate="web_mention"
+          apiBase={API_BASE}
+          onClose={() => setSearchOpen(false)}
+          onAppended={(count) => {
+            setAppendBanner(`已写入 ${count} 条证据，刷新时间线…`);
+            fetchTimeline();
+            setTimeout(() => setAppendBanner(null), 4000);
+          }}
+        />
       )}
     </div>
   );

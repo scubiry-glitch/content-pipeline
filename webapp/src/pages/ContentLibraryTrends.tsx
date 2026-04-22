@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 import { Sparkline } from '../components/Sparkline';
+import { SearchSuggestPanel } from '../components/SearchSuggestPanel';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -39,6 +40,9 @@ export function ContentLibraryTrends() {
   const [loading, setLoading] = useState(false);
   const [empty, setEmpty] = useState(false);
   const [entityOptions, setEntityOptions] = useState<EntityOption[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMetric, setSearchMetric] = useState('');
+  const [appendBanner, setAppendBanner] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/dropdown/entities?limit=50`)
@@ -69,17 +73,32 @@ export function ContentLibraryTrends() {
       <p className="text-gray-500 dark:text-gray-400 mb-6">定量：指标数值的速率与方向</p>
       <ProductMetaBar productKey="trends" />
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-6 flex-wrap">
         <input
           type="text" value={entityId} onChange={e => setEntityId(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && loadTrend(entityId)}
-          placeholder="输入实体名称..." className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          placeholder="输入实体名称..." className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
         <button onClick={() => loadTrend(entityId)} disabled={!entityId || loading}
           className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
           查询趋势
         </button>
+        <button
+          onClick={() => { setSearchMetric(''); setSearchOpen(true); }}
+          disabled={!entityId}
+          className="px-4 py-2 border border-indigo-500 text-indigo-600 dark:text-indigo-300 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 disabled:opacity-40 text-sm"
+          title="通过 TAVILY 搜索补充该实体的数值事实"
+        >
+          🔍 搜索补全
+        </button>
       </div>
+
+      {appendBanner && (
+        <div className="bg-green-50 border border-green-300 text-green-800 text-sm px-4 py-2 rounded mb-4 flex items-center justify-between">
+          <span>{appendBanner}</span>
+          <button onClick={() => setAppendBanner(null)} className="text-green-600 hover:text-green-800">×</button>
+        </div>
+      )}
 
       {entityOptions.length > 0 && (
         <div className="mb-6 flex gap-3 items-center">
@@ -152,20 +171,41 @@ export function ContentLibraryTrends() {
                 )}
 
                 {t.dataPoints && t.dataPoints.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-xs text-gray-500 mb-1">
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-xs text-gray-500">
                       {t.dataPoints.length} 个数据点
                       {(() => {
                         const sources = Array.from(new Set(t.dataPoints.map(p => p.source).filter(s => s && s !== 'unknown')));
                         return sources.length > 0 ? ` · 来自 ${sources.length} 个信息源` : '';
                       })()}
                     </p>
+                    <button
+                      onClick={() => { setSearchMetric(t.metric); setSearchOpen(true); }}
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                    >
+                      🔍 补充此指标的数据
+                    </button>
                   </div>
                 )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {searchOpen && (
+        <SearchSuggestPanel
+          mode="trend"
+          subject={entityId}
+          predicate={searchMetric}
+          apiBase={API_BASE}
+          onClose={() => setSearchOpen(false)}
+          onAppended={(count) => {
+            setAppendBanner(`已写入 ${count} 条数据点，刷新趋势…`);
+            loadTrend(entityId);
+            setTimeout(() => setAppendBanner(null), 4000);
+          }}
+        />
       )}
     </div>
   );
