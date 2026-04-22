@@ -26,6 +26,8 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       batchSize?: number;
       /** v7.3: 数据来源筛选 (如 ['upload', 'rss', 'binding']) */
       sources?: string[];
+      /** v7.4: 深度分析开关 — 勾选后调用 ContentLibraryEngine 15 deliverable + 专家库 EMM */
+      enableDeepAnalysis?: boolean;
       config?: {
         batchSize?: number;
         qualityThreshold?: number;
@@ -57,10 +59,11 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       }
 
       // 更新配置
-      if (body.config) {
+      if (body.config || body.enableDeepAnalysis !== undefined || body.includeEmbedding !== undefined) {
         assetsBatchProcessor.updateConfig({
-          ...body.config,
+          ...(body.config || {}),
           enableVectorization: body.includeEmbedding !== false,
+          enableDeepAnalysis: body.enableDeepAnalysis === true,
         });
       }
 
@@ -98,6 +101,23 @@ export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
       console.error('[Assets AI Processing] Get analysis failed:', error);
       reply.status(500);
       return { error: 'Failed to get analysis result', message: (error as Error).message };
+    }
+  });
+
+  // 2b. v7.4: 获取 Asset 深度分析结果（15 deliverable + 专家库调用痕迹）
+  fastify.get('/assets/:id/deep-analysis', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const result = await persistenceService.getDeepAnalysisResult(id);
+      if (!result) {
+        reply.status(404);
+        return { error: 'Deep analysis result not found', code: 'NOT_FOUND' };
+      }
+      return result;
+    } catch (error) {
+      console.error('[Assets AI Processing] Get deep analysis failed:', error);
+      reply.status(500);
+      return { error: 'Failed to get deep analysis result', message: (error as Error).message };
     }
   });
 

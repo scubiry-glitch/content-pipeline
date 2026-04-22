@@ -1091,6 +1091,37 @@ async function setupMVPSchema(): Promise<void> {
     )
   `);
 
+  // v7.4: Deep Analysis 结果表 (15 deliverable + 专家库调用)
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_deep_analysis (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      asset_id VARCHAR(50) NOT NULL UNIQUE REFERENCES assets(id) ON DELETE CASCADE,
+      matched_domain_expert_ids JSONB DEFAULT '[]',
+      matched_senior_expert_id VARCHAR(50),
+      match_reasons JSONB DEFAULT '[]',
+      topic_recommendations JSONB,
+      trend_signals JSONB,
+      differentiation_gaps JSONB,
+      knowledge_blanks JSONB,
+      key_facts JSONB,
+      entity_graph JSONB,
+      delta_report JSONB,
+      stale_facts JSONB,
+      knowledge_card JSONB,
+      insights JSONB,
+      material_recommendations JSONB,
+      expert_consensus JSONB,
+      controversies JSONB,
+      belief_evolution JSONB,
+      cross_domain_insights JSONB,
+      expert_invocations JSONB DEFAULT '[]',
+      model_version VARCHAR(50) DEFAULT 'v2.0-deep',
+      analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      processing_time_ms INTEGER
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ada_analyzed_at ON asset_deep_analysis(analyzed_at DESC)`);
+
   // Asset 内容分块表
   await query(`
     CREATE TABLE IF NOT EXISTS asset_content_chunks (

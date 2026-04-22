@@ -72,32 +72,101 @@ export class ContradictionDetector {
     }));
   }
 
-  /** 使用 LLM 评估矛盾的严重程度和解释 */
+  /**
+   * 使用 LLM 深度分析矛盾 — 多视角结构化输出
+   * 此方法独立于 ExpertEngine (controversyDeepAnalyzer 的轻量替代)；
+   * 需要专家 CDT 注入的调用方请用 services/assets-ai/controversyDeepAnalyzer.ts。
+   */
   async analyzeContradiction(contradiction: Contradiction): Promise<{
+    contradictionType: 'time_shift' | 'source_error' | 'real_disagreement' | 'definition_drift' | 'unknown';
+    stakeholders: Array<{ name: string; position: string; interest: string; credibility: 'high' | 'medium' | 'low' }>;
+    evidenceChainA: string[];
+    evidenceChainB: string[];
+    steelmanA: string;
+    steelmanB: string;
+    temporalContext?: string;
+    sourceCredibilityGap?: string;
+    realWorldImpact: { level: 'high' | 'medium' | 'low'; reasoning: string };
+    resolution: string;
+    residualUncertainty?: string;
+    /** 兼容旧调用方：isReal 由 contradictionType !== 'source_error' 推导 */
     isReal: boolean;
     explanation: string;
-    resolution?: string;
   }> {
-    const prompt = `分析以下两个事实是否真的矛盾:
+    const prompt = `你是一位严谨的争议仲裁者。请对下列事实矛盾做多视角深度分析，严格按 JSON schema 输出，不要 markdown 围栏。
 
-事实 A: ${contradiction.factA.subject} ${contradiction.factA.predicate} ${contradiction.factA.object}
-  (上下文: ${JSON.stringify(contradiction.factA.context)})
+【事实 A】
+  ${contradiction.factA.subject} · ${contradiction.factA.predicate} → ${contradiction.factA.object}
+  置信度 ${contradiction.factA.confidence.toFixed(2)}；上下文 ${JSON.stringify(contradiction.factA.context || {})}
 
-事实 B: ${contradiction.factB.subject} ${contradiction.factB.predicate} ${contradiction.factB.object}
-  (上下文: ${JSON.stringify(contradiction.factB.context)})
+【事实 B】
+  ${contradiction.factB.subject} · ${contradiction.factB.predicate} → ${contradiction.factB.object}
+  置信度 ${contradiction.factB.confidence.toFixed(2)}；上下文 ${JSON.stringify(contradiction.factB.context || {})}
 
-判断:
-1. 这两个事实是否真的矛盾？(可能只是不同时间/条件下的不同数据)
-2. 如果矛盾，哪个更可能是正确的？
-3. 如何解决这个矛盾？
-
-输出 JSON: {"isReal": true/false, "explanation": "解释", "resolution": "建议"}`;
+输出 JSON schema：
+{
+  "contradictionType": "time_shift | source_error | real_disagreement | definition_drift",
+  "stakeholders": [{ "name": "...", "position": "...", "interest": "...", "credibility": "high|medium|low" }],
+  "evidenceChainA": ["...", "..."],
+  "evidenceChainB": ["...", "..."],
+  "steelmanA": "双方最强论证版本——不要造稻草人",
+  "steelmanB": "同上",
+  "temporalContext": "两条事实是否其实取于不同时间/条件？",
+  "sourceCredibilityGap": "来源可信度差异",
+  "realWorldImpact": { "level": "high|medium|low", "reasoning": "真实世界影响及理由" },
+  "resolution": "可解决性 + 建议",
+  "residualUncertainty": "残余不确定性"
+}`;
 
     try {
       const response = await this.llm.complete(prompt, { temperature: 0.2, responseFormat: 'json' });
-      return JSON.parse(response);
+      const parsed = this.parseJson(response);
+      const contradictionType = parsed.contradictionType || 'unknown';
+      return {
+        contradictionType,
+        stakeholders: parsed.stakeholders || [],
+        evidenceChainA: parsed.evidenceChainA || [],
+        evidenceChainB: parsed.evidenceChainB || [],
+        steelmanA: parsed.steelmanA || '',
+        steelmanB: parsed.steelmanB || '',
+        temporalContext: parsed.temporalContext,
+        sourceCredibilityGap: parsed.sourceCredibilityGap,
+        realWorldImpact: parsed.realWorldImpact || { level: contradiction.severity, reasoning: '' },
+        resolution: parsed.resolution || '',
+        residualUncertainty: parsed.residualUncertainty,
+        isReal: contradictionType !== 'source_error',
+        explanation: parsed.resolution || parsed.steelmanA || '',
+      };
     } catch {
-      return { isReal: true, explanation: '无法自动分析', resolution: undefined };
+      return {
+        contradictionType: 'unknown',
+        stakeholders: [],
+        evidenceChainA: [],
+        evidenceChainB: [],
+        steelmanA: '',
+        steelmanB: '',
+        realWorldImpact: { level: contradiction.severity, reasoning: '' },
+        resolution: '',
+        isReal: true,
+        explanation: '无法自动分析',
+      };
+    }
+  }
+
+  private parseJson(text: string): any {
+    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          return {};
+        }
+      }
+      return {};
     }
   }
 
