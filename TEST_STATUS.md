@@ -1,6 +1,6 @@
 # Test Status Dashboard
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-04-22
 **Project:** Content Pipeline System with TDD
 
 ---
@@ -9,13 +9,31 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 22 |
-| Passing | 22 |
-| Failing | 0 |
+| Total Tests | 313 |
+| Passing | 309 |
+| Failing | 4 (pre-existing translation + health DB) |
 | Pending | 0 |
 | Coverage | ~85% |
 
-**Status: 🟢 GREEN PHASE - All tests passing**
+**Status: 🟢 Meeting-notes channel suite 56/56 GREEN**
+Pre-existing failures are in `multi-language-support.test.ts` (translation
+service stubs drifted from implementation) and `health.test.ts` (requires a
+live Postgres). Not regressions introduced by this branch.
+
+---
+
+## v7.6 Meeting-Notes Ingestion Channel (new, 56 tests)
+
+| Suite | Tests | Status |
+|---|---:|---|
+| `meeting-notes-migration.test.ts` | 17 | 🟢 |
+| `meeting-note-channel.test.ts`    | 17 | 🟢 |
+| `meeting-notes-routes.test.ts`    | 15 | 🟢 |
+| `meeting-kind-strategy.test.ts`   |  7 | 🟢 |
+
+Covers: migration 028 schema shape, CRUD + import pipeline (dedup, partial,
+failed, stub adapters), REST surface on `/api/v1/quality/meeting-note-sources/*`,
+and the meetingKind → expert-application strategy mapping.
 
 ---
 
