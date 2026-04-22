@@ -1250,6 +1250,26 @@ async function setupContentLibrarySchema(): Promise<void> {
     )
   `).catch(() => {});
 
+  // Round 2: 深度模式 — mode 列 + 复合唯一约束，让 generic/deep 两套缓存共存
+  await query(`
+    ALTER TABLE content_topic_enrichments
+    ADD COLUMN IF NOT EXISTS mode VARCHAR(20) DEFAULT 'generic' NOT NULL
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE content_topic_enrichments
+    ADD COLUMN IF NOT EXISTS expert_id VARCHAR(100)
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE content_topic_enrichments
+    ADD COLUMN IF NOT EXISTS strategy VARCHAR(200)
+  `).catch(() => {});
+  // 新复合唯一索引 (entity_id, mode) — 若旧 PK(entity_id) 存在则放宽
+  await query(`DROP INDEX IF EXISTS uq_topic_enrich_entity_mode`).catch(() => {});
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_topic_enrich_entity_mode
+    ON content_topic_enrichments(entity_id, mode)
+  `).catch(() => {});
+
   await query(`
     CREATE TABLE IF NOT EXISTS content_beliefs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

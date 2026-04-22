@@ -12,6 +12,8 @@ import { getContentLibraryEngine, isContentLibraryInitialized } from '../../modu
 import { getExpertEngine } from '../../modules/expert-library/singleton.js';
 import { ExpertMatcher } from '../../modules/expert-library/expertMatcher.js';
 import { ControversyDeepAnalyzer } from './controversyDeepAnalyzer.js';
+import { createStrategyResolver, resolveSpecString } from '../expert-application/index.js';
+import type { ExpertStrategySpec } from '../expert-application/index.js';
 import type {
   Asset,
   AssetDeepAnalysis,
@@ -28,6 +30,7 @@ export async function runDeepAnalysis(
   asset: Asset,
   quality: AssetQualityScore,
   classification: AssetThemeClassification,
+  expertStrategy?: ExpertStrategySpec,
 ): Promise<AssetDeepAnalysis> {
   const started = Date.now();
 
@@ -69,8 +72,13 @@ export async function runDeepAnalysis(
   const domainExpertIds = matchResult.domainExperts.map((d) => d.expert.expert_id);
   const seniorExpertId = matchResult.seniorExpert?.expert.expert_id;
   const primaryExpert = matchResult.seniorExpert?.expert ?? matchResult.domainExperts[0]?.expert;
+  const expertsForStrategy = [
+    ...matchResult.domainExperts.map((d) => d.expert),
+    ...(matchResult.seniorExpert ? [matchResult.seniorExpert.expert] : []),
+  ];
 
   const traces: ExpertInvocationTrace[] = [];
+  const resolveStrategy = createStrategyResolver(expertStrategy);
 
   // Step 2 — Parallel block A: asset-scoped 轻量查询
   const [keyFacts, entityGraph, knowledgeCard, beliefEvolution] = await Promise.all([
@@ -118,24 +126,35 @@ export async function runDeepAnalysis(
   // 如果有匹配到的专家，再让专家补一段"专家视角判断"，挂在 insights 上
   if (primaryExpert && insights) {
     try {
-      const expertSupplement = await expertEngine.invoke({
-        expert_id: primaryExpert.expert_id,
-        task_type: 'analysis',
-        input_type: 'text',
-        input_data: buildInsightsNarrative(asset, classification, insights),
-        context: '请以你的专家视角，对以下自动综合出的洞察补充 1-3 条反驳点或深化判断，用 JSON 数组返回。',
+      const strategy = resolveStrategy('⑩insights');
+      const specStr = resolveSpecString(expertStrategy, '⑩insights');
+      const result = await strategy.apply({
+        expertEngine,
+        deps: expertEngine.getDeps(),
+        experts: expertsForStrategy.length > 0 ? expertsForStrategy : [primaryExpert],
+        inputData: buildInsightsNarrative(asset, classification, insights),
+        taskType: 'analysis',
+        deliverable: '⑩insights',
+        contextHint: '请以你的专家视角，对以下自动综合出的洞察补充 1-3 条反驳点或深化判断。',
         params: { depth: 'standard' },
       });
-      traces.push({
-        deliverable: '⑩insights-expert-supplement',
-        expertId: primaryExpert.expert_id,
-        invokeId: expertSupplement.metadata.invoke_id,
-        emmPass: expertSupplement.metadata.emm_result?.passed ?? false,
-        confidence: expertSupplement.metadata.confidence,
-      });
+      for (const t of result.traces) {
+        traces.push({
+          deliverable: '⑩insights-expert-supplement',
+          expertId: t.expertId,
+          invokeId: t.invokeId,
+          emmPass: t.emmPass,
+          confidence: t.confidence,
+          durationMs: t.durationMs,
+          strategy: specStr,
+          stage: t.stage,
+        });
+      }
       (insights as Record<string, unknown>).expertSupplement = {
         expertId: primaryExpert.expert_id,
-        sections: expertSupplement.output.sections,
+        strategy: specStr,
+        sections: result.output.sections,
+        meta: result.meta,
       };
     } catch (err) {
       console.warn('[DeepAnalysis] Expert supplement failed:', (err as Error).message);
@@ -152,6 +171,7 @@ export async function runDeepAnalysis(
         topN: 3,
         expert: primaryExpert,
         complementaryExpert: matchResult.domainExperts[1]?.expert,
+        expertStrategy,
       });
       controversies = result.controversies;
       traces.push(...result.traces);

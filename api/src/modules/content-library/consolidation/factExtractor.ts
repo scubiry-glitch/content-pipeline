@@ -196,7 +196,150 @@ export class FactExtractor {
       { temperature: 0.1, responseFormat: 'json', maxTokens: 4096 }
     );
 
-    return this.parseAndMaybeRepair(request, response);
+    const parsed = await this.parseAndMaybeRepair(request, response);
+
+    // Round 2 — Step 3 深度模式：第 3 段专家审定
+    if (request.enableDeep && parsed.facts.length > 0) {
+      try {
+        return await this.runExpertReview(parsed, request);
+      } catch (err) {
+        console.warn('[FactExtractor] runExpertReview failed, returning unreviewed result:', err);
+      }
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Round 2 — 第 3 段：让匹配的 CDT 专家对 Stage 2 产出的事实三元组做审定。
+   * 不发明新事实，只标注 verdict / confidenceAdjustment / rationale，写入 context.expert_review。
+   */
+  private async runExpertReview(
+    result: FactExtractionResult,
+    request: FactExtractionRequest,
+  ): Promise<FactExtractionResult> {
+    if (result.facts.length === 0) return result;
+
+    const { matchExpertForTopic } = await import('../../../services/expert-library-helpers/matchExpertForTopic.js');
+    const { getExpertEngine } = await import('../../../modules/expert-library/singleton.js');
+    const { createStrategyResolver, resolveSpecString } = await import('../../../services/expert-application/index.js');
+
+    const expertEngine = getExpertEngine();
+    if (!expertEngine) return result;
+
+    const topic = request.themeName || '';
+    const match = await matchExpertForTopic(topic, {
+      taskType: 'evaluation',
+      importance: 0.5,
+      expertId: request.expertId,
+    });
+    if (!match.primaryExpert) return result;
+
+    const resolveStrategy = createStrategyResolver(request.expertStrategy);
+    const strategy = resolveStrategy('step3-fact-review');
+    const specStr = resolveSpecString(request.expertStrategy, 'step3-fact-review');
+
+    const factsListText = result.facts
+      .map((f, i) => `  ${i + 1}. ${f.subject} · ${f.predicate} → ${f.object} (conf=${f.confidence.toFixed(2)})`)
+      .join('\n');
+
+    const prompt = [
+      `以下是从素材"${request.assetId}"中抽取的 ${result.facts.length} 条事实三元组:`,
+      '',
+      factsListText,
+      '',
+      '请基于你的专业背景，对每条事实做审定。不要发明新事实，只评估既有事实。',
+      '输出 JSON 数组 (每项对应上面编号):',
+      '[{"index":1,"verdict":"keep|refine|drop|flag","confidenceAdjustment":-0.2,"rationale":"..."}]',
+      '',
+      'verdict 说明:',
+      '  keep  - 事实可信，无需改动',
+      '  refine - 事实大体正确但需要附加条件/上下文（在 rationale 里说明）',
+      '  drop  - 事实错误/无依据/无意义，建议剔除',
+      '  flag  - 存疑，应交由人工复核',
+      '',
+      'confidenceAdjustment 是 [-1, +1] 的增量，叠加到原 confidence 上（最终裁剪到 [0,1]）。',
+    ].join('\n');
+
+    const strategyResult = await strategy.apply({
+      expertEngine,
+      deps: expertEngine.getDeps(),
+      experts: [match.primaryExpert, ...match.complementaryExperts],
+      inputData: prompt,
+      taskType: 'evaluation',
+      deliverable: 'step3-fact-review',
+      contextHint: '你在做事实审定，不生成新事实，只评估三元组质量。',
+      params: { depth: 'standard' },
+    });
+
+    // 解析专家返回的 JSON 数组
+    const verdicts = this.parseVerdicts(strategyResult.output.sections.map((s) => s.content).join('\n'));
+
+    // 应用到每条 fact
+    const reviewedFacts = result.facts.map((fact, i) => {
+      const verdict = verdicts.find((v) => v.index === i + 1);
+      if (!verdict) return fact;
+
+      const newContext = { ...fact.context };
+      newContext.expert_review = {
+        expertId: match.primaryExpert!.expert_id,
+        verdict: verdict.verdict,
+        rationale: verdict.rationale,
+        confidenceAdjustment: verdict.confidenceAdjustment,
+        strategy: specStr,
+        invokeIds: strategyResult.traces.map((t) => t.invokeId),
+      };
+
+      const adj = Number(verdict.confidenceAdjustment);
+      const newConfidence = Number.isFinite(adj)
+        ? Math.min(1, Math.max(0, fact.confidence + adj))
+        : fact.confidence;
+
+      return {
+        ...fact,
+        context: newContext,
+        confidence: newConfidence,
+      };
+    });
+
+    // drop 的剔除
+    const filtered = reviewedFacts.filter((f, i) => {
+      const verdict = verdicts.find((v) => v.index === i + 1);
+      return verdict?.verdict !== 'drop';
+    });
+
+    console.log(
+      `[FactExtractor] runExpertReview done: ${result.facts.length} → ${filtered.length} facts; expert=${match.primaryExpert.expert_id}`,
+    );
+
+    return {
+      facts: filtered,
+      entities: result.entities,
+    };
+  }
+
+  private parseVerdicts(text: string): Array<{
+    index: number;
+    verdict: string;
+    rationale: string;
+    confidenceAdjustment: number;
+  }> {
+    try {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) return [];
+      const parsed = JSON.parse(match[0]);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((v: any) => ({
+          index: Number(v?.index) || 0,
+          verdict: String(v?.verdict || 'keep'),
+          rationale: String(v?.rationale || ''),
+          confidenceAdjustment: Number(v?.confidenceAdjustment) || 0,
+        }))
+        .filter((v) => v.index > 0);
+    } catch {
+      return [];
+    }
   }
 
   /**
