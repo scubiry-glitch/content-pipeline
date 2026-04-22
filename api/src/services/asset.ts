@@ -432,8 +432,8 @@ export class AssetService {
     };
   }
 
-  async search(options: { query?: string; tags?: string[]; limit: number; domain?: string; taxonomy_code?: string; asset_type?: string }) {
-    const { query: searchQuery, tags, limit, domain, taxonomy_code, asset_type } = options;
+  async search(options: { query?: string; tags?: string[]; limit: number; offset?: number; domain?: string; taxonomy_code?: string; asset_type?: string }) {
+    const { query: searchQuery, tags, limit, offset = 0, domain, taxonomy_code, asset_type } = options;
     const visibility: VisibilityOptions = {
       includeDeleted: false,
       includeHidden: false
@@ -442,7 +442,7 @@ export class AssetService {
     // 如果有搜索词，使用向量相似度搜索
     if (searchQuery) {
       const queryEmbedding = await generateEmbedding(searchQuery);
-      return this.vectorSearch(queryEmbedding, tags, limit, { domain, taxonomy_code, asset_type }, visibility);
+      return this.vectorSearch(queryEmbedding, tags, limit, offset, { domain, taxonomy_code, asset_type }, visibility);
     }
 
     // 否则使用普通标签搜索
@@ -453,14 +453,21 @@ export class AssetService {
       FROM assets
       WHERE 1=1
     `;
+    let countSql = `
+      SELECT COUNT(*)::int as total
+      FROM assets
+      WHERE 1=1
+    `;
     const params: any[] = [];
     const visibilityWhere = this.buildVisibilityWhere(visibility);
     sql += visibilityWhere.where;
+    countSql += visibilityWhere.where;
     params.push(...visibilityWhere.params);
 
     if (tags && tags.length > 0) {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
       sql += ` AND tags ?| ARRAY[${tagPlaceholders}]`;
+      countSql += ` AND tags ?| ARRAY[${tagPlaceholders}]`;
       params.push(...tags);
     }
 
@@ -469,23 +476,30 @@ export class AssetService {
       const isL1 = /^E\d{2}$/.test(taxonomy_code);
       params.push(isL1 ? `${taxonomy_code}%` : taxonomy_code);
       sql += ` AND taxonomy_code ${isL1 ? 'LIKE' : '='} $${params.length}`;
+      countSql += ` AND taxonomy_code ${isL1 ? 'LIKE' : '='} $${params.length}`;
     } else if (domain) {
       params.push(domain);
       sql += ` AND domain = $${params.length}`;
+      countSql += ` AND domain = $${params.length}`;
     }
 
     if (asset_type) {
       params.push(asset_type);
       sql += ` AND type = $${params.length}`;
+      countSql += ` AND type = $${params.length}`;
     }
 
-    sql += ` ORDER BY quality_score DESC, created_at DESC LIMIT $${params.length + 1}`;
-    params.push(limit);
+    sql += ` ORDER BY quality_score DESC, created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
 
-    const result = await query(sql, params);
+    const [result, countResult] = await Promise.all([
+      query(sql, params),
+      query(countSql, params.slice(0, params.length - 2))
+    ]);
+    const total = countResult.rows[0]?.total ?? 0;
 
     return {
-      total: result.rows.length,
+      total,
       items: result.rows.map(row => ({
         id: row.id,
         title: row.title,
@@ -512,6 +526,7 @@ export class AssetService {
     queryEmbedding: number[],
     tags?: string[],
     limit: number = 10,
+    offset: number = 0,
     extra: { domain?: string; taxonomy_code?: string; asset_type?: string } = {},
     visibility: VisibilityOptions = {}
   ) {
@@ -551,8 +566,8 @@ export class AssetService {
       sql += ` AND type = $${params.length}`;
     }
 
-    sql += ` ORDER BY embedding <=> $1::vector LIMIT $${params.length + 1}`;
-    params.push(limit);
+    sql += ` ORDER BY embedding <=> $1::vector LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
 
     const result = await query(sql, params);
 

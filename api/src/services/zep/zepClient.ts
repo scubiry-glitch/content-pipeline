@@ -3,6 +3,7 @@
 // 零依赖: 不安装 @getzep/zep-cloud SDK, 直接用 fetch 调用 REST API
 
 const ZEP_BASE_URL = process.env.ZEP_BASE_URL || 'https://api.getzep.com';
+const ZEP_GRAPH_ID = process.env.ZEP_GRAPH_ID || 'default';
 
 /** Zep 是否启用 */
 export function isZepEnabled(): boolean {
@@ -80,6 +81,7 @@ export interface ZepEpisode {
   data: string;
   group_id?: string;
   user_id?: string;
+  graph_id?: string;
 }
 
 /** 向 Zep Graph 添加 Episode (写入知识)
@@ -93,7 +95,8 @@ export async function addGraphEpisode(
   if (!isZepEnabled()) return null;
   return zepFetch('/api/v2/graph', {
     method: 'POST',
-    body: { ...episode, user_id: userId },
+    // OpenZep self-host requires graph_id; Zep Cloud v2 ignores unknown/extra fields.
+    body: { ...episode, user_id: userId, graph_id: episode.graph_id || ZEP_GRAPH_ID },
   });
 }
 
@@ -142,6 +145,23 @@ export interface ZepSearchResult {
   }>;
 }
 
+export interface ZepGraphNode {
+  uuid: string;
+  name: string;
+  group_id?: string;
+  summary?: string;
+  labels?: string[];
+}
+
+export interface ZepGraphEdge {
+  uuid: string;
+  fact: string;
+  source_node_uuid: string;
+  target_node_uuid: string;
+  valid_at?: string | null;
+  invalid_at?: string | null;
+}
+
 /** 搜索 Zep Graph (语义 + 图遍历) */
 export async function searchGraph(options: ZepGraphSearchOptions): Promise<ZepSearchResult | null> {
   if (!isZepEnabled()) return null;
@@ -154,6 +174,34 @@ export async function searchGraph(options: ZepGraphSearchOptions): Promise<ZepSe
       reranker: options.reranker,
     },
   });
+}
+
+/** OpenZep: 列出指定图谱内节点 */
+export async function listGraphNodes(limit = 100, uuidCursor?: string): Promise<ZepGraphNode[]> {
+  if (!isZepEnabled()) return [];
+  const result = await zepFetch(`/api/v2/graph/node/graph/${encodeURIComponent(ZEP_GRAPH_ID)}`, {
+    method: 'POST',
+    body: {
+      limit,
+      ...(uuidCursor ? { uuid_cursor: uuidCursor } : {}),
+    },
+  });
+  return Array.isArray(result) ? result : [];
+}
+
+/** OpenZep: 获取单个节点详情 */
+export async function getGraphNode(uuid: string): Promise<ZepGraphNode | null> {
+  if (!isZepEnabled()) return null;
+  return zepFetch(`/api/v2/graph/node/${encodeURIComponent(uuid)}`);
+}
+
+/** OpenZep: 获取节点关系边 */
+export async function getGraphNodeEdges(uuid: string): Promise<ZepGraphEdge[]> {
+  if (!isZepEnabled()) return [];
+  const result = await zepFetch(`/api/v2/graph/node/${encodeURIComponent(uuid)}/entity-edges`, {
+    params: { group_id: ZEP_GRAPH_ID },
+  });
+  return Array.isArray(result) ? result : [];
 }
 
 /** 搜索 Zep Graph 节点 (实体) */

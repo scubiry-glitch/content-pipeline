@@ -6,6 +6,9 @@ import {
   searchGraph,
   searchGraphNodes,
   getEntityEdges,
+  listGraphNodes,
+  getGraphNode,
+  getGraphNodeEdges,
   getMemoryContext,
   type ZepSearchResult,
 } from './zepClient.js';
@@ -50,19 +53,91 @@ export async function enhanceEntityGraph(
   if (!isZepEnabled()) return null;
   try {
     const result = await getEntityEdges(SYSTEM_USER, entityName, maxFacts);
-    if (!result?.facts?.length) return null;
+    if (result?.facts?.length) {
+      return {
+        relations: result.facts.map(f => ({
+          source: f.source_node?.name || '',
+          target: f.target_node?.name || '',
+          fact: f.fact || f.name || '',
+          validAt: f.valid_at,
+          invalidAt: f.invalid_at,
+        })),
+        source: 'zep',
+      };
+    }
+  } catch (err) {
+    console.warn('[ZepAdapter] cloud-style graph query failed, fallback to OpenZep node API:', err);
+  }
+
+  try {
+    // OpenZep fallback: 通过 node 列表 + entity-edges 构建关系
+    const nodes: Array<{ uuid: string; name: string }> = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 20; i++) {
+      const page = await listGraphNodes(200, cursor);
+      if (!page.length) break;
+      nodes.push(...page);
+      cursor = page[page.length - 1]?.uuid;
+      if (page.length < 200) break;
+    }
+    if (!nodes.length) return null;
+
+    const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+    const charJaccard = (a: string, b: string): number => {
+      const sa = new Set(a.split(''));
+      const sb = new Set(b.split(''));
+      const inter = Array.from(sa).filter((ch) => sb.has(ch)).length;
+      const union = new Set([...sa, ...sb]).size;
+      return union === 0 ? 0 : inter / union;
+    };
+    const q = normalize(entityName);
+
+    let center =
+      nodes.find((n) => normalize(n.name) === q)
+      || nodes.find((n) => normalize(n.name).includes(q))
+      || nodes.find((n) => q.includes(normalize(n.name)));
+
+    if (!center) {
+      const ranked = nodes
+        .map((n) => ({ node: n, score: charJaccard(normalize(n.name), q) }))
+        .sort((a, b) => b.score - a.score);
+      if (ranked[0] && ranked[0].score >= 0.35) {
+        center = ranked[0].node;
+      }
+    }
+
+    if (!center) return null;
+
+    const edges = await getGraphNodeEdges(center.uuid);
+    if (!edges.length) return null;
+
+    const uuidSet = new Set<string>();
+    for (const e of edges) {
+      uuidSet.add(e.source_node_uuid);
+      uuidSet.add(e.target_node_uuid);
+    }
+
+    const nameMap = new Map<string, string>();
+    nodes.forEach((n) => nameMap.set(n.uuid, n.name));
+    await Promise.all(Array.from(uuidSet).map(async (uuid) => {
+      if (!nameMap.has(uuid)) {
+        const node = await getGraphNode(uuid);
+        if (node?.name) nameMap.set(uuid, node.name);
+      }
+    }));
+
     return {
-      relations: result.facts.map(f => ({
-        source: f.source_node?.name || '',
-        target: f.target_node?.name || '',
-        fact: f.fact || f.name || '',
-        validAt: f.valid_at,
-        invalidAt: f.invalid_at,
+      relations: edges.slice(0, maxFacts).map((e) => ({
+        source: nameMap.get(e.source_node_uuid) || e.source_node_uuid,
+        target: nameMap.get(e.target_node_uuid) || e.target_node_uuid,
+        fact: e.fact || '',
+        validAt: e.valid_at || undefined,
+        invalidAt: e.invalid_at || undefined,
       })),
       source: 'zep',
     };
   } catch (err) {
-    console.warn('[ZepAdapter] enhanceEntityGraph failed:', err);
+    console.warn('[ZepAdapter] enhanceEntityGraph OpenZep fallback failed:', err);
     return null;
   }
 }

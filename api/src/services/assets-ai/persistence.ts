@@ -212,7 +212,11 @@ export class PersistenceService {
       await query(
         `UPDATE assets SET ai_processing_status = 'pending'
          WHERE ai_processing_status = 'failed'
-            OR (ai_processing_status = 'completed' AND ai_document_embedding IS NULL)`
+            OR (ai_processing_status = 'completed' AND id IN (
+              SELECT asset_id FROM asset_ai_analysis
+              WHERE quality_summary IS NULL OR quality_summary = ''
+                OR quality_summary LIKE '处理失败%' OR quality_summary LIKE '分析失败%'
+            ))`
       );
     }
 
@@ -251,7 +255,12 @@ export class PersistenceService {
       WHERE (
         ai_processing_status = 'pending'
         OR ai_processing_status IS NULL
-        OR (ai_processing_status = 'completed' AND ai_document_embedding IS NULL)
+        OR ai_processing_status = 'failed'
+        OR (ai_processing_status = 'completed' AND id IN (
+          SELECT asset_id FROM asset_ai_analysis
+          WHERE quality_summary IS NULL OR quality_summary = ''
+            OR quality_summary LIKE '处理失败%' OR quality_summary LIKE '分析失败%'
+        ))
       )
         ${maxAgeHours > 0 ? `AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'` : ''}
         AND (is_deleted = false OR is_deleted IS NULL)

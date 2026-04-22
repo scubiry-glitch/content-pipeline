@@ -189,18 +189,17 @@ export function ContentLibraryBatchOps() {
   // Step 2: AI 批量分析 (v7.3: 断点续传 + 可选重试失败; v7.4: 深度分析开关)
   const triggerAIBatch = async (assetIds?: string[]) => {
     setConfirmModal({ open: false, loading: false, assets: [], selected: new Set() });
-    const count = assetIds ? `（${assetIds.length} 个）` : '';
-    const runningMsg = enableDeepAnalysis
-      ? `启动深度分析${count} (15 产出物 + 专家库)...`
-      : retryFailed
-        ? `启动 AI 分析${count} (含重试失败)...`
-        : `启动 AI 批量分析${count}...`;
-    setStep('ai', { status: 'running', message: runningMsg });
+    const total = assetIds?.length ?? 0;
+    setStep('ai', { status: 'running', message: `正在分析 0 / ${total}...` });
     try {
       const sources = [
         ...(aiSourceAssets ? ['upload'] : []),
         ...(aiSourceBinding ? ['binding'] : []),
       ];
+      // 记录开始前已完成数，用于计算增量
+      const baseStats = await fetch(`${API_AI}/stats`).then(r => r.json()).catch(() => ({ totalAnalyzed: 0 }));
+      const baseAnalyzed: number = baseStats.totalAnalyzed ?? 0;
+
       const res = await fetch(`${API_AI}/batch-process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,13 +213,32 @@ export function ContentLibraryBatchOps() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const processed = data.processed ?? data.totalAssets ?? data.queued ?? '?';
-      const msg = data.message && data.message !== 'No assets to process'
-        ? `${data.message}（处理 ${processed} 个）`
-        : processed === 0 || processed === '0'
-          ? '暂无待分析素材'
-          : `处理 ${processed} 个素材`;
-      setStep('ai', { status: 'done', message: msg, lastRun: new Date().toISOString() });
+      if (data.totalAssets === 0) {
+        setStep('ai', { status: 'done', message: '暂无待分析素材', lastRun: new Date().toISOString() });
+        return;
+      }
+      const jobTotal: number = data.totalAssets ?? total;
+
+      // 轮询 /stats 展示实时进度，直到增量 >= jobTotal 或超时（5min）
+      const deadline = Date.now() + 5 * 60 * 1000;
+      const poll = setInterval(async () => {
+        try {
+          const s = await fetch(`${API_AI}/stats`).then(r => r.json());
+          const done = Math.max(0, (s.totalAnalyzed ?? 0) - baseAnalyzed);
+          if (done >= jobTotal || Date.now() > deadline) {
+            clearInterval(poll);
+            setStep('ai', {
+              status: 'done',
+              message: `分析完成：本次处理 ${done} 个，累计 ${s.totalAnalyzed} 个`,
+              lastRun: new Date().toISOString(),
+            });
+          } else {
+            setStep('ai', { status: 'running', message: `正在分析 ${done} / ${jobTotal}...` });
+          }
+        } catch {
+          // 轮询失败不中断，等下次
+        }
+      }, 4000);
     } catch (err) {
       setStep('ai', { status: 'error', message: (err as Error).message });
     }

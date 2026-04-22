@@ -296,27 +296,33 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // ① 议题推荐
     fastify.get('/topics/recommended', async (request, reply) => {
       const query = request.query as any;
-      return engine.getTopicRecommendations({
+      const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : undefined,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
+        sortBy: query.sortBy === 'time' ? 'time' : 'score',
+        sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: query.enrich === 'true',
-      });
+      };
+      return engine.getTopicRecommendations(topicOptions);
     });
 
     // 手动触发 topic enrichment 生成并缓存（供 batch-ops 调用）
     fastify.post('/topics/enrich', async (request, reply) => {
       const query = request.query as any;
-      const result = await engine.getTopicRecommendations({
+      const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : 10,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
+        sortBy: query.sortBy === 'time' ? 'time' : 'score',
+        sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: true,
-      });
+      };
+      const result = await engine.getTopicRecommendations(topicOptions);
       const enriched = result.items.filter(t => t.reason || t.titleSuggestion);
       return reply.send({ ok: true, total: result.total, pageItems: result.items.length, enriched: enriched.length });
     });
@@ -324,11 +330,14 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // 知识空白
     fastify.get('/gaps', async (request, reply) => {
       const query = request.query as any;
-      return engine.getKnowledgeGaps({
+      const gapOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit) : 20,
-      });
+        sortBy: query.sortBy === 'time' ? 'time' : 'default',
+        sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
+      };
+      return engine.getKnowledgeGaps(gapOptions);
     });
 
     // ② 趋势信号
@@ -384,6 +393,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.synthesizeInsights({
         subjects: body.subjects,
         domain: body.domain,
+        taxonomy_code: body.taxonomy_code,
         limit: body.limit,
         forceRefresh: body.forceRefresh === true,
       });
@@ -453,6 +463,21 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return result.rows[0] || { total: 0 };
     });
 
+    // 查询缓存明细（支持时间排序 + 分页）
+    fastify.get('/synthesize/cache', async (request) => {
+      const query = request.query as any;
+      return engine.querySynthesisCachePage({
+        scopeType: query.scopeType === 'entity' || query.scopeType === 'domain' || query.scopeType === 'global'
+          ? query.scopeType
+          : undefined,
+        search: query.search,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+        offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
+        page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
+        sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
+      });
+    });
+
     // ⑪ 素材组合推荐
     fastify.get('/recommendations/:taskType', async (request, reply) => {
       const { taskType } = request.params as any;
@@ -470,6 +495,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       return engine.getExpertConsensus({
         topic,
+        taxonomy_code: query.taxonomy_code,
         domain: query.domain,
         limit: query.limit ? parseInt(query.limit) : undefined,
       });

@@ -96,12 +96,13 @@ export async function assetRoutes(fastify: FastifyInstance) {
 
   // Search assets
   fastify.get('/', { preHandler: authenticate }, async (request) => {
-    const { q, tags, limit = '10', domain, taxonomy_code, type, asset_type } = request.query as any;
+    const { q, tags, limit = '10', offset = '0', domain, taxonomy_code, type, asset_type } = request.query as any;
 
     return await assetService.search({
       query: q,
       tags: tags ? tags.split(',') : undefined,
       limit: parseInt(limit),
+      offset: parseInt(offset),
       domain: domain || undefined,
       taxonomy_code: taxonomy_code || undefined,
       asset_type: asset_type || type || undefined
@@ -390,8 +391,13 @@ export async function assetRoutes(fastify: FastifyInstance) {
 
       return {
         message: '扫描完成',
+        scanned: result.scanned,
+        added: result.added,
         imported: result.imported,
-        errors: result.errors
+        errors: result.errors,
+        filtered: result.filtered,
+        unchanged: result.unchanged,
+        skipped: result.skipped
       };
     } catch (error: any) {
       reply.status(500);

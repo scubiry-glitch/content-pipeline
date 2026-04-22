@@ -23,6 +23,8 @@ interface TopicRecommendation {
   angleMatrix?: Array<{ angle: string; rationale: string }>;
   communityId?: string;
   communityCohesion?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface KnowledgeGap {
@@ -30,9 +32,11 @@ interface KnowledgeGap {
   type: 'differentiation' | 'blank';
   description: string;
   opportunity: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-const TOPICS_PAGE_SIZE = 10;
+const DEFAULT_TOPICS_PAGE_SIZE = 10;
 
 export function ContentLibraryTopics() {
   const [topics, setTopics] = useState<TopicRecommendation[]>([]);
@@ -46,6 +50,9 @@ export function ContentLibraryTopics() {
   const [tab, setTab] = useState<'topics' | 'gaps'>('topics');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [enriching, setEnriching] = useState(false);
+  const [sortBy, setSortBy] = useState<'default' | 'time'>('default');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [pageSize, setPageSize] = useState(DEFAULT_TOPICS_PAGE_SIZE);
 
   const load = async (pageArg?: number) => {
     const page = pageArg ?? topicsPage;
@@ -55,13 +62,17 @@ export function ContentLibraryTopics() {
       const topicParams = new URLSearchParams();
       if (taxCode) topicParams.set('taxonomy_code', taxCode);
       else if (domain) topicParams.set('domain', domain);
-      topicParams.set('limit', String(TOPICS_PAGE_SIZE));
+      topicParams.set('limit', String(pageSize));
       topicParams.set('page', String(page));
+      topicParams.set('sortBy', sortBy === 'time' ? 'time' : 'score');
+      topicParams.set('sortOrder', sortOrder);
 
       const gapParams = new URLSearchParams();
       if (taxCode) gapParams.set('taxonomy_code', taxCode);
       else if (domain) gapParams.set('domain', domain);
       gapParams.set('limit', '10');
+      gapParams.set('sortBy', sortBy);
+      gapParams.set('sortOrder', sortOrder);
 
       const [topicsRes, gapsRes] = await Promise.allSettled([
         fetch(`${API_BASE}/topics/recommended?${topicParams}`).then(r => r.ok ? r.json() : null),
@@ -83,9 +94,9 @@ export function ContentLibraryTopics() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(topicsPage); }, [topicsPage]);
+  useEffect(() => { void load(topicsPage); }, [topicsPage, sortBy, sortOrder, pageSize]);
 
-  const topicsTotalPages = Math.max(1, Math.ceil(topicsTotal / TOPICS_PAGE_SIZE) || 1);
+  const topicsTotalPages = Math.max(1, Math.ceil(topicsTotal / pageSize) || 1);
 
   const toggleExpand = (idx: number) => {
     setExpanded(prev => {
@@ -98,7 +109,9 @@ export function ContentLibraryTopics() {
   const generateEnrichment = async () => {
     setEnriching(true);
     try {
-      const params = new URLSearchParams({ limit: String(TOPICS_PAGE_SIZE), page: String(topicsPage) });
+      const params = new URLSearchParams({ limit: String(pageSize), page: String(topicsPage) });
+      params.set('sortBy', sortBy === 'time' ? 'time' : 'score');
+      params.set('sortOrder', sortOrder);
       const taxCode = selectionToCode(taxonomy);
       if (taxCode) params.set('taxonomy_code', taxCode);
       else if (domain) params.set('domain', domain);
@@ -127,6 +140,13 @@ export function ContentLibraryTopics() {
     return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
   };
 
+  const formatDate = (v?: string) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('zh-CN', { hour12: false });
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">议题推荐 & 知识空白</h1>
@@ -144,6 +164,44 @@ export function ContentLibraryTopics() {
         </div>
         <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
         <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+        <select
+          value={sortBy}
+          onChange={(e) => {
+            const next = e.target.value === 'time' ? 'time' : 'default';
+            setSortBy(next);
+            setTopicsPage(1);
+          }}
+          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+        >
+          <option value="default">默认排序</option>
+          <option value="time">按时间排序</option>
+        </select>
+        <select
+          value={sortOrder}
+          onChange={(e) => {
+            const next = e.target.value === 'asc' ? 'asc' : 'desc';
+            setSortOrder(next);
+            setTopicsPage(1);
+          }}
+          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+        >
+          <option value="desc">倒序</option>
+          <option value="asc">正序</option>
+        </select>
+        <select
+          value={String(pageSize)}
+          onChange={(e) => {
+            const next = parseInt(e.target.value, 10) || DEFAULT_TOPICS_PAGE_SIZE;
+            setPageSize(next);
+            setTopicsPage(1);
+          }}
+          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+        >
+          <option value="10">每页 10 条</option>
+          <option value="20">每页 20 条</option>
+          <option value="50">每页 50 条</option>
+          <option value="100">每页 100 条</option>
+        </select>
         <button type="button" onClick={() => void load()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">刷新</button>
         {tab === 'topics' && topicsTotal > 0 && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -274,6 +332,7 @@ export function ContentLibraryTopics() {
                     <div className="text-xs text-gray-400">
                       密度 {t.factDensity} · 空白 {Number.isFinite(t.gapScore) ? t.gapScore.toFixed(2) : '—'}
                       {t.communityId && ` · 社区 ${t.communityId}`}
+                      {' · '}创建 {formatDate(t.createdAt)} · 更新 {formatDate(t.updatedAt)}
                     </div>
                     <div className="flex gap-2">
                       {hasEnriched && (
@@ -315,6 +374,9 @@ export function ContentLibraryTopics() {
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">{g.description}</p>
                 <p className="text-sm text-green-600 dark:text-green-400">{g.opportunity}</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  创建 {formatDate(g.createdAt)} · 更新 {formatDate(g.updatedAt)}
+                </p>
               </div>
             ))}
           </div>

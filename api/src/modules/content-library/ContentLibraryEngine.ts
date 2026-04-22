@@ -724,6 +724,10 @@ export class ContentLibraryEngine {
     offset?: number;
     /** 1-based 页码；若设置则覆盖 offset */
     page?: number;
+    /** 排序方式：score=综合分(默认)，time=最近事实时间 */
+    sortBy?: 'score' | 'time';
+    /** 排序方向：desc=倒序(默认)，asc=正序 */
+    sortOrder?: 'asc' | 'desc';
     enrich?: boolean;   // true = 强制重新生成并保存缓存；false/undefined = 仅读缓存
   }): Promise<TopicRecommendationsPage> {
     const rawLimit = options?.limit ?? 10;
@@ -768,10 +772,17 @@ export class ContentLibraryEngine {
       total = 0;
     }
 
+    const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const topicOrderBy = options?.sortBy === 'time'
+      ? `MAX(cf.created_at) ${sortOrder} NULLS LAST, ce.created_at ${sortOrder}`
+      : `COUNT(cf.id) * AVG(cf.confidence) ${sortOrder}`;
+
     const result = await this.deps.db.query(`
       SELECT
         ce.id as entity_id,
         ce.canonical_name as entity_name,
+        ce.created_at as entity_created_at,
+        ce.updated_at as entity_updated_at,
         ce.community_id,
         ce.community_cohesion,
         COUNT(cf.id) as fact_count,
@@ -782,7 +793,7 @@ export class ContentLibraryEngine {
       WHERE 1=1 ${domainFilter}
       GROUP BY ce.id, ce.canonical_name, ce.community_id, ce.community_cohesion
       HAVING COUNT(cf.id) > 0
-      ORDER BY COUNT(cf.id) * AVG(cf.confidence) DESC
+      ORDER BY ${topicOrderBy}
       LIMIT $1 OFFSET $2
     `, listParams);
 
@@ -793,6 +804,8 @@ export class ContentLibraryEngine {
       score: Number(row.fact_count) * Number(row.avg_confidence),
       factDensity: Number(row.fact_count),
       timeliness: this.calculateTimeliness(row.latest_fact),
+      createdAt: row.entity_created_at || undefined,
+      updatedAt: row.latest_fact || row.entity_updated_at || row.entity_created_at || undefined,
       gapScore: 0,
       suggestedAngles: [] as string[],
       reason: '',
@@ -1239,6 +1252,7 @@ export class ContentLibraryEngine {
   async synthesizeInsights(options?: {
     subjects?: string[];
     domain?: string;
+    taxonomy_code?: string;
     limit?: number;
     forceRefresh?: boolean;  // true = 跳过缓存，强制重新生成
   }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string; error?: string; factsUsed?: number; fromCache?: boolean }> {
@@ -1302,6 +1316,7 @@ export class ContentLibraryEngine {
   async synthesizeInsightsRaw(options?: {
     subjects?: string[];
     domain?: string;
+    taxonomy_code?: string;
     limit?: number;
   }): Promise<{ insights: Array<{ text: string; sources: string[]; confidence: number }>; summary: string; error?: string; factsUsed?: number }> {
     const limit = options?.limit || 10;
@@ -1320,6 +1335,11 @@ export class ContentLibraryEngine {
       if (options?.domain) {
         params.push(options.domain);
         conditions.push(`context->>'domain' = $${params.length}`);
+      }
+      if (options?.taxonomy_code) {
+        const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+        params.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+        conditions.push(`context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${params.length}`);
       }
       params.push(limit * 5);
       const factsQuery = `
@@ -1418,6 +1438,117 @@ export class ContentLibraryEngine {
         factsUsed: factsResult.rows.length,
       };
     }
+  }
+
+  /** ⑩ 认知综合缓存列表（支持时间排序 + 分页） */
+  async querySynthesisCachePage(options?: {
+    scopeType?: 'entity' | 'domain' | 'global';
+    search?: string;
+    limit?: number;
+    offset?: number;
+    page?: number;
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<{
+    items: Array<{
+      cacheKey: string;
+      scopeType: string;
+      scopeValue: string | null;
+      summary: string;
+      factsUsed: number;
+      generatedAt: string;
+      insights: Array<{ text: string; sources: string[]; confidence: number }>;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (options?.scopeType) {
+      conditions.push(`scope_type = $${idx++}`);
+      params.push(options.scopeType);
+    }
+    if (options?.search) {
+      conditions.push(`(COALESCE(scope_value, '') ILIKE $${idx} OR COALESCE(summary, '') ILIKE $${idx})`);
+      params.push(`%${options.search}%`);
+      idx++;
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = Math.min(Math.max(options?.limit ?? 20, 1), 200);
+    let offset = options?.offset ?? 0;
+    if (!Number.isFinite(offset)) offset = 0;
+    offset = Math.max(offset, 0);
+    if (options?.page != null && options.page > 0 && Number.isFinite(options.page)) {
+      offset = (options.page - 1) * limit;
+    }
+
+    const countResult = await this.deps.db.query(
+      `SELECT COUNT(*)::int AS c FROM content_synthesis_cache ${where}`,
+      params
+    );
+    const total = Number(countResult.rows[0]?.c ?? 0);
+
+    const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const rows = await this.deps.db.query(
+      `SELECT cache_key, scope_type, scope_value, summary, facts_used, generated_at, insights
+       FROM content_synthesis_cache
+       ${where}
+       ORDER BY generated_at ${sortOrder}
+       LIMIT $${idx} OFFSET $${idx + 1}`,
+      [...params, limit, offset]
+    );
+
+    return {
+      items: rows.rows.map((row: any) => ({
+        // 兼容历史缓存格式：
+        // 1) insights 是数组
+        // 2) insights 是 JSON 字符串数组
+        // 3) insights 是对象 { insights: [...] }
+        cacheKey: row.cache_key,
+        scopeType: row.scope_type,
+        scopeValue: row.scope_value ?? null,
+        summary: row.summary || '',
+        factsUsed: Number(row.facts_used || 0),
+        generatedAt: (() => {
+          if (!row.generated_at) return new Date(0).toISOString();
+          const parsed = new Date(row.generated_at);
+          return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+        })(),
+        insights: (() => {
+          const normalize = (value: any): Array<{ text: string; sources: string[]; confidence: number }> => {
+            if (Array.isArray(value)) {
+              return value
+                .filter((i: any) => i && typeof i.text === 'string' && i.text.trim())
+                .map((i: any) => ({
+                  text: String(i.text).trim(),
+                  sources: Array.isArray(i.sources) ? i.sources.map(String) : [],
+                  confidence: typeof i.confidence === 'number' ? i.confidence : Number(i.confidence || 0),
+                }));
+            }
+            if (value && Array.isArray(value.insights)) return normalize(value.insights);
+            return [];
+          };
+
+          if (Array.isArray(row.insights)) return normalize(row.insights);
+          if (row.insights && typeof row.insights === 'object') return normalize(row.insights);
+          if (typeof row.insights === 'string') {
+            try {
+              const parsed = JSON.parse(row.insights);
+              return normalize(parsed);
+            } catch {
+              return [];
+            }
+          }
+          return [];
+        })(),
+      })),
+      total,
+      limit,
+      offset,
+    };
   }
 
   /** ⑪ 素材组合推荐
@@ -1532,6 +1663,7 @@ export class ContentLibraryEngine {
   /** ⑫ 专家共识图 (集成专家库) */
   async getExpertConsensus(options?: {
     topic?: string;
+    taxonomy_code?: string;
     domain?: string;
     limit?: number;
   }): Promise<{ consensus: Array<{ position: string; supportingExperts: string[]; confidence: number }>; divergences: Array<{ position1: string; position2: string; experts1: string[]; experts2: string[] }> }> {
@@ -1539,9 +1671,18 @@ export class ContentLibraryEngine {
 
     // 首先尝试从 content_facts 中聚合共识
     const consensusParams: any[] = [];
-    const domainCond = options?.domain
-      ? (() => { consensusParams.push(options.domain); return `AND context->>'domain' = $${consensusParams.length}`; })()
-      : '';
+    let domainCond = '';
+    if (options?.taxonomy_code) {
+      const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+      consensusParams.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+      domainCond = `AND context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${consensusParams.length}`;
+    } else if (options?.domain) {
+      consensusParams.push(options.domain);
+      domainCond = `AND context->>'domain' = $${consensusParams.length}`;
+    } else if (options?.topic) {
+      consensusParams.push(`%${options.topic}%`);
+      domainCond = `AND (subject ILIKE $${consensusParams.length} OR object ILIKE $${consensusParams.length})`;
+    }
     consensusParams.push(limit);
     const consensusQuery = `
       SELECT subject, predicate, object, COUNT(*) as fact_count, AVG(confidence) as avg_conf,
@@ -1563,9 +1704,18 @@ export class ContentLibraryEngine {
 
     // 查找分歧（相同主体和谓词，但对象不同）
     const divParams: any[] = [];
-    const divDomainCond = options?.domain
-      ? (() => { divParams.push(options.domain); return `AND cf1.context->>'domain' = $${divParams.length}`; })()
-      : '';
+    let divDomainCond = '';
+    if (options?.taxonomy_code) {
+      const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+      divParams.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+      divDomainCond = `AND cf1.context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${divParams.length}`;
+    } else if (options?.domain) {
+      divParams.push(options.domain);
+      divDomainCond = `AND cf1.context->>'domain' = $${divParams.length}`;
+    } else if (options?.topic) {
+      divParams.push(`%${options.topic}%`);
+      divDomainCond = `AND (cf1.subject ILIKE $${divParams.length} OR cf1.object ILIKE $${divParams.length})`;
+    }
     divParams.push(limit);
     const divergenceQuery = `
       SELECT
@@ -1666,6 +1816,18 @@ export class ContentLibraryEngine {
     domain?: string;
     limit?: number;
   }): Promise<{ associations: Array<{ entity1: string; entity2: string; relationship: string; strength: number; adamicAdar: number; commonNeighbors: number; domains: string[] }>; count: number }> {
+    const params: any[] = [];
+    const pairConditions: string[] = [];
+    if (options?.entityId) {
+      params.push(options.entityId);
+      pairConditions.push(`(aa.e1 = $${params.length} OR aa.e2 = $${params.length})`);
+    }
+    if (options?.domain) {
+      params.push(options.domain);
+      pairConditions.push(`(ed1.domain = $${params.length} OR ed2.domain = $${params.length})`);
+    }
+    const pairFilterSql = pairConditions.length > 0 ? `AND ${pairConditions.join(' AND ')}` : '';
+
     const aaQuery = `
       WITH entity_domains AS (
         -- 从 content_facts 的 context 推断每个实体的主领域
@@ -1722,10 +1884,12 @@ export class ContentLibraryEngine {
          OR (ed1.domain IS NULL AND ed2.domain IS NOT NULL)
          OR (ed1.domain IS NOT NULL AND ed2.domain IS NULL))
         AND LENGTH(aa.e1) > 2 AND LENGTH(aa.e2) > 2
+        ${pairFilterSql}
       ORDER BY aa.aa_score DESC
-      LIMIT $1
+      LIMIT $${params.length + 1}
     `;
-    const result = await this.deps.db.query(aaQuery, [options?.limit || 20]);
+    params.push(options?.limit || 20);
+    const result = await this.deps.db.query(aaQuery, params);
 
     const associations = result.rows.map((row: any) => ({
       entity1: row.entity1,
@@ -1876,11 +2040,19 @@ export class ContentLibraryEngine {
     return 'stale';
   }
 
-  async getKnowledgeGaps(options?: { domain?: string; taxonomy_code?: string; limit?: number }): Promise<Array<{
+  async getKnowledgeGaps(options?: {
+    domain?: string;
+    taxonomy_code?: string;
+    limit?: number;
+    sortBy?: 'default' | 'time';
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<Array<{
     topic: string;
     type: 'blank' | 'differentiation';
     description: string;
     opportunity: string;
+    createdAt?: string;
+    updatedAt?: string;
   }>> {
     const limit = options?.limit || 20;
     const blankLimit = Math.ceil(limit * 0.6);
@@ -1888,7 +2060,10 @@ export class ContentLibraryEngine {
 
     // 实体无任何事实 (覆盖空白)
     const blankResult = await this.deps.db.query(`
-      SELECT ce.canonical_name as topic
+      SELECT
+        ce.canonical_name as topic,
+        ce.created_at as entity_created_at,
+        ce.updated_at as entity_updated_at
       FROM content_entities ce
       WHERE NOT EXISTS (
         SELECT 1 FROM content_facts cf
@@ -1900,28 +2075,53 @@ export class ContentLibraryEngine {
 
     // 有事实但极度稀疏 (差异化空白: fact_count < 3)
     const sparseResult = await this.deps.db.query(`
-      SELECT ce.canonical_name as topic, COUNT(cf.id) as fact_count
+      SELECT
+        ce.canonical_name as topic,
+        ce.created_at as entity_created_at,
+        ce.updated_at as entity_updated_at,
+        COUNT(cf.id) as fact_count,
+        MAX(cf.created_at) as latest_fact_at
       FROM content_entities ce
       JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
-      GROUP BY ce.canonical_name
+      GROUP BY ce.canonical_name, ce.created_at, ce.updated_at
       HAVING COUNT(cf.id) < 3
       ORDER BY COUNT(cf.id) ASC
       LIMIT $1
     `, [sparseLimit]);
 
-    return [
+    const itemsWithSortTime = [
       ...blankResult.rows.map((r: any) => ({
         topic: r.topic,
         type: 'blank' as const,
         description: `"${r.topic}"在知识库中尚无任何提炼事实`,
         opportunity: '补充基础事实：定义、核心数据、关键事件',
+        createdAt: r.entity_created_at || undefined,
+        updatedAt: r.entity_updated_at || r.entity_created_at || undefined,
+        sortTime: new Date(r.entity_created_at || 0).getTime(),
       })),
       ...sparseResult.rows.map((r: any) => ({
         topic: r.topic,
         type: 'differentiation' as const,
         description: `"${r.topic}"仅有 ${r.fact_count} 条事实，覆盖浅`,
         opportunity: '深挖差异化角度：竞争对比、时序演变、因果关系',
+        createdAt: r.entity_created_at || undefined,
+        updatedAt: r.latest_fact_at || r.entity_updated_at || r.entity_created_at || undefined,
+        sortTime: new Date(r.latest_fact_at || 0).getTime(),
       })),
     ];
+
+    if (options?.sortBy === 'time') {
+      const asc = options?.sortOrder === 'asc';
+      itemsWithSortTime.sort((a, b) => (asc ? a.sortTime - b.sortTime : b.sortTime - a.sortTime));
+    }
+
+    return itemsWithSortTime.map(({ topic, type, description, opportunity, createdAt, updatedAt }) => ({
+      topic,
+      type,
+      description,
+      opportunity,
+      createdAt,
+      updatedAt,
+    }));
   }
 }

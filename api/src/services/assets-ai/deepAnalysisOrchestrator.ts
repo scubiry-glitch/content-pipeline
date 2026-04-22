@@ -40,10 +40,14 @@ export async function runDeepAnalysis(
     throw new Error('ExpertEngine not initialized');
   }
 
+  const candidateSubjects = (classification.entities || [])
+    .map((e) => e?.name?.trim())
+    .filter((name): name is string => !!name);
   const primaryEntity = classification.entities?.[0];
   const primaryTheme = classification.primaryTheme?.themeName || classification.primaryTheme?.themeId || '';
+  const primaryTaxonomyCode = classification.primaryTheme?.themeId || undefined;
   const industry = primaryTheme;
-  const subjectForFacts = primaryEntity?.name || asset.title;
+  const subjectForFacts = primaryEntity?.name || candidateSubjects[0] || asset.title;
   const entityIdForGraph = primaryEntity?.name || asset.title;
 
   const importance = Math.min(1, Math.max(0, (quality.overall || 0) / 100));
@@ -87,22 +91,27 @@ export async function runDeepAnalysis(
     materialRecommendations,
     crossDomainInsights,
   ] = await Promise.all([
-    safely('①topics', () => contentEngine.getTopicRecommendations({ limit: 10 })),
+    safely('①topics', () => contentEngine.getTopicRecommendations({ taxonomy_code: primaryTaxonomyCode, domain: industry, limit: 10 })),
     safely('②trends', () => contentEngine.getTrendSignals(entityIdForGraph)),
     safely('③④gaps', () => contentEngine.getKnowledgeGaps({ limit: 10 })),
     safely('⑦delta', () => contentEngine.getDeltaReport(since)),
     safely('⑧stale', () => contentEngine.getStaleFacts({ limit: 20 })),
     safely('⑪materials', () => contentEngine.recommendMaterials({ domain: industry, limit: 5 })),
-    safely('⑮crossDomain', () => contentEngine.discoverCrossDomainInsights({ entityId: entityIdForGraph, limit: 10 })),
+    safely('⑮crossDomain', () => contentEngine.discoverCrossDomainInsights({ entityId: entityIdForGraph, domain: industry, limit: 10 })),
   ]);
 
   // Step 4 — Serial block C: 重 LLM 调用
   const insights = await safely('⑩insights', () =>
-    contentEngine.synthesizeInsights({ subjects: [subjectForFacts], limit: 10 }),
+    contentEngine.synthesizeInsights({
+      subjects: candidateSubjects.length > 0 ? candidateSubjects.slice(0, 3) : [subjectForFacts],
+      domain: industry || undefined,
+      taxonomy_code: primaryTaxonomyCode,
+      limit: 10,
+    }),
   );
 
   const expertConsensus = await safely('⑫consensus', () =>
-    contentEngine.getExpertConsensus({ topic: primaryTheme, limit: 10 }),
+    contentEngine.getExpertConsensus({ topic: primaryTheme, taxonomy_code: primaryTaxonomyCode, domain: industry, limit: 10 }),
   );
 
   // 如果有匹配到的专家，再让专家补一段"专家视角判断"，挂在 insights 上

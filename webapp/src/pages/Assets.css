@@ -59,6 +59,64 @@
   gap: 16px;
 }
 
+.assets-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid #dee3e6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.assets-search-box:focus-within {
+  border-color: #005bc1;
+  box-shadow: 0 0 0 3px rgba(0, 91, 193, 0.08);
+}
+
+.assets-search-icon {
+  color: #8a8f94;
+  font-size: 18px;
+}
+
+.assets-search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #2d3335;
+  font-size: 14px;
+}
+
+.assets-search-box input::placeholder {
+  color: #8a8f94;
+}
+
+.assets-search-clear {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: #f1f4f5;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5b5f64;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.assets-search-clear:hover {
+  background: #e5e9eb;
+  color: #2d3335;
+}
+
+.assets-search-clear .material-icon {
+  font-size: 14px;
+}
+
 /* 筛选切换按钮 */
 .filter-tabs {
   display: flex;
@@ -228,6 +286,47 @@
 .assets-grid-container-v2 {
   flex: 1;
   min-width: 0;
+}
+
+.assets-result-meta {
+  font-size: 13px;
+  color: #5b5f64;
+  margin-bottom: 12px;
+}
+
+.assets-pagination {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.pagination-btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #2d3335;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: #005bc1;
+  color: #005bc1;
+}
+
+.pagination-btn:disabled {
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #5b5f64;
 }
 
 .assets-grid-v2 {
@@ -815,6 +914,11 @@
     flex-direction: column;
     align-items: stretch;
     width: 100%;
+  }
+
+  .assets-search-box {
+    width: 100%;
+    min-width: 0;
   }
 
   .filter-tabs {

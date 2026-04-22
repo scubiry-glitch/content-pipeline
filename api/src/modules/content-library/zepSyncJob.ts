@@ -78,13 +78,14 @@ export function startZepSyncJob(db: Pool, options: ZepSyncJobOptions = {}): stri
       while (offset < state.total && state.status === 'running') {
         if (ac.signal.aborted) { state.status = 'cancelled'; break; }
 
+        const currentLimit = Math.min(pageSize, Math.max(state.total - offset, 0));
         const factsResult = await db.query(
           `SELECT subject, predicate, object, confidence, context, asset_id
            FROM content_facts
            WHERE is_current = true AND confidence >= $1
            ORDER BY confidence DESC, created_at DESC
            LIMIT $2 OFFSET $3`,
-          [minConf, pageSize, offset],
+          [minConf, currentLimit, offset],
         );
 
         if (factsResult.rows.length === 0) break;
@@ -98,7 +99,12 @@ export function startZepSyncJob(db: Pool, options: ZepSyncJobOptions = {}): stri
           state.currentBatch = batchNum;
 
           const lines = batch.map((f: any) => {
-            const ctx = typeof f.context === 'string' ? JSON.parse(f.context || '{}') : (f.context || {});
+            let ctx: any = {};
+            if (typeof f.context === 'string') {
+              try { ctx = JSON.parse(f.context || '{}'); } catch { ctx = {}; }
+            } else {
+              ctx = f.context || {};
+            }
             const domain = ctx.domain ? `[${ctx.domain}] ` : '';
             const time = ctx.time ? ` (时间: ${ctx.time})` : '';
             return `${domain}${f.subject} ${f.predicate} ${f.object}${time}。置信度: ${Math.round(f.confidence * 100)}%`;

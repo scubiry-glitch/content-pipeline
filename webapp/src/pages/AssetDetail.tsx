@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { assetsApi, type Asset, type AssetUsage } from '../api/client';
 import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
@@ -10,11 +10,20 @@ export function AssetDetail() {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'content' | 'meta' | 'citations' | 'ai-analysis'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'meta' | 'citations' | 'ai-analysis' | 'deep-analysis'>('content');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteResult, setQuoteResult] = useState<any>(null);
   const [usageStats, setUsageStats] = useState<AssetUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [deepAnalysis, setDeepAnalysis] = useState<any>(null);
+  const [expertNameMap, setExpertNameMap] = useState<Record<string, string>>({});
+  const [pipelineBusy, setPipelineBusy] = useState<'step3' | 'step4' | 'step5' | null>(null);
+  const [pipelineLog, setPipelineLog] = useState<string>('');
+  const [step4JobId, setStep4JobId] = useState<string | null>(null);
+  const [step5JobId, setStep5JobId] = useState<string | null>(null);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [deepRunning, setDeepRunning] = useState(false);
+  const [deepProgress, setDeepProgress] = useState<string>('');
 
   useEffect(() => {
     if (id) {
@@ -52,7 +61,95 @@ export function AssetDetail() {
     if (activeTab === 'citations' && id) {
       loadUsageStats();
     }
+    if (activeTab === 'deep-analysis' && id && !deepAnalysis && !deepLoading) {
+      loadDeepAnalysis();
+    }
   }, [activeTab, id]);
+
+  useEffect(() => {
+    const ids = deepAnalysis?.matchedDomainExpertIds;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      setExpertNameMap({});
+      return;
+    }
+    const uniqueIds = Array.from(new Set(ids.filter((x: any) => typeof x === 'string' && x.trim())));
+    if (uniqueIds.length === 0) {
+      setExpertNameMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const pairs = await Promise.all(
+        uniqueIds.map(async (expertId) => {
+          try {
+            const res = await fetch(`/api/v1/expert-library/experts/${encodeURIComponent(expertId)}`);
+            if (!res.ok) return [expertId, expertId] as const;
+            const data = await res.json();
+            const name = (data?.name || data?.expert_name || expertId) as string;
+            return [expertId, name] as const;
+          } catch {
+            return [expertId, expertId] as const;
+          }
+        })
+      );
+      if (!cancelled) {
+        setExpertNameMap(Object.fromEntries(pairs));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deepAnalysis?.matchedDomainExpertIds]);
+
+  const loadDeepAnalysis = async () => {
+    setDeepLoading(true);
+    try {
+      const res = await fetch(`/api/v1/ai/assets/assets/${id}/deep-analysis`);
+      if (res.status === 404) { setDeepAnalysis(null); return; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setDeepAnalysis(await res.json());
+    } catch {
+      setDeepAnalysis(null);
+    } finally {
+      setDeepLoading(false);
+    }
+  };
+
+  const triggerDeepAnalysis = async () => {
+    setDeepRunning(true);
+    setDeepProgress('正在启动深度分析…');
+    try {
+      const res = await fetch('/api/v1/ai/assets/batch-process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: [id], enableDeepAnalysis: true, force: true }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // 轮询直到深度分析结果写入
+      const deadline = Date.now() + 10 * 60 * 1000;
+      const poll = setInterval(async () => {
+        setDeepProgress(`分析中… ${Math.round((Date.now() % 60000) / 1000)}s`);
+        const r = await fetch(`/api/v1/ai/assets/assets/${id}/deep-analysis`);
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.assetId) {
+            clearInterval(poll);
+            setDeepAnalysis(data);
+            setDeepRunning(false);
+            setDeepProgress('');
+          }
+        }
+        if (Date.now() > deadline) {
+          clearInterval(poll);
+          setDeepRunning(false);
+          setDeepProgress('超时，请稍后刷新');
+        }
+      }, 5000);
+    } catch (err) {
+      setDeepProgress(`启动失败：${(err as Error).message}`);
+      setDeepRunning(false);
+    }
+  };
 
   const handleQuote = async () => {
     if (!id) return;
@@ -67,6 +164,137 @@ export function AssetDetail() {
       setQuoteLoading(false);
     }
   };
+
+  const runStep3Reextract = async () => {
+    if (!id) return;
+    setPipelineBusy('step3');
+    setPipelineLog('Step 3 执行中：两段式事实提取...');
+    try {
+      const res = await fetch('/api/v1/content-library/reextract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetIds: [id],
+          onlyUnprocessed: false,
+          source: 'assets',
+          dryRun: false,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+      setPipelineLog(`Step 3 完成：${JSON.stringify(data).slice(0, 300)}`);
+    } catch (err) {
+      setPipelineLog(`Step 3 失败：${(err as Error).message}`);
+    } finally {
+      setPipelineBusy(null);
+    }
+  };
+
+  const runStep4ZepSync = async () => {
+    setPipelineBusy('step4');
+    setPipelineLog('Step 4 执行中：知识图谱 / Zep 同步...');
+    try {
+      const res = await fetch('/api/v1/content-library/zep/sync/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          limit: 80,
+          batchSize: 10,
+          minConfidence: 0.5,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+      const jobId = data?.jobId || null;
+      setStep4JobId(jobId);
+      setPipelineLog(`Step 4 已启动：jobId=${jobId || 'unknown'}（开始轮询进度）`);
+    } catch (err) {
+      setPipelineLog(`Step 4 失败：${(err as Error).message}`);
+    } finally {
+      setPipelineBusy(null);
+    }
+  };
+
+  const runStep5Pregenerate = async () => {
+    setPipelineBusy('step5');
+    setPipelineLog('Step 5 执行中：AI 产出物预生成...');
+    try {
+      const res = await fetch('/api/v1/content-library/synthesize/pregenerate/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          limit: 30,
+          overwrite: false,
+          minFacts: 3,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+      const jobId = data?.jobId || null;
+      setStep5JobId(jobId);
+      setPipelineLog(`Step 5 已启动：jobId=${jobId || 'unknown'}（开始轮询进度）`);
+    } catch (err) {
+      setPipelineLog(`Step 5 失败：${(err as Error).message}`);
+    } finally {
+      setPipelineBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!step4JobId) return;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/v1/content-library/zep/sync/jobs/${encodeURIComponent(step4JobId)}`);
+        if (!res.ok) return;
+        const state = await res.json();
+        if (stopped || !state) return;
+        const status = state.status || 'unknown';
+        setPipelineLog(
+          `Step 4 进度：status=${status} synced=${state.synced ?? 0}/${state.total ?? 0} skipped=${state.skipped ?? 0} errors=${state.errors ?? 0}`
+        );
+        if (status !== 'running') {
+          clearInterval(timer);
+          setStep4JobId(null);
+          setPipelineBusy((prev) => (prev === 'step4' ? null : prev));
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [step4JobId]);
+
+  useEffect(() => {
+    if (!step5JobId) return;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/v1/content-library/synthesize/pregenerate/jobs/${encodeURIComponent(step5JobId)}`);
+        if (!res.ok) return;
+        const state = await res.json();
+        if (stopped || !state) return;
+        const status = state.status || 'unknown';
+        setPipelineLog(
+          `Step 5 进度：status=${status} done=${state.processed ?? 0}/${state.total ?? 0} success=${state.success ?? 0} failed=${state.failed ?? 0}`
+        );
+        if (status !== 'running') {
+          clearInterval(timer);
+          setStep5JobId(null);
+          setPipelineBusy((prev) => (prev === 'step5' ? null : prev));
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [step5JobId]);
 
   const getQualityColor = (score: number) => {
     if (score >= 80) return '#52c41a';
@@ -190,6 +418,13 @@ export function AssetDetail() {
           onClick={() => setActiveTab('ai-analysis')}
         >
           🤖 AI 分析
+        </button>
+        <button
+          className={`tab ${activeTab === 'deep-analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('deep-analysis')}
+        >
+          🔬 深度分析
+          {deepAnalysis && <span style={{ marginLeft: 4, fontSize: 10, background: '#6366f1', color: '#fff', borderRadius: 8, padding: '1px 5px' }}>已生成</span>}
         </button>
       </div>
 
@@ -413,7 +648,269 @@ export function AssetDetail() {
             <AssetAIAnalysis assetId={id!} compact={false} />
           </div>
         )}
+
+        {activeTab === 'deep-analysis' && (
+          <div style={{ padding: '20px 0' }}>
+            {deepLoading ? (
+              <div style={{ color: '#999', padding: 24 }}>⏳ 加载中…</div>
+            ) : !deepAnalysis ? (
+              <div style={{ textAlign: 'center', padding: 48 }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🔬</div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>尚未进行深度分析</div>
+                <div style={{ color: '#999', fontSize: 13, marginBottom: 20 }}>
+                  深度分析将生成 15 项产出物，并调用专家库 EMM 进行多视角结构化分析（约 1–3 分钟）
+                </div>
+                <button
+                  onClick={triggerDeepAnalysis}
+                  disabled={deepRunning}
+                  style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontWeight: 600, cursor: 'pointer', opacity: deepRunning ? 0.6 : 1 }}
+                >
+                  {deepRunning ? `⏳ ${deepProgress}` : '🚀 启动深度分析'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* 操作栏 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#999', fontSize: 12 }}>
+                    耗时 {((deepAnalysis.processingTimeMs || 0) / 1000).toFixed(1)}s · {deepAnalysis.modelVersion}
+                  </span>
+                  <button
+                    onClick={triggerDeepAnalysis}
+                    disabled={deepRunning}
+                    style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    {deepRunning ? `⏳ ${deepProgress}` : '🔄 重新分析'}
+                  </button>
+                </div>
+
+                {/* 专家匹配 */}
+                {deepAnalysis.matchedDomainExpertIds?.length > 0 && (
+                  <Section title="🧑‍🔬 匹配专家">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {deepAnalysis.matchedDomainExpertIds.map((eid: string) => (
+                        <span key={eid} style={{ background: '#ede9fe', color: '#6d28d9', borderRadius: 6, padding: '3px 10px', fontSize: 12 }}>
+                          {expertNameMap[eid] || eid} <span style={{ opacity: 0.75 }}>({eid})</span>
+                        </span>
+                      ))}
+                    </div>
+                    {deepAnalysis.matchReasons?.length > 0 && (
+                      <ul style={{ marginTop: 8, fontSize: 13, color: '#555', paddingLeft: 16 }}>
+                        {deepAnalysis.matchReasons.slice(0, 3).map((r: string, i: number) => <li key={i}>{r}</li>)}
+                      </ul>
+                    )}
+                  </Section>
+                )}
+
+                <Section title="🛠 手动流水线（Step 3/4/5）">
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={runStep3Reextract}
+                      disabled={!!pipelineBusy}
+                      style={{ background: '#111827', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', opacity: pipelineBusy ? 0.6 : 1 }}
+                    >
+                      {pipelineBusy === 'step3' ? '⏳ Step3 运行中' : 'Step3 两段式事实提取'}
+                    </button>
+                    <button
+                      onClick={runStep4ZepSync}
+                      disabled={!!pipelineBusy}
+                      style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', opacity: pipelineBusy ? 0.6 : 1 }}
+                    >
+                      {pipelineBusy === 'step4' ? '⏳ Step4 运行中' : 'Step4 知识图谱/Zep 增强'}
+                    </button>
+                    <button
+                      onClick={runStep5Pregenerate}
+                      disabled={!!pipelineBusy}
+                      style={{ background: '#047857', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', opacity: pipelineBusy ? 0.6 : 1 }}
+                    >
+                      {pipelineBusy === 'step5' ? '⏳ Step5 运行中' : 'Step5 AI 产出物预生成'}
+                    </button>
+                  </div>
+                  <div style={{ color: '#6b7280', fontSize: 12, marginTop: 8 }}>
+                    Step4 与 Step5 是后台异步任务，按钮返回 jobId 后会继续在服务端执行。
+                  </div>
+                  {pipelineLog ? (
+                    <pre style={{ marginTop: 10, background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {pipelineLog}
+                    </pre>
+                  ) : null}
+                </Section>
+
+                {/* 关键事实 */}
+                <DeliverableSection num="⑤" title="关键事实" data={deepAnalysis.keyFacts} />
+
+                {/* 洞察 */}
+                {deepAnalysis.insights ? (
+                  <Section title="⑩ 深度洞察">
+                    <InsightsSection data={deepAnalysis.insights} />
+                  </Section>
+                ) : null}
+
+                {/* 争议分析 */}
+                {deepAnalysis.controversies?.length > 0 && (
+                  <Section title="⚡ 争议分析">
+                    {deepAnalysis.controversies.map((c: any, i: number) => (
+                      <div key={i} style={{ background: '#fef3c7', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, color: '#b45309', marginBottom: 6 }}>{c.contradictionType} · 影响: {c.realWorldImpact?.level}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div style={{ background: '#fff', borderRadius: 6, padding: 8, fontSize: 12 }}><strong>观点A：</strong>{c.steelmanA}</div>
+                          <div style={{ background: '#fff', borderRadius: 6, padding: 8, fontSize: 12 }}><strong>观点B：</strong>{c.steelmanB}</div>
+                        </div>
+                        {c.resolution && <div style={{ marginTop: 8, fontSize: 12, color: '#555' }}>💡 {c.resolution}</div>}
+                      </div>
+                    ))}
+                  </Section>
+                )}
+
+                {/* 专家共识 */}
+                {deepAnalysis.expertConsensus ? (
+                  <Section title="⑫ 专家共识">
+                    <ConsensusSection data={deepAnalysis.expertConsensus} />
+                  </Section>
+                ) : null}
+
+                {/* 趋势信号 */}
+                <DeliverableSection num="②" title="趋势信号" data={deepAnalysis.trendSignals} />
+
+                {/* 选题推荐 */}
+                <DeliverableSection num="①" title="选题推荐" data={deepAnalysis.topicRecommendations} />
+
+                {/* 知识卡片 */}
+                {deepAnalysis.knowledgeCard && (
+                  <Section title="⑨ 知识卡片">
+                    <pre style={{ background: '#f8fafc', borderRadius: 6, padding: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                      {typeof deepAnalysis.knowledgeCard === 'string' ? deepAnalysis.knowledgeCard : JSON.stringify(deepAnalysis.knowledgeCard, null, 2)}
+                    </pre>
+                  </Section>
+                )}
+
+                {/* 跨域洞察 */}
+                {deepAnalysis.crossDomainInsights ? (
+                  <Section title="⑮ 跨域洞察">
+                    <CrossDomainSection data={deepAnalysis.crossDomainInsights} />
+                  </Section>
+                ) : null}
+
+                {/* 专家调用记录 */}
+                {deepAnalysis.expertInvocations?.length > 0 && (
+                  <Section title="🔍 专家调用记录">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                      {deepAnalysis.expertInvocations.map((inv: any, i: number) => (
+                        <div key={i} style={{ background: '#f8fafc', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                          <div style={{ fontWeight: 600 }}>{inv.deliverable}</div>
+                          <div style={{ color: '#666' }}>{inv.expertId}</div>
+                          <div style={{ color: inv.emmPass ? '#16a34a' : '#dc2626' }}>{inv.emmPass ? '✓ EMM通过' : '✗ EMM未通过'}</div>
+                          {inv.durationMs && <div style={{ color: '#999' }}>{inv.durationMs}ms</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </Section>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// 辅助组件
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
+      <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+function renderDeliverableItem(item: any): string {
+  if (item === null || item === undefined) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item === 'number' || typeof item === 'boolean') return String(item);
+  // 尝试提取常见的文本字段
+  const text = item.title || item.insight || item.signal || item.trend || item.topic
+    || item.consensus || item.position || item.statement || item.fact || item.content || item.summary;
+  if (text && typeof text === 'string') {
+    const extra = item.description || item.rationale || item.reason || item.strength || item.confidence;
+    return extra ? `${text}\n${typeof extra === 'string' ? extra : JSON.stringify(extra)}` : text;
+  }
+  return JSON.stringify(item, null, 2);
+}
+
+function DeliverableSection({ num, title, data }: { num: string; title: string; data: any }) {
+  if (!data || (Array.isArray(data) && data.length === 0)) return null;
+  const items = Array.isArray(data) ? data : [data];
+  return (
+    <Section title={`${num} ${title}`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.slice(0, 10).map((item: any, i: number) => (
+          <pre key={i} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {renderDeliverableItem(item)}
+          </pre>
+        ))}
+        {items.length > 10 && <div style={{ color: '#999', fontSize: 12 }}>…还有 {items.length - 10} 条</div>}
+      </div>
+    </Section>
+  );
+}
+
+function InsightsSection({ data }: { data: any }) {
+  const summary = typeof data?.summary === 'string' ? data.summary : '';
+  const items = Array.isArray(data?.insights) ? data.insights : Array.isArray(data) ? data : [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {summary ? (
+        <div style={{ background: '#eef2ff', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>{summary}</div>
+      ) : null}
+      {items.length > 0 ? (
+        items.slice(0, 10).map((item: any, i: number) => (
+          <pre key={i} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {renderDeliverableItem(item)}
+          </pre>
+        ))
+      ) : (
+        <div style={{ color: '#999', fontSize: 12 }}>暂无可展示洞察</div>
+      )}
+    </div>
+  );
+}
+
+function ConsensusSection({ data }: { data: any }) {
+  const consensus = Array.isArray(data?.consensus) ? data.consensus : [];
+  const divergences = Array.isArray(data?.divergences) ? data.divergences : [];
+  if (consensus.length === 0 && divergences.length === 0) {
+    return <div style={{ color: '#999', fontSize: 12 }}>暂无共识/分歧数据</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {consensus.slice(0, 6).map((item: any, i: number) => (
+        <pre key={`c-${i}`} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {renderDeliverableItem(item)}
+        </pre>
+      ))}
+      {divergences.slice(0, 4).map((item: any, i: number) => (
+        <pre key={`d-${i}`} style={{ background: '#fff7ed', borderRadius: 6, padding: '8px 12px', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {renderDeliverableItem(item)}
+        </pre>
+      ))}
+    </div>
+  );
+}
+
+function CrossDomainSection({ data }: { data: any }) {
+  const associations = Array.isArray(data?.associations) ? data.associations : Array.isArray(data) ? data : [];
+  if (associations.length === 0) {
+    return <div style={{ color: '#999', fontSize: 12 }}>暂无跨域关联</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {associations.slice(0, 10).map((item: any, i: number) => (
+        <pre key={i} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 12px', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {renderDeliverableItem(item)}
+        </pre>
+      ))}
     </div>
   );
 }

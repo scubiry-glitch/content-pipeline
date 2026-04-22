@@ -46,7 +46,21 @@ export function Bindings() {
     setScanning(id);
     try {
       const result = await bindingsApi.scan(id);
-      alert(`扫描完成: 发现 ${result.scanned} 个文件，新增 ${result.added} 个素材`);
+      const scanned = result.scanned ?? result.imported ?? 0;
+      const added = result.added ?? result.imported ?? 0;
+      const errors = result.errors ?? 0;
+      const filtered = result.filtered ?? 0;
+      const unchanged = result.unchanged ?? 0;
+      const skipped = result.skipped ?? Math.max(scanned - added - errors, 0);
+      alert(
+        `扫描完成
+发现 ${scanned} 个文件
+新增 ${added} 个素材
+跳过 ${skipped} 个（含过滤/未变化）
+  - 类型过滤: ${filtered}
+  - 内容未变化: ${unchanged}
+失败 ${errors} 个`
+      );
       loadData();
     } catch (err) {
       alert('扫描失败: ' + (err instanceof Error ? err.message : '未知错误'));

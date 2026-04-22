@@ -52,6 +52,8 @@ export function Assets() {
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<AssetType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 12;
 
   // 统一的领域下拉（与 /content-library 共享同一数据源 /dropdown/domains）
   const { domains } = useDropdownOptions();
@@ -120,12 +122,23 @@ export function Assets() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [assetsRes, themesRes] = await Promise.all([
-        assetsApi.getAll({ limit: 100 }),
-        themesApi.getAll(),
-      ]);
+      const batchSize = 500;
+      let offset = 0;
+      let total = 0;
+      const allAssets: Asset[] = [];
+
+      do {
+        const assetsRes = await assetsApi.getAll({ limit: batchSize, offset });
+        const batchItems = assetsRes.items || [];
+        total = assetsRes.total || 0;
+        allAssets.push(...batchItems);
+        offset += batchItems.length;
+        if (batchItems.length === 0) break;
+      } while (offset < total);
+
+      const themesRes = await themesApi.getAll();
       // 转换数据类型
-      const extendedAssets: ExtendedAsset[] = (assetsRes.items || []).map((a, index) => {
+      const extendedAssets: ExtendedAsset[] = allAssets.map((a, index) => {
         // 计算真实字数：优先使用 metadata.wordCount，其次使用 content.length
         const wordCount = (a as any).metadata?.wordCount
           || (a.content?.length > 100 ? Math.round(a.content.length / 2) : 0)
@@ -232,6 +245,21 @@ export function Assets() {
       asset.source?.toLowerCase().includes(query)
     );
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedAssets = filteredAssets.slice(startIndex, startIndex + pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterTab, selectedDomain, selectedTaxonomy.l1, selectedTaxonomy.l2, selectedTheme, selectedType, searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // 当前选中领域下可见的主题（未选领域则全部）
   const activeCode = selectionToCode(selectedTaxonomy);
@@ -621,6 +649,26 @@ export function Assets() {
           <p className="page-subtitle">Manage and monitor editorial production quality.</p>
         </div>
         <div className="header-right">
+          <div className="assets-search-box">
+            <span className="material-icon assets-search-icon">search</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索标题 / 来源 / 标签"
+              aria-label="搜索素材"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="assets-search-clear"
+                onClick={() => setSearchQuery('')}
+                title="清除搜索"
+              >
+                <span className="material-icon">close</span>
+              </button>
+            )}
+          </div>
           {/* 批量 AI 分析按钮 */}
           <button className="btn-batch-ai" onClick={handleBatchAI} title="批量 AI 分析">
             <span className="material-icon">auto_awesome</span>
@@ -756,25 +804,6 @@ export function Assets() {
               )}
             </div>
 
-            {/* 兼容旧 /dropdown/domains（仅在没有选中 taxonomy 时显示，作为过渡期的备份入口） */}
-            {!selectedTaxonomy.l1 && domains.length > 0 && (
-              <div className="sidebar-section">
-                <span className="sidebar-section-title">旧领域标签</span>
-                {domains.map((d) => (
-                  <div
-                    key={d}
-                    className={`theme-nav-item ${selectedDomain === d ? 'active' : ''}`}
-                    onClick={() => { setSelectedDomain(selectedDomain === d ? null : d); setSelectedTheme(null); }}
-                    title={`领域：${d}`}
-                  >
-                    <span className="theme-nav-icon">🏷️</span>
-                    <span className="theme-nav-name">{d}</span>
-                    <span className="theme-nav-count">{countByDomain(d)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* AI 分析状态筛选 */}
             <div className="sidebar-section">
               <span className="sidebar-section-title">AI 分析</span>
@@ -826,17 +855,45 @@ export function Assets() {
 
         {/* 素材网格 */}
         <main className="assets-grid-container-v2">
+          <div className="assets-result-meta">
+            {filteredAssets.length > 0
+              ? `显示 ${startIndex + 1}-${Math.min(startIndex + pageSize, filteredAssets.length)} / ${filteredAssets.length} 条（总计 ${assets.length} 条）`
+              : `显示 0 / 0 条（总计 ${assets.length} 条）`}
+          </div>
           {filteredAssets.length === 0 ? (
             <div className="empty-state-v2">
               <div className="empty-state-icon">📭</div>
               <div className="empty-state-title">暂无素材</div>
-              <p>点击"New Asset"上传您的第一个文件</p>
+              <p>{searchQuery ? '未匹配到搜索结果，请尝试其他关键词' : '点击"New Asset"上传您的第一个文件'}</p>
             </div>
           ) : (
-            <div className="assets-grid-v2">
-              {filteredAssets.map(renderAssetCard)}
-              {renderEmptyCard()}
-            </div>
+            <>
+              <div className="assets-grid-v2">
+                {paginatedAssets.map(renderAssetCard)}
+                {paginatedAssets.length < pageSize && renderEmptyCard()}
+              </div>
+              {totalPages > 1 && (
+                <div className="assets-pagination">
+                  <button
+                    className="pagination-btn"
+                    disabled={safeCurrentPage === 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    上一页
+                  </button>
+                  <span className="pagination-info">
+                    第 {safeCurrentPage} / {totalPages} 页
+                  </span>
+                  <button
+                    className="pagination-btn"
+                    disabled={safeCurrentPage === totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>

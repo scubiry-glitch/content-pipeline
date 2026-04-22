@@ -161,7 +161,7 @@ export const tasksApi = {
 
 // 素材相关 API
 export const assetsApi = {
-  getAll: (params?: { limit?: number; theme_id?: string; domain?: string; asset_type?: string; type?: string }) =>
+  getAll: (params?: { limit?: number; offset?: number; theme_id?: string; domain?: string; asset_type?: string; type?: string }) =>
     client.get('/assets', { params }) as Promise<{ items: Asset[]; total: number }>,
 
   getById: (id: string) =>
@@ -286,7 +286,15 @@ export const bindingsApi = {
     client.delete(`/assets/bindings/${id}`) as Promise<void>,
 
   scan: (id: string) =>
-    client.post(`/assets/bindings/${id}/scan`) as Promise<{ scanned: number; added: number }>,
+    client.post(`/assets/bindings/${id}/scan`) as Promise<{
+      scanned?: number;
+      added?: number;
+      imported?: number;
+      errors?: number;
+      filtered?: number;
+      unchanged?: number;
+      skipped?: number;
+    }>,
 };
 
 // 深度研究相关类型

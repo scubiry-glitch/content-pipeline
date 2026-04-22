@@ -3,6 +3,8 @@
 
 import { useState } from 'react';
 import { ProductMetaBar, useDropdownOptions, DomainSelect, EntitySelect } from '../components/ContentLibraryProductMeta';
+import { DomainCascadeSelect, selectionToCode } from '../components/DomainCascadeSelect';
+import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 
@@ -33,6 +35,7 @@ export function ContentLibraryConsensus() {
   const [selectedEntityId, setSelectedEntityId] = useState('');
   const [topicInput, setTopicInput] = useState('');
   const [domain, setDomain] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ l1: null, l2: null });
 
   // 最终用的 topic: 优先下拉选择的实体名, 否则自由输入
   const resolvedTopic = (() => {
@@ -53,6 +56,8 @@ export function ContentLibraryConsensus() {
     setError(null);
     try {
       const params = new URLSearchParams();
+      const taxonomyCode = selectionToCode(taxonomy);
+      if (taxonomyCode) params.append('taxonomy_code', taxonomyCode);
       if (domain) params.append('domain', domain);
       params.append('limit', '20');
       const res = await fetch(`${API_BASE}/consensus/${encodeURIComponent(topic)}?${params}`);
@@ -78,7 +83,11 @@ export function ContentLibraryConsensus() {
 
       {/* 范围选择: 下拉 + 自由输入 */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤（级联）</label>
+            <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">从实体选择 (推荐)</label>
             <EntitySelect value={selectedEntityId} onChange={v => { setSelectedEntityId(v); setTopicInput(''); }} entities={entities} placeholder="选择实体..." />
@@ -94,7 +103,7 @@ export function ContentLibraryConsensus() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">领域过滤（兼容旧数据）</label>
             <DomainSelect value={domain} onChange={setDomain} domains={domains} />
           </div>
         </div>

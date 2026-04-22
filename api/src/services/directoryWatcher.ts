@@ -321,7 +321,15 @@ export class DirectoryWatcherService {
   }
 
   // Manual trigger for scanning a binding
-  async triggerScan(bindingId: string): Promise<{ imported: number; errors: number }> {
+  async triggerScan(bindingId: string): Promise<{
+    scanned: number;
+    added: number;
+    imported: number;
+    errors: number;
+    filtered: number;
+    unchanged: number;
+    skipped: number;
+  }> {
     const result = await query(
       `SELECT * FROM asset_directory_bindings WHERE id = $1`,
       [bindingId]
@@ -334,11 +342,15 @@ export class DirectoryWatcherService {
     const binding: DirectoryBinding = result.rows[0];
 
     // Reset counters for this scan
+    let scanned = 0;
     let imported = 0;
     let errors = 0;
+    let filtered = 0;
+    let unchanged = 0;
 
     try {
       const files = await this.getFilesInDirectory(binding.path, binding.include_subdirs);
+      scanned = files.length;
 
       for (const filePath of files) {
         try {
@@ -350,7 +362,11 @@ export class DirectoryWatcherService {
             if (!existing || existing.file_hash !== fileHash) {
               await this.importFile(binding, filePath, stats);
               imported++;
+            } else {
+              unchanged++;
             }
+          } else {
+            filtered++;
           }
         } catch (error) {
           errors++;
@@ -368,7 +384,8 @@ export class DirectoryWatcherService {
       throw error;
     }
 
-    return { imported, errors };
+    const skipped = Math.max(scanned - imported - errors, 0);
+    return { scanned, added: imported, imported, errors, filtered, unchanged, skipped };
   }
 }
 
