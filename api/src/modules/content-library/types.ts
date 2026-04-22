@@ -396,8 +396,16 @@ export interface TrendSignal {
   entityName: string;
   metric: string;
   direction: 'rising' | 'falling' | 'stable' | 'volatile';
-  dataPoints: Array<{ time: string; value: string; source: string }>;
+  dataPoints: Array<{ time: string; value: string; source: string; citationCount?: number }>;
   significance: number;
+  /** 平均速率（单位/天，基于去重后的数值序列） */
+  velocity?: number;
+  /** 人读速率标签，如 "↑ 2.3/月" */
+  velocityLabel?: string;
+  /** 后半段相对前半段的速率变化 */
+  acceleration?: 'accelerating' | 'decelerating' | 'steady';
+  /** 外推说明，仅 rising/falling 才计算 */
+  forecastNote?: string;
 }
 
 /** ⑦ 信息增量报告 */
