@@ -646,6 +646,78 @@ export const rssSourcesApi = {
     client.post('/quality/items/empty-trash') as Promise<{ success: boolean; deletedCount: number; message: string }>,
 };
 
+// 会议纪要采集渠道 (v7.6) ----------------------------------------------------
+export type MeetingNoteSourceKind =
+  | 'lark' | 'zoom' | 'teams' | 'upload' | 'folder' | 'manual';
+
+export type MeetingNoteImportStatus =
+  | 'pending' | 'running' | 'succeeded' | 'failed' | 'partial';
+
+export interface MeetingNoteSource {
+  id: string;
+  name: string;
+  kind: MeetingNoteSourceKind;
+  config: Record<string, any>;
+  isActive: boolean;
+  scheduleCron?: string | null;
+  lastImportedAt?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingNoteImport {
+  id: string;
+  sourceId: string;
+  status: MeetingNoteImportStatus;
+  startedAt: string;
+  finishedAt?: string | null;
+  itemsDiscovered: number;
+  itemsImported: number;
+  duplicates: number;
+  errors: number;
+  errorMessage?: string | null;
+  assetIds: string[];
+  triggeredBy: string;
+}
+
+export const meetingNoteSourcesApi = {
+  getAll: (params?: { kind?: MeetingNoteSourceKind; active?: boolean }) =>
+    client.get('/quality/meeting-note-sources', { params }) as Promise<{ items: MeetingNoteSource[] }>,
+
+  create: (data: {
+    name: string;
+    kind: MeetingNoteSourceKind;
+    config?: Record<string, any>;
+    isActive?: boolean;
+    scheduleCron?: string | null;
+  }) =>
+    client.post('/quality/meeting-note-sources', data) as Promise<MeetingNoteSource>,
+
+  update: (id: string, data: Partial<Pick<MeetingNoteSource, 'name' | 'config' | 'isActive' | 'scheduleCron'>>) =>
+    client.put(`/quality/meeting-note-sources/${id}`, data) as Promise<MeetingNoteSource>,
+
+  delete: (id: string) =>
+    client.delete(`/quality/meeting-note-sources/${id}`) as Promise<{ success: boolean }>,
+
+  triggerImport: (id: string, triggeredBy?: string) =>
+    client.post('/quality/meeting-note-sources/import', { id, triggeredBy }) as Promise<MeetingNoteImport>,
+
+  getProgress: () =>
+    client.get('/quality/meeting-note-sources/progress') as Promise<{ jobs: MeetingNoteImport[] }>,
+
+  getHistory: (params?: { sourceId?: string; limit?: number }) =>
+    client.get('/quality/meeting-note-sources/history', { params }) as Promise<{ items: MeetingNoteImport[] }>,
+
+  upload: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return client.post(`/quality/meeting-note-sources/${id}/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }) as Promise<MeetingNoteImport>;
+  },
+};
+
 // 情感分析相关类型 (v3.2)
 export interface SentimentAnalysis {
   id: string;

@@ -62,6 +62,7 @@ import { CopilotChat } from './pages/CopilotChat';
 import { Prediction } from './pages/Prediction';
 import { I18nManager } from './pages/I18nManager';
 import { RSSSources } from './pages/RSSSources';
+import { MeetingNoteSources } from './pages/MeetingNoteSources';
 import { RSSItems } from './pages/RSSItems';
 import { RSSAssets } from './pages/RSSAssets';
 import { AITaskRecommendations } from './pages/AITaskRecommendations';
@@ -163,6 +164,7 @@ function App() {
               <Route path="prediction" element={<Prediction />} />
               <Route path="i18n" element={<I18nManager />} />
               <Route path="rss-sources" element={<RSSSources />} />
+              <Route path="meeting-note-sources" element={<MeetingNoteSources />} />
 <Route path="rss-items" element={<RSSItems />} />
               <Route path="archive/hidden" element={<HiddenTasks />} />
               <Route path="archive/recycle-bin" element={<RecycleBin />} />
