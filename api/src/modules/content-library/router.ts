@@ -207,6 +207,8 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         onlyUnprocessed: body.onlyUnprocessed !== false,
         source: body.source === 'rss' ? 'rss' : 'assets',
         minQualityScore: body.minQualityScore ? parseInt(body.minQualityScore) : undefined,
+        enableDeep: body.enableDeep === true,
+        expertStrategy: body.expertStrategy,
       });
       return { jobId };
     });
@@ -312,6 +314,8 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // 手动触发 topic enrichment 生成并缓存（供 batch-ops 调用）
     fastify.post('/topics/enrich', async (request, reply) => {
       const query = request.query as any;
+      const body = (request.body || {}) as any;
+      const enableDeep = body.enableDeep === true || query.enableDeep === 'true';
       const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
@@ -321,10 +325,18 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         sortBy: query.sortBy === 'time' ? 'time' : 'score',
         sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: true,
+        enableDeep,
+        expertStrategy: body.expertStrategy,
       };
       const result = await engine.getTopicRecommendations(topicOptions);
       const enriched = result.items.filter(t => t.reason || t.titleSuggestion);
-      return reply.send({ ok: true, total: result.total, pageItems: result.items.length, enriched: enriched.length });
+      return reply.send({
+        ok: true,
+        total: result.total,
+        pageItems: result.items.length,
+        enriched: enriched.length,
+        deep: enableDeep,
+      });
     });
 
     // 知识空白
@@ -482,6 +494,8 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         domain: body.domain,
         overwrite: body.overwrite === true || body.overwrite === 'true',
         minFacts: body.minFacts ? parseInt(body.minFacts) : 3,
+        enableDeep: body.enableDeep === true,
+        expertStrategy: body.expertStrategy,
       });
       return { jobId };
     });

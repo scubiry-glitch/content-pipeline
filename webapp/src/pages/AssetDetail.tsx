@@ -858,16 +858,9 @@ export function AssetDetail() {
 
                 {/* 争议分析 */}
                 {deepAnalysis.controversies?.length > 0 && (
-                  <Section title="⚡ 争议分析">
+                  <Section title="⑬ 争议分析">
                     {deepAnalysis.controversies.map((c: any, i: number) => (
-                      <div key={i} style={{ background: '#fef3c7', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-                        <div style={{ fontSize: 12, color: '#b45309', marginBottom: 6 }}>{c.contradictionType} · 影响: {c.realWorldImpact?.level}</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                          <div style={{ background: '#fff', borderRadius: 6, padding: 8, fontSize: 12 }}><strong>观点A：</strong>{c.steelmanA}</div>
-                          <div style={{ background: '#fff', borderRadius: 6, padding: 8, fontSize: 12 }}><strong>观点B：</strong>{c.steelmanB}</div>
-                        </div>
-                        {c.resolution && <div style={{ marginTop: 8, fontSize: 12, color: '#555' }}>💡 {c.resolution}</div>}
-                      </div>
+                      <ControversyDetailCard key={i} c={c} />
                     ))}
                   </Section>
                 )}
@@ -904,13 +897,21 @@ export function AssetDetail() {
                 {/* 专家调用记录 */}
                 {deepAnalysis.expertInvocations?.length > 0 && (
                   <Section title="🔍 专家调用记录">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
                       {deepAnalysis.expertInvocations.map((inv: any, i: number) => (
                         <div key={i} style={{ background: '#f8fafc', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
                           <div style={{ fontWeight: 600 }}>{inv.deliverable}</div>
-                          <div style={{ color: '#666' }}>{inv.expertId}</div>
+                          <div style={{ color: '#666' }}>{inv.expertId}{inv.stage ? ` · ${inv.stage}` : ''}</div>
+                          {inv.strategy && (
+                            <div title={inv.strategy} style={{ color: '#6366f1', fontSize: 10, marginTop: 2 }}>
+                              策略: {abbrevStrategy(inv.strategy)}
+                            </div>
+                          )}
                           <div style={{ color: inv.emmPass ? '#16a34a' : '#dc2626' }}>{inv.emmPass ? '✓ EMM通过' : '✗ EMM未通过'}</div>
                           {inv.durationMs && <div style={{ color: '#999' }}>{inv.durationMs}ms</div>}
+                          {typeof inv.confidence === 'number' && (
+                            <div style={{ color: '#888' }}>置信度: {Math.round(inv.confidence * 100)}%</div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1023,4 +1024,161 @@ function CrossDomainSection({ data }: { data: any }) {
       ))}
     </div>
   );
+}
+
+// Round 2: 详细争议卡片（⑬ 专家深度分析产出）
+const CONTROVERSY_TYPE_STYLE: Record<string, { label: string; color: string }> = {
+  real_disagreement: { label: '真实分歧', color: '#e11d48' },
+  time_shift: { label: '时间变化', color: '#f59e0b' },
+  source_error: { label: '来源差异', color: '#64748b' },
+  definition_drift: { label: '定义漂移', color: '#3b82f6' },
+  unknown: { label: '未知', color: '#64748b' },
+};
+
+function ControversyDetailCard({ c }: { c: any }) {
+  const typeStyle = CONTROVERSY_TYPE_STYLE[c.contradictionType] || CONTROVERSY_TYPE_STYLE.unknown;
+  return (
+    <div style={{
+      background: '#fffbeb',
+      border: '1px solid #fde68a',
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 12,
+    }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+        <span style={{
+          background: typeStyle.color, color: '#fff',
+          padding: '2px 10px', borderRadius: 10, fontSize: 11,
+        }}>
+          {typeStyle.label}
+        </span>
+        {c.realWorldImpact && (
+          <span style={{ color: '#666', fontSize: 12 }}>影响: {c.realWorldImpact.level}</span>
+        )}
+        {c.temporalContext && (
+          <span style={{ color: '#888', fontSize: 11 }}>时间: {c.temporalContext}</span>
+        )}
+      </div>
+
+      {/* 矛盾事实对 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ background: '#fff', padding: 8, borderRadius: 6, fontSize: 12 }}>
+          <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>事实 A</div>
+          <div><strong>{c.factA?.subject}</strong> · {c.factA?.predicate} → {c.factA?.object}</div>
+          {typeof c.factA?.confidence === 'number' && (
+            <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>confidence: {Math.round(c.factA.confidence * 100)}%</div>
+          )}
+        </div>
+        <div style={{ fontWeight: 700, color: '#e11d48', fontSize: 14 }}>vs</div>
+        <div style={{ background: '#fff', padding: 8, borderRadius: 6, fontSize: 12 }}>
+          <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>事实 B</div>
+          <div><strong>{c.factB?.subject}</strong> · {c.factB?.predicate} → {c.factB?.object}</div>
+          {typeof c.factB?.confidence === 'number' && (
+            <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>confidence: {Math.round(c.factB.confidence * 100)}%</div>
+          )}
+        </div>
+      </div>
+
+      {/* Steelman */}
+      {(c.steelmanA || c.steelmanB) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div style={{ background: '#fff', padding: 8, borderRadius: 6, fontSize: 12 }}>
+            <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>支持 A 的最强论证</div>
+            <div>{c.steelmanA || '(未提供)'}</div>
+          </div>
+          <div style={{ background: '#fff', padding: 8, borderRadius: 6, fontSize: 12 }}>
+            <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>支持 B 的最强论证</div>
+            <div>{c.steelmanB || '(未提供)'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* 证据链 */}
+      {(c.evidenceChainA?.length || c.evidenceChainB?.length) ? (
+        <details style={{ fontSize: 12, marginBottom: 8 }}>
+          <summary style={{ cursor: 'pointer', color: '#475569' }}>证据链</summary>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+            <div>
+              <strong>A 方:</strong>
+              <ul style={{ margin: '4px 0', paddingLeft: 16 }}>
+                {(c.evidenceChainA || []).map((e: string, i: number) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+            <div>
+              <strong>B 方:</strong>
+              <ul style={{ margin: '4px 0', paddingLeft: 16 }}>
+                {(c.evidenceChainB || []).map((e: string, i: number) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+          </div>
+        </details>
+      ) : null}
+
+      {/* 利益相关方 */}
+      {Array.isArray(c.stakeholders) && c.stakeholders.length > 0 && (
+        <details style={{ fontSize: 12, marginBottom: 8 }}>
+          <summary style={{ cursor: 'pointer', color: '#475569' }}>利益相关方 ({c.stakeholders.length})</summary>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th style={{ padding: '4px 8px', border: '1px solid #e5e7eb', textAlign: 'left' }}>名称</th>
+                <th style={{ padding: '4px 8px', border: '1px solid #e5e7eb', textAlign: 'left' }}>立场</th>
+                <th style={{ padding: '4px 8px', border: '1px solid #e5e7eb', textAlign: 'left' }}>利益</th>
+                <th style={{ padding: '4px 8px', border: '1px solid #e5e7eb', textAlign: 'left' }}>可信度</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.stakeholders.map((s: any, i: number) => (
+                <tr key={i}>
+                  <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb' }}>{s.name}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb' }}>{s.position}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb' }}>{s.interest}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb' }}>{s.credibility}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+
+      {/* 解决方案 / 残余不确定性 */}
+      {(c.resolution || c.residualUncertainty) && (
+        <div style={{
+          background: '#ecfdf5', borderLeft: '3px solid #10b981',
+          padding: '6px 10px', fontSize: 12, marginBottom: 6,
+        }}>
+          {c.resolution && <div>💡 <strong>判定:</strong> {c.resolution}</div>}
+          {c.residualUncertainty && (
+            <div style={{ marginTop: 4 }}>⚠️ <strong>残余不确定性:</strong> {c.residualUncertainty}</div>
+          )}
+        </div>
+      )}
+
+      {/* 底部元信息 */}
+      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, borderTop: '1px dashed #e5e7eb', paddingTop: 4 }}>
+        分析专家: {c.analyzedByExpertId || '-'} · invokeId: {c.expertInvokeId?.slice(0, 8) || '-'}
+      </div>
+    </div>
+  );
+}
+
+// Round 2: 策略 spec 字符串 → 紧凑中文缩写
+const STRATEGY_ABBR: Record<string, string> = {
+  single: '单',
+  debate: '辩论',
+  mental_model_rotation: '轮询',
+  heuristic_trigger_first: '触发',
+  failure_check: '自检',
+  emm_iterative: 'EMM',
+  evidence_anchored: '锚案例',
+  calibrated_confidence: '校准',
+  track_record_verify: '历史',
+  signature_style: '签名',
+  knowledge_grounded: '引证',
+  contradictions_surface: '矛盾',
+  rubric_anchored_output: 'R',
+};
+function abbrevStrategy(spec?: string): string {
+  if (!spec) return '-';
+  return spec.split('|').map(s => STRATEGY_ABBR[s] || s.slice(0, 6)).join('|');
 }

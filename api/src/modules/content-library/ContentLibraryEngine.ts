@@ -326,6 +326,14 @@ export class ContentLibraryEngine {
     source?: 'assets' | 'rss';
     /** v7.3 调整1: 利用 Step 2 质量分过滤低质素材 (仅 source='assets') */
     minQualityScore?: number;
+    /** Round 2: 深度模式 — 走第 3 段 CDT 专家审定 */
+    enableDeep?: boolean;
+    /** Round 2: 专家应用策略配置 */
+    expertStrategy?: {
+      preset?: 'lite' | 'standard' | 'max' | 'custom';
+      default?: string;
+      perDeliverable?: Record<string, string>;
+    };
   }): Promise<{
     processed: number;
     newFacts: number;
@@ -416,10 +424,22 @@ export class ContentLibraryEngine {
         }
 
         // v7.3 调整3: 传递 themeId 让 fact.context 关联主题分类
+        // Round 2: 传递 enableDeep / expertStrategy 启用第 3 段专家审定
+        // Round 2: 深度模式下查一次 theme name，给专家匹配用
+        let themeName: string | undefined;
+        if (options.enableDeep && row.ai_theme_id) {
+          try {
+            const tn = await this.deps.db.query('SELECT name FROM asset_themes WHERE id = $1', [row.ai_theme_id]);
+            themeName = tn.rows?.[0]?.name || undefined;
+          } catch { /* theme 表不存在或查询失败 */ }
+        }
         const extraction = await this.factExtractor.extract({
           content,
           assetId: row._assetId || row.id,
           themeId: row.ai_theme_id || undefined,
+          themeName,
+          enableDeep: options.enableDeep,
+          expertStrategy: options.expertStrategy,
         });
 
         for (const entity of extraction.entities) {
@@ -739,6 +759,14 @@ export class ContentLibraryEngine {
     /** 排序方向：desc=倒序(默认)，asc=正序 */
     sortOrder?: 'asc' | 'desc';
     enrich?: boolean;   // true = 强制重新生成并保存缓存；false/undefined = 仅读缓存
+    /** Round 2: 深度模式 — enrich 时用 CDT 专家替代泛型 LLMEnricher，cache.mode='deep' */
+    enableDeep?: boolean;
+    /** Round 2: 专家应用策略配置 */
+    expertStrategy?: {
+      preset?: 'lite' | 'standard' | 'max' | 'custom';
+      default?: string;
+      perDeliverable?: Record<string, string>;
+    };
   }): Promise<TopicRecommendationsPage> {
     const rawLimit = options?.limit ?? 10;
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 200);
@@ -834,9 +862,13 @@ export class ContentLibraryEngine {
     // 读取缓存
     const entityIds = base.map(b => `'${b.entityId}'`).join(',');
     try {
+      // Round 2: 深度模式读 mode='deep' 子集；否则读 generic
+      const cacheMode = options?.enableDeep === true ? 'deep' : 'generic';
       const cacheResult = await this.deps.db.query(
         `SELECT entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles
-         FROM content_topic_enrichments WHERE entity_id IN (${entityIds})`
+         FROM content_topic_enrichments
+         WHERE entity_id IN (${entityIds}) AND (mode = $1 OR mode IS NULL)`,
+        [cacheMode],
       );
       for (const row of cacheResult.rows) {
         const item = base.find(b => b.entityId === row.entity_id);
@@ -870,81 +902,179 @@ export class ContentLibraryEngine {
       } catch { /* ignore */ }
     }
 
-    try {
-      const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
-      const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
-        items: topItems,
-        systemPrompt: `你是内容选题编辑。根据候选议题的事实证据，为每个议题产出 JSON 数组。
+    const cacheMode = options?.enableDeep === true ? 'deep' : 'generic';
+
+    // Round 2: 深度模式 — 走 CDT 专家替代泛型 LLMEnricher
+    if (options?.enableDeep === true) {
+      await this.enrichTopicsDeep(topItems, options?.expertStrategy);
+    } else {
+      try {
+        const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
+        const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
+          items: topItems,
+          systemPrompt: `你是内容选题编辑。根据候选议题的事实证据，为每个议题产出 JSON 数组。
 每个元素: {"entityName":"实体名","reason":"一句话为什么现在值得写","titleSuggestion":"15~25字建议标题","narrative":"80~120字选题会导语","angleMatrix":[{"angle":"角度","rationale":"为什么有料"}]}
 严格输出 JSON 数组, 不要 markdown 代码块, 不要多余文字。`,
-        buildUserPrompt: (items) => {
-          const lines = items.map((t, i) => {
-            const evidenceLines = (t.evidenceFacts || []).map(
-              (f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`
-            ).join('\n');
-            return `${i + 1}. ${t.entityName}  密度=${t.factDensity} 时效=${t.timeliness.toFixed(2)} 分数=${t.score.toFixed(2)}\n${evidenceLines || '  (无证据事实)'}`;
-          }).join('\n\n');
-          return `候选议题:\n\n${lines}\n\n请为每个议题生成 reason/titleSuggestion/narrative/angleMatrix (JSON 数组):`;
-        },
-        parseResponse: (parsed: any) => {
-          if (Array.isArray(parsed)) return parsed;
-          if (parsed && Array.isArray(parsed.topics)) return parsed.topics;
-          return [];
-        },
-        maxTokens: 3000,
-        fallback: [],
-      });
+          buildUserPrompt: (items) => {
+            const lines = items.map((t, i) => {
+              const evidenceLines = (t.evidenceFacts || []).map(
+                (f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`
+              ).join('\n');
+              return `${i + 1}. ${t.entityName}  密度=${t.factDensity} 时效=${t.timeliness.toFixed(2)} 分数=${t.score.toFixed(2)}\n${evidenceLines || '  (无证据事实)'}`;
+            }).join('\n\n');
+            return `候选议题:\n\n${lines}\n\n请为每个议题生成 reason/titleSuggestion/narrative/angleMatrix (JSON 数组):`;
+          },
+          parseResponse: (parsed: any) => {
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && Array.isArray(parsed.topics)) return parsed.topics;
+            return [];
+          },
+          maxTokens: 3000,
+          fallback: [],
+        });
 
-      if (!error && enriched.length > 0) {
-        for (const e of enriched) {
-          const match = topItems.find(t =>
-            t.entityName === e.entityName ||
-            t.entityName.includes(e.entityName) ||
-            e.entityName?.includes(t.entityName)
-          );
-          if (!match) continue;
-          match.reason = String(e.reason || '');
-          match.titleSuggestion = String(e.titleSuggestion || '');
-          match.narrative = String(e.narrative || '');
-          if (Array.isArray(e.angleMatrix)) {
-            match.angleMatrix = e.angleMatrix.map((a: any) => ({
-              angle: String(a?.angle || ''),
-              rationale: String(a?.rationale || ''),
-            }));
-            match.suggestedAngles = (match.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
-          }
-          // 写入缓存
-          try {
-            await this.deps.db.query(
-              `INSERT INTO content_topic_enrichments
-                 (entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles, generated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, NOW())
-               ON CONFLICT (entity_id) DO UPDATE SET
-                 reason = EXCLUDED.reason,
-                 title_suggestion = EXCLUDED.title_suggestion,
-                 narrative = EXCLUDED.narrative,
-                 angle_matrix = EXCLUDED.angle_matrix,
-                 suggested_angles = EXCLUDED.suggested_angles,
-                 generated_at = NOW()`,
-              [
-                match.entityId,
-                match.reason,
-                match.titleSuggestion,
-                match.narrative,
-                JSON.stringify(match.angleMatrix),
-                JSON.stringify(match.suggestedAngles),
-              ]
+        if (!error && enriched.length > 0) {
+          for (const e of enriched) {
+            const match = topItems.find(t =>
+              t.entityName === e.entityName ||
+              t.entityName.includes(e.entityName) ||
+              e.entityName?.includes(t.entityName)
             );
-          } catch (saveErr) {
-            console.warn('[getTopicRecommendations] cache save failed:', saveErr);
+            if (!match) continue;
+            match.reason = String(e.reason || '');
+            match.titleSuggestion = String(e.titleSuggestion || '');
+            match.narrative = String(e.narrative || '');
+            if (Array.isArray(e.angleMatrix)) {
+              match.angleMatrix = e.angleMatrix.map((a: any) => ({
+                angle: String(a?.angle || ''),
+                rationale: String(a?.rationale || ''),
+              }));
+              match.suggestedAngles = (match.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
+            }
           }
         }
+      } catch (err) {
+        console.warn('[getTopicRecommendations] LLM enrich failed:', err);
       }
-    } catch (err) {
-      console.warn('[getTopicRecommendations] LLM enrich failed:', err);
+    }
+
+    // 统一写缓存（deep 和 generic 用同一 UPSERT，只是 mode 不同）
+    for (const match of topItems) {
+      if (!match.reason && !match.titleSuggestion && !match.narrative) continue;
+      try {
+        await this.deps.db.query(
+          `INSERT INTO content_topic_enrichments
+             (entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles, mode, generated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (entity_id, mode) DO UPDATE SET
+             reason = EXCLUDED.reason,
+             title_suggestion = EXCLUDED.title_suggestion,
+             narrative = EXCLUDED.narrative,
+             angle_matrix = EXCLUDED.angle_matrix,
+             suggested_angles = EXCLUDED.suggested_angles,
+             generated_at = NOW()`,
+          [
+            match.entityId,
+            match.reason || '',
+            match.titleSuggestion || '',
+            match.narrative || '',
+            JSON.stringify(match.angleMatrix || []),
+            JSON.stringify(match.suggestedAngles || []),
+            cacheMode,
+          ],
+        );
+      } catch (saveErr) {
+        console.warn('[getTopicRecommendations] cache save failed:', saveErr);
+      }
     }
 
     return { items: base, total, limit, offset };
+  }
+
+  /**
+   * Round 2 — 深度模式议题富化：用匹配的 CDT 专家替代 LLMEnricher 泛型 prompt
+   * 直接 mutate 传入 topItems（与 LLMEnricher 行为一致）
+   */
+  private async enrichTopicsDeep(
+    topItems: TopicRecommendation[],
+    expertStrategy: {
+      preset?: 'lite' | 'standard' | 'max' | 'custom';
+      default?: string;
+      perDeliverable?: Record<string, string>;
+    } | undefined,
+  ): Promise<void> {
+    if (topItems.length === 0) return;
+
+    const { matchExpertForTopic } = await import('../../services/expert-library-helpers/matchExpertForTopic.js');
+    const { getExpertEngine } = await import('../expert-library/singleton.js');
+    const { createStrategyResolver } = await import('../../services/expert-application/index.js');
+
+    const expertEngine = getExpertEngine();
+    if (!expertEngine) return;
+
+    const resolveStrategy = createStrategyResolver(expertStrategy);
+    const strategy = resolveStrategy('①topic-enrich');
+
+    for (const item of topItems) {
+      try {
+        const match = await matchExpertForTopic(item.entityName, {
+          taskType: 'generation',
+          importance: 0.6,
+        });
+        if (!match.primaryExpert) continue;
+
+        const evidenceLines = (item.evidenceFacts || [])
+          .map((f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`)
+          .join('\n');
+
+        const prompt = [
+          `候选议题: ${item.entityName}`,
+          `事实密度: ${item.factDensity}  时效: ${item.timeliness?.toFixed(2) ?? '-'}  综合分: ${item.score?.toFixed(2) ?? '-'}`,
+          '',
+          '事实证据:',
+          evidenceLines || '  (无)',
+          '',
+          '请以你的专家视角为本议题生成 JSON:',
+          '{',
+          '  "reason": "一句话为什么现在值得写（带你的领域视角）",',
+          '  "titleSuggestion": "15~25字建议标题（体现你的表达 DNA）",',
+          '  "narrative": "80~120字选题会导语",',
+          '  "angleMatrix": [{"angle":"角度","rationale":"为什么有料"}]',
+          '}',
+          '',
+          '严格输出 JSON，不要 markdown 代码块。',
+        ].join('\n');
+
+        const result = await strategy.apply({
+          expertEngine,
+          deps: expertEngine.getDeps(),
+          experts: [match.primaryExpert, ...match.complementaryExperts],
+          inputData: prompt,
+          taskType: 'generation',
+          deliverable: '①topic-enrich',
+          contextHint: '你在为选题会生成议题包装，用你自己的口吻而非通用编辑套话。',
+          params: { depth: 'standard' },
+        });
+
+        const raw = result.output.sections.map((s) => s.content).join('\n');
+        const parsed = parseDeepTopicEnrichJson(raw);
+
+        if (parsed) {
+          if (parsed.reason) item.reason = String(parsed.reason);
+          if (parsed.titleSuggestion) item.titleSuggestion = String(parsed.titleSuggestion);
+          if (parsed.narrative) item.narrative = String(parsed.narrative);
+          if (Array.isArray(parsed.angleMatrix)) {
+            item.angleMatrix = parsed.angleMatrix.map((a: any) => ({
+              angle: String(a?.angle || ''),
+              rationale: String(a?.rationale || ''),
+            }));
+            item.suggestedAngles = (item.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
+          }
+        }
+      } catch (err) {
+        console.warn('[enrichTopicsDeep] item failed:', item.entityName, err);
+      }
+    }
   }
 
   /** ② 趋势信号 */
@@ -1465,6 +1595,144 @@ export class ContentLibraryEngine {
         error: errMsg,
         factsUsed: factsResult.rows.length,
       };
+    }
+  }
+
+  /**
+   * Round 2 — ⑩ 深度综合: 用匹配到的 CDT 专家替代泛型 prompt
+   * 缓存命名空间独立（调用方自行决定 cache_key 前缀）
+   */
+  async synthesizeInsightsDeep(options?: {
+    assetId?: string;
+    subjects?: string[];
+    domain?: string;
+    taxonomy_code?: string;
+    limit?: number;
+    expertId?: string;
+    expertStrategy?: {
+      preset?: 'lite' | 'standard' | 'max' | 'custom';
+      default?: string;
+      perDeliverable?: Record<string, string>;
+    };
+  }): Promise<{
+    insights: Array<{ text: string; sources: string[]; confidence: number }>;
+    summary: string;
+    error?: string;
+    factsUsed?: number;
+    expertId?: string;
+    invokeIds?: string[];
+    strategy?: string;
+  }> {
+    const { matchExpertForTopic } = await import('../../services/expert-library-helpers/matchExpertForTopic.js');
+    const { getExpertEngine } = await import('../expert-library/singleton.js');
+    const { createStrategyResolver, resolveSpecString } = await import('../../services/expert-application/index.js');
+
+    const expertEngine = getExpertEngine();
+    if (!expertEngine) {
+      // ExpertEngine 不可用 → 降级到泛型综合
+      return this.synthesizeInsightsRaw(options);
+    }
+
+    // 检索事实（复用 synthesizeInsightsRaw 的查询，但这里直接粘贴以避免二次加工）
+    const limit = options?.limit || 10;
+    let factsResult: any = { rows: [] };
+    for (const threshold of [0.5, 0.3, 0.0]) {
+      const conditions: string[] = [`is_current = true`, `confidence > ${threshold}`];
+      const params: any[] = [];
+      if (options?.subjects && options.subjects.length > 0) {
+        params.push(options.subjects);
+        conditions.push(`subject = ANY($${params.length})`);
+      }
+      if (options?.assetId) {
+        params.push(options.assetId);
+        conditions.push(`asset_id = $${params.length}`);
+      }
+      if (options?.domain) {
+        params.push(options.domain);
+        conditions.push(`context->>'domain' = $${params.length}`);
+      }
+      if (options?.taxonomy_code) {
+        const isL1 = /^E\d{2}$/.test(options.taxonomy_code);
+        params.push(isL1 ? `${options.taxonomy_code}%` : options.taxonomy_code);
+        conditions.push(`context->>'taxonomy_code' ${isL1 ? 'LIKE' : '='} $${params.length}`);
+      }
+      params.push(limit * 5);
+      const q = `SELECT DISTINCT subject, predicate, object, confidence, context FROM content_facts
+                 WHERE ${conditions.join(' AND ')} ORDER BY confidence DESC LIMIT $${params.length}`;
+      factsResult = await this.deps.db.query(q, params);
+      if (factsResult.rows.length >= 3) break;
+    }
+
+    if (factsResult.rows.length === 0) {
+      return {
+        insights: [],
+        summary: '内容库中暂无事实数据。请先导入素材并执行事实提取。',
+        error: 'NO_FACTS',
+        factsUsed: 0,
+      };
+    }
+
+    // 匹配专家
+    const topic = options?.subjects?.[0] || options?.domain || '';
+    const match = await matchExpertForTopic(topic, {
+      taskType: 'analysis',
+      importance: 0.6,
+      expertId: options?.expertId,
+    });
+
+    if (!match.primaryExpert) {
+      // 匹配不到专家 → 降级
+      console.warn('[synthesizeInsightsDeep] no expert matched, fallback to generic');
+      return this.synthesizeInsightsRaw(options);
+    }
+
+    const factsNarrative = factsResult.rows
+      .map((f: any) => `- ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(Number(f.confidence) * 100)}%)`)
+      .join('\n');
+
+    const resolveStrategy = createStrategyResolver(options?.expertStrategy);
+    const strategy = resolveStrategy('step5-synthesis');
+    const specStr = resolveSpecString(options?.expertStrategy, 'step5-synthesis');
+
+    const prompt = [
+      `以下是内容库中 ${factsResult.rows.length} 条高置信度事实（聚焦主题: ${topic || '全域'}）:`,
+      '',
+      factsNarrative,
+      '',
+      '请以你的专家视角，综合提炼出 3~5 条**有价值的洞察**（不是事实的简单重述）。',
+      '每条洞察应是一个完整、可操作的结论性判断，带反例/反方/边界条件更好。',
+      '',
+      '严格输出 JSON 数组，不要 markdown 代码块:',
+      '[{"text": "洞察内容", "sources": ["主体·谓词"], "confidence": 0.0-1.0}]',
+    ].join('\n');
+
+    try {
+      const result = await strategy.apply({
+        expertEngine,
+        deps: expertEngine.getDeps(),
+        experts: [match.primaryExpert, ...match.complementaryExperts],
+        inputData: prompt,
+        taskType: 'analysis',
+        deliverable: 'step5-synthesis',
+        contextHint: '你在做跨事实综合，用你自己的 CDT 而非通用分析。',
+        params: { depth: 'deep' },
+      });
+
+      const joined = result.output.sections.map((s) => s.content).join('\n');
+      const insights = parseInsightsFromText(joined, limit);
+
+      return {
+        insights,
+        summary: `[深度][${match.primaryExpert.name}] 从 ${factsResult.rows.length} 条事实中综合提炼出 ${insights.length} 条洞察`,
+        factsUsed: factsResult.rows.length,
+        expertId: match.primaryExpert.expert_id,
+        invokeIds: result.traces.map((t) => t.invokeId),
+        strategy: specStr,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[synthesizeInsightsDeep] failed, fallback to generic:', errMsg);
+      return this.synthesizeInsightsRaw(options);
     }
   }
 
@@ -2420,4 +2688,57 @@ export class ContentLibraryEngine {
       updatedAt,
     }));
   }
+}
+
+// Round 2 — 解析专家返回的议题 enrichment JSON
+function parseDeepTopicEnrichJson(text: string): any {
+  let cleaned = text.trim();
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i;
+  const fm = cleaned.match(fence);
+  if (fm) cleaned = fm[1].trim();
+  try { return JSON.parse(cleaned); } catch { /* */ }
+  const objMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try { return JSON.parse(objMatch[0].replace(/,\s*([\]}])/g, '$1')); } catch { /* */ }
+  }
+  return null;
+}
+
+// Round 2 — 共用 insights JSON 解析 (供 synthesizeInsightsDeep 使用)
+function parseInsightsFromText(
+  text: string,
+  limit: number,
+): Array<{ text: string; sources: string[]; confidence: number }> {
+  const extract = (raw: string): any => {
+    try { return JSON.parse(raw); } catch { /* */ }
+    const arr = raw.match(/\[[\s\S]*\]/);
+    if (arr) {
+      try { return JSON.parse(arr[0].replace(/,\s*([\]}])/g, '$1')); } catch { /* */ }
+    }
+    const obj = raw.match(/\{[\s\S]*\}/);
+    if (obj) {
+      try { return JSON.parse(obj[0].replace(/,\s*([\]}])/g, '$1')); } catch { /* */ }
+    }
+    return null;
+  };
+  let cleaned = text.trim();
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i;
+  const fm = cleaned.match(fence);
+  if (fm) cleaned = fm[1].trim();
+
+  const parsed = extract(cleaned);
+  const items: any[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.insights)
+      ? parsed.insights
+      : [];
+
+  return items
+    .filter((i) => i && typeof i.text === 'string' && i.text.trim())
+    .map((i) => ({
+      text: String(i.text).trim(),
+      sources: Array.isArray(i.sources) ? i.sources.map(String) : [],
+      confidence: typeof i.confidence === 'number' ? i.confidence : 0.5,
+    }))
+    .slice(0, limit);
 }

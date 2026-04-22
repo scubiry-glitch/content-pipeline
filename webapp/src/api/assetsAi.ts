@@ -8,10 +8,86 @@ export interface AssetsBatchProcessRequest {
   priority?: 'high' | 'normal' | 'low';
   force?: boolean;
   includeEmbedding?: boolean;
+  /** v7.4: 深度分析开关 */
+  enableDeepAnalysis?: boolean;
+  /** Round 2: 专家应用策略配置 */
+  expertStrategy?: ExpertStrategySpec;
   config?: {
     batchSize?: number;
     qualityThreshold?: number;
   };
+}
+
+/** Round 2: 专家应用策略配置 */
+export interface ExpertStrategySpec {
+  preset?: 'lite' | 'standard' | 'max' | 'custom';
+  default?: string;
+  perDeliverable?: Record<string, string>;
+}
+
+// ============================================================
+// Round 2: Asset 深度分析响应（⑤-⑮ deliverables + 专家调用痕迹）
+// ============================================================
+export interface ControversyStakeholder {
+  name: string;
+  position: string;
+  interest: string;
+  credibility: 'high' | 'medium' | 'low';
+}
+
+export interface ControversyAnalysisItem {
+  contradictionId: string;
+  factA: { subject: string; predicate: string; object: string; confidence: number };
+  factB: { subject: string; predicate: string; object: string; confidence: number };
+  contradictionType: string;
+  stakeholders?: ControversyStakeholder[];
+  evidenceChainA?: string[];
+  evidenceChainB?: string[];
+  steelmanA?: string;
+  steelmanB?: string;
+  temporalContext?: string;
+  sourceCredibilityGap?: string;
+  realWorldImpact?: { level: string; reasoning: string };
+  resolution?: string;
+  residualUncertainty?: string;
+  analyzedByExpertId?: string;
+  expertInvokeId?: string;
+}
+
+export interface ExpertInvocationItem {
+  deliverable: string;
+  expertId: string;
+  invokeId: string;
+  emmPass: boolean;
+  confidence?: number;
+  durationMs?: number;
+  strategy?: string;
+  stage?: string;
+}
+
+export interface AssetDeepAnalysisResponse {
+  assetId: string;
+  matchedDomainExpertIds: string[];
+  matchedSeniorExpertId?: string;
+  matchReasons: string[];
+  topicRecommendations?: any;
+  trendSignals?: any;
+  differentiationGaps?: any;
+  knowledgeBlanks?: any;
+  keyFacts?: any;
+  entityGraph?: any;
+  deltaReport?: any;
+  staleFacts?: any;
+  knowledgeCard?: any;
+  insights?: any;
+  materialRecommendations?: any;
+  expertConsensus?: any;
+  controversies?: ControversyAnalysisItem[];
+  beliefEvolution?: any;
+  crossDomainInsights?: any;
+  expertInvocations: ExpertInvocationItem[];
+  processingTimeMs: number;
+  modelVersion: string;
 }
 
 export interface AssetsBatchProcessResponse {
@@ -144,6 +220,22 @@ export const assetsAiApi = {
   async getAnalysis(assetId: string): Promise<AssetAIAnalysisResponse> {
     const data = await apiClient.get(`/ai/assets/assets/${assetId}/ai-analysis`);
     return data as unknown as AssetAIAnalysisResponse;
+  },
+
+  /**
+   * Round 2: 获取 Asset 深度分析结果（15 deliverable + 专家调用痕迹）
+   * 返回 null 表示该 asset 还没跑过深度分析
+   */
+  async getDeepAnalysis(assetId: string): Promise<AssetDeepAnalysisResponse | null> {
+    try {
+      const data = await apiClient.get(`/ai/assets/assets/${assetId}/deep-analysis`);
+      return data as unknown as AssetDeepAnalysisResponse;
+    } catch (err: any) {
+      if (err?.response?.status === 404 || err?.status === 404 || err?.code === 'NOT_FOUND') {
+        return null;
+      }
+      throw err;
+    }
   },
 
   /**

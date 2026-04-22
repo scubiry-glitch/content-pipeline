@@ -188,6 +188,16 @@ export interface FactExtractionRequest {
   themeId?: string;
   /** v7.3: 主题名称 (用于 LLM 提示上下文) */
   themeName?: string;
+  /** Round 2: 勾选"深度模式"时走第 3 段专家审定 */
+  enableDeep?: boolean;
+  /** Round 2: 可选指定专家（不指定则按 themeName/domain 自动匹配）*/
+  expertId?: string;
+  /** Round 2: 专家应用策略配置 */
+  expertStrategy?: {
+    preset?: 'lite' | 'standard' | 'max' | 'custom';
+    default?: string;
+    perDeliverable?: Record<string, string>;
+  };
 }
 
 /** 事实提取结果 */
