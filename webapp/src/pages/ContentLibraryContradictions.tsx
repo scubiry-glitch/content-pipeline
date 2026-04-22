@@ -1,5 +1,5 @@
 // 内容库 — 争议话题看板
-// v7.3: 分页 + severity/domain/subject 筛选
+// v7.4: 假阳性过滤 + 来源标注
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
@@ -7,37 +7,107 @@ import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementP
 const API_BASE = '/api/v1/content-library';
 const PAGE_SIZE = 20;
 
+// ── 假阳性过滤工具 ────────────────────────────────────────────────────────────
+
+/** 归一化 object 值：去除近似/目的前缀、助词、千分位逗号 */
+function normalizeValue(v: string): string {
+  return v
+    // 近似量词前缀
+    .replace(/^(约为?|大约|近|超过|不到|至少|最多|约达|逾|达|仅|仅约)\s*/u, '')
+    // 目的/动词前缀
+    .replace(/^(为了?|用于|旨在)\s*/u, '')
+    // 时间限定前缀（如"截至2018年底"）
+    .replace(/^截至\S+?[底末]\s*/u, '')
+    // 常见虚词
+    .replace(/[的了着过地得]/gu, '')
+    // 千分位逗号
+    .replace(/,/g, '')
+    // 各类引号（英文单双、中文全角）
+    .replace(/['"'"«»「」『』【】]/g, '')
+    .trim();
+}
+
+/** Levenshtein 编辑距离（O(n·m) 滚动数组） */
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/**
+ * 判断两个 object 值是否语义相同（假阳性）：
+ * 1. 归一化后字符串相等
+ * 2. 都能解析为数字且差异 < 0.1%
+ * 3. 一方是另一方的子串（附加时间/修饰语场景）
+ * 4. 编辑距离 / 最长串 < 15%（词序互换、标点细差）
+ */
+function isSemanticallyEqual(a: string, b: string): boolean {
+  const na = normalizeValue(a);
+  const nb = normalizeValue(b);
+  if (na === nb) return true;
+
+  const fa = parseFloat(na);
+  const fb = parseFloat(nb);
+  if (!isNaN(fa) && !isNaN(fb) && Math.abs(fa - fb) / (Math.max(Math.abs(fa), Math.abs(fb)) || 1) < 0.001) {
+    return true;
+  }
+
+  if (na.length >= 4 && (nb.includes(na) || na.includes(nb))) return true;
+
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen > 0 && maxLen <= 200 && editDistance(na, nb) / maxLen < 0.15) return true;
+
+  return false;
+}
+
+// ── 类型 ──────────────────────────────────────────────────────────────────────
+
+interface Fact {
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+  context: Record<string, unknown>;
+  assetId?: string;
+}
+
 interface Contradiction {
   id: string;
-  factA: { subject: string; predicate: string; object: string; confidence: number; context: any };
-  factB: { subject: string; predicate: string; object: string; confidence: number; context: any };
+  factA: Fact;
+  factB: Fact;
   description: string;
   severity: 'low' | 'medium' | 'high';
   detectedAt: string;
 }
 
+// ── 组件 ──────────────────────────────────────────────────────────────────────
+
 export function ContentLibraryContradictions() {
   const [all, setAll] = useState<Contradiction[]>([]);
   const [loading, setLoading] = useState(true);
-  // 筛选
   const [searchSubject, setSearchSubject] = useState('');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
-  // 分页
   const [page, setPage] = useState(1);
   const zepStatus = useZepStatus();
-  const [zepConflicts, setZepConflicts] = useState<Array<{ fact: string; validAt?: string; invalidAt?: string; source: string; target: string }>>([]);
+  const [zepConflicts, setZepConflicts] = useState<Array<{
+    fact: string; validAt?: string; invalidAt?: string; source: string; target: string
+  }>>([]);
   const [zepLoading, setZepLoading] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
-  /** 争议列表与 Zep 分离：搜索框输入即拉 Zep（无需再点刷新） */
   useEffect(() => {
     const q = searchSubject.trim();
-    if (!q) {
-      setZepConflicts([]);
-      setZepLoading(false);
-      return;
-    }
+    if (!q) { setZepConflicts([]); setZepLoading(false); return; }
     setZepLoading(true);
     fetch(`${API_BASE}/zep/contradictions/${encodeURIComponent(q)}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -52,13 +122,24 @@ export function ContentLibraryContradictions() {
       const res = await fetch(`${API_BASE}/contradictions?limit=200`);
       if (res.ok) {
         const data = await res.json();
-        setAll(Array.isArray(data) ? data : (data?.items ?? []));
+        const raw: Contradiction[] = Array.isArray(data) ? data : (data?.items ?? []);
+        // 去假阳性
+        const deduped = raw.filter(c => !isSemanticallyEqual(c.factA.object, c.factB.object));
+        // 去重：同一 (subject, predicate, objectA, objectB) 只保留第一条
+        const seen = new Set<string>();
+        const unique = deduped.filter(c => {
+          // 同一 (subject, predicate) 只保留一条，避免多值两两组合爆炸
+          const key = `${c.factA.subject}||${c.factA.predicate}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setAll(unique);
       }
     } catch { /* ignore */ }
     setLoading(false);
   };
 
-  // 客户端筛选
   const filtered = all.filter(c => {
     if (severityFilter !== 'all' && c.severity !== severityFilter) return false;
     if (searchSubject) {
@@ -74,14 +155,13 @@ export function ContentLibraryContradictions() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeP = Math.min(page, totalPages);
   const pageItems = filtered.slice((safeP - 1) * PAGE_SIZE, safeP * PAGE_SIZE);
+  const resetPage = () => setPage(1);
 
   const severityConfig: Record<string, { label: string; color: string; bg: string }> = {
     high: { label: '高', color: 'text-red-700', bg: 'bg-red-100 border-red-300' },
     medium: { label: '中', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-300' },
     low: { label: '低', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-300' },
   };
-
-  const resetPage = () => setPage(1);
 
   return (
     <div className="p-6">
@@ -109,7 +189,6 @@ export function ContentLibraryContradictions() {
         <button onClick={loadData} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
           刷新
         </button>
-        {/* 分页 */}
         {filtered.length > 0 && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 ml-auto">
             <button disabled={safeP <= 1} onClick={() => setPage(p => p - 1)}
@@ -144,18 +223,24 @@ export function ContentLibraryContradictions() {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-white dark:bg-gray-700 rounded border">
-                    <div className="text-sm text-gray-500 mb-1">事实 A</div>
-                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">{c.factA.subject} · {c.factA.predicate}</div>
-                    <div className="font-medium text-gray-900 dark:text-white">{c.factA.object}</div>
-                    <div className="text-xs text-gray-500 mt-1">置信度: {(c.factA.confidence * 100).toFixed(0)}%</div>
-                  </div>
-                  <div className="p-3 bg-white dark:bg-gray-700 rounded border">
-                    <div className="text-sm text-gray-500 mb-1">事实 B</div>
-                    <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">{c.factB.subject} · {c.factB.predicate}</div>
-                    <div className="font-medium text-gray-900 dark:text-white">{c.factB.object}</div>
-                    <div className="text-xs text-gray-500 mt-1">置信度: {(c.factB.confidence * 100).toFixed(0)}%</div>
-                  </div>
+                  {([c.factA, c.factB] as Fact[]).map((fact, fi) => {
+                    const source = fact.assetId || (fact.context?.source as string) || (fact.context?.assetId as string);
+                    return (
+                      <div key={fi} className="p-3 bg-white dark:bg-gray-700 rounded border">
+                        <div className="text-sm text-gray-500 mb-1">事实 {fi === 0 ? 'A' : 'B'}</div>
+                        <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">
+                          {fact.subject} · {fact.predicate}
+                        </div>
+                        <div className="font-medium text-gray-900 dark:text-white">{fact.object}</div>
+                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
+                          <span>置信度: {(fact.confidence * 100).toFixed(0)}%</span>
+                          {source && (
+                            <span className="text-amber-600 dark:text-amber-400">来源: {source}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

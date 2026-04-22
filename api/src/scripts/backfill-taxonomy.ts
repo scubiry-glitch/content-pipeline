@@ -1,10 +1,17 @@
-// Best-effort backfill of taxonomy_code for pre-taxonomy rows.
-// Strategy (first match wins):
+// Backfill /assets 素材的领域（级联 taxonomy_code）与一级领域展示名 domain、内容分类 type。
+//
+// taxonomy_code（仍为 NULL 的行）解析策略（first match wins）：
 //   1. Exact level-1 name   ("人工智能" -> E07)
 //   2. Exact level-2 name   ("大模型"   -> E07.LLM)
 //   3. Synonym dictionary   (see config/taxonomyData.ts)
-//   4. Fallback to E99.USER (keeps original string as user-custom)
-// The script is idempotent: it only writes rows where taxonomy_code IS NULL.
+//   4. Fallback to E99.USER
+//
+// 在 taxonomy_code 已有值后（含本次解析结果）：
+//   - 将 asset_themes.domain / assets.domain 规范为 taxonomy_domains 上一级（level-1）中文名，
+//     与前端「领域级联」展示一致（二级码取其 parent 的名称）。
+//   - 将 assets.type（分类）为空的行按 content_type 推断：pdf -> report，其余 -> file；
+//     并将非法 type 值归一为 file。
+//
 // Usage: npm run taxonomy:backfill
 
 import 'dotenv/config';
@@ -12,6 +19,20 @@ import fs from 'fs';
 import path from 'path';
 import { query, ensureDbPoolConnected, closePool } from '../db/connection.js';
 import { ensureTaxonomySchema, sync, resolve } from '../services/taxonomyService.js';
+
+const VALID_ASSET_TYPES = [
+  'file',
+  'report',
+  'quote',
+  'data',
+  'rss_item',
+  'chart',
+  'insight',
+  'meeting_minutes',
+  'briefing',
+  'interview',
+  'transcript',
+] as const;
 
 interface Counter {
   total: number;
@@ -131,6 +152,74 @@ async function backfillContentFacts(c: Counter) {
   console.log(`[backfill] content_facts: updated ${rowCount}`);
 }
 
+/** 一级领域中文名：二级码取 parent.name，一级码取自身 name（与 /assets 级联 UI 一致）。 */
+async function syncThemeDomainsFromTaxonomy(): Promise<number> {
+  const res = await query(`
+    UPDATE asset_themes t
+       SET domain = COALESCE(
+             (SELECT p.name
+                FROM taxonomy_domains c
+                JOIN taxonomy_domains p ON p.code = c.parent_code
+               WHERE c.code = t.taxonomy_code
+                 AND c.level = 2),
+             (SELECT n.name
+                FROM taxonomy_domains n
+               WHERE n.code = t.taxonomy_code
+                 AND n.level = 1)
+           )
+     WHERE t.taxonomy_code IS NOT NULL
+  `);
+  const n = res.rowCount ?? 0;
+  console.log(`[backfill] asset_themes.domain synced from taxonomy: ${n}`);
+  return n;
+}
+
+async function syncAssetDomainsFromTaxonomy(): Promise<number> {
+  const res = await query(`
+    UPDATE assets a
+       SET domain = COALESCE(
+             (SELECT p.name
+                FROM taxonomy_domains c
+                JOIN taxonomy_domains p ON p.code = c.parent_code
+               WHERE c.code = a.taxonomy_code
+                 AND c.level = 2),
+             (SELECT n.name
+                FROM taxonomy_domains n
+               WHERE n.code = a.taxonomy_code
+                 AND n.level = 1)
+           )
+     WHERE a.taxonomy_code IS NOT NULL
+  `);
+  const n = res.rowCount ?? 0;
+  console.log(`[backfill] assets.domain synced from taxonomy: ${n}`);
+  return n;
+}
+
+/** 内容类型（分类）：补全 type，与 routes 中 ASSET_TYPES 一致。 */
+async function backfillAssetTypes(): Promise<{ filled: number; normalized: number }> {
+  const list = VALID_ASSET_TYPES.map(t => `'${t.replace(/'/g, "''")}'`).join(', ');
+  const norm = await query(`
+    UPDATE assets
+       SET type = 'file'
+     WHERE type IS NOT NULL
+       AND btrim(type::text) <> ''
+       AND type::text NOT IN (${list})
+  `);
+  const fill = await query(`
+    UPDATE assets
+       SET type = CASE
+             WHEN content_type = 'pdf' THEN 'report'
+             ELSE 'file'
+           END
+     WHERE type IS NULL
+        OR btrim(COALESCE(type::text, '')) = ''
+  `);
+  const normalized = norm.rowCount ?? 0;
+  const filled = fill.rowCount ?? 0;
+  console.log(`[backfill] assets.type: filled ${filled}, normalized invalid -> file ${normalized}`);
+  return { filled, normalized };
+}
+
 async function main() {
   await ensureDbPoolConnected();
   await ensureTaxonomySchema();
@@ -145,16 +234,26 @@ async function main() {
   };
 
   await backfillAssetThemes(counter);
+  const themeDomainSynced = await syncThemeDomainsFromTaxonomy();
   await backfillAssets(counter);
+  const assetDomainSynced = await syncAssetDomainsFromTaxonomy();
+  const typeBackfill = await backfillAssetTypes();
   await backfillExperts(counter);
   await backfillContentFacts(counter);
 
   const outDir = path.resolve(process.cwd(), 'logs');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, 'taxonomy-backfill-report.json');
-  fs.writeFileSync(outPath, JSON.stringify(counter, null, 2), 'utf-8');
+  const report = {
+    ...counter,
+    asset_themes_domain_synced: themeDomainSynced,
+    assets_domain_synced: assetDomainSynced,
+    assets_type_filled: typeBackfill.filled,
+    assets_type_normalized_invalid: typeBackfill.normalized,
+  };
+  fs.writeFileSync(outPath, JSON.stringify(report, null, 2), 'utf-8');
   console.log(`[backfill] report written: ${outPath}`);
-  console.log(counter);
+  console.log(report);
 
   await closePool();
 }

@@ -383,6 +383,10 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_analyzed_at TIMESTAMP WITH TIME ZONE`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_duplicate_of VARCHAR(50)`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`);
+  // v6.3: taxonomy integration columns
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS domain VARCHAR(100)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS taxonomy_code VARCHAR(50)`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS type VARCHAR(50)`);
 
   // Research annotations - for deep research citations
   await query(`
