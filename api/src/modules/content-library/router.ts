@@ -346,6 +346,81 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return engine.getTrendSignals(entityId);
     });
 
+    // ============================================================
+    // TAVILY 搜索补全 — 用于观点演化 / 趋势信号的外部证据获取
+    // ============================================================
+
+    fastify.post('/search/suggest', async (request, reply) => {
+      const body = request.body as any;
+      const subject = String(body?.subject || '').trim();
+      const mode = body?.mode === 'trend' ? 'trend' : 'belief';
+      const metric = body?.metric ? String(body.metric).trim() : '';
+      const extra = body?.extraKeywords ? String(body.extraKeywords).trim() : '';
+      const limit = Math.min(10, Math.max(1, Number(body?.limit) || 6));
+      if (!subject) {
+        reply.code(400);
+        return { error: '缺少 subject' };
+      }
+      const query = mode === 'trend'
+        ? [subject, metric, extra, '变化', '趋势'].filter(Boolean).join(' ')
+        : [subject, extra, '最新', '观点', '演变'].filter(Boolean).join(' ');
+      try {
+        const { WebSearchService } = await import('../../services/webSearch.js');
+        const svc = new WebSearchService();
+        const results = await svc.search({ query, maxResults: limit });
+        return {
+          query,
+          mode,
+          results: results.map(r => ({
+            title: r.title,
+            snippet: r.snippet,
+            url: r.url,
+            source: r.source,
+            publishedAt: r.publishedAt,
+            relevance: r.relevance,
+            credibility: r.credibility,
+          })),
+        };
+      } catch (err: any) {
+        reply.code(502);
+        return { error: err?.message || 'search failed', query };
+      }
+    });
+
+    fastify.post('/search/append', async (request, reply) => {
+      const body = request.body as any;
+      const subject = String(body?.subject || '').trim();
+      const predicate = String(body?.predicate || '').trim();
+      const mode = body?.mode === 'trend' ? 'trend' : 'belief';
+      const items = Array.isArray(body?.items) ? body.items : [];
+      if (!subject || !predicate) {
+        reply.code(400);
+        return { error: '缺少 subject 或 predicate' };
+      }
+      if (items.length === 0) {
+        reply.code(400);
+        return { error: 'items 为空' };
+      }
+      const sanitized = items
+        .filter((it: any) => it && typeof it.url === 'string' && it.url)
+        .map((it: any) => ({
+          title: it.title ? String(it.title).slice(0, 500) : undefined,
+          snippet: it.snippet ? String(it.snippet).slice(0, 1000) : undefined,
+          url: String(it.url),
+          publishedAt: it.publishedAt ? String(it.publishedAt) : undefined,
+          value: it.value ? String(it.value).slice(0, 200) : undefined,
+          sourceHost: it.source ? String(it.source).slice(0, 120) : undefined,
+        }));
+      const result = await engine.appendFactsFromSearch({
+        subject,
+        predicate,
+        mode,
+        domain: body?.domain ? String(body.domain) : undefined,
+        items: sanitized,
+      });
+      return result;
+    });
+
     // ⑤ 关键事实
     fastify.get('/facts/key', async (request, reply) => {
       const query = request.query as any;
