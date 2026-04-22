@@ -214,6 +214,75 @@ export interface AssetAIAnalysisResult {
   vectorization?: AssetVectorization;
   duplicate?: DuplicateDetection;
   taskRecommendation?: AssetTaskRecommendation;
+  /** v7.4: 深度分析结果 — 仅当 config.enableDeepAnalysis 为 true 时填充 */
+  deepAnalysis?: AssetDeepAnalysis;
+  processingTimeMs: number;
+  modelVersion: string;
+}
+
+// ============================================
+// v7.4 深度分析 — 15 deliverable + Expert Library
+// ============================================
+export interface ExpertInvocationTrace {
+  deliverable: string;      // '⑩insights' / '⑫consensus' / '⑬controversy'
+  expertId: string;
+  invokeId: string;
+  emmPass: boolean;
+  confidence?: number;
+  durationMs?: number;
+}
+
+export interface ControversyStakeholder {
+  name: string;
+  position: string;
+  interest: string;
+  credibility: 'high' | 'medium' | 'low';
+}
+
+export interface ControversyAnalysis {
+  /** 原始矛盾 ID，来自 ContentLibraryEngine.getContradictions */
+  contradictionId: string;
+  factA: { subject: string; predicate: string; object: string; confidence: number };
+  factB: { subject: string; predicate: string; object: string; confidence: number };
+  /** LLM 分析结果 */
+  contradictionType: 'time_shift' | 'source_error' | 'real_disagreement' | 'definition_drift' | 'unknown';
+  stakeholders: ControversyStakeholder[];
+  evidenceChainA: string[];
+  evidenceChainB: string[];
+  steelmanA: string;
+  steelmanB: string;
+  temporalContext?: string;
+  sourceCredibilityGap?: string;
+  realWorldImpact: { level: 'high' | 'medium' | 'low'; reasoning: string };
+  resolution: string;
+  residualUncertainty?: string;
+  /** 调用的专家 */
+  analyzedByExpertId?: string;
+  expertInvokeId?: string;
+}
+
+export interface AssetDeepAnalysis {
+  assetId: string;
+  matchedDomainExpertIds: string[];
+  matchedSeniorExpertId?: string;
+  matchReasons: string[];
+  // 15 个 deliverable
+  topicRecommendations?: unknown;
+  trendSignals?: unknown;
+  differentiationGaps?: unknown;
+  knowledgeBlanks?: unknown;
+  keyFacts?: unknown;
+  entityGraph?: unknown;
+  deltaReport?: unknown;
+  staleFacts?: unknown;
+  knowledgeCard?: unknown;
+  insights?: unknown;
+  materialRecommendations?: unknown;
+  expertConsensus?: unknown;
+  controversies?: ControversyAnalysis[];
+  beliefEvolution?: unknown;
+  crossDomainInsights?: unknown;
+  expertInvocations: ExpertInvocationTrace[];
   processingTimeMs: number;
   modelVersion: string;
 }
@@ -230,6 +299,8 @@ export interface AssetsBatchProcessingConfig {
   enableTaskRecommendation: boolean;
   chunkSize: number;
   chunkOverlap: number;
+  /** v7.4: 开启后跑完标签化再调用 ContentLibraryEngine 15 个 deliverable + 专家库 EMM */
+  enableDeepAnalysis?: boolean;
 }
 
 export interface AssetsBatchProcessResult {

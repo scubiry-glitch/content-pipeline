@@ -28,6 +28,7 @@ const DEFAULT_CONFIG: AssetsBatchProcessingConfig = {
   enableTaskRecommendation: true,
   chunkSize: 512,
   chunkOverlap: 50,
+  enableDeepAnalysis: false,
 };
 
 // ============================================
@@ -201,10 +202,26 @@ export class AssetsAIBatchProcessor {
       }
     }
 
+    // 8. 深度分析（可选 — 15 deliverable + 专家库 EMM）
+    let deepAnalysis: AssetAIAnalysisResult['deepAnalysis'] = undefined;
+    if (this.config.enableDeepAnalysis) {
+      try {
+        const { runDeepAnalysis } = await import('./deepAnalysisOrchestrator.js');
+        deepAnalysis = await runDeepAnalysis(
+          asset,
+          qualityResult.quality,
+          classificationResult.classification,
+        );
+      } catch (error) {
+        console.error(`[AssetsAIBatchProcessor] Deep analysis failed for ${asset.id}:`, error);
+        // 不阻断主流程
+      }
+    }
+
     const totalProcessingTime = Date.now() - startTime;
 
     console.log(
-      `[AssetsAIBatchProcessor] Completed asset ${asset.id}: quality=${qualityResult.quality.overall}, time=${totalProcessingTime}ms`
+      `[AssetsAIBatchProcessor] Completed asset ${asset.id}: quality=${qualityResult.quality.overall}, time=${totalProcessingTime}ms${deepAnalysis ? ' (deep)' : ''}`
     );
 
     return {
@@ -214,8 +231,9 @@ export class AssetsAIBatchProcessor {
       vectorization: vectorizationResult,
       duplicate: duplicateResult,
       taskRecommendation,
+      deepAnalysis,
       processingTimeMs: totalProcessingTime,
-      modelVersion: 'v1.0',
+      modelVersion: deepAnalysis ? 'v2.0-deep' : 'v1.0',
     };
   }
 

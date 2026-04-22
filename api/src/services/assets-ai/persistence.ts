@@ -2,7 +2,7 @@
 // v6.2 Assets AI 批量处理 - 数据持久化服务
 // ============================================
 
-import { Asset, AssetAIAnalysisResult, DocumentChunk, SemanticSearchResult } from './types.js';
+import { Asset, AssetAIAnalysisResult, AssetDeepAnalysis, DocumentChunk, SemanticSearchResult } from './types.js';
 import { query } from '../../db/connection.js';
 
 // ============================================
@@ -132,6 +132,11 @@ export class PersistenceService {
             updated_at = NOW()`,
           ['asset', assetId, JSON.stringify(taskRecommendation), 'pending']
         );
+      }
+
+      // 4. v7.4: 深度分析结果写入 asset_deep_analysis
+      if (result.deepAnalysis) {
+        await this.saveDeepAnalysis(result.deepAnalysis);
       }
 
       console.log(`[PersistenceService] Saved analysis for asset ${assetId}`);
@@ -516,6 +521,120 @@ export class PersistenceService {
       console.error('[PersistenceService] Find similar assets failed:', error);
       return [];
     }
+  }
+
+  /**
+   * v7.4: 保存深度分析结果到 asset_deep_analysis
+   */
+  async saveDeepAnalysis(deep: AssetDeepAnalysis): Promise<void> {
+    try {
+      await query(
+        `INSERT INTO asset_deep_analysis (
+          asset_id,
+          matched_domain_expert_ids, matched_senior_expert_id, match_reasons,
+          topic_recommendations, trend_signals, differentiation_gaps, knowledge_blanks,
+          key_facts, entity_graph, delta_report, stale_facts, knowledge_card,
+          insights, material_recommendations, expert_consensus,
+          controversies, belief_evolution, cross_domain_insights,
+          expert_invocations, model_version, processing_time_ms
+        ) VALUES (
+          $1,
+          $2, $3, $4,
+          $5, $6, $7, $8,
+          $9, $10, $11, $12, $13,
+          $14, $15, $16,
+          $17, $18, $19,
+          $20, $21, $22
+        )
+        ON CONFLICT (asset_id) DO UPDATE SET
+          matched_domain_expert_ids = EXCLUDED.matched_domain_expert_ids,
+          matched_senior_expert_id = EXCLUDED.matched_senior_expert_id,
+          match_reasons = EXCLUDED.match_reasons,
+          topic_recommendations = EXCLUDED.topic_recommendations,
+          trend_signals = EXCLUDED.trend_signals,
+          differentiation_gaps = EXCLUDED.differentiation_gaps,
+          knowledge_blanks = EXCLUDED.knowledge_blanks,
+          key_facts = EXCLUDED.key_facts,
+          entity_graph = EXCLUDED.entity_graph,
+          delta_report = EXCLUDED.delta_report,
+          stale_facts = EXCLUDED.stale_facts,
+          knowledge_card = EXCLUDED.knowledge_card,
+          insights = EXCLUDED.insights,
+          material_recommendations = EXCLUDED.material_recommendations,
+          expert_consensus = EXCLUDED.expert_consensus,
+          controversies = EXCLUDED.controversies,
+          belief_evolution = EXCLUDED.belief_evolution,
+          cross_domain_insights = EXCLUDED.cross_domain_insights,
+          expert_invocations = EXCLUDED.expert_invocations,
+          model_version = EXCLUDED.model_version,
+          processing_time_ms = EXCLUDED.processing_time_ms,
+          analyzed_at = NOW()`,
+        [
+          deep.assetId,
+          JSON.stringify(deep.matchedDomainExpertIds),
+          deep.matchedSeniorExpertId || null,
+          JSON.stringify(deep.matchReasons),
+          JSON.stringify(deep.topicRecommendations ?? null),
+          JSON.stringify(deep.trendSignals ?? null),
+          JSON.stringify(deep.differentiationGaps ?? null),
+          JSON.stringify(deep.knowledgeBlanks ?? null),
+          JSON.stringify(deep.keyFacts ?? null),
+          JSON.stringify(deep.entityGraph ?? null),
+          JSON.stringify(deep.deltaReport ?? null),
+          JSON.stringify(deep.staleFacts ?? null),
+          JSON.stringify(deep.knowledgeCard ?? null),
+          JSON.stringify(deep.insights ?? null),
+          JSON.stringify(deep.materialRecommendations ?? null),
+          JSON.stringify(deep.expertConsensus ?? null),
+          JSON.stringify(deep.controversies ?? null),
+          JSON.stringify(deep.beliefEvolution ?? null),
+          JSON.stringify(deep.crossDomainInsights ?? null),
+          JSON.stringify(deep.expertInvocations),
+          deep.modelVersion,
+          deep.processingTimeMs,
+        ],
+      );
+      console.log(`[PersistenceService] Saved deep analysis for asset ${deep.assetId}`);
+    } catch (error) {
+      console.error(`[PersistenceService] Failed to save deep analysis for ${deep.assetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * v7.4: 读取深度分析结果
+   */
+  async getDeepAnalysisResult(assetId: string): Promise<AssetDeepAnalysis | null> {
+    const result = await query(
+      `SELECT * FROM asset_deep_analysis WHERE asset_id = $1`,
+      [assetId],
+    );
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    return {
+      assetId: row.asset_id,
+      matchedDomainExpertIds: row.matched_domain_expert_ids || [],
+      matchedSeniorExpertId: row.matched_senior_expert_id || undefined,
+      matchReasons: row.match_reasons || [],
+      topicRecommendations: row.topic_recommendations,
+      trendSignals: row.trend_signals,
+      differentiationGaps: row.differentiation_gaps,
+      knowledgeBlanks: row.knowledge_blanks,
+      keyFacts: row.key_facts,
+      entityGraph: row.entity_graph,
+      deltaReport: row.delta_report,
+      staleFacts: row.stale_facts,
+      knowledgeCard: row.knowledge_card,
+      insights: row.insights,
+      materialRecommendations: row.material_recommendations,
+      expertConsensus: row.expert_consensus,
+      controversies: row.controversies || [],
+      beliefEvolution: row.belief_evolution,
+      crossDomainInsights: row.cross_domain_insights,
+      expertInvocations: row.expert_invocations || [],
+      processingTimeMs: row.processing_time_ms || 0,
+      modelVersion: row.model_version || 'v2.0-deep',
+    };
   }
 
   /**

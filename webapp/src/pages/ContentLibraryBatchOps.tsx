@@ -53,6 +53,8 @@ export function ContentLibraryBatchOps() {
   /** v7.3: Step 2 素材来源勾选（仅 assets 表，不含 rss_items） */
   const [aiSourceAssets, setAiSourceAssets] = useState(true);
   const [aiSourceBinding, setAiSourceBinding] = useState(true);
+  /** v7.4: Step 2 深度分析开关 — 勾选后跑 15 产出物 + 专家库 EMM */
+  const [enableDeepAnalysis, setEnableDeepAnalysis] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Step 4b: Zep 知识回填
@@ -103,9 +105,14 @@ export function ContentLibraryBatchOps() {
     }
   };
 
-  // Step 2: AI 批量分析 (v7.3: 断点续传 + 可选重试失败)
+  // Step 2: AI 批量分析 (v7.3: 断点续传 + 可选重试失败; v7.4: 深度分析开关)
   const triggerAIBatch = async () => {
-    setStep('ai', { status: 'running', message: retryFailed ? '启动 AI 分析 (含重试失败)...' : '启动 AI 批量分析...' });
+    const runningMsg = enableDeepAnalysis
+      ? '启动深度分析 (15 产出物 + 专家库)...'
+      : retryFailed
+        ? '启动 AI 分析 (含重试失败)...'
+        : '启动 AI 批量分析...';
+    setStep('ai', { status: 'running', message: runningMsg });
     try {
       const res = await fetch(`${API_AI}/batch-process`, {
         method: 'POST',
@@ -119,6 +126,7 @@ export function ContentLibraryBatchOps() {
             batchSize: 20,
             retryFailed,
             sources: sources.length > 0 ? sources : undefined,
+            enableDeepAnalysis,
           };
         })()),
       });
@@ -490,6 +498,19 @@ export function ContentLibraryBatchOps() {
               <input type="checkbox" checked={retryFailed} onChange={e => setRetryFailed(e.target.checked)}
                 className="rounded accent-indigo-600" />
               🔄 包含之前失败的素材
+            </label>
+          </div>
+          <div className="mt-3 p-2 rounded bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+            <label className="flex items-start gap-2 text-xs cursor-pointer select-none">
+              <input type="checkbox" checked={enableDeepAnalysis}
+                onChange={e => setEnableDeepAnalysis(e.target.checked)}
+                className="mt-0.5 rounded accent-indigo-600" />
+              <span>
+                <span className="font-medium text-indigo-700 dark:text-indigo-300">🧬 深度分析（15 产出物 + 专家库 EMM）</span>
+                <span className="block text-indigo-600/80 dark:text-indigo-400/80 mt-0.5">
+                  跑完标签化后调用 ContentLibraryEngine 产出全部 15 个 deliverable，并由匹配到的专家 CDT 对争议话题做多视角结构化分析（stakeholder / steelman / contradictionType）。约慢 3-5 倍。
+                </span>
+              </span>
             </label>
           </div>
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
