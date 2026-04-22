@@ -1,20 +1,37 @@
 // 内容库 — ② 趋势信号
 import { useState, useEffect } from 'react';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
+import { Sparkline } from '../components/Sparkline';
 
 const API_BASE = '/api/v1/content-library';
 
-/** 与 api TrendSignal 对齐 */
 interface TrendSignal {
   entityId: string;
   entityName: string;
   metric: string;
   direction: 'rising' | 'falling' | 'stable' | 'volatile';
-  dataPoints: Array<{ time: string; value: string; source: string }>;
+  dataPoints: Array<{ time: string; value: string; source: string; citationCount?: number }>;
   significance: number;
+  velocity?: number;
+  velocityLabel?: string;
+  acceleration?: 'accelerating' | 'decelerating' | 'steady';
+  forecastNote?: string;
 }
 
 interface EntityOption { id: string; name: string; factCount: number; }
+
+const DIRECTION_META: Record<string, { text: string; color: string; icon: string }> = {
+  rising:   { text: '上升', color: 'bg-green-100 text-green-700',  icon: 'trending_up' },
+  falling:  { text: '下降', color: 'bg-red-100 text-red-700',      icon: 'trending_down' },
+  stable:   { text: '稳定', color: 'bg-gray-100 text-gray-600',    icon: 'trending_flat' },
+  volatile: { text: '波动', color: 'bg-amber-100 text-amber-700',  icon: 'show_chart' },
+};
+
+const ACCELERATION_META: Record<string, { text: string; icon: string; color: string }> = {
+  accelerating: { text: '加速', icon: 'speed',        color: 'text-orange-600' },
+  decelerating: { text: '减速', icon: 'slow_motion_video', color: 'text-sky-600' },
+  steady:       { text: '匀速', icon: 'horizontal_rule',   color: 'text-gray-500' },
+};
 
 export function ContentLibraryTrends() {
   const [entityId, setEntityId] = useState('');
@@ -38,7 +55,7 @@ export function ContentLibraryTrends() {
       const res = await fetch(`${API_BASE}/trends/${encodeURIComponent(nameOrId)}`);
       if (res.ok) {
         const data = await res.json();
-        const list = Array.isArray(data) ? data : [data];
+        const list: TrendSignal[] = Array.isArray(data) ? data : [data];
         setTrends(list);
         setEmpty(list.length === 0);
       }
@@ -46,20 +63,10 @@ export function ContentLibraryTrends() {
     setLoading(false);
   };
 
-  const directionLabel = (d: string) => {
-    const map: Record<string, { text: string; color: string; icon: string }> = {
-      rising: { text: '上升', color: 'bg-green-100 text-green-700', icon: 'trending_up' },
-      falling: { text: '下降', color: 'bg-red-100 text-red-700', icon: 'trending_down' },
-      stable: { text: '稳定', color: 'bg-gray-100 text-gray-600', icon: 'trending_flat' },
-      volatile: { text: '波动', color: 'bg-amber-100 text-amber-700', icon: 'show_chart' },
-    };
-    return map[d] || map.stable;
-  };
-
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">趋势信号</h1>
-      <p className="text-gray-500 dark:text-gray-400 mb-6">② 追踪实体相关事实的时间演变方向</p>
+      <p className="text-gray-500 dark:text-gray-400 mb-6">定量：指标数值的速率与方向</p>
       <ProductMetaBar productKey="trends" />
 
       <div className="flex gap-3 mb-6">
@@ -74,7 +81,6 @@ export function ContentLibraryTrends() {
         </button>
       </div>
 
-      {/* 下拉快速选择（仅含有 facts 的实体） */}
       {entityOptions.length > 0 && (
         <div className="mb-6 flex gap-3 items-center">
           <select
@@ -95,42 +101,65 @@ export function ContentLibraryTrends() {
       ) : empty ? (
         <div className="text-center py-12 text-gray-400">
           <p>「{entityId}」在知识库中暂无可追踪的趋势信号</p>
-          <p className="text-xs mt-2 text-gray-300">趋势信号需要同一指标有 2 条以上时间序列事实</p>
+          <p className="text-xs mt-2 text-gray-300">需要同一数值指标有 ≥2 个不同取值（静态属性如"成立时间"不会出现在此处）</p>
         </div>
       ) : trends.length === 0 ? (
         <div className="text-center py-12 text-gray-400">从下拉或输入框选择一个实体查看趋势信号</div>
       ) : (
         <div className="space-y-4">
           {trends.map((t, i) => {
-            const dir = directionLabel(t.direction);
+            const dir = DIRECTION_META[t.direction] || DIRECTION_META.stable;
+            const acc = t.acceleration ? ACCELERATION_META[t.acceleration] : null;
             return (
               <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
+                <div className="flex items-start justify-between mb-3 gap-4">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{t.entityName || t.entityId}</h3>
                     {t.metric && <p className="text-xs text-gray-500 mt-0.5">指标: {t.metric}</p>}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${dir.color}`}>
                       <span className="material-symbols-outlined text-base">{dir.icon}</span>
                       {dir.text}
                     </span>
+                    {t.velocityLabel && (
+                      <span className="px-2 py-1 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded font-mono">
+                        {t.velocityLabel}
+                      </span>
+                    )}
+                    {acc && (
+                      <span className={`flex items-center gap-0.5 text-xs ${acc.color}`} title="后半段相对前半段的速率变化">
+                        <span className="material-symbols-outlined text-sm">{acc.icon}</span>
+                        {acc.text}
+                      </span>
+                    )}
                     {Number.isFinite(t.significance) && (
-                      <span className="px-2 py-0.5 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">
+                      <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-300 rounded">
                         显著度 {t.significance.toFixed(2)}
                       </span>
                     )}
                   </div>
                 </div>
+
+                {t.dataPoints && t.dataPoints.length >= 2 && (
+                  <div className="overflow-x-auto">
+                    <Sparkline points={t.dataPoints} direction={t.direction} />
+                  </div>
+                )}
+
+                {t.forecastNote && (
+                  <p className="mt-2 text-xs italic text-gray-500 dark:text-gray-400">📈 {t.forecastNote}</p>
+                )}
+
                 {t.dataPoints && t.dataPoints.length > 0 && (
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {t.dataPoints.map((dp, j) => (
-                      <div key={j} className="flex flex-col items-center min-w-[96px] px-2 py-1.5 bg-gray-50 dark:bg-gray-900/50 rounded text-xs">
-                        <span className="text-gray-500">{dp.time ? new Date(dp.time).toLocaleDateString() : '—'}</span>
-                        <span className="font-medium text-gray-900 dark:text-white mt-0.5">{dp.value}</span>
-                        {dp.source && <span className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[90px]" title={dp.source}>{dp.source}</span>}
-                      </div>
-                    ))}
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 mb-1">
+                      {t.dataPoints.length} 个数据点
+                      {(() => {
+                        const sources = Array.from(new Set(t.dataPoints.map(p => p.source).filter(s => s && s !== 'unknown')));
+                        return sources.length > 0 ? ` · 来自 ${sources.length} 个信息源` : '';
+                      })()}
+                    </p>
                   </div>
                 )}
               </div>
