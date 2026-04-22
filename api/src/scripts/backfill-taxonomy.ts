@@ -20,6 +20,24 @@ import path from 'path';
 import { query, ensureDbPoolConnected, closePool } from '../db/connection.js';
 import { ensureTaxonomySchema, sync, resolve } from '../services/taxonomyService.js';
 
+/** 旧库可能先于 domain/taxonomy 列建表，补列后再回填。 */
+async function ensureAssetLibraryTaxonomyColumns(): Promise<void> {
+  const alters = [
+    `ALTER TABLE asset_themes ADD COLUMN IF NOT EXISTS domain VARCHAR(100)`,
+    `ALTER TABLE assets ADD COLUMN IF NOT EXISTS domain VARCHAR(100)`,
+    `ALTER TABLE assets ADD COLUMN IF NOT EXISTS taxonomy_code VARCHAR(20)`,
+    `ALTER TABLE assets ADD COLUMN IF NOT EXISTS type VARCHAR(50)`,
+    `ALTER TABLE asset_themes ADD COLUMN IF NOT EXISTS taxonomy_code VARCHAR(20)`,
+  ];
+  for (const sql of alters) {
+    try {
+      await query(sql);
+    } catch (e) {
+      console.warn(`[backfill] skipped DDL: ${sql} — ${(e as Error).message}`);
+    }
+  }
+}
+
 const VALID_ASSET_TYPES = [
   'file',
   'report',
@@ -40,6 +58,11 @@ interface Counter {
   matched_l2: number;
   fallback_e99: number;
   samples: Array<{ from: string; to: string; via: string }>;
+}
+
+interface AssetReclassifyResult {
+  checked: number;
+  upgraded: number;
 }
 
 function bump(c: Counter, from: string, to: string) {
@@ -107,6 +130,57 @@ async function backfillAssets(c: Counter) {
   console.log(`[backfill] assets: resolved ${res.rowCount}, fallback ${fallback.rowCount ?? 0}`);
 }
 
+function stringifyTags(tags: unknown): string {
+  if (!tags) return '';
+  if (Array.isArray(tags)) return tags.map(t => String(t)).join(' ');
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) return parsed.map(t => String(t)).join(' ');
+    } catch {
+      return tags;
+    }
+    return tags;
+  }
+  return '';
+}
+
+function buildAssetText(row: any): string {
+  const tags = stringifyTags(row.tags);
+  const content = typeof row.content === 'string' ? row.content.slice(0, 2000) : '';
+  return [
+    row.domain,
+    row.title,
+    row.source,
+    row.filename,
+    tags,
+    content,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** 第二轮增强：对 fallback 到 E99.USER 的素材，使用更多文本信号再尝试一次。 */
+async function reclassifyFallbackAssets(c: Counter): Promise<AssetReclassifyResult> {
+  const res = await query(
+    `SELECT id, domain, title, source, filename, tags, content
+       FROM assets
+      WHERE taxonomy_code = 'E99.USER'`,
+  );
+  let upgraded = 0;
+  for (const row of res.rows) {
+    const text = buildAssetText(row);
+    const code = toCode(text);
+    if (code !== 'E99.USER') {
+      await query(`UPDATE assets SET taxonomy_code = $1 WHERE id = $2`, [code, row.id]);
+      bump(c, row.title || row.domain || 'E99.USER', code);
+      upgraded++;
+    }
+  }
+  console.log(`[backfill] assets fallback reclassify: checked ${res.rowCount ?? 0}, upgraded ${upgraded}`);
+  return { checked: res.rowCount ?? 0, upgraded };
+}
+
 async function backfillExperts(c: Counter) {
   const res = await query(
     `SELECT id, domains FROM expert_library
@@ -129,23 +203,31 @@ async function backfillExperts(c: Counter) {
 async function backfillContentFacts(c: Counter) {
   let rowCount = 0;
   try {
-    const res = await query(
-      `SELECT id, context FROM content_facts
-        WHERE (context->>'taxonomy_code') IS NULL
-          AND (context->>'domain') IS NOT NULL`,
-    );
-    for (const row of res.rows) {
-      const src = row.context?.domain as string;
-      const code = toCode(src);
-      await query(
-        `UPDATE content_facts
-            SET context = jsonb_set(COALESCE(context, '{}'::jsonb), '{taxonomy_code}', to_jsonb($1::text), true)
-          WHERE id = $2`,
-        [code, row.id],
+    const batchSize = 300;
+    for (;;) {
+      const res = await query(
+        `SELECT id, context FROM content_facts
+          WHERE (context->>'taxonomy_code') IS NULL
+            AND (context->>'domain') IS NOT NULL
+          LIMIT $1`,
+        [batchSize],
       );
-      bump(c, src, code);
+      const n = res.rowCount ?? 0;
+      if (!n) break;
+      for (const row of res.rows) {
+        const src = row.context?.domain as string;
+        const code = toCode(src);
+        await query(
+          `UPDATE content_facts
+              SET context = jsonb_set(COALESCE(context, '{}'::jsonb), '{taxonomy_code}', to_jsonb($1::text), true)
+            WHERE id = $2`,
+          [code, row.id],
+        );
+        bump(c, src, code);
+      }
+      rowCount += n;
+      if (n < batchSize) break;
     }
-    rowCount = res.rowCount ?? 0;
   } catch (err) {
     console.warn('[backfill] content_facts skipped:', (err as Error).message);
   }
@@ -221,8 +303,13 @@ async function backfillAssetTypes(): Promise<{ filled: number; normalized: numbe
 }
 
 async function main() {
+  const assetsOnly =
+    process.env.TAXONOMY_BACKFILL_ASSETS_ONLY === '1'
+    || process.env.TAXONOMY_BACKFILL_ASSETS_ONLY === 'true';
+
   await ensureDbPoolConnected();
   await ensureTaxonomySchema();
+  await ensureAssetLibraryTaxonomyColumns();
   await sync('backfill');
 
   const counter: Counter = {
@@ -236,10 +323,15 @@ async function main() {
   await backfillAssetThemes(counter);
   const themeDomainSynced = await syncThemeDomainsFromTaxonomy();
   await backfillAssets(counter);
+  const fallbackReclassify = await reclassifyFallbackAssets(counter);
   const assetDomainSynced = await syncAssetDomainsFromTaxonomy();
   const typeBackfill = await backfillAssetTypes();
-  await backfillExperts(counter);
-  await backfillContentFacts(counter);
+  if (!assetsOnly) {
+    await backfillExperts(counter);
+    await backfillContentFacts(counter);
+  } else {
+    console.log('[backfill] assets-only mode: skipped expert_library and content_facts');
+  }
 
   const outDir = path.resolve(process.cwd(), 'logs');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
@@ -248,6 +340,8 @@ async function main() {
     ...counter,
     asset_themes_domain_synced: themeDomainSynced,
     assets_domain_synced: assetDomainSynced,
+    assets_fallback_reclassified_checked: fallbackReclassify.checked,
+    assets_fallback_reclassified_upgraded: fallbackReclassify.upgraded,
     assets_type_filled: typeBackfill.filled,
     assets_type_normalized_invalid: typeBackfill.normalized,
   };

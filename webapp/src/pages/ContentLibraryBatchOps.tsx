@@ -8,6 +8,14 @@ import { useState, useEffect, useRef } from 'react';
 const API = '/api/v1/content-library';
 const API_AI = '/api/v1/ai/assets';
 
+interface PendingAsset {
+  id: string;
+  title: string;
+  source?: string;
+  fileType?: string;
+  createdAt?: string;
+}
+
 interface StepStatus {
   status: 'idle' | 'running' | 'done' | 'error';
   message?: string;
@@ -29,6 +37,16 @@ interface SynthesisProgress {
   skipped: number;
   errors: number;
   currentEntity?: string;
+}
+
+interface DedupResult {
+  mode: 'dry-run' | 'apply';
+  scanned: number;
+  duplicate_groups: number;
+  canonical_kept: number;
+  to_hide: number;
+  to_delete: number;
+  processed: number;
 }
 
 export function ContentLibraryBatchOps() {
@@ -55,6 +73,14 @@ export function ContentLibraryBatchOps() {
   const [aiSourceBinding, setAiSourceBinding] = useState(true);
   /** v7.4: Step 2 深度分析开关 — 勾选后跑 15 产出物 + 专家库 EMM */
   const [enableDeepAnalysis, setEnableDeepAnalysis] = useState(false);
+  // 确认弹窗状态
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    assets: PendingAsset[];
+    selected: Set<string>;
+  }>({ open: false, loading: false, assets: [], selected: new Set() });
+
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Step 4b: Zep 知识回填
@@ -69,6 +95,9 @@ export function ContentLibraryBatchOps() {
   const [synthesisLimit, setSynthesisLimit] = useState(30);
   const [synthesisCacheStats, setSynthesisCacheStats] = useState<{ total: number; entities: number } | null>(null);
   const synthesisEsRef = useRef<EventSource | null>(null);
+  const [dedupRunning, setDedupRunning] = useState(false);
+  const [dedupResult, setDedupResult] = useState<DedupResult | null>(null);
+  const [dedupMessage, setDedupMessage] = useState<string>('');
 
   // 通用 step 状态更新
   const setStep = (key: string, update: Partial<StepStatus>) => {
@@ -105,30 +134,83 @@ export function ContentLibraryBatchOps() {
     }
   };
 
+  const runAssetDeduplicate = async (mode: 'dry-run' | 'apply') => {
+    setDedupRunning(true);
+    setDedupMessage(mode === 'dry-run' ? '正在预览重复资产...' : '正在执行去重（删除/隐藏）...');
+    try {
+      const res = await fetch('/api/v1/assets/deduplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, limit: 3000 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setDedupResult(data);
+      setDedupMessage(
+        mode === 'dry-run'
+          ? `预览完成：${data.duplicate_groups || 0} 组重复，待删 ${data.to_delete || 0}，待隐藏 ${data.to_hide || 0}`
+          : `执行完成：删除 ${data.to_delete || 0}，隐藏 ${data.to_hide || 0}`
+      );
+    } catch (err) {
+      setDedupMessage(`去重失败：${(err as Error).message}`);
+    } finally {
+      setDedupRunning(false);
+    }
+  };
+
+  // Step 2: 打开确认弹窗（先拉取 pending 列表）
+  const openAIBatchConfirm = async () => {
+    setConfirmModal({ open: true, loading: true, assets: [], selected: new Set() });
+    try {
+      // 只有单独选择某一来源时才传 sources 过滤，都选或都不选则不过滤
+      const sources = [
+        ...(aiSourceAssets ? ['upload'] : []),
+        ...(aiSourceBinding ? ['binding'] : []),
+      ];
+      const params = new URLSearchParams({ limit: '200', retryFailed: String(retryFailed) });
+      // 仅当两者不全选时传 sources（全选 = 不过滤）
+      if (sources.length > 0 && sources.length < 2) params.set('sources', sources.join(','));
+      const res = await fetch(`${API_AI}/pending?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const assets: PendingAsset[] = data.items || [];
+      setConfirmModal({
+        open: true,
+        loading: false,
+        assets,
+        selected: new Set(assets.map((a: PendingAsset) => a.id)),
+      });
+    } catch (err) {
+      setConfirmModal({ open: false, loading: false, assets: [], selected: new Set() });
+      setStep('ai', { status: 'error', message: (err as Error).message });
+    }
+  };
+
   // Step 2: AI 批量分析 (v7.3: 断点续传 + 可选重试失败; v7.4: 深度分析开关)
-  const triggerAIBatch = async () => {
+  const triggerAIBatch = async (assetIds?: string[]) => {
+    setConfirmModal({ open: false, loading: false, assets: [], selected: new Set() });
+    const count = assetIds ? `（${assetIds.length} 个）` : '';
     const runningMsg = enableDeepAnalysis
-      ? '启动深度分析 (15 产出物 + 专家库)...'
+      ? `启动深度分析${count} (15 产出物 + 专家库)...`
       : retryFailed
-        ? '启动 AI 分析 (含重试失败)...'
-        : '启动 AI 批量分析...';
+        ? `启动 AI 分析${count} (含重试失败)...`
+        : `启动 AI 批量分析${count}...`;
     setStep('ai', { status: 'running', message: runningMsg });
     try {
+      const sources = [
+        ...(aiSourceAssets ? ['upload'] : []),
+        ...(aiSourceBinding ? ['binding'] : []),
+      ];
       const res = await fetch(`${API_AI}/batch-process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify((() => {
-          const sources = [
-            ...(aiSourceAssets ? ['upload'] : []),
-            ...(aiSourceBinding ? ['binding'] : []),
-          ];
-          return {
-            batchSize: 20,
-            retryFailed,
-            sources: sources.length > 0 ? sources : undefined,
-            enableDeepAnalysis,
-          };
-        })()),
+        body: JSON.stringify({
+          batchSize: 20,
+          retryFailed,
+          sources: sources.length > 0 ? sources : undefined,
+          enableDeepAnalysis,
+          ...(assetIds ? { assetIds } : {}),
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -413,7 +495,7 @@ export function ContentLibraryBatchOps() {
   // v7.3: Step 2 与 Step 3 无数据依赖，可并发执行 (Step 2 写 AI 元数据, Step 3 写知识三元组)
   const runAll = async () => {
     await triggerDirectoryScan();
-    await triggerAIBatch();
+    await triggerAIBatch(); // 一键全量跳过弹窗，直接执行
     await startExtractJob();
     // Step 2 & 3 的后台 job 并发运行；Step 4-6 需前置完成，留给用户手动触发
   };
@@ -470,13 +552,46 @@ export function ContentLibraryBatchOps() {
           {steps.import.message && <p className="text-sm text-gray-500">{steps.import.message}</p>}
         </div>
 
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              🧹 /assets 去重（wiki 联动）
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => runAssetDeduplicate('dry-run')}
+                disabled={dedupRunning}
+                className="px-3 py-1.5 text-xs bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+              >
+                预览去重
+              </button>
+              <button
+                onClick={() => runAssetDeduplicate('apply')}
+                disabled={dedupRunning}
+                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                执行去重
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">
+            规则：完全重复（标题+正文标准化一致）；已进入 wiki 的重复资产隐藏，未进入 wiki 的重复资产删除。
+          </p>
+          {dedupMessage && <p className="text-sm text-gray-500 mt-2">{dedupMessage}</p>}
+          {dedupResult && (
+            <p className="text-xs text-gray-500 mt-1">
+              扫描 {dedupResult.scanned} 条 · 重复组 {dedupResult.duplicate_groups} · 保留主记录 {dedupResult.canonical_kept} · 删除 {dedupResult.to_delete} · 隐藏 {dedupResult.to_hide}
+            </p>
+          )}
+        </div>
+
         {/* Step 2: AI 分析 (v7.3: 断点续传 + 重试失败) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               {statusIcon(steps.ai.status)} Step 2: AI 批量分析
             </h3>
-            <button onClick={triggerAIBatch} disabled={steps.ai.status === 'running'}
+            <button onClick={openAIBatchConfirm} disabled={steps.ai.status === 'running'}
               className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
               🧠 启动分析
             </button>
@@ -788,6 +903,107 @@ export function ContentLibraryBatchOps() {
           </p>
         </div>
       </div>
+
+      {/* 确认弹窗：AI 批量分析清单 */}
+      {confirmModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
+            {/* 头部 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">🧠 确认 AI 分析清单</h3>
+                {!confirmModal.loading && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    共 {confirmModal.assets.length} 个待分析素材 · 已勾选 {confirmModal.selected.size} 个
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setConfirmModal({ open: false, loading: false, assets: [], selected: new Set() })}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 内容 */}
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {confirmModal.loading ? (
+                <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+                  <span className="animate-spin">🔄</span> 正在加载待分析素材...
+                </div>
+              ) : confirmModal.assets.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">暂无待分析素材</div>
+              ) : (
+                <>
+                  {/* 全选 */}
+                  <label className="flex items-center gap-2 text-xs text-gray-500 pb-2 border-b border-gray-100 dark:border-gray-700 mb-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={confirmModal.selected.size === confirmModal.assets.length}
+                      onChange={e => setConfirmModal(prev => ({
+                        ...prev,
+                        selected: e.target.checked
+                          ? new Set(prev.assets.map(a => a.id))
+                          : new Set(),
+                      }))}
+                      className="rounded accent-indigo-600"
+                    />
+                    全选 / 全不选
+                  </label>
+
+                  {/* 素材列表 */}
+                  <ul className="space-y-1">
+                    {confirmModal.assets.map(asset => (
+                      <li key={asset.id}>
+                        <label className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={confirmModal.selected.has(asset.id)}
+                            onChange={e => setConfirmModal(prev => {
+                              const next = new Set(prev.selected);
+                              e.target.checked ? next.add(asset.id) : next.delete(asset.id);
+                              return { ...prev, selected: next };
+                            })}
+                            className="mt-0.5 rounded accent-indigo-600 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
+                              {asset.title || asset.id}
+                            </p>
+                            <p className="text-[10px] text-gray-400 truncate">
+                              {[asset.fileType, asset.source, asset.createdAt ? new Date(asset.createdAt).toLocaleDateString('zh-CN') : ''].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+
+            {/* 底部操作 */}
+            {!confirmModal.loading && (
+              <div className="flex gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setConfirmModal({ open: false, loading: false, assets: [], selected: new Set() })}
+                  className="flex-1 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => triggerAIBatch(Array.from(confirmModal.selected))}
+                  disabled={confirmModal.selected.size === 0}
+                  className="flex-1 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
+                >
+                  确认分析 {confirmModal.selected.size > 0 ? `（${confirmModal.selected.size} 个）` : ''}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

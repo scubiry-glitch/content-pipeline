@@ -35,6 +35,12 @@ const createThemeSchema = z.object({
   taxonomy_code: z.string().max(20).optional()
 });
 
+const deduplicateSchema = z.object({
+  mode: z.enum(['dry-run', 'apply']).default('dry-run'),
+  limit: z.number().int().min(1).max(10000).optional(),
+  includeHidden: z.boolean().optional()
+});
+
 export async function assetRoutes(fastify: FastifyInstance) {
   const assetService = new AssetService();
 
@@ -116,6 +122,17 @@ export async function assetRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // Deduplicate assets (exact duplicate of normalized title + content)
+  fastify.post('/deduplicate', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = deduplicateSchema.parse(request.body || {});
+      return await assetService.deduplicateAssets(body);
+    } catch (error: any) {
+      reply.status(400);
+      return { error: 'Invalid deduplicate request', message: error?.message || 'Unknown error' };
+    }
+  });
+
   // Get asset detail
   fastify.get('/:assetId', { preHandler: authenticate }, async (request, reply) => {
     const { assetId } = request.params as any;
@@ -173,21 +190,27 @@ export async function assetRoutes(fastify: FastifyInstance) {
   // Get assets by theme
   fastify.get('/themes/:themeId/assets', { preHandler: authenticate }, async (request) => {
     const { themeId } = request.params as any;
-    const { limit = '20', offset = '0' } = request.query as any;
+    const { limit = '20', offset = '0', includeHidden = 'false', includeDeleted = 'false' } = request.query as any;
 
     return await assetService.getAssetsByTheme(themeId, {
       limit: parseInt(limit),
       offset: parseInt(offset)
+    }, {
+      includeHidden: includeHidden === 'true',
+      includeDeleted: includeDeleted === 'true'
     });
   });
 
   // Get uncategorized assets
   fastify.get('/uncategorized', { preHandler: authenticate }, async (request) => {
-    const { limit = '20', offset = '0' } = request.query as any;
+    const { limit = '20', offset = '0', includeHidden = 'false', includeDeleted = 'false' } = request.query as any;
 
     return await assetService.getAssetsByTheme(null, {
       limit: parseInt(limit),
       offset: parseInt(offset)
+    }, {
+      includeHidden: includeHidden === 'true',
+      includeDeleted: includeDeleted === 'true'
     });
   });
 

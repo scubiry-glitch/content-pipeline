@@ -107,7 +107,7 @@ export class PersistenceService {
           ai_theme_confidence = $4,
           ai_tags = $5,
           ai_analyzed_at = NOW(),
-          ai_processing_status = 'completed',
+          ai_processing_status = $7,
           ai_duplicate_of = $6
         WHERE id = $1`,
         [
@@ -117,6 +117,8 @@ export class PersistenceService {
           classification.primaryTheme.confidence,
           JSON.stringify(classification.tags.map((t) => t.tag)),
           duplicate?.duplicateOf || null,
+          // embedding 为空或 summary 为空视为部分失败，允许后续重试
+          docEmbedding && quality.aiAssessment.summary ? 'completed' : 'failed',
         ]
       );
 
@@ -195,7 +197,8 @@ export class PersistenceService {
     /** v7.3: 数据来源筛选 (如 ['upload', 'rss', 'binding']) */
     sources?: string[];
   } = {}): Promise<Asset[]> {
-    const { limit = 20, maxAgeHours = 168, retryFailed = false, staleMinutes = 30 } = options;
+    // maxAgeHours 默认不再限制（设为 0 表示无限制），避免老素材被遗漏
+    const { limit = 20, maxAgeHours = 0, retryFailed = false, staleMinutes = 30 } = options;
 
     // 断点续传: 先把 stale 'processing' 资产重置为 'pending'
     await query(
@@ -204,11 +207,12 @@ export class PersistenceService {
          AND updated_at < NOW() - INTERVAL '${staleMinutes} minutes'`
     );
 
-    // 可选: 重试失败的资产
+    // 可选: 重试失败的资产（包括标记为 failed 的，以及 completed 但缺 embedding/summary 的）
     if (retryFailed) {
       await query(
         `UPDATE assets SET ai_processing_status = 'pending'
-         WHERE ai_processing_status = 'failed'`
+         WHERE ai_processing_status = 'failed'
+            OR (ai_processing_status = 'completed' AND ai_document_embedding IS NULL)`
       );
     }
 
@@ -219,11 +223,16 @@ export class PersistenceService {
     const params: any[] = [limit];
     if (options.sources && options.sources.length > 0) {
       const hasRss = options.sources.includes('rss');
-      const otherSources = options.sources.filter(s => s !== 'rss');
+      const hasUpload = options.sources.includes('upload');
+      const hasBinding = options.sources.includes('binding');
       const conditions: string[] = [];
-      if (otherSources.length > 0) {
-        params.push(otherSources);
-        conditions.push(`source = ANY($${params.length}::text[])`);
+      // upload: 非 RSS、非目录绑定的素材
+      if (hasUpload) {
+        conditions.push(`(id NOT LIKE 'rss-%' AND source NOT ILIKE '%绑定%')`);
+      }
+      // binding: source 含 "绑定" (如 "目录绑定: 行业研究")
+      if (hasBinding) {
+        conditions.push(`source ILIKE '%绑定%'`);
       }
       if (hasRss) {
         conditions.push(`id LIKE 'rss-%'`);
@@ -239,8 +248,12 @@ export class PersistenceService {
         source, author, published_at as "publishedAt", created_at as "createdAt",
         metadata, content
       FROM assets
-      WHERE (ai_processing_status = 'pending' OR ai_processing_status IS NULL)
-        AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'
+      WHERE (
+        ai_processing_status = 'pending'
+        OR ai_processing_status IS NULL
+        OR (ai_processing_status = 'completed' AND ai_document_embedding IS NULL)
+      )
+        ${maxAgeHours > 0 ? `AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'` : ''}
         AND (is_deleted = false OR is_deleted IS NULL)
         ${sourceCond}
       ORDER BY created_at DESC

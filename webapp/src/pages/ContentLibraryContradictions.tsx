@@ -1,6 +1,7 @@
 // 内容库 — 争议话题看板
 // v7.4: 假阳性过滤 + 来源标注
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ProductMetaBar } from '../components/ContentLibraryProductMeta';
 import { useZepStatus, ZepEnhancementPanel } from '../components/ZepEnhancementPanel';
 
@@ -235,7 +236,12 @@ export function ContentLibraryContradictions() {
                         <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
                           <span>置信度: {(fact.confidence * 100).toFixed(0)}%</span>
                           {source && (
-                            <span className="text-amber-600 dark:text-amber-400">来源: {source}</span>
+                            <Link
+                              to={`/assets/${encodeURIComponent(source)}`}
+                              className="text-amber-600 dark:text-amber-400 hover:underline"
+                            >
+                              来源: {source}
+                            </Link>
                           )}
                         </div>
                       </div>

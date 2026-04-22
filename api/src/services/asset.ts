@@ -2,6 +2,7 @@
 // 支持: 上传、语义搜索、标签管理
 
 import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
 import { query } from '../db/connection.js';
 import { generate, generateEmbedding } from './llm.js';
 
@@ -36,6 +37,27 @@ export interface CreateThemeInput {
   icon?: string;
   domain?: string;
   taxonomy_code?: string;
+}
+
+interface VisibilityOptions {
+  includeDeleted?: boolean;
+  includeHidden?: boolean;
+}
+
+interface AssetDeduplicateOptions {
+  mode: 'dry-run' | 'apply';
+  limit?: number;
+  includeHidden?: boolean;
+}
+
+interface DedupAction {
+  asset_id: string;
+  title: string;
+  duplicate_key: string;
+  canonical_asset_id: string;
+  in_wiki: boolean;
+  action: 'deleted' | 'hidden' | 'would_delete' | 'would_hide';
+  reason: string;
 }
 
 export class AssetService {
@@ -346,7 +368,7 @@ export class AssetService {
   }
 
   // Get assets by theme
-  async getAssetsByTheme(themeId: string | null, options: { limit: number; offset: number }) {
+  async getAssetsByTheme(themeId: string | null, options: { limit: number; offset: number }, visibility: VisibilityOptions = {}) {
     const { limit, offset } = options;
 
     let sql = `
@@ -357,6 +379,9 @@ export class AssetService {
       WHERE 1=1
     `;
     const params: any[] = [];
+    const { where, params: visibilityParams } = this.buildVisibilityWhere(visibility);
+    sql += where;
+    params.push(...visibilityParams);
 
     if (themeId) {
       sql += ` AND theme_id = $${params.length + 1}`;
@@ -374,6 +399,9 @@ export class AssetService {
     // Get total count
     let countSql = `SELECT COUNT(*) FROM assets WHERE 1=1`;
     const countParams: any[] = [];
+    const visibilityCount = this.buildVisibilityWhere(visibility);
+    countSql += visibilityCount.where;
+    countParams.push(...visibilityCount.params);
     if (themeId) {
       countSql += ` AND theme_id = $${countParams.length + 1}`;
       countParams.push(themeId);
@@ -406,11 +434,15 @@ export class AssetService {
 
   async search(options: { query?: string; tags?: string[]; limit: number; domain?: string; taxonomy_code?: string; asset_type?: string }) {
     const { query: searchQuery, tags, limit, domain, taxonomy_code, asset_type } = options;
+    const visibility: VisibilityOptions = {
+      includeDeleted: false,
+      includeHidden: false
+    };
 
     // 如果有搜索词，使用向量相似度搜索
     if (searchQuery) {
       const queryEmbedding = await generateEmbedding(searchQuery);
-      return this.vectorSearch(queryEmbedding, tags, limit, { domain, taxonomy_code, asset_type });
+      return this.vectorSearch(queryEmbedding, tags, limit, { domain, taxonomy_code, asset_type }, visibility);
     }
 
     // 否则使用普通标签搜索
@@ -422,6 +454,9 @@ export class AssetService {
       WHERE 1=1
     `;
     const params: any[] = [];
+    const visibilityWhere = this.buildVisibilityWhere(visibility);
+    sql += visibilityWhere.where;
+    params.push(...visibilityWhere.params);
 
     if (tags && tags.length > 0) {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
@@ -477,7 +512,8 @@ export class AssetService {
     queryEmbedding: number[],
     tags?: string[],
     limit: number = 10,
-    extra: { domain?: string; taxonomy_code?: string; asset_type?: string } = {}
+    extra: { domain?: string; taxonomy_code?: string; asset_type?: string } = {},
+    visibility: VisibilityOptions = {}
   ) {
     const vectorStr = `[${queryEmbedding.join(',')}]`;
 
@@ -491,6 +527,9 @@ export class AssetService {
       WHERE embedding IS NOT NULL
     `;
     const params: any[] = [vectorStr];
+    const visibilityWhere = this.buildVisibilityWhere(visibility);
+    sql += visibilityWhere.where;
+    params.push(...visibilityWhere.params);
 
     if (tags && tags.length > 0) {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
@@ -542,7 +581,10 @@ export class AssetService {
   }
 
   async getById(assetId: string) {
-    const result = await query('SELECT * FROM assets WHERE id = $1', [assetId]);
+    const result = await query(
+      'SELECT * FROM assets WHERE id = $1 AND is_deleted = FALSE',
+      [assetId]
+    );
 
     if (result.rows.length === 0) {
       return null;
@@ -561,6 +603,9 @@ export class AssetService {
       quality_score: row.quality_score,
       theme_id: row.theme_id,
       is_pinned: row.is_pinned,
+      is_hidden: row.is_hidden,
+      hidden_at: row.hidden_at,
+      hidden_reason: row.hidden_reason,
       ai_quality_score: row.ai_quality_score,
       ai_processing_status: row.ai_processing_status,
       ai_analyzed_at: row.ai_analyzed_at,
@@ -570,6 +615,129 @@ export class AssetService {
 
   async delete(assetId: string) {
     await query('DELETE FROM assets WHERE id = $1', [assetId]);
+  }
+
+  async deduplicateAssets(options: AssetDeduplicateOptions) {
+    const { mode, limit = 2000, includeHidden = false } = options;
+    const candidates = await query(
+      `SELECT id, title, content, created_at, COALESCE(citation_count, 0) AS citation_count
+       FROM assets
+       WHERE is_deleted = FALSE
+         AND ($1::boolean OR is_hidden = FALSE)
+       ORDER BY created_at ASC
+       LIMIT $2`,
+      [includeHidden, limit]
+    );
+
+    const grouped = new Map<string, Array<{ id: string; title: string; content: string; created_at: string; citation_count: number }>>();
+    for (const row of candidates.rows) {
+      const duplicateKey = this.buildDuplicateKey(row.title, row.content);
+      if (!duplicateKey) continue;
+      const list = grouped.get(duplicateKey) || [];
+      list.push(row);
+      grouped.set(duplicateKey, list);
+    }
+
+    const duplicateGroups = [...grouped.entries()].filter(([, rows]) => rows.length > 1);
+    const duplicateIds = duplicateGroups.flatMap(([, rows]) => rows.map(r => r.id));
+    const inWikiSet = await this.getAssetsInWikiSet(duplicateIds);
+
+    const actions: DedupAction[] = [];
+    for (const [duplicateKey, rows] of duplicateGroups) {
+      const sorted = [...rows].sort((a, b) => {
+        if ((b.citation_count || 0) !== (a.citation_count || 0)) {
+          return (b.citation_count || 0) - (a.citation_count || 0);
+        }
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
+      const canonical = sorted[0];
+      for (let i = 1; i < sorted.length; i++) {
+        const row = sorted[i];
+        const inWiki = inWikiSet.has(row.id);
+        actions.push({
+          asset_id: row.id,
+          title: row.title,
+          duplicate_key: duplicateKey,
+          canonical_asset_id: canonical.id,
+          in_wiki: inWiki,
+          action: mode === 'apply' ? (inWiki ? 'hidden' : 'deleted') : (inWiki ? 'would_hide' : 'would_delete'),
+          reason: inWiki ? 'entered_wiki_protected' : 'duplicate_not_in_wiki'
+        });
+      }
+    }
+
+    if (mode === 'apply' && actions.length > 0) {
+      for (const item of actions) {
+        if (item.in_wiki) {
+          await query(
+            `UPDATE assets
+             SET is_hidden = TRUE,
+                 hidden_at = NOW(),
+                 hidden_reason = 'dedup_wiki_protected',
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [item.asset_id]
+          );
+        } else {
+          await query(`DELETE FROM assets WHERE id = $1`, [item.asset_id]);
+        }
+      }
+    }
+
+    return {
+      mode,
+      scanned: candidates.rows.length,
+      duplicate_groups: duplicateGroups.length,
+      canonical_kept: duplicateGroups.length,
+      to_hide: actions.filter(a => a.in_wiki).length,
+      to_delete: actions.filter(a => !a.in_wiki).length,
+      processed: actions.length,
+      actions
+    };
+  }
+
+  private buildVisibilityWhere(options: VisibilityOptions): { where: string; params: any[] } {
+    let where = '';
+    const params: any[] = [];
+    if (!options.includeDeleted) {
+      where += ` AND is_deleted = FALSE`;
+    }
+    if (!options.includeHidden) {
+      where += ` AND COALESCE(is_hidden, FALSE) = FALSE`;
+    }
+    return { where, params };
+  }
+
+  private normalizeText(input: string): string {
+    return input
+      .toLowerCase()
+      .replace(/\r\n/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  }
+
+  private buildDuplicateKey(title?: string | null, content?: string | null): string | null {
+    const normalizedTitle = this.normalizeText(title || '');
+    const normalizedContent = this.normalizeText(content || '');
+    if (!normalizedTitle && !normalizedContent) {
+      return null;
+    }
+    return createHash('sha256')
+      .update(`${normalizedTitle}\n${normalizedContent}`, 'utf8')
+      .digest('hex');
+  }
+
+  private async getAssetsInWikiSet(assetIds: string[]): Promise<Set<string>> {
+    if (assetIds.length === 0) return new Set<string>();
+    const result = await query(
+      `SELECT DISTINCT asset_id
+       FROM content_facts
+       WHERE is_current = TRUE
+         AND asset_id = ANY($1::varchar[])`,
+      [assetIds]
+    );
+    return new Set<string>(result.rows.map(r => String(r.asset_id)));
   }
 
   // 辅助方法

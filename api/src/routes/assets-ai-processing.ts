@@ -13,6 +13,22 @@ import { query } from '../db/connection.js';
 // 路由注册
 // ============================================
 export async function assetsAIProcessingRoutes(fastify: FastifyInstance) {
+  // 0. 获取待分析素材列表（用于确认弹窗）
+  fastify.get('/pending', { preHandler: authenticate }, async (request) => {
+    const { limit = '50', retryFailed = 'false', sources } = request.query as any;
+    const sourcesArr = sources ? String(sources).split(',').filter(Boolean) : undefined;
+    const assets = await persistenceService.getUnprocessedAssets({
+      limit: Math.min(200, parseInt(limit) || 50),
+      retryFailed: retryFailed === 'true',
+      sources: sourcesArr,
+    });
+    // 只返回 modal 展示所需字段，避免 content 全文撑爆 response
+    const items = assets.map(({ id, title, fileType, source, createdAt }) => ({
+      id, title, fileType, source, createdAt,
+    }));
+    return { items, total: items.length };
+  });
+
   // 1. 触发 Assets 批量处理
   fastify.post('/batch-process', { preHandler: authenticate }, async (request, reply) => {
     const body = request.body as {

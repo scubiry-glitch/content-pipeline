@@ -375,6 +375,9 @@ async function setupMVPSchema(): Promise<void> {
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS author VARCHAR(200)`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITH TIME ZONE`);
+  await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS hidden_reason TEXT`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_processing_status VARCHAR(50) DEFAULT 'pending'`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_quality_score INTEGER`);
   await query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ai_theme_id VARCHAR(50)`);
@@ -656,6 +659,7 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_tags ON assets USING GIN(tags)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_theme ON assets(theme_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_pinned ON assets(is_pinned, pinned_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_visibility ON assets(is_deleted, is_hidden, created_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_blue_team_task ON blue_team_reviews(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_research_annotations_task ON research_annotations(task_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_draft_versions_task ON draft_versions(task_id)`);
