@@ -264,5 +264,25 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       );
       return result;
     });
+
+    // --------------------------------------------------------
+    // Longitudinal (PR5)
+    // --------------------------------------------------------
+    fastify.get('/scopes/:id/longitudinal/:kind', { preHandler: authenticate }, async (request, reply) => {
+      const { id, kind } = request.params as { id: string; kind: string };
+      if (!['belief_drift', 'decision_tree', 'model_hit_rate'].includes(kind)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'kind must be belief_drift|decision_tree|model_hit_rate' };
+      }
+      return engine.getLongitudinal(id, kind as any);
+    });
+
+    fastify.post('/longitudinal/recompute', { preHandler: authenticate }, async (request) => {
+      const body = request.body as { scopeId?: string; kind?: string };
+      return engine.computeLongitudinal({
+        scopeId: body?.scopeId ?? null,
+        kind: body?.kind as any,
+      });
+    });
   };
 }

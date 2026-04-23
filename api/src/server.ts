@@ -351,6 +351,18 @@ async function main() {
     });
     console.log('📚 内容库定时任务已启动（增量报告每6h，保鲜度每24h）');
 
+    // PR5: Meeting Notes 模块 scheduler
+    //   - 订阅 'mn.meeting.parsed' → auto-enqueue project scope runs
+    //   - 每月 1 日 02:00 全库重算
+    try {
+      const { startMeetingNotesScheduler } = await import('./modules/meeting-notes/scheduler.js');
+      const mnModuleSched = startMeetingNotesScheduler(meetingNotesEngine);
+      await mnModuleSched.start();
+      console.log('🗓️ Meeting Notes 模块 scheduler 启动（project auto / library monthly）');
+    } catch (err) {
+      console.warn('🗓️ Meeting Notes scheduler 启动失败（不影响其他服务）:', (err as Error).message);
+    }
+
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
     // 或配置定时任务调用 collectAllFeeds()
   } catch (err) {

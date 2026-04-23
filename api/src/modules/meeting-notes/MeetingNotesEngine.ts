@@ -23,6 +23,7 @@ import { RunEngine } from './runs/runEngine.js';
 import { VersionStore } from './runs/versionStore.js';
 import { ScopeService } from './scope/scopeService.js';
 import { CrossAxisLinkResolver } from './crosslinks/crossAxisLinkResolver.js';
+import { LongitudinalService } from './longitudinal/index.js';
 
 export interface ComputeAxisRequest {
   meetingId?: string;
@@ -44,6 +45,7 @@ export class MeetingNotesEngine {
   readonly runEngine: RunEngine;
   readonly versionStore: VersionStore;
   readonly crossLinks: CrossAxisLinkResolver;
+  readonly longitudinal: LongitudinalService;
 
   constructor(
     readonly deps: MeetingNotesDeps,
@@ -52,20 +54,26 @@ export class MeetingNotesEngine {
     this.scopes = new ScopeService(deps);
     this.versionStore = new VersionStore(deps);
     this.crossLinks = new CrossAxisLinkResolver(deps);
+    this.longitudinal = new LongitudinalService(deps);
     this.runEngine = new RunEngine(
       deps,
       (meetingId) => this.getMeetingAxes(meetingId),
       { concurrency: options.runConcurrency ?? 2 },
     );
 
-    // Run 完成后触发 crosslink 重算
+    // Run 完成后触发 crosslink 重算 +（若 scope 不是 meeting）longitudinal 重算
     deps.eventBus.subscribe('mn.run.completed', async (payload: any) => {
       try {
         const run = await this.runEngine.get(payload?.runId);
         if (!run) return;
         await this.crossLinks.recomputeForScope(run.scope.kind, run.scope.id ?? null, run.id);
+        if (run.scope.kind !== 'meeting' && run.scope.id) {
+          await this.longitudinal.recomputeAll(run.scope.id, run.id);
+        } else if (run.scope.kind === 'library') {
+          await this.longitudinal.recomputeAll(null, run.id);
+        }
       } catch (e) {
-        console.error('[MeetingNotes] crosslink recompute failed:', (e as Error).message);
+        console.error('[MeetingNotes] post-run recompute failed:', (e as Error).message);
       }
     });
   }
@@ -307,11 +315,30 @@ export class MeetingNotesEngine {
   // Layer 4 — longitudinal（PR5 实现）
   // ============================================================
 
-  async computeLongitudinal(_req: {
-    scopeId: string;
-    kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate';
-  }): Promise<{ ok: boolean; reason?: string }> {
-    return { ok: false, reason: 'not-implemented (PR5)' };
+  async computeLongitudinal(req: {
+    scopeId: string | null;
+    kind?: 'belief_drift' | 'decision_tree' | 'model_hit_rate' | 'all';
+  }): Promise<{ ok: boolean; result?: any }> {
+    if (!req.kind || req.kind === 'all') {
+      const out = await this.longitudinal.recomputeAll(req.scopeId);
+      return { ok: true, result: out };
+    }
+    if (!req.scopeId && (req.kind === 'belief_drift' || req.kind === 'decision_tree')) {
+      return { ok: false, result: { reason: 'scopeId required for this kind' } };
+    }
+    if (req.kind === 'belief_drift') {
+      return { ok: true, result: await this.longitudinal.beliefDrift.recomputeForScope(req.scopeId!) };
+    }
+    if (req.kind === 'decision_tree') {
+      return { ok: true, result: await this.longitudinal.decisionTree.recomputeForScope(req.scopeId!) };
+    }
+    return { ok: true, result: await this.longitudinal.modelHitRate.recomputeForScope(req.scopeId) };
+  }
+
+  async getLongitudinal(scopeId: string, kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate') {
+    if (kind === 'belief_drift') return this.longitudinal.beliefDrift.list(scopeId);
+    if (kind === 'decision_tree') return this.longitudinal.decisionTree.latestForScope(scopeId);
+    return this.longitudinal.modelHitRate.listForScope(scopeId);
   }
 
   // ============================================================
