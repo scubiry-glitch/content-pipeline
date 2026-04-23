@@ -316,6 +316,11 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       const query = request.query as any;
       const body = (request.body || {}) as any;
       const enableDeep = body.enableDeep === true || query.enableDeep === 'true';
+      // v7.5: 场景化默认跟随 enableDeep;显式传 false 可关闭
+      const enableSceneClassification =
+        body.enableSceneClassification === false
+          ? false
+          : (body.enableSceneClassification === true || enableDeep);
       const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
@@ -327,15 +332,22 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         enrich: true,
         enableDeep,
         expertStrategy: body.expertStrategy,
+        // v7.5
+        enableSceneClassification,
+        purpose: typeof body.purpose === 'string' ? body.purpose : undefined,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
       };
       const result = await engine.getTopicRecommendations(topicOptions);
       const enriched = result.items.filter(t => t.reason || t.titleSuggestion);
+      const scened = result.items.filter(t => t.scene);
       return reply.send({
         ok: true,
         total: result.total,
         pageItems: result.items.length,
         enriched: enriched.length,
+        scened: scened.length,
         deep: enableDeep,
+        scene_classified: enableSceneClassification,
       });
     });
 
@@ -590,13 +602,15 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       });
     });
 
-    // ⑬ 争议话题
+    // ⑬ 争议话题 (v7.5: enableDeepRecall 触发 L1+L2+L3 三层召回 + 张力分类)
     fastify.get('/contradictions', async (request, reply) => {
       const query = request.query as any;
       return engine.getContradictions({
         domain: query.domain,
         severity: query.severity,
         limit: query.limit ? parseInt(query.limit) : undefined,
+        enableDeepRecall: query.enableDeepRecall === 'true',
+        enableL3: query.enableL3 !== 'false',
       });
     });
 
