@@ -253,6 +253,86 @@ describe('meeting-notes routes', () => {
     });
   });
 
+  describe('POST /meeting-note-sources/:id/ingest-text', () => {
+    it('ingests pasted text with an adapter shim and returns the job', async () => {
+      let capturedTitle = '';
+      let capturedContent = '';
+      const svc: any = {
+        getSource: vi.fn().mockResolvedValue(stubSource()),
+        runImport: vi.fn().mockImplementation(async () => {
+          // simulate that runImport drained the one-shot adapter
+          const drafts = await (svc as any).adapters.manual.fetchDrafts();
+          capturedTitle = drafts[0].title;
+          capturedContent = drafts[0].content;
+          return stubImport({ itemsImported: 1, assetIds: ['a1'] });
+        }),
+        adapters: {} as Record<string, any>,
+      };
+      const app = await makeApp(svc);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/quality/meeting-note-sources/s1/ingest-text',
+        headers: authHeaders,
+        payload: { title: '2026-Q2 架构评审', content: '讨论了 transformer 层数...' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().itemsImported).toBe(1);
+      expect(capturedTitle).toBe('2026-Q2 架构评审');
+      expect(capturedContent).toContain('transformer');
+      await app.close();
+    });
+
+    it('accepts raw text/plain body with title from X-Title header', async () => {
+      let captured: any = null;
+      const svc: any = {
+        getSource: vi.fn().mockResolvedValue(stubSource()),
+        runImport: vi.fn().mockImplementation(async () => {
+          const d = await (svc as any).adapters.manual.fetchDrafts();
+          captured = d[0];
+          return stubImport();
+        }),
+        adapters: {} as Record<string, any>,
+      };
+      const app = await makeApp(svc);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/quality/meeting-note-sources/s1/ingest-text',
+        headers: { ...authHeaders, 'content-type': 'text/plain', 'x-title': '访谈记录' },
+        payload: '问：规模？\n答：200 人',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(captured.title).toBe('访谈记录');
+      expect(captured.content).toContain('问：');
+      await app.close();
+    });
+
+    it('400s when content is empty', async () => {
+      const svc = { getSource: vi.fn().mockResolvedValue(stubSource()), runImport: vi.fn() };
+      const app = await makeApp(svc);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/quality/meeting-note-sources/s1/ingest-text',
+        headers: authHeaders,
+        payload: { title: 'x', content: '' },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it('404s when source does not exist', async () => {
+      const svc = { getSource: vi.fn().mockResolvedValue(null), runImport: vi.fn() };
+      const app = await makeApp(svc);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/quality/meeting-note-sources/ghost/ingest-text',
+        headers: authHeaders,
+        payload: { title: 'x', content: 'hello' },
+      });
+      expect(res.statusCode).toBe(404);
+      await app.close();
+    });
+  });
+
   describe('POST /meeting-note-sources/:id/upload', () => {
     it('returns 415 when request is not multipart', async () => {
       const svc = {

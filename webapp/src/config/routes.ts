@@ -15,6 +15,7 @@ export const ROUTES = {
     popular: '/assets/popular',
     rss: '/assets/rss',
     bindings: '/assets/bindings',
+    meetingNoteSources: '/meeting-note-sources',
   },
 
   expert: {

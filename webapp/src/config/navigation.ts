@@ -31,6 +31,7 @@ export const mainNavItems: NavItem[] = [
       { to: ROUTES.assets.reports, label: '研报', icon: '📊' },
       { to: ROUTES.assets.popular, label: '热门素材', icon: '🔥' },
       { to: ROUTES.assets.rss, label: 'RSS订阅', icon: '📡' },
+      { to: ROUTES.assets.meetingNoteSources, label: '会议纪要', icon: '🎙️' },
       { to: ROUTES.assets.bindings, label: '目录绑定', icon: '📂' },
     ],
   },

@@ -120,6 +120,58 @@ export async function meetingNotesRoutes(
     return { items };
   });
 
+  // Paste text (JSON or text/plain) → one-shot adapter → runImport
+  fastify.post('/meeting-note-sources/:id/ingest-text', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const source = await svc.getSource(id);
+    if (!source) {
+      reply.status(404);
+      return { error: 'Not Found', message: `Source ${id} not found` };
+    }
+
+    let title = '';
+    let content = '';
+    const ct = (request.headers['content-type'] || '').toLowerCase();
+    if (ct.includes('text/plain')) {
+      content = typeof request.body === 'string' ? request.body : String(request.body ?? '');
+      title = (request.headers['x-title'] as string | undefined)
+        ?? `pasted-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`;
+    } else {
+      const body = (request.body ?? {}) as { title?: string; content?: string };
+      title = (body.title || '').trim();
+      content = body.content || '';
+    }
+
+    if (!content.trim()) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'content is required' };
+    }
+    if (!title) {
+      title = `pasted-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`;
+    }
+
+    const sha = createHash('sha256').update(`${title}\n${content}`).digest('hex');
+    const oneShot = {
+      fetchDrafts: async () => [{
+        externalId: `paste:${sha}`,
+        title,
+        content,
+        metadata: { origin: 'paste' },
+      }],
+    };
+    const ad = (svc as any).adapters as Record<string, any>;
+    const previous = ad?.[source.kind];
+    if (ad) ad[source.kind] = oneShot;
+    try {
+      return await svc.runImport(id, 'paste');
+    } finally {
+      if (ad) {
+        if (previous) ad[source.kind] = previous;
+        else delete ad[source.kind];
+      }
+    }
+  });
+
   // Upload file (manual/upload adapter shortcut): parse file bytes → one draft → runImport
   fastify.post('/meeting-note-sources/:id/upload', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };

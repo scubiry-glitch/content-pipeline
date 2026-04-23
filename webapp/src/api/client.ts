@@ -716,6 +716,10 @@ export const meetingNoteSourcesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }) as Promise<MeetingNoteImport>;
   },
+
+  /** 粘贴文本快速入库（JSON 形式，title + content）。 */
+  ingestText: (id: string, data: { title?: string; content: string }) =>
+    client.post(`/quality/meeting-note-sources/${id}/ingest-text`, data) as Promise<MeetingNoteImport>,
 };
 
 // 情感分析相关类型 (v3.2)
