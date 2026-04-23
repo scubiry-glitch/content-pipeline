@@ -1,0 +1,61 @@
+// axes/knowledge/counterfactualsComputer.ts — 反事实 (counterfactuals)
+//
+// 抽取"被否决的路径"，以便 PR5 Longitudinal 去对比其 6 个月后实际走势
+
+import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { ensurePersonByName } from '../../parse/participantExtractor.js';
+import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import type { MeetingNotesDeps } from '../../types.js';
+
+interface ExtractedCounterfactual {
+  rejected_path: string;
+  rejected_by?: string;
+  tracking_note?: string;
+  months_later_check?: number;
+}
+
+const SYSTEM = `你是反事实抽取器。找出"被明确否决的候选方案/路径"，以便后续跟踪其若被采纳会如何。
+返回 JSON 数组：
+[{"rejected_path":"被否决的方案（≤100字）", "rejected_by":"否决者姓名", "tracking_note":"值得关注的点", "months_later_check":3/6/12}]
+- 仅列真正被否决的候选；纯理论假设不算`;
+
+export async function computeCounterfactuals(
+  deps: MeetingNotesDeps,
+  args: ComputeArgs,
+): Promise<ComputeResult> {
+  const out = emptyResult('counterfactuals');
+  if (!args.meetingId) return out;
+  const bundle = await loadMeetingBundle(deps, args.meetingId);
+  if (!bundle) return out;
+
+  if (args.replaceExisting) {
+    await deps.db.query(
+      `DELETE FROM mn_counterfactuals WHERE meeting_id = $1`,
+      [bundle.meetingId],
+    );
+  }
+
+  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
+    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
+  const items = safeJsonParse<ExtractedCounterfactual[]>(raw, []);
+
+  for (const item of items) {
+    try {
+      const rejectedById = item.rejected_by ? await ensurePersonByName(deps, item.rejected_by) : null;
+      const months = Math.max(1, Math.min(24, Number(item.months_later_check) || 6));
+      const checkAt = new Date();
+      checkAt.setMonth(checkAt.getMonth() + months);
+      await deps.db.query(
+        `INSERT INTO mn_counterfactuals
+           (meeting_id, rejected_path, rejected_by_person_id, tracking_note,
+            next_validity_check_at, current_validity)
+         VALUES ($1, $2, $3, $4, $5, 'unclear')`,
+        [bundle.meetingId, item.rejected_path, rejectedById, item.tracking_note ?? null, checkAt],
+      );
+      out.created += 1;
+    } catch {
+      out.errors += 1;
+    }
+  }
+  return out;
+}

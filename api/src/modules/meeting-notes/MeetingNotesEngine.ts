@@ -1,6 +1,7 @@
 // MeetingNotesEngine — 模块核心编排
 // 5 层能力：parse / axes / runs / longitudinal / crosslinks
-// 本文件仅为 PR1 的骨架；后续 PR 会逐层补齐实现
+//
+// PR3: parse + axes 层完整；runs / longitudinal / crosslinks 仍为 PR4/5 占位
 
 import type {
   MeetingNotesDeps,
@@ -11,6 +12,28 @@ import type {
   AxisName,
   AxisVersionRef,
 } from './types.js';
+import { parseMeeting, type ParseMeetingResult } from './parse/meetingParser.js';
+import {
+  ALL_AXES,
+  AXIS_SUBDIMS,
+  runAxisAll,
+} from './axes/registry.js';
+import type { ComputeResult } from './axes/_shared.js';
+
+export interface ComputeAxisRequest {
+  meetingId?: string;
+  scope?: ScopeRef;
+  axis: AxisName;
+  subDims?: string[];
+  replaceExisting?: boolean;
+}
+
+export interface ComputeAxisResponse {
+  ok: boolean;
+  axis: AxisName;
+  results: ComputeResult[];
+  reason?: string;
+}
 
 export class MeetingNotesEngine {
   constructor(
@@ -19,32 +42,194 @@ export class MeetingNotesEngine {
   ) {}
 
   // ============================================================
-  // 健康探测（PR1 唯一可用方法）
+  // Health
   // ============================================================
 
   async health(): Promise<{ ok: true; version: string }> {
-    return { ok: true, version: '0.1.0-scaffold' };
+    return { ok: true, version: '0.3.0-axes' };
   }
 
   // ============================================================
-  // Layer 1 — parse（PR2 实现）
+  // Layer 1 — parse
   // ============================================================
 
-  async parseMeeting(_assetId: string): Promise<{ ok: boolean; reason?: string }> {
-    return { ok: false, reason: 'not-implemented (PR2)' };
+  async parseMeeting(assetId: string): Promise<ParseMeetingResult> {
+    return parseMeeting(this.deps, assetId);
   }
 
   // ============================================================
-  // Layer 2 — axes（PR3 实现）
+  // Layer 2 — axes
   // ============================================================
 
-  async computeAxis(_req: {
-    meetingId?: string;
-    scope?: ScopeRef;
-    axis: AxisName;
-    subDims?: string[];
-  }): Promise<{ ok: boolean; reason?: string }> {
-    return { ok: false, reason: 'not-implemented (PR3)' };
+  async computeAxis(req: ComputeAxisRequest): Promise<ComputeAxisResponse> {
+    if (req.axis === 'all') {
+      const allResults: ComputeResult[] = [];
+      for (const ax of ALL_AXES) {
+        const r = await runAxisAll(this.deps, ax, {
+          meetingId: req.meetingId,
+          scopeId: req.scope?.id ?? null,
+          scopeKind: req.scope?.kind,
+          replaceExisting: req.replaceExisting,
+        });
+        allResults.push(...r);
+      }
+      return { ok: true, axis: 'all', results: allResults };
+    }
+
+    const axisKey = req.axis;
+    if (!AXIS_SUBDIMS[axisKey]) {
+      return { ok: false, axis: req.axis, results: [], reason: `unknown-axis:${req.axis}` };
+    }
+
+    const results = await runAxisAll(this.deps, axisKey, {
+      meetingId: req.meetingId,
+      scopeId: req.scope?.id ?? null,
+      scopeKind: req.scope?.kind,
+      replaceExisting: req.replaceExisting,
+    }, req.subDims);
+
+    return { ok: true, axis: req.axis, results };
+  }
+
+  /** 聚合单个 meeting 的四轴数据给前端 */
+  async getMeetingAxes(meetingId: string): Promise<Record<string, any>> {
+    return {
+      meetingId,
+      people: {
+        commitments: (await this.deps.db.query(
+          `SELECT id, person_id, text, due_at, state, progress, created_at
+             FROM mn_commitments WHERE meeting_id = $1 ORDER BY due_at NULLS LAST`,
+          [meetingId],
+        )).rows,
+        role_trajectory: (await this.deps.db.query(
+          `SELECT person_id, role_label, confidence
+             FROM mn_role_trajectory_points WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows,
+        speech_quality: (await this.deps.db.query(
+          `SELECT person_id, entropy_pct, followed_up_count, quality_score, sample_quotes
+             FROM mn_speech_quality WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows,
+        silence_signals: (await this.deps.db.query(
+          `SELECT person_id, topic_id, state, anomaly_score
+             FROM mn_silence_signals WHERE meeting_id = $1 AND state <> 'spoke'`,
+          [meetingId],
+        )).rows,
+      },
+      projects: {
+        decisions: (await this.deps.db.query(
+          `SELECT id, title, proposer_person_id, confidence, is_current, rationale, based_on_ids, superseded_by_id
+             FROM mn_decisions WHERE meeting_id = $1 ORDER BY created_at`,
+          [meetingId],
+        )).rows,
+        assumptions: (await this.deps.db.query(
+          `SELECT id, text, evidence_grade, verification_state, confidence, underpins_decision_ids
+             FROM mn_assumptions WHERE meeting_id = $1 ORDER BY evidence_grade`,
+          [meetingId],
+        )).rows,
+        open_questions: (await this.deps.db.query(
+          `SELECT id, text, category, status, times_raised, owner_person_id
+             FROM mn_open_questions
+             WHERE first_raised_meeting_id = $1 OR last_raised_meeting_id = $1`,
+          [meetingId],
+        )).rows,
+        risks: (await this.deps.db.query(
+          `SELECT id, text, severity, mention_count, heat_score, trend, action_taken
+             FROM mn_risks
+             WHERE scope_id IN (
+               SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1
+             )
+             ORDER BY heat_score DESC`,
+          [meetingId],
+        )).rows,
+      },
+      knowledge: {
+        judgments: (await this.deps.db.query(
+          `SELECT id, text, domain, generality_score, reuse_count
+             FROM mn_judgments WHERE $1 = ANY(linked_meeting_ids) ORDER BY generality_score DESC`,
+          [meetingId],
+        )).rows,
+        mental_models: (await this.deps.db.query(
+          `SELECT id, model_name, invoked_by_person_id, correctly_used, outcome, confidence
+             FROM mn_mental_model_invocations WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows,
+        cognitive_biases: (await this.deps.db.query(
+          `SELECT id, bias_type, where_excerpt, by_person_id, severity, mitigated
+             FROM mn_cognitive_biases WHERE meeting_id = $1 ORDER BY severity DESC`,
+          [meetingId],
+        )).rows,
+        counterfactuals: (await this.deps.db.query(
+          `SELECT id, rejected_path, rejected_by_person_id, tracking_note,
+                  next_validity_check_at, current_validity
+             FROM mn_counterfactuals WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows,
+        evidence_grades: (await this.deps.db.query(
+          `SELECT dist_a, dist_b, dist_c, dist_d, weighted_score
+             FROM mn_evidence_grades WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows[0] ?? null,
+      },
+      meta: {
+        decision_quality: (await this.deps.db.query(
+          `SELECT overall, clarity, actionable, traceable, falsifiable, aligned, notes
+             FROM mn_decision_quality WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows[0] ?? null,
+        meeting_necessity: (await this.deps.db.query(
+          `SELECT verdict, suggested_duration_min, reasons
+             FROM mn_meeting_necessity WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows[0] ?? null,
+        affect_curve: (await this.deps.db.query(
+          `SELECT samples, tension_peaks, insight_points
+             FROM mn_affect_curve WHERE meeting_id = $1`,
+          [meetingId],
+        )).rows[0] ?? null,
+      },
+    };
+  }
+
+  /**
+   * 会议详情三变体 A/B/C 聚合数据。PR3 同源数据 + 不同聚合视角：
+   *   A Editorial:  长文结构（章节 + 侧栏）
+   *   B Workbench: 三栏（structure / claims / experts & actions）
+   *   C Threads:    以 person 为中心的网络
+   */
+  async getMeetingDetail(meetingId: string, view: 'A' | 'B' | 'C' = 'A'): Promise<Record<string, any>> {
+    const axes = await this.getMeetingAxes(meetingId);
+    if (view === 'A') {
+      return {
+        view: 'A',
+        meetingId,
+        sections: [
+          { id: 'minutes',     title: '纪要', body: axes.projects.decisions },
+          { id: 'tension',     title: '张力点', body: axes.knowledge.cognitive_biases },
+          { id: 'new-cognition', title: '新认知', body: axes.knowledge.judgments },
+          { id: 'focus-map',   title: '焦点地图', body: axes.projects.open_questions },
+          { id: 'consensus',   title: '共识/分歧', body: axes.projects.assumptions },
+          { id: 'cross-view',  title: '跨视角', body: axes.knowledge.counterfactuals },
+        ],
+      };
+    }
+    if (view === 'B') {
+      return {
+        view: 'B',
+        meetingId,
+        left:   { speakers: axes.people.speech_quality, structure: axes.projects.decisions },
+        center: { claims: axes.projects.assumptions, tensions: axes.knowledge.cognitive_biases },
+        right:  { commitments: axes.people.commitments, openQuestions: axes.projects.open_questions },
+      };
+    }
+    return {
+      view: 'C',
+      meetingId,
+      nodes: axes.people.role_trajectory,
+      threads: axes.people.commitments,
+      influence: axes.people.speech_quality,
+    };
   }
 
   // ============================================================

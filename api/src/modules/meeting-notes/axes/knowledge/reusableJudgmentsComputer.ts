@@ -1,0 +1,73 @@
+// axes/knowledge/reusableJudgmentsComputer.ts — 可复用判断 (reusable_judgments)
+//
+// 从会议里抽象出"可以迁移到其他场景"的通用判断/经验
+// 写入 mn_judgments；若同文本已存在，则 reuse_count + linked_meeting_ids 追加
+
+import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { ensurePersonByName } from '../../parse/participantExtractor.js';
+import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import type { MeetingNotesDeps } from '../../types.js';
+
+interface ExtractedJudgment {
+  text: string;
+  author?: string;
+  domain?: string;
+  generality_score?: number;
+}
+
+const SYSTEM = `你是可复用判断抽象器。从会议里找出可抽象为跨场景适用的通用判断。
+返回 JSON 数组：
+[{"text":"判断内容（尽量抽象，≤100字）", "author":"提出者姓名", "domain":"领域关键词","generality_score":0-1}]
+- 只抽取有明显普适性的判断（如"X 市场的增长依赖供给端")
+- 排除纯事实和场景性说法`;
+
+export async function computeReusableJudgments(
+  deps: MeetingNotesDeps,
+  args: ComputeArgs,
+): Promise<ComputeResult> {
+  const out = emptyResult('reusable_judgments');
+  if (!args.meetingId) return out;
+  const bundle = await loadMeetingBundle(deps, args.meetingId);
+  if (!bundle) return out;
+
+  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
+    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
+  const items = safeJsonParse<ExtractedJudgment[]>(raw, []);
+
+  for (const item of items) {
+    try {
+      const authorId = item.author ? await ensurePersonByName(deps, item.author) : null;
+      const existing = await deps.db.query(
+        `SELECT id, reuse_count, linked_meeting_ids FROM mn_judgments
+          WHERE lower(text) = lower($1) LIMIT 1`,
+        [item.text],
+      );
+      if (existing.rows.length > 0) {
+        const id = existing.rows[0].id;
+        const linked: string[] = existing.rows[0].linked_meeting_ids ?? [];
+        if (!linked.includes(bundle.meetingId)) linked.push(bundle.meetingId);
+        await deps.db.query(
+          `UPDATE mn_judgments
+              SET reuse_count = reuse_count + 1,
+                  linked_meeting_ids = $2::uuid[],
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [id, linked],
+        );
+        out.updated += 1;
+      } else {
+        await deps.db.query(
+          `INSERT INTO mn_judgments
+             (text, abstracted_from_meeting_id, author_person_id, domain,
+              generality_score, reuse_count, linked_meeting_ids)
+           VALUES ($1, $2, $3, $4, $5, 1, ARRAY[$2]::uuid[])`,
+          [item.text, bundle.meetingId, authorId, item.domain ?? null, item.generality_score ?? 0.5],
+        );
+        out.created += 1;
+      }
+    } catch {
+      out.errors += 1;
+    }
+  }
+  return out;
+}

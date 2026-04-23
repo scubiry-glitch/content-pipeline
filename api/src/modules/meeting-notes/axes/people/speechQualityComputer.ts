@@ -1,0 +1,66 @@
+// axes/people/speechQualityComputer.ts — 发言质量 (speech_quality)
+//
+// 为每人算 entropy_pct + followed_up_count + quality_score
+// PR3: 由 LLM 同时评估三项；PR4 可替换为基于 segment 的统计
+
+import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { ensurePersonByName } from '../../parse/participantExtractor.js';
+import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import type { MeetingNotesDeps } from '../../types.js';
+
+interface ExtractedQuality {
+  who: string;
+  entropy_pct: number;       // 0-100 信息熵百分比
+  followed_up_count: number; // 其他人跟进/引用次数
+  sample_quote?: string;
+}
+
+const SYSTEM = `为每位参会人评估发言质量。返回 JSON 数组：
+[{"who":"姓名", "entropy_pct": 0-100, "followed_up_count": 整数, "sample_quote":"可选代表性引述"}]
+- entropy_pct: 信息密度 (重复/口水话低、有具体数字/引用高)
+- followed_up_count: 其观点被其他人引用/反驳/附议的次数`;
+
+export async function computeSpeechQuality(
+  deps: MeetingNotesDeps,
+  args: ComputeArgs,
+): Promise<ComputeResult> {
+  const out = emptyResult('speech_quality');
+  if (!args.meetingId) return out;
+  const bundle = await loadMeetingBundle(deps, args.meetingId);
+  if (!bundle) return out;
+
+  if (args.replaceExisting) {
+    await deps.db.query(`DELETE FROM mn_speech_quality WHERE meeting_id = $1`, [bundle.meetingId]);
+  }
+
+  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
+    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
+  const items = safeJsonParse<ExtractedQuality[]>(raw, []);
+
+  for (const item of items) {
+    try {
+      const personId = await ensurePersonByName(deps, item.who);
+      if (!personId) { out.skipped += 1; continue; }
+      const entropy = Math.max(0, Math.min(100, item.entropy_pct ?? 0));
+      const followups = Math.max(0, item.followed_up_count ?? 0);
+      const quality = entropy * 0.6 + Math.min(100, followups * 10) * 0.4;
+      const samples = item.sample_quote ? [item.sample_quote] : [];
+      await deps.db.query(
+        `INSERT INTO mn_speech_quality
+           (meeting_id, person_id, entropy_pct, followed_up_count, quality_score, sample_quotes)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         ON CONFLICT (meeting_id, person_id)
+         DO UPDATE SET entropy_pct = EXCLUDED.entropy_pct,
+                       followed_up_count = EXCLUDED.followed_up_count,
+                       quality_score = EXCLUDED.quality_score,
+                       sample_quotes = EXCLUDED.sample_quotes,
+                       computed_at = NOW()`,
+        [bundle.meetingId, personId, entropy, followups, quality, JSON.stringify(samples)],
+      );
+      out.created += 1;
+    } catch {
+      out.errors += 1;
+    }
+  }
+  return out;
+}
