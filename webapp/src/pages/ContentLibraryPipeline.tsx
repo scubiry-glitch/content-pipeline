@@ -1,6 +1,10 @@
 // 数据生产流水线可视化页面
 // v7.3: 流程图 + 分析摘要 + 点击弹窗 (上下游复用 PRODUCT_META)
 // v7.3b: SVG 连线 + 按阶段/按步骤切换
+// v7.4: 反映「深度模式」(enableDeep / expertStrategy) + 专家库 CDT 参与的 Step 2/3/5/topics
+//       · 新增 asset_deep_analysis 产出线 · Step 4 新增 BeliefPattern(8) / TrendSignalQuality
+//       · 应用场景新增「深度分析详情」「专家体系全景」
+// v7.5: 争议 L1/L2/L3 三层召回 + 议题 7 场景分类 + 角度卡 + why 三问 + 目的倒推
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PRODUCT_META, type ProductMetaDef } from '../components/ContentLibraryProductMeta';
@@ -34,37 +38,51 @@ interface OutputDef {
   sourceStep: 'step2' | 'step3' | 'step4' | 'step5' | 'step5a' | 'step5b' | 'step6';
   /** 预计算 vs 查询时计算 */
   mode: 'precomputed' | 'query-time';
+  /** v7.4: 是否支持「深度模式」—— 勾选 Step 2/3/5/topics 深度开关时走专家 CDT 路径 */
+  supportsDeep?: boolean;
+  /** v7.4: 深度模式下的增量产出说明 (弹窗展示) */
+  deepNote?: string;
 }
 
 const OUTPUTS: OutputDef[] = [
   // 选题阶段
-  { key: 'topics',    meta: PRODUCT_META.topics,    statKey: (s) => null,   sourceStep: 'step5a', mode: 'query-time' },
+  { key: 'topics',    meta: PRODUCT_META.topics,    statKey: (s) => null,   sourceStep: 'step5a', mode: 'query-time',
+    supportsDeep: true, deepNote: 'Step topics 深度模式 → 专家 CDT 生成角度矩阵 (mode=\'deep\' 缓存)；v7.5: 7 场景分类 (🔥 争议 / 📈 新变化 / ⚠️ 被忽视的风险 / 🪞 反常识 / 🧩 认知拼图 / 🧭 决策转折 / 🎭 人物切片) + 角度卡 + why 三问 (why_now / why_you / why_it_works) + 目的倒推 (自动从历史任务推断，UI 可覆盖)' },
   { key: 'trends',    meta: PRODUCT_META.trends,                            sourceStep: 'step3',  mode: 'query-time' },
-  { key: 'angles',    meta: PRODUCT_META.angles,                            sourceStep: 'step5a', mode: 'query-time' },
+  { key: 'angles',    meta: PRODUCT_META.angles,                            sourceStep: 'step5a', mode: 'query-time',
+    supportsDeep: true, deepNote: '随 topics 深度模式一起产出' },
   { key: 'gaps',      meta: PRODUCT_META.gaps,                              sourceStep: 'step3',  mode: 'query-time' },
   // 研究阶段
-  { key: 'facts',     meta: PRODUCT_META.facts,     statKey: 'facts',       sourceStep: 'step3',  mode: 'precomputed' },
+  { key: 'facts',     meta: PRODUCT_META.facts,     statKey: 'facts',       sourceStep: 'step3',  mode: 'precomputed',
+    supportsDeep: true, deepNote: 'Step 3 深度模式 → content_facts.context.expert_review 写入专家审定记录' },
   { key: 'entities',  meta: PRODUCT_META.entities,  statKey: 'entities',    sourceStep: 'step3',  mode: 'precomputed' },
   { key: 'delta',     meta: PRODUCT_META.delta,                             sourceStep: 'step3',  mode: 'query-time' },
   { key: 'freshness', meta: PRODUCT_META.freshness,                         sourceStep: 'step3',  mode: 'query-time' },
   { key: 'cards',     meta: PRODUCT_META.cards,                             sourceStep: 'step3',  mode: 'query-time' },
   // 写作阶段
-  { key: 'synthesis',  meta: PRODUCT_META.synthesis,  statKey: 'synthesisCached', sourceStep: 'step5b', mode: 'precomputed' },
+  { key: 'synthesis',  meta: PRODUCT_META.synthesis,  statKey: 'synthesisCached', sourceStep: 'step5b', mode: 'precomputed',
+    supportsDeep: true, deepNote: 'Step 5 深度模式 → content_synthesis_cache.scope_type=\'entity_deep\' (专家 CDT 替代泛型)' },
   { key: 'materials',  meta: PRODUCT_META.materials,                              sourceStep: 'step2',  mode: 'query-time' },
-  { key: 'consensus',  meta: PRODUCT_META.consensus,                              sourceStep: 'step3',  mode: 'query-time' },
+  { key: 'consensus',  meta: PRODUCT_META.consensus,                              sourceStep: 'step3',  mode: 'query-time',
+    supportsDeep: true, deepNote: 'Step 2 深度模式 → asset_deep_analysis.expert_consensus (专家补充判断)' },
   // 审核阶段
-  { key: 'contradictions', meta: PRODUCT_META.contradictions, statKey: 'contradictions', sourceStep: 'step4', mode: 'precomputed' },
-  { key: 'beliefs',        meta: PRODUCT_META.beliefs,        statKey: 'beliefs',        sourceStep: 'step4', mode: 'precomputed' },
+  { key: 'contradictions', meta: PRODUCT_META.contradictions, statKey: 'contradictions', sourceStep: 'step4', mode: 'precomputed',
+    supportsDeep: true, deepNote: 'v7.5 三层召回: L1 SQL 字面对冲 + L2 embedding 语义对冲 (cosine ≥ 0.75, Jaccard < 0.6) + L3 LLM 张力分类 (立场/叙事归因/利益/时序/定义漂移 5 类) → TensionCandidate 扩展 Contradiction (+tensionType +divergenceAxis +parties +timeSlice +recallLayer)。v7.4 深度分析: ControversyDeepAnalyzer 读新字段做 stakeholders / steelmanA-B / realWorldImpact' },
+  { key: 'beliefs',        meta: PRODUCT_META.beliefs,        statKey: 'beliefs',        sourceStep: 'step4', mode: 'precomputed',
+    supportsDeep: true, deepNote: 'Step 4 输出 8 种 BeliefPattern + Step 2 深度模式产出 belief_evolution' },
   { key: 'crossDomain',    meta: PRODUCT_META.crossDomain,                               sourceStep: 'step4', mode: 'query-time' },
 ];
 
 /** 步骤 → 产出物映射 (用于流程图连线标注) */
 const STEP_OUTPUTS: Record<string, string[]> = {
-  step2:  ['materials'],
+  // v7.4: Step 2 深度模式开启时会一次性生成 15 个 deliverable 写入 asset_deep_analysis，
+  // 所以 Step 2 的产出远不止 materials —— 把深度下的 11 个（⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮）都挂上。
+  step2:  ['materials', 'facts', 'entities', 'delta', 'freshness', 'cards', 'synthesis', 'consensus', 'contradictions', 'beliefs', 'crossDomain'],
   step3:  ['facts', 'entities', 'trends', 'gaps', 'delta', 'freshness', 'cards', 'consensus'],
   step4:  ['contradictions', 'beliefs', 'crossDomain'],
   step5a: ['topics', 'angles'],
   step5b: ['synthesis'],
+  step6:  ['wiki'],
 };
 
 const PHASES = [
@@ -109,6 +127,20 @@ const APPLICATIONS: AppDef[] = [
     color: 'hsl(260, 50%, 55%)',
   },
   {
+    key: 'expert-panorama', label: '专家体系全景', icon: '🧠',
+    description: 'CDT 专家库 · 4 基础策略 + 9 装饰器 + 3 预设',
+    href: '/expert-library/panorama',
+    consumes: ['synthesis', 'consensus', 'contradictions', 'beliefs'],
+    color: 'hsl(280, 50%, 55%)',
+  },
+  {
+    key: 'deep-analysis', label: '深度分析详情', icon: '🧬',
+    description: '单资产 15 产出物 + 专家调用痕迹',
+    href: '/assets',
+    consumes: ['facts', 'entities', 'cards', 'synthesis', 'consensus', 'contradictions', 'beliefs', 'crossDomain'],
+    color: 'hsl(320, 50%, 55%)',
+  },
+  {
     key: 'enterprise-report', label: '企业研报', icon: '📊',
     description: '自动生成研究报告草稿',
     href: '/tasks',
@@ -131,7 +163,7 @@ const APPLICATIONS: AppDef[] = [
   },
   {
     key: 'topic-decision', label: '选题决策', icon: '🎯',
-    description: '编辑部选题会参考',
+    description: '编辑部选题会参考 · 支持深度模式角度生成',
     href: '/hot-topics',
     consumes: ['topics', 'trends', 'angles', 'gaps', 'delta'],
     color: 'hsl(40, 60%, 50%)',
@@ -259,6 +291,7 @@ export function ContentLibraryPipeline() {
     let downstream: string[] = [];
     let pagePath: string | undefined;
     let batchOpsLink = true;
+    let deepModeNote: string | undefined;
 
     if (modalNode.type === 'output') {
       const o = OUTPUTS.find(x => x.key === modalNode.key);
@@ -276,6 +309,7 @@ export function ContentLibraryPipeline() {
       ];
       downstream = o.meta.downstream;
       pagePath = o.meta.page;
+      deepModeNote = o.deepNote;
       const c = getCount(o, stats);
       if (c !== null) {
         statCards.push({ value: String(c), label: '当前数量' });
@@ -286,10 +320,11 @@ export function ContentLibraryPipeline() {
         statCards.push({ value: `${stats.assets.pending_ai}`, label: '待处理素材' });
       }
     } else if (modalNode.type === 'step') {
-      const stepDefs: Record<string, { title: string; desc: string; stats: Array<{ value: string; label: string }> }> = {
+      const stepDefs: Record<string, { title: string; desc: string; stats: Array<{ value: string; label: string }>; deepDesc?: string }> = {
         step2: {
           title: 'Step 2: AI 批量分析',
           desc: '向量化 + 质量评分 + 主题检测 + 去重',
+          deepDesc: '🧬 深度模式 (enableDeepAnalysis): DeepAnalysisOrchestrator 编排 15 个 deliverable + 专家匹配 (ExpertMatcher) + 专家应用策略 (expert-application: 4 基础 + 9 装饰器 + 3 预设) + EMM 门控 → 写入 asset_deep_analysis 表；⑬ 争议单独走 ControversyDeepAnalyzer 产出 stakeholders/steelmanA-B/矛盾分类 5 类',
           stats: stats ? [
             { value: String(stats.assets.ai_analyzed), label: '已分析' },
             { value: String(stats.assets.pending_ai), label: '待处理' },
@@ -300,6 +335,7 @@ export function ContentLibraryPipeline() {
         step3: {
           title: 'Step 3: 两段式事实提取',
           desc: 'analyze → extract → delta compress → entity resolve (断点续传)',
+          deepDesc: '🧬 深度模式 (extractDeep): Stage 3 专家审定 — factExtractor.runExpertReview 通过 ExpertMatcher 选 CDT 专家对提取出的事实逐条裁决 (keep / refine / drop / flag)，将 expert_review 写入 content_facts.context',
           stats: stats ? [
             { value: String(stats.facts), label: '事实总数' },
             { value: String(stats.entities), label: '实体总数' },
@@ -309,7 +345,8 @@ export function ContentLibraryPipeline() {
         },
         step4: {
           title: 'Step 4: 知识图谱重算',
-          desc: 'Louvain 社区发现 + 4 信号边表 + 观点推断',
+          desc: 'Louvain 社区发现 + 4 信号边表 (direct/source-overlap/type-affinity/adamic-adar) + BeliefPattern 8 种模式检测 + TrendSignal 质量治理',
+          deepDesc: '🧬 v7.5 三层召回 (enableDeepRecall=true): ⑬ 争议不再是纯 SQL 字面对冲，而是 L1 SQL + L2 embedding 语义对冲 (cosine ≥ 0.75, Jaccard < 0.6) + L3 LLM 张力分类器 (立场/叙事归因/利益/时序/定义漂移 5 类) → TensionCandidate。L2 无 pgvector 时自动降级，L3 失败 → tensionType=\'unknown\' 不阻塞下游。',
           stats: stats ? [
             { value: String(stats.communities), label: '社区数' },
             { value: String(stats.relations), label: '关系边数' },
@@ -325,12 +362,14 @@ export function ContentLibraryPipeline() {
         },
         step5a: {
           title: 'Step 5a: 议题叙事预生成',
-          desc: 'Top 议题 → 标题/导语/角度矩阵，缓存至 DB',
+          desc: 'Top 议题 → 标题/导语/角度矩阵，缓存至 content_topic_enrichments',
+          deepDesc: '🧬 v7.4 深度模式 (topicsDeep): 专家 CDT 替代 LLMEnricher 泛型 prompt — 走 expert-application \'①topic-enrich\' deliverable (默认策略: knowledge_grounded | failure_check | signature_style | single)，缓存 mode=\'deep\' 与 generic 并存不冲突。\n\n🎯 v7.5 场景化 (enableSceneClassification=true): 7 类场景 (🔥 争议 / 📈 新变化 / ⚠️ 被忽视的风险 / 🪞 反常识 / 🧩 认知拼图 / 🧭 决策转折 / 🎭 人物切片) — 规则优先 + LLM 兜底。每条议题附角度卡 (hook / who_cares / promise) + why 三问 (why_now / why_you / why_it_works) + purpose 目的倒推 (自动从 userId 的历史任务聚类推断，也接收请求体 purpose 字段覆盖)。',
           stats: [],
         },
         step5b: {
           title: 'Step 5b: 认知综合预生成',
-          desc: '按实体逐一调 LLM 提炼洞察并写缓存',
+          desc: '按实体逐一调 LLM 提炼洞察并写缓存 (content_synthesis_cache, scope_type=\'entity\')',
+          deepDesc: '🧬 深度模式 (synthesisDeep): synthesizeInsightsDeep 调 ExpertMatcher 选专家 → ExpertEngine.invoke (expert-application 策略) → 写入独立命名空间 (cache_key=\'entity:{name}:deep\', scope_type=\'entity_deep\')，专家失败时 fallback 到泛型',
           stats: stats ? [
             { value: String(stats.synthesisCached), label: '综合缓存数' },
           ] : [],
@@ -345,6 +384,7 @@ export function ContentLibraryPipeline() {
       if (!sd) return null;
       title = sd.title;
       statCards = sd.stats;
+      deepModeNote = sd.deepDesc;
       // 上游: 从 PRODUCT_META 汇总
       const stepUpstreamMap: Record<string, string[]> = {
         step2: ['Assets 素材 (文件上传/目录绑定/RSS 导入)', '可选: retryFailed 重试失败素材'],
@@ -413,6 +453,13 @@ export function ContentLibraryPipeline() {
               <ul>{downstream.map((s, i) => <li key={i}>{s}</li>)}</ul>
             </div>
 
+            {deepModeNote && (
+              <div className="pipeline-modal-section section-deep">
+                <h4>🧬 深度模式 (v7.4)</h4>
+                <p>{deepModeNote}</p>
+              </div>
+            )}
+
             <div className="pipeline-modal-actions">
               {pagePath && (
                 <a href={pagePath} className="action-primary" onClick={e => { e.preventDefault(); setModalNode(null); navigate(pagePath!); }}>
@@ -438,13 +485,15 @@ export function ContentLibraryPipeline() {
     const c = getCount(o, stats);
     const stepNum = o.sourceStep.replace('step', '');
     const stepColor = STEP_COLORS[o.sourceStep] || '#999';
+    const titleParts = [`来源: Step ${stepNum}`, o.mode === 'precomputed' ? '预计算' : '查询时计算'];
+    if (o.supportsDeep) titleParts.push('🧬 支持深度模式 (专家 CDT)');
     return (
       <div
         key={o.key}
         ref={el => { outputRefs.current[o.key] = el; }}
-        className={`output-node ${o.mode === 'precomputed' ? 'output-precomputed' : 'output-querytime'}`}
+        className={`output-node ${o.mode === 'precomputed' ? 'output-precomputed' : 'output-querytime'} ${o.supportsDeep ? 'output-deep-capable' : ''}`}
         onClick={() => setModalNode({ type: 'output', key: o.key })}
-        title={`来源: Step ${stepNum} · ${o.mode === 'precomputed' ? '预计算' : '查询时计算'}`}
+        title={titleParts.join(' · ')}
         style={{ borderLeftColor: stepColor, borderLeftWidth: 3 }}
       >
         <span className="output-id">{o.meta.id}</span>
@@ -453,6 +502,7 @@ export function ContentLibraryPipeline() {
         {c !== null && <span className="output-count">{c}</span>}
         {o.mode === 'precomputed' && <span className="output-mode-badge precomputed-badge">预</span>}
         {o.mode === 'query-time' && <span className="output-mode-badge querytime-badge">⚡</span>}
+        {o.supportsDeep && <span className="output-mode-badge deep-badge" title="支持深度模式">🧬</span>}
       </div>
     );
   };
@@ -581,16 +631,18 @@ export function ContentLibraryPipeline() {
                   <div className="step-header">
                     <span className="step-number">2</span>
                     <span className="step-label">AI 批量分析</span>
+                    <span className="step-deep-badge" title="支持深度模式 (enableDeepAnalysis)">🧬</span>
                   </div>
-                  <div className="step-desc">向量化 + 质量评分 + 主题 + 去重</div>
+                  <div className="step-desc">向量化 + 质量评分 + 主题 + 去重 <br/><span className="step-desc-deep">🧬 深度: 15 deliverable + 专家 CDT + EMM 门控</span></div>
                   {stats && <div className="step-stat">{stats.assets.ai_analyzed}/{stats.assets.total} 已分析</div>}
                 </div>
                 <div className="step-node parallel-hint" ref={el => { stepRefs.current['step3'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step3' })}>
                   <div className="step-header">
                     <span className="step-number">3</span>
                     <span className="step-label">两段式事实提取</span>
+                    <span className="step-deep-badge" title="支持深度模式 (extractDeep)">🧬</span>
                   </div>
-                  <div className="step-desc">analyze → extract → delta → resolve</div>
+                  <div className="step-desc">analyze → extract → delta → resolve <br/><span className="step-desc-deep">🧬 深度: +Stage 3 CDT 专家审定事实</span></div>
                   {stats && <div className="step-stat">{stats.facts} 事实 · {stats.entities} 实体</div>}
                 </div>
                 <div className="flow-arrow">↓</div>
@@ -599,7 +651,7 @@ export function ContentLibraryPipeline() {
                     <span className="step-number" style={{ background: 'hsl(140, 45%, 40%)' }}>4</span>
                     <span className="step-label">知识图谱重算</span>
                   </div>
-                  <div className="step-desc">Louvain 社区 + 4 信号边表 + 观点</div>
+                  <div className="step-desc">Louvain 社区 + 4 信号边表 + BeliefPattern(8) + 趋势信号治理</div>
                   {stats && <div className="step-stat">{stats.communities} 社区 · {stats.relations} 边 · {stats.beliefs} 观点</div>}
                 </div>
                 <div className="flow-arrow">↓</div>
@@ -607,15 +659,17 @@ export function ContentLibraryPipeline() {
                   <div className="step-header">
                     <span className="step-number" style={{ background: 'hsl(30, 50%, 50%)' }}>5a</span>
                     <span className="step-label">议题叙事预生成</span>
+                    <span className="step-deep-badge" title="支持深度模式 (topicsDeep)">🧬</span>
                   </div>
-                  <div className="step-desc">Top 议题 → 标题/导语/角度矩阵</div>
+                  <div className="step-desc">Top 议题 → 标题/导语/角度矩阵 <br/><span className="step-desc-deep">🧬 深度: 专家 CDT 角度生成 · mode='deep' 缓存</span></div>
                 </div>
                 <div className="step-node" ref={el => { stepRefs.current['step5b'] = el; }} onClick={() => setModalNode({ type: 'step', key: 'step5b' })}>
                   <div className="step-header">
                     <span className="step-number" style={{ background: 'hsl(30, 50%, 50%)' }}>5b</span>
                     <span className="step-label">认知综合预生成</span>
+                    <span className="step-deep-badge" title="支持深度模式 (synthesisDeep)">🧬</span>
                   </div>
-                  <div className="step-desc">按实体 LLM 提炼洞察 → 缓存</div>
+                  <div className="step-desc">按实体 LLM 提炼洞察 → 缓存 <br/><span className="step-desc-deep">🧬 深度: 专家 CDT 替代泛型 · entity_deep 命名空间</span></div>
                   {stats && <div className="step-stat">{stats.synthesisCached} 条综合缓存</div>}
                 </div>
                 <div className="flow-arrow">↓</div>

@@ -27,13 +27,29 @@ export interface ProductMetaDef {
 export const PRODUCT_META: Record<string, ProductMetaDef> = {
   topics: {
     id: '①', name: '议题推荐',
-    upstream: ['L1 实体注册表 (content_entities)', 'L1 事实三元组 (content_facts)', 'L4 趋势分析'],
-    downstream: ['Planner Agent 选题推荐输入', '选题会决策参考', '任务创建 (预填标题)'],
+    upstream: [
+      'L1 实体注册表 (content_entities)',
+      'L1 事实三元组 (content_facts)',
+      'L4 趋势分析',
+      '🧬 v7.4 深度模式: 专家 CDT (ExpertEngine + expert-application 策略 ①topic-enrich)',
+      '🎯 v7.5 场景化: topicSceneClassifier (7 类) + topicAngleGenerator + purposeInferrer',
+    ],
+    downstream: [
+      'Planner Agent 选题推荐输入',
+      '选题会决策参考',
+      '任务创建 (预填标题)',
+      'content_topic_enrichments (mode=generic | deep; scene / scene_reason / why_now / why_you / why_it_works / purpose / detected_tensions / angle_cards 8 列)',
+    ],
     page: '/content-library/topics', phase: '选题', countEndpoint: '/topics/recommended',
   },
   trends: {
     id: '②', name: '趋势信号',
-    upstream: ['L1 事实时序 (content_facts.created_at)', '实体注册表'],
+    upstream: [
+      'L1 事实时序 (content_facts.created_at)',
+      '实体注册表',
+      '🧬 v7.4: reasoning/trendSignalQuality — 信号质量治理 (抑制噪声 / 识别伪趋势)',
+      'TAVILY 外部搜索 (可选富化近期案例)',
+    ],
     downstream: ['① 议题推荐的时效性评估', 'Planner Agent 时机窗口判断'],
     page: '/content-library/trends', phase: '选题',
   },
@@ -81,8 +97,16 @@ export const PRODUCT_META: Record<string, ProductMetaDef> = {
   },
   synthesis: {
     id: '⑩', name: '有价值的认知',
-    upstream: ['⑤ 高置信度事实 (confidence > 0.5)', 'LLM 综合提炼 (completeWithSystem)'],
-    downstream: ['Writer Agent 核心论点来源', '文章"我们发现了什么"段落'],
+    upstream: [
+      '⑤ 高置信度事实 (confidence > 0.5)',
+      'LLM 综合提炼 (completeWithSystem) — 泛型模式',
+      '🧬 v7.4 深度模式: synthesizeInsightsDeep (ExpertMatcher 选专家 + expert-application 策略替代泛型 prompt)',
+    ],
+    downstream: [
+      'Writer Agent 核心论点来源',
+      '文章"我们发现了什么"段落',
+      'content_synthesis_cache (scope_type=entity | entity_deep 独立命名空间)',
+    ],
     page: '/content-library/synthesis', phase: '写作', countEndpoint: '/synthesize/cache/stats',
   },
   materials: {
@@ -99,14 +123,34 @@ export const PRODUCT_META: Record<string, ProductMetaDef> = {
   },
   contradictions: {
     id: '⑬', name: '争议话题',
-    upstream: ['L4 ContradictionDetector (同 subject+predicate 不同 object)', '双方置信度评估'],
-    downstream: ['BlueTeam Agent 审核重点', '争议选题灵感', '风险点定位'],
+    upstream: [
+      'L4 ContradictionDetector (同 subject+predicate 不同 object) — L1 召回层',
+      '🎯 v7.5 L2 embedding 语义对冲 (cosine ≥ 0.75, Jaccard < 0.6 — 抓"表述不同但结论分叉")',
+      '🎯 v7.5 L3 LLM 张力分类器 (立场 / 叙事归因 / 利益 / 时序 / 定义漂移 5 类)',
+      '双方置信度评估',
+      '🧬 v7.4 深度模式: ControversyDeepAnalyzer → 专家 CDT (stakeholders / steelmanA-B / realWorldImpact / resolution / residualUncertainty)',
+    ],
+    downstream: [
+      'BlueTeam Agent 审核重点',
+      '争议选题灵感',
+      '风险点定位',
+      'asset_deep_analysis.controversies (结构化多视角分析)',
+      'TensionCandidate 扩展 Contradiction (tensionType / divergenceAxis / parties / timeSlice / recallLayer) → 喂给议题场景分类器 🔥 争议话题',
+    ],
     page: '/content-library/contradictions', phase: '审核', countEndpoint: '/contradictions?limit=1',
   },
   beliefs: {
     id: '⑭', name: '观点演化',
-    upstream: ['L4 BeliefTracker (content_beliefs 状态机)', '事实版本链 (superseded_by)'],
-    downstream: ['复盘类/演变类文章骨架', 'BlueTeam Agent 历史对比'],
+    upstream: [
+      'L4 BeliefTracker (content_beliefs 状态机)',
+      '事实版本链 (superseded_by)',
+      '🧬 v7.4: reasoning/beliefPatternDetector — 8 种纯函数模式 (reversal / strengthening / weakening / bifurcation 等)',
+    ],
+    downstream: [
+      '复盘类/演变类文章骨架',
+      'BlueTeam Agent 历史对比',
+      'asset_deep_analysis.belief_evolution (Step 2 深度模式)',
+    ],
     page: '/content-library/beliefs', phase: '审核',
   },
   crossDomain: {
