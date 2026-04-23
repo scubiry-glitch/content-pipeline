@@ -88,6 +88,13 @@ interface Contradiction {
   description: string;
   severity: 'low' | 'medium' | 'high';
   detectedAt: string;
+  // 深度召回扩展字段
+  tensionType?: string;
+  divergenceAxis?: string;
+  parties?: Array<{ name: string; stance: string }>;
+  timeSlice?: string;
+  underlyingModel?: string;
+  recallLayer?: 'L1' | 'L2' | 'L3';
 }
 
 // ── 组件 ──────────────────────────────────────────────────────────────────────
@@ -97,14 +104,17 @@ export function ContentLibraryContradictions() {
   const [loading, setLoading] = useState(true);
   const [searchSubject, setSearchSubject] = useState('');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [tensionTypeFilter, setTensionTypeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
+  const [deepRecall, setDeepRecall] = useState(false);
+  const [deepLimit, setDeepLimit] = useState(30);
   const zepStatus = useZepStatus();
   const [zepConflicts, setZepConflicts] = useState<Array<{
     fact: string; validAt?: string; invalidAt?: string; source: string; target: string
   }>>([]);
   const [zepLoading, setZepLoading] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [deepRecall, deepLimit]);
 
   useEffect(() => {
     const q = searchSubject.trim();
@@ -120,29 +130,43 @@ export function ContentLibraryContradictions() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/contradictions?limit=200`);
-      if (res.ok) {
-        const data = await res.json();
-        const raw: Contradiction[] = Array.isArray(data) ? data : (data?.items ?? []);
-        // 去假阳性
-        const deduped = raw.filter(c => !isSemanticallyEqual(c.factA.object, c.factB.object));
-        // 去重：同一 (subject, predicate, objectA, objectB) 只保留第一条
-        const seen = new Set<string>();
-        const unique = deduped.filter(c => {
-          // 同一 (subject, predicate) 只保留一条，避免多值两两组合爆炸
-          const key = `${c.factA.subject}||${c.factA.predicate}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
+      let raw: Contradiction[] = [];
+      if (deepRecall) {
+        const res = await fetch(`${API_BASE}/contradictions/recall`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: deepLimit, enableL3: true }),
         });
-        setAll(unique);
+        if (res.ok) {
+          const data = await res.json();
+          raw = Array.isArray(data.items) ? data.items : [];
+        }
+      } else {
+        const res = await fetch(`${API_BASE}/contradictions?limit=200`);
+        if (res.ok) {
+          const data = await res.json();
+          raw = Array.isArray(data) ? data : (data?.items ?? []);
+        }
       }
+      // 去假阳性（L1 模式下仍有效；L2/L3 结果保留不过滤，语义对冲本就不同值）
+      const deduped = deepRecall
+        ? raw
+        : raw.filter(c => !isSemanticallyEqual(c.factA.object, c.factB.object));
+      const seen = new Set<string>();
+      const unique = deduped.filter(c => {
+        const key = `${c.factA.subject}||${c.factA.predicate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setAll(unique);
     } catch { /* ignore */ }
     setLoading(false);
   };
 
   const filtered = all.filter(c => {
     if (severityFilter !== 'all' && c.severity !== severityFilter) return false;
+    if (tensionTypeFilter !== 'all' && c.tensionType !== tensionTypeFilter) return false;
     if (searchSubject) {
       const q = searchSubject.toLowerCase();
       const match = c.factA.subject.toLowerCase().includes(q)
@@ -152,6 +176,8 @@ export function ContentLibraryContradictions() {
     }
     return true;
   });
+
+  const tensionTypes = Array.from(new Set(all.map(c => c.tensionType).filter(Boolean))) as string[];
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeP = Math.min(page, totalPages);
@@ -173,7 +199,7 @@ export function ContentLibraryContradictions() {
       <ProductMetaBar productKey="contradictions" />
 
       {/* 筛选栏 */}
-      <div className="flex flex-wrap gap-3 mb-6 items-center">
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
         <input
           type="text" value={searchSubject}
           onChange={e => { setSearchSubject(e.target.value); resetPage(); }}
@@ -187,9 +213,39 @@ export function ContentLibraryContradictions() {
           <option value="medium">中</option>
           <option value="low">低</option>
         </select>
-        <button onClick={loadData} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
-          刷新
+        {tensionTypes.length > 0 && (
+          <select value={tensionTypeFilter} onChange={e => { setTensionTypeFilter(e.target.value); resetPage(); }}
+            className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+            <option value="all">全部张力类型</option>
+            {tensionTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        )}
+        <button onClick={loadData} disabled={loading}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm">
+          {loading ? '加载中...' : '刷新'}
         </button>
+      </div>
+      {/* 深度召回控制栏 */}
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
+        <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={deepRecall} onChange={e => { setDeepRecall(e.target.checked); resetPage(); }}
+            disabled={loading} className="rounded accent-green-600" />
+          <span className="text-green-700 dark:text-green-400 font-medium">🧬 深度召回</span>
+          <span className="text-xs text-gray-400">（L1+L2+L3，输出张力地图）</span>
+        </label>
+        {deepRecall && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 select-none">
+            召回数量
+            <input type="number" min={5} max={200} value={deepLimit}
+              onChange={e => setDeepLimit(Math.min(200, Math.max(5, Number(e.target.value) || 30)))}
+              disabled={loading}
+              className="w-16 px-1.5 py-0.5 border rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            条
+          </label>
+        )}
+        <span className="text-xs text-gray-400">
+          {deepRecall ? `深度召回（L1+L2+L3）· 共 ${all.length} 条` : `L1 字面对冲 · 共 ${all.length} 条`}
+        </span>
         {filtered.length > 0 && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 ml-auto">
             <button disabled={safeP <= 1} onClick={() => setPage(p => p - 1)}
@@ -217,12 +273,44 @@ export function ContentLibraryContradictions() {
             const cfg = severityConfig[c.severity] || severityConfig.low;
             return (
               <div key={c.id} className={`rounded-lg border p-5 ${cfg.bg} dark:bg-gray-800 dark:border-gray-700`}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-start justify-between gap-2 mb-3">
                   <span className="font-medium text-gray-900 dark:text-white">{c.description}</span>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded ${cfg.color}`}>
-                    严重度: {cfg.label}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {c.recallLayer && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 font-mono">
+                        {c.recallLayer}
+                      </span>
+                    )}
+                    {c.tensionType && c.tensionType !== 'unknown' && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium">
+                        {c.tensionType}
+                      </span>
+                    )}
+                    <span className={`text-xs font-semibold px-2 py-1 rounded ${cfg.color}`}>
+                      严重度: {cfg.label}
+                    </span>
+                  </div>
                 </div>
+                {/* 张力地图 */}
+                {(c.divergenceAxis || c.underlyingModel || (c.parties && c.parties.length > 0)) && (
+                  <div className="mb-3 p-2.5 rounded bg-white/60 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 text-xs space-y-1">
+                    {c.divergenceAxis && (
+                      <div><span className="text-gray-400">分歧轴：</span><span className="text-gray-700 dark:text-gray-200">{c.divergenceAxis}</span></div>
+                    )}
+                    {c.underlyingModel && (
+                      <div><span className="text-gray-400">心智模型：</span><span className="text-gray-700 dark:text-gray-200">{c.underlyingModel}</span></div>
+                    )}
+                    {c.parties && c.parties.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {c.parties.map((p, pi) => (
+                          <span key={pi} className="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">
+                            <span className="font-medium">{p.name}</span>：{p.stance}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   {([c.factA, c.factB] as Fact[]).map((fact, fi) => {
                     const source = fact.assetId || (fact.context?.source as string) || (fact.context?.assetId as string);
