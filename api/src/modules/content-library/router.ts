@@ -317,6 +317,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: query.enrich === 'true',
         hasNarrative: query.has_narrative === 'true' || query.hasNarrative === 'true',
+        enableDeep: query.enableDeep === 'true' || query.enable_deep === 'true',
       };
       return engine.getTopicRecommendations(topicOptions);
     });

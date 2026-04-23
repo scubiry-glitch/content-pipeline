@@ -95,6 +95,7 @@ export function ContentLibraryTopics() {
   const [sortBy, setSortBy] = useState<'default' | 'time' | 'narrative_at'>('default');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [onlyNarrative, setOnlyNarrative] = useState(false);
+  const [readDeepNarrative, setReadDeepNarrative] = useState(false);
   const [pageSize, setPageSize] = useState(DEFAULT_TOPICS_PAGE_SIZE);
 
   const load = async (pageArg?: number) => {
@@ -112,6 +113,7 @@ export function ContentLibraryTopics() {
       topicParams.set('sortBy', topicSort);
       topicParams.set('sortOrder', sortOrder);
       if (onlyNarrative) topicParams.set('has_narrative', 'true');
+      if (readDeepNarrative) topicParams.set('enableDeep', 'true');
 
       const gapParams = new URLSearchParams();
       if (taxCode) gapParams.set('taxonomy_code', taxCode);
@@ -140,7 +142,7 @@ export function ContentLibraryTopics() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(topicsPage); }, [topicsPage, sortBy, sortOrder, pageSize, onlyNarrative]);
+  useEffect(() => { void load(topicsPage); }, [topicsPage, sortBy, sortOrder, pageSize, onlyNarrative, readDeepNarrative]);
 
   const topicsTotalPages = Math.max(1, Math.ceil(topicsTotal / pageSize) || 1);
 
@@ -161,6 +163,7 @@ export function ContentLibraryTopics() {
       params.set('sortBy', topicSort);
       params.set('sortOrder', sortOrder);
       if (onlyNarrative) params.set('has_narrative', 'true');
+      if (readDeepNarrative) params.set('enableDeep', 'true');
       const taxCode = selectionToCode(taxonomy);
       if (taxCode) params.set('taxonomy_code', taxCode);
       else if (domain) params.set('domain', domain);
@@ -224,6 +227,18 @@ export function ContentLibraryTopics() {
             className="rounded border-gray-300 dark:border-gray-600"
           />
           仅看有叙事
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={readDeepNarrative}
+            onChange={(e) => {
+              setReadDeepNarrative(e.target.checked);
+              setTopicsPage(1);
+            }}
+            className="rounded border-gray-300 dark:border-gray-600"
+          />
+          读取深度叙事
         </label>
         <select
           value={sortBy}
