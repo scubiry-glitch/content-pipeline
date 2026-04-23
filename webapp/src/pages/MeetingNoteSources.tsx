@@ -56,6 +56,9 @@ export function MeetingNoteSources() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pasteTarget, setPasteTarget] = useState<MeetingNoteSource | null>(null);
+  const [pasteForm, setPasteForm] = useState<{ title: string; content: string }>({ title: '', content: '' });
+  const [pasting, setPasting] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -97,13 +100,21 @@ export function MeetingNoteSources() {
     setSaving(true);
     setMessage(null);
     try {
+      // 先试 JSON；失败则作为"备注/原始文本"包装，不阻塞保存。
       let config: Record<string, any>;
-      try {
-        config = JSON.parse(form.configText || '{}');
-      } catch {
-        setMessage('config 字段必须是合法 JSON');
-        setSaving(false);
-        return;
+      const raw = (form.configText || '').trim();
+      if (!raw || raw === '{}') {
+        config = {};
+      } else {
+        try {
+          const parsed = JSON.parse(raw);
+          config = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+            ? parsed
+            : { value: parsed };
+        } catch {
+          config = { note: raw };
+          setMessage('提示：config 非 JSON，已作为 { note: <原文> } 保存。');
+        }
       }
       if (editing) {
         await meetingNoteSourcesApi.update(editing.id, {
@@ -269,19 +280,24 @@ export function MeetingNoteSources() {
                     <button onClick={() => openEdit(s)}>编辑</button>
                     <button onClick={() => triggerImport(s)}>触发采集</button>
                     {(s.kind === 'upload' || s.kind === 'manual') && (
-                      <label className="mns-upload-btn">
-                        上传文件
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) uploadFile(s, f);
-                          }}
-                          accept=".md,.txt,.markdown,.docx"
-                          disabled={uploadingId === s.id}
-                        />
-                      </label>
+                      <>
+                        <label className="mns-upload-btn">
+                          上传文件
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) uploadFile(s, f);
+                            }}
+                            accept=".md,.txt,.markdown,.docx"
+                            disabled={uploadingId === s.id}
+                          />
+                        </label>
+                        <button onClick={() => { setPasteTarget(s); setPasteForm({ title: '', content: '' }); }}>
+                          粘贴内容
+                        </button>
+                      </>
                     )}
                     <button className="mns-btn-danger" onClick={() => remove(s)}>删除</button>
                   </td>
@@ -325,6 +341,67 @@ export function MeetingNoteSources() {
           </table>
         )}
       </section>
+
+      {pasteTarget && (
+        <div className="mns-modal-backdrop" onClick={() => !pasting && setPasteTarget(null)}>
+          <div className="mns-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mns-modal-header">
+              <h3>粘贴会议纪要 — {pasteTarget.name}</h3>
+              <button className="mns-modal-close" onClick={() => !pasting && setPasteTarget(null)}>×</button>
+            </div>
+            <div className="mns-modal-body">
+              <label>
+                标题（可留空，自动按时间戳生成）
+                <input
+                  value={pasteForm.title}
+                  onChange={(e) => setPasteForm({ ...pasteForm, title: e.target.value })}
+                  placeholder="例：2026-04-20 架构评审"
+                />
+              </label>
+              <label>
+                内容（粘贴任意文本，无需 JSON）
+                <textarea
+                  rows={14}
+                  value={pasteForm.content}
+                  onChange={(e) => setPasteForm({ ...pasteForm, content: e.target.value })}
+                  placeholder="把会议纪要、Q&A、录音转录等直接粘贴到这里..."
+                  spellCheck={false}
+                />
+              </label>
+              <small className="mns-hint">
+                保存后自动按规则识别会议性质（strategy_roadshow / tech_review / expert_interview /
+                industry_research / internal_ops），并落为 meeting_minutes 资产。
+              </small>
+            </div>
+            <div className="mns-modal-actions">
+              <button onClick={() => !pasting && setPasteTarget(null)} disabled={pasting}>取消</button>
+              <button
+                className="mns-btn-primary"
+                disabled={pasting || !pasteForm.content.trim()}
+                onClick={async () => {
+                  setPasting(true);
+                  try {
+                    const result = await meetingNoteSourcesApi.ingestText(pasteTarget.id, {
+                      title: pasteForm.title || undefined,
+                      content: pasteForm.content,
+                    });
+                    setMessage(`粘贴已入库：新增 ${result.itemsImported}，重复 ${result.duplicates}`);
+                    setPasteTarget(null);
+                    setPasteForm({ title: '', content: '' });
+                    await loadData();
+                  } catch (err: any) {
+                    setMessage(`粘贴失败: ${err?.response?.data?.message || err?.message || err}`);
+                  } finally {
+                    setPasting(false);
+                  }
+                }}
+              >
+                {pasting ? '保存中...' : '保存为资产'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
