@@ -754,10 +754,14 @@ export class ContentLibraryEngine {
     offset?: number;
     /** 1-based 页码；若设置则覆盖 offset */
     page?: number;
-    /** 排序方式：score=综合分(默认)，time=最近事实时间 */
-    sortBy?: 'score' | 'time';
+    /** 排序方式：score=综合分(默认)，time=最近事实时间，narrative_at=叙事生成时间（缓存 generated_at） */
+    sortBy?: 'score' | 'time' | 'narrative_at';
     /** 排序方向：desc=倒序(默认)，asc=正序 */
     sortOrder?: 'asc' | 'desc';
+    /** 仅返回 narrative 非空的议题（与读缓存 mode 一致：generic 或 deep） */
+    hasNarrative?: boolean;
+    /** 跳过已有 narrative 的议题，仅处理未生成的（批量循环时使用） */
+    skipNarrative?: boolean;
     enrich?: boolean;   // true = 强制重新生成并保存缓存；false/undefined = 仅读缓存
     /** Round 2: 深度模式 — enrich 时用 CDT 专家替代泛型 LLMEnricher，cache.mode='deep' */
     enableDeep?: boolean;
@@ -801,6 +805,35 @@ export class ContentLibraryEngine {
     const filterValue = useTaxCode ? taxValue : options?.domain;
     const listParams: any[] = hasFilter ? [limit, offset, filterValue] : [limit, offset];
 
+    const cacheModeForRead = options?.enableDeep === true ? 'deep' : 'generic';
+    const enrichModeSql =
+      cacheModeForRead === 'deep'
+        ? `(e.mode = 'deep' OR e.mode IS NULL)`
+        : `(e.mode = 'generic' OR e.mode IS NULL)`;
+    const hasNarrative = options?.hasNarrative === true;
+    const skipNarrative = options?.skipNarrative === true;
+    const narrativeHaving = hasNarrative
+      ? ` AND EXISTS (
+          SELECT 1 FROM content_topic_enrichments e
+          WHERE e.entity_id = ce.id
+            AND ${enrichModeSql}
+            AND TRIM(COALESCE(e.narrative, '')) <> ''
+        )`
+      : skipNarrative
+        ? ` AND NOT EXISTS (
+          SELECT 1 FROM content_topic_enrichments e
+          WHERE e.entity_id = ce.id
+            AND ${enrichModeSql}
+            AND TRIM(COALESCE(e.narrative, '')) <> ''
+        )`
+        : '';
+    const narrativeGenAtSql = `(SELECT e.generated_at FROM content_topic_enrichments e
+          WHERE e.entity_id = ce.id
+            AND ${enrichModeSql}
+            AND TRIM(COALESCE(e.narrative, '')) <> ''
+          ORDER BY e.generated_at DESC NULLS LAST
+          LIMIT 1)`;
+
     const countSql = `
       SELECT COUNT(*)::int AS total FROM (
         SELECT ce.id
@@ -808,7 +841,7 @@ export class ContentLibraryEngine {
         LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
         WHERE 1=1 ${hasFilter ? (useTaxCode ? `AND ce.taxonomy_domain_id ${taxOp} $1` : 'AND ce.taxonomy_domain_id = $1') : ''}
         GROUP BY ce.id
-        HAVING COUNT(cf.id) > 0
+        HAVING COUNT(cf.id) > 0${narrativeHaving}
       ) sub`;
     const countParams = hasFilter ? [filterValue] : [];
     let total = 0;
@@ -820,9 +853,13 @@ export class ContentLibraryEngine {
     }
 
     const sortOrder = options?.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const topicOrderBy = options?.sortBy === 'time'
-      ? `MAX(cf.created_at) ${sortOrder} NULLS LAST, ce.created_at ${sortOrder}`
-      : `COUNT(cf.id) * AVG(cf.confidence) ${sortOrder}`;
+    const scoreOrderExpr = `COUNT(cf.id) * AVG(cf.confidence)`;
+    const topicOrderBy =
+      options?.sortBy === 'time'
+        ? `MAX(cf.created_at) ${sortOrder} NULLS LAST, ce.created_at ${sortOrder}`
+        : options?.sortBy === 'narrative_at'
+          ? `${narrativeGenAtSql} ${sortOrder} NULLS LAST, ${scoreOrderExpr} DESC`
+          : `${scoreOrderExpr} ${sortOrder}`;
 
     const result = await this.deps.db.query(`
       SELECT
@@ -834,12 +871,13 @@ export class ContentLibraryEngine {
         ce.community_cohesion,
         COUNT(cf.id) as fact_count,
         MAX(cf.created_at) as latest_fact,
-        AVG(cf.confidence) as avg_confidence
+        AVG(cf.confidence) as avg_confidence,
+        ${narrativeGenAtSql} AS narrative_generated_at
       FROM content_entities ce
       LEFT JOIN content_facts cf ON cf.subject = ce.canonical_name AND cf.is_current = true
       WHERE 1=1 ${domainFilter}
       GROUP BY ce.id, ce.canonical_name, ce.community_id, ce.community_cohesion
-      HAVING COUNT(cf.id) > 0
+      HAVING COUNT(cf.id) > 0${narrativeHaving}
       ORDER BY ${topicOrderBy}
       LIMIT $1 OFFSET $2
     `, listParams);
@@ -853,6 +891,9 @@ export class ContentLibraryEngine {
       timeliness: this.calculateTimeliness(row.latest_fact),
       createdAt: row.entity_created_at || undefined,
       updatedAt: row.latest_fact || row.entity_updated_at || row.entity_created_at || undefined,
+      narrativeGeneratedAt: row.narrative_generated_at
+        ? new Date(row.narrative_generated_at).toISOString()
+        : undefined,
       gapScore: 0,
       suggestedAngles: [] as string[],
       reason: '',
@@ -936,54 +977,66 @@ export class ContentLibraryEngine {
     const cacheMode = options?.enableDeep === true ? 'deep' : 'generic';
 
     // Round 2: 深度模式 — 走 CDT 专家替代泛型 LLMEnricher
-    if (options?.enableDeep === true) {
-      await this.enrichTopicsDeep(topItems, options?.expertStrategy);
-    } else {
-      try {
-        const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
-        const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
-          items: topItems,
-          systemPrompt: `你是内容选题编辑。根据候选议题的事实证据，为每个议题产出 JSON 数组。
+    const applyGenericEnrich = async (items: TopicRecommendation[]) => {
+      const enricher = new (await import('./reasoning/llmEnricher.js')).LLMEnricher(this.deps.llm);
+      const { enriched, error } = await enricher.enrich<TopicRecommendation, any>({
+        items,
+        systemPrompt: `你是内容选题编辑。根据候选议题的事实证据，为每个议题产出 JSON 数组。
 每个元素: {"entityName":"实体名","reason":"一句话为什么现在值得写","titleSuggestion":"15~25字建议标题","narrative":"80~120字选题会导语","angleMatrix":[{"angle":"角度","rationale":"为什么有料"}]}
 严格输出 JSON 数组, 不要 markdown 代码块, 不要多余文字。`,
-          buildUserPrompt: (items) => {
-            const lines = items.map((t, i) => {
-              const evidenceLines = (t.evidenceFacts || []).map(
-                (f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`
-              ).join('\n');
-              return `${i + 1}. ${t.entityName}  密度=${t.factDensity} 时效=${t.timeliness.toFixed(2)} 分数=${t.score.toFixed(2)}\n${evidenceLines || '  (无证据事实)'}`;
-            }).join('\n\n');
-            return `候选议题:\n\n${lines}\n\n请为每个议题生成 reason/titleSuggestion/narrative/angleMatrix (JSON 数组):`;
-          },
-          parseResponse: (parsed: any) => {
-            if (Array.isArray(parsed)) return parsed;
-            if (parsed && Array.isArray(parsed.topics)) return parsed.topics;
-            return [];
-          },
-          maxTokens: 3000,
-          fallback: [],
-        });
-
-        if (!error && enriched.length > 0) {
-          for (const e of enriched) {
-            const match = topItems.find(t =>
-              t.entityName === e.entityName ||
-              t.entityName.includes(e.entityName) ||
-              e.entityName?.includes(t.entityName)
-            );
-            if (!match) continue;
-            match.reason = String(e.reason || '');
-            match.titleSuggestion = String(e.titleSuggestion || '');
-            match.narrative = String(e.narrative || '');
-            if (Array.isArray(e.angleMatrix)) {
-              match.angleMatrix = e.angleMatrix.map((a: any) => ({
-                angle: String(a?.angle || ''),
-                rationale: String(a?.rationale || ''),
-              }));
-              match.suggestedAngles = (match.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
-            }
+        buildUserPrompt: (its) => {
+          const lines = its.map((t, i) => {
+            const evidenceLines = (t.evidenceFacts || []).map(
+              (f: any) => `  - ${f.subject} · ${f.predicate} → ${f.object} (${Math.round(f.confidence * 100)}%)`
+            ).join('\n');
+            return `${i + 1}. ${t.entityName}  密度=${t.factDensity} 时效=${t.timeliness.toFixed(2)} 分数=${t.score.toFixed(2)}\n${evidenceLines || '  (无证据事实)'}`;
+          }).join('\n\n');
+          return `候选议题:\n\n${lines}\n\n请为每个议题生成 reason/titleSuggestion/narrative/angleMatrix (JSON 数组):`;
+        },
+        parseResponse: (parsed: any) => {
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && Array.isArray(parsed.topics)) return parsed.topics;
+          return [];
+        },
+        maxTokens: 3000,
+        fallback: [],
+      });
+      if (!error && enriched.length > 0) {
+        for (const e of enriched) {
+          const match = items.find(t =>
+            t.entityName === e.entityName ||
+            t.entityName.includes(e.entityName) ||
+            e.entityName?.includes(t.entityName)
+          );
+          if (!match) continue;
+          match.reason = String(e.reason || '');
+          match.titleSuggestion = String(e.titleSuggestion || '');
+          match.narrative = String(e.narrative || '');
+          if (Array.isArray(e.angleMatrix)) {
+            match.angleMatrix = e.angleMatrix.map((a: any) => ({
+              angle: String(a?.angle || ''),
+              rationale: String(a?.rationale || ''),
+            }));
+            match.suggestedAngles = (match.angleMatrix ?? []).map((a: any) => a.angle).filter(Boolean);
           }
         }
+      }
+    };
+
+    if (options?.enableDeep === true) {
+      await this.enrichTopicsDeep(topItems, options?.expertStrategy);
+      // Fallback: items where no expert matched → use generic LLM so deep mode always produces output
+      const needsFallback = topItems.filter(t => !t.reason && !t.titleSuggestion);
+      if (needsFallback.length > 0) {
+        try {
+          await applyGenericEnrich(needsFallback);
+        } catch (err) {
+          console.warn('[getTopicRecommendations] deep fallback enrich failed:', err);
+        }
+      }
+    } else {
+      try {
+        await applyGenericEnrich(topItems);
       } catch (err) {
         console.warn('[getTopicRecommendations] LLM enrich failed:', err);
       }

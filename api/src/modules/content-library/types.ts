@@ -401,6 +401,8 @@ export interface TopicRecommendation {
   titleSuggestion?: string;
   /** v7.2: 80~120 字选题会导语 */
   narrative?: string;
+  /** 叙事（导语）最近一次写入缓存的时间（来自 content_topic_enrichments.generated_at，且 narrative 非空） */
+  narrativeGeneratedAt?: string;
   /** v7.2: 支撑证据事实 */
   evidenceFacts?: Array<{ subject: string; predicate: string; object: string; confidence: number }>;
   /** v7.2: 角度矩阵 */

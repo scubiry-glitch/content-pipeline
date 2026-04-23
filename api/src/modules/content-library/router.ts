@@ -300,15 +300,23 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // ① 议题推荐
     fastify.get('/topics/recommended', async (request, reply) => {
       const query = request.query as any;
+      const sortByRaw = String(query.sortBy || '');
+      const sortBy =
+        sortByRaw === 'time'
+          ? 'time'
+          : sortByRaw === 'narrative_at' || sortByRaw === 'narrative'
+            ? 'narrative_at'
+            : 'score';
       const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : undefined,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
-        sortBy: query.sortBy === 'time' ? 'time' : 'score',
+        sortBy,
         sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: query.enrich === 'true',
+        hasNarrative: query.has_narrative === 'true' || query.hasNarrative === 'true',
       };
       return engine.getTopicRecommendations(topicOptions);
     });
@@ -323,16 +331,25 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         body.enableSceneClassification === false
           ? false
           : (body.enableSceneClassification === true || enableDeep);
+      const sortByRawEnrich = String(query.sortBy || '');
+      const sortByEnrich =
+        sortByRawEnrich === 'time'
+          ? 'time'
+          : sortByRawEnrich === 'narrative_at' || sortByRawEnrich === 'narrative'
+            ? 'narrative_at'
+            : 'score';
       const topicOptions: any = {
         domain: query.domain,
         taxonomy_code: query.taxonomy_code,
         limit: query.limit ? parseInt(query.limit, 10) : 10,
         offset: query.offset !== undefined ? parseInt(query.offset, 10) : undefined,
         page: query.page !== undefined ? parseInt(query.page, 10) : undefined,
-        sortBy: query.sortBy === 'time' ? 'time' : 'score',
+        sortBy: sortByEnrich,
         sortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc',
         enrich: true,
         enableDeep,
+        hasNarrative: query.has_narrative === 'true' || query.hasNarrative === 'true',
+        skipNarrative: body.skipExisting === true || query.skip_existing === 'true',
         expertStrategy: body.expertStrategy,
         // v7.5
         enableSceneClassification,
@@ -340,7 +357,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         userId: typeof body.userId === 'string' ? body.userId : undefined,
       };
       const result = await engine.getTopicRecommendations(topicOptions);
-      const enriched = result.items.filter(t => t.reason || t.titleSuggestion);
+      const enriched = result.items.filter(t => t.reason || t.titleSuggestion || t.narrative || t.scene);
       const scened = result.items.filter(t => t.scene);
       return reply.send({
         ok: true,

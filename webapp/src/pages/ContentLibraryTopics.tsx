@@ -56,6 +56,7 @@ interface TopicRecommendation {
     factASummary: string;
     factBSummary: string;
   }>;
+  narrativeGeneratedAt?: string;
 }
 
 const SCENE_META: Record<SceneTag, { icon: string; color: string; label: string }> = {
@@ -91,8 +92,9 @@ export function ContentLibraryTopics() {
   const [tab, setTab] = useState<'topics' | 'gaps'>('topics');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [enriching, setEnriching] = useState(false);
-  const [sortBy, setSortBy] = useState<'default' | 'time'>('default');
+  const [sortBy, setSortBy] = useState<'default' | 'time' | 'narrative_at'>('default');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [onlyNarrative, setOnlyNarrative] = useState(false);
   const [pageSize, setPageSize] = useState(DEFAULT_TOPICS_PAGE_SIZE);
 
   const load = async (pageArg?: number) => {
@@ -105,8 +107,11 @@ export function ContentLibraryTopics() {
       else if (domain) topicParams.set('domain', domain);
       topicParams.set('limit', String(pageSize));
       topicParams.set('page', String(page));
-      topicParams.set('sortBy', sortBy === 'time' ? 'time' : 'score');
+      const topicSort =
+        sortBy === 'time' ? 'time' : sortBy === 'narrative_at' ? 'narrative_at' : 'score';
+      topicParams.set('sortBy', topicSort);
       topicParams.set('sortOrder', sortOrder);
+      if (onlyNarrative) topicParams.set('has_narrative', 'true');
 
       const gapParams = new URLSearchParams();
       if (taxCode) gapParams.set('taxonomy_code', taxCode);
@@ -135,7 +140,7 @@ export function ContentLibraryTopics() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(topicsPage); }, [topicsPage, sortBy, sortOrder, pageSize]);
+  useEffect(() => { void load(topicsPage); }, [topicsPage, sortBy, sortOrder, pageSize, onlyNarrative]);
 
   const topicsTotalPages = Math.max(1, Math.ceil(topicsTotal / pageSize) || 1);
 
@@ -151,8 +156,11 @@ export function ContentLibraryTopics() {
     setEnriching(true);
     try {
       const params = new URLSearchParams({ limit: String(pageSize), page: String(topicsPage) });
-      params.set('sortBy', sortBy === 'time' ? 'time' : 'score');
+      const topicSort =
+        sortBy === 'time' ? 'time' : sortBy === 'narrative_at' ? 'narrative_at' : 'score';
+      params.set('sortBy', topicSort);
       params.set('sortOrder', sortOrder);
+      if (onlyNarrative) params.set('has_narrative', 'true');
       const taxCode = selectionToCode(taxonomy);
       if (taxCode) params.set('taxonomy_code', taxCode);
       else if (domain) params.set('domain', domain);
@@ -205,17 +213,32 @@ export function ContentLibraryTopics() {
         </div>
         <DomainCascadeSelect value={taxonomy} onChange={setTaxonomy} compact />
         <DomainSelect value={domain} onChange={setDomain} domains={domains} />
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={onlyNarrative}
+            onChange={(e) => {
+              setOnlyNarrative(e.target.checked);
+              setTopicsPage(1);
+            }}
+            className="rounded border-gray-300 dark:border-gray-600"
+          />
+          仅看有叙事
+        </label>
         <select
           value={sortBy}
           onChange={(e) => {
-            const next = e.target.value === 'time' ? 'time' : 'default';
+            const v = e.target.value;
+            const next: 'default' | 'time' | 'narrative_at' =
+              v === 'time' ? 'time' : v === 'narrative_at' ? 'narrative_at' : 'default';
             setSortBy(next);
             setTopicsPage(1);
           }}
           className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
         >
-          <option value="default">默认排序</option>
-          <option value="time">按时间排序</option>
+          <option value="default">默认排序（综合分）</option>
+          <option value="time">按最近事实时间</option>
+          <option value="narrative_at">按叙事生成时间</option>
         </select>
         <select
           value={sortOrder}
@@ -226,8 +249,8 @@ export function ContentLibraryTopics() {
           }}
           className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
         >
-          <option value="desc">倒序</option>
-          <option value="asc">正序</option>
+          <option value="desc">倒序（新→旧 / 高→低）</option>
+          <option value="asc">正序（旧→新 / 低→高）</option>
         </select>
         <select
           value={String(pageSize)}
@@ -298,7 +321,14 @@ export function ContentLibraryTopics() {
                           {SCENE_META[t.scene].icon} {SCENE_META[t.scene].label}
                         </span>
                       )}
-                      <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.entityName || '(未命名)'}</h3>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.entityName || '(未命名)'}</h3>
+                        {t.narrativeGeneratedAt && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            叙事生成：{formatDate(t.narrativeGeneratedAt)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${timelinessColor(t.timeliness)}`}>

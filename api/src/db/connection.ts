@@ -1324,7 +1324,9 @@ async function setupContentLibrarySchema(): Promise<void> {
     ALTER TABLE content_topic_enrichments
     ADD COLUMN IF NOT EXISTS strategy VARCHAR(200)
   `).catch(() => {});
-  // 新复合唯一索引 (entity_id, mode) — 若旧 PK(entity_id) 存在则放宽
+  // 新复合唯一索引 (entity_id, mode) — 先删旧单列唯一约束/主键，再建复合索引
+  await query(`ALTER TABLE content_topic_enrichments DROP CONSTRAINT IF EXISTS content_topic_enrichments_entity_id_key`).catch(() => {});
+  await query(`ALTER TABLE content_topic_enrichments DROP CONSTRAINT IF EXISTS content_topic_enrichments_pkey`).catch(() => {});
   await query(`DROP INDEX IF EXISTS uq_topic_enrich_entity_mode`).catch(() => {});
   await query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uq_topic_enrich_entity_mode

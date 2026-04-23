@@ -78,6 +78,7 @@ export function ContentLibraryBatchOps() {
   const [extractDeep, setExtractDeep] = useState(false);
   const [synthesisDeep, setSynthesisDeep] = useState(false);
   const [topicsDeep, setTopicsDeep] = useState(false);
+  const [topicsLimit, setTopicsLimit] = useState(20);
   const [step2Strategy, setStep2Strategy] = useStrategySpec('step2');
   const [step3Strategy, setStep3Strategy] = useStrategySpec('step3');
   const [step5Strategy, setStep5Strategy] = useStrategySpec('step5');
@@ -324,17 +325,21 @@ export function ContentLibraryBatchOps() {
   const triggerGraphRecompute = async () => {
     setStep('graph', { status: 'running', message: '重算社区 + 边表 + 观点...' });
     try {
-      const [commRes, relRes, beliefsRes] = await Promise.all([
+      const [commRes, relRes, beliefsRes, contrRes] = await Promise.all([
         fetch(`${API}/communities/recompute`, { method: 'POST' }),
         fetch(`${API}/relations/recompute`, { method: 'POST' }),
         fetch(`${API}/beliefs/recompute`, { method: 'POST' }),
+        fetch(`${API}/contradictions?limit=200`),
       ]);
       const comm = commRes.ok ? await commRes.json() : null;
       const rel = relRes.ok ? await relRes.json() : null;
       const beliefs = beliefsRes.ok ? await beliefsRes.json() : null;
+      const contrArr = contrRes.ok ? await contrRes.json() : null;
+      const contrCount = Array.isArray(contrArr) ? contrArr.length : null;
+      const contrStr = contrCount !== null ? ` · 争议 ${contrCount}${contrCount >= 200 ? '+' : ''} 条` : '';
       setStep('graph', {
         status: 'done',
-        message: `社区 ${comm?.communities || '?'} 个 · 边 ${rel?.inserted || '?'} 条 · 观点 ${beliefs?.total || '?'} 条`,
+        message: `社区 ${comm?.communities || '?'} 个 · 边 ${rel?.inserted || '?'} 条 · 观点 ${beliefs?.total || '?'} 条${contrStr}`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {
@@ -404,23 +409,39 @@ export function ContentLibraryBatchOps() {
     }
   };
 
-  // Step 5a: 议题叙事预生成
+  // Step 5a: 议题叙事预生成 — 自动分批循环，跳过已生成的
   const triggerTopicEnrich = async () => {
-    setStep('topics', { status: 'running', message: '调用 LLM 生成议题叙事并缓存...' });
+    setStep('topics', { status: 'running', message: '正在生成议题叙事（跳过已有）...' });
+    let totalEnriched = 0;
+    let batches = 0;
+    const perBatch = Math.min(topicsLimit, 10); // 每批最多 10（enrichLimit=5）
+    const targetTotal = topicsLimit;
+    const MAX_BATCHES = Math.ceil(targetTotal / 5) + 2;
     try {
-      const res = await fetch(`${API}/topics/enrich?limit=10`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enableDeep: topicsDeep,
-          expertStrategy: topicsDeep ? topicsStrategy : undefined,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      while (batches < MAX_BATCHES && totalEnriched < targetTotal) {
+        const res = await fetch(`${API}/topics/enrich?limit=${perBatch}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enableDeep: topicsDeep,
+            skipExisting: true,
+            expertStrategy: topicsDeep ? topicsStrategy : undefined,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        totalEnriched += data.enriched || 0;
+        batches++;
+        // 无未处理议题时退出
+        if ((data.total || 0) === 0 || (data.pageItems || 0) === 0) break;
+        setStep('topics', {
+          status: 'running',
+          message: `已生成 ${totalEnriched} 个叙事，剩余约 ${data.total || 0} 个未处理${data.deep ? ' (深度)' : ''}...`,
+        });
+      }
       setStep('topics', {
         status: 'done',
-        message: `${data.total || 0} 个议题, ${data.enriched || 0} 个成功生成叙事${data.deep ? ' (深度)' : ''}`,
+        message: `本次新生成 ${totalEnriched} 个叙事${topicsDeep ? ' (深度)' : ''}，共 ${batches} 批`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {
@@ -841,14 +862,26 @@ export function ContentLibraryBatchOps() {
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.topics.status)} 5a · 议题叙事</span>
               </div>
-              <p className="text-xs text-gray-400">Top 10 议题 → 标题/导语/角度矩阵，缓存至 DB</p>
-              <label className="flex items-center gap-1 text-xs cursor-pointer select-none mt-1">
-                <input type="checkbox" checked={topicsDeep}
-                  onChange={e => setTopicsDeep(e.target.checked)}
-                  className="rounded accent-rose-600" />
-                <span className="text-rose-700 dark:text-rose-400 font-medium">🧬 深度模式</span>
-                <span className="text-[10px] text-gray-400">（CDT 专家替代泛型编辑 prompt；独立 mode=deep 缓存）</span>
-              </label>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                  生成数量
+                  <input
+                    type="number" min={1} max={328} value={topicsLimit}
+                    onChange={e => setTopicsLimit(Math.min(328, Math.max(1, Number(e.target.value) || 20)))}
+                    className="w-16 px-1.5 py-0.5 border rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    disabled={steps.topics.status === 'running'}
+                  />
+                  个
+                </label>
+                <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                  <input type="checkbox" checked={topicsDeep}
+                    onChange={e => setTopicsDeep(e.target.checked)}
+                    className="rounded accent-rose-600"
+                    disabled={steps.topics.status === 'running'} />
+                  <span className="text-rose-700 dark:text-rose-400 font-medium">🧬 深度模式</span>
+                  <span className="text-[10px] text-gray-400">（CDT 专家替代泛型编辑 prompt）</span>
+                </label>
+              </div>
               {steps.topics.message && <p className="text-xs text-gray-500 mt-0.5">{steps.topics.message}</p>}
               {steps.topics.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
             </div>
