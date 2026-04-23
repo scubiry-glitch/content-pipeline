@@ -1,6 +1,6 @@
 # Test Status Dashboard
 
-**Last Updated:** 2026-04-22
+**Last Updated:** 2026-04-23
 **Project:** Content Pipeline System with TDD
 
 ---
@@ -9,31 +9,38 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 313 |
-| Passing | 309 |
+| Total Tests | 341 |
+| Passing | 337 |
 | Failing | 4 (pre-existing translation + health DB) |
 | Pending | 0 |
 | Coverage | ~85% |
 
-**Status: 🟢 Meeting-notes channel suite 56/56 GREEN**
+**Status: 🟢 Meeting-notes channel suite 84/84 GREEN**
 Pre-existing failures are in `multi-language-support.test.ts` (translation
 service stubs drifted from implementation) and `health.test.ts` (requires a
 live Postgres). Not regressions introduced by this branch.
 
 ---
 
-## v7.6 Meeting-Notes Ingestion Channel (new, 56 tests)
+## v7.6 Meeting-Notes Ingestion Channel (new, 84 tests)
 
 | Suite | Tests | Status |
 |---|---:|---|
-| `meeting-notes-migration.test.ts` | 17 | 🟢 |
-| `meeting-note-channel.test.ts`    | 17 | 🟢 |
-| `meeting-notes-routes.test.ts`    | 15 | 🟢 |
-| `meeting-kind-strategy.test.ts`   |  7 | 🟢 |
+| `meeting-notes-migration.test.ts`       | 17 | 🟢 |
+| `meeting-note-channel.test.ts`          | 17 | 🟢 |
+| `meeting-notes-routes.test.ts`          | 15 | 🟢 |
+| `meeting-kind-strategy.test.ts`         |  7 | 🟢 |
+| `meeting-note-scheduler.test.ts`        |  9 | 🟢 |
+| `meeting-classifier.test.ts`            | 10 | 🟢 |
+| `deep-analysis-meeting-routing.test.ts` |  9 | 🟢 |
 
-Covers: migration 028 schema shape, CRUD + import pipeline (dedup, partial,
-failed, stub adapters), REST surface on `/api/v1/quality/meeting-note-sources/*`,
-and the meetingKind → expert-application strategy mapping.
+Covers: migration 028 schema shape; CRUD + import pipeline (dedup / partial /
+failed / stub adapters); REST surface on `/api/v1/quality/meeting-note-sources/*`;
+meetingKind → expert-application strategy mapping; node-cron scheduler with
+invalid-cron tolerance and same-source concurrency serialization; keyword +
+Q/A-structure classifier; and the orchestrator's `routeMeetingKind` helper that
+skips internal_ops and derives the expert strategy from meeting_kind when the
+caller omits one.
 
 ---
 
