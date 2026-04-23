@@ -31,6 +31,8 @@ export interface MeetingNoteChannelDeps {
   query?: typeof defaultQuery;
   createAsset?: (dto: CreateAssetDTO) => Promise<Asset>;
   adapters?: Partial<Record<MeetingNoteSourceKind, MeetingNoteAdapter>>;
+  /** Fired after createSource/updateSource/deleteSource so the scheduler can re-sync. */
+  onSourceChanged?: () => void | Promise<void>;
 }
 
 export interface ListSourceFilters {
@@ -90,15 +92,30 @@ export class MeetingNoteChannelService {
   private query: typeof defaultQuery;
   private createAsset: (dto: CreateAssetDTO) => Promise<Asset>;
   private adapters: Partial<Record<MeetingNoteSourceKind, MeetingNoteAdapter>>;
+  private onSourceChanged: (() => void | Promise<void>) | undefined;
 
   constructor(deps: MeetingNoteChannelDeps = {}) {
     this.query = deps.query ?? defaultQuery;
     this.adapters = deps.adapters ?? {};
+    this.onSourceChanged = deps.onSourceChanged;
     if (deps.createAsset) {
       this.createAsset = deps.createAsset;
     } else {
       const svc = new AssetService();
       this.createAsset = (dto) => svc.createAsset(dto);
+    }
+  }
+
+  /** Late-bind the scheduler callback (server.ts wires this post-construction). */
+  setOnSourceChanged(cb: () => void | Promise<void>): void {
+    this.onSourceChanged = cb;
+  }
+
+  private async fireChanged(): Promise<void> {
+    if (!this.onSourceChanged) return;
+    try { await this.onSourceChanged(); }
+    catch (err) {
+      console.warn('[MeetingNoteChannel] onSourceChanged failed:', (err as Error).message);
     }
   }
 
@@ -149,7 +166,9 @@ export class MeetingNoteChannelService {
         input.createdBy ?? null,
       ],
     );
-    return mapSourceRow(result.rows[0]);
+    const created = mapSourceRow(result.rows[0]);
+    await this.fireChanged();
+    return created;
   }
 
   async updateSource(id: string, patch: UpdateSourceInput): Promise<MeetingNoteSource | null> {
@@ -181,7 +200,9 @@ export class MeetingNoteChannelService {
        RETURNING *`,
       params,
     );
-    return result.rows[0] ? mapSourceRow(result.rows[0]) : null;
+    const updated = result.rows[0] ? mapSourceRow(result.rows[0]) : null;
+    if (updated) await this.fireChanged();
+    return updated;
   }
 
   async deleteSource(id: string): Promise<boolean> {
@@ -189,7 +210,9 @@ export class MeetingNoteChannelService {
       `DELETE FROM meeting_note_sources WHERE id = $1`,
       [id],
     );
-    return (result.rowCount ?? 0) > 0;
+    const deleted = (result.rowCount ?? 0) > 0;
+    if (deleted) await this.fireChanged();
+    return deleted;
   }
 
   // ========= Import pipeline =========
