@@ -8,6 +8,7 @@
 
 import { query as defaultQuery } from '../db/connection.js';
 import { AssetService } from './assetService.js';
+import { classifyMeeting } from './meetingClassifier.js';
 import type {
   Asset,
   CreateAssetDTO,
@@ -296,6 +297,9 @@ export class MeetingNoteChannelService {
           duplicates += 1;
           continue;
         }
+        // meeting_kind 优先级：draft 显式传入 > classifier 自动识别
+        const meetingKind = draft.metadata?.meeting_kind
+          ?? classifyMeeting(draft.title, draft.content).kind;
         const asset = await this.createAsset({
           type: 'meeting_minutes',
           title: draft.title,
@@ -306,7 +310,7 @@ export class MeetingNoteChannelService {
           metadata: {
             ...(draft.metadata || {}),
             external_id: draft.externalId,
-            meeting_kind: draft.metadata?.meeting_kind,
+            meeting_kind: meetingKind,
             occurred_at: draft.occurredAt?.toISOString(),
             participants: draft.participants,
             import_job_id: jobId,
