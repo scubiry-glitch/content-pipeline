@@ -78,6 +78,9 @@ export function ContentLibraryBatchOps() {
   const [extractDeep, setExtractDeep] = useState(false);
   const [synthesisDeep, setSynthesisDeep] = useState(false);
   const [topicsDeep, setTopicsDeep] = useState(false);
+  const [graphDeep, setGraphDeep] = useState(false);
+  const [graphDeepLimit, setGraphDeepLimit] = useState(30);
+  const [graphProgress, setGraphProgress] = useState<{ done: number; total: number; label: string } | null>(null);
   const [topicsLimit, setTopicsLimit] = useState(20);
   const [step2Strategy, setStep2Strategy] = useStrategySpec('step2');
   const [step3Strategy, setStep3Strategy] = useStrategySpec('step3');
@@ -323,26 +326,61 @@ export function ContentLibraryBatchOps() {
 
   // Step 4: 知识图谱重算
   const triggerGraphRecompute = async () => {
-    setStep('graph', { status: 'running', message: '重算社区 + 边表 + 观点...' });
+    const totalSteps = 4;
+    setGraphProgress({ done: 0, total: totalSteps, label: '启动中...' });
+    setStep('graph', { status: 'running', message: '' });
     try {
-      const [commRes, relRes, beliefsRes, contrRes] = await Promise.all([
-        fetch(`${API}/communities/recompute`, { method: 'POST' }),
-        fetch(`${API}/relations/recompute`, { method: 'POST' }),
-        fetch(`${API}/beliefs/recompute`, { method: 'POST' }),
-        fetch(`${API}/contradictions?limit=200`),
-      ]);
+      setGraphProgress({ done: 0, total: totalSteps, label: '社区发现（Louvain）...' });
+      const commRes = await fetch(`${API}/communities/recompute`, { method: 'POST' });
       const comm = commRes.ok ? await commRes.json() : null;
+
+      setGraphProgress({ done: 1, total: totalSteps, label: '实体关系边表...' });
+      const relRes = await fetch(`${API}/relations/recompute`, { method: 'POST' });
       const rel = relRes.ok ? await relRes.json() : null;
+
+      setGraphProgress({ done: 2, total: totalSteps, label: '观点聚合...' });
+      const beliefsRes = await fetch(`${API}/beliefs/recompute`, { method: 'POST' });
       const beliefs = beliefsRes.ok ? await beliefsRes.json() : null;
-      const contrArr = contrRes.ok ? await contrRes.json() : null;
-      const contrCount = Array.isArray(contrArr) ? contrArr.length : null;
-      const contrStr = contrCount !== null ? ` · 争议 ${contrCount}${contrCount >= 200 ? '+' : ''} 条` : '';
+
+      let contrStr = '';
+      if (graphDeep) {
+        setGraphProgress({ done: 3, total: totalSteps, label: '深度张力图（L1+L2+L3）...' });
+        const contrRes = await fetch(`${API}/contradictions/recall`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: graphDeepLimit, enableL3: true }),
+        });
+        if (contrRes.ok) {
+          const data = await contrRes.json();
+          const total = data.total || 0;
+          const byType = data.byType as Record<string, number> | undefined;
+          const byLayer = data.byLayer as Record<string, number> | undefined;
+          const typeStr = byType
+            ? Object.entries(byType).filter(([k, n]) => n > 0 && k !== 'unknown').map(([t, n]) => `${t}×${n}`).join(' ')
+            : '';
+          const layerStr = byLayer
+            ? Object.entries(byLayer).map(([l, n]) => `${l}:${n}`).join('+')
+            : '';
+          contrStr = ` · 张力 ${total} 条${typeStr ? `（${typeStr}）` : ''}${layerStr ? ` [${layerStr}]` : ''}`;
+        }
+      } else {
+        setGraphProgress({ done: 3, total: totalSteps, label: '争议话题计数...' });
+        const contrRes = await fetch(`${API}/contradictions?limit=200`);
+        if (contrRes.ok) {
+          const contrArr = await contrRes.json();
+          const contrCount = Array.isArray(contrArr) ? contrArr.length : null;
+          if (contrCount !== null) contrStr = ` · 争议 ${contrCount}${contrCount >= 200 ? '+' : ''} 条`;
+        }
+      }
+
+      setGraphProgress({ done: totalSteps, total: totalSteps, label: '完成' });
       setStep('graph', {
         status: 'done',
         message: `社区 ${comm?.communities || '?'} 个 · 边 ${rel?.inserted || '?'} 条 · 观点 ${beliefs?.total || '?'} 条${contrStr}`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {
+      setGraphProgress(null);
       setStep('graph', { status: 'error', message: (err as Error).message });
     }
   };
@@ -439,9 +477,19 @@ export function ContentLibraryBatchOps() {
           message: `已生成 ${totalEnriched} 个叙事，剩余约 ${data.total || 0} 个未处理${data.deep ? ' (深度)' : ''}...`,
         });
       }
+      // 查询 DB 里目前有叙事的总数，给用户看累计进度
+      let narrativeTotal: number | null = null;
+      try {
+        const countRes = await fetch(`${API}/topics/recommended?has_narrative=true&limit=1`);
+        if (countRes.ok) {
+          const countData = await countRes.json();
+          narrativeTotal = typeof countData.total === 'number' ? countData.total : null;
+        }
+      } catch { /* ignore */ }
+      const totalStr = narrativeTotal !== null ? `，库中共 ${narrativeTotal} 条` : '';
       setStep('topics', {
         status: 'done',
-        message: `本次新生成 ${totalEnriched} 个叙事${topicsDeep ? ' (深度)' : ''}，共 ${batches} 批`,
+        message: `本次新生成 ${totalEnriched} 条叙事${topicsDeep ? ' (深度)' : ''}${totalStr}，共 ${batches} 批`,
         lastRun: new Date().toISOString(),
       });
     } catch (err) {
@@ -779,6 +827,41 @@ export function ContentLibraryBatchOps() {
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{statusIcon(steps.graph.status)} 4a · 图谱重算</span>
               </div>
               <p className="text-xs text-gray-400">Louvain 社区发现 + 4 信号边表 + 观点聚合</p>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                  <input type="checkbox" checked={graphDeep} onChange={e => setGraphDeep(e.target.checked)}
+                    disabled={steps.graph.status === 'running'}
+                    className="rounded accent-green-600" />
+                  <span className="text-green-700 dark:text-green-400 font-medium">🧬 深度支持</span>
+                  <span className="text-[10px] text-gray-400">L1+L2+L3 三层召回，输出张力地图</span>
+                </label>
+                {graphDeep && (
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                    召回数量
+                    <input
+                      type="number" min={5} max={200} value={graphDeepLimit}
+                      onChange={e => setGraphDeepLimit(Math.min(200, Math.max(5, Number(e.target.value) || 30)))}
+                      className="w-16 px-1.5 py-0.5 border rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      disabled={steps.graph.status === 'running'}
+                    />
+                    条
+                  </label>
+                )}
+              </div>
+              {graphProgress && steps.graph.status === 'running' && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>{graphProgress.label}</span>
+                    <span>{graphProgress.done}/{graphProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="bg-green-500 rounded-full h-1.5 transition-all duration-300"
+                      style={{ width: `${Math.round(graphProgress.done / graphProgress.total * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               {steps.graph.message && <p className="text-xs text-gray-500 mt-0.5">{steps.graph.message}</p>}
               {steps.graph.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.graph.lastRun).toLocaleString()}</p>}
             </div>

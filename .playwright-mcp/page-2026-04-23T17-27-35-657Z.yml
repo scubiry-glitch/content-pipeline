@@ -1,0 +1,191 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "Content Pipeline" [level=1] [ref=e7]
+      - navigation [ref=e8]:
+        - link "仪表盘" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e11]: 仪表盘
+        - link "任务中心" [ref=e13] [cursor=pointer]:
+          - /url: /tasks
+          - generic [ref=e14]: 任务中心
+        - link "内容资产" [ref=e16] [cursor=pointer]:
+          - /url: /assets
+          - generic [ref=e17]: 内容资产
+        - link "专家体系" [ref=e19] [cursor=pointer]:
+          - /url: /expert-library
+          - generic [ref=e20]: 专家体系
+        - link "内容库" [ref=e22] [cursor=pointer]:
+          - /url: /content-library
+          - generic [ref=e23]: 内容库
+        - link "热点洞察" [ref=e25] [cursor=pointer]:
+          - /url: /hot-topics
+          - generic [ref=e26]: 热点洞察
+        - link "AI推荐" [ref=e28] [cursor=pointer]:
+          - /url: /ai-task-recommendations
+          - generic [ref=e29]: AI推荐
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]: 🔍
+          - textbox "Search topics... (⌘K)" [ref=e33]
+        - button "🏺 陶土" [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: 🏺
+          - generic [ref=e37]: 陶土
+        - button "🔔" [ref=e39] [cursor=pointer]
+        - button "⚙️" [ref=e41] [cursor=pointer]:
+          - generic [ref=e42]: ⚙️
+  - navigation [ref=e43]:
+    - generic [ref=e45]:
+      - link "产出物总览" [ref=e46] [cursor=pointer]:
+        - /url: /content-library
+      - link "①③④ 议题推荐" [ref=e47] [cursor=pointer]:
+        - /url: /content-library/topics
+      - link "② 趋势信号" [ref=e48] [cursor=pointer]:
+        - /url: /content-library/trends
+      - link "⑤ 事实浏览" [ref=e49] [cursor=pointer]:
+        - /url: /content-library/facts
+      - link "⑥ 实体图谱" [ref=e50] [cursor=pointer]:
+        - /url: /content-library/entities
+      - link "⑦ 信息增量" [ref=e51] [cursor=pointer]:
+        - /url: /content-library/delta
+      - link "⑧ 保鲜度" [ref=e52] [cursor=pointer]:
+        - /url: /content-library/freshness
+      - link "⑨ 知识卡片" [ref=e53] [cursor=pointer]:
+        - /url: /content-library/cards
+      - link "⑩ 认知综合" [ref=e54] [cursor=pointer]:
+        - /url: /content-library/synthesis
+      - link "⑪ 素材推荐" [ref=e55] [cursor=pointer]:
+        - /url: /content-library/materials
+      - link "⑫ 专家共识" [ref=e56] [cursor=pointer]:
+        - /url: /content-library/consensus
+      - link "⑬ 争议话题" [ref=e57] [cursor=pointer]:
+        - /url: /content-library/contradictions
+      - link "⑭ 观点演化" [ref=e58] [cursor=pointer]:
+        - /url: /content-library/beliefs
+      - link "⑮ 跨域关联" [ref=e59] [cursor=pointer]:
+        - /url: /content-library/cross-domain
+      - link "Wiki 物化" [ref=e60] [cursor=pointer]:
+        - /url: /content-library/wiki
+      - link "批量操作" [ref=e61] [cursor=pointer]:
+        - /url: /content-library/batch-ops
+      - link "生产流水线" [ref=e62] [cursor=pointer]:
+        - /url: /content-library/pipeline
+  - main [ref=e63]:
+    - generic [ref=e64]:
+      - generic [ref=e65]:
+        - heading "批量操作中心" [level=1] [ref=e66]
+        - paragraph [ref=e67]: 从素材导入到知识图谱，一站式完成内容库全量更新
+      - generic [ref=e68]:
+        - generic [ref=e70]:
+          - 'heading "⚪ Step 1: 素材导入" [level=3] [ref=e71]'
+          - generic [ref=e72]:
+            - button "📂 扫描目录" [ref=e73] [cursor=pointer]
+            - link "手动上传" [ref=e74] [cursor=pointer]:
+              - /url: /assets
+        - generic [ref=e75]:
+          - generic [ref=e76]:
+            - heading "🧹 /assets 去重（wiki 联动）" [level=3] [ref=e77]
+            - generic [ref=e78]:
+              - button "预览去重" [ref=e79] [cursor=pointer]
+              - button "执行去重" [ref=e80] [cursor=pointer]
+          - paragraph [ref=e81]: 规则：完全重复（标题+正文标准化一致）；已进入 wiki 的重复资产隐藏，未进入 wiki 的重复资产删除。
+        - generic [ref=e82]:
+          - generic [ref=e83]:
+            - 'heading "⚪ Step 2: AI 批量分析" [level=3] [ref=e84]'
+            - button "🧠 启动分析" [ref=e85] [cursor=pointer]
+          - paragraph [ref=e86]: "向量化 + 质量评分 + 主题检测 + 去重（断点续传: 卡住 >30min 自动恢复）"
+          - generic [ref=e87]:
+            - generic [ref=e88]: "素材来源:"
+            - generic [ref=e89] [cursor=pointer]:
+              - checkbox "📁 素材库 (upload)" [checked] [ref=e90]
+              - text: 📁 素材库 (upload)
+            - generic [ref=e91] [cursor=pointer]:
+              - checkbox "📂 目录绑定 (binding)" [checked] [ref=e92]
+              - text: 📂 目录绑定 (binding)
+            - generic [ref=e93] [cursor=pointer]:
+              - checkbox "🔄 包含之前失败的素材" [ref=e94]
+              - text: 🔄 包含之前失败的素材
+          - generic [ref=e96] [cursor=pointer]:
+            - checkbox "🧬 深度分析（15 产出物 + 专家库 EMM） 跑完标签化后调用 ContentLibraryEngine 产出全部 15 个 deliverable，并由匹配到的专家 CDT 对争议话题做多视角结构化分析（stakeholder / steelman / contradictionType）。约慢 3-5 倍。" [ref=e97]
+            - generic [ref=e98]:
+              - text: 🧬 深度分析（15 产出物 + 专家库 EMM）
+              - generic [ref=e99]: 跑完标签化后调用 ContentLibraryEngine 产出全部 15 个 deliverable，并由匹配到的专家 CDT 对争议话题做多视角结构化分析（stakeholder / steelman / contradictionType）。约慢 3-5 倍。
+          - paragraph [ref=e100]: 📡 RSS 条目 (1116 条) 存储在独立表，不经过此步 → 直接在 Step 3 选「RSS 源」提取事实
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - 'heading "⚪ Step 3: 两段式事实提取" [level=3] [ref=e103]'
+            - generic [ref=e104]:
+              - combobox [ref=e105]:
+                - option "素材库 (assets)" [selected]
+                - option "📡 RSS 源 (1116 条)"
+              - spinbutton [ref=e106]: "50"
+              - generic [ref=e107]: 条
+              - button "📋 启动提取" [ref=e108] [cursor=pointer]
+          - generic [ref=e109]:
+            - paragraph [ref=e110]: analyze → extract → delta compress → entity resolve (断点续传 + themeId 关联)
+            - generic [ref=e111] [cursor=pointer]:
+              - text: 质量门槛
+              - spinbutton "质量门槛" [ref=e112]: "0"
+            - generic [ref=e113] [cursor=pointer]:
+              - checkbox "🧬 深度模式 （CDT 专家第 3 段审定，慢 ~1.5x）" [ref=e114]
+              - generic [ref=e115]: 🧬 深度模式
+              - generic [ref=e116]: （CDT 专家第 3 段审定，慢 ~1.5x）
+        - generic [ref=e117]:
+          - 'heading "⚪Step 4: 知识图谱 & Zep 增强" [level=3] [ref=e118]'
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - generic [ref=e122]: ⚪ 4a · 图谱重算
+              - paragraph [ref=e123]: Louvain 社区发现 + 4 信号边表 + 观点聚合
+              - generic [ref=e124] [cursor=pointer]:
+                - checkbox "🧬 深度支持 （L1+L2+L3 三层召回，输出张力地图：分歧轴 · 对立方 · 心智模型）" [ref=e125]
+                - generic [ref=e126]: 🧬 深度支持
+                - generic [ref=e127]: （L1+L2+L3 三层召回，输出张力地图：分歧轴 · 对立方 · 心智模型）
+            - button "🔗 重算图谱" [ref=e128] [cursor=pointer]
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - generic [ref=e133]: ⚪ 4b · Zep 知识回填
+              - paragraph [ref=e134]: 将 content_facts 历史数据回填至 Zep Graph，激活图谱实体关联与时序矛盾检测
+            - button "🧠 回填 Zep" [ref=e136] [cursor=pointer]
+        - generic [ref=e137]:
+          - 'heading "⚪Step 5: AI 产出物预生成" [level=3] [ref=e138]'
+          - generic [ref=e139]:
+            - generic [ref=e140]:
+              - generic [ref=e142]: ⚪ 5a · 议题叙事
+              - generic [ref=e143]:
+                - generic [ref=e144] [cursor=pointer]:
+                  - text: 生成数量
+                  - spinbutton "生成数量 个" [ref=e145]: "20"
+                  - text: 个
+                - generic [ref=e146] [cursor=pointer]:
+                  - checkbox "🧬 深度模式 （CDT 专家替代泛型编辑 prompt）" [ref=e147]
+                  - generic [ref=e148]: 🧬 深度模式
+                  - generic [ref=e149]: （CDT 专家替代泛型编辑 prompt）
+            - button "✍️ 生成叙事" [ref=e150] [cursor=pointer]
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - generic [ref=e154]:
+                  - generic [ref=e155]: ⚪ 5b · 认知综合
+                  - generic [ref=e156]: 缓存 197 实体
+                - paragraph [ref=e157]: 按实体逐一调 LLM 提炼洞察并写缓存，打开综合页直接读取
+              - button "🧠 预生成" [ref=e159] [cursor=pointer]
+            - generic [ref=e160]:
+              - generic [ref=e161] [cursor=pointer]:
+                - spinbutton "个实体" [ref=e162]: "30"
+                - text: 个实体
+              - generic [ref=e163] [cursor=pointer]:
+                - checkbox "覆盖已有缓存 (断点续传)" [ref=e164]
+                - text: 覆盖已有缓存
+                - generic [ref=e165]: (断点续传)
+              - generic [ref=e166] [cursor=pointer]:
+                - checkbox "🧬 深度模式 （CDT 专家综合，独立 entity:X:deep 缓存）" [ref=e167]
+                - generic [ref=e168]: 🧬 深度模式
+                - generic [ref=e169]: （CDT 专家综合，独立 entity:X:deep 缓存）
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - 'heading "⚪ Step 6: Wiki 重生成" [level=3] [ref=e172]'
+            - button "📖 生成 Wiki" [ref=e173] [cursor=pointer]
+          - paragraph [ref=e174]: 物化为 Obsidian 兼容 Markdown vault
+        - generic [ref=e175]:
+          - button "🔄 一键全量更新 (Step 1→3 顺序执行)" [ref=e176] [cursor=pointer]
+          - paragraph [ref=e177]: Step 4–5 在事实提取完成后手动触发（需确认数据正确）

@@ -357,7 +357,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         userId: typeof body.userId === 'string' ? body.userId : undefined,
       };
       const result = await engine.getTopicRecommendations(topicOptions);
-      const enriched = result.items.filter(t => t.reason || t.titleSuggestion || t.narrative || t.scene);
+      const enriched = result.items.filter(t => t.narrative && t.narrative.trim() !== '');
       const scened = result.items.filter(t => t.scene);
       return reply.send({
         ok: true,
@@ -630,6 +630,33 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         limit: query.limit ? parseInt(query.limit) : undefined,
         enableDeepRecall: query.enableDeepRecall === 'true',
         enableL3: query.enableL3 !== 'false',
+      });
+    });
+
+    // POST /contradictions/recall — 深度张力图召回（供 batch-ops 4a 深度模式调用）
+    fastify.post('/contradictions/recall', async (request, reply) => {
+      const body = (request.body || {}) as any;
+      const query = request.query as any;
+      const tensions = await engine.getContradictions({
+        domain: body.domain || query.domain,
+        limit: body.limit ? parseInt(body.limit) : 100,
+        enableDeepRecall: true,
+        enableL3: body.enableL3 !== false,
+      });
+      const byType: Record<string, number> = {};
+      const byLayer: Record<string, number> = {};
+      for (const t of tensions as any[]) {
+        const type = t.tensionType || 'unknown';
+        byType[type] = (byType[type] || 0) + 1;
+        const layer = t.recallLayer || 'L1';
+        byLayer[layer] = (byLayer[layer] || 0) + 1;
+      }
+      return reply.send({
+        ok: true,
+        total: tensions.length,
+        byType,
+        byLayer,
+        items: tensions,
       });
     });
 
