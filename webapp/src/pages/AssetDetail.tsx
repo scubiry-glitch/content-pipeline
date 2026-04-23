@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { assetsApi, type Asset, type AssetUsage } from '../api/client';
 import { AssetAIAnalysis } from '../components/AssetAIAnalysis';
+import { MeetingKindBadge } from '../components/MeetingKindBadge';
 import './AssetDetail.css';
 
 export function AssetDetail() {
@@ -436,6 +437,9 @@ export function AssetDetail() {
           <div className="asset-badges">
             <span className="content-type-badge">{getContentTypeLabel(asset.content_type)}</span>
             {asset.is_pinned && <span className="pinned-badge">📌 置顶</span>}
+            {(asset as any).metadata?.meeting_kind && (
+              <MeetingKindBadge kind={(asset as any).metadata.meeting_kind} compact={false} />
+            )}
           </div>
         </div>
 

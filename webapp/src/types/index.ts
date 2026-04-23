@@ -225,9 +225,26 @@ export interface Asset {
   summary?: string;
   key_points?: string[];
   embedding?: number[];
+  metadata?: Record<string, any>; // v7.6 meeting_kind 等任意结构化附加
   created_at: string;
   updated_at: string;
 }
+
+// v7.6 会议纪要性质分类（与 domain D01-D15 正交）
+export type MeetingKind =
+  | 'strategy_roadshow'
+  | 'tech_review'
+  | 'expert_interview'
+  | 'industry_research'
+  | 'internal_ops';
+
+export const MEETING_KIND_META: Record<MeetingKind, { label: string; icon: string; color: string; hint: string }> = {
+  strategy_roadshow:  { label: '战略路演',  icon: '📊', color: '#c2410c', hint: '融资/IPO/战略讨论，跑 debate + EMM' },
+  tech_review:        { label: '技术评审',  icon: '🧪', color: '#1d4ed8', hint: '架构/算法/模型评审，跑 mental_model_rotation + 全家桶' },
+  expert_interview:   { label: '专家访谈',  icon: '🎤', color: '#7c3aed', hint: 'Q/A 结构访谈，跑 single + contradictions_surface' },
+  industry_research:  { label: '行业调研',  icon: '🧭', color: '#059669', hint: '行业走访/调研，跑 heuristic_trigger_first + evidence_anchored' },
+  internal_ops:       { label: '内部运营',  icon: '📋', color: '#6b7280', hint: '周会/站会/复盘，跳过专家分析' },
+};
 
 // 研报特有属性（作为 Asset 的扩展）
 export interface ReportAsset extends Asset {

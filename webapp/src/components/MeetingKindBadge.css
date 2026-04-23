@@ -1,0 +1,33 @@
+.mkb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--mkb-color, #6b7280);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mkb-color, #6b7280) 8%, white);
+  color: var(--mkb-color, #6b7280);
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 500;
+  vertical-align: middle;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.mkb-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.mkb-label {
+  font-size: 12px;
+}
+
+.mkb-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mkb-clickable:hover {
+  background: color-mix(in srgb, var(--mkb-color, #6b7280) 16%, white);
+}
