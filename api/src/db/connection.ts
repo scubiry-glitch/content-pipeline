@@ -766,6 +766,16 @@ async function setupMVPSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_meeting_note_sources_kind ON meeting_note_sources(kind)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_meeting_note_imports_source ON meeting_note_imports(source_id, started_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_meeting_note_imports_active ON meeting_note_imports(status) WHERE status IN ('pending','running')`);
+  // 与 migrations/001 一致；部分库未跑过早期迁移时缺少此函数，会导致 init 失败、API 立即退出。
+  await query(`
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
   await query(`DROP TRIGGER IF EXISTS trg_meeting_note_sources_updated_at ON meeting_note_sources`);
   await query(`CREATE TRIGGER trg_meeting_note_sources_updated_at BEFORE UPDATE ON meeting_note_sources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()`);
 

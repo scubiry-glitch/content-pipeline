@@ -29,7 +29,7 @@ if (!envLoaded) {
   dotenv.config(); // 尝试默认路径
 }
 
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { productionRoutes } from './routes/production.js';
@@ -151,8 +151,14 @@ async function main() {
   await fastify.register(productionRoutes, { prefix: '/api/v1/production' });
   await fastify.register(assetRoutes, { prefix: '/api/v1/assets' });
   await fastify.register(outputRoutes, { prefix: '/api/v1/outputs' });
-  await fastify.register(rssRoutes, { prefix: '/api/v1/quality' });
-  await fastify.register(meetingNotesRoutes, { prefix: '/api/v1/quality' });
+  // 同一父级下挂载 RSS + 会议纪要：避免对同一 prefix 连续 register 时子插件封装导致部分路由未挂到根实例（本地曾出现 meeting-note-sources 404）。
+  await fastify.register(
+    async function qualityRoutesBundle(instance: FastifyInstance) {
+      await instance.register(rssRoutes);
+      await instance.register(meetingNotesRoutes);
+    },
+    { prefix: '/api/v1/quality' },
+  );
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
