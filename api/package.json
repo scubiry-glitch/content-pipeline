@@ -25,7 +25,9 @@
     "expert:seed-builtins": "tsx src/scripts/seed-expert-library-builtins.ts",
     "setup:production": "tsx src/scripts/setup-production.ts",
     "worker": "tsx src/worker.ts",
-    "test": "echo \"Tests not implemented yet\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:meeting-notes": "vitest run tests/unit/meeting-notes",
     "docker:build": "docker build -t content-pipeline-api ..",
     "docker:run": "docker run -p 3000:3000 --env-file ../.env content-pipeline-api"
   },
