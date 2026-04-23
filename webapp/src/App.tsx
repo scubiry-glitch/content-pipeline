@@ -54,6 +54,14 @@ import { ContentLibraryWiki } from './pages/ContentLibraryWiki';
 import { ContentLibraryBatchOps } from './pages/ContentLibraryBatchOps';
 import { ContentLibraryPipeline } from './pages/ContentLibraryPipeline';
 import { ContentLibraryMaterials } from './pages/ContentLibraryMaterials';
+import { MeetingNotesShell } from './pages/meeting-notes/MeetingNotesShell';
+import { MeetingLibrary } from './pages/meeting-notes/MeetingLibrary';
+import { MeetingDetail } from './pages/meeting-notes/MeetingDetail';
+import { AxisPeople } from './pages/meeting-notes/AxisPeople';
+import { AxisProjects } from './pages/meeting-notes/AxisProjects';
+import { AxisKnowledge } from './pages/meeting-notes/AxisKnowledge';
+import { AxisMeta } from './pages/meeting-notes/AxisMeta';
+import { GenerationCenter } from './pages/meeting-notes/GenerationCenter';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -157,6 +165,18 @@ function App() {
                 <Route path="pipeline" element={<ContentLibraryPipeline />} />
                 <Route path="materials" element={<ContentLibraryMaterials />} />
               </Route>
+              {/* 会议纪要模块 (PR6) — 嵌套路由 */}
+              <Route path="meeting-notes" element={<Outlet />}>
+                <Route index element={<MeetingNotesShell />} />
+                <Route path="library" element={<MeetingLibrary />} />
+                <Route path="generation-center" element={<GenerationCenter />} />
+                <Route path="axes/people" element={<AxisPeople />} />
+                <Route path="axes/projects" element={<AxisProjects />} />
+                <Route path="axes/knowledge" element={<AxisKnowledge />} />
+                <Route path="axes/meta" element={<AxisMeta />} />
+                <Route path=":id" element={<MeetingDetail />} />
+              </Route>
+
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
               <Route path="orchestrator" element={<Orchestrator />} />
