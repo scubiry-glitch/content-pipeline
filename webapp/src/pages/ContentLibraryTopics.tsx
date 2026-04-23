@@ -7,6 +7,23 @@ import type { TaxonomySelection } from '../types/taxonomy';
 
 const API_BASE = '/api/v1/content-library';
 
+type SceneTag =
+  | '争议话题'
+  | '新变化'
+  | '被忽视的风险'
+  | '反常识'
+  | '认知拼图'
+  | '决策转折'
+  | '人物切片';
+
+type PurposeId =
+  | '建立权威'
+  | '引发讨论'
+  | '拉新'
+  | '转化'
+  | '教育'
+  | '消费决策';
+
 interface TopicRecommendation {
   entityId: string;
   entityName: string;
@@ -25,7 +42,31 @@ interface TopicRecommendation {
   communityCohesion?: number;
   createdAt?: string;
   updatedAt?: string;
+  // v7.5 场景化 + 目的倒推 + why 三问 + 角度卡
+  scene?: SceneTag;
+  sceneReason?: string;
+  whyNow?: string;
+  whyYou?: string;
+  whyItWorks?: string;
+  purpose?: PurposeId;
+  angleCards?: Array<{ title: string; hook: string; whoCares: string; promise: string }>;
+  detectedTensions?: Array<{
+    tensionType: string;
+    divergenceAxis?: string;
+    factASummary: string;
+    factBSummary: string;
+  }>;
 }
+
+const SCENE_META: Record<SceneTag, { icon: string; color: string; label: string }> = {
+  '争议话题':   { icon: '🔥', color: 'bg-red-100 text-red-800 border-red-200', label: '争议话题' },
+  '新变化':     { icon: '📈', color: 'bg-blue-100 text-blue-800 border-blue-200', label: '新变化' },
+  '被忽视的风险': { icon: '⚠️', color: 'bg-amber-100 text-amber-800 border-amber-200', label: '被忽视的风险' },
+  '反常识':     { icon: '🪞', color: 'bg-purple-100 text-purple-800 border-purple-200', label: '反常识' },
+  '认知拼图':   { icon: '🧩', color: 'bg-teal-100 text-teal-800 border-teal-200', label: '认知拼图' },
+  '决策转折':   { icon: '🧭', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', label: '决策转折' },
+  '人物切片':   { icon: '🎭', color: 'bg-rose-100 text-rose-800 border-rose-200', label: '人物切片' },
+};
 
 interface KnowledgeGap {
   topic: string;
@@ -245,9 +286,20 @@ export function ContentLibraryTopics() {
               const hasEnriched = !!t.reason || !!t.titleSuggestion || !!t.narrative;
               return (
                 <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-                  {/* 头部: 名称 + 时效 + 分数 */}
+                  {/* 头部: 名称 + 场景 badge + 时效 + 分数 */}
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.entityName || '(未命名)'}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* v7.5: 场景 badge */}
+                      {t.scene && SCENE_META[t.scene] && (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium border ${SCENE_META[t.scene].color}`}
+                          title={t.sceneReason || ''}
+                        >
+                          {SCENE_META[t.scene].icon} {SCENE_META[t.scene].label}
+                        </span>
+                      )}
+                      <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{t.entityName || '(未命名)'}</h3>
+                    </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${timelinessColor(t.timeliness)}`}>
                         {timelinessLabel(t.timeliness)}
@@ -262,6 +314,46 @@ export function ContentLibraryTopics() {
                       <span className="shrink-0">📌</span>
                       <span>{t.reason}</span>
                     </p>
+                  )}
+
+                  {/* v7.5: 角度卡(横向两列) */}
+                  {t.angleCards && t.angleCards.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 mt-2">
+                      {t.angleCards.slice(0, isExpanded ? 3 : 2).map((card, j) => (
+                        <div key={j} className="border border-indigo-200 dark:border-indigo-700 rounded-md p-2.5 bg-indigo-50/40 dark:bg-indigo-900/20">
+                          <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100 mb-1">{card.title}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mb-1.5">💬 {card.hook}</p>
+                          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                            <span>🎯 {card.whoCares}</span>
+                            <span>📦 {card.promise}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* v7.5: why 三问 */}
+                  {(t.whyNow || t.whyYou || t.whyItWorks) && (
+                    <div className="mt-2 mb-2 space-y-1 bg-gray-50 dark:bg-gray-900/30 rounded p-2.5 text-xs">
+                      {t.whyNow && (
+                        <div className="flex items-start gap-1.5">
+                          <span className="shrink-0 font-medium text-gray-600 dark:text-gray-400">为什么现在:</span>
+                          <span className="text-gray-700 dark:text-gray-300">{t.whyNow}</span>
+                        </div>
+                      )}
+                      {t.whyYou && (
+                        <div className="flex items-start gap-1.5">
+                          <span className="shrink-0 font-medium text-gray-600 dark:text-gray-400">为什么你:</span>
+                          <span className="text-gray-700 dark:text-gray-300">{t.whyYou}</span>
+                        </div>
+                      )}
+                      {t.whyItWorks && (
+                        <div className="flex items-start gap-1.5">
+                          <span className="shrink-0 font-medium text-gray-600 dark:text-gray-400">历史表现:</span>
+                          <span className="text-gray-700 dark:text-gray-300">{t.whyItWorks}</span>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* v7.2: 建议标题 */}

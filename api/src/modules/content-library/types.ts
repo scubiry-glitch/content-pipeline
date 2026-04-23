@@ -340,6 +340,16 @@ export interface BeliefHistoryEntry {
   timestamp: Date;
 }
 
+/** v7.5: 张力类型 — 替代浅层字面矛盾 */
+export type TensionType =
+  | '立场'        // 同主谓宾，评价标准/价值取向不同
+  | '叙事归因'    // 同一事实，两种因果解释
+  | '利益'        // 同一事实对不同群体利弊相反
+  | '时序'        // 不同时期的事实被用来支撑同一主张
+  | '定义漂移'    // 主谓相同但"主语/谓语"的定义实质不同
+  | 'real_disagreement'
+  | 'unknown';
+
 /** 矛盾检测结果 */
 export interface Contradiction {
   id: string;
@@ -348,6 +358,16 @@ export interface Contradiction {
   description: string;
   severity: 'low' | 'medium' | 'high';
   detectedAt: Date;
+  /** v7.5: 张力分类（L3 LLM 产出） */
+  tensionType?: TensionType;
+  /** v7.5: 分歧的维度（"评价标准"/"时间窗口"/"归因链"等） */
+  divergenceAxis?: string;
+  /** v7.5: 对立方 */
+  parties?: Array<{ name: string; stance: string }>;
+  /** v7.5: 事实 A/B 的时间跨度描述 */
+  timeSlice?: string;
+  /** v7.5: 召回来源层 */
+  recallLayer?: 'L1' | 'L2' | 'L3';
 }
 
 /** 生产经验记录 */
@@ -390,7 +410,52 @@ export interface TopicRecommendation {
   communityCohesion?: number;
   /** v7.2: 与 task purpose 的匹配度 */
   purposeAlignment?: number;
+  /** v7.5: 场景标签（由 topicSceneClassifier 贴） */
+  scene?: SceneTag;
+  /** v7.5: 场景命中原因 */
+  sceneReason?: string;
+  /** v7.5: 为什么现在值得推荐 */
+  whyNow?: string;
+  /** v7.5: 为什么匹配本用户目的 */
+  whyYou?: string;
+  /** v7.5: 类似选题的历史表现（回灌） */
+  whyItWorks?: string;
+  /** v7.5: 对应的用户目的（自动推断或显式覆盖） */
+  purpose?: PurposeId;
+  /** v7.5: 角度卡（替代 angleMatrix 的升级版，保留 angleMatrix 兼容） */
+  angleCards?: Array<{
+    title: string;
+    hook: string;
+    whoCares: string;
+    promise: string;
+  }>;
+  /** v7.5: 被检测到的张力候选（用于 🔥争议话题 场景支撑） */
+  detectedTensions?: Array<{
+    tensionType: TensionType;
+    divergenceAxis?: string;
+    factASummary: string;
+    factBSummary: string;
+  }>;
 }
+
+/** v7.5: 7 种议题场景 */
+export type SceneTag =
+  | '争议话题'
+  | '新变化'
+  | '被忽视的风险'
+  | '反常识'
+  | '认知拼图'
+  | '决策转折'
+  | '人物切片';
+
+/** v7.5: 6 种用户目的 — 目的倒推推荐角度 */
+export type PurposeId =
+  | '建立权威'
+  | '引发讨论'
+  | '拉新'
+  | '转化'
+  | '教育'
+  | '消费决策';
 
 /** ① 议题推荐分页响应 */
 export interface TopicRecommendationsPage {

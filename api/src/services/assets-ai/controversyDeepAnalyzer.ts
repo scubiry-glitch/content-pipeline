@@ -153,6 +153,26 @@ export class ControversyDeepAnalyzer {
   }
 
   private buildContradictionNarrative(c: Contradiction): string {
+    // v7.5: 若上游 recall 层已经分类出 tensionType/divergenceAxis/parties,
+    // 直接把这些结果"喂"给专家 —— 专家在已有分类上做深化,不重复分类
+    const tensionHint =
+      c.tensionType && c.tensionType !== 'unknown'
+        ? `
+【上游初判】
+  张力类型: ${c.tensionType}
+  分歧维度: ${c.divergenceAxis || '(未给出)'}
+  对立方: ${
+    Array.isArray(c.parties) && c.parties.length > 0
+      ? c.parties.map((p) => `${p.name}(${p.stance})`).join(' vs ')
+      : '(未给出)'
+  }
+  时间跨度: ${c.timeSlice || '(未给出)'}
+  召回层: ${c.recallLayer || 'L1'}
+
+请基于以上初判深化 stakeholders 和 steelman,不要重新分类 contradictionType
+(优先采纳上游初判,除非你有强证据推翻)。`
+        : '';
+
     return `请深度分析以下事实矛盾：
 
 【事实 A】
@@ -168,7 +188,7 @@ export class ControversyDeepAnalyzer {
   对象: ${c.factB.object}
   置信度: ${c.factB.confidence.toFixed(2)}
   上下文: ${safeJson(c.factB.context)}
-
+${tensionHint}
 【分析任务】
 请按下列严格 JSON schema 输出，不要 markdown 代码块、不要解释性文字：
 

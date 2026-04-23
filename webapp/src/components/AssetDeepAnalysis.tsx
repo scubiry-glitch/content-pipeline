@@ -264,6 +264,11 @@ function ControversyCard({ item }: { item: ControversyAnalysisItem }) {
     source_error: '#95a5a6',
     definition_drift: '#3498db',
     unknown: '#7f8c8d',
+    // v7.5 张力 5 类
+    立场: '#c0392b',
+    叙事归因: '#8e44ad',
+    利益: '#d35400',
+    时序: '#27ae60',
   };
   const color = typeColor[item.contradictionType] || '#7f8c8d';
 
@@ -370,11 +375,17 @@ function ControversyCard({ item }: { item: ControversyAnalysisItem }) {
 
 function typeLabel(t: string): string {
   const map: Record<string, string> = {
+    // v7.4 原有 4 类
     real_disagreement: '真实分歧',
     time_shift: '时间变化',
     source_error: '来源差异',
     definition_drift: '定义漂移',
     unknown: '未知',
+    // v7.5 新增 5 类张力（来自 contradictionRecall L3）
+    立场: '立场对立',
+    叙事归因: '叙事归因',
+    利益: '利益冲突',
+    时序: '时序错位',
   };
   return map[t] || t;
 }
