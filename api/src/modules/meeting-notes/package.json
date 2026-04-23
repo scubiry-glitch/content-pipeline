@@ -1,0 +1,29 @@
+{
+  "name": "@content-pipeline/meeting-notes",
+  "version": "0.1.0",
+  "description": "会议纪要智能模块 — 一库多视图 (人物/项目/知识/会议本身) + 运行/版本 + 跨会议纵向分析",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./adapters/pipeline": "./adapters/pipeline.ts",
+    "./adapters/local-event-bus": "./adapters/local-event-bus.ts",
+    "./adapters/postgres-text-search": "./adapters/postgres-text-search.ts"
+  },
+  "keywords": [
+    "meeting-notes",
+    "meeting-intelligence",
+    "multi-axis-views",
+    "scope-projection",
+    "longitudinal-analysis"
+  ],
+  "peerDependencies": {
+    "fastify": ">=4.0.0",
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": { "optional": true },
+    "pg": { "optional": true }
+  }
+}

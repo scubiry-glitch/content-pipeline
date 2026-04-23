@@ -61,6 +61,18 @@ import { initExpertEngineSingleton } from './modules/expert-library/singleton.js
 import { createContentLibraryEngine, createRouter as createContentLibraryRouter } from './modules/content-library/index.js';
 import { createContentLibraryPipelineDeps } from './modules/content-library/adapters/pipeline.js';
 import { initContentLibraryEngineSingleton } from './modules/content-library/singleton.js';
+import {
+  createMeetingNotesEngine,
+  createRouter as createMeetingNotesRouter,
+} from './modules/meeting-notes/index.js';
+import {
+  createPipelineDeps as createMeetingNotesDeps,
+  createPipelineDBAdapter as createMeetingNotesDBAdapter,
+  createPipelineExpertsAdapter,
+  createPipelineExpertApplicationAdapter,
+} from './modules/meeting-notes/adapters/pipeline.js';
+import { initMeetingNotesEngineSingleton } from './modules/meeting-notes/singleton.js';
+import { resolveStrategyForMeeting, shouldSkipExpertAnalysis } from './services/expert-application/meetingKindStrategyMap.js';
 import { query } from './db/connection.js';
 import { generateEmbedding } from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
@@ -214,6 +226,24 @@ async function main() {
   );
   initContentLibraryEngineSingleton(contentLibraryEngine);
   await fastify.register(createContentLibraryRouter(contentLibraryEngine), { prefix: '/api/v1/content-library' });
+
+  // Meeting Notes 独立模块 (PR1 骨架) — 一库多视图 (人物/项目/知识/会议本身) + 运行/版本 + 跨会议纵向
+  // 依赖 expert-library（experts.invoke）与 services/expert-application（strategy resolver）
+  // PR1 仅暴露 /health；后续 PR 逐步补齐 parse / axes / runs / longitudinal
+  const meetingNotesEngine = createMeetingNotesEngine(
+    createMeetingNotesDeps({
+      db: createMeetingNotesDBAdapter(query),
+      experts: createPipelineExpertsAdapter({
+        invoke: async (req) => expertEngine.invoke(req as any),
+      }),
+      expertApplication: createPipelineExpertApplicationAdapter({
+        resolveForMeetingKind: (kind) => resolveStrategyForMeeting(kind) ?? null,
+        shouldSkipExpertAnalysis,
+      }),
+    }),
+  );
+  initMeetingNotesEngineSingleton(meetingNotesEngine);
+  await fastify.register(createMeetingNotesRouter(meetingNotesEngine), { prefix: '/api/v1/meeting-notes' });
 
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });
