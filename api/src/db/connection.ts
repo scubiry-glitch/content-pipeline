@@ -1249,6 +1249,16 @@ async function setupContentLibrarySchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_content_facts_contradiction ON content_facts(subject, predicate) WHERE is_current = true`
   ).catch(() => {});
 
+  // Zep 回填断点续传（与 migrations/029-content-facts-zep-sync.sql 对齐）
+  await query(`ALTER TABLE content_facts ADD COLUMN IF NOT EXISTS zep_synced_at TIMESTAMPTZ`).catch(() => {});
+  await query(`ALTER TABLE content_facts ADD COLUMN IF NOT EXISTS zep_graph_id TEXT`).catch(() => {});
+  await query(
+    `ALTER TABLE content_facts ADD COLUMN IF NOT EXISTS zep_sync_attempts SMALLINT NOT NULL DEFAULT 0`
+  ).catch(() => {});
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_content_facts_zep_resume ON content_facts (COALESCE(zep_sync_attempts, 0), confidence DESC, created_at DESC, id DESC) WHERE is_current = true`
+  ).catch(() => {});
+
   await query(`
     CREATE TABLE IF NOT EXISTS content_entities (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

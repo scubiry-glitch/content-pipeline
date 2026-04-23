@@ -370,8 +370,9 @@ export function ContentLibraryBatchOps() {
         try {
           const d = JSON.parse(e.data);
           setZepSyncProgress(d);
-          const pct = d.total > 0 ? Math.round((d.synced + d.skipped + d.errors) / d.total * 100) : 0;
-          setStep('zepSync', { status: 'running', message: `${d.synced + d.skipped + d.errors}/${d.total} (${pct}%) · 同步 ${d.synced} · 跳过 ${d.skipped}` });
+          const denom = typeof d.syncGoal === 'number' ? d.syncGoal : d.total;
+          const pct = denom > 0 ? Math.round((d.synced + d.skipped + d.errors) / denom * 100) : 0;
+          setStep('zepSync', { status: 'running', message: `${d.synced + d.skipped + d.errors}/${denom} (${pct}%) · 同步 ${d.synced} · 跳过 ${d.skipped}` });
         } catch { /* ignore */ }
       });
       es.addEventListener('done', (e: any) => {

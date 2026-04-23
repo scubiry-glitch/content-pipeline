@@ -86,6 +86,8 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
         limit: body.limit ? parseInt(body.limit) : undefined,
         batchSize: body.batchSize ? parseInt(body.batchSize) : 10,
         minConfidence: body.minConfidence ? parseFloat(body.minConfidence) : 0.5,
+        forceResync: body.forceResync === true || body.forceResync === 'true',
+        maxSyncAttempts: body.maxSyncAttempts ? parseInt(body.maxSyncAttempts, 10) : undefined,
       });
       return { jobId };
     });
