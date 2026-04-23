@@ -2125,3 +2125,55 @@ v6.1: RSS AI 处理                    v6.2: Assets AI 处理
 - [v6.2 Assets AI 批量处理](./Product-Spec-v6.2-AI-Assets-Processing.md)
 - [Expert Library 分类体系](../webapp/src/services/expertService.ts)
 - [RSS 采集服务](../api/src/services/rssCollector.ts)
+
+---
+
+## 11. v7.6 补充：meetingKind 会议性质分类（正交维度）
+
+> **状态**: ✅ 已实现（2026-04-22）
+> **关联代码**: `api/src/services/meetingClassifier.ts`、`api/src/services/expert-application/meetingKindStrategyMap.ts`
+
+### 11.1 为什么引入 meetingKind
+
+D01-D15 是**领域**维度（回答"这份内容讲什么行业/主题"）。
+会议纪要还需要回答"这是什么**性质**的会议"——因为同一份纪要可能既是 D06 AI，也是一场技术评审，单靠领域无法决定**该不该/如何**跑专家分析。所以 `meetingKind` 是与 domain **正交**的第二维度，只作用在 `asset_type='meeting_minutes'` 上。
+
+### 11.2 五个候选值
+
+| meetingKind | 识别线索（classifier 启发式） | 下游专家策略（自动应用） |
+|---|---|---|
+| `strategy_roadshow` | 路演/融资/IPO/战略/Term Sheet | debate + EMM 一票否决 + rubric 打分 |
+| `tech_review` | 评审/架构/算法/验收 | mental_model_rotation + max 预设（全家桶装饰器） |
+| `expert_interview` | `问:/答:` 或 `Q:/A:` 结构 ≥2 对（最高优先级） | single + contradictionsSurface + knowledgeGrounded（不开 EMM） |
+| `industry_research` | 行业调研/走访/产能 | heuristic_trigger_first + evidenceAnchored + knowledgeGrounded |
+| `internal_ops` | 周会/站会/OKR/复盘（亦为默认兜底） | **跳过专家分析**，只做领域打标 |
+
+### 11.3 数据链路
+
+```
+meetingNoteChannel.runImport()
+  ↓
+classifyMeeting(title, content)           // 纯规则，不调 LLM
+  ↓
+asset.metadata.meeting_kind 持久化到 JSONB
+  ↓
+batchProcessor → deepAnalysisOrchestrator.routeMeetingKind(asset)
+  ↓
+├─ internal_ops                   → { skipped: true } 直接返回
+├─ 其它 kind + 调用方未传 strategy → resolveStrategyForMeeting() 派生
+└─ 调用方已给 strategy            → 完全不干预
+  ↓
+createStrategyResolver(spec) → ExpertApplicationStrategy.apply(ctx)
+```
+
+### 11.4 与 D01-D15 的关系
+
+两维**并存**，互不替换：
+
+| 场景 | domain | meetingKind |
+|---|---|---|
+| AI 创业路演纪要 | D06 AI | strategy_roadshow |
+| 半导体行业走访 | D07 半导体 | industry_research |
+| 团队周会（不涉及外部） | null | internal_ops |
+
+路由链路先按 `domain` 过滤领域专家（语义 + 关键词），再按 `meetingKind` 决定"怎么用这些专家"。
