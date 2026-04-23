@@ -19,6 +19,10 @@ import {
   runAxisAll,
 } from './axes/registry.js';
 import type { ComputeResult } from './axes/_shared.js';
+import { RunEngine } from './runs/runEngine.js';
+import { VersionStore } from './runs/versionStore.js';
+import { ScopeService } from './scope/scopeService.js';
+import { CrossAxisLinkResolver } from './crosslinks/crossAxisLinkResolver.js';
 
 export interface ComputeAxisRequest {
   meetingId?: string;
@@ -36,10 +40,35 @@ export interface ComputeAxisResponse {
 }
 
 export class MeetingNotesEngine {
+  readonly scopes: ScopeService;
+  readonly runEngine: RunEngine;
+  readonly versionStore: VersionStore;
+  readonly crossLinks: CrossAxisLinkResolver;
+
   constructor(
     readonly deps: MeetingNotesDeps,
     readonly options: MeetingNotesOptions = {},
-  ) {}
+  ) {
+    this.scopes = new ScopeService(deps);
+    this.versionStore = new VersionStore(deps);
+    this.crossLinks = new CrossAxisLinkResolver(deps);
+    this.runEngine = new RunEngine(
+      deps,
+      (meetingId) => this.getMeetingAxes(meetingId),
+      { concurrency: options.runConcurrency ?? 2 },
+    );
+
+    // Run 完成后触发 crosslink 重算
+    deps.eventBus.subscribe('mn.run.completed', async (payload: any) => {
+      try {
+        const run = await this.runEngine.get(payload?.runId);
+        if (!run) return;
+        await this.crossLinks.recomputeForScope(run.scope.kind, run.scope.id ?? null, run.id);
+      } catch (e) {
+        console.error('[MeetingNotes] crosslink recompute failed:', (e as Error).message);
+      }
+    });
+  }
 
   // ============================================================
   // Health
@@ -236,16 +265,42 @@ export class MeetingNotesEngine {
   // Layer 3 — runs / versions（PR4 实现）
   // ============================================================
 
-  async enqueueRun(_req: EnqueueRunRequest): Promise<{ ok: boolean; runId?: string; reason?: string }> {
-    return { ok: false, reason: 'not-implemented (PR4)' };
+  async enqueueRun(req: EnqueueRunRequest): Promise<{ ok: boolean; runId?: string; reason?: string }> {
+    return this.runEngine.enqueue(req);
   }
 
-  async getRun(_id: string): Promise<RunRecord | null> {
-    return null;
+  async getRun(id: string): Promise<RunRecord | null> {
+    return this.runEngine.get(id);
   }
 
-  async listAxisVersions(_scope: ScopeRef, _axis: AxisName): Promise<AxisVersionRef[]> {
-    return [];
+  async listRuns(filter: {
+    scopeKind?: string;
+    scopeId?: string | null;
+    axis?: string;
+    state?: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    limit?: number;
+  }): Promise<RunRecord[]> {
+    return this.runEngine.list(filter);
+  }
+
+  async cancelRun(id: string): Promise<boolean> {
+    return this.runEngine.cancel(id);
+  }
+
+  async listAxisVersions(scope: ScopeRef, axis: AxisName): Promise<AxisVersionRef[]> {
+    const rows = await this.versionStore.listVersions(scope.kind, scope.id ?? null, axis);
+    return rows.map((r) => ({
+      id: r.id,
+      runId: r.runId,
+      scope,
+      axis,
+      versionLabel: r.versionLabel,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async diffVersions(aId: string, bId: string) {
+    return this.versionStore.diff(aId, bId);
   }
 
   // ============================================================
@@ -263,7 +318,7 @@ export class MeetingNotesEngine {
   // Layer 5 — cross-axis links（PR4 实现）
   // ============================================================
 
-  async getCrossAxisLinks(_req: {
+  async getCrossAxisLinks(req: {
     scope: ScopeRef;
     axis: AxisName;
     itemId: string;
@@ -274,6 +329,13 @@ export class MeetingNotesEngine {
     relationship: string;
     score: number;
   }>> {
-    return [];
+    const links = await this.crossLinks.listBySource(req.axis, req.itemId);
+    return links.map((l) => ({
+      targetAxis: l.targetAxis as AxisName,
+      targetItemType: l.targetItemType,
+      targetItemId: l.targetItemId,
+      relationship: l.relationship,
+      score: l.score,
+    }));
   }
 }
