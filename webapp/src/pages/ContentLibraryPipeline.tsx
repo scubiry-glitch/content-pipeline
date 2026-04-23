@@ -569,6 +569,11 @@ export function ContentLibraryPipeline() {
                   <span className="source-label">RSS 源</span>
                   <span className="source-count">{stats?.rssItems ?? '-'} 条</span>
                 </div>
+                <div className="source-node" onClick={() => navigate('/meeting-note-sources')}>
+                  <span className="source-icon">🎙️</span>
+                  <span className="source-label">会议纪要</span>
+                  <span className="source-count">lark / zoom / upload</span>
+                </div>
                 <div className="flow-arrow">→</div>
               </div>
             </div>

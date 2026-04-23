@@ -14,6 +14,10 @@ import { ExpertMatcher } from '../../modules/expert-library/expertMatcher.js';
 import { ControversyDeepAnalyzer } from './controversyDeepAnalyzer.js';
 import { createStrategyResolver, resolveSpecString } from '../expert-application/index.js';
 import type { ExpertStrategySpec } from '../expert-application/index.js';
+import {
+  resolveStrategyForMeeting,
+  shouldSkipExpertAnalysis,
+} from '../expert-application/meetingKindStrategyMap.js';
 import type {
   Asset,
   AssetDeepAnalysis,
@@ -21,6 +25,25 @@ import type {
   AssetThemeClassification,
   ExpertInvocationTrace,
 } from './types.js';
+
+/**
+ * v7.6 meeting-kind 路由（纯函数，便于单测）。
+ * - meeting_minutes + meeting_kind=internal_ops → 建议跳过专家分析
+ * - meeting_minutes + 已识别 kind + 调用方未传 strategy → 建议派生默认 strategy
+ */
+export function routeMeetingKind(
+  asset: Asset,
+  callerStrategy?: ExpertStrategySpec,
+): { skip: boolean; reason?: string; derivedStrategy?: ExpertStrategySpec } {
+  if (asset.type !== 'meeting_minutes') return { skip: false };
+  const meetingKind: string | undefined = (asset as any).metadata?.meeting_kind;
+  if (shouldSkipExpertAnalysis(meetingKind)) {
+    return { skip: true, reason: `meeting_kind=${meetingKind}` };
+  }
+  if (callerStrategy) return { skip: false };
+  const derived = resolveStrategyForMeeting(meetingKind);
+  return derived ? { skip: false, derivedStrategy: derived } : { skip: false };
+}
 
 /**
  * 单 asset 级深度分析入口。
@@ -33,6 +56,21 @@ export async function runDeepAnalysis(
   expertStrategy?: ExpertStrategySpec,
 ): Promise<AssetDeepAnalysis> {
   const started = Date.now();
+
+  const route = routeMeetingKind(asset, expertStrategy);
+  if (route.skip) {
+    return {
+      assetId: asset.id,
+      matchedDomainExpertIds: [],
+      matchReasons: [`${route.reason} → expert analysis intentionally skipped`],
+      expertInvocations: [],
+      processingTimeMs: Date.now() - started,
+      modelVersion: 'skip-v1',
+      skipped: true,
+      skippedReason: route.reason,
+    };
+  }
+  if (route.derivedStrategy) expertStrategy = route.derivedStrategy;
 
   if (!isContentLibraryInitialized()) {
     throw new Error('ContentLibraryEngine not initialized');

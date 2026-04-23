@@ -58,6 +58,52 @@ export interface AssetFilters {
   limit?: number;
 }
 
+// v7.6 会议纪要采集渠道 (migration 028) ---------------------------------------
+export type MeetingNoteSourceKind =
+  | 'lark' | 'zoom' | 'teams' | 'upload' | 'folder' | 'manual';
+
+export type MeetingNoteImportStatus =
+  | 'pending' | 'running' | 'succeeded' | 'failed' | 'partial';
+
+export interface MeetingNoteSource {
+  id: string;
+  name: string;
+  kind: MeetingNoteSourceKind;
+  config: Record<string, any>;
+  isActive: boolean;
+  scheduleCron?: string | null;
+  lastImportedAt?: Date | null;
+  createdBy?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MeetingNoteImport {
+  id: string;
+  sourceId: string;
+  status: MeetingNoteImportStatus;
+  startedAt: Date;
+  finishedAt?: Date | null;
+  itemsDiscovered: number;
+  itemsImported: number;
+  duplicates: number;
+  errors: number;
+  errorMessage?: string | null;
+  assetIds: string[];
+  triggeredBy: string;
+}
+
+/** 上游 adapter 抓到的草稿，在 ingestDraft 里转成 Asset。 */
+export interface ImportedMeetingNoteDraft {
+  externalId: string;          // sha256(file_bytes) for uploads; provider id for lark/zoom
+  title: string;
+  content: string;
+  occurredAt?: Date;           // 会议发生时间（非导入时间）
+  participants?: string[];
+  domain?: string;             // D01-D15 taxonomy slug
+  metadata?: Record<string, any>;
+}
+
 export class AssetService {
   // 创建素材
   async createAsset(data: CreateAssetDTO): Promise<Asset> {

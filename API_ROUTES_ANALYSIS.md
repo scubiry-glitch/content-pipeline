@@ -1,5 +1,27 @@
 # 任务详情页面 API 路由分析
 
+## v7.6 会议纪要采集渠道 (新增, 2026-04-22)
+
+挂在 `/api/v1/quality` 前缀下 (与 rss-sources 同类), 全部 preHandler=authenticate:
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET  | `/meeting-note-sources?kind=&active=` | 采集源列表, 可按 kind/active 过滤 |
+| POST | `/meeting-note-sources`                | 创建采集源 (name/kind/config) |
+| PUT  | `/meeting-note-sources/:id`            | 更新 (name/config/isActive/scheduleCron) |
+| DELETE | `/meeting-note-sources/:id`          | 删除 (ON DELETE CASCADE 到 imports) |
+| POST | `/meeting-note-sources/import`         | 触发采集 `{ id, triggeredBy? }` |
+| POST | `/meeting-note-sources/:id/upload`     | multipart 单文件快速上传 |
+| GET  | `/meeting-note-sources/progress`       | 运行中作业 (status=pending/running) |
+| GET  | `/meeting-note-sources/history`        | 历史作业, `?sourceId=&limit=` |
+
+kind 枚举: `lark` \| `zoom` \| `teams` \| `upload` \| `folder` \| `manual`
+(v1 真实实现: upload/folder/manual; 其余 stub, 幂等返回空)
+
+资产去重键: `(source_id, metadata->>'external_id')`, upload/manual 用 sha256.
+
+---
+
 ## 测试结论
 
 ### ✅ 有效的 API (12个)

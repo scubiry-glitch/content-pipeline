@@ -289,6 +289,9 @@ export interface AssetDeepAnalysis {
   expertInvocations: ExpertInvocationTrace[];
   processingTimeMs: number;
   modelVersion: string;
+  // v7.6 meeting-notes 路由：internal_ops 类会议跳过专家分析
+  skipped?: boolean;
+  skippedReason?: string;
 }
 
 // ============================================

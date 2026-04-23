@@ -36,6 +36,7 @@ import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
 import { rssRoutes } from './routes/rss.js';
+import { meetingNotesRoutes } from './routes/meetingNotes.js';
 import { recommendationRoutes } from './routes/recommendation.js';
 import { archiveRoutes } from './routes/archive.js';
 import { researchRoutes } from './routes/research.js';
@@ -151,6 +152,7 @@ async function main() {
   await fastify.register(assetRoutes, { prefix: '/api/v1/assets' });
   await fastify.register(outputRoutes, { prefix: '/api/v1/outputs' });
   await fastify.register(rssRoutes, { prefix: '/api/v1/quality' });
+  await fastify.register(meetingNotesRoutes, { prefix: '/api/v1/quality' });
   await fastify.register(recommendationRoutes, { prefix: '/api/v1/recommendations' });
   await fastify.register(archiveRoutes, { prefix: '/api/v1/archive' });
   await fastify.register(researchRoutes, { prefix: '/api/v1/research' });
@@ -290,6 +292,19 @@ async function main() {
     const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
     assetsAIScheduler.start();
     console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
+
+    // v7.6: 启动会议纪要采集定时任务（按每个 source.scheduleCron 独立调度）
+    try {
+      const { MeetingNoteChannelService } = await import('./services/meetingNoteChannel.js');
+      const { getMeetingNoteScheduler } = await import('./services/meetingNoteScheduler.js');
+      const mnSvc = new MeetingNoteChannelService();
+      const mnSched = getMeetingNoteScheduler(mnSvc);
+      mnSvc.setOnSourceChanged(() => mnSched.reload());
+      await mnSched.start();
+      console.log(`🎙️ 会议纪要定时采集已启动（活跃 ${mnSched.activeCount} 个源，跳过 ${mnSched.skipped.length}）`);
+    } catch (err) {
+      console.warn('🎙️ 会议纪要调度器启动失败（不影响其他服务）:', (err as Error).message);
+    }
 
     // v7.0: 启动内容库定时任务（信息增量报告 + 保鲜度检查）
     const { startContentLibraryScheduler } = await import('./modules/content-library/scheduler.js');

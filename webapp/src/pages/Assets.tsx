@@ -19,6 +19,7 @@ import { DomainCascadeSelect, selectionToCode, codeToSelection } from '../compon
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import type { TaxonomySelection } from '../types/taxonomy';
 import { ASSET_TYPE_META, ASSET_TYPES, type AssetType } from '../types';
+import { MeetingKindBadge } from '../components/MeetingKindBadge';
 import './Assets.css';
 
 type FilterTab = 'all' | 'my' | 'shared';
@@ -570,6 +571,12 @@ export function Assets() {
             <span className="material-icon text-xs">calendar_today</span>
             {formatDate(asset.created_at)} • {(asset.word_count || 0).toLocaleString()} words
           </p>
+
+          {asset.asset_type === 'meeting_minutes' && asset.metadata?.meeting_kind && (
+            <div className="asset-card-meeting-kind" style={{ padding: '0 0 8px' }}>
+              <MeetingKindBadge kind={asset.metadata.meeting_kind} />
+            </div>
+          )}
 
           {/* 质量指标 */}
           <div className="asset-card-metrics">

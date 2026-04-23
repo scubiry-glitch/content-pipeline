@@ -217,6 +217,160 @@ paths:
                     items:
                       $ref: '#/components/schemas/Report'
 
+  # ─────────── v7.6 会议纪要采集渠道 ─────────────────────────────
+  /quality/meeting-note-sources:
+    get:
+      summary: 列出采集源
+      parameters:
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/MeetingNoteSourceKind' }
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: 采集源列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/MeetingNoteSource' }
+    post:
+      summary: 创建采集源
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MeetingNoteSourceCreate' }
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeetingNoteSource' }
+        '400': { description: kind 不支持或字段非法 }
+
+  /quality/meeting-note-sources/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      summary: 更新采集源
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MeetingNoteSourceUpdate' }
+      responses:
+        '200':
+          description: 更新后的对象
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeetingNoteSource' }
+        '404': { description: 不存在 }
+    delete:
+      summary: 删除采集源（级联删除 imports）
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean } }
+        '404': { description: 不存在 }
+
+  /quality/meeting-note-sources/import:
+    post:
+      summary: 触发采集
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+                triggeredBy:
+                  type: string
+                  description: 默认 'manual'，定时任务写 'scheduled'，上传走 'upload'
+      responses:
+        '200':
+          description: 作业结果（同步返回）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeetingNoteImport' }
+        '404': { description: source 不存在 }
+
+  /quality/meeting-note-sources/{id}/upload:
+    post:
+      summary: 单文件上传（multipart）— upload / manual 类型快捷通道
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: 作业结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeetingNoteImport' }
+        '404': { description: source 不存在 }
+        '415': { description: 非 multipart 请求 }
+
+  /quality/meeting-note-sources/progress:
+    get:
+      summary: 运行中的采集作业
+      responses:
+        '200':
+          description: 作业列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: '#/components/schemas/MeetingNoteImport' }
+
+  /quality/meeting-note-sources/history:
+    get:
+      summary: 历史采集记录
+      parameters:
+        - name: sourceId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: 按 started_at DESC
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/MeetingNoteImport' }
+
 components:
   schemas:
     HealthResponse:
@@ -362,3 +516,87 @@ components:
           type: number
         excerpt:
           type: string
+
+    # ─────────── v7.6 会议纪要采集渠道 schema ────────────────────
+    MeetingNoteSourceKind:
+      type: string
+      enum: [lark, zoom, teams, upload, folder, manual]
+      description: |
+        v1 真实实现: upload / folder / manual；lark / zoom / teams 是 stub
+        (幂等返回空草稿，接线后再启用)。
+
+    MeetingKind:
+      type: string
+      enum: [strategy_roadshow, tech_review, expert_interview, industry_research, internal_ops]
+      description: |
+        会议性质分类，由 meetingClassifier 按 (title, content) 启发式得出，
+        存储在 asset.metadata.meeting_kind，供下游 deepAnalysisOrchestrator
+        通过 meetingKindStrategyMap 选择专家策略。
+        internal_ops 会被明确跳过专家分析。
+
+    MeetingNoteSource:
+      type: object
+      required: [id, name, kind, config, isActive, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/MeetingNoteSourceKind' }
+        config:
+          type: object
+          additionalProperties: true
+          description: 按 kind 异构：folder→path、lark→space_id、upload→空对象等
+        isActive: { type: boolean }
+        scheduleCron:
+          type: string
+          nullable: true
+          description: 标准 5 字段 cron 表达式；由 meetingNoteScheduler 调度
+        lastImportedAt: { type: string, format: date-time, nullable: true }
+        createdBy: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MeetingNoteSourceCreate:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/MeetingNoteSourceKind' }
+        config:
+          type: object
+          additionalProperties: true
+        isActive: { type: boolean, default: true }
+        scheduleCron: { type: string, nullable: true }
+
+    MeetingNoteSourceUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        config:
+          type: object
+          additionalProperties: true
+        isActive: { type: boolean }
+        scheduleCron: { type: string, nullable: true }
+
+    MeetingNoteImport:
+      type: object
+      required: [id, sourceId, status, startedAt, itemsDiscovered, itemsImported, duplicates, errors, assetIds, triggeredBy]
+      properties:
+        id: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, partial]
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        itemsDiscovered: { type: integer, minimum: 0 }
+        itemsImported: { type: integer, minimum: 0 }
+        duplicates: { type: integer, minimum: 0 }
+        errors: { type: integer, minimum: 0 }
+        errorMessage: { type: string, nullable: true }
+        assetIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: 本次导入新增的 asset.id 列表，反向索引用
+        triggeredBy:
+          type: string
+          enum: [manual, scheduled, upload]
