@@ -709,12 +709,32 @@ export const meetingNoteSourcesApi = {
   getHistory: (params?: { sourceId?: string; limit?: number }) =>
     client.get('/quality/meeting-note-sources/history', { params }) as Promise<{ items: MeetingNoteImport[] }>,
 
-  upload: (id: string, file: File) => {
+  /** 使用 fetch：axios 实例默认带 application/json，与 FormData 组合时易被错误序列化，导致后端收不到 multipart。 */
+  upload: async (id: string, file: File): Promise<MeetingNoteImport> => {
     const form = new FormData();
     form.append('file', file);
-    return client.post(`/quality/meeting-note-sources/${id}/upload`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }) as Promise<MeetingNoteImport>;
+    const path = `/quality/meeting-note-sources/${id}/upload`;
+    const url = BASE_URL.startsWith('http')
+      ? `${BASE_URL.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+      : `${BASE_URL.replace(/\/$/, '')}${path}`;
+    console.log(`[API] POST ${path} (fetch multipart)`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: form,
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const msg =
+        (typeof data.message === 'string' && data.message) ||
+        (typeof data.error === 'string' && data.error) ||
+        res.statusText;
+      const err = new Error(msg) as Error & { response?: { data: unknown; status: number } };
+      err.response = { data, status: res.status };
+      console.error('[API] Response error:', data);
+      throw err;
+    }
+    return data as unknown as MeetingNoteImport;
   },
 
   /** 粘贴文本快速入库（JSON 形式，title + content）。 */

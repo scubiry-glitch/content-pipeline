@@ -1,0 +1,139 @@
+Context
+专家库（Expert Library）是内容生产流水线的核心模块，外部调用方（前端、其他服务、第三方集成）
+需要一份清晰的 API 接入文档：既能说明 HTTP 接口契约，也能说明核心的 expert-application
+策略组合模块（4 基础策略 + 9 装饰器 + 3 预设 lite/standard/max）的语义与用法。
+当前 api/docs/ 目录只有 sequential-review.md、stage4-streaming-revision.md 两份功能级文档，
+缺少面向接入方的总览文档。本次任务生成一份 api/docs/expert-library-external-api.md，
+作为对外接入的权威参考。
+目标读者
+
+前端工程师（调 /api/v1/expert-library/*）
+其他后端服务开发者（以 SDK 方式调用 createStrategyResolver）
+接入方 / 运营配置人员（理解三档预设的差异与选择逻辑）
+
+文档产物
+路径: /home/user/content-pipeline/api/docs/expert-library-external-api.md
+文档结构
+1. 概述
+
+专家库定位（WHO 层 persona + HOW 层 method + EMM 门禁）
+对外接入的两种方式：HTTP REST 与 In-process SDK（expert-application）
+Base URL: /api/v1/expert-library
+
+2. 快速开始
+
+最小 /invoke 调用示例（curl + JSON 请求/响应）
+最小 createStrategyResolver 代码示例
+
+3. 认证
+
+X-API-Key 头（写操作 + admin/*）
+只读接口无需鉴权
+401 错误返回形状 { error, code: "UNAUTHORIZED" }
+
+4. HTTP 接口清单（表格形式）
+按功能分组，来源于 api/src/modules/expert-library/router.ts:
+
+核心调用: POST /invoke, POST /chat, POST /chat/stream (SSE)
+专家管理: GET/POST/PATCH/PUT/DELETE /experts/*
+反馈与校准: POST /feedback, GET /experts/:id/performance, POST /calibrate/:id
+高级能力: POST /debate, POST /match, POST /review-outline, POST /hot-topic-perspectives
+心智模型图谱: GET /mental-models/*
+Admin 同步: POST /admin/sync-builtins/*
+
+每组重点接口附一段请求/响应 schema（聚焦 /invoke 展开完整字段）。
+5. 核心数据结构
+
+ExpertRequest / ExpertResponse（api/src/modules/expert-library/types.ts:242-278）
+ExpertProfile 简要字段说明（persona / method / emm / output_schema / anti_patterns）
+TaskType 枚举: analysis | evaluation | generation 的语义区分
+ExpertInvocationTrace 持久化结构
+
+6. Expert-Application 策略组合模块（本次文档重点）
+6.1 模块定位
+
+解耦"如何把专家用到分析里"这一层；调用点声明 spec，由策略实现细节
+入口: createStrategyResolver(spec?) → (deliverable) => Strategy（api/src/services/expert-application/index.ts:34-58）
+持久化: resolveSpecString() 返回最终 spec 字符串写入 expert_invocations.strategy
+
+6.2 spec 解析优先级（5 级兜底）
+
+spec.perDeliverable[deliverable]
+spec.default
+PRESET_COMBOS[preset].mapping[deliverable]
+PRESET_COMBOS[DEFAULT_PRESET='standard'].mapping[deliverable]
+FALLBACK_SPEC = 'single'
+
+6.3 4 个基础策略（Base Strategies）
+表格形式，每个策略一行（id / 描述 / 专家数要求 / 支持 TaskType / 阶段 stages / meta 输出）:
+id描述专家数TaskType关键 metasingle单专家直接调用（baseline）≥1analysis/evaluation/generationmodelApplications, rubricScoresdebate正反方 + 裁判（三段式）≥2 (推荐3)analysis/evaluationdebate.expertAId/BId/judgeIdmental_model_rotation专家心智模型逐个应用 + 跨模型综合1（需模型）analysis/generationmentalModelRotation.modelsUsedheuristic_trigger_first关键词触发专家决策启发式1（需启发式）analysis/evaluation/generationheuristicsTriggered
+说明文件级引用：
+
+strategies/single.ts
+strategies/debate.ts（≥3 人时效果最佳；1 人时 fallback 到 single）
+strategies/mentalModelRotation.ts（MAX_MODELS_PER_ROUND = 4）
+strategies/heuristicTriggerFirst.ts
+
+6.4 9 个装饰器（Decorators）
+表格形式，每行：id / 作用 / 对专家 profile 的要求 / 主要副作用或 meta 字段。
+
+failure_check — 针对专家 mentalModels[].failureCondition 自检，命中则 confidence ×0.5
+emm_iterative — EMM 门禁不通过则迭代重跑，最多 2 轮，选最佳
+evidence_anchored — 从 knowledgeService.retrieveKnowledge() 注入 3 条相似案例作 few-shot
+calibrated_confidence — 读 expert_calibration（Brier + overbias）调整 confidence，factor ∈ [0.3, 1.2]
+track_record_verify — 拉取最近 180 天 ≤3 条预测，强制专家回顾是否一致
+signature_style — 注入 expressionDNA + signature_phrases + 风格样本
+knowledge_grounded — 强制 [M#n] 引用；无引用段落会被过滤
+contradictions_surface — 要求专家明确激活哪条内部矛盾并表态
+rubric_anchored_output — 强制输出 rubric_scores JSON，对齐 output_schema.rubrics
+
+每条附文件路径：api/src/services/expert-application/decorators/<name>.ts
+6.5 3 个预设（Presets）
+源: api/src/services/expert-application/presets.ts
+预设名称定位LLM 成本lite精简模式failure_check|emm_iterative|single（2 装饰器 + 单专家）最低（日常批量）standard深度模式（默认）案例锚定 + 校准 + 心智模型；争议走辩论中max极致模式7-8 装饰器全量堆叠；每条产出都带专家 DNA慢 5-8 倍
+每个预设列出 7 条 deliverable 的完整 mapping（直接引用 presets.ts 的值）:
+
+⑩insights / ⑫consensus / ⑬controversy / ⑭beliefEvolution
+①topic-enrich / step3-fact-review / step5-synthesis
+
+6.6 spec 字符串语法
+
+格式: "decorator1|decorator2|...|baseStrategy"
+最后一段为基础策略；前面若干段为装饰器（从外向内包裹）
+例: "evidence_anchored|debate" = 先给辩论策略穿上 evidence_anchored 外壳
+未知 token 会被静默降级到 single
+
+6.7 in-process SDK 调用示例（TypeScript）
+贴一段完整的 createStrategyResolver({ preset: 'standard', perDeliverable: { '⑬controversy': 'evidence_anchored|debate' } }) 调用到 strategy.apply(ctx) 的代码。
+7. 错误与响应码
+
+400: 字段缺失、Zod 校验失败（含 field-level details）
+401: X-API-Key 缺失或错误
+404: 专家 / 辩论记录 / invocation 不存在
+500: 处理异常（开发环境返回 message，生产返回通用文案）
+
+8. 持久化字段速查
+
+expert_invocations.strategy — 最终解析的 spec 字符串
+expert_invocations.traces — ExpertInvocationTrace[]
+expert_calibration — Brier / overbias（供 calibrated_confidence 读取）
+expert_knowledge_sources — signature_style 读取风格样本
+
+9. 版本与变更
+指向 CHANGELOG-v3.0.md 和 api/docs/sequential-review.md、api/docs/stage4-streaming-revision.md 作为延伸阅读。
+关键待引用文件
+文件用途api/src/modules/expert-library/router.tsHTTP 路由注册api/src/modules/expert-library/types.tsExpertRequest/Response/Profile/Depsapi/src/services/expert-application/index.ts公开入口api/src/services/expert-application/types.tsStrategy/Context/Result/Trace/Specapi/src/services/expert-application/registry.tscomposeStrategies + ALL_BASE/ALL_DECORATORSapi/src/services/expert-application/presets.ts3 预设完整 mappingapi/src/services/expert-application/strategies/*.ts4 基础策略实现api/src/services/expert-application/decorators/*.ts9 装饰器实现api/src/middleware/auth.tsX-API-Key 认证api/src/server.ts:201挂载 prefix /api/v1/expert-library
+完成后动作
+
+运行 git status 确认新增文件唯一
+git add api/docs/expert-library-external-api.md
+切换到分支 claude/expert-library-api-docs-x24IO（若不存在则创建）
+提交: docs: add expert library external API & strategy composition docs
+推送: git push -u origin claude/expert-library-api-docs-x24IO（4 次指数退避重试）
+
+验证
+
+文档可在 GitHub Markdown 渲染下正常显示（表格、代码块、中文）
+所有引用的文件路径在仓库内存在
+三份预设 mapping 与源码 presets.ts 完全一致（避免漂移）
+/invoke 示例的字段名与 types.ts:242-278 完全一致

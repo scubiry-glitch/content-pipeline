@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { createHash } from 'node:crypto';
+import mammoth from 'mammoth';
 import {
   MeetingNoteChannelService,
   type MeetingNoteChannelService as Service,
@@ -19,6 +20,20 @@ function notFound(err: unknown): boolean {
 
 function unsupportedKind(err: unknown): boolean {
   return err instanceof Error && /kind/i.test(err.message);
+}
+
+/** 从上传字节解析正文：.docx 用 mammoth，其余按 UTF-8 文本。 */
+async function textFromUploadBuffer(
+  buf: Buffer,
+  filename?: string,
+  mime?: string,
+): Promise<string> {
+  const name = (filename || '').toLowerCase();
+  if (name.endsWith('.docx') || (mime && mime.includes('wordprocessingml'))) {
+    const { value } = await mammoth.extractRawText({ buffer: buf });
+    return (value || '').trim();
+  }
+  return buf.toString('utf8');
 }
 
 export async function meetingNotesRoutes(
@@ -194,7 +209,17 @@ export async function meetingNotesRoutes(
     for await (const c of mp.file) chunks.push(c);
     const buf = Buffer.concat(chunks);
     const sha = createHash('sha256').update(buf).digest('hex');
-    const content = buf.toString('utf8');
+    let content: string;
+    try {
+      content = await textFromUploadBuffer(buf, mp.filename as string | undefined, mp.mimetype);
+    } catch (e) {
+      reply.status(400);
+      return { error: 'Bad Request', message: (e as Error).message || 'failed to read file' };
+    }
+    if (!content.trim()) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'file is empty or unreadable as text' };
+    }
     const title = (mp.filename as string | undefined) ?? `upload-${sha.slice(0, 8)}`;
 
     // Register a one-shot adapter with this single draft
