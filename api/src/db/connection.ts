@@ -1321,6 +1321,19 @@ async function setupContentLibrarySchema(): Promise<void> {
     ON content_topic_enrichments(entity_id, mode)
   `).catch(() => {});
 
+  // v7.5: 场景化 + 目的倒推 + why 三问 + 角度卡
+  await query(`
+    ALTER TABLE content_topic_enrichments
+    ADD COLUMN IF NOT EXISTS scene VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS scene_reason TEXT,
+    ADD COLUMN IF NOT EXISTS why_now TEXT,
+    ADD COLUMN IF NOT EXISTS why_you TEXT,
+    ADD COLUMN IF NOT EXISTS why_it_works TEXT,
+    ADD COLUMN IF NOT EXISTS purpose VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS detected_tensions JSONB DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS angle_cards JSONB DEFAULT '[]'
+  `).catch(() => {});
+
   await query(`
     CREATE TABLE IF NOT EXISTS content_beliefs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

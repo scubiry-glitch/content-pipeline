@@ -767,6 +767,15 @@ export class ContentLibraryEngine {
       default?: string;
       perDeliverable?: Record<string, string>;
     };
+    /**
+     * v7.5: 场景分类 + 目的倒推 + 角度卡 + why 三问。
+     * 默认:当 enableDeep=true 时启用;可通过显式 false 关闭。
+     */
+    enableSceneClassification?: boolean;
+    /** v7.5: 显式覆盖用户目的;不传则由 purposeInferrer 从历史推断 */
+    purpose?: import('./types.js').PurposeId;
+    /** v7.5: 用户 id — 用于 purposeInferrer 查当前用户的历史任务分布 */
+    userId?: string;
   }): Promise<TopicRecommendationsPage> {
     const rawLimit = options?.limit ?? 10;
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 200);
@@ -865,7 +874,8 @@ export class ContentLibraryEngine {
       // Round 2: 深度模式读 mode='deep' 子集；否则读 generic
       const cacheMode = options?.enableDeep === true ? 'deep' : 'generic';
       const cacheResult = await this.deps.db.query(
-        `SELECT entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles
+        `SELECT entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles,
+                scene, scene_reason, why_now, why_you, why_it_works, purpose, detected_tensions, angle_cards
          FROM content_topic_enrichments
          WHERE entity_id IN (${entityIds}) AND (mode = $1 OR mode IS NULL)`,
         [cacheMode],
@@ -878,6 +888,27 @@ export class ContentLibraryEngine {
           item.narrative = row.narrative || '';
           item.angleMatrix = Array.isArray(row.angle_matrix) ? row.angle_matrix : [];
           item.suggestedAngles = Array.isArray(row.suggested_angles) ? row.suggested_angles : [];
+          // v7.5: 场景 + why 三问 + 角度卡
+          if (row.scene) item.scene = row.scene;
+          if (row.scene_reason) item.sceneReason = row.scene_reason;
+          if (row.why_now) item.whyNow = row.why_now;
+          if (row.why_you) item.whyYou = row.why_you;
+          if (row.why_it_works) item.whyItWorks = row.why_it_works;
+          if (row.purpose) item.purpose = row.purpose;
+          if (row.detected_tensions) {
+            item.detectedTensions = Array.isArray(row.detected_tensions)
+              ? row.detected_tensions
+              : (typeof row.detected_tensions === 'string'
+                  ? safeJsonParse(row.detected_tensions, [])
+                  : []);
+          }
+          if (row.angle_cards) {
+            item.angleCards = Array.isArray(row.angle_cards)
+              ? row.angle_cards
+              : (typeof row.angle_cards === 'string'
+                  ? safeJsonParse(row.angle_cards, [])
+                  : []);
+          }
         }
       }
     } catch { /* 缓存表不存在时忽略 */ }
@@ -958,20 +989,47 @@ export class ContentLibraryEngine {
       }
     }
 
+    // v7.5: 场景化 + 目的倒推 + 角度卡 + why 三问
+    // 默认:当 enableDeep=true 时开启;显式 enableSceneClassification=false 可关闭
+    const shouldClassifyScenes =
+      options?.enableSceneClassification !== false &&
+      (options?.enableSceneClassification === true || options?.enableDeep === true);
+
+    if (shouldClassifyScenes && topItems.length > 0) {
+      try {
+        await this.classifyAndGenerateAngles(topItems, {
+          purpose: options?.purpose,
+          userId: options?.userId,
+        });
+      } catch (sceneErr) {
+        console.warn('[getTopicRecommendations] scene classification failed:', sceneErr);
+      }
+    }
+
     // 统一写缓存（deep 和 generic 用同一 UPSERT，只是 mode 不同）
     for (const match of topItems) {
-      if (!match.reason && !match.titleSuggestion && !match.narrative) continue;
+      if (!match.reason && !match.titleSuggestion && !match.narrative && !match.scene) continue;
       try {
         await this.deps.db.query(
           `INSERT INTO content_topic_enrichments
-             (entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles, mode, generated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+             (entity_id, reason, title_suggestion, narrative, angle_matrix, suggested_angles,
+              scene, scene_reason, why_now, why_you, why_it_works, purpose, detected_tensions, angle_cards,
+              mode, generated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
            ON CONFLICT (entity_id, mode) DO UPDATE SET
              reason = EXCLUDED.reason,
              title_suggestion = EXCLUDED.title_suggestion,
              narrative = EXCLUDED.narrative,
              angle_matrix = EXCLUDED.angle_matrix,
              suggested_angles = EXCLUDED.suggested_angles,
+             scene = EXCLUDED.scene,
+             scene_reason = EXCLUDED.scene_reason,
+             why_now = EXCLUDED.why_now,
+             why_you = EXCLUDED.why_you,
+             why_it_works = EXCLUDED.why_it_works,
+             purpose = EXCLUDED.purpose,
+             detected_tensions = EXCLUDED.detected_tensions,
+             angle_cards = EXCLUDED.angle_cards,
              generated_at = NOW()`,
           [
             match.entityId,
@@ -980,6 +1038,14 @@ export class ContentLibraryEngine {
             match.narrative || '',
             JSON.stringify(match.angleMatrix || []),
             JSON.stringify(match.suggestedAngles || []),
+            match.scene ?? null,
+            match.sceneReason ?? null,
+            match.whyNow ?? null,
+            match.whyYou ?? null,
+            match.whyItWorks ?? null,
+            match.purpose ?? null,
+            JSON.stringify(match.detectedTensions || []),
+            JSON.stringify(match.angleCards || []),
             cacheMode,
           ],
         );
@@ -989,6 +1055,79 @@ export class ContentLibraryEngine {
     }
 
     return { items: base, total, limit, offset };
+  }
+
+  /**
+   * v7.5: 场景分类 + 目的推断 + 角度卡 + why 三问生成（直接 mutate topItems）
+   */
+  private async classifyAndGenerateAngles(
+    topItems: TopicRecommendation[],
+    opts: { purpose?: import('./types.js').PurposeId; userId?: string },
+  ): Promise<void> {
+    const { recallTensions } = await import('./reasoning/contradictionRecall.js');
+    const { classifyScenes } = await import('./reasoning/topicSceneClassifier.js');
+    const { inferPurpose } = await import('./reasoning/purposeInferrer.js');
+    const { generateTopicAngles } = await import('./reasoning/topicAngleGenerator.js');
+
+    // 1) 召回该批次所有 entity 上的 tensions(一次性查,按 subject 分组)
+    const tensionsByEntity = new Map<string, any[]>();
+    try {
+      const tensions = await recallTensions(this.deps, { limit: 50, enableL3: true });
+      for (const t of tensions) {
+        const subj = t.factA?.subject;
+        if (!subj) continue;
+        // entity id 可能与 subject 不对齐:用 entityName 字符串匹配
+        for (const item of topItems) {
+          if (item.entityName === subj || subj.includes(item.entityName) || item.entityName.includes(subj)) {
+            if (!tensionsByEntity.has(item.entityId)) tensionsByEntity.set(item.entityId, []);
+            tensionsByEntity.get(item.entityId)!.push(t);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[classifyAndGenerateAngles] recallTensions failed:', (err as Error).message);
+    }
+
+    // 2) 场景分类
+    const classified = await classifyScenes(topItems, tensionsByEntity, this.deps);
+    for (let i = 0; i < topItems.length; i++) {
+      const c = classified[i];
+      if (!c) continue;
+      topItems[i].scene = c.scene;
+      topItems[i].sceneReason = c.sceneReason;
+      if (c.detectedTensions) topItems[i].detectedTensions = c.detectedTensions;
+    }
+
+    // 3) 目的推断 (一次)
+    const { purpose, source: purposeSource } = await inferPurpose(this.deps, {
+      userId: opts.userId,
+      override: opts.purpose,
+    });
+
+    // 4) 为每条 topic 生成 angleCards + why 三问
+    for (const item of topItems) {
+      if (!item.scene) continue;
+      try {
+        const angleOut = await generateTopicAngles(
+          {
+            topic: item,
+            scene: item.scene,
+            sceneReason: item.sceneReason || '',
+            purpose,
+            purposeSource,
+            detectedTensions: item.detectedTensions,
+          },
+          this.deps,
+        );
+        item.purpose = purpose;
+        item.angleCards = angleOut.angleCards;
+        item.whyNow = angleOut.whyNow;
+        item.whyYou = angleOut.whyYou;
+        item.whyItWorks = angleOut.whyItWorks;
+      } catch (err) {
+        console.warn('[classifyAndGenerateAngles] angle gen failed for', item.entityName, err);
+      }
+    }
   }
 
   /**
@@ -1357,15 +1496,35 @@ export class ContentLibraryEngine {
     };
   }
 
-  /** ⑬ 争议话题 (矛盾检测) */
+  /**
+   * ⑬ 争议话题 (矛盾检测)
+   *
+   * v7.5: 新增三层召回 — L1 SQL + L2 embedding 语义对冲 + L3 LLM 张力分类。
+   * 通过 `enableDeepRecall=true` 触发;默认 false 保留原浅层字面匹配行为,兼容回归。
+   */
   async getContradictions(options?: {
     domain?: string;
     severity?: 'low' | 'medium' | 'high';
     limit?: number;
+    /** v7.5: 启用三层召回 (L1 + L2 + L3)。默认 false = 仅 L1 SQL 字面对冲。 */
+    enableDeepRecall?: boolean;
+    /** v7.5: 当 enableDeepRecall=true 时,是否跑 L3 LLM 分类器。默认 true。 */
+    enableL3?: boolean;
   }): Promise<Contradiction[]> {
-    // 简化版：找同一 subject+predicate 但 object 不同的事实对
     const limit = options?.limit || 20;
 
+    // v7.5: 深度召回 — 走 L1+L2+L3
+    if (options?.enableDeepRecall) {
+      const { recallTensions } = await import('./reasoning/contradictionRecall.js');
+      const tensions = await recallTensions(this.deps, {
+        domain: options?.domain,
+        limit,
+        enableL3: options?.enableL3 ?? true,
+      });
+      return tensions as Contradiction[];
+    }
+
+    // 原行为：SQL 字面对冲 (L1) 作为兼容 fallback
     const result = await this.deps.db.query(`
       SELECT
         cf1.id as fact_a_id, cf1.subject, cf1.predicate,
@@ -1395,6 +1554,7 @@ export class ContentLibraryEngine {
       description: `"${row.subject}"的"${row.predicate}"存在矛盾: "${row.object_a}" vs "${row.object_b}"`,
       severity: (row.conf_a + row.conf_b) > 1.6 ? 'high' : (row.conf_a + row.conf_b) > 1.2 ? 'medium' : 'low',
       detectedAt: new Date(),
+      recallLayer: 'L1' as const,
     }));
   }
 
@@ -2687,6 +2847,15 @@ export class ContentLibraryEngine {
       createdAt,
       updatedAt,
     }));
+  }
+}
+
+// v7.5 — 容错 JSON parse，用于读库里 JSONB 列返回字符串时兜底
+function safeJsonParse<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
   }
 }
 
