@@ -2,9 +2,11 @@
 // 原型来源：/tmp/mn-proto/library.jsx Library / FolderNode / MeetingCard / PreviewPanel
 // 三栏：左侧文件夹树 · 中间会议卡片 · 右侧详情预览
 
-import { useState, useMemo, CSSProperties } from 'react';
-import { Avatar, Chip, Dot, Icon, MonoMeta, SectionLabel } from './_atoms';
+import { useState, useMemo, useEffect, CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Avatar, Chip, Dot, Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -216,11 +218,11 @@ function MiniStat({ icon, color, v, label }: { icon: IconName; color: string; v:
   );
 }
 
-function MeetingCard({ m, active, onClick, groupName }: {
-  m: Meeting; active: boolean; onClick: () => void; groupName: string;
+function MeetingCard({ m, active, onClick, onOpen, groupName }: {
+  m: Meeting; active: boolean; onClick: () => void; onOpen: () => void; groupName: string;
 }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} onDoubleClick={onOpen} title="单击预览 · 双击打开 Editorial 视图" style={{
       textAlign: 'left', background: 'var(--paper)',
       border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
       borderRadius: 8, padding: '14px 16px', cursor: 'pointer',
@@ -281,13 +283,16 @@ function StatBox({ label, v, tone }: { label: string; v: number; tone: 'accent' 
   );
 }
 
-function PreviewPanel({ m, tree, groupBy }: { m: Meeting; tree: TreeNode[]; groupBy: GroupKey }) {
-  const quickActions: Array<{ icon: IconName; label: string }> = [
-    { icon: 'book',    label: '打开 Editorial 视图' },
-    { icon: 'layers',  label: '打开 Workbench' },
-    { icon: 'network', label: '打开 Threads' },
-    { icon: 'folder',  label: '移动到其他分组…' },
-    { icon: 'upload',  label: '导出为 PDF / Markdown' },
+function PreviewPanel({ m, tree, groupBy, onAction }: {
+  m: Meeting; tree: TreeNode[]; groupBy: GroupKey;
+  onAction: (action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export', m: Meeting) => void;
+}) {
+  const quickActions: Array<{ icon: IconName; label: string; action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export' }> = [
+    { icon: 'book',    label: '打开 Editorial 视图',     action: 'view-a' },
+    { icon: 'layers',  label: '打开 Workbench',           action: 'view-b' },
+    { icon: 'network', label: '打开 Threads',             action: 'view-c' },
+    { icon: 'folder',  label: '移动到其他分组…',         action: 'move'   },
+    { icon: 'upload',  label: '导出为 PDF / Markdown',    action: 'export' },
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -331,7 +336,7 @@ function PreviewPanel({ m, tree, groupBy }: { m: Meeting; tree: TreeNode[]; grou
         <SectionLabel>快速动作</SectionLabel>
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {quickActions.map((x, i) => (
-            <button key={i} style={{
+            <button key={i} onClick={() => onAction(x.action, m)} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
               border: '1px solid var(--line-2)', background: 'var(--paper)', borderRadius: 5,
               cursor: 'pointer', fontSize: 12.5, fontFamily: 'var(--sans)', color: 'var(--ink-2)',
@@ -350,10 +355,31 @@ function PreviewPanel({ m, tree, groupBy }: { m: Meeting; tree: TreeNode[]; grou
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export function Library() {
+  const navigate = useNavigate();
   const [groupBy, setGroupBy] = useState<GroupKey>('project');
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState('M-2026-04-11-0237');
   const [renaming, setRenaming] = useState<string | null>(null);
+
+  // API probe：成功即 un-mock；失败/empty 保留 fixture + MockBadge
+  const [apiProbe, setApiProbe] = useState<{ meetings: boolean; scopes: boolean }>({ meetings: false, scopes: false });
+  useEffect(() => {
+    let cancelled = false;
+    meetingNotesApi.listMeetings({ limit: 50 })
+      .then((r) => !cancelled && setApiProbe((p) => ({ ...p, meetings: Array.isArray(r?.items) && r.items.length > 0 })))
+      .catch(() => {});
+    Promise.allSettled([
+      meetingNotesApi.listScopes({ kind: 'project' }),
+      meetingNotesApi.listScopes({ kind: 'client' }),
+      meetingNotesApi.listScopes({ kind: 'topic' }),
+    ]).then((results) => {
+      if (cancelled) return;
+      const ok = results.some((r) => r.status === 'fulfilled' && Array.isArray(r.value?.items) && r.value.items.length > 0);
+      setApiProbe((p) => ({ ...p, scopes: ok }));
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const isMock = !apiProbe.meetings || !apiProbe.scopes;
 
   const tree = GROUP_TREES[groupBy];
 
@@ -374,6 +400,14 @@ export function Library() {
 
   const visible = MEETINGS.filter(m => matchGroup(m, activeGroup));
   const selected = MEETINGS.find(m => m.id === selectedId) ?? visible[0];
+
+  const handlePreviewAction = (action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export', m: Meeting) => {
+    if (action === 'view-a') navigate(`/meeting/${m.id}/a`);
+    else if (action === 'view-b') navigate(`/meeting/${m.id}/b`);
+    else if (action === 'view-c') navigate(`/meeting/${m.id}/c`);
+    else if (action === 'move') alert('移动到其他分组 · 后端 bindMeeting/unbindScope 待接入（Phase 10+）');
+    else if (action === 'export') alert('导出 PDF/Markdown · 待接入 getMeetingDetail 下载');
+  };
 
   const groupTabs: Array<{ id: GroupKey; label: string }> = [
     { id: 'project', label: '按项目' },
@@ -416,19 +450,24 @@ export function Library() {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isMock && <MockBadge />}
           <Chip tone="ghost">{MEETINGS.length} 条会议 · {allGroupIds.length} 个分组</Chip>
-          <button style={{
-            padding: '6px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
-            color: 'var(--ink-2)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)',
-          }}>
+          <button
+            onClick={() => alert('全文搜索 · 待接入（TODO: search API）')}
+            style={{
+              padding: '6px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
+              color: 'var(--ink-2)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)',
+            }}>
             <Icon name="search" size={12} /> 搜索
           </button>
-          <button style={{
-            padding: '6px 14px', border: '1px solid var(--ink)', background: 'var(--ink)',
-            color: 'var(--paper)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)', fontWeight: 500,
-          }}>
+          <button
+            onClick={() => navigate('/meeting/new')}
+            style={{
+              padding: '6px 14px', border: '1px solid var(--ink)', background: 'var(--ink)',
+              color: 'var(--paper)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)', fontWeight: 500,
+            }}>
             <Icon name="plus" size={12} /> 新建纪要
           </button>
         </div>
@@ -511,6 +550,7 @@ export function Library() {
               <MeetingCard key={m.id} m={m}
                 active={m.id === selectedId}
                 onClick={() => setSelectedId(m.id)}
+                onOpen={() => navigate(`/meeting/${m.id}/a`)}
                 groupName={findNode(tree, m.groups[groupBy])?.name ?? ''}
               />
             ))}
@@ -528,7 +568,7 @@ export function Library() {
 
         {/* Right: preview panel */}
         <aside style={{ borderLeft: '1px solid var(--line-2)', background: 'var(--paper)', overflow: 'auto', padding: '22px 22px' }}>
-          {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} />}
+          {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} />}
         </aside>
       </div>
     </div>
