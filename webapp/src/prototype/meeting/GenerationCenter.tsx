@@ -59,6 +59,23 @@ const MOCK_SCHEDULES = [
 
 function mapApiRun(it: Record<string, unknown>): MockRun {
   const sub = (it.subDims as string[] | undefined) ?? [];
+  // Phase 15.6 · tokens/cost 适配 · 兼容老 response (tokens: number) 与新 response (tokens: {input,output} + costUsd)
+  const tokObj = it.tokens as (number | { input?: number; output?: number } | undefined);
+  const costUsd = it.costUsd as (number | undefined);
+  let costStr: string;
+  if (costUsd != null) {
+    const sumTok = typeof tokObj === 'object' && tokObj ? (Number(tokObj.input ?? 0) + Number(tokObj.output ?? 0)) : null;
+    costStr = sumTok != null ? `${Math.round(sumTok / 1000)}k tok · $${costUsd.toFixed(2)}` : `$${costUsd.toFixed(2)}`;
+  } else if (it.cost != null) {
+    costStr = String(it.cost);
+  } else if (typeof tokObj === 'object' && tokObj) {
+    const sumTok = Number(tokObj.input ?? 0) + Number(tokObj.output ?? 0);
+    costStr = `${Math.round(sumTok / 1000)}k tok`;
+  } else if (typeof tokObj === 'number') {
+    costStr = `${Math.round(tokObj / 1000)}k tok`;
+  } else {
+    costStr = '—';
+  }
   return {
     id: String(it.id ?? ''),
     state: (it.state as MockRun['state']) ?? 'queued',
@@ -71,7 +88,7 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     eta: String(it.eta ?? (it.state === 'done' ? '已完成' : '')),
     pct: Number(it.progress ?? it.pct ?? 0),
     triggeredBy: String(it.triggeredBy ?? ''),
-    cost: String(it.cost ?? (it.tokens ? `${it.tokens} tok` : '—')),
+    cost: costStr,
     version: (it.version as string | undefined),
   };
 }

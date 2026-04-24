@@ -414,6 +414,11 @@ function FlowProcessing({
   const [realRunId, setRealRunId] = useState<string | null>(runId);
   const [realMeetingId, setRealMeetingId] = useState<string | null>(null);
   const [realProgress, setRealProgress] = useState<number | null>(null);
+  // Phase 15.6 · getRun 扩 tokens/cost/currentStep
+  const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
+  const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
+  const [realCurrentStep, setRealCurrentStep] = useState<string | null>(null);
+  const [startedAt] = useState(() => Date.now());
 
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 900);
@@ -426,10 +431,15 @@ function FlowProcessing({
     let cancelled = false;
     const poll = async () => {
       try {
-        const r: { state?: string; progress?: number; meetingId?: string; result?: { meetingId?: string } } = await meetingNotesApi.getRun(runId);
+        const r: { state?: string; progress?: number; meetingId?: string; result?: { meetingId?: string }; tokens?: number | { input?: number; output?: number }; costUsd?: number; currentStep?: string } = await meetingNotesApi.getRun(runId);
         if (cancelled) return;
         setRealRunId(runId);
         if (typeof r.progress === 'number') setRealProgress(r.progress);
+        if (typeof r.tokens === 'object' && r.tokens) {
+          setRealTokens({ input: Number(r.tokens.input ?? 0), output: Number(r.tokens.output ?? 0) });
+        }
+        if (typeof r.costUsd === 'number') setRealCostUsd(r.costUsd);
+        if (r.currentStep) setRealCurrentStep(r.currentStep);
         const mid = r.meetingId ?? r.result?.meetingId;
         if (mid) setRealMeetingId(mid);
         if (r.state === 'done' || r.state === 'completed') setDone(true);
@@ -537,15 +547,31 @@ function FlowProcessing({
             </div>
           </div>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
-            <SectionLabel>实时开销</SectionLabel>
+            <SectionLabel>实时开销{realTokens || realCostUsd != null ? '' : ' · mock'}</SectionLabel>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-              {[{ l: 'input tokens', v: '41,382' }, { l: 'output tokens', v: '8,240' }, { l: 'experts called', v: '3' }, { l: 'elapsed', v: '1m 32s' }].map(x => (
-                <div key={x.l} style={{ padding: '8px 10px', background: 'var(--paper-2)', borderRadius: 5, border: '1px solid var(--line-2)' }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{x.l}</div>
-                  <div style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 600, marginTop: 2 }}>{x.v}</div>
-                </div>
-              ))}
+              {(() => {
+                const elapsedMs = Date.now() - startedAt;
+                const elapsedStr = `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`;
+                const tiles = [
+                  { l: 'input tokens',  v: realTokens ? realTokens.input.toLocaleString() : '41,382' },
+                  { l: 'output tokens', v: realTokens ? realTokens.output.toLocaleString() : '8,240' },
+                  { l: realCostUsd != null ? 'cost (USD)' : 'experts called', v: realCostUsd != null ? `$${realCostUsd.toFixed(2)}` : '3' },
+                  { l: 'elapsed',       v: runId ? elapsedStr : '1m 32s' },
+                ];
+                return tiles.map(x => (
+                  <div key={x.l} style={{ padding: '8px 10px', background: 'var(--paper-2)', borderRadius: 5, border: '1px solid var(--line-2)' }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{x.l}</div>
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 600, marginTop: 2 }}>{x.v}</div>
+                  </div>
+                ));
+              })()}
             </div>
+            {realCurrentStep && (
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink-4)' }}>current step: </span>
+                {realCurrentStep}
+              </div>
+            )}
           </div>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
             <SectionLabel>已产出 · 2 / 7</SectionLabel>
