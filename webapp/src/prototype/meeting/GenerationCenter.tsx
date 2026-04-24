@@ -249,6 +249,42 @@ function mapApiVersion(it: Record<string, unknown>): MockVersion {
   };
 }
 
+interface DiffRow { k: string; a: string; b: string; d: string; }
+
+const MOCK_DIFF_ROWS: DiffRow[] = [
+  { k: '承诺 · 已兑现',      a: '14',             b: '11',    d: '+3' },
+  { k: '承诺 · 已违约',      a: '2',              b: '3',     d: '-1' },
+  { k: '承诺 · 风险',        a: '5',              b: '4',     d: '+1' },
+  { k: '新增 at-risk 人物',  a: 'Wei Tan (0.56)', b: '—',     d: 'new' },
+  { k: '整体置信度',         a: '0.72',           b: '0.69',  d: '+0.03' },
+];
+
+function structuredDiffToRows(r: { added: any[]; removed: any[]; changed: Array<{ path: string; before: unknown; after: unknown }> } | null): DiffRow[] | null {
+  if (!r) return null;
+  const rows: DiffRow[] = [];
+  for (const c of r.changed ?? []) {
+    const before = c.before == null ? '—' : typeof c.before === 'number' ? String(c.before) : JSON.stringify(c.before).slice(0, 40);
+    const after  = c.after  == null ? '—' : typeof c.after  === 'number' ? String(c.after)  : JSON.stringify(c.after).slice(0, 40);
+    let d: string;
+    if (typeof c.before === 'number' && typeof c.after === 'number') {
+      const delta = c.after - c.before;
+      d = delta > 0 ? `+${delta.toFixed(2)}` : `${delta.toFixed(2)}`;
+    } else {
+      d = '~';
+    }
+    rows.push({ k: c.path, a: after, b: before, d });
+  }
+  for (const it of r.added ?? []) {
+    const label = typeof it === 'string' ? it : (it?.path ?? JSON.stringify(it).slice(0, 40));
+    rows.push({ k: label, a: '(new)', b: '—', d: 'new' });
+  }
+  for (const it of r.removed ?? []) {
+    const label = typeof it === 'string' ? it : (it?.path ?? JSON.stringify(it).slice(0, 40));
+    rows.push({ k: label, a: '—', b: '(removed)', d: '-' });
+  }
+  return rows;
+}
+
 function VersionsView() {
   const [searchParams] = useSearchParams();
   const axisParam = searchParams.get('axis') ?? 'people';
@@ -256,6 +292,8 @@ function VersionsView() {
   const [versions, setVersions] = useState<MockVersion[]>(MOCK_VERSIONS);
   const [isMock, setIsMock] = useState(true);
   const [sel, setSel] = useState<string[]>(['v14', 'v13']);
+  const [diffRows, setDiffRows] = useState<DiffRow[]>(MOCK_DIFF_ROWS);
+  const [diffIsMock, setDiffIsMock] = useState(true);
 
   useEffect(() => {
     if (forceMock) { setVersions(MOCK_VERSIONS); setIsMock(true); return; }
@@ -275,11 +313,22 @@ function VersionsView() {
     return () => { cancelled = true; };
   }, [axisParam, forceMock]);
 
-  // diff 预取（后续可用来替换下方硬编码对比行；Phase 15.5 完成后端结构化输出再接入）
+  // Phase 15.5 · 结构化 diff 适配 · 先试 ?structured=1，失败或 shape 不合则回落 mock 对比表
   useEffect(() => {
-    if (forceMock) return;
+    if (forceMock) { setDiffRows(MOCK_DIFF_ROWS); setDiffIsMock(true); return; }
     if (sel.length !== 2) return;
-    meetingNotesApi.diffVersions(sel[0], sel[1]).catch(() => {});
+    let cancelled = false;
+    meetingNotesApi.diffVersionsStructured(sel[0], sel[1])
+      .then((r) => {
+        if (cancelled) return;
+        const rows = structuredDiffToRows(r);
+        if (rows && rows.length > 0) {
+          setDiffRows(rows);
+          setDiffIsMock(false);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [sel, forceMock]);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 22 }}>
@@ -326,7 +375,11 @@ function VersionsView() {
       </div>
 
       <div>
-        <SectionLabel>对比 · {sel.join('  ↔  ')}</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <SectionLabel>对比 · {sel.join('  ↔  ')}</SectionLabel>
+          {diffIsMock && <MockBadge />}
+          {diffIsMock && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>structured diff 未上线（Phase 15.5）</span>}
+        </div>
         <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, borderBottom: '1px solid var(--line-2)', background: 'var(--paper)' }}>
             {sel.map((v, i) => (
@@ -338,13 +391,7 @@ function VersionsView() {
               </div>
             ))}
           </div>
-          {[
-            { k: '承诺 · 已兑现',      a: '14',             b: '11',    d: '+3' },
-            { k: '承诺 · 已违约',      a: '2',              b: '3',     d: '-1' },
-            { k: '承诺 · 风险',        a: '5',              b: '4',     d: '+1' },
-            { k: '新增 at-risk 人物',  a: 'Wei Tan (0.56)', b: '—',     d: 'new' },
-            { k: '整体置信度',         a: '0.72',           b: '0.69',  d: '+0.03' },
-          ].map((row, i) => (
+          {diffRows.map((row, i) => (
             <div key={i} style={{
               display: 'grid', gridTemplateColumns: '220px 1fr 1fr 80px', gap: 0, alignItems: 'center',
               padding: '12px 16px', borderTop: '1px solid var(--line-2)',
