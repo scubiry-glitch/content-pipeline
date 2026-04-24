@@ -603,6 +603,95 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     // --------------------------------------------------------
+    // Schedules (Phase 15.7) — cron 配置 · GenerationCenter · ScheduleView
+    // --------------------------------------------------------
+    fastify.get('/schedules', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { scopeId?: string; scopeKind?: string; axis?: string };
+      const conds: string[] = [];
+      const args: unknown[] = [];
+      if (q.scopeKind) { args.push(q.scopeKind); conds.push(`scope_kind = $${args.length}`); }
+      if (q.scopeId && UUID_RE.test(q.scopeId)) { args.push(q.scopeId); conds.push(`scope_id = $${args.length}`); }
+      if (q.axis) { args.push(q.axis); conds.push(`axis = $${args.length}`); }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      const r = await engine.deps.db.query(
+        `SELECT id, name, cron, on_state AS on, scope_kind AS "scopeKind", scope_id AS "scopeId",
+                axis, preset, next_run_at AS next, last_run_at AS "lastRunAt", last_run_id AS "lastRunId",
+                created_at AS "createdAt", updated_at AS "updatedAt"
+           FROM mn_schedules ${where}
+          ORDER BY created_at DESC`,
+        args,
+      );
+      return { items: r.rows };
+    });
+
+    fastify.post('/schedules', { preHandler: authenticate }, async (request, reply) => {
+      const body = request.body as {
+        name?: string; cron?: string; scopeKind?: string; scopeId?: string;
+        axis?: string; preset?: string; on?: boolean;
+      };
+      if (!body?.name || !body.name.trim()) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'name is required' };
+      }
+      const scopeId = body.scopeId && UUID_RE.test(body.scopeId) ? body.scopeId : null;
+      const r = await engine.deps.db.query(
+        `INSERT INTO mn_schedules (name, cron, on_state, scope_kind, scope_id, axis, preset)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          body.name.trim(),
+          body.cron ?? null,
+          body.on !== false,
+          body.scopeKind ?? null,
+          scopeId,
+          body.axis ?? null,
+          body.preset ?? 'standard',
+        ],
+      );
+      return { id: r.rows[0].id, ok: true };
+    });
+
+    fastify.put('/schedules/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const body = request.body as Record<string, unknown>;
+      const cols: string[] = [];
+      const args: unknown[] = [];
+      const allowed: Record<string, string> = {
+        name: 'name', cron: 'cron', on: 'on_state', scopeKind: 'scope_kind',
+        scopeId: 'scope_id', axis: 'axis', preset: 'preset',
+      };
+      for (const [k, dbCol] of Object.entries(allowed)) {
+        if (k in body) {
+          let v = body[k];
+          if (k === 'scopeId' && typeof v === 'string' && !UUID_RE.test(v)) v = null;
+          args.push(v);
+          cols.push(`${dbCol} = $${args.length}`);
+        }
+      }
+      if (cols.length === 0) return { ok: true };
+      cols.push('updated_at = NOW()');
+      args.push(id);
+      const r = await engine.deps.db.query(
+        `UPDATE mn_schedules SET ${cols.join(', ')} WHERE id = $${args.length} RETURNING id`,
+        args,
+      );
+      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
+    });
+
+    fastify.delete('/schedules/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const r = await engine.deps.db.query(
+        `DELETE FROM mn_schedules WHERE id = $1`,
+        [id],
+      );
+      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
+    });
+
+    // --------------------------------------------------------
     // Runs (PR4)
     // --------------------------------------------------------
     fastify.post('/runs', { preHandler: authenticate }, async (request, reply) => {
