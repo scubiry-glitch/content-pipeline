@@ -63,6 +63,22 @@ import { AxisKnowledge } from './pages/meeting-notes/AxisKnowledge';
 import { AxisMeta } from './pages/meeting-notes/AxisMeta';
 import { GenerationCenter } from './pages/meeting-notes/GenerationCenter';
 import { NewMeeting } from './pages/meeting-notes/NewMeeting';
+import { MeetingShell } from './prototype/meeting/MeetingShell';
+import { MeetingDetailShell } from './prototype/meeting/MeetingDetailShell';
+import { MeetingToday } from './prototype/meeting/MeetingToday';
+import { Library as MeetingLibraryProto } from './prototype/meeting/Library';
+import { NewMeeting as NewMeetingProto } from './prototype/meeting/NewMeeting';
+import { LongitudinalView } from './prototype/meeting/LongitudinalView';
+import { ScopeExpertConfig } from './prototype/meeting/ScopeExpertConfig';
+import { StrategiesPanel } from './prototype/meeting/StrategiesPanel';
+import { GenerationCenter as GenerationCenterProto } from './prototype/meeting/GenerationCenter';
+import { AxisPeople as AxisPeopleProto } from './prototype/meeting/AxisPeople';
+import { AxisProjects as AxisProjectsProto } from './prototype/meeting/AxisProjects';
+import { AxisKnowledge as AxisKnowledgeProto } from './prototype/meeting/AxisKnowledge';
+import { AxisMeta as AxisMetaProto } from './prototype/meeting/AxisMeta';
+import { VariantEditorial } from './prototype/meeting/VariantEditorial';
+import { VariantWorkbench } from './prototype/meeting/VariantWorkbench';
+import { VariantThreads } from './prototype/meeting/VariantThreads';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -172,12 +188,14 @@ function App() {
                 <Route path="new" element={<NewMeeting />} />
                 <Route path="library" element={<MeetingLibrary />} />
                 <Route path="generation-center" element={<GenerationCenter />} />
+                <Route path="scopes" element={<ScopeExpertConfig />} />
                 <Route path="axes/people" element={<AxisPeople />} />
                 <Route path="axes/projects" element={<AxisProjects />} />
                 <Route path="axes/knowledge" element={<AxisKnowledge />} />
                 <Route path="axes/meta" element={<AxisMeta />} />
                 <Route path=":id" element={<MeetingDetail />} />
               </Route>
+
 
               <Route path="sentiment" element={<SentimentAnalysisPage />} />
               <Route path="compliance" element={<Compliance />} />
@@ -208,6 +226,29 @@ function App() {
                 <Route path="portal" element={<LGPortalTab />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+
+            {/* 会议纪要 v2 原型 — /meeting/* 独立于主站 Layout，全屏原型壳 */}
+            <Route path="/meeting" element={<MeetingShell />}>
+              <Route index element={<Navigate to="today" replace />} />
+              <Route path="today" element={<MeetingToday />} />
+              <Route path="new" element={<NewMeetingProto />} />
+              <Route path="library" element={<MeetingLibraryProto />} />
+              <Route path="generation-center" element={<GenerationCenterProto />} />
+              <Route path="longitudinal" element={<LongitudinalView />} />
+              <Route path="scopes" element={<ScopeExpertConfig />} />
+              <Route path="strategies" element={<StrategiesPanel />} />
+              <Route path="axes/people" element={<AxisPeopleProto />} />
+              <Route path="axes/projects" element={<AxisProjectsProto />} />
+              <Route path="axes/knowledge" element={<AxisKnowledgeProto />} />
+              <Route path="axes/meta" element={<AxisMetaProto />} />
+            </Route>
+            {/* 会议详情 A/B/C —— 独立 shell，顶栏 + tab，不显示主导航侧栏 */}
+            <Route path="/meeting/:id" element={<MeetingDetailShell />}>
+              <Route index element={<Navigate to="a" replace />} />
+              <Route path="a" element={<VariantEditorial />} />
+              <Route path="b" element={<VariantWorkbench />} />
+              <Route path="c" element={<VariantThreads />} />
             </Route>
           </Routes>
         </BrowserRouter>
