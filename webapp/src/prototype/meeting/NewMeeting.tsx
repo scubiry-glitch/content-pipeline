@@ -1,9 +1,11 @@
 // NewMeeting — 新建会议纪要向导（3 步）
 // 原型来源：/tmp/mn-proto/strategy-panel.jsx FlowUpload / FlowExperts / FlowProcessing
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { EXPERTS } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Local presets (richer than _fixtures.ts) ─────────────────────────────────
 
@@ -48,8 +50,14 @@ function StepBar({ step }: { step: number }) {
 
 // ── Step 1: FlowUpload ────────────────────────────────────────────────────────
 
-function FlowUpload({ onNext }: { onNext: () => void }) {
+function FlowUpload({ onNext, onUploaded }: {
+  onNext: () => void;
+  onUploaded: (assetId: string | null) => void;
+}) {
   const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
+  const [uploading, setUploading] = useState(false);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
     color: 'var(--paper)', borderRadius: 5, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--sans)',
@@ -58,6 +66,24 @@ function FlowUpload({ onNext }: { onNext: () => void }) {
     padding: '9px 18px', border: '1px solid var(--line)', background: 'var(--paper)',
     color: 'var(--ink-2)', borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--sans)',
   };
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    setUploadedName(file.name);
+    setUploading(true);
+    try {
+      const sources = await meetingNotesApi.listSources();
+      const sourceId = sources.items?.[0]?.id ?? 'meetings';
+      const r: { assetId?: string; id?: string } = await meetingNotesApi.uploadToSource(sourceId, file);
+      onUploaded(r.assetId ?? r.id ?? null);
+    } catch (e) {
+      console.warn('upload failed, demo fallback:', e);
+      onUploaded(null);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <div style={{
@@ -88,11 +114,22 @@ function FlowUpload({ onNext }: { onNext: () => void }) {
       </div>
 
       {mode === 'files' && (
-        <div style={{
-          flex: 1, border: '1.5px dashed var(--line)', borderRadius: 8, background: 'var(--paper)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14,
-          position: 'relative', overflow: 'hidden',
-        }}>
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+          style={{
+            flex: 1, border: '1.5px dashed var(--line)', borderRadius: 8, background: 'var(--paper)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14,
+            position: 'relative', overflow: 'hidden', cursor: 'pointer',
+          }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={(e) => handleFiles(e.target.files)}
+            style={{ display: 'none' }}
+            accept=".m4a,.mp3,.wav,.docx,.md,.txt,.pdf,.vtt,.srt"
+          />
           <div style={{
             width: 64, height: 64, borderRadius: 14, background: 'var(--paper-2)',
             border: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -101,7 +138,7 @@ function FlowUpload({ onNext }: { onNext: () => void }) {
             <Icon name="upload" size={26} />
           </div>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 500 }}>
-            拖拽文件到此处 · 或点击上传
+            {uploading ? '上传中…' : uploadedName ? `已上传：${uploadedName}` : '拖拽文件到此处 · 或点击上传'}
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
             支持 m4a / mp3 / wav · docx / md / txt · pdf · vtt / srt
@@ -193,7 +230,11 @@ function FlowUpload({ onNext }: { onNext: () => void }) {
 
 // ── Step 2: FlowExperts ───────────────────────────────────────────────────────
 
-function FlowExperts({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+function FlowExperts({ onNext, onBack, onSubmit }: {
+  onNext: () => void;
+  onBack: () => void;
+  onSubmit: (body: { presetId: string; expertIds: string[] }) => void;
+}) {
   const [selectedIds, setSelectedIds] = useState<string[]>(EXPERTS.filter(e => e.selected).map(e => e.id));
   const [presetId, setPresetId] = useState('standard');
   const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -322,7 +363,10 @@ function FlowExperts({ onNext, onBack }: { onNext: () => void; onBack: () => voi
               padding: '9px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
               color: 'var(--ink-2)', borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--sans)',
             }}>← 返回</button>
-            <button style={{ ...btnPrimary, flex: 1 }} onClick={onNext}>生成会议纪要 →</button>
+            <button style={{ ...btnPrimary, flex: 1 }} onClick={() => {
+              onSubmit({ presetId, expertIds: selectedIds });
+              onNext();
+            }}>生成会议纪要 →</button>
           </div>
         </aside>
       </div>
@@ -350,10 +394,46 @@ function StepDot({ state, tick }: { state: string; tick: number }) {
   return <div style={{ width: 14, height: 14, borderRadius: 99, border: '1.5px solid var(--line)', marginLeft: 2 }} />;
 }
 
-function FlowProcessing({ onBack }: { onBack: () => void }) {
+function FlowProcessing({
+  onBack, runId, onViewRun, onGoMultiView,
+}: {
+  onBack: () => void;
+  runId: string | null;
+  onViewRun: (runId: string) => void;
+  onGoMultiView: (meetingId: string) => void;
+}) {
   const [tick, setTick] = useState(0);
   const [done, setDone] = useState(false);
-  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 900); return () => clearInterval(t); }, []);
+  const [realRunId, setRealRunId] = useState<string | null>(runId);
+  const [realMeetingId, setRealMeetingId] = useState<string | null>(null);
+  const [realProgress, setRealProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 900);
+    return () => clearInterval(t);
+  }, []);
+
+  // 真实 getRun 轮询（runId 非空时）
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r: { state?: string; progress?: number; meetingId?: string; result?: { meetingId?: string } } = await meetingNotesApi.getRun(runId);
+        if (cancelled) return;
+        setRealRunId(runId);
+        if (typeof r.progress === 'number') setRealProgress(r.progress);
+        const mid = r.meetingId ?? r.result?.meetingId;
+        if (mid) setRealMeetingId(mid);
+        if (r.state === 'done' || r.state === 'completed') setDone(true);
+        else setTimeout(poll, 2000);
+      } catch (e) {
+        console.warn('getRun failed, falling back to demo timing:', e);
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [runId]);
 
   const steps = [
     { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              pct: 100,       state: 'done',    sub: '' },
@@ -510,8 +590,8 @@ function FlowProcessing({ onBack }: { onBack: () => void }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button style={btnGhost}>查看本次 run</button>
-              <button style={btnPrimary}>进入多维视图 →</button>
+              <button style={btnGhost} onClick={() => onViewRun(realRunId ?? 'run-237')}>查看本次 run</button>
+              <button style={btnPrimary} onClick={() => onGoMultiView(realMeetingId ?? 'M-2026-04-11-0237')}>进入多维视图 →</button>
             </div>
           </>
         ) : (
@@ -533,12 +613,42 @@ function FlowProcessing({ onBack }: { onBack: () => void }) {
 // ── Main export ──────────────────────────────────────────────────────────────
 
 export function NewMeeting() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [assetId, setAssetId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+
+  async function handleSubmit(body: { presetId: string; expertIds: string[] }) {
+    if (!assetId) {
+      // No real upload — skip enqueueRun, stay in demo mode
+      return;
+    }
+    try {
+      const scope = { kind: 'MEETING', assetId };
+      const r: { runId?: string; ok?: boolean } = await meetingNotesApi.enqueueRun({
+        scope,
+        axis: 'multi',
+        preset: body.presetId,
+        triggeredBy: 'new-meeting-wizard',
+      });
+      if (r.runId) setRunId(r.runId);
+    } catch (e) {
+      console.warn('enqueueRun failed, demo fallback:', e);
+    }
+  }
+
   return (
     <div style={{ width: '100%', height: '100%' }}>
-      {step === 1 && <FlowUpload onNext={() => setStep(2)} />}
-      {step === 2 && <FlowExperts onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-      {step === 3 && <FlowProcessing onBack={() => setStep(2)} />}
+      {step === 1 && <FlowUpload onNext={() => setStep(2)} onUploaded={setAssetId} />}
+      {step === 2 && <FlowExperts onNext={() => setStep(3)} onBack={() => setStep(1)} onSubmit={handleSubmit} />}
+      {step === 3 && (
+        <FlowProcessing
+          onBack={() => setStep(2)}
+          runId={runId}
+          onViewRun={(rid) => navigate(`/meeting/generation-center?run=${rid}`)}
+          onGoMultiView={(mid) => navigate(`/meeting/${mid}/a`)}
+        />
+      )}
     </div>
   );
 }
