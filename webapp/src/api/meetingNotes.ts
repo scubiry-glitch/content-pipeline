@@ -126,6 +126,14 @@ export const meetingNotesApi = {
       `/versions/${a}/diff?vs=${b}&structured=1`,
     ),
 
+  // Phase 15.9 · AxisPeople Commitments
+  listScopeCommitments: (scopeId: string, q: { personId?: string; state?: string } = {}) => {
+    const qs = new URLSearchParams(q as any).toString();
+    return jget<{ items: Array<{ id: string; meeting_id: string; person_id: string; person_name?: string; text: string; due_at?: string; state: string; progress: number; created_at: string }> }>(
+      `/scopes/${scopeId}/commitments${qs ? '?' + qs : ''}`,
+    );
+  },
+
   // Phase 15.8 · AxisProjects 数据源（全新路由族 · 无破坏性）
   listScopeDecisions: (scopeId: string) =>
     jget<{ items: Array<{ id: string; meeting_id: string; title: string; proposer_person_id?: string; proposer_name?: string; based_on_ids: string[]; superseded_by_id?: string; confidence: number; is_current: boolean; rationale?: string; created_at: string }> }>(

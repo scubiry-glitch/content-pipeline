@@ -10,6 +10,7 @@ import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -115,19 +116,69 @@ function SilenceFinding({ p, topic, note }: { p: ReturnType<typeof P>; topic: st
 
 // ── P1 · 承诺与兑现 ─────────────────────────────────────────────────────────
 
-function PCommitments() {
-  const byPerson = PARTICIPANTS.map(p => ({
-    p,
-    stats: PEOPLE_STATS.find(x => x.who === p.id),
-    items: COMMITMENTS.filter(c => c.who === p.id),
-  })).filter(x => x.items.length > 0);
+type CommitmentRow = typeof COMMITMENTS[number];
+
+function PCommitments({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [items, setItems] = useState<CommitmentRow[]>(COMMITMENTS);
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeCommitments(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const list = r?.items ?? [];
+        if (list.length === 0) return;
+        const stateMap: Record<string, CommitmentRow['state']> = {
+          'on_track': 'on-track',
+          'at_risk': 'at-risk',
+          'done': 'done',
+          'slipped': 'slipped',
+        };
+        const names: Record<string, string> = {};
+        const mapped: CommitmentRow[] = list.map((c) => {
+          if (c.person_id && c.person_name) names[c.person_id] = c.person_name;
+          return {
+            id: 'K-' + c.id.slice(0, 6).toUpperCase(),
+            who: c.person_id,
+            meeting: c.meeting_id.slice(0, 12),
+            what: c.text,
+            due: c.due_at ? c.due_at.slice(0, 10) : '—',
+            state: stateMap[c.state] ?? 'on-track',
+            progress: Math.min(1, Number(c.progress ?? 0) / 100),
+          };
+        });
+        setItems(mapped);
+        setPersonNames(names);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
+  const byPerson = isMock
+    ? PARTICIPANTS.map(p => ({
+        p,
+        stats: PEOPLE_STATS.find(x => x.who === p.id),
+        items: items.filter(c => c.who === p.id),
+      })).filter(x => x.items.length > 0)
+    : Array.from(new Set(items.map(i => i.who))).map(pid => ({
+        p: { id: pid, name: personNames[pid] ?? pid.slice(0, 8), role: '', initials: (personNames[pid] ?? '?').slice(0, 2), tone: 'neutral' as const, speakingPct: 0 },
+        stats: undefined as typeof PEOPLE_STATS[number] | undefined,
+        items: items.filter(c => c.who === pid),
+      })).filter(x => x.items.length > 0);
 
   return (
     <div style={{ padding: '24px 32px 36px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
       <div>
-        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-          承诺 ledger · 跨会议
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+            承诺 ledger · 跨会议
+          </h3>
+          {isMock && <MockBadge />}
+        </div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 600 }}>
           每一条行动项都被抽出为可追踪的承诺。谁说的话能当 signal、谁的话需要 discount，这张表会告诉你。
         </div>
@@ -494,6 +545,8 @@ export function AxisPeople() {
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const forceMock = useForceMock();
+  const scope = useMeetingScope();
+  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }
@@ -512,7 +565,7 @@ export function AxisPeople() {
   return (
     <>
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
-        {tab === 'commitments' && <PCommitments />}
+        {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
         {tab === 'trajectory'  && <PTrajectory />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
         {tab === 'silence'     && <PSilence />}

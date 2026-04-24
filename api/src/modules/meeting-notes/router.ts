@@ -290,6 +290,29 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // Phase 15.9 · AxisPeople · Commitments (mn_commitments)
+    fastify.get('/scopes/:id/commitments', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const q = request.query as { personId?: string; state?: string };
+      const conds: string[] = [
+        `c.meeting_id IN (SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1)`,
+      ];
+      const args: unknown[] = [id];
+      if (q.personId) { conds.push(`c.person_id = $${args.length + 1}`); args.push(q.personId); }
+      if (q.state)    { conds.push(`c.state = $${args.length + 1}`);     args.push(q.state); }
+      const r = await engine.deps.db.query(
+        `SELECT c.id, c.meeting_id, c.person_id, c.text, c.due_at,
+                c.state, c.progress, c.evidence_refs, c.created_at, c.updated_at,
+                p.canonical_name AS person_name
+           FROM mn_commitments c
+           LEFT JOIN mn_people p ON p.id = c.person_id
+          WHERE ${conds.join(' AND ')}
+          ORDER BY c.created_at DESC`,
+        args,
+      );
+      return { items: r.rows };
+    });
+
     // Provenance chain · 从一个 decision 往回追 N 层 based_on_ids
     fastify.get('/scopes/:id/provenance', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
