@@ -9,6 +9,7 @@ import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -462,14 +463,16 @@ export function AxisPeople() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
+    if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled && r && (r.axes?.people || r.people)) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [meetingId]);
+  }, [meetingId, forceMock]);
   const tabs = [
     { id: 'commitments', label: '承诺与兑现', sub: '说到做到率 · 跨会议承诺 ledger', icon: 'check' as const },
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },

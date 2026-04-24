@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { EXPERTS } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Local presets (richer than _fixtures.ts) ─────────────────────────────────
 
@@ -54,6 +55,7 @@ function FlowUpload({ onNext, onUploaded }: {
   onNext: () => void;
   onUploaded: (assetId: string | null) => void;
 }) {
+  const forceMock = useForceMock();
   const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
   const [uploading, setUploading] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
@@ -71,6 +73,11 @@ function FlowUpload({ onNext, onUploaded }: {
     if (!files || files.length === 0) return;
     const file = files[0];
     setUploadedName(file.name);
+    if (forceMock) {
+      // Mock 模式：不调用 API，伪装上传成功
+      onUploaded(null);
+      return;
+    }
     setUploading(true);
     try {
       const sources = await meetingNotesApi.listSources();
@@ -614,11 +621,13 @@ function FlowProcessing({
 
 export function NewMeeting() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [assetId, setAssetId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
 
   async function handleSubmit(body: { presetId: string; expertIds: string[] }) {
+    if (forceMock) return;
     if (!assetId) {
       // No real upload — skip enqueueRun, stay in demo mode
       return;

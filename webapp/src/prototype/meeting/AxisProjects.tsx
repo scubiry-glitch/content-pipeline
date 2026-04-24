@@ -9,6 +9,7 @@ import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -484,14 +485,16 @@ export function AxisProjects() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
+    if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled && r && (r.axes?.projects || r.projects)) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [meetingId]);
+  }, [meetingId, forceMock]);
   const tabs = [
     { id: 'provenance',  label: '决策溯源链', sub: '如何一步步走到这里',         icon: 'git' as const },
     { id: 'assumptions', label: '假设清单',   sub: '每个决策背后的未验证假设',   icon: 'layers' as const },

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Dot, MonoMeta, MockBadge } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data (fallback) ─────────────────────────────────────
 
@@ -65,10 +66,12 @@ function runToItem(run: ApiRun, meetings: ApiMeeting[]): TodayItem | null {
 
 export function MeetingToday() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [items, setItems] = useState<TodayItem[]>(MOCK_ITEMS);
   const [isMock, setIsMock] = useState(true);
 
   useEffect(() => {
+    if (forceMock) { setItems(MOCK_ITEMS); setIsMock(true); return; }
     let cancelled = false;
     Promise.allSettled([
       meetingNotesApi.listRuns({ limit: 10, state: 'done' }),
@@ -85,7 +88,7 @@ export function MeetingToday() {
       }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [forceMock]);
 
   return (
     <div style={{ padding: '40px 48px 60px', maxWidth: 1100 }}>

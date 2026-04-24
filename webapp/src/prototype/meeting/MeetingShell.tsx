@@ -7,6 +7,7 @@ import { Icon, MonoMeta, Chip } from './_atoms';
 import type { IconName } from './_atoms';
 import { SCOPES } from './_fixtures';
 import { MeetingScopeProvider } from './_scopeContext';
+import { MockToggleProvider, MockToggleBar } from './_mockToggle';
 import './_tokens.css';
 
 interface NavItem {
@@ -42,6 +43,7 @@ export function MeetingShell() {
   const onDetailPage = /^\/meeting\/[^/]+\/(a|b|c)/.test(location.pathname);
 
   return (
+    <MockToggleProvider>
     <MeetingScopeProvider>
     <div className="meeting-proto" style={{ display: 'flex', minHeight: '100vh' }}>
       <aside style={{
@@ -173,8 +175,10 @@ export function MeetingShell() {
           <Outlet />
         </div>
       </main>
+      <MockToggleBar />
     </div>
     </MeetingScopeProvider>
+    </MockToggleProvider>
   );
 }
 

@@ -9,6 +9,7 @@ import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -365,14 +366,16 @@ export function AxisKnowledge() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
+    if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled && r && (r.axes?.knowledge || r.knowledge)) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [meetingId]);
+  }, [meetingId, forceMock]);
   const tabs = [
     { id: 'judgments',       label: '可复用判断',    sub: '从具体案例提炼的通用结论',  icon: 'book' as const },
     { id: 'mental_models',   label: '心智模型激活',  sub: '谁用了什么模型，用得对吗',  icon: 'compass' as const },

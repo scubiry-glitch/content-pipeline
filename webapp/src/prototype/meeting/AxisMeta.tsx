@@ -9,6 +9,7 @@ import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -216,14 +217,16 @@ export function AxisMeta() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
+    if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled && r && (r.axes?.meta || r.meta)) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [meetingId]);
+  }, [meetingId, forceMock]);
   const tabs = [
     { id: 'quality',   label: '决策质量',   sub: '5 维打分 · 可证伪度最低',  icon: 'scale' as const },
     { id: 'necessity', label: '会议必要性', sub: '本场可缩减 58 分钟',        icon: 'clock' as const },

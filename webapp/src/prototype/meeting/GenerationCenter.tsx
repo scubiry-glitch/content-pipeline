@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -77,10 +78,12 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
 
 function QueueView() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [runs, setRuns] = useState<MockRun[]>(MOCK_RUNS);
   const [isMock, setIsMock] = useState(true);
 
   const refetch = () => {
+    if (forceMock) { setRuns(MOCK_RUNS); setIsMock(true); return; }
     meetingNotesApi.listRuns({ limit: 50 })
       .then((r) => {
         const items = r?.items ?? [];
@@ -93,9 +96,11 @@ function QueueView() {
   };
   useEffect(() => {
     refetch();
+    if (forceMock) return;
     const t = setInterval(refetch, 5000);
     return () => clearInterval(t);
-  }, []);
+
+  }, [forceMock]);
 
   const counts = {
     running: runs.filter((r) => r.state === 'running').length,
@@ -230,11 +235,13 @@ function mapApiVersion(it: Record<string, unknown>): MockVersion {
 function VersionsView() {
   const [searchParams] = useSearchParams();
   const axisParam = searchParams.get('axis') ?? 'people';
+  const forceMock = useForceMock();
   const [versions, setVersions] = useState<MockVersion[]>(MOCK_VERSIONS);
   const [isMock, setIsMock] = useState(true);
   const [sel, setSel] = useState<string[]>(['v14', 'v13']);
 
   useEffect(() => {
+    if (forceMock) { setVersions(MOCK_VERSIONS); setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.listVersions('library', axisParam)
       .then((r) => {
@@ -249,13 +256,14 @@ function VersionsView() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [axisParam]);
+  }, [axisParam, forceMock]);
 
   // diff 预取（后续可用来替换下方硬编码对比行；Phase 15.5 完成后端结构化输出再接入）
   useEffect(() => {
+    if (forceMock) return;
     if (sel.length !== 2) return;
     meetingNotesApi.diffVersions(sel[0], sel[1]).catch(() => {});
-  }, [sel]);
+  }, [sel, forceMock]);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 22 }}>
       <div>

@@ -4,6 +4,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 export type ScopeKind = 'LIBRARY' | 'PROJECT' | 'CLIENT' | 'TOPIC';
 
@@ -63,8 +64,11 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
     topic:   DEFAULT_KINDS[3].instances[0].id,
   });
 
-  // 用 listScopes({kind}) 增量替换 fixture。失败就保留 DEFAULT_KINDS（降级）。
+  const forceMock = useForceMock();
+
+  // 用 listScopes({kind}) 增量替换 fixture。失败或 forceMock 就保留 DEFAULT_KINDS。
   useEffect(() => {
+    if (forceMock) { setKinds(DEFAULT_KINDS); return; }
     let cancelled = false;
     setLoading(true);
     Promise.allSettled([
@@ -89,7 +93,7 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [forceMock]);
 
   const setInstance = useCallback((targetKind: string, targetInst: string) => {
     setInstanceIds((prev) => ({ ...prev, [targetKind]: targetInst }));

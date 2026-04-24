@@ -1,11 +1,15 @@
 // LongitudinalView — 纵向视图 · 跨会议
 // 原型来源：/tmp/mn-proto/longitudinal.jsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
+import { useMeetingScope } from './_scopeContext';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -44,6 +48,7 @@ const MODEL_HITRATE = [
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function BeliefDrift() {
+  const navigate = useNavigate();
   const d = BELIEF_DRIFT;
   const p = P(d.who);
   const W = 820, H = 260, PAD = 60;
@@ -90,10 +95,12 @@ function BeliefDrift() {
             fill="none" stroke="var(--accent)" strokeWidth="2"
           />
           {d.points.map((pt, i) => (
-            <g key={i}>
+            <g key={i} onClick={() => navigate(`/meeting/${pt.meeting}/a`)} style={{ cursor: 'pointer' }}>
               <circle cx={xFor(i)} cy={yFor(vals[i])} r={i === d.points.length - 1 ? 7 : 5}
                 fill={i === d.points.length - 1 ? 'var(--accent)' : 'var(--paper)'}
-                stroke="var(--accent)" strokeWidth={2} />
+                stroke="var(--accent)" strokeWidth={2}>
+                <title>点击查看 {pt.meeting}</title>
+              </circle>
               <text x={xFor(i)} y={yFor(vals[i]) - 16} textAnchor="middle" fontFamily="var(--serif)" fontSize="12" fontWeight="600" fill="var(--ink)">
                 {pt.value}
               </text>
@@ -250,6 +257,19 @@ function ModelHitrate() {
 export function LongitudinalView() {
   const [tab, setTab] = useState('drift');
   const [regenOpen, setRegenOpen] = useState(false);
+  const scope = useMeetingScope();
+  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
+  const forceMock = useForceMock();
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setIsMock(true); return; }
+    let cancelled = false;
+    const kind = tab === 'drift' ? 'belief_drift' : tab === 'tree' ? 'decision_tree' : 'model_hit_rate';
+    meetingNotesApi.getLongitudinal(scopeId, kind)
+      .then((r) => { if (!cancelled && r && Object.keys(r).length > 0) setIsMock(false); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, tab, forceMock]);
   const tabs = [
     { id: 'drift',   label: '信念漂移',       sub: '同一人在同一议题上随时间的判断变化', icon: 'arrow' as const },
     { id: 'tree',    label: '决策树',         sub: '项目的所有分岔点与未来待决',          icon: 'git' as const },
@@ -257,7 +277,7 @@ export function LongitudinalView() {
   ];
   return (
     <>
-      <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+      <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'drift'   && <BeliefDrift />}
         {tab === 'tree'    && <DecisionTree />}
         {tab === 'hitrate' && <ModelHitrate />}

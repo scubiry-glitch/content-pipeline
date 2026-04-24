@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Avatar, Chip, Dot, Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -362,8 +363,10 @@ export function Library() {
   const [renaming, setRenaming] = useState<string | null>(null);
 
   // API probe：成功即 un-mock；失败/empty 保留 fixture + MockBadge
+  const forceMock = useForceMock();
   const [apiProbe, setApiProbe] = useState<{ meetings: boolean; scopes: boolean }>({ meetings: false, scopes: false });
   useEffect(() => {
+    if (forceMock) { setApiProbe({ meetings: false, scopes: false }); return; }
     let cancelled = false;
     meetingNotesApi.listMeetings({ limit: 50 })
       .then((r) => !cancelled && setApiProbe((p) => ({ ...p, meetings: Array.isArray(r?.items) && r.items.length > 0 })))
@@ -378,8 +381,8 @@ export function Library() {
       setApiProbe((p) => ({ ...p, scopes: ok }));
     });
     return () => { cancelled = true; };
-  }, []);
-  const isMock = !apiProbe.meetings || !apiProbe.scopes;
+  }, [forceMock]);
+  const isMock = forceMock || !apiProbe.meetings || !apiProbe.scopes;
 
   const tree = GROUP_TREES[groupBy];
 
