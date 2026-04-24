@@ -663,9 +663,17 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const { id } = request.params as { id: string };
       const q = request.query as { vs?: string };
       if (!q.vs) { reply.status(400); return { error: 'Bad Request', message: 'vs query param required' }; }
-      const d = await engine.diffVersions(id, q.vs);
-      if (!d) { reply.status(404); return { error: 'Not Found' }; }
-      return d;
+      try {
+        const d = await engine.diffVersions(id, q.vs);
+        if (!d) { reply.status(404); return { error: 'Not Found' }; }
+        return d;
+      } catch (e) {
+        // 引擎抛错（版本不存在/解析失败）通常意味着请求的版本 id 不在库 ·
+        // 转 404 让前端走 fallback，避免 500 满屏
+        request.log.warn({ id, vs: q.vs, err: e }, 'diffVersions failed → 404');
+        reply.status(404);
+        return { error: 'Not Found', message: e instanceof Error ? e.message : 'diff failed' };
+      }
     });
 
     // --------------------------------------------------------
