@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, Chip, MonoMeta } from './_atoms';
+import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P } from './_fixtures';
@@ -47,14 +47,51 @@ const MODEL_HITRATE = [
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function BeliefDrift() {
+interface DriftPoint { meeting: string; date: string; value: string; confidence: number; note: string; }
+interface DriftData { who: string; topic: string; points: DriftPoint[]; band?: { min: number; max: number }; confidenceTrace?: number[]; }
+
+function adaptBeliefDrift(r: unknown): DriftData | null {
+  if (!r || typeof r !== 'object') return null;
+  const obj = r as Record<string, unknown>;
+  const points = obj.points as unknown[] | undefined;
+  if (!Array.isArray(points) || points.length === 0) return null;
+  const who = String(obj.who ?? obj.personId ?? 'p1');
+  const topic = String(obj.topic ?? '—');
+  const mapped: DriftPoint[] = points.map((x: any) => ({
+    meeting: String(x.meeting ?? x.meetingId ?? ''),
+    date: String(x.date ?? ''),
+    value: String(x.value ?? ''),
+    confidence: Number(x.confidence ?? 0.5),
+    note: String(x.note ?? ''),
+  }));
+  const band = obj.band as { min?: number; max?: number } | undefined;
+  const confidenceTrace = obj.confidence_trace as number[] | undefined;
+  return { who, topic, points: mapped, band: band ? { min: Number(band.min ?? 30), max: Number(band.max ?? 90) } : undefined, confidenceTrace };
+}
+
+function BeliefDrift({ scopeId }: { scopeId: string }) {
   const navigate = useNavigate();
-  const d = BELIEF_DRIFT;
+  const forceMock = useForceMock();
+  const [d, setD] = useState<DriftData>(BELIEF_DRIFT);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setD(BELIEF_DRIFT); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getLongitudinal(scopeId, 'belief_drift')
+      .then((r) => {
+        if (cancelled) return;
+        const adapted = adaptBeliefDrift(r);
+        if (adapted) { setD(adapted); setIsMock(false); }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   const p = P(d.who);
   const W = 820, H = 260, PAD = 60;
   const vals = d.points.map(pt => parseFloat(pt.value.replace(/[^0-9.]/g, '')));
-  const vMin = 30, vMax = 90;
-  const xFor = (i: number) => PAD + (i / (d.points.length - 1)) * (W - PAD * 2);
+  const vMin = d.band?.min ?? 30, vMax = d.band?.max ?? 90;
+  const xFor = (i: number) => PAD + (i / Math.max(1, d.points.length - 1)) * (W - PAD * 2);
   const yFor = (v: number) => H - PAD - ((v - vMin) / (vMax - vMin)) * (H - PAD * 1.5);
 
   return (
@@ -65,6 +102,7 @@ function BeliefDrift() {
           {p.name} · 信念漂移
         </h3>
         <Chip tone="ghost">议题: {d.topic}</Chip>
+        {isMock && <MockBadge />}
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 700 }}>
         5 场会议跨 5 个月 · 观察<b>真实的心理价格区间</b>，而非某一次的表态。
@@ -129,8 +167,50 @@ function BeliefDrift() {
   );
 }
 
-function DecisionTree() {
-  const allNodes = [DECISION_TREE_DATA.root, ...DECISION_TREE_DATA.nodes];
+interface TreeNode { id: string; parent?: string; branch?: string; label?: string; decided?: string; meeting?: string; date?: string; current?: boolean; pending?: boolean; }
+interface TreeData { root: TreeNode; nodes: TreeNode[]; }
+
+function adaptDecisionTree(r: unknown): TreeData | null {
+  if (!r || typeof r !== 'object') return null;
+  const obj = r as Record<string, unknown>;
+  // New shape: { nodes: [...], edges: [...], current?, pending?: [...] }
+  if (Array.isArray(obj.nodes) && obj.nodes.length > 0) {
+    const nodes = obj.nodes as TreeNode[];
+    const pending = (obj.pending as string[] | undefined) ?? [];
+    const currentId = obj.current as string | undefined;
+    const root = nodes.find(n => !n.parent) ?? nodes[0];
+    const rest = nodes.filter(n => n.id !== root.id).map(n => ({
+      ...n,
+      current: n.current ?? n.id === currentId,
+      pending: n.pending ?? pending.includes(n.id),
+    }));
+    return { root, nodes: rest };
+  }
+  // Legacy shape: { root, nodes }
+  if (obj.root && Array.isArray(obj.nodes)) {
+    return { root: obj.root as TreeNode, nodes: obj.nodes as TreeNode[] };
+  }
+  return null;
+}
+
+function DecisionTree({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [tree, setTree] = useState<TreeData>(DECISION_TREE_DATA);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setTree(DECISION_TREE_DATA); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getLongitudinal(scopeId, 'decision_tree')
+      .then((r) => {
+        if (cancelled) return;
+        const adapted = adaptDecisionTree(r);
+        if (adapted) { setTree(adapted); setIsMock(false); }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
+  const allNodes = [tree.root, ...tree.nodes];
   const W = 860, H = 360;
   const pos: Record<string, { x: number; y: number }> = {
     'R':  { x: 80,  y: H / 2 },
@@ -140,19 +220,28 @@ function DecisionTree() {
     'N4': { x: 420, y: H / 2 + 110 },
     'N5': { x: 620, y: H / 2 + 110 },
   };
+  // 对新 shape 里未在 pos 中的节点，粗略平铺
+  allNodes.forEach((n, i) => {
+    if (!pos[n.id]) pos[n.id] = { x: 80 + (i % 5) * 180, y: 60 + Math.floor(i / 5) * 100 };
+  });
 
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        项目决策树 · AI 基础设施方向
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          项目决策树 · AI 基础设施方向
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 700 }}>
         每个节点是一次会议上的分岔决定。红点 = 当前待决节点。整棵树可时间回溯。
       </div>
       <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px' }}>
         <svg width={W} height={H}>
-          {DECISION_TREE_DATA.nodes.map(n => {
+          {tree.nodes.map(n => {
+            if (!n.parent) return null;
             const p1 = pos[n.parent], p2 = pos[n.id];
+            if (!p1 || !p2) return null;
             return (
               <path key={n.id}
                 d={`M ${p1.x + 40} ${p1.y} C ${(p1.x + p2.x) / 2} ${p1.y}, ${(p1.x + p2.x) / 2} ${p2.y}, ${p2.x - 40} ${p2.y}`}
@@ -260,13 +349,13 @@ export function LongitudinalView() {
   const scope = useMeetingScope();
   const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
   const forceMock = useForceMock();
-  const [isMock, setIsMock] = useState(true);
+  const [headerMock, setHeaderMock] = useState(true);
   useEffect(() => {
-    if (forceMock) { setIsMock(true); return; }
+    if (forceMock) { setHeaderMock(true); return; }
     let cancelled = false;
     const kind = tab === 'drift' ? 'belief_drift' : tab === 'tree' ? 'decision_tree' : 'model_hit_rate';
     meetingNotesApi.getLongitudinal(scopeId, kind)
-      .then((r) => { if (!cancelled && r && Object.keys(r).length > 0) setIsMock(false); })
+      .then((r) => { if (!cancelled && r && Object.keys(r).length > 0) setHeaderMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [scopeId, tab, forceMock]);
@@ -277,9 +366,9 @@ export function LongitudinalView() {
   ];
   return (
     <>
-      <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
-        {tab === 'drift'   && <BeliefDrift />}
-        {tab === 'tree'    && <DecisionTree />}
+      <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={headerMock}>
+        {tab === 'drift'   && <BeliefDrift scopeId={scopeId} />}
+        {tab === 'tree'    && <DecisionTree scopeId={scopeId} />}
         {tab === 'hitrate' && <ModelHitrate />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
