@@ -93,17 +93,23 @@
 
 ---
 
-## Tier B · 算法/口径类（本轮未实施 · 等待后端 schema 确认）
+## Tier B · 算法/口径类 — 已落地
 
-每项都是 `extend getMeetingAxes` 子树 / `extend getMeetingDetail` 子树。前端已显示 mock，待后端确认字段 schema 后再加 adapter。
+从 migrations SQL 读取 schema 后，发现 mn_* 表已完整定义。新增全新路由族（全部 append-only · 无破坏性）：
 
-- #1 tension classification · VariantEditorial/Workbench
-- #4 commitment trace · AxisPeople Commitments
-- #7 provenance chain · AxisProjects
-- #12 mental model hit rate · AxisKnowledge MentalModels + LongitudinalView HitRate
-- #15 necessity audit · AxisMeta Necessity
+| # | 路由 | 数据源表 | Phase commit |
+|---|------|----------|---------------|
+| B.4  | GET /scopes/:id/commitments | mn_commitments | 15.9  |
+| B.7  | GET /scopes/:id/provenance?decisionId= | mn_decisions (based_on_ids 递归) | 15.8 |
+| B.7' | GET /scopes/:id/decisions | mn_decisions | 15.8 |
+| B.8  | GET /scopes/:id/assumptions | mn_assumptions | 15.8 |
+| B.9  | GET /scopes/:id/open-questions | mn_open_questions | 15.8 |
+| B.10 | GET /scopes/:id/risks | mn_risks | 15.8 |
+| B.11 | GET /scopes/:id/judgments | mn_judgments | 15.10 |
+| B.12 | GET /scopes/:id/mental-models/hit-rate | mn_mental_model_hit_stats | 15.10 |
+| B.15 | GET /meetings/:id/necessity-audit | mn_meeting_necessity | 15.11 |
 
-**前端阻塞点**：需要后端先给出 `extend axes.xxx` 的字段约定（例如 commitment trace 的 `supersededBy` 链式结构）才能写精确 adapter。当前策略：等 schema 发布 → 本地加 adapter → 单独 commit 收尾。
+#1 tension classification 未落地 · DB 无专用表，仍是 LLM 推断，保留 mock
 
 ## Tier C · LLM/信号类（Phase 15.15 实施）
 
@@ -163,3 +169,11 @@
 - [x] `GET /meetings/:id/detail?view=C` append field — 回归检查通过（无旧消费方）
 - [ ] `chore(regression): verify <route> across consumers` · 在后端 15.5/15.6/15.3/15.4 真实上线后跑
 - [ ] 最终 `docs(meeting-proto): Phase 15 收尾 · 接口改动对外影响验证通过`
+
+## 本轮 Phase 15.8-15.14 接口改动一览
+
+全部 **新路由** · 无 既有消费方 · forward-compat：
+
+- router.ts 总计新增 11 条路由（Phase 15.7 的 schedule 除外）
+- meetingNotes.ts 新增 ~15 个方法
+- 前端 adapter 模式一致：useEffect probe → 成功则 setIsMock(false) + 更新 state；失败/空/forceMock → fallback mock + `<MockBadge />`
