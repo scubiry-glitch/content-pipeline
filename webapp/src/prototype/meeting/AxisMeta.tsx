@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Chip, MonoMeta, StatTile } from './_atoms';
+import { Chip, MonoMeta, StatTile, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { MEETING } from './_fixtures';
@@ -52,13 +52,37 @@ const EMOTION_CURVE = [
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function Quality() {
-  const d = DECISION_QUALITY;
+function Quality({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const [d, setD] = useState(DECISION_QUALITY);
+  const [teamAvg, setTeamAvg] = useState<number | null>(null);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setD(DECISION_QUALITY); setTeamAvg(null); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getDecisionQuality(meetingId)
+      .then((r) => {
+        if (cancelled || !r) return;
+        if (r.dims && r.dims.length > 0) {
+          setD({
+            overall: Number(r.overall ?? 0),
+            dims: r.dims.map(x => ({ id: x.id, label: x.label, score: Number(x.score ?? 0), note: x.note ?? '' })),
+          });
+          setTeamAvg(r.teamAvg != null ? Number(r.teamAvg) : null);
+          setIsMock(false);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        决策质量打分 · Decision quality
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          决策质量打分 · Decision quality
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         一场会议的产出是一个<b>决议对象</b> —— 它可以被打分。本场决议在「可证伪性」上失分显著。
       </div>
@@ -71,7 +95,7 @@ function Quality() {
           <div style={{ fontFamily: 'var(--serif)', fontSize: 64, fontWeight: 500, letterSpacing: '-0.03em', margin: '6px 0', color: 'var(--ink)' }}>
             {d.overall.toFixed(2)}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>团队 6 场均值 0.68</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>团队 6 场均值 {teamAvg != null ? teamAvg.toFixed(2) : '0.68'}</div>
           <div style={{ marginTop: 16, height: 1, background: 'var(--line-2)' }} />
           <div style={{ marginTop: 14, fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.6, fontFamily: 'var(--serif)', textAlign: 'left' }}>
             建议：在决议文里追加<b>失败条件</b>（若 Q3 recheck 时 X 成立则回滚）与<b>回看时点</b>。
@@ -235,7 +259,7 @@ export function AxisMeta() {
   return (
     <>
       <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
-        {tab === 'quality'   && <Quality />}
+        {tab === 'quality'   && <Quality meetingId={meetingId} />}
         {tab === 'necessity' && <Necessity />}
         {tab === 'emotion'   && <Emotion />}
       </DimShell>
