@@ -4,7 +4,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Chip, MonoMeta, SectionLabel } from './_atoms';
+import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
@@ -289,13 +289,43 @@ function PTrajectory() {
 
 // ── P3 · 发言质量 ───────────────────────────────────────────────────────────
 
-function PSpeech() {
-  const max = Math.max(...PEOPLE_STATS.map(s => s.claims));
+interface SpeechRow { who: string; claims: number; speechHighEntropy: number; beingFollowedUp: number; }
+
+function PSpeech({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<SpeechRow[]>(PEOPLE_STATS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getSpeechMetrics(meetingId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length > 0) {
+          const mapped: SpeechRow[] = items.map((it) => ({
+            who: String(it.personId),
+            claims: PEOPLE_STATS.find(x => x.who === String(it.personId))?.claims ?? 0,
+            speechHighEntropy: Number(it.entropy ?? 0),
+            beingFollowedUp: Number(it.followedUp ?? 0),
+          }));
+          setRows(mapped);
+          setIsMock(false);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
+
+  const max = Math.max(...rows.map(s => s.claims));
   return (
     <div style={{ padding: '24px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        发言质量 ≠ 发言数量
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          发言质量 ≠ 发言数量
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 20, maxWidth: 640 }}>
         信息熵衡量"这句话提供了多少新信息"；被追问率衡量"这句话点燃了多少后续讨论"。
         高熵 + 高追问 = 真正的贡献。发言多但双低的人，可能只是在填充空气。
@@ -312,7 +342,7 @@ function PSpeech() {
         <span style={{ textAlign: 'right' }}>FOLLOWED UP</span>
         <span style={{ textAlign: 'right' }}>QUALITY</span>
       </div>
-      {PEOPLE_STATS.map((s, idx) => {
+      {rows.map((s, idx) => {
         const p = P(s.who);
         const qualityScore = Math.round((s.speechHighEntropy * 0.6 + (s.beingFollowedUp / 30) * 0.4) * 100);
         return (
@@ -484,7 +514,7 @@ export function AxisPeople() {
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'commitments' && <PCommitments />}
         {tab === 'trajectory'  && <PTrajectory />}
-        {tab === 'speech'      && <PSpeech />}
+        {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
         {tab === 'silence'     && <PSilence />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
