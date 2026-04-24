@@ -4,12 +4,13 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Chip, MonoMeta, Icon } from './_atoms';
+import { Avatar, Chip, MonoMeta, Icon, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -158,12 +159,46 @@ function ProjectBanner() {
   );
 }
 
-function ProvenanceChain() {
+type DecisionRow = typeof DECISION_CHAIN[number];
+
+function ProvenanceChain({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<DecisionRow[]>(DECISION_CHAIN);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeDecisions(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const mapped: DecisionRow[] = items.map((d) => ({
+          id: d.id.slice(0, 6),
+          at: d.meeting_id ? d.meeting_id.slice(0, 12) : '',
+          title: d.title,
+          who: DECISION_CHAIN[0]?.who ?? 'p1',
+          basedOn: d.rationale ?? (d.based_on_ids?.length ? `${d.based_on_ids.length} 个前置决策` : '无显式前置'),
+          confidence: Number(d.confidence ?? 0.5),
+          superseded: Boolean(d.superseded_by_id),
+          supersededBy: d.superseded_by_id?.slice(0, 6),
+          current: Boolean(d.is_current),
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        决策溯源链 · Decision provenance
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          决策溯源链 · Decision provenance
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 680 }}>
         今天的每一个决议，都可以回溯到一条由若干次会议、若干份证据、若干个人共同编织的链条。
         当结论崩坏时，这张图告诉你 <i>要推翻哪一环</i>。
@@ -171,7 +206,7 @@ function ProvenanceChain() {
 
       <div style={{ position: 'relative' }}>
         <div style={{ position: 'absolute', left: 26, top: 14, bottom: 14, width: 2, background: 'var(--line)' }} />
-        {DECISION_CHAIN.map((d) => {
+        {rows.map((d) => {
           const p = P(d.who);
           const currentColor = d.current ? 'var(--accent)' : d.superseded ? 'var(--ink-4)' : 'var(--ink)';
           return (
@@ -240,12 +275,53 @@ function ProvenanceChain() {
   );
 }
 
-function AssumptionLedger() {
+type AssumptionRow = typeof ASSUMPTIONS[number];
+
+function AssumptionLedger({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<AssumptionRow[]>(ASSUMPTIONS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeAssumptions(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const stateLabel: Record<string, string> = {
+          'unverified': '未验证',
+          'verifying': '验证中',
+          'confirmed': '已验证',
+          'falsified': '已证伪',
+        };
+        const mapped: AssumptionRow[] = items.map((a) => ({
+          id: a.id.slice(0, 8).toUpperCase(),
+          text: a.text,
+          underpins: a.underpins_decision_ids?.map((u) => u.slice(0, 6)) ?? [],
+          introducedAt: a.meeting_id?.slice(0, 12) ?? '',
+          by: ASSUMPTIONS[0]?.by ?? 'p1',
+          evidenceGrade: a.evidence_grade,
+          verificationState: stateLabel[a.verification_state] ?? a.verification_state,
+          verifier: a.verifier_name ?? '—',
+          verifyDue: a.due_at ? a.due_at.slice(0, 10) : '—',
+          confidence: Number(a.confidence ?? 0.5),
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        假设清单 · Assumptions ledger
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          假设清单 · Assumptions ledger
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 20, maxWidth: 700 }}>
         把决议背后的 <b>未经验证的信念</b> 明摆出来，并给每一条安排一个 verifier 和 deadline。
         这就是<i>"把会议室里的自信变成可验证的 bet"</i>。
@@ -259,7 +335,7 @@ function AssumptionLedger() {
         <span>ID</span><span>假设</span><span>证据级</span><span>验证状态</span>
         <span>验证人 / 截止</span><span style={{ textAlign: 'right' }}>置信</span>
       </div>
-      {ASSUMPTIONS.map((a, i) => {
+      {rows.map((a, i) => {
         const e = EVIDENCE_TONE[a.evidenceGrade];
         const v = VERIFY_TONE[a.verificationState] ?? { bg: 'var(--paper-3)', fg: 'var(--ink-3)' };
         const verifier = a.verifier === '—' ? null : P(a.verifier);
@@ -323,13 +399,48 @@ function AssumptionLedger() {
   );
 }
 
-function OpenQuestions() {
-  const sorted = [...OPEN_QUESTIONS].sort((a, b) => b.timesRaised - a.timesRaised);
+type OpenQuestionRow = typeof OPEN_QUESTIONS[number];
+
+function OpenQuestions({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<OpenQuestionRow[]>(OPEN_QUESTIONS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeOpenQuestions(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const mapped: OpenQuestionRow[] = items.map((q) => ({
+          id: q.id.slice(0, 8).toUpperCase(),
+          text: q.text,
+          raisedAt: q.first_raised_meeting_id?.slice(0, 12) ?? '',
+          by: OPEN_QUESTIONS[0]?.by ?? 'p1',
+          timesRaised: Number(q.times_raised ?? 1),
+          lastRaised: q.last_raised_meeting_id?.slice(0, 12) ?? '',
+          category: q.category,
+          status: q.status,
+          owner: q.owner_name ?? '—',
+          note: '',
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
+  const sorted = [...rows].sort((a, b) => b.timesRaised - a.timesRaised);
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        未解问题 · Open questions
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          未解问题 · Open questions
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         被提起、被讨论、但没有结论的问题。系统持续追踪：每次被提起都算一次 tick；
         提起 3 次以上仍未分派负责人的，自动升级为<b>慢性问题</b>。
@@ -398,13 +509,47 @@ function OpenQuestions() {
   );
 }
 
-function RiskHeat() {
-  const sorted = [...RISKS].sort((a, b) => b.heat - a.heat);
+type RiskRow = typeof RISKS[number];
+
+function RiskHeat({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<RiskRow[]>(RISKS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(RISKS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeRisks(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const mapped: RiskRow[] = items.map((x) => ({
+          id: x.id.slice(0, 6).toUpperCase(),
+          text: x.text,
+          mentions: Number(x.mention_count ?? 1),
+          hasAction: Boolean(x.action_taken),
+          action: x.action_taken ? '已分派 · 见 action items' : '',
+          severity: x.severity === 'critical' ? 'high' : x.severity,
+          heat: Math.min(1, Number(x.heat_score ?? 0) / 100),
+          meetings: Math.max(1, Math.round(Number(x.mention_count ?? 1) / 2)),
+          trend: (x.trend as 'up' | 'flat' | 'down') ?? 'flat',
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
+  const sorted = [...rows].sort((a, b) => b.heat - a.heat);
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        风险热度 · Risk heat
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          风险热度 · Risk heat
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         <b>热度 = 被反复提及 × 严重程度 × 是否分派</b>。
         最危险的不是"严重的风险"，是"严重的风险但没人管"。系统把这两条信号合在一起，给你一个 triage 队列。
@@ -485,6 +630,8 @@ export function AxisProjects() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const scope = useMeetingScope();
+  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
   const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -505,10 +652,10 @@ export function AxisProjects() {
     <>
       <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         <ProjectBanner />
-        {tab === 'provenance'  && <ProvenanceChain />}
-        {tab === 'assumptions' && <AssumptionLedger />}
-        {tab === 'questions'   && <OpenQuestions />}
-        {tab === 'risks'       && <RiskHeat />}
+        {tab === 'provenance'  && <ProvenanceChain scopeId={scopeId} />}
+        {tab === 'assumptions' && <AssumptionLedger scopeId={scopeId} />}
+        {tab === 'questions'   && <OpenQuestions scopeId={scopeId} />}
+        {tab === 'risks'       && <RiskHeat scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="projects" onClose={() => setRegenOpen(false)} />

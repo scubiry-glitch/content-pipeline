@@ -222,6 +222,103 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     // --------------------------------------------------------
+    // Phase 15.8 · AxisProjects data routes (decisions / assumptions / open-questions / risks)
+    // --------------------------------------------------------
+    fastify.get('/scopes/:id/decisions', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT d.id, d.meeting_id, d.title, d.proposer_person_id,
+                d.based_on_ids, d.superseded_by_id, d.confidence, d.is_current, d.rationale,
+                d.created_at,
+                p.canonical_name AS proposer_name
+           FROM mn_decisions d
+           LEFT JOIN mn_people p ON p.id = d.proposer_person_id
+          WHERE d.scope_id = $1
+          ORDER BY d.created_at ASC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    fastify.get('/scopes/:id/assumptions', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT a.id, a.meeting_id, a.text, a.evidence_grade, a.verification_state,
+                a.verifier_person_id, a.due_at, a.underpins_decision_ids,
+                a.confidence, a.created_at, a.updated_at,
+                p.canonical_name AS verifier_name
+           FROM mn_assumptions a
+           LEFT JOIN mn_people p ON p.id = a.verifier_person_id
+          WHERE a.scope_id = $1
+          ORDER BY a.created_at DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    fastify.get('/scopes/:id/open-questions', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const q = request.query as { status?: string; category?: string };
+      const conds: string[] = ['scope_id = $1'];
+      const args: unknown[] = [id];
+      if (q.status)   { conds.push(`status = $${args.length + 1}`);   args.push(q.status); }
+      if (q.category) { conds.push(`category = $${args.length + 1}`); args.push(q.category); }
+      const r = await engine.deps.db.query(
+        `SELECT oq.id, oq.text, oq.category, oq.status, oq.times_raised,
+                oq.first_raised_meeting_id, oq.last_raised_meeting_id,
+                oq.owner_person_id, oq.due_at, oq.metadata, oq.created_at,
+                p.canonical_name AS owner_name
+           FROM mn_open_questions oq
+           LEFT JOIN mn_people p ON p.id = oq.owner_person_id
+          WHERE ${conds.join(' AND ')}
+          ORDER BY oq.times_raised DESC, oq.created_at DESC`,
+        args,
+      );
+      return { items: r.rows };
+    });
+
+    fastify.get('/scopes/:id/risks', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT id, text, severity, mention_count, heat_score, trend,
+                action_taken, metadata, created_at, updated_at
+           FROM mn_risks
+          WHERE scope_id = $1
+          ORDER BY heat_score DESC, mention_count DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    // Provenance chain · 从一个 decision 往回追 N 层 based_on_ids
+    fastify.get('/scopes/:id/provenance', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const q = request.query as { decisionId?: string; depth?: string };
+      if (!q.decisionId) return { items: [], chain: [] };
+      const maxDepth = Math.min(20, Math.max(1, parseInt(q.depth ?? '6', 10)));
+      const r = await engine.deps.db.query(
+        `WITH RECURSIVE chain AS (
+           SELECT d.id, d.title, d.meeting_id, d.based_on_ids, d.proposer_person_id,
+                  d.confidence, d.created_at, 0 AS depth
+             FROM mn_decisions d
+            WHERE d.id = $1 AND d.scope_id = $2
+           UNION ALL
+           SELECT d2.id, d2.title, d2.meeting_id, d2.based_on_ids, d2.proposer_person_id,
+                  d2.confidence, d2.created_at, c.depth + 1
+             FROM mn_decisions d2
+             JOIN chain c ON d2.id = ANY(c.based_on_ids)
+            WHERE c.depth < $3
+         )
+         SELECT DISTINCT ON (id) id, title, meeting_id, based_on_ids, proposer_person_id,
+                confidence, created_at, depth
+           FROM chain
+          ORDER BY id, depth`,
+        [q.decisionId, id, maxDepth],
+      );
+      return { decisionId: q.decisionId, chain: r.rows };
+    });
+
+    // --------------------------------------------------------
     // Runs (PR4)
     // --------------------------------------------------------
     fastify.post('/runs', { preHandler: authenticate }, async (request, reply) => {

@@ -126,6 +126,32 @@ export const meetingNotesApi = {
       `/versions/${a}/diff?vs=${b}&structured=1`,
     ),
 
+  // Phase 15.8 · AxisProjects 数据源（全新路由族 · 无破坏性）
+  listScopeDecisions: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; meeting_id: string; title: string; proposer_person_id?: string; proposer_name?: string; based_on_ids: string[]; superseded_by_id?: string; confidence: number; is_current: boolean; rationale?: string; created_at: string }> }>(
+      `/scopes/${scopeId}/decisions`,
+    ),
+  listScopeAssumptions: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; meeting_id: string; text: string; evidence_grade: string; verification_state: string; verifier_person_id?: string; verifier_name?: string; due_at?: string; underpins_decision_ids: string[]; confidence: number; created_at: string }> }>(
+      `/scopes/${scopeId}/assumptions`,
+    ),
+  listScopeOpenQuestions: (scopeId: string, q: { status?: string; category?: string } = {}) => {
+    const qs = new URLSearchParams(q as any).toString();
+    return jget<{ items: Array<{ id: string; text: string; category: string; status: string; times_raised: number; first_raised_meeting_id?: string; last_raised_meeting_id?: string; owner_person_id?: string; owner_name?: string; due_at?: string; created_at: string }> }>(
+      `/scopes/${scopeId}/open-questions${qs ? '?' + qs : ''}`,
+    );
+  },
+  listScopeRisks: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; text: string; severity: string; mention_count: number; heat_score: number; trend: string; action_taken: boolean; created_at: string }> }>(
+      `/scopes/${scopeId}/risks`,
+    ),
+  getScopeProvenance: (scopeId: string, decisionId: string, depth?: number) => {
+    const qs = new URLSearchParams({ decisionId, ...(depth ? { depth: String(depth) } : {}) }).toString();
+    return jget<{ decisionId: string; chain: Array<{ id: string; title: string; meeting_id: string; based_on_ids: string[]; proposer_person_id?: string; confidence: number; created_at: string; depth: number }> }>(
+      `/scopes/${scopeId}/provenance?${qs}`,
+    );
+  },
+
   // Phase 15.7 · Schedule CRUD (#20 · 全新路由族)
   listSchedules: (q: { scopeId?: string; scopeKind?: string; axis?: string } = {}) => {
     const qs = new URLSearchParams(q as any).toString();
