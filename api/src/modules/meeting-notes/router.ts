@@ -17,6 +17,36 @@ async function resolveScopeUuid(db: any, idOrSlug: string): Promise<string | nul
   return r.rows[0]?.id ?? null;
 }
 
+function emptyAxes(meetingId: string) {
+  return {
+    meetingId,
+    people: {
+      commitments: [],
+      role_trajectory: [],
+      speech_quality: [],
+      silence_signals: [],
+    },
+    projects: {
+      decisions: [],
+      assumptions: [],
+      open_questions: [],
+      risks: [],
+    },
+    knowledge: {
+      judgments: [],
+      mental_models: [],
+      cognitive_biases: [],
+      counterfactuals: [],
+      evidence_grades: null,
+    },
+    meta: {
+      decision_quality: null,
+      meeting_necessity: null,
+      affect_curve: null,
+    },
+  };
+}
+
 export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
   return async function meetingNotesRouter(fastify: FastifyInstance) {
     // --------------------------------------------------------
@@ -118,8 +148,27 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/meetings/:id/axes', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return emptyAxes(id);
       return engine.getMeetingAxes(id);
     });
+    // Phase 15.1 · Speech metrics (#6 · 新路由 · 无破坏性)
+    fastify.get('/meetings/:id/speech-metrics', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT person_id AS "personId",
+                entropy_pct AS entropy,
+                followed_up_count AS "followedUp",
+                qa_ratio AS "qaRatio",
+                term_density AS "termDensity"
+           FROM mn_speech_quality
+          WHERE meeting_id = $1
+          ORDER BY quality_score DESC NULLS LAST`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
 
     fastify.get('/meetings/:id/detail', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
@@ -422,6 +471,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.10 · AxisKnowledge · Judgments (mn_judgments) + Mental Model Hit Rate (mn_mental_model_hit_stats)
     fastify.get('/scopes/:id/judgments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       // judgments 本身无 scope_id 字段；通过 linked_meeting_ids ∩ scope bindings 筛
       const r = await engine.deps.db.query(
         `SELECT j.id, j.text, j.abstracted_from_meeting_id, j.author_person_id,
@@ -437,20 +488,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                   SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1
                 )
           ORDER BY j.reuse_count DESC, j.generality_score DESC`,
-        [id],
+                [uuid],
       );
       return { items: r.rows };
     });
 
     fastify.get('/scopes/:id/mental-models/hit-rate', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT id, model_name, invocations, hits, hit_rate, trend_30d, flag,
                 computed_at
            FROM mn_mental_model_hit_stats
           WHERE scope_id = $1
           ORDER BY hit_rate DESC, invocations DESC`,
-        [id],
+        [uuid],
       );
       return { items: r.rows };
     });
@@ -458,11 +511,13 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.9 · AxisPeople · Commitments (mn_commitments)
     fastify.get('/scopes/:id/commitments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const q = request.query as { personId?: string; state?: string };
       const conds: string[] = [
         `c.meeting_id IN (SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1)`,
       ];
-      const args: unknown[] = [id];
+      const args: unknown[] = [uuid];
       if (q.personId) { conds.push(`c.person_id = $${args.length + 1}`); args.push(q.personId); }
       if (q.state)    { conds.push(`c.state = $${args.length + 1}`);     args.push(q.state); }
       const r = await engine.deps.db.query(
@@ -481,6 +536,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Provenance chain · 从一个 decision 往回追 N 层 based_on_ids
     fastify.get('/scopes/:id/provenance', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [], chain: [] };
       const q = request.query as { decisionId?: string; depth?: string };
       if (!q.decisionId) return { items: [], chain: [] };
       const maxDepth = Math.min(20, Math.max(1, parseInt(q.depth ?? '6', 10)));
@@ -501,7 +558,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                 confidence, created_at, depth
            FROM chain
           ORDER BY id, depth`,
-        [q.decisionId, id, maxDepth],
+        [q.decisionId, uuid, maxDepth],
       );
       return { decisionId: q.decisionId, chain: r.rows };
     });
@@ -515,8 +572,42 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(400);
         return { error: 'Bad Request', message: 'scope and axis are required' };
       }
+      let scope = body.scope as { kind?: string; id?: string };
+      const allowedKinds = new Set(['library', 'project', 'client', 'topic', 'meeting']);
+      if (scope?.kind === 'scope' && scope?.id) {
+        const r = await engine.deps.db.query(
+          `SELECT id, kind
+             FROM mn_scopes
+            WHERE id::text = $1::text OR slug::text = $1::text
+            LIMIT 1`,
+          [scope.id],
+        );
+        if (r.rows[0]) {
+          scope = { kind: r.rows[0].kind, id: r.rows[0].id };
+        } else {
+          reply.status(400);
+          return { error: 'Bad Request', message: `unknown scope: ${scope.id}` };
+        }
+      } else if (
+        scope?.id
+        && scope.kind
+        && ['project', 'client', 'topic'].includes(scope.kind)
+        && !UUID_RE.test(scope.id)
+      ) {
+        const uuid = await resolveScopeUuid(engine.deps.db, scope.id);
+        if (uuid) {
+          scope = { ...scope, id: uuid };
+        } else {
+          reply.status(400);
+          return { error: 'Bad Request', message: `unknown scope: ${scope.id}` };
+        }
+      }
+      if (!scope?.kind || !allowedKinds.has(scope.kind)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: `invalid scope kind: ${scope?.kind ?? 'unknown'}` };
+      }
       const r = await engine.enqueueRun({
-        scope: body.scope,
+        scope: scope as any,
         axis: body.axis,
         subDims: body.subDims,
         preset: body.preset,
