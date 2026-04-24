@@ -386,6 +386,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.11 · AxisMeta · Necessity audit (mn_meeting_necessity)
     fastify.get('/meetings/:id/necessity-audit', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
       const r = await engine.deps.db.query(
         `SELECT meeting_id, verdict, suggested_duration_min, reasons, computed_at
            FROM mn_meeting_necessity
@@ -396,9 +397,44 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return r.rows[0];
     });
 
+    // Phase 15.2 · AxisMeta · Decision quality (mn_decision_quality)
+    fastify.get('/meetings/:id/decision-quality', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
+      const r = await engine.deps.db.query(
+        `SELECT meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, computed_at
+           FROM mn_decision_quality
+          WHERE meeting_id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) return null;
+      const row = r.rows[0];
+      const notes = (row.notes ?? {}) as Record<string, string>;
+      // 转换为前端期望的 { overall, dims: [{id, label, score, note}] } 形态
+      const dimMeta: Array<{ id: keyof typeof row; label: string }> = [
+        { id: 'clarity',     label: '清晰度' },
+        { id: 'actionable',  label: '可执行' },
+        { id: 'traceable',   label: '可追溯' },
+        { id: 'falsifiable', label: '可证伪' },
+        { id: 'aligned',     label: '对齐度' },
+      ];
+      return {
+        overall: Number(row.overall ?? 0),
+        dims: dimMeta.map(({ id: dimId, label }) => ({
+          id: dimId,
+          label,
+          score: Number(row[dimId] ?? 0),
+          note: notes[dimId] ?? '',
+        })),
+        teamAvg: null,
+        computedAt: row.computed_at,
+      };
+    });
+
     // Phase 15.12 · AxisPeople · Silence signals (mn_silence_signals)
     fastify.get('/meetings/:id/silence', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const q = request.query as { personId?: string };
       const conds: string[] = ['s.meeting_id = $1'];
       const args: unknown[] = [id];
@@ -419,6 +455,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.13 · AxisKnowledge · Biases (mn_cognitive_biases)
     fastify.get('/meetings/:id/biases', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT b.id, b.meeting_id, b.bias_type, b.where_excerpt, b.by_person_id,
                 b.severity, b.mitigated, b.mitigation_strategy, b.created_at,
@@ -436,6 +473,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.14 · AxisMeta · Emotion curve (mn_affect_curve)
     fastify.get('/meetings/:id/emotion-curve', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
       const r = await engine.deps.db.query(
         `SELECT meeting_id, samples, tension_peaks, insight_points, computed_at
            FROM mn_affect_curve
@@ -449,6 +487,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.15 · C.1 · Tensions (mn_tensions + mn_tension_moments)
     fastify.get('/meetings/:id/tensions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT t.id, t.tension_key, t.between_ids, t.topic, t.intensity, t.summary,
                 COALESCE(
