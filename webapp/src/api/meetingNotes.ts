@@ -126,6 +126,32 @@ export const meetingNotesApi = {
       `/versions/${a}/diff?vs=${b}&structured=1`,
     ),
 
+  // Phase 15.11 · AxisMeta · Necessity audit
+  getMeetingNecessityAudit: (meetingId: string) =>
+    jget<{ meeting_id: string; verdict: string; suggested_duration_min?: number; reasons: Array<{ k: string; t: string; ratio?: number }>; computed_at: string } | null>(
+      `/meetings/${meetingId}/necessity-audit`,
+    ),
+
+  // Phase 15.12 · AxisPeople · Silence
+  getMeetingSilence: (meetingId: string, q: { personId?: string } = {}) => {
+    const qs = new URLSearchParams(q as any).toString();
+    return jget<{ items: Array<{ id: string; person_id: string; person_name?: string; topic_id: string; state: 'spoke' | 'normal_silence' | 'abnormal_silence' | 'absent'; prior_topics_spoken: number; anomaly_score: number; computed_at: string }> }>(
+      `/meetings/${meetingId}/silence${qs ? '?' + qs : ''}`,
+    );
+  },
+
+  // Phase 15.13 · AxisKnowledge · Biases
+  getMeetingBiases: (meetingId: string) =>
+    jget<{ items: Array<{ id: string; bias_type: string; where_excerpt?: string; by_person_id?: string; by_person_name?: string; severity: 'low' | 'med' | 'high'; mitigated: boolean; mitigation_strategy?: string; created_at: string }> }>(
+      `/meetings/${meetingId}/biases`,
+    ),
+
+  // Phase 15.14 · AxisMeta · Emotion curve
+  getMeetingEmotionCurve: (meetingId: string) =>
+    jget<{ meeting_id: string; samples: Array<{ t_sec: number; valence: number; intensity: number; tag?: string }>; tension_peaks: unknown[]; insight_points: unknown[]; computed_at: string } | null>(
+      `/meetings/${meetingId}/emotion-curve`,
+    ),
+
   // Phase 15.10 · AxisKnowledge · Judgments + Mental Models
   listScopeJudgments: (scopeId: string) =>
     jget<{ items: Array<{ id: string; text: string; abstracted_from_meeting_id: string; author_person_id?: string; author_name?: string; domain?: string; generality_score: number; reuse_count: number; linked_meeting_ids: string[]; created_at: string }> }>(

@@ -125,13 +125,43 @@ function Quality({ meetingId }: { meetingId: string }) {
   );
 }
 
-function Necessity() {
-  const n = NECESSITY;
+function Necessity({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const [n, setN] = useState(NECESSITY);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setN(NECESSITY); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getMeetingNecessityAudit(meetingId)
+      .then((r) => {
+        if (cancelled || !r) return;
+        const verdictMap: Record<string, string> = {
+          'async_ok': '可完全异步处理',
+          'partial': '可部分异步 · 建议缩减',
+          'needed': '必须同步讨论',
+        };
+        setN({
+          verdict: verdictMap[r.verdict] ?? r.verdict,
+          score: r.suggested_duration_min != null ? Math.max(0, Math.min(1, 1 - r.suggested_duration_min / 120)) : NECESSITY.score,
+          reasons: (r.reasons ?? []).map((x: { k?: string; t?: string }) => ({
+            k: String(x.k ?? '段落'),
+            t: String(x.t ?? ''),
+          })),
+        });
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        会议必要性审计 · Necessity audit
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          会议必要性审计 · Necessity audit
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         这场会议是否本可用文档替代？哪些段落是不可替代的、哪些是仪式性冗余？
       </div>
@@ -171,17 +201,46 @@ function Necessity() {
   );
 }
 
-function Emotion() {
+type EmotionPoint = typeof EMOTION_CURVE[number];
+
+function Emotion({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const [curve, setCurve] = useState<EmotionPoint[]>(EMOTION_CURVE);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setCurve(EMOTION_CURVE); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getMeetingEmotionCurve(meetingId)
+      .then((r) => {
+        if (cancelled || !r) return;
+        const samples = r.samples ?? [];
+        if (samples.length === 0) return;
+        const mapped: EmotionPoint[] = samples.map((s) => ({
+          t: Math.round(Number(s.t_sec ?? 0) / 60),
+          v: Number(s.valence ?? 0),
+          i: Number(s.intensity ?? 0),
+          tag: s.tag,
+        }));
+        setCurve(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
+
   const W = 900, H = 280, PAD = 40;
-  const maxT = 118;
+  const maxT = Math.max(60, ...curve.map(p => p.t));
   const xFor = (t: number) => PAD + (t / maxT) * (W - PAD * 2);
   const yFor = (v: number) => H / 2 - v * (H / 2 - PAD);
   const sizeFor = (i: number) => 3 + i * 8;
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        情绪温度曲线 · Affective trace
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          情绪温度曲线 · Affective trace
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         时间轴上的<b>情绪价 × 强度</b>。负值 = 紧张 / 争执；正值 = 松弛 / 认同。点大小 = 强度。
       </div>
@@ -197,10 +256,10 @@ function Emotion() {
             </g>
           ))}
           <path
-            d={EMOTION_CURVE.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(p.t)} ${yFor(p.v)}`).join(' ')}
+            d={curve.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(p.t)} ${yFor(p.v)}`).join(' ')}
             fill="none" stroke="var(--accent)" strokeWidth="1.8" opacity="0.8"
           />
-          {EMOTION_CURVE.map((p, i) => (
+          {curve.map((p, i) => (
             <g key={i}>
               <circle cx={xFor(p.t)} cy={yFor(p.v)} r={sizeFor(p.i)}
                 fill={p.v < 0 ? 'oklch(0.6 0.14 30 / 0.75)' : 'oklch(0.7 0.11 140 / 0.7)'}
@@ -260,8 +319,8 @@ export function AxisMeta() {
     <>
       <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'quality'   && <Quality meetingId={meetingId} />}
-        {tab === 'necessity' && <Necessity />}
-        {tab === 'emotion'   && <Emotion />}
+        {tab === 'necessity' && <Necessity meetingId={meetingId} />}
+        {tab === 'emotion'   && <Emotion meetingId={meetingId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="meta" onClose={() => setRegenOpen(false)} />

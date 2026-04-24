@@ -290,6 +290,69 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // Phase 15.11 · AxisMeta · Necessity audit (mn_meeting_necessity)
+    fastify.get('/meetings/:id/necessity-audit', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT meeting_id, verdict, suggested_duration_min, reasons, computed_at
+           FROM mn_meeting_necessity
+          WHERE meeting_id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) return null;
+      return r.rows[0];
+    });
+
+    // Phase 15.12 · AxisPeople · Silence signals (mn_silence_signals)
+    fastify.get('/meetings/:id/silence', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const q = request.query as { personId?: string };
+      const conds: string[] = ['s.meeting_id = $1'];
+      const args: unknown[] = [id];
+      if (q.personId) { conds.push(`s.person_id = $${args.length + 1}`); args.push(q.personId); }
+      const r = await engine.deps.db.query(
+        `SELECT s.id, s.meeting_id, s.person_id, s.topic_id, s.state,
+                s.prior_topics_spoken, s.anomaly_score, s.computed_at,
+                p.canonical_name AS person_name
+           FROM mn_silence_signals s
+           LEFT JOIN mn_people p ON p.id = s.person_id
+          WHERE ${conds.join(' AND ')}
+          ORDER BY s.anomaly_score DESC`,
+        args,
+      );
+      return { items: r.rows };
+    });
+
+    // Phase 15.13 · AxisKnowledge · Biases (mn_cognitive_biases)
+    fastify.get('/meetings/:id/biases', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT b.id, b.meeting_id, b.bias_type, b.where_excerpt, b.by_person_id,
+                b.severity, b.mitigated, b.mitigation_strategy, b.created_at,
+                p.canonical_name AS by_person_name
+           FROM mn_cognitive_biases b
+           LEFT JOIN mn_people p ON p.id = b.by_person_id
+          WHERE b.meeting_id = $1
+          ORDER BY CASE b.severity WHEN 'high' THEN 3 WHEN 'med' THEN 2 ELSE 1 END DESC,
+                   b.created_at DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    // Phase 15.14 · AxisMeta · Emotion curve (mn_affect_curve)
+    fastify.get('/meetings/:id/emotion-curve', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT meeting_id, samples, tension_peaks, insight_points, computed_at
+           FROM mn_affect_curve
+          WHERE meeting_id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) return null;
+      return r.rows[0];
+    });
+
     // Phase 15.10 · AxisKnowledge · Judgments (mn_judgments) + Mental Model Hit Rate (mn_mental_model_hit_stats)
     fastify.get('/scopes/:id/judgments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
