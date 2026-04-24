@@ -446,9 +446,10 @@ function PSpeech({ meetingId }: { meetingId: string }) {
 
 // ── P4 · 沉默信号 ───────────────────────────────────────────────────────────
 
-function PSilence() {
-  const topics = ['推理层', '训练层', '估值方法', '合规 / LP', '退出路径', '地缘 / 政策', '技术路线'];
-  const matrix = [
+function PSilence({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const defaultTopics = ['推理层', '训练层', '估值方法', '合规 / LP', '退出路径', '地缘 / 政策', '技术路线'];
+  const defaultMatrix = [
     { who: 'p1', vals: ['spoke', 'spoke', 'spoke', 'abnormalSilence', 'spoke', 'normalSilence', 'normalSilence'] },
     { who: 'p2', vals: ['spoke', 'spoke', 'spoke', 'spoke', 'spoke', 'spoke', 'normalSilence'] },
     { who: 'p3', vals: ['spoke', 'spoke', 'spoke', 'abnormalSilence', 'spoke', 'normalSilence', 'spoke'] },
@@ -456,6 +457,45 @@ function PSilence() {
     { who: 'p5', vals: ['normalSilence', 'normalSilence', 'abnormalSilence', 'spoke', 'normalSilence', 'normalSilence', 'normalSilence'] },
     { who: 'p6', vals: ['spoke', 'spoke', 'normalSilence', 'abnormalSilence', 'spoke', 'normalSilence', 'normalSilence'] },
   ];
+  const [topics, setTopics] = useState(defaultTopics);
+  const [matrix, setMatrix] = useState(defaultMatrix);
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
+  const [isMock, setIsMock] = useState(true);
+
+  useEffect(() => {
+    if (forceMock) { setTopics(defaultTopics); setMatrix(defaultMatrix); setPersonNames({}); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getMeetingSilence(meetingId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const stateMap: Record<string, string> = {
+          'spoke': 'spoke',
+          'normal_silence': 'normalSilence',
+          'abnormal_silence': 'abnormalSilence',
+          'absent': 'absent',
+        };
+        const topicSet = Array.from(new Set(items.map(i => i.topic_id)));
+        const names: Record<string, string> = {};
+        const grouped: Record<string, Record<string, string>> = {};
+        for (const it of items) {
+          if (it.person_name) names[it.person_id] = it.person_name;
+          grouped[it.person_id] ??= {};
+          grouped[it.person_id][it.topic_id] = stateMap[it.state] ?? 'normalSilence';
+        }
+        const newMatrix = Object.keys(grouped).map((pid) => ({
+          who: pid,
+          vals: topicSet.map((t) => grouped[pid][t] ?? 'normalSilence'),
+        }));
+        setTopics(topicSet);
+        setMatrix(newMatrix);
+        setPersonNames(names);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
   const cellStyle: Record<string, { bg: string; fg: string; symbol: string; hint: string }> = {
     'spoke':           { bg: 'var(--ink)',        fg: 'var(--paper)',  symbol: '●', hint: '发言' },
     'normalSilence':   { bg: 'var(--paper-3)',    fg: 'var(--ink-4)', symbol: '·', hint: '未涉及 · 符合常态' },
@@ -466,9 +506,12 @@ function PSilence() {
 
   return (
     <div style={{ padding: '24px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        沉默信号 · Silence as signal
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          沉默信号 · Silence as signal
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 680 }}>
         反常的沉默 = 这个议题他过去总会参与，但这次没有。可能是让步、回避、不适、不同意却不便说。
         <b> 最危险的信息往往藏在没说的话里。</b>
@@ -482,7 +525,8 @@ function PSilence() {
           </div>
         ))}
         {matrix.map(row => {
-          const p = P(row.who);
+          const displayName = personNames[row.who];
+          const p = displayName ? { id: row.who, name: displayName, role: '', initials: displayName.slice(0, 2), tone: 'neutral' as const, speakingPct: 0 } : P(row.who);
           return (
             <Fragment key={row.who}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -568,7 +612,7 @@ export function AxisPeople() {
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
         {tab === 'trajectory'  && <PTrajectory />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
-        {tab === 'silence'     && <PSilence />}
+        {tab === 'silence'     && <PSilence meetingId={meetingId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="people" onClose={() => setRegenOpen(false)} />
