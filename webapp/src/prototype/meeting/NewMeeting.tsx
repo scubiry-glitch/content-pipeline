@@ -687,8 +687,10 @@ export function NewMeeting() {
   async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<void> {
     if (forceMock || !assetId) return;
     try {
+      // scope.kind 必须是后端 router 接受的小写枚举（'library'|'project'|'client'|'topic'|'meeting'）
+      // 新建会议尚未生成 meeting_id，用 library scope 让 enqueueRun 走全库默认路径
       const r: { runId?: string; ok?: boolean } = await meetingNotesApi.enqueueRun({
-        scope: { kind: 'MEETING', assetId },
+        scope: { kind: 'library', id: assetId },
         axis: 'multi',
         preset: body.presetId,
         triggeredBy: 'new-meeting-wizard',
