@@ -282,12 +282,44 @@ function DecisionTree({ scopeId }: { scopeId: string }) {
   );
 }
 
-function ModelHitrate() {
+type MMRow = typeof MODEL_HITRATE[number];
+
+function ModelHitrate({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<MMRow[]>(MODEL_HITRATE);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(MODEL_HITRATE); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getScopeMentalModelHitRate(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const mapped: MMRow[] = items.map((m) => ({
+          id: 'MM-' + m.id.slice(0, 6).toUpperCase(),
+          name: m.model_name,
+          invoked: Number(m.invocations ?? 0),
+          hits: Number(m.hits ?? 0),
+          hitrate: Number(m.hit_rate ?? 0),
+          byTopExpert: '—',
+          warn: m.flag === 'downweight',
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        心智模型命中率 · 反向校准专家库
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          心智模型命中率 · 反向校准专家库
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 720 }}>
         6 个月内所有会议的模型激活 × 后验命中。这张表用于<b>反向修正专家池</b> —— 命中率长期低于 65% 的模型，
         会被系统降低匹配权重。
@@ -299,7 +331,7 @@ function ModelHitrate() {
       }}>
         <span>模型</span><span>激活</span><span>命中率</span><span>命中</span><span>主要专家</span>
       </div>
-      {MODEL_HITRATE.map((m, i) => (
+      {rows.map((m, i) => (
         <div key={m.id} style={{
           display: 'grid', gridTemplateColumns: '180px 80px 1fr 100px 120px',
           alignItems: 'center', gap: 10, padding: '14px 14px',
@@ -369,7 +401,7 @@ export function LongitudinalView() {
       <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={headerMock}>
         {tab === 'drift'   && <BeliefDrift scopeId={scopeId} />}
         {tab === 'tree'    && <DecisionTree scopeId={scopeId} />}
-        {tab === 'hitrate' && <ModelHitrate />}
+        {tab === 'hitrate' && <ModelHitrate scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />

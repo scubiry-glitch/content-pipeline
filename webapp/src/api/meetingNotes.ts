@@ -126,6 +126,16 @@ export const meetingNotesApi = {
       `/versions/${a}/diff?vs=${b}&structured=1`,
     ),
 
+  // Phase 15.10 · AxisKnowledge · Judgments + Mental Models
+  listScopeJudgments: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; text: string; abstracted_from_meeting_id: string; author_person_id?: string; author_name?: string; domain?: string; generality_score: number; reuse_count: number; linked_meeting_ids: string[]; created_at: string }> }>(
+      `/scopes/${scopeId}/judgments`,
+    ),
+  getScopeMentalModelHitRate: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; model_name: string; invocations: number; hits: number; hit_rate: number; trend_30d?: number; flag: string; computed_at: string }> }>(
+      `/scopes/${scopeId}/mental-models/hit-rate`,
+    ),
+
   // Phase 15.9 · AxisPeople Commitments
   listScopeCommitments: (scopeId: string, q: { personId?: string; state?: string } = {}) => {
     const qs = new URLSearchParams(q as any).toString();

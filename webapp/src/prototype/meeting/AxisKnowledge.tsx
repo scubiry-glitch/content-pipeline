@@ -4,12 +4,13 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Chip, MonoMeta } from './_atoms';
+import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -93,17 +94,50 @@ const BIAS_SEV: Record<string, { bg: string; fg: string; label: string }> = {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function Judgments() {
+type JudgmentRow = typeof REUSABLE_JUDGMENTS[number];
+
+function Judgments({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [items, setItems] = useState<JudgmentRow[]>(REUSABLE_JUDGMENTS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setItems(REUSABLE_JUDGMENTS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.listScopeJudgments(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const list = r?.items ?? [];
+        if (list.length === 0) return;
+        const mapped: JudgmentRow[] = list.map((j) => ({
+          id: 'J-' + j.id.slice(0, 6).toUpperCase(),
+          text: j.text,
+          abstractedFrom: j.abstracted_from_meeting_id?.slice(0, 12) ?? '',
+          generalityScore: Number(j.generality_score ?? 0.5),
+          reuseCount: Number(j.reuse_count ?? 0),
+          linkedMeetings: (j.linked_meeting_ids ?? []).map((m) => m.slice(0, 12)),
+          domain: j.domain ?? '—',
+          author: j.author_name ?? '—',
+        }));
+        setItems(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        可复用判断 · Reusable judgments
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          可复用判断 · Reusable judgments
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         从具体讨论中抽离出的<b>脱离当前语境仍然成立</b>的通用结论。系统自动入知识库，并跟踪其在未来会议中的被引用次数。
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {REUSABLE_JUDGMENTS.map(j => (
+        {items.map(j => (
           <div key={j.id} style={{
             background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--accent)',
             borderRadius: 5, padding: '16px 20px',
@@ -149,12 +183,44 @@ function Judgments() {
   );
 }
 
-function MentalModels() {
+type MentalModelRow = typeof MENTAL_MODELS[number];
+
+function MentalModels({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<MentalModelRow[]>(MENTAL_MODELS);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(MENTAL_MODELS); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getScopeMentalModelHitRate(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const list = r?.items ?? [];
+        if (list.length === 0) return;
+        const mapped: MentalModelRow[] = list.map((m) => ({
+          id: 'MM-' + m.id.slice(0, 6).toUpperCase(),
+          name: m.model_name,
+          invokedBy: '—',
+          invokedCount: Number(m.invocations ?? 0),
+          correctly: m.flag === 'priority' ? true : m.flag === 'downweight' ? false : null,
+          outcome: `命中率 ${(Number(m.hit_rate ?? 0) * 100).toFixed(0)}% · ${m.hits}/${m.invocations} · flag=${m.flag}`,
+          expert: '—',
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        心智模型激活 · Mental models invoked
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          心智模型激活 · Mental models invoked
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         会议中被激活的心智模型 —— 激活 ≠ 用得对。系统标记滥用与未激活的盲点。
       </div>
@@ -165,7 +231,7 @@ function MentalModels() {
       }}>
         <span>模型</span><span>激活者</span><span>次数</span><span>使用</span><span>产出 / 说明</span><span>来源专家</span>
       </div>
-      {MENTAL_MODELS.map((m, i) => {
+      {rows.map((m, i) => {
         const p = m.invokedBy === '—' ? null : P(m.invokedBy);
         return (
           <div key={m.id} style={{
@@ -366,6 +432,8 @@ export function AxisKnowledge() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const scope = useMeetingScope();
+  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
   const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -386,8 +454,8 @@ export function AxisKnowledge() {
   return (
     <>
       <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
-        {tab === 'judgments'       && <Judgments />}
-        {tab === 'mental_models'   && <MentalModels />}
+        {tab === 'judgments'       && <Judgments scopeId={scopeId} />}
+        {tab === 'mental_models'   && <MentalModels scopeId={scopeId} />}
         {tab === 'evidence'        && <Evidence />}
         {tab === 'biases'          && <Biases />}
         {tab === 'counterfactuals' && <Counterfactuals />}

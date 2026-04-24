@@ -290,6 +290,42 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // Phase 15.10 · AxisKnowledge · Judgments (mn_judgments) + Mental Model Hit Rate (mn_mental_model_hit_stats)
+    fastify.get('/scopes/:id/judgments', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      // judgments 本身无 scope_id 字段；通过 linked_meeting_ids ∩ scope bindings 筛
+      const r = await engine.deps.db.query(
+        `SELECT j.id, j.text, j.abstracted_from_meeting_id, j.author_person_id,
+                j.domain, j.generality_score, j.reuse_count, j.linked_meeting_ids,
+                j.created_at, j.updated_at,
+                p.canonical_name AS author_name
+           FROM mn_judgments j
+           LEFT JOIN mn_people p ON p.id = j.author_person_id
+          WHERE j.linked_meeting_ids && ARRAY(
+                  SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1
+                )
+             OR j.abstracted_from_meeting_id IN (
+                  SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1
+                )
+          ORDER BY j.reuse_count DESC, j.generality_score DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    fastify.get('/scopes/:id/mental-models/hit-rate', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT id, model_name, invocations, hits, hit_rate, trend_30d, flag,
+                computed_at
+           FROM mn_mental_model_hit_stats
+          WHERE scope_id = $1
+          ORDER BY hit_rate DESC, invocations DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
     // Phase 15.9 · AxisPeople · Commitments (mn_commitments)
     fastify.get('/scopes/:id/commitments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
