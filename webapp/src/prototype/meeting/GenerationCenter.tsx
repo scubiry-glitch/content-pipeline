@@ -1,8 +1,10 @@
 // GenerationCenter — 生成中心
 // 原型来源：/tmp/mn-proto/axis-regenerate.jsx GenerationCenter
 
-import { useState } from 'react';
-import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Icon, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -54,15 +56,83 @@ const MOCK_SCHEDULES = [
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
+function mapApiRun(it: Record<string, unknown>): MockRun {
+  const sub = (it.subDims as string[] | undefined) ?? [];
+  return {
+    id: String(it.id ?? ''),
+    state: (it.state as MockRun['state']) ?? 'queued',
+    axis: String(it.axis ?? ''),
+    subs: sub,
+    preset: String(it.preset ?? 'standard'),
+    scope: String((it.scopeKind as string | undefined) ?? (it.scope as string | undefined) ?? 'project'),
+    scopeLabel: String(it.scopeLabel ?? it.scopeId ?? ''),
+    started: String(it.startedAt ?? it.started ?? ''),
+    eta: String(it.eta ?? (it.state === 'done' ? '已完成' : '')),
+    pct: Number(it.progress ?? it.pct ?? 0),
+    triggeredBy: String(it.triggeredBy ?? ''),
+    cost: String(it.cost ?? (it.tokens ? `${it.tokens} tok` : '—')),
+    version: (it.version as string | undefined),
+  };
+}
+
 function QueueView() {
+  const navigate = useNavigate();
+  const [runs, setRuns] = useState<MockRun[]>(MOCK_RUNS);
+  const [isMock, setIsMock] = useState(true);
+
+  const refetch = () => {
+    meetingNotesApi.listRuns({ limit: 50 })
+      .then((r) => {
+        const items = r?.items ?? [];
+        if (items.length > 0) {
+          setRuns(items.map(mapApiRun));
+          setIsMock(false);
+        }
+      })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    refetch();
+    const t = setInterval(refetch, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const counts = {
+    running: runs.filter((r) => r.state === 'running').length,
+    queued:  runs.filter((r) => r.state === 'queued').length,
+    done:    runs.filter((r) => r.state === 'done').length,
+    failed:  runs.filter((r) => r.state === 'failed').length,
+  };
+
+  async function handleRowAction(r: MockRun) {
+    if (r.state === 'queued' || r.state === 'running') {
+      try { await meetingNotesApi.cancelRun(r.id); refetch(); }
+      catch { alert('取消失败 · 后端无响应'); }
+      return;
+    }
+    if (r.state === 'failed') {
+      try {
+        await meetingNotesApi.enqueueRun({ scope: { kind: r.scope.toUpperCase() }, axis: r.axis, subDims: r.subs, preset: r.preset });
+        refetch();
+      } catch { alert('重试失败'); }
+      return;
+    }
+    // done → jump to versions
+    navigate(`/meeting/generation-center?tab=versions&axis=${r.axis}`);
+  }
+
   return (
     <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        {isMock && <MockBadge />}
+        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>每 5 秒轮询 · listRuns</span>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
         {[
-          { l: 'running',    v: '1', c: 'var(--teal)' },
-          { l: 'queued',     v: '1', c: 'var(--amber)' },
-          { l: 'done · 24h', v: '7', c: 'var(--accent)' },
-          { l: 'failed · 24h', v: '1', c: 'oklch(0.55 0.16 25)' },
+          { l: 'running',    v: String(counts.running),  c: 'var(--teal)' },
+          { l: 'queued',     v: String(counts.queued),   c: 'var(--amber)' },
+          { l: 'done · 24h', v: String(counts.done),     c: 'var(--accent)' },
+          { l: 'failed · 24h', v: String(counts.failed), c: 'oklch(0.55 0.16 25)' },
         ].map(s => (
           <div key={s.l} style={{
             padding: '14px 16px', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
@@ -76,7 +146,7 @@ function QueueView() {
 
       <SectionLabel>所有任务 · 近 48 小时</SectionLabel>
       <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
-        {MOCK_RUNS.map((r, i) => {
+        {runs.map((r, i) => {
           const color = r.state === 'running' ? 'var(--teal)' : r.state === 'done' ? 'var(--accent)' : r.state === 'failed' ? 'oklch(0.55 0.16 25)' : 'var(--amber)';
           const axisMeta = AXIS_SUB[r.axis] ?? { label: r.axis, color: 'var(--ink-3)', subs: [] };
           return (
@@ -130,7 +200,7 @@ function QueueView() {
                   </div>
                 )}
               </div>
-              <button style={{
+              <button onClick={() => handleRowAction(r)} style={{
                 border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
                 padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
               }}>
@@ -144,8 +214,48 @@ function QueueView() {
   );
 }
 
+interface MockVersion { v: string; axis: string; when: string; preset: string; scope: string; diff: string; }
+
+function mapApiVersion(it: Record<string, unknown>): MockVersion {
+  return {
+    v: String(it.version ?? it.v ?? it.id ?? ''),
+    axis: String(it.axis ?? ''),
+    when: String(it.createdAt ?? it.when ?? ''),
+    preset: String(it.preset ?? ''),
+    scope: String((it.scopeKind as string | undefined) ?? it.scope ?? ''),
+    diff: String(it.diffSummary ?? it.diff ?? ''),
+  };
+}
+
 function VersionsView() {
+  const [searchParams] = useSearchParams();
+  const axisParam = searchParams.get('axis') ?? 'people';
+  const [versions, setVersions] = useState<MockVersion[]>(MOCK_VERSIONS);
+  const [isMock, setIsMock] = useState(true);
   const [sel, setSel] = useState<string[]>(['v14', 'v13']);
+
+  useEffect(() => {
+    let cancelled = false;
+    meetingNotesApi.listVersions('library', axisParam)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length > 0) {
+          const mapped = items.map(mapApiVersion);
+          setVersions(mapped);
+          setIsMock(false);
+          if (mapped.length >= 2) setSel([mapped[0].v, mapped[1].v]);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [axisParam]);
+
+  // diff 预取（后续可用来替换下方硬编码对比行；Phase 15.5 完成后端结构化输出再接入）
+  useEffect(() => {
+    if (sel.length !== 2) return;
+    meetingNotesApi.diffVersions(sel[0], sel[1]).catch(() => {});
+  }, [sel]);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 22 }}>
       <div>
@@ -154,7 +264,7 @@ function VersionsView() {
           <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>勾选 2 个对比</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {MOCK_VERSIONS.map(v => {
+          {versions.map(v => {
             const on = sel.includes(v.v);
             return (
               <button key={v.v} onClick={() => {
@@ -198,7 +308,7 @@ function VersionsView() {
               <div key={v} style={{ padding: '12px 16px', borderLeft: i === 0 ? 'none' : '1px solid var(--line-2)' }}>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{v}</div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>
-                  {MOCK_VERSIONS.find(x => x.v === v)?.when ?? ''}
+                  {versions.find(x => x.v === v)?.when ?? ''}
                 </div>
               </div>
             ))}
@@ -243,12 +353,18 @@ function ScheduleView() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <SectionLabel>定时与触发规则</SectionLabel>
-        <button style={{
-          padding: '7px 14px', border: '1px solid var(--ink)', background: 'var(--ink)',
-          color: 'var(--paper)', borderRadius: 5, fontSize: 12, cursor: 'pointer', fontWeight: 500,
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SectionLabel>定时与触发规则</SectionLabel>
+          <MockBadge />
+          <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>后端 cron API（#20）未上线 · 编辑不持久化</span>
+        </div>
+        <button
+          onClick={() => alert('新建规则 · 待接入（Phase 15.7 · POST /schedules）')}
+          style={{
+            padding: '7px 14px', border: '1px solid var(--ink)', background: 'var(--ink)',
+            color: 'var(--paper)', borderRadius: 5, fontSize: 12, cursor: 'pointer', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
           <Icon name="plus" size={12} />
           新建规则
         </button>
@@ -311,7 +427,18 @@ function ScheduleView() {
 // ── Main export ──────────────────────────────────────────────────────────────
 
 export function GenerationCenter() {
-  const [tab, setTab] = useState<'queue' | 'versions' | 'schedule'>('queue');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = (searchParams.get('tab') as 'queue' | 'versions' | 'schedule' | null) ?? 'queue';
+  const [tab, setTab] = useState<'queue' | 'versions' | 'schedule'>(tabFromUrl);
+  useEffect(() => {
+    if (tab !== tabFromUrl) {
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        p.set('tab', tab);
+        return p;
+      }, { replace: true });
+    }
+  }, [tab]);
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper)', color: 'var(--ink)',

@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,29 @@ export function AxisRegeneratePanel({
 
   const toggle = (id: string) =>
     setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const [submitting, setSubmitting] = useState(false);
+  async function handleEnqueue() {
+    if (selected.length === 0) return;
+    setSubmitting(true);
+    try {
+      const r: { runId?: string } = await meetingNotesApi.enqueueRun({
+        scope: { kind: scope.toUpperCase() },
+        axis,
+        subDims: selected,
+        preset,
+        triggeredBy: 'axis-regenerate-panel',
+      });
+      if (r.runId) {
+        console.info('enqueued:', r.runId);
+      }
+    } catch (e) {
+      console.warn('enqueueRun failed:', e);
+    } finally {
+      setSubmitting(false);
+      if (onClose) onClose();
+    }
+  }
 
   return (
     <div style={{
@@ -256,13 +280,13 @@ export function AxisRegeneratePanel({
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
-            <button style={linkBtnStyle} onClick={onClose}>取消</button>
+            <button style={linkBtnStyle} onClick={onClose} disabled={submitting}>取消</button>
             <button style={{
               flex: 1, padding: '11px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
               color: 'var(--paper)', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              opacity: selected.length === 0 ? 0.4 : 1,
-            }} disabled={selected.length === 0} onClick={onClose}>
-              入队 · 开始重算 →
+              opacity: (selected.length === 0 || submitting) ? 0.4 : 1,
+            }} disabled={selected.length === 0 || submitting} onClick={handleEnqueue}>
+              {submitting ? '入队中…' : '入队 · 开始重算 →'}
             </button>
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>
