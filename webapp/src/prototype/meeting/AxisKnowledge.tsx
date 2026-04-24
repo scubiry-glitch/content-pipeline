@@ -233,6 +233,8 @@ function MentalModels({ scopeId }: { scopeId: string }) {
       </div>
       {rows.map((m, i) => {
         const p = m.invokedBy === '—' ? null : P(m.invokedBy);
+        // mock 模式 · '—' 表示真"未激活"；API 模式 · 后端无 invoker 字段
+        const noInvokerLabel = isMock ? (m.invokedCount === 0 ? '未激活' : '无人激活') : '后端未提供';
         return (
           <div key={m.id} style={{
             display: 'grid', gridTemplateColumns: '180px 1fr 80px 100px 1fr 120px',
@@ -249,7 +251,7 @@ function MentalModels({ scopeId }: { scopeId: string }) {
                   <Avatar p={p} size={20} radius={4} />
                   <span style={{ fontSize: 12 }}>{p.name}</span>
                 </div>
-              ) : <span style={{ fontSize: 11.5, color: 'var(--ink-4)', fontStyle: 'italic' }}>无人激活</span>}
+              ) : <span style={{ fontSize: 11.5, color: 'var(--ink-4)', fontStyle: 'italic' }}>{noInvokerLabel}</span>}
             </div>
             <div style={{
               fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600,
@@ -341,15 +343,19 @@ function Biases({ meetingId }: { meetingId: string }) {
         if (cancelled) return;
         const items = r?.items ?? [];
         if (items.length === 0) return;
-        const mapped: BiasRow[] = items.map((b) => ({
-          id: 'B-' + b.id.slice(0, 6).toUpperCase(),
-          name: b.bias_type,
-          where: b.where_excerpt ?? '—',
-          by: b.by_person_name ? [b.by_person_name] : ['—'],
-          severity: b.severity,
-          mitigated: Boolean(b.mitigated),
-          mitigation: b.mitigation_strategy,
-        }));
+        const mapped: BiasRow[] = items.map((b) => {
+          const name = b.by_person_name?.trim();
+          const where = b.where_excerpt?.trim();
+          return {
+            id: 'B-' + b.id.slice(0, 6).toUpperCase(),
+            name: b.bias_type,
+            where: where || '—',
+            by: name ? [name] : ['—'],
+            severity: b.severity,
+            mitigated: Boolean(b.mitigated),
+            mitigation: b.mitigation_strategy,
+          };
+        });
         setRows(mapped);
         setIsMock(false);
       })
