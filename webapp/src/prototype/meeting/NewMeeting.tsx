@@ -58,6 +58,7 @@ function FlowUpload({ onNext, onUploaded }: {
   const forceMock = useForceMock();
   const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
   const [uploading, setUploading] = useState(false);
+  const [uploadDone, setUploadDone] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const btnPrimary: React.CSSProperties = {
@@ -73,9 +74,10 @@ function FlowUpload({ onNext, onUploaded }: {
     if (!files || files.length === 0) return;
     const file = files[0];
     setUploadedName(file.name);
+    setUploadDone(false);
     if (forceMock) {
-      // Mock 模式：不调用 API，伪装上传成功
       onUploaded(null);
+      setUploadDone(true);
       return;
     }
     setUploading(true);
@@ -89,6 +91,7 @@ function FlowUpload({ onNext, onUploaded }: {
       onUploaded(null);
     } finally {
       setUploading(false);
+      setUploadDone(true);
     }
   }
 
@@ -229,7 +232,13 @@ function FlowUpload({ onNext, onUploaded }: {
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
         <button style={btnGhost}>稍后</button>
-        <button style={btnPrimary} onClick={onNext}>继续 · 选择专家</button>
+        <button
+          style={{ ...btnPrimary, ...(mode === 'files' && uploading ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+          onClick={onNext}
+          disabled={mode === 'files' && uploading}
+        >
+          {uploading ? '上传中…' : uploadDone && !forceMock && mode === 'files' ? '已上传 · 继续' : '继续 · 选择专家'}
+        </button>
       </div>
     </div>
   );
@@ -240,10 +249,11 @@ function FlowUpload({ onNext, onUploaded }: {
 function FlowExperts({ onNext, onBack, onSubmit }: {
   onNext: () => void;
   onBack: () => void;
-  onSubmit: (body: { presetId: string; expertIds: string[] }) => void;
+  onSubmit: (body: { presetId: string; expertIds: string[] }) => Promise<void>;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(EXPERTS.filter(e => e.selected).map(e => e.id));
   const [presetId, setPresetId] = useState('standard');
+  const [enqueueing, setEnqueueing] = useState(false);
   const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
@@ -370,10 +380,16 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
               padding: '9px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
               color: 'var(--ink-2)', borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--sans)',
             }}>← 返回</button>
-            <button style={{ ...btnPrimary, flex: 1 }} onClick={() => {
-              onSubmit({ presetId, expertIds: selectedIds });
-              onNext();
-            }}>生成会议纪要 →</button>
+            <button
+              style={{ ...btnPrimary, flex: 1, ...(enqueueing ? { opacity: 0.7, cursor: 'not-allowed' } : {}) }}
+              disabled={enqueueing}
+              onClick={async () => {
+                setEnqueueing(true);
+                await onSubmit({ presetId, expertIds: selectedIds });
+                setEnqueueing(false);
+                onNext();
+              }}
+            >{enqueueing ? '入队中…' : '生成会议纪要 →'}</button>
           </div>
         </aside>
       </div>
@@ -484,13 +500,29 @@ function FlowProcessing({
             <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: 0, letterSpacing: '-0.01em' }}>
               {done ? '解析完成' : '正在生成'}
             </h2>
-            <MonoMeta>step 3 / 3 · standard preset {done && '· run-237'}</MonoMeta>
+            <MonoMeta>step 3 / 3 · standard preset {done && `· ${realRunId ?? 'run-237'}`}</MonoMeta>
+            {!runId && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 3, fontFamily: 'var(--mono)',
+                background: 'oklch(0.93 0.04 50)', color: 'oklch(0.45 0.12 50)',
+                border: '1px solid oklch(0.82 0.07 50)', marginLeft: 4,
+              }}>mock · 无真实 run</span>
+            )}
+            {runId && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 3, fontFamily: 'var(--mono)',
+                background: 'oklch(0.93 0.08 165)', color: 'oklch(0.35 0.12 165)',
+                border: '1px solid oklch(0.80 0.10 165)', marginLeft: 4,
+              }}>API · 轮询中</span>
+            )}
             <div style={{ marginLeft: 'auto' }}>
-              <button onClick={() => setDone(d => !d)} style={{
-                padding: '5px 12px', fontSize: 11, border: '1px dashed var(--line)',
-                background: 'transparent', borderRadius: 4, color: 'var(--ink-3)',
-                cursor: 'pointer', fontFamily: 'var(--mono)',
-              }}>{done ? '↺ 重置演示' : '⇢ 演示完成态'}</button>
+              {!runId && (
+                <button onClick={() => setDone(d => !d)} style={{
+                  padding: '5px 12px', fontSize: 11, border: '1px dashed var(--line)',
+                  background: 'transparent', borderRadius: 4, color: 'var(--ink-3)',
+                  cursor: 'pointer', fontFamily: 'var(--mono)',
+                }}>{done ? '↺ 重置演示' : '⇢ 演示完成态'}</button>
+              )}
             </div>
           </div>
 
@@ -652,16 +684,11 @@ export function NewMeeting() {
   const [assetId, setAssetId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
 
-  async function handleSubmit(body: { presetId: string; expertIds: string[] }) {
-    if (forceMock) return;
-    if (!assetId) {
-      // No real upload — skip enqueueRun, stay in demo mode
-      return;
-    }
+  async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<void> {
+    if (forceMock || !assetId) return;
     try {
-      const scope = { kind: 'MEETING', assetId };
       const r: { runId?: string; ok?: boolean } = await meetingNotesApi.enqueueRun({
-        scope,
+        scope: { kind: 'MEETING', assetId },
         axis: 'multi',
         preset: body.presetId,
         triggeredBy: 'new-meeting-wizard',
