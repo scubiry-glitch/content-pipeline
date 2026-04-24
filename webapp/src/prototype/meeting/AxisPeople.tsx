@@ -354,9 +354,11 @@ function PSpeech({ meetingId }: { meetingId: string }) {
         if (cancelled) return;
         const items = r?.items ?? [];
         if (items.length > 0) {
+          // 后端 mn_speech_metrics 不存 claims（发言次数）· API 模式 claims=0
+          // render 端用 hasClaims 判定是否显示 volume bar
           const mapped: SpeechRow[] = items.map((it) => ({
             who: String(it.personId),
-            claims: PEOPLE_STATS.find(x => x.who === String(it.personId))?.claims ?? 0,
+            claims: 0,
             speechHighEntropy: Number(it.entropy ?? 0),
             beingFollowedUp: Number(it.followedUp ?? 0),
           }));
@@ -368,7 +370,8 @@ function PSpeech({ meetingId }: { meetingId: string }) {
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
 
-  const max = Math.max(...rows.map(s => s.claims));
+  const max = Math.max(1, ...rows.map(s => s.claims));
+  const hasClaims = rows.some(s => s.claims > 0);
   return (
     <div style={{ padding: '24px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -411,10 +414,16 @@ function PSpeech({ meetingId }: { meetingId: string }) {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1, maxWidth: 240, height: 8, background: 'var(--line-2)', borderRadius: 2 }}>
-                <div style={{ width: `${(s.claims / max) * 100}%`, height: '100%', background: 'var(--ink-3)', borderRadius: 2 }} />
-              </div>
-              <MonoMeta style={{ width: 28 }}>{s.claims}</MonoMeta>
+              {hasClaims ? (
+                <>
+                  <div style={{ flex: 1, maxWidth: 240, height: 8, background: 'var(--line-2)', borderRadius: 2 }}>
+                    <div style={{ width: `${(s.claims / max) * 100}%`, height: '100%', background: 'var(--ink-3)', borderRadius: 2 }} />
+                  </div>
+                  <MonoMeta style={{ width: 28 }}>{s.claims}</MonoMeta>
+                </>
+              ) : (
+                <MonoMeta style={{ color: 'var(--ink-4)' }}>· 后端未提供</MonoMeta>
+              )}
             </div>
             <div style={{ textAlign: 'right' }}>
               <EntropyBar v={s.speechHighEntropy} />
