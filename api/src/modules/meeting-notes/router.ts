@@ -9,6 +9,14 @@ import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { meetingNotesRoutes as ingestRoutes } from './ingest/routes.js';
 import { authenticate } from '../../middleware/auth.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveScopeUuid(db: any, idOrSlug: string): Promise<string | null> {
+  if (UUID_RE.test(idOrSlug)) return idOrSlug;
+  const r = await db.query(`SELECT id FROM mn_scopes WHERE slug = $1 LIMIT 1`, [idOrSlug]);
+  return r.rows[0]?.id ?? null;
+}
+
 export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
   return async function meetingNotesRouter(fastify: FastifyInstance) {
     // --------------------------------------------------------
@@ -118,7 +126,35 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const q = request.query as { view?: string };
       const view = q.view === 'B' || q.view === 'C' ? q.view : 'A';
       try {
-        return await engine.getMeetingDetail(id, view as 'A' | 'B' | 'C');
+        const base = await engine.getMeetingDetail(id, view as 'A' | 'B' | 'C');
+        if (view !== 'C') return base;
+        // Phase 15.15 · C view: append consensus (C.2) + focusMap (C.3)
+        const db = engine.deps.db;
+        const [cRows, fRows] = await Promise.all([
+          db.query(
+            `SELECT ci.id, ci.kind, ci.item_text AS text, ci.supported_by,
+                    COALESCE(
+                      json_agg(
+                        json_build_object('stance', s.stance, 'reason', s.reason, 'by', s.by_ids)
+                        ORDER BY s.seq
+                      ) FILTER (WHERE s.id IS NOT NULL),
+                      '[]'::json
+                    ) AS sides
+               FROM mn_consensus_items ci
+               LEFT JOIN mn_consensus_sides s ON s.item_id = ci.id
+              WHERE ci.meeting_id = $1
+              GROUP BY ci.id
+              ORDER BY ci.seq`,
+            [id],
+          ),
+          db.query(
+            `SELECT person_id AS who, themes, returns_to AS "returnsTo"
+               FROM mn_focus_map
+              WHERE meeting_id = $1`,
+            [id],
+          ),
+        ]);
+        return { ...base, consensus: cRows.rows, focusMap: fRows.rows };
       } catch (e) {
         reply.status(500);
         return { error: 'Internal Server Error', message: (e as Error).message };
@@ -226,6 +262,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // --------------------------------------------------------
     fastify.get('/scopes/:id/decisions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT d.id, d.meeting_id, d.title, d.proposer_person_id,
                 d.based_on_ids, d.superseded_by_id, d.confidence, d.is_current, d.rationale,
@@ -235,13 +273,15 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            LEFT JOIN mn_people p ON p.id = d.proposer_person_id
           WHERE d.scope_id = $1
           ORDER BY d.created_at ASC`,
-        [id],
+        [uuid],
       );
       return { items: r.rows };
     });
 
     fastify.get('/scopes/:id/assumptions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT a.id, a.meeting_id, a.text, a.evidence_grade, a.verification_state,
                 a.verifier_person_id, a.due_at, a.underpins_decision_ids,
@@ -251,16 +291,18 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            LEFT JOIN mn_people p ON p.id = a.verifier_person_id
           WHERE a.scope_id = $1
           ORDER BY a.created_at DESC`,
-        [id],
+        [uuid],
       );
       return { items: r.rows };
     });
 
     fastify.get('/scopes/:id/open-questions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const q = request.query as { status?: string; category?: string };
       const conds: string[] = ['scope_id = $1'];
-      const args: unknown[] = [id];
+      const args: unknown[] = [uuid];
       if (q.status)   { conds.push(`status = $${args.length + 1}`);   args.push(q.status); }
       if (q.category) { conds.push(`category = $${args.length + 1}`); args.push(q.category); }
       const r = await engine.deps.db.query(
@@ -279,13 +321,15 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/scopes/:id/risks', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT id, text, severity, mention_count, heat_score, trend,
                 action_taken, metadata, created_at, updated_at
            FROM mn_risks
           WHERE scope_id = $1
           ORDER BY heat_score DESC, mention_count DESC`,
-        [id],
+        [uuid],
       );
       return { items: r.rows };
     });
@@ -351,6 +395,28 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       );
       if (r.rows.length === 0) return null;
       return r.rows[0];
+    });
+
+    // Phase 15.15 · C.1 · Tensions (mn_tensions + mn_tension_moments)
+    fastify.get('/meetings/:id/tensions', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.deps.db.query(
+        `SELECT t.id, t.tension_key, t.between_ids, t.topic, t.intensity, t.summary,
+                COALESCE(
+                  json_agg(
+                    json_build_object('who', m.person_id::text, 'text', m.quote)
+                    ORDER BY m.seq
+                  ) FILTER (WHERE m.id IS NOT NULL),
+                  '[]'::json
+                ) AS moments
+           FROM mn_tensions t
+           LEFT JOIN mn_tension_moments m ON m.tension_id = t.id
+          WHERE t.meeting_id = $1
+          GROUP BY t.id
+          ORDER BY t.intensity DESC`,
+        [id],
+      );
+      return { items: r.rows };
     });
 
     // Phase 15.10 · AxisKnowledge · Judgments (mn_judgments) + Mental Model Hit Rate (mn_mental_model_hit_stats)

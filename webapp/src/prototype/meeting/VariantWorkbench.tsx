@@ -52,12 +52,13 @@ function Stance({ p, stance, text, tone }: {
 }
 
 // ── WBTension ──
-function WBTension({ a, selected, setSelected }: {
-  a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void;
+function WBTension({ a, selected, setSelected, isMock }: {
+  a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void; isMock?: boolean;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {isMock && <div style={{ textAlign: 'right', marginBottom: 2 }}><MockBadge /></div>}
         {a.tension.map((t) => {
           const [p1, p2] = t.between.map(P);
           const active = t.id === selected;
@@ -392,12 +393,29 @@ export function VariantWorkbench() {
   const [selectedT, setSelectedT] = useState('T1');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
+  const [tensionMock, setTensionMock] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     meetingNotesApi.getMeetingDetail(id, 'B')
       .then((data: any) => {
         if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+      })
+      .catch(() => {});
+    // Phase 15.15 · C.1 · tension probe
+    meetingNotesApi.getMeetingTensions(id)
+      .then((data) => {
+        if (data?.items?.length) {
+          setA((prev) => ({ ...prev, tension: data.items.map((t) => ({
+            id: t.tension_key,
+            between: t.between_ids,
+            topic: t.topic,
+            intensity: t.intensity,
+            summary: t.summary ?? '',
+            moments: t.moments ?? [],
+          })) }));
+          setTensionMock(false);
+        }
       })
       .catch(() => {});
   }, [id]);
@@ -530,7 +548,7 @@ export function VariantWorkbench() {
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px' }}>
-            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} />}
+            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} />}
             {dim === 'minutes'       && <WBMinutes        a={a} />}
             {dim === 'new_cognition' && <WBNewCognition   a={a} />}
             {dim === 'focus_map'     && <WBFocusMap       a={a} />}

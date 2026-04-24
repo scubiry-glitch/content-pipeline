@@ -167,6 +167,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeDecisions(scopeId)
       .then((r) => {
@@ -283,6 +284,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeAssumptions(scopeId)
       .then((r) => {
@@ -407,6 +409,7 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeOpenQuestions(scopeId)
       .then((r) => {
@@ -517,6 +520,7 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(RISKS); setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeRisks(scopeId)
       .then((r) => {
@@ -636,6 +640,7 @@ export function AxisProjects() {
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled && r && (r.axes?.projects || r.projects)) setIsMock(false); })

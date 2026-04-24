@@ -105,15 +105,41 @@
 
 **前端阻塞点**：需要后端先给出 `extend axes.xxx` 的字段约定（例如 commitment trace 的 `supersededBy` 链式结构）才能写精确 adapter。当前策略：等 schema 发布 → 本地加 adapter → 单独 commit 收尾。
 
-## Tier C · LLM/信号类（本轮未实施 · 后端回填时再接）
+## Tier C · LLM/信号类（Phase 15.15 实施）
 
-- #2 consensus fork · VariantThreads
-- #3 nebula edges · VariantThreads
-- #5 silence · AxisPeople Silence
-- #13 biases · AxisKnowledge
-- #16 emotion curve · AxisMeta Emotion
+- [x] #2 consensus fork · VariantThreads · 接 getMeetingDetail view=C（append field）
+- [x] #3 nebula edges · VariantThreads · 同上
+- [x] #1 tension classification · VariantEditorial/Workbench · 接 GET /meetings/:id/tensions（新路由）
+- [x] #5 silence · AxisPeople Silence（Phase 15.12 已完成）
+- [x] #13 biases · AxisKnowledge（Phase 15.13 已完成）
+- [x] #16 emotion curve · AxisMeta Emotion（Phase 15.11/15.14 已完成）
 
-**前端阻塞点**：LLM 输出 schema 通常要看样本才定型。等后端给 sample payload → 本地加 adapter → 单独 commit。
+---
+
+## 2026-04-25 · 15.15 · C.1/C.2/C.3 · 张力/共识叉/焦点星云
+
+### C.1 · `GET /meetings/:id/tensions` · 全新路由
+
+- 改动类型：new route（migration 010）
+- 兼容性：forward-compat · 无既有消费方
+- **待回归检查**（TODO）：
+  - [x] `/pages/meeting-notes/**` — 无此接口消费
+  - [x] `api/meetingNotes.ts` — 新增 `getMeetingTensions`，无既有方法改动
+  - [x] batch-ops / 脚本 — 无
+- 前端：VariantEditorial + VariantWorkbench 加 tension probe + `tensionMock` 降级；
+  SecTension / WBTension 加 `isMock` prop + `<MockBadge />`
+
+### C.2 + C.3 · `GET /meetings/:id/detail?view=C` · append field
+
+- 改动类型：append field（在 C view 响应追加 `consensus[]` + `focusMap[]`）
+- 兼容性：forward-compat（只加字段，旧消费方忽略新字段）
+- **待回归检查**（TODO）：
+  - [x] `/pages/meeting-notes/MeetingDetail`（旧版）— 消费 `/meetings/:id/detail?view=A`，不消费 C；无影响
+  - [x] 旧 4 个 Axis 页（`/pages/meeting-notes/`）— 不调用 detail API；无影响
+  - [x] `content-pipeline` 其他模块 — `grep -r "meeting-notes" api/src/` 确认无其他消费方
+  - [x] batch-ops / 脚本 — 无
+- 前端：VariantThreads useEffect 扩展读 `data.consensus` + `data.focusMap`；
+  ConsensusGraph + FocusNebula 从 hardcoded `<MockBadge />` 改为 `{isMock && <MockBadge />}`
 
 ---
 
@@ -128,6 +154,12 @@
   - 15.5 diffVersions structured（GenerationCenter · Versions）
   - 15.6 getRun tokens/cost（FlowProcessing + QueueView）
   - 15.7 schedule CRUD（GenerationCenter · ScheduleView）
-- [ ] Tier B/C · 等后端 schema 确认后启动（非本轮范围）
-- [ ] `chore(regression): verify <route> across consumers` · 在后端 15.5/15.6/15.3/15.4 上线后分别跑
+- [x] Tier B · 15.8-15.10 全部 commit（2026-04-24）
+- [x] Tier C · 15.11-15.15 全部 commit（2026-04-25）
+  - 15.11+15.14 necessity + emotion curve（AxisMeta）
+  - 15.12 silence（AxisPeople）
+  - 15.13 biases（AxisKnowledge）
+  - 15.15 tension / consensus / focusMap（C.1/C.2/C.3 · 本 commit）
+- [x] `GET /meetings/:id/detail?view=C` append field — 回归检查通过（无旧消费方）
+- [ ] `chore(regression): verify <route> across consumers` · 在后端 15.5/15.6/15.3/15.4 真实上线后跑
 - [ ] 最终 `docs(meeting-proto): Phase 15 收尾 · 接口改动对外影响验证通过`

@@ -86,10 +86,13 @@ function TensionArrow({ intensity }: { intensity: number }) {
 }
 
 // ── SecTension ──
-function SecTension({ a }: { a: typeof ANALYSIS }) {
+function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
   return (
     <section>
-      {sectionHeader('02', '张力', '不是冲突 —— 是未解的推拉。每一条张力附带触发点、强度与未化解的残留。')}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {sectionHeader('02', '张力', '不是冲突 —— 是未解的推拉。每一条张力附带触发点、强度与未化解的残留。')}
+        {isMock && <MockBadge style={{ marginTop: 6, flexShrink: 0 }} />}
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 760 }}>
         {a.tension.map((t) => {
           const [a1, a2] = t.between.map(P);
@@ -342,12 +345,29 @@ export function VariantEditorial() {
   const [dim, setDim] = useState('minutes');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
+  const [tensionMock, setTensionMock] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     meetingNotesApi.getMeetingDetail(id, 'A')
       .then((data: any) => {
         if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+      })
+      .catch(() => {});
+    // Phase 15.15 · C.1 · tension probe
+    meetingNotesApi.getMeetingTensions(id)
+      .then((data) => {
+        if (data?.items?.length) {
+          setA((prev) => ({ ...prev, tension: data.items.map((t) => ({
+            id: t.tension_key,
+            between: t.between_ids,
+            topic: t.topic,
+            intensity: t.intensity,
+            summary: t.summary ?? '',
+            moments: t.moments ?? [],
+          })) }));
+          setTensionMock(false);
+        }
       })
       .catch(() => {});
   }, [id]);
@@ -466,7 +486,7 @@ export function VariantEditorial() {
 
         {/* Dimension content */}
         {dim === 'minutes'       && <SecMinutes       a={a} />}
-        {dim === 'tension'       && <SecTension       a={a} />}
+        {dim === 'tension'       && <SecTension       a={a} isMock={tensionMock} />}
         {dim === 'new_cognition' && <SecNewCognition  a={a} />}
         {dim === 'focus_map'     && <SecFocusMap      a={a} />}
         {dim === 'consensus'     && <SecConsensus     a={a} />}

@@ -251,7 +251,7 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── ConsensusGraph ──
-function ConsensusGraph({ a }: { a: typeof ANALYSIS }) {
+function ConsensusGraph({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
   const cons = a.consensus.filter((x) => x.kind === 'consensus');
   const divs = a.consensus.filter((x) => x.kind === 'divergence');
   const participants = PARTICIPANTS;
@@ -267,7 +267,7 @@ function ConsensusGraph({ a }: { a: typeof ANALYSIS }) {
     <div style={{ padding: '22px 56px 26px', display: 'grid', gridTemplateColumns: '900px 1fr', gap: 26, overflow: 'auto' }}>
       <div style={{ position: 'relative', height: 720 }}>
         <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-          共识 · 分歧 · 图谱 <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />
+          共识 · 分歧 · 图谱 {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
         <svg width={900} height={680} style={{ position: 'absolute', left: 0, top: 40 }}>
           <defs>
@@ -421,7 +421,7 @@ function ConsensusGraph({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── FocusNebula ──
-function FocusNebula({ a }: { a: typeof ANALYSIS }) {
+function FocusNebula({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
   const W = 900, H = 620;
   const clusters = a.focusMap.map((f, i) => {
     const angle = (i / a.focusMap.length) * Math.PI * 2 - Math.PI / 2;
@@ -438,7 +438,7 @@ function FocusNebula({ a }: { a: typeof ANALYSIS }) {
     <div style={{ padding: '22px 56px 26px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 26, overflow: 'auto' }}>
       <div>
         <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-          关注点星云 · Focus nebula <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />
+          关注点星云 · Focus nebula {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
         <div style={{
           position: 'relative', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
@@ -533,12 +533,35 @@ export function VariantThreads() {
   const [view, setView] = useState<'threads' | 'consensus' | 'focus'>('threads');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
+  const [consensusMock, setConsensusMock] = useState(true);
+  const [focusMapMock, setFocusMapMock] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     meetingNotesApi.getMeetingDetail(id, 'C')
       .then((data: any) => {
         if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+        // Phase 15.15 · C.2 · consensus fork
+        if (Array.isArray(data?.consensus) && data.consensus.length > 0) {
+          const adapted = (data.consensus as any[]).map((c) => ({
+            id: c.id as string,
+            kind: c.kind as 'consensus' | 'divergence',
+            text: c.text as string,
+            supportedBy: (c.supported_by ?? []) as string[],
+            sides: ((c.sides ?? []) as any[]).map((s) => ({
+              stance: s.stance as string,
+              reason: (s.reason ?? '') as string,
+              by: (s.by_ids ?? s.by ?? []) as string[],
+            })),
+          }));
+          setA((prev) => ({ ...prev, consensus: adapted }));
+          setConsensusMock(false);
+        }
+        // Phase 15.15 · C.3 · focus nebula
+        if (Array.isArray(data?.focusMap) && data.focusMap.length > 0) {
+          setA((prev) => ({ ...prev, focusMap: data.focusMap }));
+          setFocusMapMock(false);
+        }
       })
       .catch(() => {});
   }, [id]);
@@ -582,8 +605,8 @@ export function VariantThreads() {
       </header>
 
       {view === 'threads'   && <ThreadView    a={a} />}
-      {view === 'consensus' && <ConsensusGraph a={a} />}
-      {view === 'focus'     && <FocusNebula   a={a} />}
+      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} />}
+      {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} />}
     </div>
   );
 }
