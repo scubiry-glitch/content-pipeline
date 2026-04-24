@@ -327,17 +327,49 @@ function Evidence() {
   );
 }
 
-function Biases() {
+type BiasRow = typeof COGNITIVE_BIASES[number];
+
+function Biases({ meetingId }: { meetingId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<BiasRow[]>(COGNITIVE_BIASES);
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    if (forceMock) { setRows(COGNITIVE_BIASES); setIsMock(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getMeetingBiases(meetingId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        const mapped: BiasRow[] = items.map((b) => ({
+          id: 'B-' + b.id.slice(0, 6).toUpperCase(),
+          name: b.bias_type,
+          where: b.where_excerpt ?? '—',
+          by: b.by_person_name ? [b.by_person_name] : ['—'],
+          severity: b.severity,
+          mitigated: Boolean(b.mitigated),
+          mitigation: b.mitigation_strategy,
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
+
   return (
     <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        认知偏差探测 · Cognitive-bias surface
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          认知偏差探测 · Cognitive-bias surface
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         系统不评价对错，只标记可疑的认知模式。对<b>未被化解的高等级偏差</b>保持警觉。
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {COGNITIVE_BIASES.map(b => {
+        {rows.map(b => {
           const sev = BIAS_SEV[b.severity];
           const p = P(b.by[0]);
           return (
@@ -457,7 +489,7 @@ export function AxisKnowledge() {
         {tab === 'judgments'       && <Judgments scopeId={scopeId} />}
         {tab === 'mental_models'   && <MentalModels scopeId={scopeId} />}
         {tab === 'evidence'        && <Evidence />}
-        {tab === 'biases'          && <Biases />}
+        {tab === 'biases'          && <Biases meetingId={meetingId} />}
         {tab === 'counterfactuals' && <Counterfactuals />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
