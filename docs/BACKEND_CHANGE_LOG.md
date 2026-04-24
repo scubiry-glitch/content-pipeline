@@ -93,8 +93,41 @@
 
 ---
 
+## Tier B · 算法/口径类（本轮未实施 · 等待后端 schema 确认）
+
+每项都是 `extend getMeetingAxes` 子树 / `extend getMeetingDetail` 子树。前端已显示 mock，待后端确认字段 schema 后再加 adapter。
+
+- #1 tension classification · VariantEditorial/Workbench
+- #4 commitment trace · AxisPeople Commitments
+- #7 provenance chain · AxisProjects
+- #12 mental model hit rate · AxisKnowledge MentalModels + LongitudinalView HitRate
+- #15 necessity audit · AxisMeta Necessity
+
+**前端阻塞点**：需要后端先给出 `extend axes.xxx` 的字段约定（例如 commitment trace 的 `supersededBy` 链式结构）才能写精确 adapter。当前策略：等 schema 发布 → 本地加 adapter → 单独 commit 收尾。
+
+## Tier C · LLM/信号类（本轮未实施 · 后端回填时再接）
+
+- #2 consensus fork · VariantThreads
+- #3 nebula edges · VariantThreads
+- #5 silence · AxisPeople Silence
+- #13 biases · AxisKnowledge
+- #16 emotion curve · AxisMeta Emotion
+
+**前端阻塞点**：LLM 输出 schema 通常要看样本才定型。等后端给 sample payload → 本地加 adapter → 单独 commit。
+
+---
+
 ## 汇总回归（Phase 15 收尾）
 
-- [ ] 全部 TODO 勾选或标明 "no other consumer"
-- [ ] `chore(regression): verify <route> across consumers` 若干 commit
+- [x] Tier A · 15.0-15.7 全部 commit（2026-04-24）
+  - 15.0 初始化 Change Log
+  - 15.1 speech metrics（AxisPeople · Speech）
+  - 15.2 decision quality（AxisMeta · Quality）
+  - 15.3 belief_drift schema（LongitudinalView · BeliefDrift）
+  - 15.4 decision_tree schema（LongitudinalView · DecisionTree）
+  - 15.5 diffVersions structured（GenerationCenter · Versions）
+  - 15.6 getRun tokens/cost（FlowProcessing + QueueView）
+  - 15.7 schedule CRUD（GenerationCenter · ScheduleView）
+- [ ] Tier B/C · 等后端 schema 确认后启动（非本轮范围）
+- [ ] `chore(regression): verify <route> across consumers` · 在后端 15.5/15.6/15.3/15.4 上线后分别跑
 - [ ] 最终 `docs(meeting-proto): Phase 15 收尾 · 接口改动对外影响验证通过`
