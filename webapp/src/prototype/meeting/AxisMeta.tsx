@@ -2,10 +2,13 @@
 // 原型来源：/tmp/mn-proto/dimensions-meta.jsx DimensionMeta
 // 决策质量打分 · 必要性审计 · 情绪温度曲线
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Chip, MonoMeta, StatTile } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
+import { MEETING } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -211,6 +214,16 @@ function Emotion() {
 export function AxisMeta() {
   const [tab, setTab] = useState('quality');
   const [regenOpen, setRegenOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    meetingNotesApi.getMeetingAxes(meetingId)
+      .then((r) => { if (!cancelled && r && (r.axes?.meta || r.meta)) setIsMock(false); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId]);
   const tabs = [
     { id: 'quality',   label: '决策质量',   sub: '5 维打分 · 可证伪度最低',  icon: 'scale' as const },
     { id: 'necessity', label: '会议必要性', sub: '本场可缩减 58 分钟',        icon: 'clock' as const },
@@ -218,7 +231,7 @@ export function AxisMeta() {
   ];
   return (
     <>
-      <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+      <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'quality'   && <Quality />}
         {tab === 'necessity' && <Necessity />}
         {tab === 'emotion'   && <Emotion />}

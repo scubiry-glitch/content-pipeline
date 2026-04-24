@@ -2,11 +2,13 @@
 // 原型来源：/tmp/mn-proto/dimensions-people.jsx DimensionPeople
 // 承诺与兑现 · 角色画像演化 · 发言质量 · 沉默信号
 
-import { useState, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
-import { PARTICIPANTS, P } from './_fixtures';
+import { PARTICIPANTS, P, MEETING } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -458,6 +460,16 @@ function PSilence() {
 export function AxisPeople() {
   const [tab, setTab] = useState('commitments');
   const [regenOpen, setRegenOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    meetingNotesApi.getMeetingAxes(meetingId)
+      .then((r) => { if (!cancelled && r && (r.axes?.people || r.people)) setIsMock(false); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId]);
   const tabs = [
     { id: 'commitments', label: '承诺与兑现', sub: '说到做到率 · 跨会议承诺 ledger', icon: 'check' as const },
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },
@@ -466,7 +478,7 @@ export function AxisPeople() {
   ];
   return (
     <>
-      <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+      <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'commitments' && <PCommitments />}
         {tab === 'trajectory'  && <PTrajectory />}
         {tab === 'speech'      && <PSpeech />}

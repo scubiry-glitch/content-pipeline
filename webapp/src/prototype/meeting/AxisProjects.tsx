@@ -2,11 +2,13 @@
 // 原型来源：/tmp/mn-proto/dimensions-projects.jsx DimensionProjects
 // 决策溯源链 · 假设清单 · 未解问题 · 风险热度
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, Icon } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
-import { P } from './_fixtures';
+import { P, MEETING } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -480,6 +482,16 @@ function RiskHeat() {
 export function AxisProjects() {
   const [tab, setTab] = useState('provenance');
   const [regenOpen, setRegenOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const [isMock, setIsMock] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    meetingNotesApi.getMeetingAxes(meetingId)
+      .then((r) => { if (!cancelled && r && (r.axes?.projects || r.projects)) setIsMock(false); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meetingId]);
   const tabs = [
     { id: 'provenance',  label: '决策溯源链', sub: '如何一步步走到这里',         icon: 'git' as const },
     { id: 'assumptions', label: '假设清单',   sub: '每个决策背后的未验证假设',   icon: 'layers' as const },
@@ -488,7 +500,7 @@ export function AxisProjects() {
   ];
   return (
     <>
-      <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+      <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         <ProjectBanner />
         {tab === 'provenance'  && <ProvenanceChain />}
         {tab === 'assumptions' && <AssumptionLedger />}

@@ -5,7 +5,7 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon, MonoMeta, SectionLabel } from './_atoms';
+import { Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
 import { useMeetingScope, type ScopeKind } from './_scopeContext';
 
@@ -421,7 +421,7 @@ function RunBadge({ axis, run = 'run-237', version = 'v14', time = '08:03' }: { 
 // ── DimShell ─────────────────────────────────────────────────
 
 export function DimShell({
-  axis, tabs, tab, setTab, children, onOpenRegenerate,
+  axis, tabs, tab, setTab, children, onOpenRegenerate, mock,
 }: {
   axis: AxisName;
   tabs: TabDef[];
@@ -429,6 +429,7 @@ export function DimShell({
   setTab: (id: string) => void;
   children: ReactNode;
   onOpenRegenerate?: () => void;
+  mock?: boolean;
 }) {
   const axisColor = axisColorFor(axis);
   return (
@@ -451,8 +452,9 @@ export function DimShell({
           }}>{axis[0]}</div>
           <div>
             <MonoMeta style={{ fontSize: 10 }}>AXIS · 一库多视图</MonoMeta>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.005em', marginTop: -2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.005em', marginTop: -2 }}>
               {axis}轴
+              {mock && <MockBadge />}
             </div>
           </div>
         </div>
