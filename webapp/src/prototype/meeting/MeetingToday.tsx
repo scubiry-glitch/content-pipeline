@@ -1,33 +1,101 @@
-// Today — 「今天」入口页（骨架阶段）
+// MeetingToday — 「今天」入口页
 // 原型来源：/tmp/mn-proto/main-shell.jsx TodayPane
 
-import { Placeholder } from './_placeholder';
-import { RECENT_MEETINGS } from './_fixtures';
-import { MonoMeta } from './_atoms';
+import { Icon, Chip, Dot, MonoMeta } from './_atoms';
+
+const TODAY_ITEMS = [
+  {
+    kind: 'new' as const,
+    title: '昨晚的「2026 Q2 AI 基础设施策略评审」已完成解析',
+    sub: '标记出 3 条张力 · 3 条信念更新 · 2 条分歧 · 14 个 warm intro 数据点',
+    meta: 'M-2026-04-11 · 118 分钟 · 3 experts · 98 秒完成',
+  },
+  {
+    kind: 'due' as const,
+    title: 'AS-04 「LP 对 6000 万不会反弹」今天需要验证',
+    sub: '证据等级 D · 置信度 0.55 · 关联决策 D-07（3 天前刚作出）',
+    meta: '负责：陈汀 · 已逾期 0 天',
+  },
+  {
+    kind: 'drift' as const,
+    title: 'Wei Tan 的「训练层规模效应」信念 14 天内出现明显松动',
+    sub: '从 0.78 降至 0.56 · 触发点：沈岚展示的客户报价曲线',
+    meta: '6 次会议的纵向观察 · 建议下次会议定向追问',
+  },
+];
+
+const kindColor = { new: 'var(--accent)', due: 'var(--amber)', drift: 'var(--teal)' } as const;
+const kindLabel = { new: 'New · 新解析', due: 'Due · 待验证', drift: 'Drift · 信念漂移' } as const;
 
 export function MeetingToday() {
   return (
-    <Placeholder
-      title="今天，值得关注"
-      subtitle="首页：最近 run · 新判断 · 至风险 · 开放问题 · 承诺到期提示"
-      protoSrc="main-shell.jsx · TodayPane"
-      phase={7}
-      preview={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 720 }}>
-          {RECENT_MEETINGS.slice(0, 3).map((m) => (
-            <div key={m.id} style={{
-              background: 'var(--paper)', border: '1px solid var(--line-2)',
-              borderRadius: 6, padding: '12px 16px',
-              display: 'grid', gridTemplateColumns: '100px 1fr 160px', gap: 12, alignItems: 'center',
+    <div style={{ padding: '40px 48px 60px', maxWidth: 1100 }}>
+      <div style={{
+        fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+      }}>
+        2026 · 04 · 11 · 星期六 · 09:42
+      </div>
+      <h1 style={{
+        fontFamily: 'var(--serif)', fontSize: 40, fontWeight: 500,
+        letterSpacing: '-0.02em', margin: '8px 0 28px', lineHeight: 1.12,
+      }}>
+        今天，3 件事值得你的注意。
+      </h1>
+
+      {TODAY_ITEMS.map((it, i) => (
+        <article key={i} style={{
+          background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+          borderLeft: `2px solid ${kindColor[it.kind]}`,
+          borderRadius: 4, padding: '22px 26px', marginBottom: 12,
+          display: 'grid', gridTemplateColumns: '1fr auto', gap: 20, alignItems: 'center',
+        }}>
+          <div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+              fontFamily: 'var(--mono)', fontSize: 10.5, letterSpacing: 0.3, color: 'var(--ink-3)',
+              textTransform: 'uppercase',
             }}>
-              <MonoMeta>{m.date}</MonoMeta>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500 }}>{m.title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{m.n}</div>
+              <Dot color={kindColor[it.kind]} />
+              {kindLabel[it.kind]}
+            </div>
+            <h2 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.005em' }}>
+              {it.title}
+            </h2>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.55 }}>{it.sub}</p>
+            <MonoMeta>{it.meta}</MonoMeta>
+          </div>
+          <button style={{
+            padding: '8px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
+            borderRadius: 5, cursor: 'pointer', fontSize: 12.5, color: 'var(--ink)',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            打开 <Icon name="arrow" size={12} />
+          </button>
+        </article>
+      ))}
+
+      <div style={{ marginTop: 32, padding: '20px 22px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6 }}>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 12 }}>
+          近期待跟进 · 承诺 + 验证点
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          {[
+            { l: '待验证承诺', v: '5', sub: '本周到期 2 条', c: 'var(--amber)' },
+            { l: '开放问题', v: '8', sub: '3 条超 2 周未决', c: 'var(--accent)' },
+            { l: '新入库判断', v: '4', sub: '本周新增', c: 'var(--teal)' },
+          ].map(s => (
+            <div key={s.l} style={{
+              padding: '14px 16px', background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 5,
+            }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{s.l}</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: s.c, letterSpacing: '-0.01em', margin: '4px 0 2px' }}>{s.v}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{s.sub}</div>
             </div>
           ))}
         </div>
-      }
-    />
+      </div>
+    </div>
   );
 }
 

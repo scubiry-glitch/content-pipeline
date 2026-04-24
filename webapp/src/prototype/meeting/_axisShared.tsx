@@ -5,7 +5,7 @@ import { type ReactNode } from 'react';
 import { Icon, MonoMeta, SectionLabel } from './_atoms';
 import type { IconName } from './_atoms';
 
-export type AxisName = '人物' | '项目' | '知识' | '会议本身';
+export type AxisName = '人物' | '项目' | '知识' | '会议本身' | '纵向视图 · 跨会议';
 
 export interface TabDef {
   id: string;
