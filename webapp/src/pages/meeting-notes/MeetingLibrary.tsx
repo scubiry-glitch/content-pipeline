@@ -31,18 +31,26 @@ export function MeetingLibrary() {
         title="会议纪要库"
         subtitle="按 项目 / 客户 / 主题 三种分组维度浏览同一批会议"
         actions={
-          <div className="flex gap-1 p-1 bg-white border rounded">
-            {(['project', 'client', 'topic'] as GroupKind[]).map((k) => (
-              <button
-                key={k}
-                onClick={() => setGroupKind(k)}
-                className={`px-3 py-1 text-sm rounded ${
-                  groupKind === k ? 'bg-stone-900 text-white' : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {k === 'project' ? '项目' : k === 'client' ? '客户' : '主题'}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1 p-1 bg-white border rounded">
+              {(['project', 'client', 'topic'] as GroupKind[]).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setGroupKind(k)}
+                  className={`px-3 py-1 text-sm rounded ${
+                    groupKind === k ? 'bg-stone-900 text-white' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {k === 'project' ? '项目' : k === 'client' ? '客户' : '主题'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate('/meeting-notes/new')}
+              className="px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded shadow-sm flex items-center gap-1.5"
+            >
+              <span className="text-base leading-none">＋</span> 新建会议纪要
+            </button>
           </div>
         }
       />

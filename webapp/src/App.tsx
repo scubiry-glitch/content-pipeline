@@ -62,6 +62,7 @@ import { AxisProjects } from './pages/meeting-notes/AxisProjects';
 import { AxisKnowledge } from './pages/meeting-notes/AxisKnowledge';
 import { AxisMeta } from './pages/meeting-notes/AxisMeta';
 import { GenerationCenter } from './pages/meeting-notes/GenerationCenter';
+import { NewMeeting } from './pages/meeting-notes/NewMeeting';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -168,6 +169,7 @@ function App() {
               {/* 会议纪要模块 (PR6) — 嵌套路由 */}
               <Route path="meeting-notes" element={<Outlet />}>
                 <Route index element={<MeetingNotesShell />} />
+                <Route path="new" element={<NewMeeting />} />
                 <Route path="library" element={<MeetingLibrary />} />
                 <Route path="generation-center" element={<GenerationCenter />} />
                 <Route path="axes/people" element={<AxisPeople />} />

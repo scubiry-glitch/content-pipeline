@@ -83,7 +83,13 @@ export function MeetingNotesShell() {
           </div>
         </div>
 
-        <div className="mt-auto flex flex-col gap-1">
+        <div className="mt-auto flex flex-col gap-2">
+          <button
+            onClick={() => navigate('/meeting-notes/new')}
+            className="w-full px-3 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded flex items-center justify-center gap-1.5"
+          >
+            <span className="text-base leading-none">＋</span> 新建会议纪要
+          </button>
           <button onClick={() => navigate('/meeting-notes/generation-center')} className="text-xs text-gray-500 hover:text-gray-900 text-left">生成中心 →</button>
           <button onClick={() => navigate('/meeting-notes/scopes')} className="text-xs text-gray-500 hover:text-gray-900 text-left">scope 管理 →</button>
         </div>
