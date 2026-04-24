@@ -1,8 +1,10 @@
 // ScopeExpertConfig — 专家调用系统的作用层配置
 // 原型来源：/tmp/mn-proto/scope-expert-config.jsx
 
-import { useState, Fragment } from 'react';
-import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { Icon, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -104,9 +106,46 @@ const SCOPE_PRESETS: Record<ScopeId, ScopePreset[]> = {
 
 // ── Main export ──────────────────────────────────────────────────────────────
 
+// scopeId 映射：UI 层 scope (meeting/project/library) → API 的 scopeId 实例
+// 原型中这是 3 类层级（不是特定实例），后端 #19 尚未确定是否需要 instanceId
+// Phase 14 先以固定 placeholder 实例 id 呼叫，backend 对齐 schema 后再迭代
+const SCOPE_TO_API_ID: Record<ScopeId, string> = {
+  meeting: 'current-meeting',
+  project: 'p-ai-q2',
+  library: 'all',
+};
+
 export function ScopeExpertConfig() {
   const [scope, setScope] = useState<ScopeId>('meeting');
   const [preset, setPreset] = useState('standard');
+  const forceMock = useForceMock();
+  const [isMockPersistence, setIsMockPersistence] = useState(true);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 初次载入 / 切 scope：尝试拉配置
+  useEffect(() => {
+    if (forceMock) { setIsMockPersistence(true); return; }
+    let cancelled = false;
+    meetingNotesApi.getScopeConfig(SCOPE_TO_API_ID[scope])
+      .then((r) => {
+        if (cancelled || !r) return;
+        if (r.preset) setPreset(r.preset);
+        setIsMockPersistence(false);
+      })
+      .catch(() => { /* 后端 #19 未上线 → 保留本地 state + MockBadge */ });
+    return () => { cancelled = true; };
+  }, [scope, forceMock]);
+
+  // preset / decorator stack 改动 → debounce 1s 保存
+  useEffect(() => {
+    if (forceMock || isMockPersistence) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      meetingNotesApi.saveScopeConfig(SCOPE_TO_API_ID[scope], { kind: scope, preset })
+        .catch(() => setIsMockPersistence(true));
+    }, 1000);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [scope, preset, forceMock, isMockPersistence]);
 
   const scopes = [
     { id: 'meeting' as ScopeId, label: '会议层', kind: 'PER-MEETING', sub: '单场会议 · 产出 6 维解析', input: '原始素材', output: '6 维解析纪要' },
@@ -130,6 +169,14 @@ export function ScopeExpertConfig() {
             专家调用 · 作用层配置
           </h2>
           <MonoMeta>presets.scope.ts</MonoMeta>
+          {isMockPersistence && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <MockBadge />
+              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                后端 #19 未上线 · 刷新将丢失修改
+              </span>
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, maxWidth: 820, lineHeight: 1.55 }}>
           同一套专家 × 三个作用层：会议 → 项目 → 库。切换 scope 时，策略、装饰器、预设都会切到对应层。

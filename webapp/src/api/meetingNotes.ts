@@ -30,6 +30,16 @@ async function jdelete<T>(path: string): Promise<T> {
   return r.json();
 }
 
+async function jput<T>(path: string, body?: any): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
+  return r.json();
+}
+
 // ========== Parse / Axes ==========
 
 export const meetingNotesApi = {
@@ -92,6 +102,11 @@ export const meetingNotesApi = {
     jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
   unbindScope: (scopeId: string, meetingId: string) =>
     jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
+
+  // Scope expert config（Phase 14 · 后端 #19 · 未上线时前端自动降级）
+  getScopeConfig: (scopeId: string) => jget<{ scopeId: string; kind: string; preset: string; strategies: string[]; decorators: string[]; updatedAt?: string } | null>(`/scopes/${scopeId}/expert-config`),
+  saveScopeConfig: (scopeId: string, body: { kind: string; preset: string; strategies?: string[]; decorators?: string[] }) =>
+    jput<{ ok: boolean }>(`/scopes/${scopeId}/expert-config`, body),
 
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
