@@ -215,8 +215,11 @@ function Emotion({ meetingId }: { meetingId: string }) {
         if (cancelled || !r) return;
         const samples = r.samples ?? [];
         if (samples.length === 0) return;
-        const mapped: EmotionPoint[] = samples.map((s) => ({
-          t: Math.round(Number(s.t_sec ?? 0) / 60),
+        // 若所有样本都缺 t_sec · 后端字段未上线 · 保留 mock，不切换
+        const valid = samples.filter((s) => s.t_sec != null);
+        if (valid.length === 0) return;
+        const mapped: EmotionPoint[] = valid.map((s) => ({
+          t: Math.round(Number(s.t_sec) / 60),
           v: Number(s.valence ?? 0),
           i: Number(s.intensity ?? 0),
           tag: s.tag,
@@ -274,9 +277,28 @@ function Emotion({ meetingId }: { meetingId: string }) {
         </svg>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
-        <StatTile label="最低温" value="-0.55" sub="第 42 分钟 · T1 高点" tone="accent" />
-        <StatTile label="最高温" value="+0.45" sub="第 108 分钟 · 决议达成" tone="teal" />
-        <StatTile label="转折点数" value="3" sub="T1 起, N3 更新, 决议" />
+        {(() => {
+          if (curve.length === 0) {
+            return (
+              <>
+                <StatTile label="最低温" value="—" sub="无数据" tone="accent" />
+                <StatTile label="最高温" value="—" sub="无数据" tone="teal" />
+                <StatTile label="转折点数" value="0" sub="无数据" />
+              </>
+            );
+          }
+          const lo = curve.reduce((a, p) => (p.v < a.v ? p : a), curve[0]);
+          const hi = curve.reduce((a, p) => (p.v > a.v ? p : a), curve[0]);
+          const tagged = curve.filter((p) => p.tag);
+          const fmt = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2);
+          return (
+            <>
+              <StatTile label="最低温" value={fmt(lo.v)} sub={`第 ${lo.t} 分钟${lo.tag ? ` · ${lo.tag}` : ''}`} tone="accent" />
+              <StatTile label="最高温" value={fmt(hi.v)} sub={`第 ${hi.t} 分钟${hi.tag ? ` · ${hi.tag}` : ''}`} tone="teal" />
+              <StatTile label="转折点数" value={String(tagged.length)} sub={tagged.slice(0, 3).map((p) => p.tag).filter(Boolean).join(' · ') || '无标记'} />
+            </>
+          );
+        })()}
       </div>
 
       <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
