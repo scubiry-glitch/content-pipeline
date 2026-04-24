@@ -17,6 +17,8 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy application files
 COPY dist ./dist
+# meeting-notes：initDatabase 在运行时读取 001–009 SQL（dist 不含 src）
+COPY src/modules/meeting-notes/migrations ./meeting-notes-migrations
 
 # Create directories for uploads and logs
 RUN mkdir -p uploads logs

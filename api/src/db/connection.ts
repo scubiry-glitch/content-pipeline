@@ -2,6 +2,7 @@
 // PostgreSQL with pgvector support
 
 import { Pool, PoolClient, QueryResult } from 'pg';
+import { ensureMeetingNotesModuleSchema } from './ensureMeetingNotesSchema.js';
 
 let pool: Pool | null = null;
 const SLOW_QUERY_THRESHOLD_MS = parseInt(process.env.DB_SLOW_QUERY_THRESHOLD_MS || '1000', 10);
@@ -1441,4 +1442,7 @@ async function setupContentLibrarySchema(): Promise<void> {
       USING ivfflat (embedding vector_cosine_ops)
       WITH (lists = 50)
   `).catch(() => console.log('[DB] content_entities ivfflat index skipped'));
+
+  // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–009 SQL 对齐
+  await ensureMeetingNotesModuleSchema(query);
 }

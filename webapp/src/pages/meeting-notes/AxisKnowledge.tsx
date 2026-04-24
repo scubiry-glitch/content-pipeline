@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { AxisHeader, Pill } from '../../components/meeting-notes/shared';
+import { AxisMeetingGate } from './AxisMeetingGate';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 
 export function AxisKnowledge() {
@@ -37,7 +38,7 @@ export function AxisKnowledge() {
           <button onClick={() => setRegenOpen(true)} className="px-3 py-1 bg-stone-900 text-white rounded text-sm">★ 快捷重算</button>
         }
       />
-      {!meetingId && <div className="text-sm text-gray-500">请在 URL 提供 ?meetingId=...</div>}
+      <AxisMeetingGate />
       {loading && <div className="text-gray-400">loading…</div>}
 
       {axes && (

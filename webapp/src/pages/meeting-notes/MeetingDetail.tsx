@@ -86,7 +86,9 @@ export function MeetingDetail() {
             {(['people', 'projects', 'knowledge', 'meta'] as const).map((a) => (
               <button
                 key={a}
-                onClick={() => navigate(`/meeting-notes/axes/${a}`)}
+                onClick={() =>
+                  navigate(`/meeting-notes/axes/${a}?meetingId=${encodeURIComponent(id)}`)
+                }
                 className="text-xs px-3 py-1.5 bg-white border border-gray-200 rounded hover:border-orange-300"
               >
                 {a === 'people' ? '人物轴' : a === 'projects' ? '项目轴' : a === 'knowledge' ? '知识轴' : '会议本身'}

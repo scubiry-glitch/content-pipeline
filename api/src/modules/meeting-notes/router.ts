@@ -40,6 +40,61 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     await fastify.register(ingestRoutes, { pathPrefix: '/sources' });
 
     // --------------------------------------------------------
+    // Meetings CRUD (list + create, detail in /meetings/:id/*)
+    // --------------------------------------------------------
+    fastify.get('/meetings', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { limit?: string };
+      const limit = Math.min(100, parseInt(q.limit ?? '50', 10));
+      const r = await engine.deps.db.query(
+        `SELECT
+           a.id,
+           COALESCE(a.title, a.metadata->>'title', 'Untitled') AS title,
+           a.metadata->>'meeting_kind' AS meeting_kind,
+           a.created_at,
+           (SELECT row_to_json(rr) FROM (
+             SELECT id, state, axis, finished_at, error_message
+             FROM mn_runs WHERE scope_kind='meeting' AND scope_id::text = a.id
+             ORDER BY created_at DESC LIMIT 1
+           ) rr) AS last_run,
+           COALESCE(
+             (SELECT json_agg(json_build_object(
+               'scopeId', s.id, 'kind', s.kind, 'name', s.name, 'slug', s.slug
+             ) ORDER BY sm.bound_at)
+             FROM mn_scope_members sm
+             JOIN mn_scopes s ON s.id = sm.scope_id
+             WHERE sm.meeting_id::text = a.id),
+             '[]'::json
+           ) AS scope_bindings
+         FROM assets a
+         WHERE a.type = 'meeting_note' OR (a.metadata ? 'meeting_kind')
+         ORDER BY a.created_at DESC
+         LIMIT $1`,
+        [limit],
+      );
+      // library-scoped runs (not attached to a specific meeting asset)
+      const libR = await engine.deps.db.query(
+        `SELECT id, scope_kind, axis, state, created_at, finished_at, error_message, metadata
+         FROM mn_runs WHERE scope_kind = 'library'
+         ORDER BY created_at DESC LIMIT $1`,
+        [Math.min(limit, 20)],
+      );
+      return { items: r.rows, libraryRuns: libR.rows };
+    });
+
+    fastify.post('/meetings', { preHandler: authenticate }, async (request, reply) => {
+      const body = request.body as { title?: string; meetingKind?: string; metadata?: Record<string, unknown> };
+      const meta = { meeting_kind: body.meetingKind ?? 'general', ...(body.metadata ?? {}) };
+      const r = await engine.deps.db.query(
+        `INSERT INTO assets (id, type, title, content, content_type, metadata)
+         VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb)
+         RETURNING id, title, created_at, metadata`,
+        [body.title ?? 'New Meeting', JSON.stringify(meta)],
+      );
+      reply.status(201);
+      return r.rows[0];
+    });
+
+    // --------------------------------------------------------
     // Parse + axes read (PR3)
     // --------------------------------------------------------
     fastify.post('/ingest/parse', { preHandler: authenticate }, async (request, reply) => {

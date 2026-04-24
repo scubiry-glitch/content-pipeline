@@ -33,6 +33,28 @@ interface QueuePayload {
   meetingId?: string;
 }
 
+const RUN_TRIGGERS = new Set<RunTrigger>(['auto', 'manual', 'schedule', 'cascade']);
+const PRESETS = new Set<Preset>(['lite', 'standard', 'max']);
+/** mn_runs.scope_id 为 UUID；前端可能传 ref 或非 UUID 占位符，非法则置空避免 INSERT 失败 */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function coerceRunTrigger(v: unknown): RunTrigger {
+  return typeof v === 'string' && RUN_TRIGGERS.has(v as RunTrigger) ? (v as RunTrigger) : 'manual';
+}
+
+function coercePreset(v: unknown): Preset | undefined {
+  return typeof v === 'string' && PRESETS.has(v as Preset) ? (v as Preset) : undefined;
+}
+
+/** 兼容 scope.ref；非 UUID 的 id/ref 不写入 scope_id（DB 列为 UUID） */
+function normalizeScopeForDb(scope: ScopeRef & { ref?: unknown }): ScopeRef {
+  const raw = scope.id ?? (typeof scope.ref === 'string' ? scope.ref : undefined);
+  let id: string | undefined =
+    typeof raw === 'string' && raw.length > 0 && UUID_RE.test(raw) ? raw : undefined;
+  return { kind: scope.kind, id };
+}
+
 function mapRun(row: Record<string, any>): RunRecord {
   return {
     id: row.id,
@@ -70,10 +92,17 @@ export class RunEngine {
 
   /** 入队一条 run 并立即触发 drain（异步） */
   async enqueue(req: EnqueueRunRequest): Promise<{ ok: boolean; runId?: string; reason?: string }> {
+    const scopeNorm = normalizeScopeForDb(req.scope as ScopeRef & { ref?: unknown });
+    const reqNorm: EnqueueRunRequest = { ...req, scope: scopeNorm };
+    const triggeredBy = coerceRunTrigger(req.triggeredBy);
+
     // 1. 解析 strategy / preset
-    const meetingKind = await this.lookupMeetingKind(req);
+    const meetingKind = await this.lookupMeetingKind(reqNorm);
     const strategyFromApp = this.deps.expertApplication.resolveForMeetingKind(meetingKind);
-    const preset: Preset = req.preset ?? strategyFromApp?.preset ?? 'standard';
+    const preset: Preset =
+      coercePreset(req.preset)
+      ?? coercePreset(strategyFromApp?.preset as unknown)
+      ?? 'standard';
     const strategySpec = req.strategy ?? strategyFromApp?.default ?? null;
 
     // 2. 拉直 subDims：若未指定，使用 axis 全量子维度
@@ -89,13 +118,13 @@ export class RunEngine {
        VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb)
        RETURNING id`,
       [
-        req.scope.kind,
-        req.scope.id ?? null,
+        scopeNorm.kind,
+        scopeNorm.id ?? null,
         req.axis,
         subDims,
         preset,
         strategySpec,
-        req.triggeredBy ?? 'manual',
+        triggeredBy,
         req.parentRunId ?? null,
         JSON.stringify({ meetingKind }),
       ],
@@ -107,14 +136,14 @@ export class RunEngine {
       id: runId,
       payload: {
         runId,
-        scope: req.scope,
+        scope: scopeNorm,
         axis: req.axis,
         subDims,
         preset,
         strategySpec,
-        triggeredBy: req.triggeredBy ?? 'manual',
+        triggeredBy,
         parentRunId: req.parentRunId ?? null,
-        meetingId: req.scope.kind === 'meeting' ? req.scope.id : undefined,
+        meetingId: scopeNorm.kind === 'meeting' ? scopeNorm.id : undefined,
       },
       enqueuedAt: Date.now(),
     });

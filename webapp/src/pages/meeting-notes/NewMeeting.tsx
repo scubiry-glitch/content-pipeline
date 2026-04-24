@@ -648,13 +648,22 @@ export function NewMeeting() {
         setProgress(20);
       }
 
-      // 2) 启动 run
+      // 2) 创建 meeting asset → 获得 UUID，再以 meeting 级 scope 入队 run
+      const titleGuess = files[0]?.name
+        ? files[0].name.replace(/\.[^.]+$/, '')
+        : '新建会议';
+      const meetingAsset = await meetingNotesApi.createMeeting({
+        title: titleGuess,
+        meetingKind: 'general',
+      });
+      setMeetingId(meetingAsset.id);
+
       const runRes = await meetingNotesApi.enqueueRun({
-        scope: { kind: 'meeting', ref: meetingId ?? `upload-${Date.now()}` },
+        scope: { kind: 'meeting' as const, id: meetingAsset.id },
         axis: 'meta',
         preset,
         strategy: 'debate',
-        triggeredBy: 'new-meeting-wizard',
+        triggeredBy: 'manual',
       });
       if (!runRes.ok || !runRes.runId) {
         throw new Error(runRes.reason || '创建 run 失败');
@@ -672,7 +681,6 @@ export function NewMeeting() {
           if (run?.progress) setProgress(Math.min(95, 35 + Math.round(run.progress * 60)));
           if (run?.state === 'succeeded') {
             setProgress(100);
-            setMeetingId(run.meetingId ?? run.scopeRef ?? undefined);
             setDone(true);
             return;
           }
@@ -701,7 +709,7 @@ export function NewMeeting() {
   useEffect(() => {
     if (!done) return;
     const t = setTimeout(() => {
-      const target = meetingId ? `/meeting-notes/${meetingId}` : '/meeting-notes/axes/people';
+      const target = meetingId ? `/meeting-notes/${meetingId}` : '/meeting-notes';
       navigate(target, { state: { justParsed: true, runId } });
     }, 2200);
     return () => clearTimeout(t);
@@ -835,7 +843,11 @@ export function NewMeeting() {
             </div>
           </div>
           <button
-            onClick={() => navigate(meetingId ? `/meeting-notes/${meetingId}` : '/meeting-notes/axes/people', { state: { justParsed: true, runId } })}
+            onClick={() =>
+              navigate(meetingId ? `/meeting-notes/${meetingId}` : '/meeting-notes', {
+                state: { justParsed: true, runId },
+              })
+            }
             className="text-xs px-4 py-2 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded"
           >
             立即进入 →

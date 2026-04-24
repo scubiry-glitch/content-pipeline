@@ -24,6 +24,12 @@ async function jpost<T>(path: string, body?: any): Promise<T> {
   return r.json();
 }
 
+async function jdelete<T>(path: string): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: headers() });
+  if (!r.ok) throw new Error(`DELETE ${path} → ${r.status}`);
+  return r.json();
+}
+
 // ========== Parse / Axes ==========
 
 export const meetingNotesApi = {
@@ -76,6 +82,16 @@ export const meetingNotesApi = {
   // Longitudinal
   getLongitudinal: (scopeId: string, kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate') =>
     jget<any>(`/scopes/${scopeId}/longitudinal/${kind}`),
+
+  // Meetings
+  listMeetings: (q: { limit?: number } = {}) => {
+    const qs = q.limit ? `?limit=${q.limit}` : '';
+    return jget<{ items: any[]; libraryRuns: any[] }>(`/meetings${qs}`);
+  },
+  createMeeting: (body: { title?: string; meetingKind?: string }) =>
+    jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
+  unbindScope: (scopeId: string, meetingId: string) =>
+    jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
 
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
