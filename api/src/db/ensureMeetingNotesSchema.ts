@@ -1,5 +1,5 @@
 /**
- * Meeting Notes 模块 DDL（001–009）在 initDatabase/setupMVPSchema 中执行，
+ * Meeting Notes 模块 DDL（001–010）在 initDatabase/setupMVPSchema 中执行，
  * 避免未手动 psql 迁移时 /api/v1/meeting-notes/runs 等路由因缺表返回 500。
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -15,6 +15,7 @@ const FILES = [
   '007-longitudinal.sql',
   '008-cross-axis-links.sql',
   '009-migrate-existing.sql',
+  '010-tension-consensus-nebula.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
@@ -51,5 +52,5 @@ export async function ensureMeetingNotesModuleSchema(
     const sql = readFileSync(path, 'utf8');
     await runSql(sql);
   }
-  console.log('[DB] meeting-notes 模块表结构已就绪（001–009）');
+  console.log('[DB] meeting-notes 模块表结构已就绪（001–010）');
 }

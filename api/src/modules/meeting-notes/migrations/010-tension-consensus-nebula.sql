@@ -10,7 +10,8 @@
 -- ============================================================
 CREATE TABLE IF NOT EXISTS mn_tensions (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  meeting_id   UUID NOT NULL REFERENCES mn_meetings(id) ON DELETE CASCADE,
+  -- 与 002/003 等一致：会议 = assets 行（id 为 VARCHAR，可为 UUID 字符串或业务 id）
+  meeting_id   VARCHAR(50) NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   tension_key  TEXT NOT NULL,                              -- 'T1', 'T2' …（LLM 生成的局部 ID）
   between_ids  UUID[] NOT NULL DEFAULT ARRAY[]::UUID[],    -- 涉及的 person IDs
   topic        TEXT NOT NULL,
@@ -41,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_mn_tension_moments_tension
 -- ============================================================
 CREATE TABLE IF NOT EXISTS mn_consensus_items (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  meeting_id   UUID NOT NULL REFERENCES mn_meetings(id) ON DELETE CASCADE,
+  meeting_id   VARCHAR(50) NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   kind         TEXT NOT NULL CHECK (kind IN ('consensus', 'divergence')),
   item_text    TEXT NOT NULL,
   supported_by UUID[] NOT NULL DEFAULT ARRAY[]::UUID[],    -- 支持方 person IDs
@@ -69,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_mn_consensus_sides_item
 -- ============================================================
 CREATE TABLE IF NOT EXISTS mn_focus_map (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  meeting_id  UUID NOT NULL REFERENCES mn_meetings(id) ON DELETE CASCADE,
+  meeting_id  VARCHAR(50) NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   person_id   UUID REFERENCES mn_people(id) ON DELETE SET NULL,
   themes      TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   returns_to  INT NOT NULL DEFAULT 0,
