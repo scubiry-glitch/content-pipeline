@@ -135,14 +135,79 @@ export const ANALYSIS = {
     risks: ['LP 对集中度担忧尚未回应', 'H-chip 进口配额 Q3 可能再次收紧'],
   },
   tension: [
-    { id: 'T1', between: ['p2', 'p3'], topic: '中游 vs 训练层',   intensity: 0.82 },
-    { id: 'T2', between: ['p1', 'p5'], topic: '集中度 vs LP 偏好', intensity: 0.61 },
-    { id: 'T3', between: ['p2', 'p6'], topic: '北美配售 vs 本土化', intensity: 0.44 },
+    {
+      id: 'T1', between: ['p2', 'p3'], topic: '中游 vs 训练层', intensity: 0.82,
+      summary: '沈岚认为中游推理层有价格歧视空间，毛利结构更耐周期；Wei Tan 坚持训练层规模效应是真正护城河，一旦摊薄单位成本会碾过毛利曲线。',
+      moments: [
+        '"我坚持的是：推理层在特定 workload 下有价格歧视空间，毛利结构比训练层更耐得住周期。"',
+        '"规模你守不住。训练层一旦摊到 10^27 flops，单位成本会碾过毛利曲线。"',
+      ],
+    },
+    {
+      id: 'T2', between: ['p1', 'p5'], topic: '集中度 vs LP 偏好', intensity: 0.61,
+      summary: '陈汀倾向于单笔上限 8,000 万以保持集中度，林雾担忧 LP 对集中度的接受度，提出合规边界。',
+      moments: ['"上限可以谈，但 8000 万那种单笔，我们要准备好跟 LP 沟通预案。"'],
+    },
+    {
+      id: 'T3', between: ['p2', 'p6'], topic: '北美配售 vs 本土化', intensity: 0.44,
+      summary: '沈岚偏向北美配售节奏，Omar K. 提出本土化路径（subadvisor 结构）正在验证中。',
+      moments: [],
+    },
   ],
   newCognition: [
-    { id: 'N1', who: 'p1', before: '推理层=毛利陷阱', after: '推理层在特定 workload 下具备价格歧视空间' },
-    { id: 'N2', who: 'p3', before: '中国团队很难拿到北美 deal flow', after: '通过 subadvisor 结构每月 3-5 个 warm intro 可行' },
-    { id: 'N3', who: 'p2', before: 'H-chip 短缺是利好',   after: '若配额再收紧，portfolio 头部两家将被迫降价' },
+    {
+      id: 'N1', who: 'p1', before: '推理层=毛利陷阱', after: '推理层在特定 workload 下具备价格歧视空间',
+      trigger: 'Wei Tan 给出的北美 3 家推理层案例数据，以及 Omar K. 的 warm intro 成功率',
+    },
+    {
+      id: 'N2', who: 'p3', before: '中国团队很难拿到北美 deal flow', after: '通过 subadvisor 结构每月 3-5 个 warm intro 可行',
+      trigger: 'Omar K. 分享的 18 次 warm intro、4 个 term sheet 的实证数据',
+    },
+    {
+      id: 'N3', who: 'p2', before: 'H-chip 短缺是利好', after: '若配额再收紧，portfolio 头部两家将被迫降价',
+      trigger: '周劭然补充的 Q3 配额收紧政策信号与现有 portfolio 头寸测算',
+    },
+  ],
+  focusMap: [
+    { who: 'p1', themes: ['单笔上限', '集中度', 'LP 沟通'],   returnsTo: 7 },
+    { who: 'p2', themes: ['推理层', '毛利', '价格歧视'],       returnsTo: 9 },
+    { who: 'p3', themes: ['训练层', '规模效应', '退出路径'],   returnsTo: 6 },
+    { who: 'p4', themes: ['基础利率', '历史中位数', '数据'],   returnsTo: 4 },
+    { who: 'p5', themes: ['合规 / LP', '边界条件'],            returnsTo: 3 },
+    { who: 'p6', themes: ['warm intro', 'subadvisor', '北美'], returnsTo: 5 },
+  ],
+  consensus: [
+    { id: 'C1', kind: 'consensus' as const, text: '推理层是本轮优先布局方向，单笔上限定在 6,000 万美元。', supportedBy: ['p1','p2','p3','p4','p5','p6'], sides: [] },
+    { id: 'C2', kind: 'consensus' as const, text: 'subadvisor 结构可作为北美 deal flow 的补充渠道。', supportedBy: ['p1','p2','p6'], sides: [] },
+    { id: 'D1', kind: 'divergence' as const, text: '单笔上限究竟应为 6,000 万还是 8,000 万？', supportedBy: [], sides: [
+      { stance: '6000万', reason: '集中度已到 LP 接受上限', by: ['p1','p5'] },
+      { stance: '8000万', reason: '单笔更大才能拿到核心头部份额', by: ['p2'] },
+    ]},
+    { id: 'D2', kind: 'divergence' as const, text: '中游 vs 训练层：哪一层的毛利护城河更深？', supportedBy: [], sides: [
+      { stance: '中游护城河', reason: '价格歧视空间 + workload 粘性', by: ['p2','p6'] },
+      { stance: '训练层护城河', reason: '规模效应不可逆，一旦摊薄碾压中游', by: ['p3'] },
+    ]},
+  ],
+  crossView: [
+    {
+      id: 'V1', claimBy: 'p2',
+      claim: '推理层在特定 workload 下有价格歧视空间，毛利结构比训练层更耐得住周期。',
+      responses: [
+        { who: 'p3', stance: 'oppose'   as const, text: '规模摊薄效应不可逆，3 年内训练层会碾过推理层毛利曲线。' },
+        { who: 'p1', stance: 'partial'  as const, text: '认同，但需要先确认 H-chip 配额风险敞口。' },
+        { who: 'p6', stance: 'support'  as const, text: '北美案例证实：特定工作负载的粘性很强。' },
+        { who: 'p4', stance: 'neutral'  as const, text: '历史同类中位数 38%，需要拆 cohort 再做判断。' },
+      ],
+    },
+    {
+      id: 'V2', claimBy: 'p6',
+      claim: '过去 6 个月提供了 18 个 warm intro，4 个进到 term sheet，subadvisor 渠道已验证。',
+      responses: [
+        { who: 'p1', stance: 'support'  as const, text: '认可渠道有效性，可以列为标准 deal flow 来源。' },
+        { who: 'p3', stance: 'partial'  as const, text: '进入率 22% 不算高，但对我们的规模已够用。' },
+        { who: 'p2', stance: 'support'  as const, text: '这解决了我们对北美 deal flow 最大的担忧。' },
+      ],
+    },
   ],
 };
 
