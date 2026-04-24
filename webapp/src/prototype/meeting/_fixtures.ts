@@ -36,6 +36,18 @@ export const PARTICIPANTS: Participant[] = [
 export const P = (id: string): Participant =>
   PARTICIPANTS.find((x) => x.id === id) ?? ({ id, name: id, role: '', initials: '?', tone: 'neutral', speakingPct: 0 });
 
+// API 模式下从后端拿到的 person_id 通常是 UUID，配套返回 person_name。
+// 这个 helper 用于 mapping 时选最适合 P() 的输入：
+// - 命中 fixture id（demo 数据）→ 用 id
+// - 否则用 name → P() 返回 { name, initials: '?' } 占位 Participant，避免显示 UUID
+// - 全空 → '—'（render 端用 === '—' 判定显示"—"）
+export const pickPerson = (id?: string | null, name?: string | null): string => {
+  if (id && PARTICIPANTS.some((p) => p.id === id)) return id;
+  if (name && name.trim()) return name.trim();
+  if (id) return id;
+  return '—';
+};
+
 // ── Experts ──
 export interface ExpertMock {
   id: string;

@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, Icon, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
-import { P, MEETING } from './_fixtures';
+import { P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
@@ -178,7 +178,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           id: d.id.slice(0, 6),
           at: d.meeting_id ? d.meeting_id.slice(0, 12) : '',
           title: d.title,
-          who: DECISION_CHAIN[0]?.who ?? 'p1',
+          who: pickPerson(d.proposer_person_id, d.proposer_name),
           basedOn: d.rationale ?? (d.based_on_ids?.length ? `${d.based_on_ids.length} 个前置决策` : '无显式前置'),
           confidence: Number(d.confidence ?? 0.5),
           superseded: Boolean(d.superseded_by_id),
@@ -297,18 +297,22 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
           'confirmed': '已验证',
           'falsified': '已证伪',
         };
-        const mapped: AssumptionRow[] = items.map((a) => ({
-          id: a.id.slice(0, 8).toUpperCase(),
-          text: a.text,
-          underpins: a.underpins_decision_ids?.map((u) => u.slice(0, 6)) ?? [],
-          introducedAt: a.meeting_id?.slice(0, 12) ?? '',
-          by: ASSUMPTIONS[0]?.by ?? 'p1',
-          evidenceGrade: a.evidence_grade,
-          verificationState: stateLabel[a.verification_state] ?? a.verification_state,
-          verifier: a.verifier_name ?? '—',
-          verifyDue: a.due_at ? a.due_at.slice(0, 10) : '—',
-          confidence: Number(a.confidence ?? 0.5),
-        }));
+        const mapped: AssumptionRow[] = items.map((a) => {
+          // 后端 mn_assumptions 不存独立的 introducer 字段；borrow verifier 作 fallback
+          const verifierKey = pickPerson(a.verifier_person_id, a.verifier_name);
+          return {
+            id: a.id.slice(0, 8).toUpperCase(),
+            text: a.text,
+            underpins: a.underpins_decision_ids?.map((u) => u.slice(0, 6)) ?? [],
+            introducedAt: a.meeting_id?.slice(0, 12) ?? '',
+            by: verifierKey,
+            evidenceGrade: a.evidence_grade,
+            verificationState: stateLabel[a.verification_state] ?? a.verification_state,
+            verifier: verifierKey,
+            verifyDue: a.due_at ? a.due_at.slice(0, 10) : '—',
+            confidence: Number(a.confidence ?? 0.5),
+          };
+        });
         setRows(mapped);
         setIsMock(false);
       })
@@ -416,18 +420,22 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
         if (cancelled) return;
         const items = r?.items ?? [];
         if (items.length === 0) return;
-        const mapped: OpenQuestionRow[] = items.map((q) => ({
-          id: q.id.slice(0, 8).toUpperCase(),
-          text: q.text,
-          raisedAt: q.first_raised_meeting_id?.slice(0, 12) ?? '',
-          by: OPEN_QUESTIONS[0]?.by ?? 'p1',
-          timesRaised: Number(q.times_raised ?? 1),
-          lastRaised: q.last_raised_meeting_id?.slice(0, 12) ?? '',
-          category: q.category,
-          status: q.status,
-          owner: q.owner_name ?? '—',
-          note: '',
-        }));
+        const mapped: OpenQuestionRow[] = items.map((q) => {
+          // 后端 mn_open_questions 不存独立的 raiser 字段；borrow owner 作 fallback
+          const ownerKey = pickPerson(q.owner_person_id, q.owner_name);
+          return {
+            id: q.id.slice(0, 8).toUpperCase(),
+            text: q.text,
+            raisedAt: q.first_raised_meeting_id?.slice(0, 12) ?? '',
+            by: ownerKey,
+            timesRaised: Number(q.times_raised ?? 1),
+            lastRaised: q.last_raised_meeting_id?.slice(0, 12) ?? '',
+            category: q.category,
+            status: q.status,
+            owner: ownerKey,
+            note: '',
+          };
+        });
         setRows(mapped);
         setIsMock(false);
       })
