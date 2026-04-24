@@ -108,6 +108,38 @@ export const meetingNotesApi = {
   saveScopeConfig: (scopeId: string, body: { kind: string; preset: string; strategies?: string[]; decorators?: string[] }) =>
     jput<{ ok: boolean }>(`/scopes/${scopeId}/expert-config`, body),
 
+  // Phase 15.1 · Speech metrics (#6 · 新路由 · 无破坏性)
+  getSpeechMetrics: (meetingId: string) =>
+    jget<{ items: Array<{ personId: string; entropy: number; followedUp: number; qaRatio?: number; termDensity?: number }> } | null>(
+      `/meetings/${meetingId}/speech-metrics`,
+    ),
+
+  // Phase 15.2 · Decision quality (#14 · 新路由 · 无破坏性)
+  getDecisionQuality: (meetingId: string) =>
+    jget<{ overall: number; dims: Array<{ id: string; label: string; score: number; note?: string }>; teamAvg?: number } | null>(
+      `/meetings/${meetingId}/decision-quality`,
+    ),
+
+  // Phase 15.5 · Structured diff (可能破坏性 · 走 ?structured=1 开关)
+  diffVersionsStructured: (a: string, b: string) =>
+    jget<{ added: any[]; removed: any[]; changed: Array<{ path: string; before: unknown; after: unknown }> } | null>(
+      `/versions/${a}/diff?vs=${b}&structured=1`,
+    ),
+
+  // Phase 15.7 · Schedule CRUD (#20 · 全新路由族)
+  listSchedules: (q: { scopeId?: string; scopeKind?: string; axis?: string } = {}) => {
+    const qs = new URLSearchParams(q as any).toString();
+    return jget<{ items: Array<{ id: string; name: string; cron?: string; target?: string; next?: string; on: boolean; scopeKind?: string; axis?: string; preset?: string }> }>(
+      `/schedules${qs ? '?' + qs : ''}`,
+    );
+  },
+  createSchedule: (body: { name: string; cron?: string; scopeKind?: string; scopeId?: string; axis?: string; preset?: string; on?: boolean }) =>
+    jpost<{ id: string; ok: boolean }>('/schedules', body),
+  updateSchedule: (id: string, body: Partial<{ name: string; cron: string; scopeKind: string; scopeId: string; axis: string; preset: string; on: boolean }>) =>
+    jput<{ ok: boolean }>(`/schedules/${id}`, body),
+  deleteSchedule: (id: string) =>
+    jdelete<{ ok: boolean }>(`/schedules/${id}`),
+
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
   uploadToSource: async (sourceId: string, file: File) => {

@@ -357,17 +357,75 @@ function VersionsView() {
   );
 }
 
+interface ScheduleRow { id: string; name: string; target: string; next: string; on: boolean; }
+
+function mapApiSchedule(it: Record<string, unknown>): ScheduleRow {
+  const scope = String(it.scopeKind ?? it.scope ?? 'project');
+  const axis = String(it.axis ?? '—');
+  const preset = String(it.preset ?? 'standard');
+  return {
+    id: String(it.id ?? ''),
+    name: String(it.name ?? it.cron ?? ''),
+    target: it.target ? String(it.target) : `${scope} · ${axis} · ${preset}`,
+    next: String(it.next ?? it.nextRunAt ?? '—'),
+    on: Boolean(it.on ?? it.enabled ?? false),
+  };
+}
+
 function ScheduleView() {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<ScheduleRow[]>(MOCK_SCHEDULES);
+  const [isMock, setIsMock] = useState(true);
+
+  const refetch = () => {
+    if (forceMock) { setRows(MOCK_SCHEDULES); setIsMock(true); return; }
+    meetingNotesApi.listSchedules()
+      .then((r) => {
+        const items = r?.items ?? [];
+        if (items.length > 0) {
+          setRows(items.map(mapApiSchedule));
+          setIsMock(false);
+        }
+      })
+      .catch(() => {});
+  };
+  useEffect(() => { refetch(); }, [forceMock]);
+
+  async function toggleSchedule(row: ScheduleRow) {
+    if (isMock) {
+      setRows(rows.map(r => r.id === row.id ? { ...r, on: !r.on } : r));
+      return;
+    }
+    try {
+      await meetingNotesApi.updateSchedule(row.id, { on: !row.on });
+      refetch();
+    } catch { alert('切换失败 · 后端无响应'); }
+  }
+
+  async function handleCreate() {
+    const name = prompt('规则名称（示例：每周一 09:00）');
+    if (!name) return;
+    if (isMock) {
+      alert('当前为 mock 模式 · 后端 #20 未上线 · 不会持久化');
+      return;
+    }
+    try {
+      await meetingNotesApi.createSchedule({ name, on: true, scopeKind: 'project', axis: 'multi', preset: 'standard' });
+      refetch();
+    } catch { alert('创建失败'); }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SectionLabel>定时与触发规则</SectionLabel>
-          <MockBadge />
-          <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>后端 cron API（#20）未上线 · 编辑不持久化</span>
+          {isMock && <MockBadge />}
+          {isMock && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>后端 cron API（#20）未上线 · 编辑不持久化</span>}
+          {!isMock && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>listSchedules · {rows.length} 条规则</span>}
         </div>
         <button
-          onClick={() => alert('新建规则 · 待接入（Phase 15.7 · POST /schedules）')}
+          onClick={handleCreate}
           style={{
             padding: '7px 14px', border: '1px solid var(--ink)', background: 'var(--ink)',
             color: 'var(--paper)', borderRadius: 5, fontSize: 12, cursor: 'pointer', fontWeight: 500,
@@ -378,17 +436,19 @@ function ScheduleView() {
         </button>
       </div>
       <div style={{ border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
-        {MOCK_SCHEDULES.map((s, i) => (
+        {rows.map((s, i) => (
           <div key={s.id} style={{
             display: 'grid', gridTemplateColumns: '44px 1fr 1fr 180px 80px',
             gap: 16, alignItems: 'center', padding: '14px 18px',
             borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
           }}>
-            <div style={{
-              width: 36, height: 20, borderRadius: 99,
-              background: s.on ? 'var(--accent)' : 'var(--line)',
-              position: 'relative', cursor: 'pointer',
-            }}>
+            <div
+              onClick={() => toggleSchedule(s)}
+              style={{
+                width: 36, height: 20, borderRadius: 99,
+                background: s.on ? 'var(--accent)' : 'var(--line)',
+                position: 'relative', cursor: 'pointer',
+              }}>
               <div style={{
                 position: 'absolute', top: 2, left: s.on ? 18 : 2,
                 width: 16, height: 16, borderRadius: 99, background: 'var(--paper)',
@@ -403,10 +463,17 @@ function ScheduleView() {
               <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>NEXT</div>
               <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{s.next}</div>
             </div>
-            <button style={{
-              border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
-              padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
-            }}>编辑</button>
+            <button
+              onClick={async () => {
+                if (isMock) { alert('mock 模式 · 不会持久化'); return; }
+                if (!confirm(`删除 ${s.name}？`)) return;
+                try { await meetingNotesApi.deleteSchedule(s.id); refetch(); }
+                catch { alert('删除失败'); }
+              }}
+              style={{
+                border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
+              }}>{isMock ? '编辑' : '删除'}</button>
           </div>
         ))}
       </div>
