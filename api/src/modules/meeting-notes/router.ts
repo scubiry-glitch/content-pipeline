@@ -386,6 +386,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.11 · AxisMeta · Necessity audit (mn_meeting_necessity)
     fastify.get('/meetings/:id/necessity-audit', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
       const r = await engine.deps.db.query(
         `SELECT meeting_id, verdict, suggested_duration_min, reasons, computed_at
            FROM mn_meeting_necessity
@@ -396,9 +397,44 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return r.rows[0];
     });
 
+    // Phase 15.2 · AxisMeta · Decision quality (mn_decision_quality)
+    fastify.get('/meetings/:id/decision-quality', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
+      const r = await engine.deps.db.query(
+        `SELECT meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, computed_at
+           FROM mn_decision_quality
+          WHERE meeting_id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) return null;
+      const row = r.rows[0];
+      const notes = (row.notes ?? {}) as Record<string, string>;
+      // 转换为前端期望的 { overall, dims: [{id, label, score, note}] } 形态
+      const dimMeta: Array<{ id: keyof typeof row; label: string }> = [
+        { id: 'clarity',     label: '清晰度' },
+        { id: 'actionable',  label: '可执行' },
+        { id: 'traceable',   label: '可追溯' },
+        { id: 'falsifiable', label: '可证伪' },
+        { id: 'aligned',     label: '对齐度' },
+      ];
+      return {
+        overall: Number(row.overall ?? 0),
+        dims: dimMeta.map(({ id: dimId, label }) => ({
+          id: dimId,
+          label,
+          score: Number(row[dimId] ?? 0),
+          note: notes[dimId] ?? '',
+        })),
+        teamAvg: null,
+        computedAt: row.computed_at,
+      };
+    });
+
     // Phase 15.12 · AxisPeople · Silence signals (mn_silence_signals)
     fastify.get('/meetings/:id/silence', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const q = request.query as { personId?: string };
       const conds: string[] = ['s.meeting_id = $1'];
       const args: unknown[] = [id];
@@ -419,6 +455,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.13 · AxisKnowledge · Biases (mn_cognitive_biases)
     fastify.get('/meetings/:id/biases', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT b.id, b.meeting_id, b.bias_type, b.where_excerpt, b.by_person_id,
                 b.severity, b.mitigated, b.mitigation_strategy, b.created_at,
@@ -436,6 +473,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.14 · AxisMeta · Emotion curve (mn_affect_curve)
     fastify.get('/meetings/:id/emotion-curve', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return null;
       const r = await engine.deps.db.query(
         `SELECT meeting_id, samples, tension_peaks, insight_points, computed_at
            FROM mn_affect_curve
@@ -449,6 +487,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.15 · C.1 · Tensions (mn_tensions + mn_tension_moments)
     fastify.get('/meetings/:id/tensions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT t.id, t.tension_key, t.between_ids, t.topic, t.intensity, t.summary,
                 COALESCE(
@@ -564,6 +603,95 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     // --------------------------------------------------------
+    // Schedules (Phase 15.7) — cron 配置 · GenerationCenter · ScheduleView
+    // --------------------------------------------------------
+    fastify.get('/schedules', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { scopeId?: string; scopeKind?: string; axis?: string };
+      const conds: string[] = [];
+      const args: unknown[] = [];
+      if (q.scopeKind) { args.push(q.scopeKind); conds.push(`scope_kind = $${args.length}`); }
+      if (q.scopeId && UUID_RE.test(q.scopeId)) { args.push(q.scopeId); conds.push(`scope_id = $${args.length}`); }
+      if (q.axis) { args.push(q.axis); conds.push(`axis = $${args.length}`); }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      const r = await engine.deps.db.query(
+        `SELECT id, name, cron, on_state AS on, scope_kind AS "scopeKind", scope_id AS "scopeId",
+                axis, preset, next_run_at AS next, last_run_at AS "lastRunAt", last_run_id AS "lastRunId",
+                created_at AS "createdAt", updated_at AS "updatedAt"
+           FROM mn_schedules ${where}
+          ORDER BY created_at DESC`,
+        args,
+      );
+      return { items: r.rows };
+    });
+
+    fastify.post('/schedules', { preHandler: authenticate }, async (request, reply) => {
+      const body = request.body as {
+        name?: string; cron?: string; scopeKind?: string; scopeId?: string;
+        axis?: string; preset?: string; on?: boolean;
+      };
+      if (!body?.name || !body.name.trim()) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'name is required' };
+      }
+      const scopeId = body.scopeId && UUID_RE.test(body.scopeId) ? body.scopeId : null;
+      const r = await engine.deps.db.query(
+        `INSERT INTO mn_schedules (name, cron, on_state, scope_kind, scope_id, axis, preset)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          body.name.trim(),
+          body.cron ?? null,
+          body.on !== false,
+          body.scopeKind ?? null,
+          scopeId,
+          body.axis ?? null,
+          body.preset ?? 'standard',
+        ],
+      );
+      return { id: r.rows[0].id, ok: true };
+    });
+
+    fastify.put('/schedules/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const body = request.body as Record<string, unknown>;
+      const cols: string[] = [];
+      const args: unknown[] = [];
+      const allowed: Record<string, string> = {
+        name: 'name', cron: 'cron', on: 'on_state', scopeKind: 'scope_kind',
+        scopeId: 'scope_id', axis: 'axis', preset: 'preset',
+      };
+      for (const [k, dbCol] of Object.entries(allowed)) {
+        if (k in body) {
+          let v = body[k];
+          if (k === 'scopeId' && typeof v === 'string' && !UUID_RE.test(v)) v = null;
+          args.push(v);
+          cols.push(`${dbCol} = $${args.length}`);
+        }
+      }
+      if (cols.length === 0) return { ok: true };
+      cols.push('updated_at = NOW()');
+      args.push(id);
+      const r = await engine.deps.db.query(
+        `UPDATE mn_schedules SET ${cols.join(', ')} WHERE id = $${args.length} RETURNING id`,
+        args,
+      );
+      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
+    });
+
+    fastify.delete('/schedules/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const r = await engine.deps.db.query(
+        `DELETE FROM mn_schedules WHERE id = $1`,
+        [id],
+      );
+      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
+    });
+
+    // --------------------------------------------------------
     // Runs (PR4)
     // --------------------------------------------------------
     fastify.post('/runs', { preHandler: authenticate }, async (request, reply) => {
@@ -663,9 +791,17 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const { id } = request.params as { id: string };
       const q = request.query as { vs?: string };
       if (!q.vs) { reply.status(400); return { error: 'Bad Request', message: 'vs query param required' }; }
-      const d = await engine.diffVersions(id, q.vs);
-      if (!d) { reply.status(404); return { error: 'Not Found' }; }
-      return d;
+      try {
+        const d = await engine.diffVersions(id, q.vs);
+        if (!d) { reply.status(404); return { error: 'Not Found' }; }
+        return d;
+      } catch (e) {
+        // 引擎抛错（版本不存在/解析失败）通常意味着请求的版本 id 不在库 ·
+        // 转 404 让前端走 fallback，避免 500 满屏
+        request.log.warn({ id, vs: q.vs, err: e }, 'diffVersions failed → 404');
+        reply.status(404);
+        return { error: 'Not Found', message: e instanceof Error ? e.message : 'diff failed' };
+      }
     });
 
     // --------------------------------------------------------

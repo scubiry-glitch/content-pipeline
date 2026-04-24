@@ -1443,6 +1443,6 @@ async function setupContentLibrarySchema(): Promise<void> {
       WITH (lists = 50)
   `).catch(() => console.log('[DB] content_entities ivfflat index skipped'));
 
-  // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–010 SQL 对齐
+  // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–011 SQL 对齐
   await ensureMeetingNotesModuleSchema(query);
 }
