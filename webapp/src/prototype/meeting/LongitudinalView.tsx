@@ -3,7 +3,8 @@
 
 import { useState } from 'react';
 import { Avatar, Chip, MonoMeta } from './_atoms';
-import { DimShell, CalloutCard } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P } from './_fixtures';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
@@ -248,17 +249,23 @@ function ModelHitrate() {
 
 export function LongitudinalView() {
   const [tab, setTab] = useState('drift');
+  const [regenOpen, setRegenOpen] = useState(false);
   const tabs = [
     { id: 'drift',   label: '信念漂移',       sub: '同一人在同一议题上随时间的判断变化', icon: 'arrow' as const },
     { id: 'tree',    label: '决策树',         sub: '项目的所有分岔点与未来待决',          icon: 'git' as const },
     { id: 'hitrate', label: '心智模型命中率', sub: '反向校准专家库',                       icon: 'target' as const },
   ];
   return (
-    <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab}>
-      {tab === 'drift'   && <BeliefDrift />}
-      {tab === 'tree'    && <DecisionTree />}
-      {tab === 'hitrate' && <ModelHitrate />}
-    </DimShell>
+    <>
+      <DimShell axis="纵向视图 · 跨会议" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+        {tab === 'drift'   && <BeliefDrift />}
+        {tab === 'tree'    && <DecisionTree />}
+        {tab === 'hitrate' && <ModelHitrate />}
+      </DimShell>
+      <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
+        <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
+      </RegenerateOverlay>
+    </>
   );
 }
 

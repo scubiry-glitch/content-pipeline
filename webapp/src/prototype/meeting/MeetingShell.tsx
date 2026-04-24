@@ -6,6 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import type { IconName } from './_atoms';
 import { SCOPES } from './_fixtures';
+import { MeetingScopeProvider } from './_scopeContext';
 import './_tokens.css';
 
 interface NavItem {
@@ -41,6 +42,7 @@ export function MeetingShell() {
   const onDetailPage = /^\/meeting\/[^/]+\/(a|b|c)/.test(location.pathname);
 
   return (
+    <MeetingScopeProvider>
     <div className="meeting-proto" style={{ display: 'flex', minHeight: '100vh' }}>
       <aside style={{
         width: 240,
@@ -172,6 +174,7 @@ export function MeetingShell() {
         </div>
       </main>
     </div>
+    </MeetingScopeProvider>
   );
 }
 

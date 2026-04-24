@@ -76,8 +76,14 @@ const linkBtnStyle: React.CSSProperties = {
 
 // ── Main export ──────────────────────────────────────────────────────────────
 
-export function AxisRegeneratePanel() {
-  const [axis, setAxis] = useState('knowledge');
+export function AxisRegeneratePanel({
+  initialAxis = 'knowledge',
+  onClose,
+}: {
+  initialAxis?: string;
+  onClose?: () => void;
+} = {}) {
+  const [axis, setAxis] = useState(initialAxis);
   const [selected, setSelected] = useState<string[]>(['mmodel', 'bias']);
   const [preset, setPreset] = useState<'lite' | 'standard' | 'max'>('standard');
   const [scope, setScope] = useState<'project' | 'library'>('project');
@@ -250,17 +256,17 @@ export function AxisRegeneratePanel() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
-            <button style={linkBtnStyle}>取消</button>
+            <button style={linkBtnStyle} onClick={onClose}>取消</button>
             <button style={{
               flex: 1, padding: '11px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
               color: 'var(--paper)', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
               opacity: selected.length === 0 ? 0.4 : 1,
-            }} disabled={selected.length === 0}>
+            }} disabled={selected.length === 0} onClick={onClose}>
               入队 · 开始重算 →
             </button>
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>
-            任务进入<a style={{ color: 'var(--accent)' }}>生成中心</a>后台执行，可继续其他操作
+            任务进入<a style={{ color: 'var(--accent)', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); }}>生成中心</a>后台执行，可继续其他操作
           </div>
         </aside>
       </div>

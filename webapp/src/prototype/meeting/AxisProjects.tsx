@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { Avatar, Chip, MonoMeta, Icon } from './_atoms';
-import { DimShell, CalloutCard } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P } from './_fixtures';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
@@ -478,6 +479,7 @@ function RiskHeat() {
 
 export function AxisProjects() {
   const [tab, setTab] = useState('provenance');
+  const [regenOpen, setRegenOpen] = useState(false);
   const tabs = [
     { id: 'provenance',  label: '决策溯源链', sub: '如何一步步走到这里',         icon: 'git' as const },
     { id: 'assumptions', label: '假设清单',   sub: '每个决策背后的未验证假设',   icon: 'layers' as const },
@@ -485,13 +487,18 @@ export function AxisProjects() {
     { id: 'risks',       label: '风险热度',   sub: '被反复提及但没人处理的风险', icon: 'bolt' as const },
   ];
   return (
-    <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab}>
-      <ProjectBanner />
-      {tab === 'provenance'  && <ProvenanceChain />}
-      {tab === 'assumptions' && <AssumptionLedger />}
-      {tab === 'questions'   && <OpenQuestions />}
-      {tab === 'risks'       && <RiskHeat />}
-    </DimShell>
+    <>
+      <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+        <ProjectBanner />
+        {tab === 'provenance'  && <ProvenanceChain />}
+        {tab === 'assumptions' && <AssumptionLedger />}
+        {tab === 'questions'   && <OpenQuestions />}
+        {tab === 'risks'       && <RiskHeat />}
+      </DimShell>
+      <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
+        <AxisRegeneratePanel initialAxis="projects" onClose={() => setRegenOpen(false)} />
+      </RegenerateOverlay>
+    </>
   );
 }
 

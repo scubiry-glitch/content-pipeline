@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { Avatar, Chip, MonoMeta } from './_atoms';
-import { DimShell, CalloutCard } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P } from './_fixtures';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
@@ -359,6 +360,7 @@ function Counterfactuals() {
 
 export function AxisKnowledge() {
   const [tab, setTab] = useState('judgments');
+  const [regenOpen, setRegenOpen] = useState(false);
   const tabs = [
     { id: 'judgments',       label: '可复用判断',    sub: '从具体案例提炼的通用结论',  icon: 'book' as const },
     { id: 'mental_models',   label: '心智模型激活',  sub: '谁用了什么模型，用得对吗',  icon: 'compass' as const },
@@ -367,13 +369,18 @@ export function AxisKnowledge() {
     { id: 'counterfactuals', label: '反事实 / 未走的路', sub: '被否决的路径持续追踪',   icon: 'git' as const },
   ];
   return (
-    <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab}>
-      {tab === 'judgments'       && <Judgments />}
-      {tab === 'mental_models'   && <MentalModels />}
-      {tab === 'evidence'        && <Evidence />}
-      {tab === 'biases'          && <Biases />}
-      {tab === 'counterfactuals' && <Counterfactuals />}
-    </DimShell>
+    <>
+      <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+        {tab === 'judgments'       && <Judgments />}
+        {tab === 'mental_models'   && <MentalModels />}
+        {tab === 'evidence'        && <Evidence />}
+        {tab === 'biases'          && <Biases />}
+        {tab === 'counterfactuals' && <Counterfactuals />}
+      </DimShell>
+      <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
+        <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
+      </RegenerateOverlay>
+    </>
   );
 }
 

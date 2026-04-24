@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { Chip, MonoMeta, StatTile } from './_atoms';
-import { DimShell, CalloutCard } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -209,17 +210,23 @@ function Emotion() {
 
 export function AxisMeta() {
   const [tab, setTab] = useState('quality');
+  const [regenOpen, setRegenOpen] = useState(false);
   const tabs = [
     { id: 'quality',   label: '决策质量',   sub: '5 维打分 · 可证伪度最低',  icon: 'scale' as const },
     { id: 'necessity', label: '会议必要性', sub: '本场可缩减 58 分钟',        icon: 'clock' as const },
     { id: 'emotion',   label: '情绪温度',   sub: '时间 × 情绪 × 强度',        icon: 'bolt' as const },
   ];
   return (
-    <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab}>
-      {tab === 'quality'   && <Quality />}
-      {tab === 'necessity' && <Necessity />}
-      {tab === 'emotion'   && <Emotion />}
-    </DimShell>
+    <>
+      <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+        {tab === 'quality'   && <Quality />}
+        {tab === 'necessity' && <Necessity />}
+        {tab === 'emotion'   && <Emotion />}
+      </DimShell>
+      <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
+        <AxisRegeneratePanel initialAxis="meta" onClose={() => setRegenOpen(false)} />
+      </RegenerateOverlay>
+    </>
   );
 }
 

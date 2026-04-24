@@ -4,7 +4,8 @@
 
 import { useState, Fragment } from 'react';
 import { Avatar, Chip, MonoMeta, SectionLabel } from './_atoms';
-import { DimShell, CalloutCard, StatCell, BigStat } from './_axisShared';
+import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
+import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P } from './_fixtures';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
@@ -456,6 +457,7 @@ function PSilence() {
 
 export function AxisPeople() {
   const [tab, setTab] = useState('commitments');
+  const [regenOpen, setRegenOpen] = useState(false);
   const tabs = [
     { id: 'commitments', label: '承诺与兑现', sub: '说到做到率 · 跨会议承诺 ledger', icon: 'check' as const },
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },
@@ -463,12 +465,17 @@ export function AxisPeople() {
     { id: 'silence',     label: '沉默信号',   sub: '谁在什么议题上反常沉默', icon: 'wand' as const },
   ];
   return (
-    <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab}>
-      {tab === 'commitments' && <PCommitments />}
-      {tab === 'trajectory'  && <PTrajectory />}
-      {tab === 'speech'      && <PSpeech />}
-      {tab === 'silence'     && <PSilence />}
-    </DimShell>
+    <>
+      <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)}>
+        {tab === 'commitments' && <PCommitments />}
+        {tab === 'trajectory'  && <PTrajectory />}
+        {tab === 'speech'      && <PSpeech />}
+        {tab === 'silence'     && <PSilence />}
+      </DimShell>
+      <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
+        <AxisRegeneratePanel initialAxis="people" onClose={() => setRegenOpen(false)} />
+      </RegenerateOverlay>
+    </>
   );
 }
 
