@@ -105,21 +105,24 @@ export function AxisRegeneratePanel({
     if (selected.length === 0) return;
     setSubmitting(true);
     try {
+      // 后端 router L605 校验 allowedKinds 全小写
       const r: { runId?: string } = await meetingNotesApi.enqueueRun({
-        scope: { kind: scope.toUpperCase() },
+        scope: { kind: scope.toLowerCase() },
         axis,
         subDims: selected,
         preset,
         triggeredBy: 'axis-regenerate-panel',
       });
-      if (r.runId) {
-        console.info('enqueued:', r.runId);
+      setSubmitting(false);
+      if (r?.runId) {
+        // 入队成功 · 关闭浮层
+        if (onClose) onClose();
+      } else {
+        alert('入队失败 · 后端未返回 runId');
       }
     } catch (e) {
-      console.warn('enqueueRun failed:', e);
-    } finally {
       setSubmitting(false);
-      if (onClose) onClose();
+      alert(`入队失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
