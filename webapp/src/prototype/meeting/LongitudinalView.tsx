@@ -50,11 +50,13 @@ const MODEL_HITRATE = [
 interface DriftPoint { meeting: string; date: string; value: string; confidence: number; note: string; }
 interface DriftData { who: string; topic: string; points: DriftPoint[]; band?: { min: number; max: number }; confidenceTrace?: number[]; }
 
+// 返回 null 表示"形态不合 · 不能用"（保留 mock）
+// 返回对象（即使 points 为空）表示"形态合法 · API 可用"（切换到 API 数据 · 即使空）
 function adaptBeliefDrift(r: unknown): DriftData | null {
   if (!r || typeof r !== 'object') return null;
   const obj = r as Record<string, unknown>;
   const points = obj.points as unknown[] | undefined;
-  if (!Array.isArray(points) || points.length === 0) return null;
+  if (!Array.isArray(points)) return null;
   const who = String(obj.who ?? obj.personId ?? 'p1');
   const topic = String(obj.topic ?? '—');
   const mapped: DriftPoint[] = points.map((x: any) => ({
@@ -170,12 +172,18 @@ function BeliefDrift({ scopeId }: { scopeId: string }) {
 interface TreeNode { id: string; parent?: string; branch?: string; label?: string; decided?: string; meeting?: string; date?: string; current?: boolean; pending?: boolean; }
 interface TreeData { root: TreeNode; nodes: TreeNode[]; }
 
+// 返回 null：形态不识别 → 保留 mock
+// 返回对象（含空 nodes）：形态合法 → 切换到 API · 渲染空树
 function adaptDecisionTree(r: unknown): TreeData | null {
   if (!r || typeof r !== 'object') return null;
   const obj = r as Record<string, unknown>;
   // New shape: { nodes: [...], edges: [...], current?, pending?: [...] }
-  if (Array.isArray(obj.nodes) && obj.nodes.length > 0) {
+  if (Array.isArray(obj.nodes)) {
     const nodes = obj.nodes as TreeNode[];
+    if (nodes.length === 0) {
+      // API 返回空树 · 给一个占位 root 让渲染不崩
+      return { root: { id: '__empty__', label: '暂无决策链路' }, nodes: [] };
+    }
     const pending = (obj.pending as string[] | undefined) ?? [];
     const currentId = obj.current as string | undefined;
     const root = nodes.find(n => !n.parent) ?? nodes[0];
