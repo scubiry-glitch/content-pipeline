@@ -2,17 +2,36 @@
 // 顶栏显示 meeting 元数据 + A/B/C tab 切换 + 导航回库
 // 真正内容由子路由 VariantEditorial / VariantWorkbench / VariantThreads 提供
 
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import { MEETING } from './_fixtures';
+import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 import './_tokens.css';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
 export function MeetingDetailShell() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const forceMock = useForceMock();
 
-  // Phase 1 只用 mock；Phase 2 接 getMeetingDetail(id)
   const m = id && id !== MEETING.id ? { ...MEETING, id } : MEETING;
+
+  const [apiTitle, setApiTitle] = useState<string | null>(null);
+  const [apiDate, setApiDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (forceMock || !id || !UUID_RE.test(id)) return;
+    meetingNotesApi.listMeetings({ limit: 200 })
+      .then((r: any) => {
+        const found = r?.items?.find((item: any) => String(item.id) === id);
+        if (found?.title) setApiTitle(String(found.title));
+        if (found?.created_at) setApiDate(String(found.created_at).slice(0, 10));
+      })
+      .catch(() => {});
+  }, [id, forceMock]);
 
   const views = [
     { to: 'a', label: 'A · Editorial', sub: '文档精读' },
@@ -51,9 +70,9 @@ export function MeetingDetailShell() {
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             maxWidth: 520,
           }}>
-            {m.title}
+            {apiTitle ?? m.title}
           </div>
-          <MonoMeta>{m.date} · {m.duration}</MonoMeta>
+          <MonoMeta>{apiDate ?? m.date} · {m.duration}</MonoMeta>
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>

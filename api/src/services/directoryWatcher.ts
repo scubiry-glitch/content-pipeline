@@ -33,9 +33,16 @@ export class DirectoryWatcherService {
   private watchers: Map<string, FSWatcher> = new Map();
   private assetService: AssetService;
   private scanInterval: NodeJS.Timeout | null = null;
+  private loadingBindings = false;
+  private importChains: Map<string, Promise<void>> = new Map();
+  private readonly maxFilesPerScan: number;
 
   constructor() {
     this.assetService = new AssetService();
+    this.maxFilesPerScan = Math.max(
+      1,
+      parseInt(process.env.DIRECTORY_WATCHER_MAX_FILES_PER_SCAN || '200', 10)
+    );
   }
 
   // Initialize service - load all active bindings and start watching
@@ -73,6 +80,10 @@ export class DirectoryWatcherService {
 
   // Load active bindings and set up watchers
   private async loadAndWatchBindings(): Promise<void> {
+    if (this.loadingBindings) {
+      return;
+    }
+    this.loadingBindings = true;
     try {
       const result = await query(
         `SELECT * FROM asset_directory_bindings WHERE is_active = true`
@@ -96,6 +107,8 @@ export class DirectoryWatcherService {
       }
     } catch (error) {
       console.error('[DirectoryWatcher] Failed to load bindings:', error);
+    } finally {
+      this.loadingBindings = false;
     }
   }
 
@@ -124,18 +137,18 @@ export class DirectoryWatcherService {
             try {
               const stats = await stat(filePath);
               if (stats.isFile()) {
-                await this.importFile(binding, filePath, stats);
+                this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
               }
             } catch {
               // File was removed
-              await this.removeTrackedFile(binding.id, filePath);
+              this.enqueueImport(binding.id, () => this.removeTrackedFile(binding.id, filePath));
             }
           } else if (eventType === 'change') {
             // File modified
             try {
               const stats = await stat(filePath);
               if (stats.isFile()) {
-                await this.importFile(binding, filePath, stats);
+                this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
               }
             } catch {
               // File no longer exists
@@ -157,12 +170,18 @@ export class DirectoryWatcherService {
 
     try {
       const files = await this.getFilesInDirectory(binding.path, binding.include_subdirs);
+      const limitedFiles = files.slice(0, this.maxFilesPerScan);
+      if (files.length > this.maxFilesPerScan) {
+        console.warn(
+          `[DirectoryWatcher] Scan limited for ${binding.name}: processing ${this.maxFilesPerScan}/${files.length} files this round`
+        );
+      }
 
-      for (const filePath of files) {
+      for (const filePath of limitedFiles) {
         try {
           const stats = await stat(filePath);
           if (stats.isFile() && this.matchesPattern(filePath, binding.file_patterns)) {
-            await this.importFile(binding, filePath, stats);
+            await this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
           }
         } catch (error) {
           console.error(`[DirectoryWatcher] Error processing ${filePath}:`, error);
@@ -305,6 +324,21 @@ export class DirectoryWatcherService {
       [bindingId, filePath]
     );
     console.log(`[DirectoryWatcher] Removed tracking: ${filePath}`);
+  }
+
+  // Serialize file import/remove operations per binding to avoid DB spikes
+  private async enqueueImport(bindingId: string, task: () => Promise<void>): Promise<void> {
+    const prev = this.importChains.get(bindingId) || Promise.resolve();
+    const next = prev
+      .catch(() => {
+        // keep chain alive
+      })
+      .then(task)
+      .catch((error) => {
+        console.error(`[DirectoryWatcher] Task failed for binding ${bindingId}:`, error);
+      });
+    this.importChains.set(bindingId, next);
+    await next;
   }
 
   // Get MIME type from filename

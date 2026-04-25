@@ -149,6 +149,20 @@ export async function ensureDbPoolConnected(): Promise<void> {
   await query('SELECT 1');
 }
 
+/**
+ * 运行时性能索引（轻量、幂等）。
+ * 在关闭全量迁移时依然可以执行，避免热点列表查询走慢路径。
+ */
+export async function ensureRuntimePerformanceIndexes(): Promise<void> {
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_visible_created_partial ON tasks(created_at DESC) WHERE COALESCE(is_hidden, false) = false`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status_visible_created_partial ON tasks(status, created_at DESC) WHERE COALESCE(is_hidden, false) = false`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_hidden_created_partial ON tasks(created_at DESC) WHERE COALESCE(is_hidden, false) = true`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_scopes_kind_created ON mn_scopes(kind, created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_type_created ON assets(type, created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_runs_scope_axis_created ON mn_runs(scope_kind, axis, created_at DESC)`).catch(() => {});
+}
+
 async function withConnectionRetry<T>(
   operation: () => Promise<T>,
   operationName: string
@@ -179,7 +193,7 @@ async function withConnectionRetry<T>(
   throw lastError instanceof Error ? lastError : new Error('Unknown database error');
 }
 
-function isConnectionError(error: unknown): boolean {
+export function isConnectionError(error: unknown): boolean {
   const err = error as { code?: string; message?: string };
   const code = err?.code || '';
   const message = (err?.message || '').toLowerCase();
@@ -653,6 +667,10 @@ async function setupMVPSchema(): Promise<void> {
 
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_visible_created_partial ON tasks(created_at DESC) WHERE COALESCE(is_hidden, false) = false`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status_visible_created_partial ON tasks(status, created_at DESC) WHERE COALESCE(is_hidden, false) = false`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_hidden_created_partial ON tasks(created_at DESC) WHERE COALESCE(is_hidden, false) = true`);
   await query(`CREATE INDEX IF NOT EXISTS idx_research_reports_topic ON research_reports(topic_id)`);
   // Expert library indexes (only if table exists with correct schema)
   await query(`CREATE INDEX IF NOT EXISTS idx_expert_library_role ON expert_library(role)`).catch(() => {});
@@ -1445,4 +1463,9 @@ async function setupContentLibrarySchema(): Promise<void> {
 
   // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–011 SQL 对齐
   await ensureMeetingNotesModuleSchema(query);
+
+  // Hot-path indexes used by dashboard list APIs
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_scopes_kind_created ON mn_scopes(kind, created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_assets_type_created ON assets(type, created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_runs_scope_axis_created ON mn_runs(scope_kind, axis, created_at DESC)`).catch(() => {});
 }

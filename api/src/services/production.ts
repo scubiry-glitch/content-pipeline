@@ -1,7 +1,7 @@
 // 生产任务服务
 // 处理: 选题 → 研究 → 写作 → BlueTeam评审 → 人工确认
 
-import { query } from '../db/connection.js';
+import { isConnectionError, query } from '../db/connection.js';
 import { getQueue } from '../utils/queue-manager.js';
 import { PipelineService } from './pipeline.js';
 import { generate } from './llm.js';
@@ -25,6 +25,29 @@ export interface AnnotationInput {
   url?: string;
   asset_id?: string;
   title: string;
+}
+
+function encodeCursor(createdAt: string, id: string): string {
+  return Buffer.from(JSON.stringify({ createdAt, id }), 'utf8').toString('base64url');
+}
+
+function decodeCursor(cursor?: string): { createdAt: string; id: string } | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      parsed
+      && typeof parsed.createdAt === 'string'
+      && parsed.createdAt.length > 0
+      && typeof parsed.id === 'string'
+      && parsed.id.length > 0
+    ) {
+      return { createdAt: parsed.createdAt, id: parsed.id };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export class ProductionService {
@@ -81,43 +104,87 @@ export class ProductionService {
     }
   }
 
-  async listTasks(options: { status?: string; limit: number; offset: number; includeHidden?: boolean }) {
-    const { status, limit, offset, includeHidden = false } = options;
+  async listTasks(options: { status?: string; limit: number; offset: number; includeHidden?: boolean; cursor?: string }) {
+    const { status, includeHidden = false } = options;
+    const limit = Math.min(Math.max(options.limit || 10, 1), 100);
+    const offset = Math.max(options.offset || 0, 0);
+    const decodedCursor = decodeCursor(options.cursor);
 
-    let sql = 'SELECT * FROM tasks';
+    // 列表接口仅返回轻量字段；重字段（outline/research_data 等）由详情接口按需读取
+    let sql = `SELECT
+      id,
+      topic,
+      target_formats,
+      status,
+      progress,
+      current_stage,
+      is_hidden,
+      created_at,
+      updated_at,
+      completed_at
+    FROM tasks`;
     const params: any[] = [];
-    const conditions: string[] = [];
+    const baseConditions: string[] = [];
+    const pageConditions: string[] = [];
 
     // 默认不显示隐藏任务
     if (!includeHidden) {
-      conditions.push('(is_hidden = false OR is_hidden IS NULL)');
+      baseConditions.push(`COALESCE(is_hidden, false) = false`);
+      pageConditions.push(`COALESCE(is_hidden, false) = false`);
     }
 
     if (status) {
-      conditions.push(`status = $${params.length + 1}`);
+      const cond = `status = $${params.length + 1}`;
+      baseConditions.push(cond);
+      pageConditions.push(cond);
       params.push(status);
     }
 
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
+    // Keyset pagination 优先：按 (created_at DESC, id DESC) 稳定翻页
+    if (decodedCursor) {
+      pageConditions.push(`(created_at, id) < ($${params.length + 1}::timestamptz, $${params.length + 2})`);
+      params.push(decodedCursor.createdAt, decodedCursor.id);
     }
 
-    sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
-
-    const result = await query(sql, params);
-
-    // Get total count
-    let countSql = 'SELECT COUNT(*) FROM tasks';
-    if (conditions.length > 0) {
-      countSql += ' WHERE ' + conditions.join(' AND ');
+    if (pageConditions.length > 0) {
+      sql += ' WHERE ' + pageConditions.join(' AND ');
     }
-    const countResult = await query(countSql, params.slice(0, -2));
 
-    return {
-      total: parseInt(countResult.rows[0].count),
-      items: result.rows
-    };
+    sql += ` ORDER BY created_at DESC, id DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+    if (!decodedCursor) {
+      sql += ` OFFSET $${params.length + 1}`;
+      params.push(offset);
+    }
+
+    try {
+      const result = await query(sql, params);
+
+      // Get total count
+      let countSql = 'SELECT COUNT(*) FROM tasks';
+      if (baseConditions.length > 0) {
+        countSql += ' WHERE ' + baseConditions.join(' AND ');
+      }
+      const countParams = status ? [status] : [];
+      const countResult = await query(countSql, countParams);
+      const last = result.rows[result.rows.length - 1];
+      const nextCursor =
+        result.rows.length === limit && last?.created_at && last?.id
+          ? encodeCursor(new Date(last.created_at).toISOString(), String(last.id))
+          : null;
+
+      return {
+        total: parseInt(countResult.rows[0].count),
+        items: result.rows,
+        nextCursor
+      };
+    } catch (error) {
+      if (isConnectionError(error)) {
+        console.warn('[Production] listTasks degraded: database unavailable');
+        return { total: 0, items: [], nextCursor: null };
+      }
+      throw error;
+    }
   }
 
   async getTask(taskId: string) {

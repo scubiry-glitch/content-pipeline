@@ -21,6 +21,34 @@ const TasksContext = createContext<TasksContextType | undefined>(undefined);
 
 // SWR key for tasks list
 const TASKS_KEY = 'tasks/list';
+const TASKS_PAGE_SIZE = 50;
+const TASKS_MAX_PAGES = 6;
+
+async function fetchTasksByCursor(): Promise<Task[]> {
+  let cursor: string | undefined;
+  let page = 0;
+  const allItems: Task[] = [];
+  const seen = new Set<string>();
+
+  while (page < TASKS_MAX_PAGES) {
+    const response = await tasksApi.getAll({ limit: TASKS_PAGE_SIZE, cursor });
+    const items = response.items || [];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        allItems.push(item);
+      }
+    }
+
+    if (!response.nextCursor) break;
+    cursor = response.nextCursor;
+    page += 1;
+  }
+
+  return allItems;
+}
 
 export function TasksProvider({ children }: { children: React.ReactNode }) {
   // 使用 SWR 缓存任务列表数据（5分钟缓存）
@@ -32,10 +60,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     mutate,
   } = useCachedData(
     TASKS_KEY,
-    async () => {
-      const response = await tasksApi.getAll({ limit: 50 });
-      return response.items || [];
-    },
+    fetchTasksByCursor,
     {
       // 每30秒自动刷新（对应 Dashboard 自动刷新需求）
       refreshInterval: 30000,

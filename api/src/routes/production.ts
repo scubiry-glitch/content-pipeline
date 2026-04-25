@@ -58,12 +58,13 @@ export async function productionRoutes(fastify: FastifyInstance) {
 
   // List tasks
   fastify.get('/', { preHandler: authenticate }, async (request) => {
-    const { status, limit = '10', offset = '0' } = request.query as any;
+    const { status, limit = '10', offset = '0', cursor } = request.query as any;
 
     return await productionService.listTasks({
       status,
       limit: parseInt(limit),
-      offset: parseInt(offset)
+      offset: parseInt(offset),
+      cursor: typeof cursor === 'string' && cursor.trim().length > 0 ? cursor.trim() : undefined,
     });
   });
 

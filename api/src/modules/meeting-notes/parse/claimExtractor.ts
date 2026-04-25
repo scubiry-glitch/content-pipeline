@@ -19,10 +19,19 @@ export async function loadMeetingBundle(
   deps: MeetingNotesDeps,
   meetingId: string,
 ): Promise<MeetingBundle | null> {
+  const hasAssetTypeCol = await deps.db.query(
+    `SELECT 1
+       FROM information_schema.columns
+      WHERE table_name = 'assets' AND column_name = 'asset_type'
+      LIMIT 1`,
+  );
+  const typeExpr = hasAssetTypeCol.rows.length > 0
+    ? `COALESCE(asset_type::text, type::text, content_type::text, '')`
+    : `COALESCE(type::text, content_type::text, '')`;
   const r = await deps.db.query(
     `SELECT id, title, content, metadata, created_at
        FROM assets
-      WHERE id = $1 AND asset_type = 'meeting_minutes'`,
+      WHERE id = $1 AND ${typeExpr} = 'meeting_minutes'`,
     [meetingId],
   );
   if (r.rows.length === 0) return null;

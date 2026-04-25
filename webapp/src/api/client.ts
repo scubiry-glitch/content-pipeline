@@ -40,8 +40,8 @@ client.interceptors.response.use(
 
 // 任务相关 API
 export const tasksApi = {
-  getAll: (params?: { limit?: number; status?: string }) =>
-    client.get('/production', { params }) as Promise<{ items: Task[]; total: number }>,
+  getAll: (params?: { limit?: number; status?: string; offset?: number; cursor?: string }) =>
+    client.get('/production', { params }) as Promise<{ items: Task[]; total: number; nextCursor?: string | null }>,
 
   getById: (id: string) =>
     client.get(`/production/${id}`) as Promise<Task>,
@@ -294,6 +294,11 @@ export const bindingsApi = {
       filtered?: number;
       unchanged?: number;
       skipped?: number;
+    }>,
+  listFiles: (id: string, params?: { limit?: number; offset?: number }) =>
+    client.get(`/assets/bindings/${id}/files`, { params }) as Promise<{
+      total: number;
+      items: Array<{ id?: string; path?: string; relative_path?: string; file_path?: string; asset_id?: string }>;
     }>,
 };
 

@@ -24,8 +24,18 @@ export async function parseMeeting(
   assetId: string,
 ): Promise<ParseMeetingResult> {
   // 1) 先确认 asset 存在且是 meeting_minutes
+  // 兼容历史库字段：有的库是 assets.type（当前主线），旧实现曾使用 asset_type。
+  const hasAssetTypeCol = await deps.db.query(
+    `SELECT 1
+       FROM information_schema.columns
+      WHERE table_name = 'assets' AND column_name = 'asset_type'
+      LIMIT 1`,
+  );
+  const typeExpr = hasAssetTypeCol.rows.length > 0
+    ? `COALESCE(asset_type::text, type::text, content_type::text, '')`
+    : `COALESCE(type::text, content_type::text, '')`;
   const rows = await deps.db.query(
-    `SELECT id, asset_type, title, content, metadata
+    `SELECT id, ${typeExpr} AS asset_kind, title, content, metadata
        FROM assets WHERE id = $1`,
     [assetId],
   );
@@ -33,7 +43,7 @@ export async function parseMeeting(
     return { ok: false, assetId, participantCount: 0, reason: 'asset-not-found' };
   }
   const asset = rows.rows[0];
-  if (asset.asset_type !== 'meeting_minutes') {
+  if (asset.asset_kind !== 'meeting_minutes') {
     return { ok: false, assetId, participantCount: 0, reason: 'not-meeting-minutes' };
   }
 

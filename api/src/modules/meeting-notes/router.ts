@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { meetingNotesRoutes as ingestRoutes } from './ingest/routes.js';
 import { authenticate } from '../../middleware/auth.js';
+import { isConnectionError } from '../../db/connection.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -83,8 +84,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.get('/meetings', { preHandler: authenticate }, async (request) => {
       const q = request.query as { limit?: string };
       const limit = Math.min(100, parseInt(q.limit ?? '50', 10));
-      const r = await engine.deps.db.query(
-        `SELECT
+      try {
+        const r = await engine.deps.db.query(
+          `SELECT
            a.id,
            COALESCE(a.title, a.metadata->>'title', 'Untitled') AS title,
            a.metadata->>'meeting_kind' AS meeting_kind,
@@ -107,16 +109,23 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
          WHERE a.type = 'meeting_note' OR (a.metadata ? 'meeting_kind')
          ORDER BY a.created_at DESC
          LIMIT $1`,
-        [limit],
-      );
-      // library-scoped runs (not attached to a specific meeting asset)
-      const libR = await engine.deps.db.query(
-        `SELECT id, scope_kind, axis, state, created_at, finished_at, error_message, metadata
+          [limit],
+        );
+        // library-scoped runs (not attached to a specific meeting asset)
+        const libR = await engine.deps.db.query(
+          `SELECT id, scope_kind, axis, state, created_at, finished_at, error_message, metadata
          FROM mn_runs WHERE scope_kind = 'library'
          ORDER BY created_at DESC LIMIT $1`,
-        [Math.min(limit, 20)],
-      );
-      return { items: r.rows, libraryRuns: libR.rows };
+          [Math.min(limit, 20)],
+        );
+        return { items: r.rows, libraryRuns: libR.rows };
+      } catch (error) {
+        if (isConnectionError(error)) {
+          request.log.warn({ err: error }, 'meeting list degraded: database unavailable');
+          return { items: [], libraryRuns: [] };
+        }
+        throw error;
+      }
     });
 
     fastify.post('/meetings', { preHandler: authenticate }, async (request, reply) => {
@@ -236,12 +245,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // --------------------------------------------------------
     fastify.get('/scopes', { preHandler: authenticate }, async (request) => {
       const q = request.query as { kind?: string; status?: string };
-      return {
-        items: await engine.scopes.list({
-          kind: q.kind as any,
-          status: q.status as any,
-        }),
-      };
+      try {
+        return {
+          items: await engine.scopes.list({
+            kind: q.kind as any,
+            status: q.status as any,
+          }),
+        };
+      } catch (error) {
+        if (isConnectionError(error)) {
+          request.log.warn({ err: error }, 'scopes list degraded: database unavailable');
+          return { items: [] };
+        }
+        throw error;
+      }
     });
 
     fastify.get('/scopes/:id', { preHandler: authenticate }, async (request, reply) => {
@@ -320,10 +337,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // --------------------------------------------------------
     fastify.get('/scopes/:id/decisions', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
-      const uuid = await resolveScopeUuid(engine.deps.db, id);
-      if (!uuid) return { items: [] };
-      const r = await engine.deps.db.query(
-        `SELECT d.id, d.meeting_id, d.title, d.proposer_person_id,
+      try {
+        const uuid = await resolveScopeUuid(engine.deps.db, id);
+        if (!uuid) return { items: [] };
+        const r = await engine.deps.db.query(
+          `SELECT d.id, d.meeting_id, d.title, d.proposer_person_id,
                 d.based_on_ids, d.superseded_by_id, d.confidence, d.is_current, d.rationale,
                 d.created_at,
                 p.canonical_name AS proposer_name
@@ -331,9 +349,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            LEFT JOIN mn_people p ON p.id = d.proposer_person_id
           WHERE d.scope_id = $1
           ORDER BY d.created_at ASC`,
-        [uuid],
-      );
-      return { items: r.rows };
+          [uuid],
+        );
+        return { items: r.rows };
+      } catch (error) {
+        if (isConnectionError(error)) {
+          request.log.warn({ scopeId: id, err: error }, 'decisions degraded: database unavailable');
+          return { items: [] };
+        }
+        throw error;
+      }
     });
 
     fastify.get('/scopes/:id/assumptions', { preHandler: authenticate }, async (request) => {
@@ -420,7 +445,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const row = r.rows[0];
       const notes = (row.notes ?? {}) as Record<string, string>;
       // 转换为前端期望的 { overall, dims: [{id, label, score, note}] } 形态
-      const dimMeta: Array<{ id: keyof typeof row; label: string }> = [
+      const dimMeta: Array<{ id: 'clarity' | 'actionable' | 'traceable' | 'falsifiable' | 'aligned'; label: string }> = [
         { id: 'clarity',     label: '清晰度' },
         { id: 'actionable',  label: '可执行' },
         { id: 'traceable',   label: '可追溯' },
@@ -433,7 +458,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           id: dimId,
           label,
           score: Number(row[dimId] ?? 0),
-          note: notes[dimId] ?? '',
+          note: notes[String(dimId)] ?? '',
         })),
         teamAvg: null,
         computedAt: row.computed_at,
@@ -559,26 +584,34 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Phase 15.9 · AxisPeople · Commitments (mn_commitments)
     fastify.get('/scopes/:id/commitments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
-      const uuid = await resolveScopeUuid(engine.deps.db, id);
-      if (!uuid) return { items: [] };
-      const q = request.query as { personId?: string; state?: string };
-      const conds: string[] = [
-        `c.meeting_id IN (SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1)`,
-      ];
-      const args: unknown[] = [uuid];
-      if (q.personId) { conds.push(`c.person_id = $${args.length + 1}`); args.push(q.personId); }
-      if (q.state)    { conds.push(`c.state = $${args.length + 1}`);     args.push(q.state); }
-      const r = await engine.deps.db.query(
-        `SELECT c.id, c.meeting_id, c.person_id, c.text, c.due_at,
+      try {
+        const uuid = await resolveScopeUuid(engine.deps.db, id);
+        if (!uuid) return { items: [] };
+        const q = request.query as { personId?: string; state?: string };
+        const conds: string[] = [
+          `c.meeting_id IN (SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $1)`,
+        ];
+        const args: unknown[] = [uuid];
+        if (q.personId) { conds.push(`c.person_id = $${args.length + 1}`); args.push(q.personId); }
+        if (q.state)    { conds.push(`c.state = $${args.length + 1}`);     args.push(q.state); }
+        const r = await engine.deps.db.query(
+          `SELECT c.id, c.meeting_id, c.person_id, c.text, c.due_at,
                 c.state, c.progress, c.evidence_refs, c.created_at, c.updated_at,
                 p.canonical_name AS person_name
            FROM mn_commitments c
            LEFT JOIN mn_people p ON p.id = c.person_id
           WHERE ${conds.join(' AND ')}
           ORDER BY c.created_at DESC`,
-        args,
-      );
-      return { items: r.rows };
+          args,
+        );
+        return { items: r.rows };
+      } catch (error) {
+        if (isConnectionError(error)) {
+          request.log.warn({ scopeId: id, err: error }, 'commitments degraded: database unavailable');
+          return { items: [] };
+        }
+        throw error;
+      }
     });
 
     // Provenance chain · 从一个 decision 往回追 N 层 based_on_ids
@@ -685,7 +718,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         `UPDATE mn_schedules SET ${cols.join(', ')} WHERE id = $${args.length} RETURNING id`,
         args,
       );
-      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      if ((r as any).rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
       return { ok: true };
     });
 
@@ -696,7 +729,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         `DELETE FROM mn_schedules WHERE id = $1`,
         [id],
       );
-      if (r.rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      if ((r as any).rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
       return { ok: true };
     });
 

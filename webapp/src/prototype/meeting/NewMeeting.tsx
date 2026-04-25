@@ -1,11 +1,12 @@
 // NewMeeting — 新建会议纪要向导（3 步）
 // 原型来源：/tmp/mn-proto/strategy-panel.jsx FlowUpload / FlowExperts / FlowProcessing
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
-import { EXPERTS } from './_fixtures';
+import { EXPERTS, ExpertMock } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { bindingsApi, expertLibraryApi } from '../../api/client';
 import { useForceMock } from './_mockToggle';
 
 // ── Local presets (richer than _fixtures.ts) ─────────────────────────────────
@@ -55,11 +56,30 @@ function FlowUpload({ onNext, onUploaded }: {
   onNext: () => void;
   onUploaded: (assetId: string | null) => void;
 }) {
+  const normalizePath = (p: string) =>
+    p.trim().replace(/\\/g, '/').replace(/\/+$/, '');
   const forceMock = useForceMock();
   const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState('');
+  const [bindingFolder, setBindingFolder] = useState(false);
+  const [folderHint, setFolderHint] = useState<string | null>(null);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentError, setRecentError] = useState<string | null>(null);
+  const [recentItems, setRecentItems] = useState<Array<{
+    id: string;
+    t: string;
+    title: string;
+    n: string;
+    assetId: string | null;
+  }>>([]);
+  const [selectedRecentId, setSelectedRecentId] = useState<string | null>(null);
+  const [folderPreviewLoading, setFolderPreviewLoading] = useState(false);
+  const [folderPreviewError, setFolderPreviewError] = useState<string | null>(null);
+  const [folderPreviewItems, setFolderPreviewItems] = useState<string[]>([]);
+  const [activeBindingId, setActiveBindingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
@@ -84,8 +104,22 @@ function FlowUpload({ onNext, onUploaded }: {
     try {
       const sources = await meetingNotesApi.listSources();
       const sourceId = sources.items?.[0]?.id ?? 'meetings';
-      const r: { assetId?: string; id?: string } = await meetingNotesApi.uploadToSource(sourceId, file);
-      onUploaded(r.assetId ?? r.id ?? null);
+      const r: { assetId?: string; assetIds?: string[]; id?: string } = await meetingNotesApi.uploadToSource(sourceId, file);
+      // /sources/:id/upload 返回的是 import 记录，id 通常是 importId，不是 assets.id。
+      // 这里必须优先使用 assetIds[0]（或显式 assetId），否则 parse 会拿错 id 返回 404。
+      let resolvedAssetId = r.assetId ?? (Array.isArray(r.assetIds) ? (r.assetIds[0] ?? null) : null);
+      // 某些后端分支可能返回导入记录但未内联 assetIds，这里立刻从历史补一次。
+      if (!resolvedAssetId) {
+        try {
+          const history = await meetingNotesApi.getSourceHistory({ sourceId, limit: 5 });
+          resolvedAssetId = (history.items ?? [])
+            .flatMap((item: any) => (Array.isArray(item?.assetIds) ? item.assetIds : []))
+            .find((id: unknown) => typeof id === 'string' && id.length > 0) ?? null;
+        } catch (historyErr) {
+          console.warn('fallback getSourceHistory failed:', historyErr);
+        }
+      }
+      onUploaded(resolvedAssetId ?? null);
     } catch (e) {
       console.warn('upload failed, demo fallback:', e);
       onUploaded(null);
@@ -94,6 +128,133 @@ function FlowUpload({ onNext, onUploaded }: {
       setUploadDone(true);
     }
   }
+
+  async function handleBindFolder() {
+    const path = normalizePath(folderPath);
+    if (!path) return;
+    if (forceMock) {
+      setFolderHint(`已绑定目录: ${path}`);
+      setUploadDone(true);
+      onUploaded(null);
+      return;
+    }
+    setBindingFolder(true);
+    setFolderHint(null);
+    try {
+      const listed = await bindingsApi.getAll();
+      let binding = (listed ?? []).find((b: any) =>
+        normalizePath(String(b?.path ?? '')) === path,
+      );
+      if (!binding) {
+        binding = await bindingsApi.create({
+          name: `Meeting Folder · ${path.split('/').filter(Boolean).slice(-1)[0] || 'meeting-notes'}`,
+          path,
+          auto_import: true,
+        });
+      }
+      try {
+        await bindingsApi.scan(binding.id);
+      } catch (scanErr) {
+        console.warn('binding scan failed:', scanErr);
+      }
+      setActiveBindingId(binding.id);
+      onUploaded(null);
+      setUploadDone(true);
+      setFolderHint(`已绑定目录: ${path}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '目录绑定失败';
+      setFolderHint(msg);
+    } finally {
+      setBindingFolder(false);
+    }
+  }
+
+  useEffect(() => {
+    if (mode !== 'folder') return;
+    const path = normalizePath(folderPath);
+    if (!path) {
+      setFolderPreviewItems([]);
+      setFolderPreviewError(null);
+      setFolderPreviewLoading(false);
+      setActiveBindingId(null);
+      return;
+    }
+    let cancelled = false;
+    setFolderPreviewLoading(true);
+    setFolderPreviewError(null);
+    const loadPreview = async () => {
+      try {
+        let bindingId = activeBindingId;
+        if (!bindingId) {
+          const all = await bindingsApi.getAll();
+          const matched = (all ?? []).find((b: any) => normalizePath(String(b?.path ?? '')) === path);
+          if (!matched) {
+            setFolderPreviewItems([]);
+            return;
+          }
+          bindingId = matched.id;
+          setActiveBindingId(matched.id);
+        }
+        let latest: string[] = [];
+        // scan 后 tracked_files 可能稍后落库，短轮询几次避免误报“暂无文件”
+        for (let i = 0; i < 4; i += 1) {
+          const filesResp = await bindingsApi.listFiles(bindingId, { limit: 50, offset: 0 });
+          latest = (filesResp.items ?? []).map((f: any) =>
+            String(f.relative_path ?? f.path ?? f.file_path ?? '').trim(),
+          ).filter(Boolean);
+          if (latest.length > 0) break;
+          await new Promise((r) => setTimeout(r, 800));
+        }
+        if (!cancelled) setFolderPreviewItems(latest);
+      } catch (err: unknown) {
+        if (cancelled) return;
+        setFolderPreviewError(err instanceof Error ? err.message : '读取目录预览失败');
+        setFolderPreviewItems([]);
+      } finally {
+        if (!cancelled) setFolderPreviewLoading(false);
+      }
+    };
+    void loadPreview();
+    return () => { cancelled = true; };
+  }, [mode, folderPath, activeBindingId]);
+
+  useEffect(() => {
+    if (mode !== 'recent') return;
+    if (forceMock) {
+      setRecentItems([
+        { id: 'mock-1', t: '2026-03-28', title: '远翎资本 · Q1 复盘 · 基础设施方向', n: '8 人 · 142 分钟', assetId: null },
+        { id: 'mock-2', t: '2026-03-14', title: '团队内部 · 推理层 subadvisor 选择讨论', n: '4 人 · 68 分钟', assetId: null },
+        { id: 'mock-3', t: '2026-02-22', title: 'LP 沟通会 · Q1 进度披露', n: '12 人 · 95 分钟', assetId: null },
+      ]);
+      return;
+    }
+    setRecentLoading(true);
+    setRecentError(null);
+    meetingNotesApi.getSourceHistory({ limit: 20 })
+      .then((r) => {
+        const mapped = (r.items ?? []).map((x: any, idx: number) => {
+          const dt = x.startedAt || x.finishedAt || new Date().toISOString();
+          const timeLabel = new Date(dt).toLocaleString('zh-CN', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+          });
+          const status = x.status || 'unknown';
+          const sourceLabel = x.sourceId ? String(x.sourceId).slice(0, 8) : 'unknown';
+          return {
+            id: x.id ?? `history-${idx}`,
+            t: timeLabel,
+            title: `导入 ${status} · source ${sourceLabel}`,
+            n: `${x.itemsImported ?? 0} 条导入 / ${x.itemsDiscovered ?? 0} 条发现`,
+            assetId: Array.isArray(x.assetIds) ? (x.assetIds[0] ?? null) : null,
+          };
+        });
+        setRecentItems(mapped);
+      })
+      .catch((err: unknown) => {
+        setRecentError(err instanceof Error ? err.message : '读取历史失败');
+        setRecentItems([]);
+      })
+      .finally(() => setRecentLoading(false));
+  }, [mode, forceMock]);
 
   return (
     <div style={{
@@ -181,11 +342,36 @@ function FlowUpload({ onNext, onUploaded }: {
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px 20px' }}>
             <SectionLabel>目录绑定</SectionLabel>
-            <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--paper-2)', borderRadius: 6, fontFamily: 'var(--mono)', fontSize: 12, border: '1px solid var(--line-2)' }}>
-              paper.morning.rocks/assets/meetings/
-            </div>
+            <input
+              value={folderPath}
+              onChange={(e) => setFolderPath(e.target.value)}
+              placeholder="/absolute/path/to/meetings"
+              style={{
+                marginTop: 12, width: '100%', padding: '12px 14px',
+                background: 'var(--paper-2)', borderRadius: 6, fontFamily: 'var(--mono)',
+                fontSize: 12, border: '1px solid var(--line-2)',
+              }}
+            />
             <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10, lineHeight: 1.6 }}>
               目录中任何新增文件都会被持续索引，并按同一套原始素参考规则挂载到下一次会议纪要。
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={handleBindFolder}
+                disabled={bindingFolder || !folderPath.trim()}
+                style={{
+                  padding: '8px 12px', borderRadius: 4, border: '1px solid var(--ink)',
+                  background: 'var(--ink)', color: 'var(--paper)', fontSize: 12,
+                  opacity: bindingFolder || !folderPath.trim() ? 0.5 : 1,
+                  cursor: bindingFolder || !folderPath.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {bindingFolder ? '绑定中…' : '绑定并索引'}
+              </button>
+              {folderHint && (
+                <span style={{ fontSize: 12, color: 'var(--ink-3)', alignSelf: 'center' }}>{folderHint}</span>
+              )}
             </div>
             <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
               <Chip tone="accent">自动索引</Chip>
@@ -196,7 +382,18 @@ function FlowUpload({ onNext, onUploaded }: {
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px 20px' }}>
             <SectionLabel>目录内容 · 预览</SectionLabel>
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-              {['audio/zoom-237.m4a','notes/纪要初稿.docx','notes/纪要补丁.md','attachments/尽调包.xlsx','attachments/推理层-候选.pdf'].map((f, i) => (
+              {folderPreviewLoading && (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '8px 4px' }}>加载目录文件中…</div>
+              )}
+              {!folderPreviewLoading && folderPreviewError && (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '8px 4px' }}>读取失败: {folderPreviewError}</div>
+              )}
+              {!folderPreviewLoading && !folderPreviewError && folderPreviewItems.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '8px 4px' }}>
+                  暂无可预览文件（请先完成绑定并确认目录下有可索引文件）
+                </div>
+              )}
+              {!folderPreviewLoading && !folderPreviewError && folderPreviewItems.map((f, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px',
                   borderTop: i === 0 ? 'none' : '1px solid var(--line-2)', fontSize: 12.5,
@@ -212,14 +409,28 @@ function FlowUpload({ onNext, onUploaded }: {
 
       {mode === 'recent' && (
         <div style={{ flex: 1, background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '4px 0' }}>
-          {[
-            { t: '2026-03-28', title: '远翎资本 · Q1 复盘 · 基础设施方向', n: '8 人 · 142 分钟' },
-            { t: '2026-03-14', title: '团队内部 · 推理层 subadvisor 选择讨论', n: '4 人 · 68 分钟' },
-            { t: '2026-02-22', title: 'LP 沟通会 · Q1 进度披露', n: '12 人 · 95 分钟' },
-          ].map((x, i) => (
-            <div key={i} style={{
+          {recentLoading && (
+            <div style={{ padding: '22px 20px', fontSize: 12, color: 'var(--ink-3)' }}>正在读取历史记录…</div>
+          )}
+          {!recentLoading && recentError && (
+            <div style={{ padding: '22px 20px', fontSize: 12, color: 'var(--ink-3)' }}>读取历史失败: {recentError}</div>
+          )}
+          {!recentLoading && !recentError && recentItems.length === 0 && (
+            <div style={{ padding: '22px 20px', fontSize: 12, color: 'var(--ink-3)' }}>暂无历史导入记录</div>
+          )}
+          {!recentLoading && !recentError && recentItems.map((x, i) => (
+            <div
+              key={x.id}
+              onClick={() => {
+                setSelectedRecentId(x.id);
+                onUploaded(x.assetId);
+                setUploadDone(true);
+              }}
+              style={{
               display: 'grid', gridTemplateColumns: '120px 1fr 200px 24px', gap: 14, alignItems: 'center',
               padding: '14px 20px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
+              background: selectedRecentId === x.id ? 'var(--paper-2)' : 'transparent',
+              cursor: 'pointer',
             }}>
               <MonoMeta>{x.t}</MonoMeta>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500 }}>{x.title}</div>
@@ -233,11 +444,22 @@ function FlowUpload({ onNext, onUploaded }: {
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
         <button style={btnGhost}>稍后</button>
         <button
-          style={{ ...btnPrimary, ...(mode === 'files' && uploading ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+          style={{ ...btnPrimary, ...((mode === 'files' && uploading) || (mode === 'folder' && bindingFolder) ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
           onClick={onNext}
-          disabled={mode === 'files' && uploading}
+          disabled={
+            (mode === 'files' && uploading)
+            || (mode === 'folder' && bindingFolder)
+            || (mode === 'folder' && !uploadDone)
+            || (mode === 'recent' && !uploadDone)
+          }
         >
-          {uploading ? '上传中…' : uploadDone && !forceMock && mode === 'files' ? '已上传 · 继续' : '继续 · 选择专家'}
+          {uploading
+            ? '上传中…'
+            : mode === 'folder' && bindingFolder
+              ? '绑定中…'
+              : uploadDone
+                ? '已选择 · 继续'
+                : '继续 · 选择专家'}
         </button>
       </div>
     </div>
@@ -249,12 +471,90 @@ function FlowUpload({ onNext, onUploaded }: {
 function FlowExperts({ onNext, onBack, onSubmit }: {
   onNext: () => void;
   onBack: () => void;
-  onSubmit: (body: { presetId: string; expertIds: string[] }) => Promise<void>;
+  onSubmit: (body: { presetId: string; expertIds: string[] }) => Promise<boolean>;
 }) {
-  const [selectedIds, setSelectedIds] = useState<string[]>(EXPERTS.filter(e => e.selected).map(e => e.id));
+  const pageSize = 8;
+  const slowThresholdMs = 5000;
+  const forceMock = useForceMock();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [expertList, setExpertList] = useState<ExpertMock[]>([]);
   const [presetId, setPresetId] = useState('standard');
+  const [nameKeyword, setNameKeyword] = useState('');
+  const [page, setPage] = useState(1);
+  const [loadingExperts, setLoadingExperts] = useState(!forceMock);
+  const [slowHint, setSlowHint] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const normalizedKeyword = nameKeyword.trim().toLowerCase();
+  const sortedExperts = useMemo(
+    () => [...expertList].sort((a, b) => b.match - a.match),
+    [expertList],
+  );
+  const filteredExperts = useMemo(() => {
+    if (!normalizedKeyword) return sortedExperts;
+    return sortedExperts.filter(e =>
+      `${e.name} ${e.id}`.toLowerCase().includes(normalizedKeyword),
+    );
+  }, [sortedExperts, normalizedKeyword]);
+  const totalPages = Math.max(1, Math.ceil(filteredExperts.length / pageSize));
+  const pagedExperts = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredExperts.slice(start, start + pageSize);
+  }, [filteredExperts, page]);
+
+  useEffect(() => {
+    if (forceMock) {
+      setExpertList(EXPERTS);
+      setSelectedIds(EXPERTS.filter(e => e.selected).map(e => e.id));
+      setLoadingExperts(false);
+      setSlowHint(false);
+      return;
+    }
+    setLoadingExperts(true);
+    setSlowHint(false);
+    const startedAt = performance.now();
+    expertLibraryApi.getExpertsFull()
+      .then((r: any) => {
+        const adapted: ExpertMock[] = (r?.experts ?? []).map((e: any) => ({
+          id: e.id,
+          name: e.name,
+          field: e.domainName || '',
+          style: e.profile?.personality || e.profile?.title || '',
+          match: 0.8,
+          calibration: '',
+          mentalModels: Array.isArray(e.philosophy?.core) ? e.philosophy.core
+            : Array.isArray(e.reviewDimensions) ? e.reviewDimensions : [],
+          signature: e.philosophy?.quotes?.[0] || '',
+          recommendedFor: [],
+          selected: false,
+        }));
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        const slow = elapsedMs > slowThresholdMs;
+        setSlowHint(slow);
+        if (slow) {
+          console.info(`[FlowExperts] experts/full slow: ${elapsedMs}ms (> ${slowThresholdMs}ms)`);
+        } else {
+          console.info(`[FlowExperts] experts/full ok: ${elapsedMs}ms`);
+        }
+        setExpertList(adapted.length > 0 ? adapted : EXPERTS);
+      })
+      .catch((error: unknown) => {
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        console.warn(`[FlowExperts] experts/full failed: ${elapsedMs}ms`, error);
+        setSlowHint(false);
+        setExpertList(EXPERTS);
+      });
+  }, [forceMock]);
+  useEffect(() => {
+    if (!forceMock && expertList.length > 0) setLoadingExperts(false);
+  }, [expertList, forceMock]);
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedKeyword, expertList.length]);
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
     color: 'var(--paper)', borderRadius: 5, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--sans)',
@@ -284,7 +584,69 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
             <SectionLabel>推荐</SectionLabel>
             <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>按 match 降序 · 根据话题、风格与校准分</span>
           </div>
-          {EXPERTS.map(e => {
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 2 }}>
+            <input
+              value={nameKeyword}
+              onChange={e => setNameKeyword(e.target.value)}
+              placeholder="按名字筛选（支持 id）"
+              style={{
+                flex: 1,
+                minWidth: 240,
+                padding: '8px 10px',
+                border: '1px solid var(--line-2)',
+                borderRadius: 6,
+                fontSize: 12.5,
+                background: 'var(--paper)',
+                color: 'var(--ink)',
+                fontFamily: 'var(--sans)',
+              }}
+            />
+            {nameKeyword.trim() && (
+              <button
+                type="button"
+                onClick={() => setNameKeyword('')}
+                style={{
+                  padding: '7px 10px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 5,
+                  background: 'var(--paper)',
+                  color: 'var(--ink-2)',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                清空
+              </button>
+            )}
+            <MonoMeta>{filteredExperts.length} / {expertList.length}</MonoMeta>
+          </div>
+          {loadingExperts && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: 12.5, color: 'var(--ink-3)',
+              background: 'var(--paper)', border: '1px solid var(--line-2)',
+              borderRadius: 8, padding: '10px 12px',
+            }}>
+              <div style={{
+                width: 14, height: 14, borderRadius: 99,
+                border: '2px solid var(--line)', borderTopColor: 'transparent',
+                animation: 'spin 1s linear infinite',
+              }}>
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              </div>
+              <span>正在加载专家库…</span>
+            </div>
+          )}
+          {slowHint && (
+            <div style={{
+              fontSize: 12, color: 'var(--ink-3)',
+              background: 'var(--paper)', border: '1px dashed var(--line)',
+              borderRadius: 8, padding: '8px 10px',
+            }}>
+              接口响应较慢，已先展示本地专家，可直接继续选择。
+            </div>
+          )}
+          {pagedExperts.map(e => {
             const on = selectedIds.includes(e.id);
             return (
               <div key={e.id} onClick={() => toggle(e.id)} style={{
@@ -333,6 +695,57 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
               </div>
             );
           })}
+          {filteredExperts.length === 0 && (
+            <div style={{
+              background: 'var(--paper)',
+              border: '1px dashed var(--line)',
+              borderRadius: 8,
+              padding: '18px 16px',
+              fontSize: 12.5,
+              color: 'var(--ink-3)',
+            }}>
+              没有匹配的专家，请尝试更短的关键词。
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+            <MonoMeta>第 {page} / {totalPages} 页</MonoMeta>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 5,
+                  background: 'var(--paper)',
+                  color: 'var(--ink-2)',
+                  cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                  opacity: page <= 1 ? 0.5 : 1,
+                  fontSize: 12,
+                }}
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 5,
+                  background: 'var(--paper)',
+                  color: 'var(--ink-2)',
+                  cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                  opacity: page >= totalPages ? 0.5 : 1,
+                  fontSize: 12,
+                }}
+              >
+                下一页
+              </button>
+            </div>
+          </div>
         </div>
 
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -340,7 +753,7 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
             <SectionLabel>已选 · {selectedIds.length} 位</SectionLabel>
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {selectedIds.map(id => {
-                const e = EXPERTS.find(x => x.id === id);
+                const e = expertList.find(x => x.id === id);
                 if (!e) return null;
                 return (
                   <div key={id} style={{
@@ -385,12 +798,19 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
               disabled={enqueueing}
               onClick={async () => {
                 setEnqueueing(true);
-                await onSubmit({ presetId, expertIds: selectedIds });
+                setSubmitError(null);
+                const ok = await onSubmit({ presetId, expertIds: selectedIds });
                 setEnqueueing(false);
-                onNext();
+                if (ok) onNext();
+                else setSubmitError('任务未成功入队：请先上传可解析的会议纪要文件，再重试。');
               }}
             >{enqueueing ? '入队中…' : '生成会议纪要 →'}</button>
           </div>
+          {submitError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+              {submitError}
+            </div>
+          )}
         </aside>
       </div>
     </div>
@@ -418,12 +838,13 @@ function StepDot({ state, tick }: { state: string; tick: number }) {
 }
 
 function FlowProcessing({
-  onBack, runId, onViewRun, onGoMultiView,
+  onBack, runId, onViewRun, onGoMultiView, onRetry,
 }: {
   onBack: () => void;
   runId: string | null;
   onViewRun: (runId: string) => void;
   onGoMultiView: (meetingId: string) => void;
+  onRetry: () => Promise<boolean>;
 }) {
   const [tick, setTick] = useState(0);
   const [done, setDone] = useState(false);
@@ -434,7 +855,24 @@ function FlowProcessing({
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
   const [realCurrentStep, setRealCurrentStep] = useState<string | null>(null);
+  const [realState, setRealState] = useState<string | null>(null);
+  const [realErrorMessage, setRealErrorMessage] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    setDone(false);
+    setRealRunId(runId);
+    setRealMeetingId(null);
+    setRealProgress(null);
+    setRealTokens(null);
+    setRealCostUsd(null);
+    setRealCurrentStep(null);
+    setRealState(null);
+    setRealErrorMessage(null);
+    setRetryError(null);
+  }, [runId]);
 
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 900);
@@ -447,19 +885,46 @@ function FlowProcessing({
     let cancelled = false;
     const poll = async () => {
       try {
-        const r: { state?: string; progress?: number; meetingId?: string; result?: { meetingId?: string }; tokens?: number | { input?: number; output?: number }; costUsd?: number; currentStep?: string } = await meetingNotesApi.getRun(runId);
+        const r: {
+          state?: string;
+          progress?: number;
+          progressPct?: number;
+          meetingId?: string;
+          result?: { meetingId?: string };
+          tokens?: number | { input?: number; output?: number };
+          costTokens?: number;
+          costUsd?: number;
+          currentStep?: string;
+          metadata?: { currentStep?: string };
+          errorMessage?: string;
+        } = await meetingNotesApi.getRun(runId);
         if (cancelled) return;
         setRealRunId(runId);
-        if (typeof r.progress === 'number') setRealProgress(r.progress);
+        const state = (r.state ?? '').toLowerCase();
+        setRealState(state || null);
+        setRealErrorMessage(typeof r.errorMessage === 'string' ? r.errorMessage : null);
+        const pct = typeof r.progress === 'number'
+          ? r.progress
+          : (typeof r.progressPct === 'number' ? r.progressPct : null);
+        if (pct != null) setRealProgress(Math.max(0, Math.min(100, pct)));
         if (typeof r.tokens === 'object' && r.tokens) {
           setRealTokens({ input: Number(r.tokens.input ?? 0), output: Number(r.tokens.output ?? 0) });
+        } else if (typeof r.costTokens === 'number') {
+          // 后端当前仅返回总 token；前端双栏按 input/output 近似拆分，避免看起来像 mock 固定值
+          const input = Math.round(r.costTokens * 0.8);
+          setRealTokens({ input, output: Math.max(0, r.costTokens - input) });
         }
         if (typeof r.costUsd === 'number') setRealCostUsd(r.costUsd);
-        if (r.currentStep) setRealCurrentStep(r.currentStep);
+        if (r.currentStep || r.metadata?.currentStep) setRealCurrentStep(r.currentStep ?? r.metadata?.currentStep ?? null);
         const mid = r.meetingId ?? r.result?.meetingId;
         if (mid) setRealMeetingId(mid);
-        if (r.state === 'done' || r.state === 'completed') setDone(true);
-        else setTimeout(poll, 2000);
+        if (state === 'done' || state === 'completed' || state === 'succeeded') {
+          setDone(true);
+        } else if (state === 'failed' || state === 'cancelled') {
+          setDone(false);
+        } else {
+          setTimeout(poll, 2000);
+        }
       } catch (e) {
         console.warn('getRun failed, falling back to demo timing:', e);
       }
@@ -468,14 +933,59 @@ function FlowProcessing({
     return () => { cancelled = true; };
   }, [runId]);
 
-  const steps = [
-    { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              pct: 100,       state: 'done',    sub: '' },
-    { id: 'segment',   label: '发言切分 + 参与者归并',                       pct: 100,       state: 'done',    sub: '' },
-    { id: 'dispatch',  label: '分派给 3 位专家 · preset: standard',          pct: 100,       state: 'done',    sub: '' },
-    { id: 'dec',       label: '装饰器 stack · 注入证据 / 校准 confidence',   pct: done ? 100 : 78, state: done ? 'done' : 'running', sub: 'evidence_anchored → calibrated_confidence → knowledge_grounded' },
-    { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          pct: done ? 100 : 12, state: done ? 'done' : 'queued',  sub: '' },
-    { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', pct: done ? 100 : 0,  state: done ? 'done' : 'queued',  sub: '' },
+  const stepDefs = [
+    { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              sub: '' },
+    { id: 'segment',   label: '发言切分 + 参与者归并',                       sub: '' },
+    { id: 'dispatch',  label: '分派给 3 位专家 · preset: standard',          sub: '' },
+    { id: 'dec',       label: '装饰器 stack · 注入证据 / 校准 confidence',   sub: 'evidence_anchored → calibrated_confidence → knowledge_grounded' },
+    { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          sub: '' },
+    { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', sub: '' },
+  ] as const;
+  const fallbackProgress = runId
+    ? (realState === 'queued'
+      ? 5
+      : realState === 'running'
+        ? Math.min(92, 12 + (tick % 72))
+        : 0)
+    : null;
+  const displayProgress = runId
+    ? (realProgress != null ? realProgress : fallbackProgress)
+    : null;
+  const steps = stepDefs.map((s, i) => {
+    if (runId && displayProgress != null) {
+      const chunk = 100 / stepDefs.length;
+      const raw = (displayProgress - i * chunk) / chunk;
+      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
+      const state: 'done' | 'running' | 'queued' =
+        pct >= 100 ? 'done' : pct > 0 ? 'running' : 'queued';
+      return { ...s, pct, state };
+    }
+    if (done) return { ...s, pct: 100, state: 'done' as const };
+    const demoPct = [100, 100, 100, 78, 12, 0][i] ?? 0;
+    const demoState = ['done', 'done', 'done', 'running', 'queued', 'queued'][i] as 'done' | 'running' | 'queued';
+    return { ...s, pct: demoPct, state: demoState };
+  });
+  const liveStrategy = runId ? 'pipeline-runner' : 'debate';
+  const liveDecorators = realCurrentStep
+    ? [realCurrentStep]
+    : ['failure_check', 'evidence_anchored', 'calibrated_confidence', 'knowledge_grounded', 'rubric_anchored_output'];
+  const deliverables = [
+    '① topic-enrich',
+    'step3-fact-review',
+    '⑫ consensus',
+    '⑬ controversy',
+    '⑩ insights',
+    '⑭ beliefEvolution',
+    'step5-synthesis',
   ];
+  const deliveredCount = runId && realProgress != null
+    ? Math.max(0, Math.min(deliverables.length, Math.floor((realProgress / 100) * deliverables.length)))
+    : runId && displayProgress != null
+      ? Math.max(0, Math.min(deliverables.length, Math.floor((displayProgress / 100) * deliverables.length)))
+    : (done ? deliverables.length : 2);
+  const elapsedMs = Date.now() - startedAt;
+  const elapsedStr = `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`;
+  const totalTokens = realTokens ? (realTokens.input + realTokens.output) : null;
 
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
@@ -500,7 +1010,11 @@ function FlowProcessing({
             <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: 0, letterSpacing: '-0.01em' }}>
               {done ? '解析完成' : '正在生成'}
             </h2>
-            <MonoMeta>step 3 / 3 · standard preset {done && `· ${realRunId ?? 'run-237'}`}</MonoMeta>
+            <MonoMeta>
+              step 3 / 3 · standard preset
+              {realState ? ` · ${realState}` : ''}
+              {done && ` · ${realRunId ?? 'run-237'}`}
+            </MonoMeta>
             {!runId && (
               <span style={{
                 fontSize: 10.5, padding: '2px 8px', borderRadius: 3, fontFamily: 'var(--mono)',
@@ -566,17 +1080,22 @@ function FlowProcessing({
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
             <SectionLabel>当前调用</SectionLabel>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, lineHeight: 1.8, marginTop: 10, color: 'var(--ink-2)' }}>
-              <div><span style={{ color: 'var(--ink-4)' }}>strategy   </span>debate</div>
-              <div><span style={{ color: 'var(--ink-4)' }}>expertA    </span>E09-09 · 二阶思考者</div>
-              <div><span style={{ color: 'var(--ink-4)' }}>expertB    </span>E11-03 · 叙事追踪者</div>
-              <div><span style={{ color: 'var(--ink-4)' }}>judge      </span>E04-12 · 产业链测绘师</div>
+              <div><span style={{ color: 'var(--ink-4)' }}>strategy   </span>{liveStrategy}</div>
+              <div><span style={{ color: 'var(--ink-4)' }}>run state  </span>{realState ?? (done ? 'done' : 'running')}</div>
+              <div><span style={{ color: 'var(--ink-4)' }}>progress   </span>{displayProgress != null ? `${Math.round(displayProgress)}%` : (done ? '100%' : '78%')}</div>
               <div><span style={{ color: 'var(--ink-4)' }}>decorators </span></div>
-              {['failure_check','evidence_anchored','calibrated_confidence','knowledge_grounded','rubric_anchored_output'].map((d, i) => (
+              {liveDecorators.map((d, i) => (
                 <div key={d} style={{ paddingLeft: 12, color: i === 1 ? 'var(--teal)' : 'var(--ink-2)' }}>
                   {i === 1 ? '▸ ' : '· '}{d}
                 </div>
               ))}
             </div>
+            {(realState === 'failed' || realState === 'cancelled') && (
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.6 }}>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink-4)' }}>error: </span>
+                {realErrorMessage || 'run 执行失败，请返回上一步重试。'}
+              </div>
+            )}
           </div>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
             <SectionLabel>实时开销{realTokens || realCostUsd != null ? '' : ' · mock'}</SectionLabel>
@@ -606,22 +1125,14 @@ function FlowProcessing({
             )}
           </div>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
-            <SectionLabel>已产出 · 2 / 7</SectionLabel>
+            <SectionLabel>已产出 · {deliveredCount} / {deliverables.length}</SectionLabel>
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                { k: '① topic-enrich',  done: true  },
-                { k: 'step3-fact-review', done: true  },
-                { k: '⑫ consensus',     done: false },
-                { k: '⑬ controversy',   done: false },
-                { k: '⑩ insights',      done: false },
-                { k: '⑭ beliefEvolution', done: false },
-                { k: 'step5-synthesis',  done: false },
-              ].map(d => (
-                <div key={d.k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  {d.done
+              {deliverables.map((k, idx) => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  {idx < deliveredCount
                     ? <Icon name="check" size={13} style={{ color: 'var(--accent)' }} />
                     : <div style={{ width: 13, height: 13, borderRadius: 99, border: '1.2px solid var(--line)' }} />}
-                  <span style={{ color: d.done ? 'var(--ink)' : 'var(--ink-3)', fontFamily: 'var(--serif)' }}>{d.k}</span>
+                  <span style={{ color: idx < deliveredCount ? 'var(--ink)' : 'var(--ink-3)', fontFamily: 'var(--serif)' }}>{k}</span>
                 </div>
               ))}
             </div>
@@ -651,7 +1162,9 @@ function FlowProcessing({
                 <span>at-risk <b style={{ color: 'var(--ink)' }}>3</b></span>
                 <span>开放问题 <b style={{ color: 'var(--ink)' }}>5</b></span>
                 <span>新判断入库 <b style={{ color: 'var(--ink)' }}>4</b></span>
-                <span style={{ color: 'var(--ink-3)' }}>· run-237 · 2m 08s · 49,622 tokens</span>
+                <span style={{ color: 'var(--ink-3)' }}>
+                  · {realRunId ?? 'run-237'} · {runId ? elapsedStr : '2m 08s'} · {totalTokens != null ? `${totalTokens.toLocaleString()} tokens` : '49,622 tokens'}
+                </span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -664,13 +1177,37 @@ function FlowProcessing({
             <div style={{ width: 22, height: 22, borderRadius: 99, border: '2px solid var(--teal)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-                解析进行中 · 约 <b>48 秒</b> 后可进入多维视图
+                {realState === 'queued'
+                  ? <>任务排队中 · 正等待执行</>
+                  : (realState === 'failed' || realState === 'cancelled')
+                    ? <>任务执行失败 · 请返回上一步重试</>
+                    : <>解析进行中 · 约 <b>48 秒</b> 后可进入多维视图</>}
               </div>
             </div>
             <button onClick={onBack} style={btnGhost}>← 返回</button>
+            {(realState === 'failed' || realState === 'cancelled') && (
+              <button
+                onClick={async () => {
+                  setRetrying(true);
+                  setRetryError(null);
+                  const ok = await onRetry();
+                  setRetrying(false);
+                  if (!ok) setRetryError('重试入队失败，请返回上一步检查素材后重试。');
+                }}
+                disabled={retrying}
+                style={{ ...btnPrimary, ...(retrying ? { opacity: 0.7, cursor: 'not-allowed' } : {}) }}
+              >
+                {retrying ? '重试中…' : '重试本次任务'}
+              </button>
+            )}
           </>
         )}
       </div>
+      {retryError && (
+        <div style={{ padding: '8px 48px 14px', fontSize: 12, color: 'var(--ink-3)' }}>
+          {retryError}
+        </div>
+      )}
     </div>
   );
 }
@@ -683,21 +1220,38 @@ export function NewMeeting() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [assetId, setAssetId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [lastSubmitBody, setLastSubmitBody] = useState<{ presetId: string; expertIds: string[] } | null>(null);
 
-  async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<void> {
-    if (forceMock || !assetId) return;
+  async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<boolean> {
+    setLastSubmitBody(body);
+    if (forceMock) return true;
+    if (!assetId) {
+      console.warn('enqueue skipped: missing assetId (no uploaded/recent meeting file selected)');
+      return false;
+    }
     try {
-      // scope.kind 必须是后端 router 接受的小写枚举（'library'|'project'|'client'|'topic'|'meeting'）
-      // 新建会议尚未生成 meeting_id，用 library scope 让 enqueueRun 走全库默认路径
+      const parsed: { ok?: boolean; reason?: string } = await meetingNotesApi.parseMeeting(assetId);
+      if (!parsed?.ok) {
+        console.warn('parseMeeting failed:', parsed);
+        return false;
+      }
+      // 解析成功后按 meeting scope 发起 run，避免落到 library 级“空跑成功”
+      const scope = { kind: 'meeting', id: assetId };
       const r: { runId?: string; ok?: boolean } = await meetingNotesApi.enqueueRun({
-        scope: { kind: 'library', id: assetId },
-        axis: 'multi',
+        scope,
+        axis: 'all',
         preset: body.presetId,
         triggeredBy: 'new-meeting-wizard',
       });
-      if (r.runId) setRunId(r.runId);
+      if (r.runId) {
+        setRunId(r.runId);
+        return true;
+      }
+      console.warn('enqueueRun returned no runId:', r);
+      return false;
     } catch (e) {
-      console.warn('enqueueRun failed, demo fallback:', e);
+      console.warn('enqueueRun failed:', e);
+      return false;
     }
   }
 
@@ -711,6 +1265,10 @@ export function NewMeeting() {
           runId={runId}
           onViewRun={(rid) => navigate(`/meeting/generation-center?run=${rid}`)}
           onGoMultiView={(mid) => navigate(`/meeting/${mid}/a`)}
+          onRetry={async () => {
+            if (!lastSubmitBody) return false;
+            return handleSubmit(lastSubmitBody);
+          }}
         />
       )}
     </div>

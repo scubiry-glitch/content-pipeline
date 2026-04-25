@@ -9,6 +9,8 @@
 
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import mammoth from 'mammoth';
 import {
   MeetingNoteChannelService,
@@ -28,6 +30,10 @@ function notFound(err: unknown): boolean {
 
 function unsupportedKind(err: unknown): boolean {
   return err instanceof Error && /kind/i.test(err.message);
+}
+
+function sanitizeFilename(input: string): string {
+  return input.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 /** 从上传字节解析正文：.docx 用 mammoth，其余按 UTF-8 文本。 */
@@ -218,6 +224,20 @@ export async function meetingNotesRoutes(
     for await (const c of mp.file) chunks.push(c);
     const buf = Buffer.concat(chunks);
     const sha = createHash('sha256').update(buf).digest('hex');
+    const uploadRoot = process.env.UPLOAD_DIR || './uploads';
+    const meetingUploadDir = path.join(uploadRoot, 'meeting-notes');
+    const originalFilename = (mp.filename as string | undefined) ?? `upload-${sha.slice(0, 8)}`;
+    const safeFilename = sanitizeFilename(originalFilename);
+    const localFilePath = path.join(meetingUploadDir, `${sha.slice(0, 12)}-${safeFilename}`);
+
+    try {
+      await fs.mkdir(meetingUploadDir, { recursive: true });
+      await fs.writeFile(localFilePath, buf);
+    } catch (e) {
+      reply.status(500);
+      return { error: 'Internal Server Error', message: `failed to persist uploaded file: ${(e as Error).message}` };
+    }
+
     let content: string;
     try {
       content = await textFromUploadBuffer(buf, mp.filename as string | undefined, mp.mimetype);
@@ -229,7 +249,7 @@ export async function meetingNotesRoutes(
       reply.status(400);
       return { error: 'Bad Request', message: 'file is empty or unreadable as text' };
     }
-    const title = (mp.filename as string | undefined) ?? `upload-${sha.slice(0, 8)}`;
+    const title = originalFilename;
 
     // Register a one-shot adapter with this single draft
     const oneShot = {
@@ -237,7 +257,14 @@ export async function meetingNotesRoutes(
         externalId: `sha256:${sha}`,
         title,
         content,
-        metadata: { origin: 'upload', filename: mp.filename, mime: mp.mimetype },
+        metadata: {
+          origin: 'upload',
+          filename: mp.filename,
+          mime: mp.mimetype,
+          sha256: sha,
+          sizeBytes: buf.byteLength,
+          localFilePath,
+        },
       }],
     };
     // Compose with existing adapters for the source's kind

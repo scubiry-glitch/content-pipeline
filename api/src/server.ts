@@ -89,7 +89,7 @@ import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
-import { initDatabase } from './db/connection.js';
+import { ensureDbPoolConnected, ensureRuntimePerformanceIndexes, initDatabase } from './db/connection.js';
 import { printAPICheckReport, validateRequiredConfig } from './services/apiCheck.js';
 
 async function main() {
@@ -237,7 +237,14 @@ async function main() {
         invoke: async (req) => expertEngine.invoke(req as any),
       }),
       expertApplication: createPipelineExpertApplicationAdapter({
-        resolveForMeetingKind: (kind) => resolveStrategyForMeeting(kind) ?? null,
+        resolveForMeetingKind: (kind) => {
+          const strategy = resolveStrategyForMeeting(kind);
+          if (!strategy || !strategy.default) return null;
+          if (strategy.preset === 'lite' || strategy.preset === 'standard' || strategy.preset === 'max') {
+            return { preset: strategy.preset, default: strategy.default };
+          }
+          return null;
+        },
         shouldSkipExpertAnalysis,
       }),
     }),
@@ -283,6 +290,9 @@ async function main() {
 
   const PORT = parseInt(process.env.PORT || '3006', 10);
   const HOST = process.env.HOST || '0.0.0.0';
+  const autoMigrate = process.env.DB_AUTO_MIGRATE === 'true';
+  const schedulerStaggerMs = Math.max(0, parseInt(process.env.STARTUP_TASK_STAGGER_MS || '15000', 10));
+  const taxonomyBootstrap = process.env.TAXONOMY_BOOTSTRAP !== 'false';
 
   try {
     await fastify.listen({ port: PORT, host: HOST });
@@ -291,16 +301,26 @@ async function main() {
 
     try {
       if (process.env.DATABASE_URL || process.env.DB_HOST) {
-        console.log('[Server] Running database migrations / schema setup…');
-        await initDatabase();
+        if (autoMigrate) {
+          console.log('[Server] Running database migrations / schema setup…');
+          await initDatabase();
+        } else {
+          console.log('[Server] DB auto-migrate disabled, only checking connectivity');
+          await ensureDbPoolConnected();
+          await ensureRuntimePerformanceIndexes();
+        }
         console.log('✓ Database connected');
 
-        try {
-          await ensureTaxonomySchema();
-          const { upserted } = await taxonomySync('boot');
-          console.log(`🏷  Taxonomy ready (${upserted} nodes seeded/updated)`);
-        } catch (err) {
-          console.warn('[Server] Taxonomy bootstrap skipped:', (err as Error).message);
+        if (taxonomyBootstrap) {
+          try {
+            await ensureTaxonomySchema();
+            const { upserted } = await taxonomySync('boot');
+            console.log(`🏷  Taxonomy ready (${upserted} nodes seeded/updated)`);
+          } catch (err) {
+            console.warn('[Server] Taxonomy bootstrap skipped:', (err as Error).message);
+          }
+        } else {
+          console.log('🏷  Taxonomy bootstrap disabled (TAXONOMY_BOOTSTRAP=false)');
         }
       }
     } catch (e) {
@@ -309,25 +329,36 @@ async function main() {
     }
     resolveDbReady();
 
-    // Initialize directory watcher service
-    const watcherService = getDirectoryWatcherService();
-    await watcherService.initialize();
+    const directoryWatcherEnabled = process.env.DIRECTORY_WATCHER_ENABLED === 'true';
+    if (directoryWatcherEnabled) {
+      // Initialize directory watcher service
+      const watcherService = getDirectoryWatcherService();
+      await watcherService.initialize();
+      console.log('📁 Directory watcher enabled');
+    } else {
+      console.log('📁 Directory watcher disabled (set DIRECTORY_WATCHER_ENABLED=true to enable)');
+    }
+
+    // 启动后台任务（错峰，降低数据库瞬时压力）
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     // 启动热度分数定时更新任务（每30分钟）
     const { startHotScoreScheduler } = await import('./services/hotScoreScheduler.js');
     startHotScoreScheduler('*/30 * * * *'); // 每30分钟更新一次
-    
     console.log('⏰ 热度分数定时更新已启动（每30分钟）');
+    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
 
     // v6.1: 启动 RSS AI 批量处理定时任务
     const { aiScheduler } = await import('./services/ai/scheduler.js');
     aiScheduler.start();
     console.log('🤖 RSS AI 批量处理定时任务已启动（每15分钟）');
-    
+    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
+
     // v6.2: 启动 Assets AI 批量处理定时任务
     const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
     assetsAIScheduler.start();
     console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
+    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
 
     // v7.6: 启动会议纪要采集定时任务（按每个 source.scheduleCron 独立调度）
     try {
@@ -341,6 +372,7 @@ async function main() {
     } catch (err) {
       console.warn('🎙️ 会议纪要调度器启动失败（不影响其他服务）:', (err as Error).message);
     }
+    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
 
     // v7.0: 启动内容库定时任务（信息增量报告 + 保鲜度检查）
     const { startContentLibraryScheduler } = await import('./modules/content-library/scheduler.js');

@@ -222,6 +222,25 @@ export const meetingNotesApi = {
 
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
+  createSource: (body: {
+    name: string;
+    kind: 'lark' | 'zoom' | 'teams' | 'upload' | 'folder' | 'manual';
+    config?: Record<string, unknown>;
+    isActive?: boolean;
+    scheduleCron?: string | null;
+    createdBy?: string;
+  }) => jpost<any>('/sources', body),
+  getSourceHistory: (q: { sourceId?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<{ items: any[] }>(`/sources/history${qs ? `?${qs}` : ''}`);
+  },
+  triggerSourceImport: (id: string, triggeredBy?: string) =>
+    jpost<any>('/sources/import', { id, triggeredBy }),
   uploadToSource: async (sourceId: string, file: File) => {
     const fd = new FormData();
     fd.append('file', file);

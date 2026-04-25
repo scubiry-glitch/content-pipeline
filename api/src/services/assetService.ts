@@ -109,14 +109,15 @@ export class AssetService {
   async createAsset(data: CreateAssetDTO): Promise<Asset> {
     const id = uuidv4();
     const result = await query(
-      `INSERT INTO assets (id, type, title, content, source, source_id, tags, quality_score, domain, metadata, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+      `INSERT INTO assets (id, type, title, content, content_type, source, source_id, tags, quality_score, domain, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
        RETURNING *`,
       [
         id,
         data.type,
         data.title,
         data.content,
+        'txt',
         data.source || null,
         data.sourceId || null,
         JSON.stringify(data.tags || []),
