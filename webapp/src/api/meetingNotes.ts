@@ -53,8 +53,14 @@ export const meetingNotesApi = {
   computeAxis: (body: { meetingId?: string; scope?: any; axis: string; subDims?: string[]; replaceExisting?: boolean }) =>
     jpost<any>('/compute/axis', body),
 
-  enqueueRun: (body: { scope: any; axis: string; subDims?: string[]; preset?: string; strategy?: string; triggeredBy?: string }) =>
-    jpost<{ ok: boolean; runId?: string; reason?: string }>('/runs', body),
+  enqueueRun: (body: { scope: any; axis: string; subDims?: string[]; preset?: string; strategy?: string; triggeredBy?: string }) => {
+    // 后端 router L605 要求 scope.kind 全小写 ['library','project','client','topic','meeting']
+    // 多个调用点历史上传 'MEETING'/'PROJECT' 会触发 400 · 这里统一 normalize
+    const scope = body.scope && typeof body.scope === 'object' && 'kind' in body.scope
+      ? { ...body.scope, kind: typeof body.scope.kind === 'string' ? body.scope.kind.toLowerCase() : body.scope.kind }
+      : body.scope;
+    return jpost<{ ok: boolean; runId?: string; reason?: string }>('/runs', { ...body, scope });
+  },
   listRuns: (q: { scopeKind?: string; scopeId?: string; axis?: string; state?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams(Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
       if (v !== undefined) acc[k] = String(v);
