@@ -83,7 +83,8 @@ function BeliefDrift({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const adapted = adaptBeliefDrift(r);
-        if (adapted) { setD(adapted); setIsMock(false); }
+        if (adapted) setD(adapted);
+        setIsMock(false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -212,7 +213,8 @@ function DecisionTree({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const adapted = adaptDecisionTree(r);
-        if (adapted) { setTree(adapted); setIsMock(false); }
+        if (adapted) setTree(adapted);
+        setIsMock(false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -294,7 +296,7 @@ type MMRow = typeof MODEL_HITRATE[number];
 
 function ModelHitrate({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<MMRow[]>(MODEL_HITRATE);
+  const [rows, setRows] = useState<MMRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(MODEL_HITRATE); setIsMock(true); return; }
@@ -303,7 +305,6 @@ function ModelHitrate({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const mapped: MMRow[] = items.map((m) => ({
           id: 'MM-' + m.id.slice(0, 6).toUpperCase(),
           name: m.model_name,

@@ -80,12 +80,11 @@ export function MeetingToday() {
       if (cancelled) return;
       const runs: ApiRun[] = rRuns.status === 'fulfilled' ? (rRuns.value.items ?? []) : [];
       const meetings: ApiMeeting[] = rMeetings.status === 'fulfilled' ? (rMeetings.value.items ?? []) : [];
-      if (runs.length === 0 && meetings.length === 0) return;  // 保留 mock
+      const apiResponded = rRuns.status === 'fulfilled' || rMeetings.status === 'fulfilled';
+      if (!apiResponded) return;
       const apiItems = runs.slice(0, 3).map((r) => runToItem(r, meetings)).filter((x): x is TodayItem => !!x);
-      if (apiItems.length > 0) {
-        setItems(apiItems);
-        setIsMock(false);
-      }
+      setItems(apiItems);
+      setIsMock(false);
     });
     return () => { cancelled = true; };
   }, [forceMock]);

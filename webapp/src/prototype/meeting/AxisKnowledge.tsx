@@ -98,7 +98,7 @@ type JudgmentRow = typeof REUSABLE_JUDGMENTS[number];
 
 function Judgments({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [items, setItems] = useState<JudgmentRow[]>(REUSABLE_JUDGMENTS);
+  const [items, setItems] = useState<JudgmentRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setItems(REUSABLE_JUDGMENTS); setIsMock(true); return; }
@@ -107,7 +107,6 @@ function Judgments({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const list = r?.items ?? [];
-        if (list.length === 0) return;
         const mapped: JudgmentRow[] = list.map((j) => ({
           id: 'J-' + j.id.slice(0, 6).toUpperCase(),
           text: j.text,
@@ -187,7 +186,7 @@ type MentalModelRow = typeof MENTAL_MODELS[number];
 
 function MentalModels({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<MentalModelRow[]>(MENTAL_MODELS);
+  const [rows, setRows] = useState<MentalModelRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(MENTAL_MODELS); setIsMock(true); return; }
@@ -196,7 +195,6 @@ function MentalModels({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const list = r?.items ?? [];
-        if (list.length === 0) return;
         const mapped: MentalModelRow[] = list.map((m) => ({
           id: 'MM-' + m.id.slice(0, 6).toUpperCase(),
           name: m.model_name,
@@ -333,7 +331,7 @@ type BiasRow = typeof COGNITIVE_BIASES[number];
 
 function Biases({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<BiasRow[]>(COGNITIVE_BIASES);
+  const [rows, setRows] = useState<BiasRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(COGNITIVE_BIASES); setIsMock(true); return; }
@@ -342,7 +340,6 @@ function Biases({ meetingId }: { meetingId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const mapped: BiasRow[] = items.map((b) => {
           const name = b.by_person_name?.trim();
           const where = b.where_excerpt?.trim();
@@ -478,7 +475,7 @@ export function AxisKnowledge() {
     if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled && r && (r.axes?.knowledge || r.knowledge)) setIsMock(false); })
+      .then((r) => { if (!cancelled && r) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);

@@ -163,7 +163,7 @@ type DecisionRow = typeof DECISION_CHAIN[number];
 
 function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<DecisionRow[]>(DECISION_CHAIN);
+  const [rows, setRows] = useState<DecisionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); return; }
@@ -173,7 +173,6 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const mapped: DecisionRow[] = items.map((d) => ({
           id: d.id.slice(0, 6),
           at: d.meeting_id ? d.meeting_id.slice(0, 12) : '',
@@ -280,7 +279,7 @@ type AssumptionRow = typeof ASSUMPTIONS[number];
 
 function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<AssumptionRow[]>(ASSUMPTIONS);
+  const [rows, setRows] = useState<AssumptionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); return; }
@@ -290,7 +289,6 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const stateLabel: Record<string, string> = {
           'unverified': '未验证',
           'verifying': '验证中',
@@ -409,7 +407,7 @@ type OpenQuestionRow = typeof OPEN_QUESTIONS[number];
 
 function OpenQuestions({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<OpenQuestionRow[]>(OPEN_QUESTIONS);
+  const [rows, setRows] = useState<OpenQuestionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); return; }
@@ -419,7 +417,6 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const mapped: OpenQuestionRow[] = items.map((q) => {
           // 后端 mn_open_questions 不存独立的 raiser 字段；borrow owner 作 fallback
           const ownerKey = pickPerson(q.owner_person_id, q.owner_name);
@@ -524,7 +521,7 @@ type RiskRow = typeof RISKS[number];
 
 function RiskHeat({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<RiskRow[]>(RISKS);
+  const [rows, setRows] = useState<RiskRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(RISKS); setIsMock(true); return; }
@@ -534,7 +531,6 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const mapped: RiskRow[] = items.map((x) => ({
           id: x.id.slice(0, 6).toUpperCase(),
           text: x.text,

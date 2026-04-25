@@ -63,14 +63,12 @@ function Quality({ meetingId }: { meetingId: string }) {
     meetingNotesApi.getDecisionQuality(meetingId)
       .then((r) => {
         if (cancelled || !r) return;
-        if (r.dims && r.dims.length > 0) {
-          setD({
-            overall: Number(r.overall ?? 0),
-            dims: r.dims.map(x => ({ id: x.id, label: x.label, score: Number(x.score ?? 0), note: x.note ?? '' })),
-          });
-          setTeamAvg(r.teamAvg != null ? Number(r.teamAvg) : null);
-          setIsMock(false);
-        }
+        setD({
+          overall: Number(r.overall ?? 0),
+          dims: (r.dims ?? []).map(x => ({ id: x.id, label: x.label, score: Number(x.score ?? 0), note: x.note ?? '' })),
+        });
+        setTeamAvg(r.teamAvg != null ? Number(r.teamAvg) : null);
+        setIsMock(false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -205,7 +203,7 @@ type EmotionPoint = typeof EMOTION_CURVE[number];
 
 function Emotion({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
-  const [curve, setCurve] = useState<EmotionPoint[]>(EMOTION_CURVE);
+  const [curve, setCurve] = useState<EmotionPoint[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setCurve(EMOTION_CURVE); setIsMock(true); return; }
@@ -214,10 +212,7 @@ function Emotion({ meetingId }: { meetingId: string }) {
       .then((r) => {
         if (cancelled || !r) return;
         const samples = r.samples ?? [];
-        if (samples.length === 0) return;
-        // 若所有样本都缺 t_sec · 后端字段未上线 · 保留 mock，不切换
         const valid = samples.filter((s) => s.t_sec != null);
-        if (valid.length === 0) return;
         const mapped: EmotionPoint[] = valid.map((s) => ({
           t: Math.round(Number(s.t_sec) / 60),
           v: Number(s.valence ?? 0),
@@ -328,7 +323,7 @@ export function AxisMeta() {
     if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled && r && (r.axes?.meta || r.meta)) setIsMock(false); })
+      .then((r) => { if (!cancelled && r) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);

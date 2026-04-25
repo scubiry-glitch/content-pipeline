@@ -402,9 +402,7 @@ export function Library() {
     meetingNotesApi.listMeetings({ limit: 50 })
       .then((r) => {
         if (cancelled) return;
-        const items = r?.items ?? [];
-        if (items.length === 0) return;
-        setApiMeetings(items.map(adaptApiMeeting));
+        setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
       })
       .catch(() => {});
     Promise.allSettled([
@@ -419,7 +417,7 @@ export function Library() {
     return () => { cancelled = true; };
   }, [forceMock]);
   const meetingsDisplay = apiMeetings ?? MEETINGS;
-  const isMock = forceMock || apiMeetings === null || !scopesOk;
+  const isMock = forceMock || apiMeetings === null;
 
   const tree = GROUP_TREES[groupBy];
 

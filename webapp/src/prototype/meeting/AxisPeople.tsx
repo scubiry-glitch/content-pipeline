@@ -120,7 +120,7 @@ type CommitmentRow = typeof COMMITMENTS[number];
 
 function PCommitments({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const [items, setItems] = useState<CommitmentRow[]>(COMMITMENTS);
+  const [items, setItems] = useState<CommitmentRow[]>([]);
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -130,7 +130,6 @@ function PCommitments({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const list = r?.items ?? [];
-        if (list.length === 0) return;
         const stateMap: Record<string, CommitmentRow['state']> = {
           'on_track': 'on-track',
           'at_risk': 'at-risk',
@@ -344,7 +343,7 @@ interface SpeechRow { who: string; claims: number; speechHighEntropy: number; be
 
 function PSpeech({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<SpeechRow[]>(PEOPLE_STATS);
+  const [rows, setRows] = useState<SpeechRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); return; }
@@ -353,18 +352,16 @@ function PSpeech({ meetingId }: { meetingId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length > 0) {
-          // 后端 mn_speech_metrics 不存 claims（发言次数）· API 模式 claims=0
-          // render 端用 hasClaims 判定是否显示 volume bar
-          const mapped: SpeechRow[] = items.map((it) => ({
-            who: String(it.personId),
-            claims: 0,
-            speechHighEntropy: Number(it.entropy ?? 0),
-            beingFollowedUp: Number(it.followedUp ?? 0),
-          }));
-          setRows(mapped);
-          setIsMock(false);
-        }
+        // 后端 mn_speech_metrics 不存 claims（发言次数）· API 模式 claims=0
+        // render 端用 hasClaims 判定是否显示 volume bar
+        const mapped: SpeechRow[] = items.map((it) => ({
+          who: String(it.personId),
+          claims: 0,
+          speechHighEntropy: Number(it.entropy ?? 0),
+          beingFollowedUp: Number(it.followedUp ?? 0),
+        }));
+        setRows(mapped);
+        setIsMock(false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -478,7 +475,6 @@ function PSilence({ meetingId }: { meetingId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        if (items.length === 0) return;
         const stateMap: Record<string, string> = {
           'spoke': 'spoke',
           'normal_silence': 'normalSilence',
@@ -605,7 +601,7 @@ export function AxisPeople() {
     if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled && r && (r.axes?.people || r.people)) setIsMock(false); })
+      .then((r) => { if (!cancelled && r) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);

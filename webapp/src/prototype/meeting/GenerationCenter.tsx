@@ -96,18 +96,15 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
 function QueueView() {
   const navigate = useNavigate();
   const forceMock = useForceMock();
-  const [runs, setRuns] = useState<MockRun[]>(MOCK_RUNS);
+  const [runs, setRuns] = useState<MockRun[]>([]);
   const [isMock, setIsMock] = useState(true);
 
   const refetch = () => {
     if (forceMock) { setRuns(MOCK_RUNS); setIsMock(true); return; }
     meetingNotesApi.listRuns({ limit: 50 })
       .then((r) => {
-        const items = r?.items ?? [];
-        if (items.length > 0) {
-          setRuns(items.map(mapApiRun));
-          setIsMock(false);
-        }
+        setRuns((r?.items ?? []).map(mapApiRun));
+        setIsMock(false);
       })
       .catch(() => {});
   };
@@ -290,7 +287,7 @@ function VersionsView() {
   const [searchParams] = useSearchParams();
   const axisParam = searchParams.get('axis') ?? 'people';
   const forceMock = useForceMock();
-  const [versions, setVersions] = useState<MockVersion[]>(MOCK_VERSIONS);
+  const [versions, setVersions] = useState<MockVersion[]>([]);
   const [isMock, setIsMock] = useState(true);
   const [sel, setSel] = useState<string[]>(['v14', 'v13']);
   const [diffRows, setDiffRows] = useState<DiffRow[]>(MOCK_DIFF_ROWS);
@@ -302,13 +299,10 @@ function VersionsView() {
     meetingNotesApi.listVersions('library', axisParam)
       .then((r) => {
         if (cancelled) return;
-        const items = r?.items ?? [];
-        if (items.length > 0) {
-          const mapped = items.map(mapApiVersion);
-          setVersions(mapped);
-          setIsMock(false);
-          if (mapped.length >= 2) setSel([mapped[0].v, mapped[1].v]);
-        }
+        const mapped = (r?.items ?? []).map(mapApiVersion);
+        setVersions(mapped);
+        setIsMock(false);
+        if (mapped.length >= 2) setSel([mapped[0].v, mapped[1].v]);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -439,18 +433,15 @@ function mapApiSchedule(it: Record<string, unknown>): ScheduleRow {
 
 function ScheduleView() {
   const forceMock = useForceMock();
-  const [rows, setRows] = useState<ScheduleRow[]>(MOCK_SCHEDULES);
+  const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [isMock, setIsMock] = useState(true);
 
   const refetch = () => {
     if (forceMock) { setRows(MOCK_SCHEDULES); setIsMock(true); return; }
     meetingNotesApi.listSchedules()
       .then((r) => {
-        const items = r?.items ?? [];
-        if (items.length > 0) {
-          setRows(items.map(mapApiSchedule));
-          setIsMock(false);
-        }
+        setRows((r?.items ?? []).map(mapApiSchedule));
+        setIsMock(false);
       })
       .catch(() => {});
   };
