@@ -125,6 +125,36 @@ const MEETINGS: Meeting[] = [
     preset: 'lite', tags: ['合规', '披露'] },
 ];
 
+// ── API → Meeting 适配 ──────────────────────────────────────────────────────
+
+// 后端 GET /meetings 返回 { id, title, meeting_kind, created_at, last_run, scope_bindings }
+// 字段比 Meeting 少很多 · 缺失字段填默认值，让 fixture 风格的 UI 仍能渲染
+function adaptApiMeeting(api: any): Meeting {
+  const scopes: Array<{ scopeId: string; kind: string; name?: string; slug?: string }> = api.scope_bindings ?? [];
+  const findScope = (kind: string) => scopes.find((s) => s.kind === kind);
+  const project = findScope('project');
+  const client = findScope('client');
+  const topic = findScope('topic');
+  const lastRun = api.last_run ?? {};
+  return {
+    id: String(api.id),
+    title: String(api.title ?? '未命名会议'),
+    date: String(api.created_at ?? '').slice(0, 10),
+    duration: '—',
+    attendees: 0,
+    groups: {
+      project: project?.slug ?? project?.scopeId ?? 'p-internal',
+      client: client?.slug ?? client?.scopeId ?? 'c-yuanling',
+      topic: topic?.slug ?? topic?.scopeId ?? 't-ai-infra',
+    },
+    status: lastRun.state === 'succeeded' ? 'analyzed' : 'draft',
+    tension: 0, consensus: 0, divergence: 0,
+    starred: false,
+    preset: 'standard',
+    tags: api.meeting_kind ? [String(api.meeting_kind)] : [],
+  };
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function findNode(nodes: TreeNode[], id: string): TreeNode | null {
@@ -362,14 +392,20 @@ export function Library() {
   const [selectedId, setSelectedId] = useState('M-2026-04-11-0237');
   const [renaming, setRenaming] = useState<string | null>(null);
 
-  // API probe：成功即 un-mock；失败/empty 保留 fixture + MockBadge
+  // API probe：成功即 un-mock + 拿到的 items 直接代替 fixture 显示
   const forceMock = useForceMock();
-  const [apiProbe, setApiProbe] = useState<{ meetings: boolean; scopes: boolean }>({ meetings: false, scopes: false });
+  const [apiMeetings, setApiMeetings] = useState<Meeting[] | null>(null);
+  const [scopesOk, setScopesOk] = useState(false);
   useEffect(() => {
-    if (forceMock) { setApiProbe({ meetings: false, scopes: false }); return; }
+    if (forceMock) { setApiMeetings(null); setScopesOk(false); return; }
     let cancelled = false;
     meetingNotesApi.listMeetings({ limit: 50 })
-      .then((r) => !cancelled && setApiProbe((p) => ({ ...p, meetings: Array.isArray(r?.items) && r.items.length > 0 })))
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) return;
+        setApiMeetings(items.map(adaptApiMeeting));
+      })
       .catch(() => {});
     Promise.allSettled([
       meetingNotesApi.listScopes({ kind: 'project' }),
@@ -378,11 +414,12 @@ export function Library() {
     ]).then((results) => {
       if (cancelled) return;
       const ok = results.some((r) => r.status === 'fulfilled' && Array.isArray(r.value?.items) && r.value.items.length > 0);
-      setApiProbe((p) => ({ ...p, scopes: ok }));
+      setScopesOk(ok);
     });
     return () => { cancelled = true; };
   }, [forceMock]);
-  const isMock = forceMock || !apiProbe.meetings || !apiProbe.scopes;
+  const meetingsDisplay = apiMeetings ?? MEETINGS;
+  const isMock = forceMock || apiMeetings === null || !scopesOk;
 
   const tree = GROUP_TREES[groupBy];
 
@@ -401,8 +438,8 @@ export function Library() {
     return false;
   };
 
-  const visible = MEETINGS.filter(m => matchGroup(m, activeGroup));
-  const selected = MEETINGS.find(m => m.id === selectedId) ?? visible[0];
+  const visible = meetingsDisplay.filter(m => matchGroup(m, activeGroup));
+  const selected = meetingsDisplay.find(m => m.id === selectedId) ?? visible[0];
 
   const handlePreviewAction = (action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export', m: Meeting) => {
     if (action === 'view-a') navigate(`/meeting/${m.id}/a`);
@@ -454,7 +491,7 @@ export function Library() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {isMock && <MockBadge />}
-          <Chip tone="ghost">{MEETINGS.length} 条会议 · {allGroupIds.length} 个分组</Chip>
+          <Chip tone="ghost">{meetingsDisplay.length} 条会议 · {allGroupIds.length} 个分组</Chip>
           <button
             onClick={() => alert('全文搜索 · 待接入（TODO: search API）')}
             style={{
@@ -492,7 +529,7 @@ export function Library() {
           <button onClick={() => setActiveGroup(null)} style={folderRowStyle(activeGroup === null)}>
             <Icon name="layers" size={13} />
             <span style={{ flex: 1, textAlign: 'left' }}>全部</span>
-            <MonoMeta style={{ fontSize: 10 }}>{MEETINGS.length}</MonoMeta>
+            <MonoMeta style={{ fontSize: 10 }}>{meetingsDisplay.length}</MonoMeta>
           </button>
 
           <div style={{ height: 8 }} />

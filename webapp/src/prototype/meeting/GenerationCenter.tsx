@@ -134,7 +134,8 @@ function QueueView() {
     }
     if (r.state === 'failed') {
       try {
-        await meetingNotesApi.enqueueRun({ scope: { kind: r.scope.toUpperCase() }, axis: r.axis, subDims: r.subs, preset: r.preset });
+        // 后端 router L605 校验 allowedKinds 全小写 ['library','project','client','topic','meeting']
+        await meetingNotesApi.enqueueRun({ scope: { kind: r.scope.toLowerCase() }, axis: r.axis, subDims: r.subs, preset: r.preset });
         refetch();
       } catch { alert('重试失败'); }
       return;
