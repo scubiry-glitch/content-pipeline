@@ -174,39 +174,48 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const { id } = request.params as { id: string };
       const q = request.query as { view?: string };
       const view = q.view === 'B' || q.view === 'C' ? q.view : 'A';
+      // 非 UUID（demo meeting id）直接返回 null · 让前端 fallback mock
+      if (!UUID_RE.test(id)) return { analysis: null };
       try {
         const base = await engine.getMeetingDetail(id, view as 'A' | 'B' | 'C');
-        if (view !== 'C') return base;
-        // Phase 15.15 · C view: append consensus (C.2) + focusMap (C.3)
-        const db = engine.deps.db;
-        const [cRows, fRows] = await Promise.all([
-          db.query(
-            `SELECT ci.id, ci.kind, ci.item_text AS text, ci.supported_by,
-                    COALESCE(
-                      json_agg(
-                        json_build_object('stance', s.stance, 'reason', s.reason, 'by', s.by_ids)
-                        ORDER BY s.seq
-                      ) FILTER (WHERE s.id IS NOT NULL),
-                      '[]'::json
-                    ) AS sides
-               FROM mn_consensus_items ci
-               LEFT JOIN mn_consensus_sides s ON s.item_id = ci.id
-              WHERE ci.meeting_id = $1
-              GROUP BY ci.id
-              ORDER BY ci.seq`,
-            [id],
-          ),
-          db.query(
-            `SELECT person_id AS who, themes, returns_to AS "returnsTo"
-               FROM mn_focus_map
-              WHERE meeting_id = $1`,
-            [id],
-          ),
-        ]);
-        return { ...base, consensus: cRows.rows, focusMap: fRows.rows };
+        let payload: Record<string, unknown> = base;
+        if (view === 'C') {
+          // Phase 15.15 · C view: append consensus (C.2) + focusMap (C.3)
+          const db = engine.deps.db;
+          const [cRows, fRows] = await Promise.all([
+            db.query(
+              `SELECT ci.id, ci.kind, ci.item_text AS text, ci.supported_by,
+                      COALESCE(
+                        json_agg(
+                          json_build_object('stance', s.stance, 'reason', s.reason, 'by', s.by_ids)
+                          ORDER BY s.seq
+                        ) FILTER (WHERE s.id IS NOT NULL),
+                        '[]'::json
+                      ) AS sides
+                 FROM mn_consensus_items ci
+                 LEFT JOIN mn_consensus_sides s ON s.item_id = ci.id
+                WHERE ci.meeting_id = $1
+                GROUP BY ci.id
+                ORDER BY ci.seq`,
+              [id],
+            ),
+            db.query(
+              `SELECT person_id AS who, themes, returns_to AS "returnsTo"
+                 FROM mn_focus_map
+                WHERE meeting_id = $1`,
+              [id],
+            ),
+          ]);
+          payload = { ...base, consensus: cRows.rows, focusMap: fRows.rows };
+        }
+        // 包一层 { analysis } 让 VariantEditorial/Workbench/Threads 的
+        // `data?.analysis` 探针生效；具体字段（summary/tension/...）按
+        // 前端 ANALYSIS 形态映射，缺失字段在前端 fallback 到 mock
+        return { analysis: payload };
       } catch (e) {
-        reply.status(500);
-        return { error: 'Internal Server Error', message: (e as Error).message };
+        request.log.warn({ id, view, err: e }, 'getMeetingDetail failed → fallback');
+        // 失败时也返 null analysis · 让前端走 mock，避免 500 让用户看不到任何内容
+        return { analysis: null };
       }
     });
 
