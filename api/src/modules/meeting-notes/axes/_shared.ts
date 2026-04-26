@@ -6,6 +6,7 @@
 
 import type { MeetingNotesDeps } from '../types.js';
 import { applyDecoratorStack, getCurrentStrategy } from './decoratorStack.js';
+import { chunkedContent } from '../parse/claimExtractor.js';
 
 export interface ComputeArgs {
   meetingId?: string;
@@ -114,4 +115,56 @@ export async function callExpertOrLLM(
 /** 统一 computer 空结果 */
 export function emptyResult(subDim: string): ComputeResult {
   return { subDim, created: 0, updated: 0, skipped: 0, errors: 0 };
+}
+
+/**
+ * P0-1 滑窗 LLM 抽取：把 content 切成多个 chunks，每个 chunk 调一次 LLM，
+ * 结果合并并按 dedupeKey 去重。用于 LIST-OUTPUT axis（commitments、
+ * assumptions 等）替代 budgetedExcerpt 的"开头+结尾"腰斩做法。
+ *
+ * 注意：每个 chunk 一次 LLM 调用 → cost 会乘 N 倍（N = chunks 数）；为了
+ * 兼顾 cost，content ≤ chunkSize 时退化为单次调用，与原行为一致。
+ *
+ * @param buildUserPrompt — 收 (chunk, idx, total) 返回 user prompt 的函数
+ * @param dedupeKey       — 给每条 item 算一个 string key，相同 key 视为重复
+ *                          （第一次出现的保留，后续覆盖被丢弃）。
+ */
+export async function extractListOverChunks<T = any>(
+  deps: MeetingNotesDeps,
+  meetingKind: string | null | undefined,
+  systemPrompt: string,
+  buildUserPrompt: (chunk: string, idx: number, total: number) => string,
+  content: string,
+  options: {
+    dedupeKey?: (item: T) => string;
+    chunkSize?: number;
+    overlap?: number;
+    temperature?: number;
+    maxTokens?: number;
+  } = {},
+): Promise<T[]> {
+  const chunks = chunkedContent(content, options.chunkSize ?? 4500, options.overlap ?? 400);
+  const all: T[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < chunks.length; i++) {
+    const userPrompt = buildUserPrompt(chunks[i], i, chunks.length);
+    const raw = await callExpertOrLLM(
+      deps,
+      meetingKind,
+      systemPrompt,
+      userPrompt,
+      { temperature: options.temperature, maxTokens: options.maxTokens },
+    );
+    const items = safeJsonParse<T[]>(raw, []);
+    if (!Array.isArray(items)) continue;
+
+    for (const item of items) {
+      const key = options.dedupeKey ? options.dedupeKey(item) : JSON.stringify(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      all.push(item);
+    }
+  }
+  return all;
 }
