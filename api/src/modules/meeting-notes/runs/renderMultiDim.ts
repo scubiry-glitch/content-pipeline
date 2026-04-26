@@ -42,9 +42,11 @@ export async function renderMultiDim(
       LIMIT 5`,
     [meetingId],
   );
+  // mn_consensus_items 真实列：item_text / supported_by（migration 010）
   const divergences = await safeRows(
     deps,
-    `SELECT id, summary, side_count
+    `SELECT id, item_text AS summary,
+            COALESCE(array_length(supported_by, 1), 0) AS side_count
        FROM mn_consensus_items
       WHERE meeting_id = $1 AND kind = 'divergence'
       LIMIT 5`,
@@ -78,16 +80,18 @@ export async function renderMultiDim(
   ];
 
   // 3) 共识（consensus）：verified assumptions + consensus_items
+  // 'confirmed' 是 mn_assumptions.verification_state 的合法值（migration 003）
   const verified = await deps.db.query(
     `SELECT id, text, evidence_grade
        FROM mn_assumptions
-      WHERE meeting_id = $1 AND verification_state = 'verified'
+      WHERE meeting_id = $1 AND verification_state = 'confirmed'
       LIMIT 5`,
     [meetingId],
   );
   const consensusRows = await safeRows(
     deps,
-    `SELECT id, summary, side_count
+    `SELECT id, item_text AS summary,
+            COALESCE(array_length(supported_by, 1), 0) AS side_count
        FROM mn_consensus_items
       WHERE meeting_id = $1 AND kind = 'consensus'
       LIMIT 5`,

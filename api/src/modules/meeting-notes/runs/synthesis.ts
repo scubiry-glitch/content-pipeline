@@ -82,18 +82,22 @@ export async function synthesizeDeliverables(
   };
 
   // ⑫ consensus = mn_consensus_items(consensus) + 已验证 assumptions
+  // mn_consensus_items 真实列：item_text / supported_by / seq（migration 010）
   const consensusRows = await safeQuery(
     deps,
-    `SELECT id, summary, side_count
+    `SELECT id, item_text AS summary,
+            COALESCE(array_length(supported_by, 1), 0) AS side_count
        FROM mn_consensus_items
       WHERE meeting_id = $1 AND kind = 'consensus'
       LIMIT 5`,
     [meetingId],
   );
+  // verification_state 合法值（migration 003）: unverified/verifying/confirmed/falsified
+  // —— 'verified' 是早期文档遗留写法，永远命中 0 行；正确值是 'confirmed'
   const verifiedAssumptions = await deps.db.query(
     `SELECT id, text, evidence_grade, verification_state
        FROM mn_assumptions
-      WHERE meeting_id = $1 AND verification_state = 'verified'
+      WHERE meeting_id = $1 AND verification_state = 'confirmed'
       LIMIT 5`,
     [meetingId],
   );
@@ -118,7 +122,8 @@ export async function synthesizeDeliverables(
   );
   const divergences = await safeQuery(
     deps,
-    `SELECT id, summary, side_count
+    `SELECT id, item_text AS summary,
+            COALESCE(array_length(supported_by, 1), 0) AS side_count
        FROM mn_consensus_items
       WHERE meeting_id = $1 AND kind = 'divergence'
       LIMIT 5`,
