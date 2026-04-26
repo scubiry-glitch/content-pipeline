@@ -172,6 +172,8 @@ export async function extractListOverChunks<T = any>(
     maxTokens?: number;
     /** Opt-1：把 chunk 级失败计数 push 到调用方的 ComputeResult 上 */
     statsSink?: ComputeResult;
+    /** Opt-5 (O6)：chunks 并发上限（0/undefined = 串行；正数 = 并行） */
+    concurrency?: number;
   } = {},
 ): Promise<T[]> {
   const chunks = chunkedContent(content, options.chunkSize ?? 4500, options.overlap ?? 400);
@@ -204,13 +206,16 @@ export async function extractListOverChunks<T = any>(
     return { items: j as T[] };
   }
 
-  for (let i = 0; i < chunks.length; i++) {
+  // Opt-5 (O6) chunks 并行：默认 chunks 数 ≤ 3 时全部并发，>3 时按 chunkConcurrency
+  // 滚动窗口跑。1 chunk 单独走（无并发开销）。
+  // 调用方可显式 concurrency=1 退化为串行（用于 rate-limit 严格的 provider）。
+  const chunkConcurrency = options.concurrency ?? Math.min(chunks.length, 4);
+
+  async function processChunk(i: number): Promise<void> {
     let attempt = await tryChunk(i, chunks.length, baseTemp);
     if ('error' in attempt) {
-      // 重试一次（更高 temperature 鼓励改写 + 跳过临时网络抖动）
       attempt = await tryChunk(i, chunks.length, retryTemp);
     }
-
     if ('error' in attempt) {
       if (sink) {
         if (attempt.error === 'llm') {
@@ -224,16 +229,32 @@ export async function extractListOverChunks<T = any>(
             attempt.raw.slice(0, 120));
         }
       }
-      continue;
+      return;
     }
-    const items = attempt.items;
-
-    for (const item of items) {
+    // 注意 dedupe 用共享 seen Set；并发下 add+has 是串行原子但顺序不定
+    // 这是可接受的——dedupe 语义是"任一 chunk 见过即丢"，顺序不影响最终集合
+    for (const item of attempt.items) {
       const key = options.dedupeKey ? options.dedupeKey(item) : JSON.stringify(item);
       if (seen.has(key)) continue;
       seen.add(key);
       all.push(item);
     }
+  }
+
+  if (chunkConcurrency >= chunks.length) {
+    // 全部一次起飞
+    await Promise.all(chunks.map((_, i) => processChunk(i)));
+  } else {
+    // 滚动窗口（concurrency <= chunks.length）
+    let next = 0;
+    const workers = Array.from({ length: chunkConcurrency }, async () => {
+      while (true) {
+        const my = next++;
+        if (my >= chunks.length) return;
+        await processChunk(my);
+      }
+    });
+    await Promise.all(workers);
   }
   return all;
 }
