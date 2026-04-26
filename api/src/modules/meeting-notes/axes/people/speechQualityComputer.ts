@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_SPEECH_QUALITY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -43,7 +43,7 @@ export async function computeSpeechQuality(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    {},
+    { statsSink: out },
   );
   const byPerson = new Map<string, { sumE: number; sumF: number; n: number; quote: string }>();
   for (const r of rawItems) {
@@ -84,8 +84,10 @@ export async function computeSpeechQuality(
         [bundle.meetingId, personId, entropy, followups, quality, JSON.stringify(samples)],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `who=${item.who} entropy=${entropy} followups=${followups}`);
     }
   }
   return out;

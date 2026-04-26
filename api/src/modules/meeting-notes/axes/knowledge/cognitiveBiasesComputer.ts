@@ -2,7 +2,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_COGNITIVE_BIASES } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -45,7 +45,7 @@ export async function computeCognitiveBiases(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => `${(x.bias_type ?? '').toLowerCase()}|${(x.where_excerpt ?? '').slice(0, 30)}` },
+    { dedupeKey: (x) => `${(x.bias_type ?? '').toLowerCase()}|${(x.where_excerpt ?? '').slice(0, 30)}`, statsSink: out },
   );
 
   for (const item of items) {
@@ -68,8 +68,10 @@ export async function computeCognitiveBiases(
         ],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `bias=${item.bias_type} severity=${item.severity}`);
     }
   }
   return out;

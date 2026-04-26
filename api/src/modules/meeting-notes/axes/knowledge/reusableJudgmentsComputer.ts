@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_REUSABLE_JUDGMENTS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -41,7 +41,7 @@ export async function computeReusableJudgments(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60) },
+    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60), statsSink: out },
   );
 
   for (const item of items) {
@@ -75,8 +75,10 @@ export async function computeReusableJudgments(
         );
         out.created += 1;
       }
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `text=${(item.text ?? '').slice(0, 60)}`);
     }
   }
   return out;

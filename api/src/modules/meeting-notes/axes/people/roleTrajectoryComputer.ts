@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ROLE_TRAJECTORY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -46,7 +46,7 @@ export async function computeRoleTrajectory(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    {},
+    { statsSink: out },
   );
   const byPerson = new Map<string, ExtractedRole>();
   for (const r of rawItems) {
@@ -70,8 +70,10 @@ export async function computeRoleTrajectory(
         [personId, bundle.meetingId, args.scopeId ?? null, item.role_label, item.confidence ?? 0.5],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `who=${item.who} role=${item.role_label}`);
     }
   }
   return out;

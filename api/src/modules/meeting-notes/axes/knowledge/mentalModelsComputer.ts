@@ -4,7 +4,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_MENTAL_MODELS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -47,7 +47,7 @@ export async function computeMentalModels(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => `${(x.model_name ?? '').trim().toLowerCase()}|${(x.by ?? '').trim()}` },
+    { dedupeKey: (x) => `${(x.model_name ?? '').trim().toLowerCase()}|${(x.by ?? '').trim()}`, statsSink: out },
   );
 
   for (const item of items) {
@@ -61,8 +61,10 @@ export async function computeMentalModels(
          item.outcome ?? null, item.confidence ?? 0.5],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `model=${item.model_name} by=${item.by}`);
     }
   }
   return out;

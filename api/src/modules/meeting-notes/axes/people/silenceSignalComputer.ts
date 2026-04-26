@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_SILENCE_SIGNAL } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -44,7 +44,7 @@ export async function computeSilenceSignal(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => `${x.who?.trim() ?? ''}|${x.topic_id?.trim() ?? ''}` },
+    { dedupeKey: (x) => `${x.who?.trim() ?? ''}|${x.topic_id?.trim() ?? ''}`, statsSink: out },
   );
 
   for (const item of items) {
@@ -60,8 +60,10 @@ export async function computeSilenceSignal(
         [bundle.meetingId, personId, item.topic_id, item.state, item.anomaly_score ?? 0],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `who=${item.who} topic=${item.topic_id}`);
     }
   }
   return out;

@@ -23,6 +23,26 @@ export interface ComputeResult {
   skipped: number;
   errors: number;
   sampleIds?: string[];
+  /** Opt-1 (O1): chunked LLM 调用中 JSON 解析失败次数 */
+  parseFailures?: number;
+  /** Opt-1 (O2): 失败样例（前 5 条）；含 message + 上下文，方便定位 silent-zero */
+  errorSamples?: Array<{
+    kind: 'parse' | 'db' | 'transform';
+    message: string;
+    excerpt?: string;   // 出错时的关键字段，如 LLM 返回前 80 字 / item.text 前 60 字
+  }>;
+}
+
+/** Opt-1: computer 内 push 错误样例的工具，统一控制上限避免 metadata 膨胀 */
+export function pushErrorSample(
+  out: ComputeResult,
+  kind: 'parse' | 'db' | 'transform',
+  message: string,
+  excerpt?: string,
+): void {
+  if (!out.errorSamples) out.errorSamples = [];
+  if (out.errorSamples.length >= 5) return;
+  out.errorSamples.push({ kind, message: message.slice(0, 200), excerpt: excerpt?.slice(0, 200) });
 }
 
 /**
@@ -129,6 +149,15 @@ export function emptyResult(subDim: string): ComputeResult {
  * @param dedupeKey       — 给每条 item 算一个 string key，相同 key 视为重复
  *                          （第一次出现的保留，后续覆盖被丢弃）。
  */
+export interface ExtractStats {
+  parseFailures: number;
+  llmCallFailures: number;
+  /** 每个 chunk 拿到 0 个 item 的次数（可能 LLM 真的没找到，也可能是坏 JSON 兜底） */
+  emptyChunks: number;
+  /** 失败样例（前 3 条） */
+  samples: Array<{ kind: 'parse' | 'llm'; message: string; excerpt?: string }>;
+}
+
 export async function extractListOverChunks<T = any>(
   deps: MeetingNotesDeps,
   meetingKind: string | null | undefined,
@@ -141,23 +170,56 @@ export async function extractListOverChunks<T = any>(
     overlap?: number;
     temperature?: number;
     maxTokens?: number;
+    /** Opt-1：把 chunk 级失败计数 push 到调用方的 ComputeResult 上 */
+    statsSink?: ComputeResult;
   } = {},
 ): Promise<T[]> {
   const chunks = chunkedContent(content, options.chunkSize ?? 4500, options.overlap ?? 400);
   const all: T[] = [];
   const seen = new Set<string>();
+  const sink = options.statsSink;
 
   for (let i = 0; i < chunks.length; i++) {
     const userPrompt = buildUserPrompt(chunks[i], i, chunks.length);
-    const raw = await callExpertOrLLM(
-      deps,
-      meetingKind,
-      systemPrompt,
-      userPrompt,
-      { temperature: options.temperature, maxTokens: options.maxTokens },
-    );
-    const items = safeJsonParse<T[]>(raw, []);
-    if (!Array.isArray(items)) continue;
+    let raw = '';
+    try {
+      raw = await callExpertOrLLM(
+        deps,
+        meetingKind,
+        systemPrompt,
+        userPrompt,
+        { temperature: options.temperature, maxTokens: options.maxTokens },
+      );
+    } catch (e) {
+      if (sink) {
+        sink.errors = (sink.errors ?? 0) + 1;
+        pushErrorSample(sink, 'transform', `chunk[${i+1}/${chunks.length}] LLM call: ${(e as Error).message}`);
+      }
+      continue;
+    }
+    // 用一个"看似已尝试解析"哨兵区分"LLM 真返空数组"vs"JSON 解析失败兜底返空"
+    const PARSE_FAIL = Symbol('parse-fail');
+    let parsed: T[] | typeof PARSE_FAIL = PARSE_FAIL;
+    try {
+      const trimmed = (raw ?? '').trim();
+      if (trimmed.length === 0) {
+        parsed = [];
+      } else {
+        const j = safeJsonParse<T[] | null>(trimmed, null);
+        parsed = Array.isArray(j) ? j : PARSE_FAIL;
+      }
+    } catch {
+      parsed = PARSE_FAIL;
+    }
+    if (parsed === PARSE_FAIL) {
+      if (sink) {
+        sink.parseFailures = (sink.parseFailures ?? 0) + 1;
+        pushErrorSample(sink, 'parse', `chunk[${i+1}/${chunks.length}] returned non-array JSON`,
+                        raw.slice(0, 120));
+      }
+      continue;
+    }
+    const items = parsed as T[];
 
     for (const item of items) {
       const key = options.dedupeKey ? options.dedupeKey(item) : JSON.stringify(item);

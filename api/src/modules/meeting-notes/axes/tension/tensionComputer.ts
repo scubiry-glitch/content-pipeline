@@ -6,7 +6,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_TENSIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -58,6 +58,7 @@ export async function computeTensions(
       // 同一 topic 在重叠 chunk 会被识别两次，去重保留先见到的
       // 用 topic 归一化作 key（去除大小写/空白）
       dedupeKey: (x) => (x.topic ?? '').toLowerCase().replace(/\s+/g, ' ').slice(0, 60),
+      statsSink: out,
     },
   );
 
@@ -107,6 +108,8 @@ export async function computeTensions(
       }
     } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `topic=${(item.topic ?? '').slice(0, 40)} between=${(item.between ?? []).join('+')}`);
     }
   }
 

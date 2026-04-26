@@ -3,7 +3,7 @@
 // 抽取支撑决策的假设 + 其证据等级（A/B/C/D）
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ASSUMPTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -42,7 +42,7 @@ export async function computeAssumptions(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => (x.text ?? '').slice(0, 50).toLowerCase() },
+    { dedupeKey: (x) => (x.text ?? '').slice(0, 50).toLowerCase(), statsSink: out },
   );
 
   for (const item of items) {
@@ -55,8 +55,10 @@ export async function computeAssumptions(
         [args.scopeId ?? null, bundle.meetingId, item.text, grade, item.confidence ?? 0.5],
       );
       out.created += 1;
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `grade=${item.evidence_grade} text=${(item.text ?? '').slice(0, 50)}`);
     }
   }
   return out;

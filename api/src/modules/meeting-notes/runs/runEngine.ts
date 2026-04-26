@@ -545,6 +545,32 @@ export class RunEngine {
           WHERE id = $1`,
         [payload.runId, Date.now() - startedAt, counter.input + counter.output, counter.input, counter.output, counter.calls],
       );
+      // Opt-1 (O1+O2)：把 axis-level errorSamples / parseFailures 聚合到
+       // metadata.axisIssues 让前端 / 运维能看到 silent-zero 的原因
+      try {
+        const issues = allResults
+          .filter((r) => (r.errors ?? 0) > 0 || (r.parseFailures ?? 0) > 0
+                       || (r.errorSamples?.length ?? 0) > 0)
+          .map((r) => ({
+            subDim: r.subDim,
+            errors: r.errors ?? 0,
+            parseFailures: r.parseFailures ?? 0,
+            errorSamples: (r.errorSamples ?? []).slice(0, 3),
+          }));
+        if (issues.length > 0) {
+          await this.deps.db.query(
+            `UPDATE mn_runs
+                SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'axisIssues', $2::jsonb
+                )
+              WHERE id = $1`,
+            [payload.runId, JSON.stringify(issues)],
+          );
+        }
+      } catch (e) {
+        console.warn('[runEngine] axisIssues write failed:', (e as Error).message);
+      }
+
       await this.deps.eventBus.publish('mn.run.completed', {
         runId: payload.runId,
         results: allResults,

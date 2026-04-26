@@ -4,7 +4,7 @@
 // severity_factor: low=1, med=2, high=3, critical=4
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_RISK_HEAT } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -39,7 +39,7 @@ export async function computeRiskHeat(
     deps, bundle.meetingKind, SYSTEM,
     (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60) },
+    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60), statsSink: out },
   );
 
   for (const item of items) {
@@ -78,8 +78,10 @@ export async function computeRiskHeat(
         );
         out.created += 1;
       }
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `text=${(item.text ?? '').slice(0, 50)} severity=${item.severity}`);
     }
   }
   return out;

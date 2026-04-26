@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_COMMITMENTS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -49,7 +49,10 @@ export async function computeCommitments(
     (chunk, idx, total) =>
       `会议标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
     bundle.content,
-    { dedupeKey: (x) => `${x.who?.trim() ?? ''}|${(x.text ?? '').slice(0, 40)}` },
+    {
+      dedupeKey: (x) => `${x.who?.trim() ?? ''}|${(x.text ?? '').slice(0, 40)}`,
+      statsSink: out,
+    },
   );
 
   for (const item of items) {
@@ -74,8 +77,10 @@ export async function computeCommitments(
       if (out.sampleIds && out.sampleIds.length < 5 && ins.rows[0]?.id) {
         out.sampleIds.push(ins.rows[0].id);
       }
-    } catch {
+    } catch (e) {
       out.errors += 1;
+      pushErrorSample(out, 'db', (e as Error).message,
+        `who=${item.who} text=${(item.text ?? '').slice(0, 40)}`);
     }
   }
 
