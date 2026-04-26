@@ -106,10 +106,69 @@ export class RunEngine {
   constructor(
     private readonly deps: MeetingNotesDeps,
     private readonly getMeetingAxes: (meetingId: string) => Promise<any>,
-    opts: { concurrency?: number } = {},
+    opts: { concurrency?: number; zombieTimeoutMin?: number } = {},
   ) {
     this.queue = new RunQueue<QueuePayload>(opts.concurrency ?? 2);
     this.versionStore = new VersionStore(deps);
+
+    // Opt-3 (O4): 启动时清扫僵尸 running run
+    // RunQueue 是 in-memory，进程重启 / 崩溃后 mn_runs.state='running' 永久卡住
+    // 这里把 started_at < NOW() - zombieTimeoutMin 的 running 标 failed
+    // zombieTimeoutMin 默认 30 分钟（远大于正常 run 时长 ~5-25 分钟）
+    const zombieMin = opts.zombieTimeoutMin ?? 30;
+    setImmediate(() => {
+      this.cleanupZombieRuns(zombieMin).catch((e) =>
+        console.warn('[RunEngine] zombie cleanup failed:', (e as Error).message),
+      );
+    });
+  }
+
+  /**
+   * Opt-3 (O4): 把 started_at 早于 zombieTimeoutMin 分钟前但仍 state='running'
+   * 的 run 标 failed，并写明确的 error_message 让运维 / 前端可见。
+   * 同时清理 state='queued' 但 created_at 太久以前的 run（队列已丢）。
+   */
+  async cleanupZombieRuns(zombieMin: number): Promise<{ failedRuns: number; cancelledQueued: number }> {
+    let failedRuns = 0;
+    let cancelledQueued = 0;
+    try {
+      const r1 = await this.deps.db.query(
+        `UPDATE mn_runs
+            SET state = 'failed', finished_at = NOW(),
+                error_message = COALESCE(error_message, 'heartbeat-timeout: process restart or crash'),
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'currentStep', '失败 · 心跳超时',
+                  'currentStepKey', 'zombie',
+                  'zombieDetectedAt', NOW()::text
+                )
+          WHERE state = 'running'
+            AND started_at IS NOT NULL
+            AND started_at < NOW() - ($1::int * INTERVAL '1 minute')
+          RETURNING id`,
+        [zombieMin],
+      );
+      failedRuns = (r1 as any).rowCount ?? r1.rows?.length ?? 0;
+    } catch (e) {
+      console.warn('[RunEngine] cleanup running zombies failed:', (e as Error).message);
+    }
+    try {
+      // queued 超过 1 小时无人处理 → 标 cancelled（队列已丢）
+      const r2 = await this.deps.db.query(
+        `UPDATE mn_runs
+            SET state = 'cancelled', finished_at = NOW(),
+                error_message = COALESCE(error_message, 'queued-orphan: in-memory queue lost on restart')
+          WHERE state = 'queued'
+            AND created_at < NOW() - INTERVAL '1 hour'
+          RETURNING id`,
+      );
+      cancelledQueued = (r2 as any).rowCount ?? r2.rows?.length ?? 0;
+    } catch (e) {
+      console.warn('[RunEngine] cleanup queued orphans failed:', (e as Error).message);
+    }
+    if (failedRuns > 0 || cancelledQueued > 0) {
+      console.log(`[RunEngine] zombie cleanup: failed=${failedRuns} cancelled=${cancelledQueued}`);
+    }
+    return { failedRuns, cancelledQueued };
   }
 
   /** 入队一条 run 并立即触发 drain（异步） */
