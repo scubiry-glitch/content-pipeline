@@ -6,6 +6,7 @@ import { getLLMRouter } from '../../../providers/index.js';
 import type { GenerationParams } from '../../../types/index.js';
 import { LocalEventBus } from './local-event-bus.js';
 import { PostgresTextSearch } from './postgres-text-search.js';
+import { parseTranscript } from '../parse/transcriptParser.js';
 import type {
   DatabaseAdapter,
   EmbeddingAdapter,
@@ -164,7 +165,6 @@ export function createLocalAssetsAiAdapter(
 ): AssetsAiAdapter {
   return {
     async parseMeeting(assetId: string): Promise<ParsedMeeting> {
-      const { parseTranscript } = await import('../parse/transcriptParser.js');
       const r = await db.query(
         `SELECT id, title, content, metadata FROM assets WHERE id = $1`,
         [assetId],

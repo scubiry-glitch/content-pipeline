@@ -25,6 +25,7 @@ import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatc
 import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
 import { synthesizeDeliverables } from './synthesis.js';
 import { renderMultiDim } from './renderMultiDim.js';
+import { parseMeeting } from '../parse/meetingParser.js';
 
 interface QueuePayload {
   runId: string;
@@ -372,7 +373,6 @@ export class RunEngine {
           try {
             // 直接用 deps.assetsAi 拿到 segments/participants（本地解析无 LLM 成本），
             // 然后用 parseMeeting 完成 mn_people 入库 + segment 落库。
-            const { parseMeeting } = await import('../parse/meetingParser.js');
             const parseResult = await parseMeeting(this.deps, payload.meetingId);
             if (parseResult.ok) {
               await writeStep(

@@ -5,6 +5,7 @@
 // args.replaceExisting=false（默认）= 增量追加
 
 import type { MeetingNotesDeps } from '../types.js';
+import { applyDecoratorStack, getCurrentStrategy } from './decoratorStack.js';
 
 export interface ComputeArgs {
   meetingId?: string;
@@ -77,8 +78,7 @@ export async function callExpertOrLLM(
   if (deps.expertApplication.shouldSkipExpertAnalysis(meetingKind)) {
     return '';
   }
-  // 注入装饰器栈
-  const { applyDecoratorStack, getCurrentStrategy } = await import('./decoratorStack.js');
+  // 注入装饰器栈（静态 import，避免每次调用走 dynamic import 解析开销）
   const strategy = getCurrentStrategy();
   const { prompt: decorated } = applyDecoratorStack(systemPrompt, strategy?.strategySpec ?? null);
 
