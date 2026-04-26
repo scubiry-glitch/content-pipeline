@@ -906,6 +906,14 @@ function FlowProcessing({
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
   const [realCurrentStep, setRealCurrentStep] = useState<string | null>(null);
+  // Phase 15.8 · 后端落库的 6 步标记 + dispatchPlan / decorators / synthesis / render
+  const [realCurrentStepKey, setRealCurrentStepKey] = useState<string | null>(null);
+  const [realSurfaces, setRealSurfaces] = useState<{
+    dispatchPlan?: any;
+    decorators?: any;
+    synthesis?: any;
+    render?: any;
+  } | null>(null);
   const [realLlmCalls, setRealLlmCalls] = useState<number | null>(null);
   const [realState, setRealState] = useState<string | null>(null);
   const [realErrorMessage, setRealErrorMessage] = useState<string | null>(null);
@@ -921,6 +929,8 @@ function FlowProcessing({
     setRealTokens(null);
     setRealCostUsd(null);
     setRealCurrentStep(null);
+    setRealCurrentStepKey(null);
+    setRealSurfaces(null);
     setRealLlmCalls(null);
     setRealState(null);
     setRealErrorMessage(null);
@@ -955,8 +965,10 @@ function FlowProcessing({
           costTokens?: number;
           costUsd?: number;
           currentStep?: string;
+          currentStepKey?: string;
           llmCalls?: number;
-          metadata?: { currentStep?: string; llmCalls?: number };
+          metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number };
+          surfaces?: { dispatchPlan?: any; decorators?: any; synthesis?: any; render?: any };
           errorMessage?: string;
         } = await meetingNotesApi.getRun(runId);
         if (cancelled) return;
@@ -978,6 +990,9 @@ function FlowProcessing({
         }
         if (typeof r.costUsd === 'number') setRealCostUsd(r.costUsd);
         if (r.currentStep || r.metadata?.currentStep) setRealCurrentStep(r.currentStep ?? r.metadata?.currentStep ?? null);
+        const stepKey = r.currentStepKey ?? r.metadata?.currentStepKey ?? null;
+        if (stepKey) setRealCurrentStepKey(stepKey);
+        if (r.surfaces) setRealSurfaces(r.surfaces);
         const llmCount = typeof r.llmCalls === 'number' ? r.llmCalls : (typeof r.metadata?.llmCalls === 'number' ? r.metadata.llmCalls : null);
         if (llmCount != null) setRealLlmCalls(llmCount);
         // API 返回 scope: { kind:'meeting', id:uuid } — meetingId 就在 scope.id 里
@@ -1046,13 +1061,38 @@ function FlowProcessing({
   const displayProgress = runId
     ? (realProgress != null && realProgress > 0 ? realProgress : fallbackProgress)
     : null;
+  // Phase 15.8 · 后端按 STEP_RANGES 写 progress_pct，前端按区间反推每步状态：
+  //   ingest 3-16 / segment 17-33 / dispatch 34-50 / dec 51-58 /
+  //   axes 59-83(map到 dispatch+dec 平均，前端无独立 axes 步) /
+  //   synth 84-91 / render 92-99
+  // 注意：前端 stepDefs 没有"axes"项，axes 期间 currentStepKey='axes'，
+  // 我们把它视为 dec 已完成 + synth 未开始（即 dec=done, synth=queued）。
+  const STEP_PCT_RANGES: Record<string, [number, number]> = {
+    ingest:   [0,   16],
+    segment:  [17,  33],
+    dispatch: [34,  50],
+    dec:      [51,  58],
+    synth:    [84,  91],
+    render:   [92, 100],
+  };
+  const stepKeys = ['ingest', 'segment', 'dispatch', 'dec', 'synth', 'render'] as const;
   const steps = stepDefs.map((s, i) => {
-    if (runId && displayProgress != null) {
-      const chunk = 100 / stepDefs.length;
-      const raw = (displayProgress - i * chunk) / chunk;
-      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
-      const state: 'done' | 'running' | 'queued' =
+    if (runId && (realProgress != null || displayProgress != null)) {
+      const cur = realProgress ?? displayProgress ?? 0;
+      const key = stepKeys[i];
+      const [lo, hi] = STEP_PCT_RANGES[key];
+      let pct = 0;
+      if (cur >= hi) pct = 100;
+      else if (cur < lo) pct = 0;
+      else pct = Math.round(((cur - lo) / Math.max(1, hi - lo)) * 100);
+      // currentStepKey 优先：如果它命中本步，强制 running 状态
+      let state: 'done' | 'running' | 'queued' =
         pct >= 100 ? 'done' : pct > 0 ? 'running' : 'queued';
+      if (realCurrentStepKey === key) state = 'running';
+      else if (realCurrentStepKey === 'axes' && (key === 'dispatch' || key === 'dec')) {
+        // axes 期间 dispatch/dec 都已 done
+        state = 'done'; pct = 100;
+      }
       return { ...s, pct, state };
     }
     if (done) return { ...s, pct: 100, state: 'done' as const };
@@ -1061,9 +1101,9 @@ function FlowProcessing({
     return { ...s, pct: demoPct, state: demoState };
   });
   const liveStrategy = runId ? 'pipeline-runner' : 'debate';
-  const liveDecorators = realCurrentStep
-    ? [realCurrentStep]
-    : ['failure_check', 'evidence_anchored', 'calibrated_confidence', 'knowledge_grounded', 'rubric_anchored_output'];
+  // 优先用后端 surfaces.decorators.applied（真实生效的装饰器栈）
+  const liveDecorators = (realSurfaces?.decorators?.applied as string[] | undefined)
+    ?? (realCurrentStep ? [realCurrentStep] : ['failure_check', 'evidence_anchored', 'calibrated_confidence', 'knowledge_grounded', 'rubric_anchored_output']);
   const deliverables = [
     '① topic-enrich',
     'step3-fact-review',
@@ -1073,11 +1113,15 @@ function FlowProcessing({
     '⑭ beliefEvolution',
     'step5-synthesis',
   ];
-  const deliveredCount = runId && realProgress != null
-    ? Math.max(0, Math.min(deliverables.length, Math.floor((realProgress / 100) * deliverables.length)))
-    : runId && displayProgress != null
-      ? Math.max(0, Math.min(deliverables.length, Math.floor((displayProgress / 100) * deliverables.length)))
-    : (done ? deliverables.length : 2);
+  // 优先用后端 surfaces.synthesis.generatedCount（真实 deliverable 数量）
+  const synthesisCount = realSurfaces?.synthesis?.generatedCount;
+  const deliveredCount = typeof synthesisCount === 'number'
+    ? Math.max(0, Math.min(deliverables.length, synthesisCount))
+    : runId && realProgress != null
+      ? Math.max(0, Math.min(deliverables.length, Math.floor((realProgress / 100) * deliverables.length)))
+      : runId && displayProgress != null
+        ? Math.max(0, Math.min(deliverables.length, Math.floor((displayProgress / 100) * deliverables.length)))
+      : (done ? deliverables.length : 2);
   const elapsedMs = Date.now() - startedAt;
   const elapsedStr = `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`;
   const totalTokens = realTokens ? (realTokens.input + realTokens.output) : null;
