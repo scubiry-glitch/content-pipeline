@@ -273,18 +273,32 @@ export class RunEngine {
       // Wrap the entire run in AsyncLocalStorage so every LLM call done inside
       // any axis computer accumulates into our counter.
       await llmUsageStorage.run(counter, async () => {
-        // Ingest stage: ASR / 文档清洗（本地正则切分说话人 / 时间戳）
-        // 该步骤在 axis 计算前执行一次，幂等地把 segments + participants 写进
-        // assets.metadata.parse，前端 step3 第 1 步因此从 0% 切实进入 running。
+        // Ingest + Segment + Participant-merge：通过 meetingParser 走完整链路
+        //   step3 第 1 步「原始素材解析」：assetsAi.parseMeeting 做正则切分
+        //   step3 第 2 步「发言切分 + 参与者归并」：parseMeeting() 完成 ensurePersonByName
+        // 这两步一起跑（共用 LLM 之外的 IO），但 progress 分两次写以便前端能看到推进。
         if (payload.meetingId) {
           await writeProgress(0, '原始素材解析 · ASR + 文档清洗');
           try {
-            const parsed = await this.deps.assetsAi.parseMeeting(payload.meetingId);
-            const segCount = parsed.segments?.length ?? 0;
-            const partCount = parsed.participants?.length ?? 0;
-            await writeProgress(0, `素材解析完成 · ${segCount} 段 · ${partCount} 位参与者`);
+            // 直接用 deps.assetsAi 拿到 segments/participants（本地解析无 LLM 成本），
+            // 然后用 parseMeeting 完成 mn_people 入库 + segment 落库。
+            const { parseMeeting } = await import('../parse/meetingParser.js');
+            const parseResult = await parseMeeting(this.deps, payload.meetingId);
+            if (parseResult.ok) {
+              await writeProgress(
+                0,
+                `素材解析完成 · ${parseResult.segmentCount ?? 0} 段` +
+                  (parseResult.durationSec ? ` · ≈${Math.round(parseResult.durationSec / 60)} 分钟` : ''),
+              );
+              await writeProgress(
+                0,
+                `发言切分 + 参与者归并完成 · ${parseResult.participantCount} 位参与者已入库 mn_people`,
+              );
+            } else {
+              await writeProgress(0, `素材解析跳过 · ${parseResult.reason ?? 'unknown'}`);
+            }
           } catch (e) {
-            // ingest 失败不致命；记录但继续往下走
+            // ingest/segment 失败不致命；记录但继续往下走
             console.warn('[runEngine] ingest parseMeeting failed:', (e as Error).message);
           }
         }
