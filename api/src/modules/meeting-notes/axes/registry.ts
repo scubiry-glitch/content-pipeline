@@ -73,8 +73,23 @@ export function resolveComputer(axis: string, subDim: string): ComputerFn | null
 }
 
 /**
- * 对一个 axis 按顺序跑所有（或指定）子维度，返回 ComputeResult 数组。
- * 若 subDims 为空，跑该 axis 的所有 subDim（按 AXIS_SUBDIMS 顺序）。
+ * 已知依赖关系：当前唯一一处串行依赖是 knowledge.evidence_grading 必须在
+ * knowledge.assumptions 之后跑（不，evidence_grading 派生自 mn_assumptions，
+ * 但 mn_assumptions 是 projects/assumptions 的产出，**不是同 axis 内 subDim**）。
+ * 因此 knowledge axis 内 5 个 subDim 实际可全部并行。
+ *
+ * 但为安全起见，把 evidence_grading 单独留到最后一阶段（其他 4 个并行后再跑）。
+ */
+const SEQUENTIAL_AFTER: Record<string, string[]> = {
+  // knowledge axis: evidence_grading 依赖 mn_assumptions 表（projects axis 已先跑），
+  // 单独留到 knowledge 内的 phase-2，避免与并行的其他 4 个争资源。
+  knowledge: ['evidence_grading'],
+};
+
+/**
+ * 对一个 axis 跑所有（或指定）子维度。
+ * Opt-6 (O7)：同 axis 内独立 subDim 并行；SEQUENTIAL_AFTER 列表里的 subDim
+ * 在 phase-1 全部完成后再跑（保留显式依赖顺序）。
  */
 export async function runAxisAll(
   deps: MeetingNotesDeps,
@@ -83,18 +98,30 @@ export async function runAxisAll(
   subDims?: string[],
 ): Promise<ComputeResult[]> {
   const dims = subDims && subDims.length > 0 ? subDims : (AXIS_SUBDIMS[axis] ?? []);
-  const results: ComputeResult[] = [];
-  for (const sd of dims) {
+  const tail = new Set(SEQUENTIAL_AFTER[axis] ?? []);
+  const phase1 = dims.filter((sd) => !tail.has(sd));
+  const phase2 = dims.filter((sd) => tail.has(sd));
+
+  const runOne = async (sd: string): Promise<ComputeResult> => {
     const fn = resolveComputer(axis, sd);
-    if (!fn) continue;
+    if (!fn) return { subDim: sd, created: 0, updated: 0, skipped: 0, errors: 0 };
     try {
-      results.push(await fn(deps, args));
+      return await fn(deps, args);
     } catch (e) {
-      results.push({
+      return {
         subDim: sd,
         created: 0, updated: 0, skipped: 0, errors: 1,
-      });
+        errorSamples: [{ kind: 'transform', message: (e as Error).message }],
+      };
     }
+  };
+
+  // Phase 1: 独立 subDims 并行
+  const phase1Results = await Promise.all(phase1.map(runOne));
+  // Phase 2: 有依赖的 subDims 串行（通常只 0-1 个）
+  const phase2Results: ComputeResult[] = [];
+  for (const sd of phase2) {
+    phase2Results.push(await runOne(sd));
   }
-  return results;
+  return [...phase1Results, ...phase2Results];
 }
