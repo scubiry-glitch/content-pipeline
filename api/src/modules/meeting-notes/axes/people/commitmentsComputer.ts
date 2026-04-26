@@ -6,6 +6,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_COMMITMENTS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedCommitment {
@@ -18,10 +19,14 @@ interface ExtractedCommitment {
 
 const SYSTEM = `你是会议纪要承诺抽取器。从给定的会议正文里找出所有承诺/行动项。
 返回 JSON 数组，每项格式：
-{"who":"发言者姓名", "text":"承诺内容", "due_at":"ISO8601 或 null", "state":"on_track|at_risk|done|slipped"}
+{"who":"发言者姓名", "text":"承诺内容", "due_at":"ISO8601 或 null", "state":"on_track|at_risk|done|slipped", "progress":0-100}
 - 只抽取明确具名的承诺，不要推断
-- text 控制在 80 字内
-- 若无承诺，返回 []`;
+- text 必须保留原文中的所有数字、公司名、日期（如"3 家 candidate"、"两周内"、"Q3 配额"）
+- text 控制在 80 字内但不省略关键信息
+- 若无承诺，返回 []
+
+${FEW_SHOT_HEADER}
+${EX_COMMITMENTS}`;
 
 export async function computeCommitments(
   deps: MeetingNotesDeps,

@@ -6,6 +6,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_SPEECH_QUALITY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedQuality {
@@ -16,9 +17,13 @@ interface ExtractedQuality {
 }
 
 const SYSTEM = `为每位参会人评估发言质量。返回 JSON 数组：
-[{"who":"姓名", "entropy_pct": 0-100, "followed_up_count": 整数, "sample_quote":"可选代表性引述"}]
+[{"who":"姓名", "entropy_pct": 0-100, "followed_up_count": 整数, "sample_quote":"代表性引述（原文）"}]
 - entropy_pct: 信息密度 (重复/口水话低、有具体数字/引用高)
-- followed_up_count: 其观点被其他人引用/反驳/附议的次数`;
+- followed_up_count: 其观点被其他人引用/反驳/附议的次数
+- sample_quote 必须从原文挑出一句信息密度最高的（含数字/比率/具体名词），不要复述
+
+${FEW_SHOT_HEADER}
+${EX_SPEECH_QUALITY}`;
 
 export async function computeSpeechQuality(
   deps: MeetingNotesDeps,

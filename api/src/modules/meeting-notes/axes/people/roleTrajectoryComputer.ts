@@ -6,6 +6,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_ROLE_TRAJECTORY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedRole {
@@ -17,7 +18,11 @@ interface ExtractedRole {
 const SYSTEM = `你是会议角色识别器。识别每位参会人在这场会议中的主导角色，返回 JSON 数组：
 [{"who":"姓名", "role_label":"proposer|challenger|decider|moderator|silent|reporter|analyst", "confidence":0-1}]
 - 每人只给一个最能代表的角色
-- 仅返回本场会议中有明显证据的人`;
+- 仅返回本场会议中有明显证据的人
+- confidence 反映角色证据强度，不要默认 0.5；强证据 0.85+，单次发言 0.6 左右
+
+${FEW_SHOT_HEADER}
+${EX_ROLE_TRAJECTORY}`;
 
 export async function computeRoleTrajectory(
   deps: MeetingNotesDeps,
