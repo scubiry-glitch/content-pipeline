@@ -80,11 +80,16 @@ export async function renderMultiDim(
   ];
 
   // 3) 共识（consensus）：verified assumptions + consensus_items
-  // 'confirmed' 是 mn_assumptions.verification_state 的合法值（migration 003）
+  // 'confirmed' 是 mn_assumptions.verification_state 的合法值（migration 003），
+  // 但 codebase 里没有任何地方写 'confirmed'，全是默认 'unverified'。
+  // 务实降级：高证据等级（A/B）即视为共识级，OR verification_state='confirmed'
+  // 兼容外部标记的情况。
   const verified = await deps.db.query(
     `SELECT id, text, evidence_grade
        FROM mn_assumptions
-      WHERE meeting_id = $1 AND verification_state = 'confirmed'
+      WHERE meeting_id = $1
+        AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
+      ORDER BY evidence_grade
       LIMIT 5`,
     [meetingId],
   );

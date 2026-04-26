@@ -93,11 +93,15 @@ export async function synthesizeDeliverables(
     [meetingId],
   );
   // verification_state 合法值（migration 003）: unverified/verifying/confirmed/falsified
-  // —— 'verified' 是早期文档遗留写法，永远命中 0 行；正确值是 'confirmed'
+  // 但 codebase 里没有任何地方把它转成 confirmed，全靠外部系统标记 → 实际永远 0 行。
+  // 务实降级：把 evidence_grade ∈ ('A','B') 的假设视为"硬证据共识"，再 OR
+  // verification_state='confirmed' 兼容外部已标记的情况。
   const verifiedAssumptions = await deps.db.query(
     `SELECT id, text, evidence_grade, verification_state
        FROM mn_assumptions
-      WHERE meeting_id = $1 AND verification_state = 'confirmed'
+      WHERE meeting_id = $1
+        AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
+      ORDER BY evidence_grade, confidence DESC NULLS LAST
       LIMIT 5`,
     [meetingId],
   );
