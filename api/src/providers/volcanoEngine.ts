@@ -2,7 +2,7 @@
 // API 文档: https://www.volcengine.com/docs/82379/1399202
 // 支持 Responses API 格式 + Chat Completions 兼容格式
 
-import { LLMProvider } from './base';
+import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export class VolcanoEngineProvider extends LLMProvider {
@@ -35,7 +35,7 @@ export class VolcanoEngineProvider extends LLMProvider {
     model: string,
     params?: GenerationParams
   ): Promise<GenerationResult> {
-    const response = await fetch(`${this.baseUrl}/api/v3/chat/completions`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v3/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -112,7 +112,7 @@ export class VolcanoEngineProvider extends LLMProvider {
       });
     }
 
-    const response = await fetch(`${this.baseUrl}/api/v3/responses`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v3/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -172,8 +172,8 @@ export class VolcanoEngineProvider extends LLMProvider {
       if (!this.apiKey) {
         return false;
       }
-      // 发送最小请求验证连通性
-      const response = await fetch(`${this.baseUrl}/api/v3/chat/completions`, {
+      // 发送最小请求验证连通性 · health check 用短 timeout (10s) 避免拖死 readiness
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/v3/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export class VolcanoEngineProvider extends LLMProvider {
           max_tokens: 5,
           stream: false,
         }),
-      });
+      }, 10_000);
       return response.ok;
     } catch {
       return false;

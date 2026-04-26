@@ -1,7 +1,7 @@
 // SiliconFlow Provider - 支持 DeepSeek 等模型
 // API 文档: https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions
 
-import { LLMProvider } from './base';
+import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
 
 export class SiliconFlowProvider extends LLMProvider {
@@ -18,7 +18,7 @@ export class SiliconFlowProvider extends LLMProvider {
     const startTime = Date.now();
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,7 +62,7 @@ export class SiliconFlowProvider extends LLMProvider {
 
   async embed(text: string, model: string = 'BAAI/bge-large-zh-v1.5'): Promise<number[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,12 +88,12 @@ export class SiliconFlowProvider extends LLMProvider {
 
   async checkHealth(): Promise<boolean> {
     try {
-      // 使用 models 接口检查
-      const response = await fetch(`${this.baseUrl}/models`, {
+      // 使用 models 接口检查 · health check 用短 timeout (10s) 避免拖死 readiness
+      const response = await fetchWithTimeout(`${this.baseUrl}/models`, {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
         },
-      });
+      }, 10_000);
       return response.ok;
     } catch {
       return false;
