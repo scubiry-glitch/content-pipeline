@@ -149,6 +149,49 @@ export const EX_MEETING_NECESSITY = `{
 }
 // verdict: async_ok / partial / needed。每个 reason 必须给出占会议时长的 ratio (0-1) 与具体内容。`;
 
+// ============================================================
+// tension axis (P1-5 新增)
+// ============================================================
+
+export const EX_TENSIONS = `[
+  {
+    "tension_key": "T1",
+    "between": ["沈岚", "Wei Tan"],
+    "topic": "中游推理层 vs 训练层 哪一层是真护城河",
+    "intensity": 0.82,
+    "summary": "沈岚主张推理层在特定 workload 下有价格歧视空间，毛利结构更耐周期；Wei Tan 反驳训练层规模效应不可逆，10^27 flops 后单位成本会碾过中游毛利。",
+    "moments": [
+      {"who": "沈岚", "text": "推理层在特定 workload 下有价格歧视空间，毛利结构比训练层更耐得住周期"},
+      {"who": "Wei Tan", "text": "训练层一旦摊到 10^27 flops，单位成本会碾过毛利曲线"}
+    ]
+  },
+  {
+    "tension_key": "T2",
+    "between": ["陈汀", "林雾"],
+    "topic": "单笔上限 集中度 vs LP 偏好",
+    "intensity": 0.61,
+    "summary": "陈汀倾向 8000 万单笔以保持集中度；林雾从 LP 接受度边界出发要求降到 6000 万，并提出合规预案前置。",
+    "moments": [
+      {"who": "陈汀", "text": "上限可以谈，但 8000 万那种单笔，我们要准备好跟 LP 沟通预案"},
+      {"who": "林雾", "text": "LP 对集中度的接受边界，我们这次必须算清楚再加单笔"}
+    ]
+  },
+  {
+    "tension_key": "T3",
+    "between": ["沈岚", "Omar K."],
+    "topic": "北美配售节奏 vs subadvisor 本土化路径",
+    "intensity": 0.44,
+    "summary": "沈岚主张直接按北美配售节奏；Omar K. 提出 subadvisor 结构（每月 3-5 个 warm intro）作为更稳定的本土化路径。",
+    "moments": [
+      {"who": "Omar K.", "text": "过去 6 个月 18 次 warm intro，4 个进 term sheet，subadvisor 渠道已验证"}
+    ]
+  }
+]
+// intensity 量化强度，必须有区分（0.4 / 0.6 / 0.85），不要全部 0.5。
+// moments 至少 1 条，理想 2-3 条；text 必须是原文真实片段（≤60 字）。
+// between 至少 2 人；多人派系对立时可以 3-4 人。
+// 只列实质对立，不包括澄清式提问、重复主张。`;
+
 export const EX_AFFECT_CURVE = `{
   "samples": [
     {"t_sec": 0, "valence": 0.3, "intensity": 0.4, "tag": "opening"},
