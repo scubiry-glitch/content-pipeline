@@ -24,6 +24,7 @@ import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
 import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatchPlan.js';
 import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
 import { synthesizeDeliverables } from './synthesis.js';
+import { renderMultiDim } from './renderMultiDim.js';
 
 interface QueuePayload {
   runId: string;
@@ -442,8 +443,28 @@ export class RunEngine {
           }
         }
 
-        // Snapshot stage（step3 第 6 步「多维度组装」）
+        // Step3 第 6 步「多维度组装 · 张力 / 新认知 / 共识 / 观点对位」
         if (payload.meetingId) {
+          await writeProgress(axesToRun.length, '多维度组装中…');
+          try {
+            const render = await renderMultiDim(this.deps, payload.meetingId);
+            await this.deps.db.query(
+              `UPDATE mn_runs
+                  SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'render', $2::jsonb
+                  )
+                WHERE id = $1`,
+              [payload.runId, JSON.stringify(render)],
+            );
+            await writeProgress(
+              axesToRun.length,
+              `多维度组装完成 · ${render.ready}/${render.dims.length} 维度就绪`,
+            );
+          } catch (e) {
+            console.warn('[runEngine] renderMultiDim failed:', (e as Error).message);
+          }
+
+          // Snapshot：把 getMeetingAxes 的完整数据落版本号 vN
           await writeProgress(axesToRun.length, '生成快照…');
           const snapshot = await this.getMeetingAxes(payload.meetingId);
           await this.versionStore.snapshot({
