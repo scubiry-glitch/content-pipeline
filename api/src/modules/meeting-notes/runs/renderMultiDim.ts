@@ -103,12 +103,16 @@ export async function renderMultiDim(
   ];
 
   // 4) 观点对位（perspectiveAlign）：cross-axis links
+  // mn_cross_axis_links 没有 meeting_id 列（migration 008），按 scope_id 过滤；
+  // 通过 mn_scope_members 把 meeting → scope 反查。
   const links = await safeRows(
     deps,
     `SELECT source_axis, source_item_type, target_axis, target_item_type,
             relationship, score
        FROM mn_cross_axis_links
-      WHERE meeting_id = $1
+      WHERE scope_id IN (
+              SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1
+            )
       ORDER BY score DESC NULLS LAST
       LIMIT 10`,
     [meetingId],
