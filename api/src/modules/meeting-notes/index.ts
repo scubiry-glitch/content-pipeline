@@ -35,6 +35,10 @@ export { createRouter } from './router.js';
 // Adapters
 export { LocalEventBus } from './adapters/local-event-bus.js';
 export { PostgresTextSearch } from './adapters/postgres-text-search.js';
+export {
+  createLocalAssetsAiAdapter,
+  createNoopAssetsAiAdapter,
+} from './adapters/pipeline.js';
 
 // Types
 export type {

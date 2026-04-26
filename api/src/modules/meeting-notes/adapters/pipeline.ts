@@ -155,6 +155,64 @@ export function createNoopAssetsAiAdapter(): AssetsAiAdapter {
   };
 }
 
+/**
+ * 本地 ASR-like 解析：从 assets.content 直接做正则切分（说话人/时间戳）。
+ * 不调用 LLM；用来在没有外部 ASR 服务时保证 ingest 步骤真实落库。
+ */
+export function createLocalAssetsAiAdapter(
+  db: DatabaseAdapter,
+): AssetsAiAdapter {
+  return {
+    async parseMeeting(assetId: string): Promise<ParsedMeeting> {
+      const { parseTranscript } = await import('../parse/transcriptParser.js');
+      const r = await db.query(
+        `SELECT id, title, content, metadata FROM assets WHERE id = $1`,
+        [assetId],
+      );
+      const row = r.rows[0];
+      if (!row) return { assetId };
+      const raw = typeof row.content === 'string' ? row.content : '';
+      if (!raw.trim()) {
+        return { assetId, title: row.title ?? undefined, transcript: '', segments: [], participants: [] };
+      }
+      const parsed = parseTranscript(raw);
+      // 落库到 metadata.parse（幂等覆写）
+      try {
+        await db.query(
+          `UPDATE assets
+              SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                'parse', $2::jsonb,
+                'parsed_at', NOW()::text
+              )
+            WHERE id = $1`,
+          [assetId, JSON.stringify({
+            stats: parsed.stats,
+            segmentCount: parsed.segments.length,
+            participants: parsed.participants,
+            // 全量 segments 体积可能较大，只在必要时存 head + tail
+            segmentsHead: parsed.segments.slice(0, 10),
+          })],
+        );
+      } catch (e) {
+        console.warn('[meeting-notes] persist parse stats failed:', (e as Error).message);
+      }
+      return {
+        assetId,
+        title: row.title ?? undefined,
+        transcript: parsed.cleaned,
+        segments: parsed.segments.map((s) => ({
+          speaker: s.speaker,
+          start: s.start,
+          end: s.end,
+          text: s.text,
+        })),
+        participants: parsed.participants.map((p) => ({ name: p.name })),
+        metadata: { stats: parsed.stats },
+      };
+    },
+  };
+}
+
 // ---------- 聚合工厂 ----------
 export interface PipelineDepsInput {
   db: DatabaseAdapter;

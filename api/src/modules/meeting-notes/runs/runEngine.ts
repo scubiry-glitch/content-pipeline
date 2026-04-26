@@ -273,6 +273,22 @@ export class RunEngine {
       // Wrap the entire run in AsyncLocalStorage so every LLM call done inside
       // any axis computer accumulates into our counter.
       await llmUsageStorage.run(counter, async () => {
+        // Ingest stage: ASR / 文档清洗（本地正则切分说话人 / 时间戳）
+        // 该步骤在 axis 计算前执行一次，幂等地把 segments + participants 写进
+        // assets.metadata.parse，前端 step3 第 1 步因此从 0% 切实进入 running。
+        if (payload.meetingId) {
+          await writeProgress(0, '原始素材解析 · ASR + 文档清洗');
+          try {
+            const parsed = await this.deps.assetsAi.parseMeeting(payload.meetingId);
+            const segCount = parsed.segments?.length ?? 0;
+            const partCount = parsed.participants?.length ?? 0;
+            await writeProgress(0, `素材解析完成 · ${segCount} 段 · ${partCount} 位参与者`);
+          } catch (e) {
+            // ingest 失败不致命；记录但继续往下走
+            console.warn('[runEngine] ingest parseMeeting failed:', (e as Error).message);
+          }
+        }
+
         await writeProgress(0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
 
         for (let i = 0; i < axesToRun.length; i++) {

@@ -63,6 +63,7 @@ import { createContentLibraryPipelineDeps } from './modules/content-library/adap
 import { initContentLibraryEngineSingleton } from './modules/content-library/singleton.js';
 import {
   createMeetingNotesEngine,
+  createLocalAssetsAiAdapter,
   createRouter as createMeetingNotesRouter,
 } from './modules/meeting-notes/index.js';
 import {
@@ -230,9 +231,14 @@ async function main() {
   // Meeting Notes 独立模块 (PR1 骨架) — 一库多视图 (人物/项目/知识/会议本身) + 运行/版本 + 跨会议纵向
   // 依赖 expert-library（experts.invoke）与 services/expert-application（strategy resolver）
   // PR1 仅暴露 /health；后续 PR 逐步补齐 parse / axes / runs / longitudinal
+  const mnDbAdapter = createMeetingNotesDBAdapter(query);
   const meetingNotesEngine = createMeetingNotesEngine(
     createMeetingNotesDeps({
-      db: createMeetingNotesDBAdapter(query),
+      db: mnDbAdapter,
+      // Local ASR-like parser — reads assets.content, regex-splits speakers/timestamps,
+      // persists segment stats into assets.metadata.parse. Replaces the noop adapter
+      // that previously made step3 "ingest" stage observable but inert.
+      assetsAi: createLocalAssetsAiAdapter(mnDbAdapter),
       experts: createPipelineExpertsAdapter({
         invoke: async (req) => expertEngine.invoke(req as any),
       }),
