@@ -4,6 +4,7 @@
 
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_ASSUMPTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedAssumption {
@@ -15,8 +16,14 @@ interface ExtractedAssumption {
 const SYSTEM = `你是假设识别器。从正文里找出明显是"信念/假设"的断言（不是事实、不是决策本身）。
 返回 JSON 数组：
 [{"text":"假设内容", "evidence_grade":"A|B|C|D", "confidence":0-1}]
-- A=硬数据 B=类比案例 C=直觉/主观 D=道听途说
-- 每条 ≤ 80 字`;
+- A=硬数据（具体次数/比率/精确测量） B=类比案例（同类项目/历史样本）
+  C=直觉/趋势判断 D=道听途说
+- text 必须保留原文中的数字/比率/具体名词（如"H-chip Q3 配额"）
+- 每条 ≤ 80 字
+- evidence_grade 抽取后必须能在原文找到对应支撑句；找不到就降到 C/D
+
+${FEW_SHOT_HEADER}
+${EX_ASSUMPTIONS}`;
 
 export async function computeAssumptions(
   deps: MeetingNotesDeps,

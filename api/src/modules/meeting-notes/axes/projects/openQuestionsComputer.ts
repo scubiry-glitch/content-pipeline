@@ -6,6 +6,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_OPEN_QUESTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedQuestion {
@@ -16,7 +17,12 @@ interface ExtractedQuestion {
 
 const SYSTEM = `你是开放问题抽取器。从正文里找出"被提出但未在本会议解决"的问题。返回 JSON 数组：
 [{"text":"问题（≤80字）", "category":"strategic|analytical|governance|operational", "owner":"可选-负责人姓名"}]
-- 只抽取明确提出的问题，不包括主持人的修辞性提问`;
+- 只抽取明确提出的问题，不包括主持人的修辞性提问
+- text 必须保留原文中的具体范围/数字（如"6000 万-8000 万单笔上限"），不要泛化
+- owner 仅在会上明确指派时填写，否则留空
+
+${FEW_SHOT_HEADER}
+${EX_OPEN_QUESTIONS}`;
 
 function normalizeText(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');

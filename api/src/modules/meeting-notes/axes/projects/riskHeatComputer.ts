@@ -5,6 +5,7 @@
 
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_RISK_HEAT } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedRisk {
@@ -16,7 +17,12 @@ interface ExtractedRisk {
 
 const SYSTEM = `你是风险抽取器。从正文里找出被提出的项目风险。返回 JSON 数组：
 [{"text":"风险描述（≤80字）", "severity":"low|med|high|critical", "action_taken":true/false, "trend":"up|flat|down"}]
-- 只抽取明显是风险/隐患的断言`;
+- 只抽取明显是风险/隐患的断言
+- text 必须能定位到具体业务场景（哪家公司/哪个赛道/哪条业务线），不要泛化为"市场风险"
+- severity 反映对项目的影响强度；action_taken=true 仅当会上有明确缓解动作
+
+${FEW_SHOT_HEADER}
+${EX_RISK_HEAT}`;
 
 const SEVERITY_FACTOR: Record<string, number> = { low: 1, med: 2, high: 3, critical: 4 };
 
