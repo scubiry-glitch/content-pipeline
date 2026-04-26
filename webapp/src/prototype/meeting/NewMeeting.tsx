@@ -1086,9 +1086,11 @@ function FlowProcessing({
       else if (cur < lo) pct = 0;
       else pct = Math.round(((cur - lo) / Math.max(1, hi - lo)) * 100);
       // currentStepKey 优先：如果它命中本步，强制 running 状态
+      // 但已 done（pct>=100）或整体 succeeded 时不覆盖，避免最终态闪回 running
       let state: 'done' | 'running' | 'queued' =
         pct >= 100 ? 'done' : pct > 0 ? 'running' : 'queued';
-      if (realCurrentStepKey === key) state = 'running';
+      const wholeRunDone = realState === 'succeeded' || realState === 'done' || done;
+      if (realCurrentStepKey === key && !wholeRunDone && pct < 100) state = 'running';
       else if (realCurrentStepKey === 'axes' && (key === 'dispatch' || key === 'dec')) {
         // axes 期间 dispatch/dec 都已 done
         state = 'done'; pct = 100;
@@ -1106,16 +1108,17 @@ function FlowProcessing({
     ?? (realCurrentStep ? [realCurrentStep] : ['failure_check', 'evidence_anchored', 'calibrated_confidence', 'knowledge_grounded', 'rubric_anchored_output']);
   // 优先取 surfaces.synthesis.deliverables（来自后端实际聚合）；
   // 否则回退到静态 demo 列表，保持原 mock 行为。
-  const synthDeliverables = realSurfaces?.synthesis?.deliverables as
-    | Array<{ key: string; label?: string; count?: number; generated?: boolean }>
-    | undefined;
+  // Array.isArray 守卫：避免后端返回非数组（如 null / 对象）时崩溃
+  const rawDeliverables = realSurfaces?.synthesis?.deliverables;
+  const synthDeliverables: Array<{ key: string; label?: string; count?: number; generated?: boolean }> | undefined =
+    Array.isArray(rawDeliverables) ? rawDeliverables : undefined;
   const deliverables: Array<{ key: string; label?: string; ready: boolean; count?: number }> =
     synthDeliverables && synthDeliverables.length > 0
       ? synthDeliverables.map((d) => ({
-          key: d.key,
-          label: d.label,
-          ready: !!d.generated,
-          count: d.count,
+          key: typeof d?.key === 'string' ? d.key : 'unknown',
+          label: typeof d?.label === 'string' ? d.label : undefined,
+          ready: !!d?.generated,
+          count: typeof d?.count === 'number' ? d.count : undefined,
         }))
       : [
           '① topic-enrich',
