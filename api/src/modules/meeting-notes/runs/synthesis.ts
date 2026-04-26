@@ -115,7 +115,17 @@ export async function synthesizeDeliverables(
     generated: consensusCount > 0,
   };
 
-  // ⑬ controversy = cognitive_biases + divergences
+  // ⑬ controversy = mn_tensions(主) + cognitive_biases + divergences
+  // P1-5: mn_tensions 表是 demo 张力维度的真正承载（带 between_ids/intensity/moments）
+  const tensions = await safeQuery(
+    deps,
+    `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
+       FROM mn_tensions
+      WHERE meeting_id = $1
+      ORDER BY intensity DESC
+      LIMIT 5`,
+    [meetingId],
+  );
   const biases = await deps.db.query(
     `SELECT id, bias_type, where_excerpt, severity
        FROM mn_cognitive_biases
@@ -133,13 +143,17 @@ export async function synthesizeDeliverables(
       LIMIT 5`,
     [meetingId],
   );
-  const controversyCount = biases.rows.length + divergences.length;
+  const controversyCount = tensions.length + biases.rows.length + divergences.length;
   const controversy: DeliverableItem = {
     key: '⑬ controversy',
-    label: '张力与认知偏误',
-    sourceAxes: ['knowledge', 'projects'],
+    label: '张力 / 认知偏误 / 立场分叉',
+    sourceAxes: ['tension', 'knowledge', 'projects'],
     count: controversyCount,
-    samples: [...biases.rows.slice(0, 3), ...divergences.slice(0, 2)],
+    samples: [
+      ...tensions.slice(0, 3).map((t) => ({ kind: 'tension', ...t })),
+      ...biases.rows.slice(0, 1),
+      ...divergences.slice(0, 1),
+    ],
     generated: controversyCount > 0,
   };
 

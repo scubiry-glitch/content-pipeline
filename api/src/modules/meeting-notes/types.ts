@@ -140,7 +140,7 @@ export interface StandaloneConfig {
 
 export type ScopeKind = 'library' | 'project' | 'client' | 'topic' | 'meeting';
 
-export type AxisName = 'people' | 'projects' | 'knowledge' | 'meta' | 'longitudinal' | 'all';
+export type AxisName = 'people' | 'projects' | 'knowledge' | 'meta' | 'tension' | 'longitudinal' | 'all';
 
 export type Preset = 'lite' | 'standard' | 'max';
 

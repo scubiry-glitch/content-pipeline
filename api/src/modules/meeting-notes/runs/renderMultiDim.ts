@@ -26,7 +26,17 @@ export async function renderMultiDim(
   deps: MeetingNotesDeps,
   meetingId: string,
 ): Promise<RenderResult> {
-  // 1) 张力（tension）：cognitive_biases + divergences + at_risk commitments
+  // 1) 张力（tension）：mn_tensions(主) + cognitive_biases + at_risk + divergences
+  // P1-5: mn_tensions 是 demo 张力维度的真正承载（带 between_ids/intensity/moments）
+  const realTensions = await safeRows(
+    deps,
+    `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
+       FROM mn_tensions
+      WHERE meeting_id = $1
+      ORDER BY intensity DESC
+      LIMIT 5`,
+    [meetingId],
+  );
   const biases = await deps.db.query(
     `SELECT id, bias_type, where_excerpt, severity
        FROM mn_cognitive_biases
@@ -53,6 +63,8 @@ export async function renderMultiDim(
     [meetingId],
   );
   const tensionItems = [
+    // tension 排前面（信息最丰富：between_ids + intensity + moments）
+    ...realTensions.map((t) => ({ kind: 'tension', ...t })),
     ...biases.rows.map((b) => ({ kind: 'bias', ...b })),
     ...atRisk.rows.map((c) => ({ kind: 'commitment_at_risk', ...c })),
     ...divergences.map((d) => ({ kind: 'divergence', ...d })),

@@ -32,6 +32,8 @@ const AXIS_TO_EXPERT: Record<string, { id: string; label: string }> = {
   projects:  { id: 'expert-decision-strategist', label: '项目/决策战略家' },
   knowledge: { id: 'expert-knowledge-synthesizer', label: '知识/认知综合师' },
   meta:      { id: 'expert-knowledge-synthesizer', label: '知识/认知综合师' },
+  // P1-5：tension 归到知识/认知综合师（与 cognitive_biases 同源逻辑）
+  tension:   { id: 'expert-knowledge-synthesizer', label: '知识/认知综合师' },
 };
 
 const AXIS_SUBDIMS: Record<string, string[]> = {
@@ -39,6 +41,7 @@ const AXIS_SUBDIMS: Record<string, string[]> = {
   projects:  ['decision_provenance', 'assumptions', 'open_questions', 'risk_heat'],
   knowledge: ['reusable_judgments', 'mental_models', 'cognitive_biases', 'counterfactuals', 'evidence_grading'],
   meta:      ['decision_quality', 'meeting_necessity', 'affect_curve'],
+  tension:   ['intra_meeting'],
 };
 
 export function buildDispatchPlan(

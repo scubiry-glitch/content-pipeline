@@ -41,6 +41,19 @@ CREATE INDEX IF NOT EXISTS idx_mn_tensions_scope
   ON mn_tensions(scope_id) WHERE scope_id IS NOT NULL;
 
 -- ============================================================
+-- 扩展 mn_runs.axis CHECK 约束以接受 'tension'
+-- mn_runs CHECK 在 006 迁移里硬编码，新加 axis 必须 drop + recreate
+-- ============================================================
+ALTER TABLE mn_runs
+  DROP CONSTRAINT IF EXISTS mn_runs_axis_check;
+ALTER TABLE mn_runs
+  ADD CONSTRAINT mn_runs_axis_check
+  CHECK (axis IN ('people', 'projects', 'knowledge', 'meta', 'tension', 'longitudinal', 'all'));
+
+-- ============================================================
 -- Rollback (manual):
 --   DROP TABLE IF EXISTS mn_tensions CASCADE;
+--   ALTER TABLE mn_runs DROP CONSTRAINT IF EXISTS mn_runs_axis_check;
+--   ALTER TABLE mn_runs ADD CONSTRAINT mn_runs_axis_check
+--     CHECK (axis IN ('people','projects','knowledge','meta','longitudinal','all'));
 -- ============================================================

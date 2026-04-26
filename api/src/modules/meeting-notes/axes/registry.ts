@@ -25,6 +25,8 @@ import { computeDecisionQuality } from './meta/decisionQualityComputer.js';
 import { computeMeetingNecessity } from './meta/meetingNecessityComputer.js';
 import { computeAffectCurve } from './meta/affectCurveComputer.js';
 
+import { computeTensions } from './tension/tensionComputer.js';
+
 export type ComputerFn = (deps: MeetingNotesDeps, args: ComputeArgs) => Promise<ComputeResult>;
 
 /**
@@ -36,9 +38,10 @@ export const AXIS_SUBDIMS: Record<string, string[]> = {
   projects:  ['decision_provenance', 'assumptions', 'open_questions', 'risk_heat'],
   knowledge: ['reusable_judgments', 'mental_models', 'cognitive_biases', 'counterfactuals', 'evidence_grading'],
   meta:      ['decision_quality', 'meeting_necessity', 'affect_curve'],
+  tension:   ['intra_meeting'],
 };
 
-export const ALL_AXES = ['people', 'projects', 'knowledge', 'meta'] as const;
+export const ALL_AXES = ['people', 'projects', 'knowledge', 'meta', 'tension'] as const;
 
 const REGISTRY: Record<string, ComputerFn> = {
   // people
@@ -61,6 +64,8 @@ const REGISTRY: Record<string, ComputerFn> = {
   'meta/decision_quality':       computeDecisionQuality,
   'meta/meeting_necessity':      computeMeetingNecessity,
   'meta/affect_curve':           computeAffectCurve,
+  // tension (P1-5)
+  'tension/intra_meeting':       computeTensions,
 };
 
 export function resolveComputer(axis: string, subDim: string): ComputerFn | null {

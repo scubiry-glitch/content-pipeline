@@ -226,6 +226,24 @@ export class MeetingNotesEngine {
           [meetingId],
         )).rows[0] ?? null,
       },
+      // P1-5: tension axis
+      tension: {
+        intra_meeting: await (async () => {
+          try {
+            const r = await this.deps.db.query(
+              `SELECT id, tension_key, between_ids, topic, intensity, summary, moments, created_at
+                 FROM mn_tensions
+                WHERE meeting_id = $1
+                ORDER BY intensity DESC`,
+              [meetingId],
+            );
+            return r.rows;
+          } catch {
+            // mn_tensions 表未迁移时降级为空数组
+            return [];
+          }
+        })(),
+      },
     };
   }
 
