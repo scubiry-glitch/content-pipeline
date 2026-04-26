@@ -3,9 +3,9 @@
 // 为每个参会人在此 meeting 中打一个角色标签
 // （proposer/challenger/decider/moderator/silent 等），写入 mn_role_trajectory_points。
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ROLE_TRAJECTORY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -40,9 +40,22 @@ export async function computeRoleTrajectory(
     );
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedRole[]>(raw, []);
+  // role 是 per-person 单值，多 chunk 抽取后用 who 取 confidence 最高那条
+  // 不传 dedupeKey 是为了拿到 raw items（包含同 who 的多份）后自己挑 max
+  const rawItems = await extractListOverChunks<ExtractedRole>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    {},
+  );
+  const byPerson = new Map<string, ExtractedRole>();
+  for (const r of rawItems) {
+    const key = r.who?.trim() ?? '';
+    if (!key) continue;
+    const prev = byPerson.get(key);
+    if (!prev || (r.confidence ?? 0) > (prev.confidence ?? 0)) byPerson.set(key, r);
+  }
+  const items = [...byPerson.values()];
 
   for (const item of items) {
     try {

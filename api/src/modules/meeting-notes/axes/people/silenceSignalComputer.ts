@@ -3,9 +3,9 @@
 // 识别异常沉默：某人在其平常发言的 topic 上此次未发言
 // PR3: LLM 直接识别异常点；PR5+ 接入 longitudinal 历史基线做更准判定
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_SILENCE_SIGNAL } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -39,9 +39,13 @@ export async function computeSilenceSignal(
     await deps.db.query(`DELETE FROM mn_silence_signals WHERE meeting_id = $1`, [bundle.meetingId]);
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedSilence[]>(raw, []);
+  // 用 (who, topic_id) 联合 dedupe；先到为准
+  const items = await extractListOverChunks<ExtractedSilence>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => `${x.who?.trim() ?? ''}|${x.topic_id?.trim() ?? ''}` },
+  );
 
   for (const item of items) {
     try {

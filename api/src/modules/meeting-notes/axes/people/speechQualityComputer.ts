@@ -3,9 +3,9 @@
 // 为每人算 entropy_pct + followed_up_count + quality_score
 // PR3: 由 LLM 同时评估三项；PR4 可替换为基于 segment 的统计
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_SPEECH_QUALITY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -38,9 +38,30 @@ export async function computeSpeechQuality(
     await deps.db.query(`DELETE FROM mn_speech_quality WHERE meeting_id = $1`, [bundle.meetingId]);
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedQuality[]>(raw, []);
+  // per-person 单值；多 chunks 后按 who 聚合（entropy/followups 取均值，sample_quote 选最长）
+  const rawItems = await extractListOverChunks<ExtractedQuality>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    {},
+  );
+  const byPerson = new Map<string, { sumE: number; sumF: number; n: number; quote: string }>();
+  for (const r of rawItems) {
+    const key = r.who?.trim() ?? '';
+    if (!key) continue;
+    const cur = byPerson.get(key) ?? { sumE: 0, sumF: 0, n: 0, quote: '' };
+    cur.sumE += Number(r.entropy_pct ?? 0);
+    cur.sumF += Number(r.followed_up_count ?? 0);
+    cur.n += 1;
+    if ((r.sample_quote ?? '').length > cur.quote.length) cur.quote = r.sample_quote ?? '';
+    byPerson.set(key, cur);
+  }
+  const items: ExtractedQuality[] = [...byPerson.entries()].map(([who, v]) => ({
+    who,
+    entropy_pct: Math.round(v.sumE / Math.max(1, v.n)),
+    followed_up_count: Math.round(v.sumF / Math.max(1, v.n)),
+    sample_quote: v.quote,
+  }));
 
   for (const item of items) {
     try {

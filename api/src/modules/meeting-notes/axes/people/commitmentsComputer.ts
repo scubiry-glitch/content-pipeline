@@ -3,9 +3,9 @@
 // 从一场 meeting 的 content 里抽取"谁承诺了什么、何时完成"，写入 mn_commitments。
 // 重算（replaceExisting=true）会先删掉本 meeting 的旧 commitments。
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_COMMITMENTS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -42,13 +42,15 @@ export async function computeCommitments(
     await deps.db.query(`DELETE FROM mn_commitments WHERE meeting_id = $1`, [bundle.meetingId]);
   }
 
-  const raw = await callExpertOrLLM(
+  const items = await extractListOverChunks<ExtractedCommitment>(
     deps,
     bundle.meetingKind,
     SYSTEM,
-    `会议标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`,
+    (chunk, idx, total) =>
+      `会议标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => `${x.who?.trim() ?? ''}|${(x.text ?? '').slice(0, 40)}` },
   );
-  const items = safeJsonParse<ExtractedCommitment[]>(raw, []);
 
   for (const item of items) {
     try {
