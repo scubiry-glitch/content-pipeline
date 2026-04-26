@@ -21,6 +21,7 @@ import { VersionStore } from './versionStore.js';
 import { ALL_AXES, AXIS_SUBDIMS, runAxisAll } from '../axes/registry.js';
 import type { ComputeResult } from '../axes/_shared.js';
 import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
+import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatchPlan.js';
 
 interface QueuePayload {
   runId: string;
@@ -268,6 +269,34 @@ export class RunEngine {
       }
     };
 
+    /** 把 dispatchPlan 落到 mn_runs.metadata（不动 progress）。 */
+    const writeDispatchPlan = async (plan: DispatchPlan) => {
+      try {
+        await this.deps.db.query(
+          `UPDATE mn_runs
+              SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                'dispatchPlan', $2::jsonb
+              )
+            WHERE id = $1`,
+          [payload.runId, JSON.stringify(plan)],
+        );
+      } catch (e) {
+        console.warn('[runEngine] dispatchPlan write failed:', (e as Error)?.message);
+      }
+    };
+
+    /** 更新某个 expertSlot 的状态。 */
+    const updateExpertSlot = async (
+      plan: DispatchPlan,
+      expertId: string,
+      patch: Partial<ExpertSlot>,
+    ) => {
+      const slot = plan.experts.find((e) => e.expertId === expertId);
+      if (!slot) return;
+      Object.assign(slot, patch);
+      await writeDispatchPlan(plan);
+    };
+
     const allResults: ComputeResult[] = [];
     try {
       // Wrap the entire run in AsyncLocalStorage so every LLM call done inside
@@ -303,10 +332,30 @@ export class RunEngine {
           }
         }
 
+        // Step3 第 3 步「分派给 3 位专家」：把 axes 按 AXIS_TO_EXPERT 分组，
+        // 落 dispatchPlan 到 mn_runs.metadata。前端可读 metadata.dispatchPlan
+        // 渲染真实的"专家×子维度"清单，而不是空文案。
+        const dispatchPlan = buildDispatchPlan(axesToRun, payload.preset, payload.strategySpec);
+        await writeDispatchPlan(dispatchPlan);
+        await writeProgress(
+          0,
+          `分派完成 · ${dispatchPlan.experts.length} 位专家 · preset=${payload.preset}`,
+        );
+
         await writeProgress(0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
+
+        // 把每个 axis 反查它属于哪位专家，跑完后更新该专家的 completedSubDims
+        const axisToExpertId = new Map<string, string>();
+        for (const slot of dispatchPlan.experts) {
+          for (const ax of slot.axes) axisToExpertId.set(ax, slot.expertId);
+        }
 
         for (let i = 0; i < axesToRun.length; i++) {
           const ax = axesToRun[i];
+          const expertId = axisToExpertId.get(ax);
+          if (expertId) {
+            await updateExpertSlot(dispatchPlan, expertId, { state: 'running' });
+          }
           await writeProgress(i, `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
           const r = await runAxisAll(this.deps, ax, {
             meetingId: payload.meetingId,
@@ -315,6 +364,23 @@ export class RunEngine {
             replaceExisting: true,
           }, payload.axis === 'all' ? undefined : payload.subDims);
           allResults.push(...r);
+
+          if (expertId) {
+            const slot = dispatchPlan.experts.find((e) => e.expertId === expertId);
+            // 把刚跑完的 subDims 累加到 completedSubDims
+            const justDone = r.map((x) => x.subDim).filter(Boolean) as string[];
+            if (slot) {
+              for (const sd of justDone) {
+                if (!slot.completedSubDims.includes(sd)) slot.completedSubDims.push(sd);
+              }
+              // 该专家所有 axis 都跑完才标 done
+              const allMyAxesDone = slot.axes.every((a) =>
+                axesToRun.indexOf(a) <= i,
+              );
+              if (allMyAxesDone) slot.state = 'done';
+            }
+            await writeDispatchPlan(dispatchPlan);
+          }
           await writeProgress(i + 1, `${ax} 完成（${i + 1}/${axesToRun.length}）`);
         }
 
