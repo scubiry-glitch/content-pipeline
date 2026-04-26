@@ -5,6 +5,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_MENTAL_MODELS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedModel {
@@ -15,11 +16,16 @@ interface ExtractedModel {
   confidence?: number;
 }
 
-const SYSTEM = `你是心智模型识别器。识别会议中被使用的经典心智模型（如：二阶思维、SWOT、定价金字塔、反脆弱、路径依赖、ROI 折现、成本曲线…）。
+const SYSTEM = `你是心智模型识别器。识别会议中被使用的经典心智模型（如：二阶思维、SWOT、定价金字塔、反脆弱、路径依赖、ROI 折现、成本曲线、价格歧视、规模效应、基础利率、反身性、瓶颈分析…）。
 返回 JSON 数组：
 [{"model_name":"模型名", "by":"使用者姓名", "correctly_used":true/false, "outcome":"应用结果摘要", "confidence":0-1}]
 - 仅列被显式或强隐式调用的模型
-- model_name 用常见叫法，中文或英文均可`;
+- model_name 用常见叫法，中文或英文均可
+- outcome 必须给出"模型用来论证什么具体结论"（含原文数字/对象），不要"用 X 模型分析了 Y"
+- correctly_used=false 表示模型被引用但应用不到位，需要在 outcome 中说明缺什么
+
+${FEW_SHOT_HEADER}
+${EX_MENTAL_MODELS}`;
 
 export async function computeMentalModels(
   deps: MeetingNotesDeps,

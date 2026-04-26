@@ -5,6 +5,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_COUNTERFACTUALS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedCounterfactual {
@@ -17,7 +18,12 @@ interface ExtractedCounterfactual {
 const SYSTEM = `你是反事实抽取器。找出"被明确否决的候选方案/路径"，以便后续跟踪其若被采纳会如何。
 返回 JSON 数组：
 [{"rejected_path":"被否决的方案（≤100字）", "rejected_by":"否决者姓名", "tracking_note":"值得关注的点", "months_later_check":3/6/12}]
-- 仅列真正被否决的候选；纯理论假设不算`;
+- 仅列真正被否决的候选；纯理论假设不算
+- rejected_path 必须保留原文中的具体数字/对象（如"单笔上限抬高到 8000 万"）
+- tracking_note 必须给出"6/12 个月后用什么具体事实判断这条路径会被证实/证伪"
+
+${FEW_SHOT_HEADER}
+${EX_COUNTERFACTUALS}`;
 
 export async function computeCounterfactuals(
   deps: MeetingNotesDeps,

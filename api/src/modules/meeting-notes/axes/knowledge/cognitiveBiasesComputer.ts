@@ -3,6 +3,7 @@
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_COGNITIVE_BIASES } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedBias {
@@ -17,7 +18,12 @@ interface ExtractedBias {
 const SYSTEM = `你是认知偏误识别器。从正文里找出典型偏误发生点。返回 JSON 数组：
 [{"bias_type":"偏误英文蛇形", "where_excerpt":"≤60字片段原文", "by":"施动者", "severity":"low|med|high", "mitigated":true/false, "mitigation_strategy":"若有"}]
 - 只标明显例子，不过度推断
-- bias_type 范围：anchoring, overconfidence, confirmation, survivorship, sunk_cost, availability, hindsight, groupthink, base_rate_neglect`;
+- where_excerpt 必须是原文真实片段（≤60 字），不是概述
+- mitigated=true 仅当本场会议中有人明确缓解；mitigation_strategy 写出"谁如何缓解"
+- bias_type 范围：anchoring, overconfidence, confirmation, survivorship, sunk_cost, availability, hindsight, groupthink, base_rate_neglect
+
+${FEW_SHOT_HEADER}
+${EX_COGNITIVE_BIASES}`;
 
 export async function computeCognitiveBiases(
   deps: MeetingNotesDeps,
