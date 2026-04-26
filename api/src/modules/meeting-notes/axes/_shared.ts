@@ -179,47 +179,54 @@ export async function extractListOverChunks<T = any>(
   const seen = new Set<string>();
   const sink = options.statsSink;
 
-  for (let i = 0; i < chunks.length; i++) {
-    const userPrompt = buildUserPrompt(chunks[i], i, chunks.length);
+  // Opt-2 (O3) chunk-level retry：一次失败用 temp 0.4 再试一次。区分：
+  //   - LLM 抛错（网络/rate-limit/超时）→ 只重试 1 次
+  //   - JSON 解析失败 → 重试 1 次（temp ↑ 鼓励模型重写更清晰的 JSON）
+  //   - LLM 返合法空数组 [] → 不重试（视作真无内容）
+  const baseTemp = options.temperature ?? 0.2;
+  const retryTemp = Math.min(0.6, baseTemp + 0.2);
+
+  async function tryChunk(idx: number, total: number, temp: number): Promise<{ items: T[] } | { error: 'llm' | 'parse'; message: string; raw: string }> {
+    const userPrompt = buildUserPrompt(chunks[idx], idx, total);
     let raw = '';
     try {
       raw = await callExpertOrLLM(
-        deps,
-        meetingKind,
-        systemPrompt,
-        userPrompt,
-        { temperature: options.temperature, maxTokens: options.maxTokens },
+        deps, meetingKind, systemPrompt, userPrompt,
+        { temperature: temp, maxTokens: options.maxTokens },
       );
     } catch (e) {
+      return { error: 'llm', message: (e as Error).message, raw: '' };
+    }
+    const trimmed = (raw ?? '').trim();
+    if (trimmed.length === 0) return { items: [] };
+    const j = safeJsonParse<T[] | null>(trimmed, null);
+    if (!Array.isArray(j)) return { error: 'parse', message: 'non-array JSON', raw };
+    return { items: j as T[] };
+  }
+
+  for (let i = 0; i < chunks.length; i++) {
+    let attempt = await tryChunk(i, chunks.length, baseTemp);
+    if ('error' in attempt) {
+      // 重试一次（更高 temperature 鼓励改写 + 跳过临时网络抖动）
+      attempt = await tryChunk(i, chunks.length, retryTemp);
+    }
+
+    if ('error' in attempt) {
       if (sink) {
-        sink.errors = (sink.errors ?? 0) + 1;
-        pushErrorSample(sink, 'transform', `chunk[${i+1}/${chunks.length}] LLM call: ${(e as Error).message}`);
+        if (attempt.error === 'llm') {
+          sink.errors = (sink.errors ?? 0) + 1;
+          pushErrorSample(sink, 'transform',
+            `chunk[${i+1}/${chunks.length}] LLM call (after retry): ${attempt.message}`);
+        } else {
+          sink.parseFailures = (sink.parseFailures ?? 0) + 1;
+          pushErrorSample(sink, 'parse',
+            `chunk[${i+1}/${chunks.length}] non-array JSON (after retry)`,
+            attempt.raw.slice(0, 120));
+        }
       }
       continue;
     }
-    // 用一个"看似已尝试解析"哨兵区分"LLM 真返空数组"vs"JSON 解析失败兜底返空"
-    const PARSE_FAIL = Symbol('parse-fail');
-    let parsed: T[] | typeof PARSE_FAIL = PARSE_FAIL;
-    try {
-      const trimmed = (raw ?? '').trim();
-      if (trimmed.length === 0) {
-        parsed = [];
-      } else {
-        const j = safeJsonParse<T[] | null>(trimmed, null);
-        parsed = Array.isArray(j) ? j : PARSE_FAIL;
-      }
-    } catch {
-      parsed = PARSE_FAIL;
-    }
-    if (parsed === PARSE_FAIL) {
-      if (sink) {
-        sink.parseFailures = (sink.parseFailures ?? 0) + 1;
-        pushErrorSample(sink, 'parse', `chunk[${i+1}/${chunks.length}] returned non-array JSON`,
-                        raw.slice(0, 120));
-      }
-      continue;
-    }
-    const items = parsed as T[];
+    const items = attempt.items;
 
     for (const item of items) {
       const key = options.dedupeKey ? options.dedupeKey(item) : JSON.stringify(item);
