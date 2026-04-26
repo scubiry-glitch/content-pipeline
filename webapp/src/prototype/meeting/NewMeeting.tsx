@@ -1041,11 +1041,31 @@ function FlowProcessing({
     };
   }, [runId]);
 
+  // R15: 用 surfaces 动态生成 dispatch / dec 标签，避免硬编码 "3 位专家"
+  // 与实际 dispatchPlan.experts.length 不一致（如单 axis 跑只 1 位）
+  const dispatchExpertCount = Array.isArray((realSurfaces as any)?.dispatchPlan?.experts)
+    ? (realSurfaces as any).dispatchPlan.experts.length
+    : null;
+  const decoratorAppliedList = Array.isArray((realSurfaces as any)?.decorators?.applied)
+    ? ((realSurfaces as any).decorators.applied as string[])
+    : null;
   const stepDefs = [
     { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              sub: '' },
     { id: 'segment',   label: '发言切分 + 参与者归并',                       sub: '' },
-    { id: 'dispatch',  label: '分派给 3 位专家 · preset: standard',          sub: '' },
-    { id: 'dec',       label: '装饰器 stack · 注入证据 / 校准 confidence',   sub: 'evidence_anchored → calibrated_confidence → knowledge_grounded' },
+    {
+      id: 'dispatch',
+      label: dispatchExpertCount != null
+        ? `分派给 ${dispatchExpertCount} 位专家 · preset: ${realSurfaces?.dispatchPlan?.preset ?? 'standard'}`
+        : '分派给 3 位专家 · preset: standard',
+      sub: '',
+    },
+    {
+      id: 'dec',
+      label: '装饰器 stack · 注入证据 / 校准 confidence',
+      sub: decoratorAppliedList && decoratorAppliedList.length > 0
+        ? decoratorAppliedList.slice(0, 3).join(' → ')
+        : 'evidence_anchored → calibrated_confidence → knowledge_grounded',
+    },
     { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          sub: '' },
     { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', sub: '' },
   ] as const;
