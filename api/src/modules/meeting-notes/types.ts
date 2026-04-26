@@ -183,7 +183,16 @@ export interface RunRecord {
   // Phase 15.6 surfaces — incremental progress + token cost during execute
   tokens?: { input: number; output: number };
   currentStep?: string | null;
+  /** Phase 15.8 — Step3 6 步化标记（ingest/segment/dispatch/dec/axes/synth/render） */
+  currentStepKey?: string | null;
   llmCalls?: number;
+  /** Phase 15.8 — 后端落库的 dispatchPlan / decorators / synthesis / render 镜像 */
+  surfaces?: {
+    dispatchPlan?: any;
+    decorators?: any;
+    synthesis?: any;
+    render?: any;
+  };
 }
 
 export interface AxisVersionRef {

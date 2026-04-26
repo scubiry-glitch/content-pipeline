@@ -84,7 +84,16 @@ function mapRun(row: Record<string, any>): RunRecord {
     // Phase 15.6 surfaces — frontend reads these directly
     tokens: { input: inputTokens, output: outputTokens },
     currentStep: typeof meta.currentStep === 'string' ? meta.currentStep : null,
+    currentStepKey: typeof meta.currentStepKey === 'string' ? meta.currentStepKey : null,
     llmCalls: Number(meta.llmCalls ?? 0),
+    // Phase 15.8 — surface dispatchPlan / decorators / synthesis / render so
+    // 前端 GenerationCenter / NewMeeting 不必再去解析 metadata jsonb
+    surfaces: {
+      dispatchPlan: meta.dispatchPlan ?? null,
+      decorators: meta.decorators ?? null,
+      synthesis: meta.synthesis ?? null,
+      render: meta.render ?? null,
+    },
   };
 }
 
