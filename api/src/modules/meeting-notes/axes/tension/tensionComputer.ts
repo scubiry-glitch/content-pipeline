@@ -76,10 +76,19 @@ export async function computeTensions(
       const intensity = Math.max(0, Math.min(1, Number(item.intensity ?? 0.5)));
       const moments = Array.isArray(item.moments) ? item.moments.slice(0, 8) : [];
 
+      // 010 已建 UNIQUE (meeting_id, tension_key)；同 key 重跑 → 走 ON CONFLICT
+      // 更新而非崩。tension_key 为 null 时 PostgreSQL 视为 distinct，不会触发 conflict。
       const ins = await deps.db.query(
         `INSERT INTO mn_tensions
            (meeting_id, scope_id, tension_key, between_ids, topic, intensity, summary, moments)
          VALUES ($1, $2, $3, $4::uuid[], $5, $6, $7, $8::jsonb)
+         ON CONFLICT (meeting_id, tension_key) DO UPDATE SET
+           between_ids = EXCLUDED.between_ids,
+           topic       = EXCLUDED.topic,
+           intensity   = EXCLUDED.intensity,
+           summary     = EXCLUDED.summary,
+           moments     = EXCLUDED.moments,
+           computed_at = NOW()
          RETURNING id`,
         [
           bundle.meetingId,
