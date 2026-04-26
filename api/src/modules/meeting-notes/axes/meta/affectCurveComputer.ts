@@ -5,6 +5,7 @@
 
 import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
 import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { FEW_SHOT_HEADER, EX_AFFECT_CURVE } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
 interface ExtractedAffect {
@@ -22,7 +23,12 @@ const SYSTEM = `你是情绪轨迹分析器。沿会议时间轴采样情绪。
 }
 - samples 每 1-3 分钟一个点，最多 30 个
 - valence: -1=紧张/冲突 +1=放松/一致
-- intensity: 0=平淡 1=高强度`;
+- intensity: 0=平淡 1=高强度
+- tension_peaks.note 必须指明"谁 vs 谁、什么议题"；insight_points.note 必须指明"谁的认知更新成什么"
+- tag 可对应 tension/cognition 的标签如 T1_中游vs训练层 / N1_认知更新 / C1_共识达成
+
+${FEW_SHOT_HEADER}
+${EX_AFFECT_CURVE}`;
 
 export async function computeAffectCurve(
   deps: MeetingNotesDeps,
