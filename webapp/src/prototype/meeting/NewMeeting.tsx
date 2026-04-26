@@ -1104,24 +1104,41 @@ function FlowProcessing({
   // 优先用后端 surfaces.decorators.applied（真实生效的装饰器栈）
   const liveDecorators = (realSurfaces?.decorators?.applied as string[] | undefined)
     ?? (realCurrentStep ? [realCurrentStep] : ['failure_check', 'evidence_anchored', 'calibrated_confidence', 'knowledge_grounded', 'rubric_anchored_output']);
-  const deliverables = [
-    '① topic-enrich',
-    'step3-fact-review',
-    '⑫ consensus',
-    '⑬ controversy',
-    '⑩ insights',
-    '⑭ beliefEvolution',
-    'step5-synthesis',
-  ];
-  // 优先用后端 surfaces.synthesis.generatedCount（真实 deliverable 数量）
-  const synthesisCount = realSurfaces?.synthesis?.generatedCount;
-  const deliveredCount = typeof synthesisCount === 'number'
-    ? Math.max(0, Math.min(deliverables.length, synthesisCount))
-    : runId && realProgress != null
-      ? Math.max(0, Math.min(deliverables.length, Math.floor((realProgress / 100) * deliverables.length)))
-      : runId && displayProgress != null
-        ? Math.max(0, Math.min(deliverables.length, Math.floor((displayProgress / 100) * deliverables.length)))
-      : (done ? deliverables.length : 2);
+  // 优先取 surfaces.synthesis.deliverables（来自后端实际聚合）；
+  // 否则回退到静态 demo 列表，保持原 mock 行为。
+  const synthDeliverables = realSurfaces?.synthesis?.deliverables as
+    | Array<{ key: string; label?: string; count?: number; generated?: boolean }>
+    | undefined;
+  const deliverables: Array<{ key: string; label?: string; ready: boolean; count?: number }> =
+    synthDeliverables && synthDeliverables.length > 0
+      ? synthDeliverables.map((d) => ({
+          key: d.key,
+          label: d.label,
+          ready: !!d.generated,
+          count: d.count,
+        }))
+      : [
+          '① topic-enrich',
+          'step3-fact-review',
+          '⑫ consensus',
+          '⑬ controversy',
+          '⑩ insights',
+          '⑭ beliefEvolution',
+          'step5-synthesis',
+        ].map((k) => ({ key: k, ready: false }));
+  // 优先用 surfaces.synthesis.deliverables 中真实 generated=true 的数量
+  const generatedFromSurfaces = synthDeliverables
+    ? synthDeliverables.filter((d) => d.generated).length
+    : null;
+  const deliveredCount = typeof generatedFromSurfaces === 'number'
+    ? generatedFromSurfaces
+    : typeof realSurfaces?.synthesis?.generatedCount === 'number'
+      ? Math.max(0, Math.min(deliverables.length, realSurfaces.synthesis.generatedCount))
+      : runId && realProgress != null
+        ? Math.max(0, Math.min(deliverables.length, Math.floor((realProgress / 100) * deliverables.length)))
+        : runId && displayProgress != null
+          ? Math.max(0, Math.min(deliverables.length, Math.floor((displayProgress / 100) * deliverables.length)))
+        : (done ? deliverables.length : 2);
   const elapsedMs = Date.now() - startedAt;
   const elapsedStr = `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`;
   const totalTokens = realTokens ? (realTokens.input + realTokens.output) : null;
@@ -1270,16 +1287,47 @@ function FlowProcessing({
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
             <SectionLabel>已产出 · {deliveredCount} / {deliverables.length}</SectionLabel>
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {deliverables.map((k, idx) => (
-                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  {idx < deliveredCount
-                    ? <Icon name="check" size={13} style={{ color: 'var(--accent)' }} />
-                    : <div style={{ width: 13, height: 13, borderRadius: 99, border: '1.2px solid var(--line)' }} />}
-                  <span style={{ color: idx < deliveredCount ? 'var(--ink)' : 'var(--ink-3)', fontFamily: 'var(--serif)' }}>{k}</span>
-                </div>
-              ))}
+              {deliverables.map((d, idx) => {
+                const isReady = synthDeliverables ? d.ready : idx < deliveredCount;
+                return (
+                  <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    {isReady
+                      ? <Icon name="check" size={13} style={{ color: 'var(--accent)' }} />
+                      : <div style={{ width: 13, height: 13, borderRadius: 99, border: '1.2px solid var(--line)' }} />}
+                    <span style={{ color: isReady ? 'var(--ink)' : 'var(--ink-3)', fontFamily: 'var(--serif)' }}>{d.key}</span>
+                    {typeof d.count === 'number' && d.count > 0 && (
+                      <span style={{ fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>· {d.count}</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+          {/* Phase 15.8 · 后端 surfaces.dispatchPlan.experts → 真实"3 位专家"清单 */}
+          {realSurfaces?.dispatchPlan?.experts && Array.isArray(realSurfaces.dispatchPlan.experts) && realSurfaces.dispatchPlan.experts.length > 0 && (
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
+              <SectionLabel>专家分派 · {realSurfaces.dispatchPlan.experts.length} 位</SectionLabel>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {realSurfaces.dispatchPlan.experts.map((ex: any) => (
+                  <div key={ex.expertId} style={{ fontSize: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: 99,
+                        background: ex.state === 'done' ? 'var(--accent)' : ex.state === 'running' ? 'var(--teal)' : 'var(--line)',
+                      }} />
+                      <span style={{ fontFamily: 'var(--serif)' }}>{ex.label}</span>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
+                        {ex.completedSubDims?.length ?? 0}/{ex.subDims?.length ?? 0}
+                      </span>
+                    </div>
+                    <div style={{ paddingLeft: 12, fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
+                      {(ex.axes || []).join(' · ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
       </div>
 
