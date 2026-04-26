@@ -23,6 +23,7 @@ import type { ComputeResult } from '../axes/_shared.js';
 import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
 import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatchPlan.js';
 import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
+import { synthesizeDeliverables } from './synthesis.js';
 
 interface QueuePayload {
   runId: string;
@@ -419,7 +420,29 @@ export class RunEngine {
           await writeProgress(i + 1, `${ax} 完成（${i + 1}/${axesToRun.length}）`);
         }
 
-        // Snapshot stage
+        // Step3 第 5 步「跨专家综合 · 7 条 deliverable 映射」
+        if (payload.meetingId) {
+          await writeProgress(axesToRun.length, '跨专家综合 · 生成 7 条 deliverable');
+          try {
+            const synth = await synthesizeDeliverables(this.deps, payload.meetingId);
+            await this.deps.db.query(
+              `UPDATE mn_runs
+                  SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'synthesis', $2::jsonb
+                  )
+                WHERE id = $1`,
+              [payload.runId, JSON.stringify(synth)],
+            );
+            await writeProgress(
+              axesToRun.length,
+              `综合完成 · ${synth.generatedCount}/${synth.deliverables.length} 条 deliverable 已就绪`,
+            );
+          } catch (e) {
+            console.warn('[runEngine] synthesis failed:', (e as Error).message);
+          }
+        }
+
+        // Snapshot stage（step3 第 6 步「多维度组装」）
         if (payload.meetingId) {
           await writeProgress(axesToRun.length, '生成快照…');
           const snapshot = await this.getMeetingAxes(payload.meetingId);
