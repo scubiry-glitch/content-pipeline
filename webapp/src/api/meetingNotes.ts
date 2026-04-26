@@ -68,7 +68,16 @@ export const meetingNotesApi = {
     }, {})).toString();
     return jget<{ items: any[] }>(`/runs${qs ? '?' + qs : ''}`);
   },
-  getRun: (id: string) => jget<any>(`/runs/${id}`),
+  getRun: async (id: string) => {
+    const run = await jget<any>(`/runs/${id}`);
+    return {
+      ...run,
+      // Backward compatibility: frontend polling reads `progress` / `error`,
+      // while backend returns `progressPct` / `errorMessage`.
+      progress: run?.progress ?? run?.progressPct ?? 0,
+      error: run?.error ?? run?.errorMessage ?? null,
+    };
+  },
   cancelRun: (id: string) => jpost<{ success?: boolean }>(`/runs/${id}/cancel`),
 
   // Versions
