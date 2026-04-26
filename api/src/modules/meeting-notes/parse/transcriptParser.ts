@@ -57,7 +57,19 @@ const RE_CN_SPEAKER = /^(说话人\s*\d+|[一-龥A-Za-z][一-龥A-Za-z0-9_·\s]{
 const RE_BRACKET_SPEAKER = /^\[\s*([^\]]{1,30})\s*\]\s*(\d{1,2}:\d{2}(?::\d{2})?)?\s*[:：]?\s*(.*)$/;
 const RE_COLON_SPEAKER = /^([一-龥A-Za-z][一-龥A-Za-z0-9_·\s]{0,30})[:：]\s*(.+)$/;
 
+// 中文短填充词（嗯/哦/对/啊/呃 等）若被误判为 speaker 会过度切段，过滤之
+const ZH_FILLER_SPEAKER = /^(嗯|哦|对|啊|呃|额|那|这)$/;
+
 export function parseTranscript(raw: string): ParseTranscriptResult {
+  // 空输入早退
+  if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
+    return {
+      cleaned: '',
+      segments: [],
+      participants: [],
+      stats: { rawLength: 0, cleanedLength: 0, segmentCount: 0, speakerCount: 0, durationSec: null },
+    };
+  }
   const cleaned = cleanText(raw);
   const lines = cleaned.split('\n');
   const segments: ParsedSegment[] = [];
@@ -93,7 +105,12 @@ export function parseTranscript(raw: string): ParseTranscriptResult {
       continue;
     }
     const mColon = line.match(RE_COLON_SPEAKER);
-    if (mColon && mColon[1].length <= 12 && !/[，。？！,.?!]/.test(mColon[1])) {
+    if (
+      mColon &&
+      mColon[1].length <= 12 &&
+      !/[，。？！,.?!]/.test(mColon[1]) &&
+      !ZH_FILLER_SPEAKER.test(mColon[1].trim())
+    ) {
       flush();
       cur = { speaker: mColon[1].trim(), text: mColon[2].trim() };
       continue;
