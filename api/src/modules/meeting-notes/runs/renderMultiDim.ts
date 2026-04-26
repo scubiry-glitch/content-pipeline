@@ -26,114 +26,114 @@ export async function renderMultiDim(
   deps: MeetingNotesDeps,
   meetingId: string,
 ): Promise<RenderResult> {
-  // 1) 张力（tension）：mn_tensions(主) + cognitive_biases + at_risk + divergences
-  // P1-5: mn_tensions 是 demo 张力维度的真正承载（带 between_ids/intensity/moments）
-  const realTensions = await safeRows(
-    deps,
-    `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
-       FROM mn_tensions
-      WHERE meeting_id = $1
-      ORDER BY intensity DESC
-      LIMIT 5`,
-    [meetingId],
-  );
-  const biases = await deps.db.query(
-    `SELECT id, bias_type, where_excerpt, severity
-       FROM mn_cognitive_biases
-      WHERE meeting_id = $1
-      ORDER BY severity DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
-  const atRisk = await deps.db.query(
-    `SELECT id, person_id, text, state
-       FROM mn_commitments
-      WHERE meeting_id = $1 AND state IN ('at_risk', 'slipped')
-      LIMIT 5`,
-    [meetingId],
-  );
-  // mn_consensus_items 真实列：item_text / supported_by（migration 010）
-  const divergences = await safeRows(
-    deps,
-    `SELECT id, item_text AS summary,
-            COALESCE(array_length(supported_by, 1), 0) AS side_count
-       FROM mn_consensus_items
-      WHERE meeting_id = $1 AND kind = 'divergence'
-      LIMIT 5`,
-    [meetingId],
-  );
+  // Opt-7 (O8): 9 个独立 SQL 全部 Promise.all 并行
+  const [
+    realTensions,
+    biases,
+    atRisk,
+    divergences,
+    judgments,
+    counterfactuals,
+    verified,
+    consensusRows,
+    links,
+  ] = await Promise.all([
+    safeRows(
+      deps,
+      `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
+         FROM mn_tensions
+        WHERE meeting_id = $1
+        ORDER BY intensity DESC
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, bias_type, where_excerpt, severity
+         FROM mn_cognitive_biases
+        WHERE meeting_id = $1
+        ORDER BY severity DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, person_id, text, state
+         FROM mn_commitments
+        WHERE meeting_id = $1 AND state IN ('at_risk', 'slipped')
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeRows(
+      deps,
+      `SELECT id, item_text AS summary,
+              COALESCE(array_length(supported_by, 1), 0) AS side_count
+         FROM mn_consensus_items
+        WHERE meeting_id = $1 AND kind = 'divergence'
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, text, domain, generality_score
+         FROM mn_judgments
+        WHERE $1 = ANY(linked_meeting_ids)
+        ORDER BY generality_score DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, rejected_path, current_validity
+         FROM mn_counterfactuals
+        WHERE meeting_id = $1
+        LIMIT 3`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, text, evidence_grade
+         FROM mn_assumptions
+        WHERE meeting_id = $1
+          AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
+        ORDER BY evidence_grade
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeRows(
+      deps,
+      `SELECT id, item_text AS summary,
+              COALESCE(array_length(supported_by, 1), 0) AS side_count
+         FROM mn_consensus_items
+        WHERE meeting_id = $1 AND kind = 'consensus'
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeRows(
+      deps,
+      `SELECT source_axis, source_item_type, target_axis, target_item_type,
+              relationship, score
+         FROM mn_cross_axis_links
+        WHERE scope_id IN (
+                SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1
+              )
+        ORDER BY score DESC NULLS LAST
+        LIMIT 10`,
+      [meetingId],
+    ),
+  ]);
+
   const tensionItems = [
-    // tension 排前面（信息最丰富：between_ids + intensity + moments）
     ...realTensions.map((t) => ({ kind: 'tension', ...t })),
     ...biases.rows.map((b) => ({ kind: 'bias', ...b })),
     ...atRisk.rows.map((c) => ({ kind: 'commitment_at_risk', ...c })),
     ...divergences.map((d) => ({ kind: 'divergence', ...d })),
   ];
 
-  // 2) 新认知（newCognition）：judgments + counterfactuals
-  const judgments = await deps.db.query(
-    `SELECT id, text, domain, generality_score
-       FROM mn_judgments
-      WHERE $1 = ANY(linked_meeting_ids)
-      ORDER BY generality_score DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
-  const counterfactuals = await deps.db.query(
-    `SELECT id, rejected_path, current_validity
-       FROM mn_counterfactuals
-      WHERE meeting_id = $1
-      LIMIT 3`,
-    [meetingId],
-  );
   const cognitionItems = [
     ...judgments.rows.map((j) => ({ kind: 'judgment', ...j })),
     ...counterfactuals.rows.map((c) => ({ kind: 'counterfactual', ...c })),
   ];
 
-  // 3) 共识（consensus）：verified assumptions + consensus_items
-  // 'confirmed' 是 mn_assumptions.verification_state 的合法值（migration 003），
-  // 但 codebase 里没有任何地方写 'confirmed'，全是默认 'unverified'。
-  // 务实降级：高证据等级（A/B）即视为共识级，OR verification_state='confirmed'
-  // 兼容外部标记的情况。
-  const verified = await deps.db.query(
-    `SELECT id, text, evidence_grade
-       FROM mn_assumptions
-      WHERE meeting_id = $1
-        AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
-      ORDER BY evidence_grade
-      LIMIT 5`,
-    [meetingId],
-  );
-  const consensusRows = await safeRows(
-    deps,
-    `SELECT id, item_text AS summary,
-            COALESCE(array_length(supported_by, 1), 0) AS side_count
-       FROM mn_consensus_items
-      WHERE meeting_id = $1 AND kind = 'consensus'
-      LIMIT 5`,
-    [meetingId],
-  );
   const consensusItems = [
     ...verified.rows.map((a) => ({ kind: 'verified_assumption', ...a })),
     ...consensusRows.map((c) => ({ kind: 'consensus_item', ...c })),
   ];
-
-  // 4) 观点对位（perspectiveAlign）：cross-axis links
-  // mn_cross_axis_links 没有 meeting_id 列（migration 008），按 scope_id 过滤；
-  // 通过 mn_scope_members 把 meeting → scope 反查。
-  const links = await safeRows(
-    deps,
-    `SELECT source_axis, source_item_type, target_axis, target_item_type,
-            relationship, score
-       FROM mn_cross_axis_links
-      WHERE scope_id IN (
-              SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1
-            )
-      ORDER BY score DESC NULLS LAST
-      LIMIT 10`,
-    [meetingId],
-  );
 
   const dims: RenderDim[] = [
     {

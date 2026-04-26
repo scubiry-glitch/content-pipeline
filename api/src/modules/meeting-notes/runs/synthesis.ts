@@ -38,13 +38,86 @@ export async function synthesizeDeliverables(
   deps: MeetingNotesDeps,
   meetingId: string,
 ): Promise<SynthesisResult> {
+  // Opt-7 (O8) 7 个独立 SQL 全部 Promise.all 并行
+  const [
+    meta,
+    judgments,
+    models,
+    consensusRows,
+    verifiedAssumptions,
+    tensions,
+    biases,
+    divergences,
+  ] = await Promise.all([
+    deps.db.query(
+      `SELECT title, metadata->>'meeting_kind' AS kind,
+              metadata->>'occurred_at' AS occurred_at
+         FROM assets WHERE id = $1`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, text, domain, generality_score, reuse_count
+         FROM mn_judgments
+        WHERE $1 = ANY(linked_meeting_ids)
+        ORDER BY generality_score DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, model_name, correctly_used, outcome, confidence
+         FROM mn_mental_model_invocations
+        WHERE meeting_id = $1
+        ORDER BY confidence DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeQuery(
+      deps,
+      `SELECT id, item_text AS summary,
+              COALESCE(array_length(supported_by, 1), 0) AS side_count
+         FROM mn_consensus_items
+        WHERE meeting_id = $1 AND kind = 'consensus'
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, text, evidence_grade, verification_state
+         FROM mn_assumptions
+        WHERE meeting_id = $1
+          AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
+        ORDER BY evidence_grade, confidence DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeQuery(
+      deps,
+      `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
+         FROM mn_tensions
+        WHERE meeting_id = $1
+        ORDER BY intensity DESC
+        LIMIT 5`,
+      [meetingId],
+    ),
+    deps.db.query(
+      `SELECT id, bias_type, where_excerpt, severity
+         FROM mn_cognitive_biases
+        WHERE meeting_id = $1
+        ORDER BY severity DESC NULLS LAST
+        LIMIT 5`,
+      [meetingId],
+    ),
+    safeQuery(
+      deps,
+      `SELECT id, item_text AS summary,
+              COALESCE(array_length(supported_by, 1), 0) AS side_count
+         FROM mn_consensus_items
+        WHERE meeting_id = $1 AND kind = 'divergence'
+        LIMIT 5`,
+      [meetingId],
+    ),
+  ]);
+
   // ① topic-enrich
-  const meta = await deps.db.query(
-    `SELECT title, metadata->>'meeting_kind' AS kind,
-            metadata->>'occurred_at' AS occurred_at
-       FROM assets WHERE id = $1`,
-    [meetingId],
-  );
   const topicEnrich: DeliverableItem = {
     key: '① topic-enrich',
     label: '议题主旨与会议类型',
@@ -54,23 +127,7 @@ export async function synthesizeDeliverables(
     generated: meta.rows.length > 0,
   };
 
-  // ⑩ insights = judgments + mental_models（top by score）
-  const judgments = await deps.db.query(
-    `SELECT id, text, domain, generality_score, reuse_count
-       FROM mn_judgments
-      WHERE $1 = ANY(linked_meeting_ids)
-      ORDER BY generality_score DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
-  const models = await deps.db.query(
-    `SELECT id, model_name, correctly_used, outcome, confidence
-       FROM mn_mental_model_invocations
-      WHERE meeting_id = $1
-      ORDER BY confidence DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
+  // ⑩ insights
   const insightsCount = judgments.rows.length + models.rows.length;
   const insights: DeliverableItem = {
     key: '⑩ insights',
@@ -81,30 +138,7 @@ export async function synthesizeDeliverables(
     generated: insightsCount > 0,
   };
 
-  // ⑫ consensus = mn_consensus_items(consensus) + 已验证 assumptions
-  // mn_consensus_items 真实列：item_text / supported_by / seq（migration 010）
-  const consensusRows = await safeQuery(
-    deps,
-    `SELECT id, item_text AS summary,
-            COALESCE(array_length(supported_by, 1), 0) AS side_count
-       FROM mn_consensus_items
-      WHERE meeting_id = $1 AND kind = 'consensus'
-      LIMIT 5`,
-    [meetingId],
-  );
-  // verification_state 合法值（migration 003）: unverified/verifying/confirmed/falsified
-  // 但 codebase 里没有任何地方把它转成 confirmed，全靠外部系统标记 → 实际永远 0 行。
-  // 务实降级：把 evidence_grade ∈ ('A','B') 的假设视为"硬证据共识"，再 OR
-  // verification_state='confirmed' 兼容外部已标记的情况。
-  const verifiedAssumptions = await deps.db.query(
-    `SELECT id, text, evidence_grade, verification_state
-       FROM mn_assumptions
-      WHERE meeting_id = $1
-        AND (verification_state = 'confirmed' OR evidence_grade IN ('A','B'))
-      ORDER BY evidence_grade, confidence DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
+  // ⑫ consensus
   const consensusCount = consensusRows.length + verifiedAssumptions.rows.length;
   const consensus: DeliverableItem = {
     key: '⑫ consensus',
@@ -115,34 +149,7 @@ export async function synthesizeDeliverables(
     generated: consensusCount > 0,
   };
 
-  // ⑬ controversy = mn_tensions(主) + cognitive_biases + divergences
-  // P1-5: mn_tensions 表是 demo 张力维度的真正承载（带 between_ids/intensity/moments）
-  const tensions = await safeQuery(
-    deps,
-    `SELECT id, tension_key, between_ids, topic, intensity, summary, moments
-       FROM mn_tensions
-      WHERE meeting_id = $1
-      ORDER BY intensity DESC
-      LIMIT 5`,
-    [meetingId],
-  );
-  const biases = await deps.db.query(
-    `SELECT id, bias_type, where_excerpt, severity
-       FROM mn_cognitive_biases
-      WHERE meeting_id = $1
-      ORDER BY severity DESC NULLS LAST
-      LIMIT 5`,
-    [meetingId],
-  );
-  const divergences = await safeQuery(
-    deps,
-    `SELECT id, item_text AS summary,
-            COALESCE(array_length(supported_by, 1), 0) AS side_count
-       FROM mn_consensus_items
-      WHERE meeting_id = $1 AND kind = 'divergence'
-      LIMIT 5`,
-    [meetingId],
-  );
+  // ⑬ controversy
   const controversyCount = tensions.length + biases.rows.length + divergences.length;
   const controversy: DeliverableItem = {
     key: '⑬ controversy',
