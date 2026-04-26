@@ -280,6 +280,54 @@ export class RunEngine {
     return (r as any).rowCount > 0;
   }
 
+  /**
+   * Opt-9 (O9) 续传：把 failed/cancelled 的 run 置回 queued 重新入队。
+   * execute() 会从 metadata.checkpoint.axisIdx 续跑，已完成的 axis 不重做。
+   * 返回 false:run 不存在 / 状态不允许续传 / 入队失败。
+   */
+  async resume(id: string): Promise<{ ok: boolean; reason?: string }> {
+    const r = await this.deps.db.query(
+      `SELECT id, scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
+              triggered_by, parent_run_id, state, metadata
+         FROM mn_runs WHERE id = $1`,
+      [id],
+    );
+    if (r.rows.length === 0) return { ok: false, reason: 'not-found' };
+    const row = r.rows[0];
+    if (!['failed', 'cancelled'].includes(row.state)) {
+      return { ok: false, reason: `state-not-resumable: ${row.state}` };
+    }
+    // 把 state 置回 queued 但保留 metadata.checkpoint
+    await this.deps.db.query(
+      `UPDATE mn_runs
+          SET state = 'queued', finished_at = NULL, error_message = NULL,
+              metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                'resumedAt', NOW()::text,
+                'resumedFromState', $2::text
+              )
+        WHERE id = $1`,
+      [id, row.state],
+    );
+    // 重新入队
+    this.queue.enqueue({
+      id,
+      payload: {
+        runId: id,
+        scope: { kind: row.scope_kind, id: row.scope_id ?? undefined },
+        axis: row.axis,
+        subDims: row.sub_dims ?? [],
+        preset: row.preset,
+        strategySpec: row.strategy_spec,
+        triggeredBy: row.triggered_by,
+        parentRunId: row.parent_run_id,
+        meetingId: row.scope_kind === 'meeting' ? row.scope_id : undefined,
+      },
+      enqueuedAt: Date.now(),
+    });
+    this.drainSoon();
+    return { ok: true };
+  }
+
   // ============================================================
   // 内部驱动
   // ============================================================
@@ -508,7 +556,35 @@ export class RunEngine {
         let prevIn = counter.input;
         let prevOut = counter.output;
 
-        for (let i = 0; i < axesToRun.length; i++) {
+        // Opt-9 (O9) checkpoint 续传：读 metadata.checkpoint 确定从哪个 axis 续跑
+        // 进程重启后被 cleanupZombieRuns 标 failed 的 run 不会续；但用户手动
+        // 重试同一 runId 时，从已完成的 axis 后开始（避免 4-axis 跑 23 分钟全重）
+        let resumeAxisIdx = 0;
+        try {
+          const cur = await this.deps.db.query(
+            `SELECT metadata->'checkpoint' AS ckpt FROM mn_runs WHERE id = $1`,
+            [payload.runId],
+          );
+          const ckpt = cur.rows[0]?.ckpt;
+          if (ckpt && typeof ckpt.axisIdx === 'number' && ckpt.axisIdx > 0
+              && ckpt.axisIdx <= axesToRun.length) {
+            resumeAxisIdx = ckpt.axisIdx;
+            console.log(`[runEngine] resume run ${payload.runId.slice(0,8)} from axis[${resumeAxisIdx}]=${axesToRun[resumeAxisIdx] ?? 'done'}`);
+            // 把已经做过的 axisStats 也读回来，避免 stats 从 0 重算
+            const existing = cur.rows[0] ? null : null;  // axisStats 不在 ckpt 内但在 metadata.axisStats
+            const cur2 = await this.deps.db.query(
+              `SELECT metadata->'axisStats' AS stats FROM mn_runs WHERE id = $1`,
+              [payload.runId]);
+            const prevStats = cur2.rows[0]?.stats;
+            if (prevStats && typeof prevStats === 'object') {
+              Object.assign(axisStats, prevStats);
+            }
+          }
+        } catch (e) {
+          console.warn('[runEngine] checkpoint read failed:', (e as Error).message);
+        }
+
+        for (let i = resumeAxisIdx; i < axesToRun.length; i++) {
           const ax = axesToRun[i];
           const expertId = axisToExpertId.get(ax);
           if (expertId) {
@@ -569,6 +645,34 @@ export class RunEngine {
             await writeDispatchPlan(dispatchPlan);
           }
           await writeStep('axes', (i + 1) / Math.max(1, axesToRun.length), `${ax} 完成（${i + 1}/${axesToRun.length}）`);
+
+          // Opt-9 (O9): 每完成一个 axis 写 checkpoint，下次重试可从 i+1 续跑
+          try {
+            await this.deps.db.query(
+              `UPDATE mn_runs
+                  SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'checkpoint', jsonb_build_object(
+                      'axisIdx', $2::int,
+                      'axisName', $3::text,
+                      'finishedAt', NOW()::text
+                    )
+                  )
+                WHERE id = $1`,
+              [payload.runId, i + 1, ax],
+            );
+          } catch (e) {
+            console.warn('[runEngine] checkpoint write failed:', (e as Error).message);
+          }
+        }
+
+        // 所有 axis 跑完，清掉 checkpoint（避免成功 run 也带 stale checkpoint）
+        try {
+          await this.deps.db.query(
+            `UPDATE mn_runs SET metadata = metadata - 'checkpoint' WHERE id = $1`,
+            [payload.runId],
+          );
+        } catch (e) {
+          console.warn('[runEngine] checkpoint clear failed:', (e as Error).message);
         }
 
         // Step3 第 5 步「跨专家综合 · 7 条 deliverable 映射」

@@ -823,6 +823,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { success: true };
     });
 
+    // Opt-9 (O9): 续传 failed/cancelled run。从 metadata.checkpoint.axisIdx 续跑，
+    // 已完成的 axis 不会重做（避免 23 分钟的 run 全重）。
+    fastify.post('/runs/:id/resume', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const r = await engine.resumeRun(id);
+      if (!r.ok) {
+        const isNotFound = r.reason === 'not-found';
+        reply.status(isNotFound ? 404 : 409);
+        return {
+          error: isNotFound ? 'Not Found' : 'Conflict',
+          message: r.reason ?? 'resume failed',
+        };
+      }
+      return { success: true };
+    });
+
     // --------------------------------------------------------
     // Versions (PR4)
     // --------------------------------------------------------

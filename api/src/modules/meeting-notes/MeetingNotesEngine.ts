@@ -360,6 +360,11 @@ export class MeetingNotesEngine {
     return this.runEngine.cancel(id);
   }
 
+  /** Opt-9 (O9) 续传 failed/cancelled run，从 metadata.checkpoint 续跑 */
+  async resumeRun(id: string): Promise<{ ok: boolean; reason?: string }> {
+    return this.runEngine.resume(id);
+  }
+
   async listAxisVersions(scope: ScopeRef, axis: AxisName): Promise<AxisVersionRef[]> {
     const rows = await this.versionStore.listVersions(scope.kind, scope.id ?? null, axis);
     return rows.map((r) => ({
