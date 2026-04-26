@@ -22,6 +22,7 @@ import { ALL_AXES, AXIS_SUBDIMS, runAxisAll } from '../axes/registry.js';
 import type { ComputeResult } from '../axes/_shared.js';
 import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
 import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatchPlan.js';
+import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
 
 interface QueuePayload {
   runId: string;
@@ -299,8 +300,15 @@ export class RunEngine {
 
     const allResults: ComputeResult[] = [];
     try {
-      // Wrap the entire run in AsyncLocalStorage so every LLM call done inside
-      // any axis computer accumulates into our counter.
+      // Wrap the entire run in two nested AsyncLocalStorage:
+      //  · llmUsageStorage —— LLM token 累计
+      //  · strategyStorage —— 当前 run 的 strategy/decorator 栈，axis computer
+      //     的 callExpertOrLLM 会读到，自动把装饰器追加到 system prompt
+      const strategyCtx = {
+        strategySpec: payload.strategySpec,
+        preset: payload.preset,
+      };
+      await strategyStorage.run(strategyCtx, async () => {
       await llmUsageStorage.run(counter, async () => {
         // Ingest + Segment + Participant-merge：通过 meetingParser 走完整链路
         //   step3 第 1 步「原始素材解析」：assetsAi.parseMeeting 做正则切分
@@ -340,6 +348,33 @@ export class RunEngine {
         await writeProgress(
           0,
           `分派完成 · ${dispatchPlan.experts.length} 位专家 · preset=${payload.preset}`,
+        );
+
+        // Step3 第 4 步「装饰器 stack 注入」：把当前 strategy 的装饰器栈
+        // 写到 mn_runs.metadata.decorators，供前端在 dec 步骤展示真实清单
+        const decoratorList = splitDecorators(payload.strategySpec);
+        const sample = applyDecoratorStack('（system prompt sample）', payload.strategySpec);
+        try {
+          await this.deps.db.query(
+            `UPDATE mn_runs
+                SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'decorators', $2::jsonb
+                )
+              WHERE id = $1`,
+            [payload.runId, JSON.stringify({
+              raw: payload.strategySpec,
+              parsed: decoratorList,
+              applied: sample.applied,
+              skipped: sample.skipped,
+              promptPreviewLen: sample.prompt.length,
+            })],
+          );
+        } catch (e) {
+          console.warn('[runEngine] decorators write failed:', (e as Error).message);
+        }
+        await writeProgress(
+          0,
+          `装饰器栈就绪 · ${sample.applied.length} 项已生效（${sample.applied.join(' → ') || 'base'}）`,
         );
 
         await writeProgress(0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
@@ -396,6 +431,7 @@ export class RunEngine {
             data: snapshot,
           });
         }
+      });
       });
 
       // Finalize: state=succeeded, progress=100, persist final tokens

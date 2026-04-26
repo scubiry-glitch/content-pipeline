@@ -61,9 +61,11 @@ export function safeJsonParse<T = any>(raw: string, fallback: T): T {
 
 /**
  * 调用 expertApplication 决定用哪个 strategy + preset，然后走 LLM 补全。
- * PR3 实现：若 expertApplication.resolveForMeetingKind 返回 null（如 internal_ops）
- * 则跳过直接返回空字符串；否则直接调 llm.completeWithSystem。
- * PR4 起由 runEngine 包裹，走完整 strategy/decorator 链路。
+ * 若 expertApplication.resolveForMeetingKind 返回 null（如 internal_ops）则
+ * 跳过直接返回空字符串；否则把当前 run 的装饰器栈（evidence_anchored /
+ * calibrated_confidence / knowledge_grounded …）追加到 systemPrompt，再走
+ * llm.completeWithSystem。装饰器栈通过 strategyStorage AsyncLocalStorage
+ * 由 runEngine 在 execute() 顶层注入；axis computer 无需感知。
  */
 export async function callExpertOrLLM(
   deps: MeetingNotesDeps,
@@ -75,7 +77,12 @@ export async function callExpertOrLLM(
   if (deps.expertApplication.shouldSkipExpertAnalysis(meetingKind)) {
     return '';
   }
-  return deps.llm.completeWithSystem(systemPrompt, userPrompt, {
+  // 注入装饰器栈
+  const { applyDecoratorStack, getCurrentStrategy } = await import('./decoratorStack.js');
+  const strategy = getCurrentStrategy();
+  const { prompt: decorated } = applyDecoratorStack(systemPrompt, strategy?.strategySpec ?? null);
+
+  return deps.llm.completeWithSystem(decorated, userPrompt, {
     temperature: options?.temperature ?? 0.2,
     maxTokens: options?.maxTokens ?? 2000,
     responseFormat: 'json',
