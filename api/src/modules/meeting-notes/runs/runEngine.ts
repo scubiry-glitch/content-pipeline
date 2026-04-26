@@ -249,6 +249,48 @@ export class RunEngine {
     const totalStages = Math.max(1, axesToRun.length) + 1;
     const counter: LLMUsageCounter = { input: 0, output: 0, calls: 0 };
 
+    // Step3 6 步的 progress_pct 区间（与前端 stepDefs 顺序一致）：
+    //   ingest 0-16, segment 17-33, dispatch 34-50, dec 51-58,
+    //   axes 59-83, synth 84-91, render 92-99
+    type Step3Key = 'ingest' | 'segment' | 'dispatch' | 'dec' | 'axes' | 'synth' | 'render';
+    const STEP_RANGES: Record<Step3Key, [number, number]> = {
+      ingest:   [3, 16],
+      segment:  [17, 33],
+      dispatch: [34, 50],
+      dec:      [51, 58],
+      axes:     [59, 83],
+      synth:    [84, 91],
+      render:   [92, 99],
+    };
+
+    /** Step-based progress writer：把命名 step 映射到固定区间内的百分比。 */
+    const writeStep = async (
+      step: Step3Key,
+      ratio: number,
+      currentStep: string,
+    ) => {
+      const [lo, hi] = STEP_RANGES[step];
+      const pct = Math.max(lo, Math.min(hi, Math.round(lo + ratio * (hi - lo))));
+      try {
+        await this.deps.db.query(
+          `UPDATE mn_runs
+              SET progress_pct = $2,
+                  cost_tokens  = $3,
+                  metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'currentStep', $4::text,
+                    'currentStepKey', $8::text,
+                    'inputTokens', $5::int,
+                    'outputTokens', $6::int,
+                    'llmCalls', $7::int
+                  )
+            WHERE id = $1`,
+          [payload.runId, pct, counter.input + counter.output, currentStep, counter.input, counter.output, counter.calls, step],
+        );
+      } catch (e) {
+        console.warn('[runEngine] step progress write failed:', (e as Error)?.message);
+      }
+    };
+
     /** Persist progress + tokens + currentStep to mn_runs.metadata. */
     const writeProgress = async (stageIdx: number, currentStep: string) => {
       const pct = Math.min(99, Math.round((stageIdx / totalStages) * 100));
@@ -317,27 +359,28 @@ export class RunEngine {
         //   step3 第 2 步「发言切分 + 参与者归并」：parseMeeting() 完成 ensurePersonByName
         // 这两步一起跑（共用 LLM 之外的 IO），但 progress 分两次写以便前端能看到推进。
         if (payload.meetingId) {
-          await writeProgress(0, '原始素材解析 · ASR + 文档清洗');
+          await writeStep('ingest', 0.1, '原始素材解析 · ASR + 文档清洗');
           try {
             // 直接用 deps.assetsAi 拿到 segments/participants（本地解析无 LLM 成本），
             // 然后用 parseMeeting 完成 mn_people 入库 + segment 落库。
             const { parseMeeting } = await import('../parse/meetingParser.js');
             const parseResult = await parseMeeting(this.deps, payload.meetingId);
             if (parseResult.ok) {
-              await writeProgress(
-                0,
+              await writeStep(
+                'ingest',
+                1.0,
                 `素材解析完成 · ${parseResult.segmentCount ?? 0} 段` +
                   (parseResult.durationSec ? ` · ≈${Math.round(parseResult.durationSec / 60)} 分钟` : ''),
               );
-              await writeProgress(
-                0,
+              await writeStep(
+                'segment',
+                1.0,
                 `发言切分 + 参与者归并完成 · ${parseResult.participantCount} 位参与者已入库 mn_people`,
               );
             } else {
-              await writeProgress(0, `素材解析跳过 · ${parseResult.reason ?? 'unknown'}`);
+              await writeStep('ingest', 1.0, `素材解析跳过 · ${parseResult.reason ?? 'unknown'}`);
             }
           } catch (e) {
-            // ingest/segment 失败不致命；记录但继续往下走
             console.warn('[runEngine] ingest parseMeeting failed:', (e as Error).message);
           }
         }
@@ -347,8 +390,9 @@ export class RunEngine {
         // 渲染真实的"专家×子维度"清单，而不是空文案。
         const dispatchPlan = buildDispatchPlan(axesToRun, payload.preset, payload.strategySpec);
         await writeDispatchPlan(dispatchPlan);
-        await writeProgress(
-          0,
+        await writeStep(
+          'dispatch',
+          1.0,
           `分派完成 · ${dispatchPlan.experts.length} 位专家 · preset=${payload.preset}`,
         );
 
@@ -374,12 +418,13 @@ export class RunEngine {
         } catch (e) {
           console.warn('[runEngine] decorators write failed:', (e as Error).message);
         }
-        await writeProgress(
-          0,
+        await writeStep(
+          'dec',
+          1.0,
           `装饰器栈就绪 · ${sample.applied.length} 项已生效（${sample.applied.join(' → ') || 'base'}）`,
         );
 
-        await writeProgress(0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
+        await writeStep('axes', 0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
 
         // 把每个 axis 反查它属于哪位专家，跑完后更新该专家的 completedSubDims
         const axisToExpertId = new Map<string, string>();
@@ -393,7 +438,7 @@ export class RunEngine {
           if (expertId) {
             await updateExpertSlot(dispatchPlan, expertId, { state: 'running' });
           }
-          await writeProgress(i, `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
+          await writeStep('axes', i / Math.max(1, axesToRun.length), `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
           const r = await runAxisAll(this.deps, ax, {
             meetingId: payload.meetingId,
             scopeId: payload.scope.id ?? null,
@@ -404,26 +449,22 @@ export class RunEngine {
 
           if (expertId) {
             const slot = dispatchPlan.experts.find((e) => e.expertId === expertId);
-            // 把刚跑完的 subDims 累加到 completedSubDims
             const justDone = r.map((x) => x.subDim).filter(Boolean) as string[];
             if (slot) {
               for (const sd of justDone) {
                 if (!slot.completedSubDims.includes(sd)) slot.completedSubDims.push(sd);
               }
-              // 该专家所有 axis 都跑完才标 done
-              const allMyAxesDone = slot.axes.every((a) =>
-                axesToRun.indexOf(a) <= i,
-              );
+              const allMyAxesDone = slot.axes.every((a) => axesToRun.indexOf(a) <= i);
               if (allMyAxesDone) slot.state = 'done';
             }
             await writeDispatchPlan(dispatchPlan);
           }
-          await writeProgress(i + 1, `${ax} 完成（${i + 1}/${axesToRun.length}）`);
+          await writeStep('axes', (i + 1) / Math.max(1, axesToRun.length), `${ax} 完成（${i + 1}/${axesToRun.length}）`);
         }
 
         // Step3 第 5 步「跨专家综合 · 7 条 deliverable 映射」
         if (payload.meetingId) {
-          await writeProgress(axesToRun.length, '跨专家综合 · 生成 7 条 deliverable');
+          await writeStep('synth', 0.1, '跨专家综合 · 生成 7 条 deliverable');
           try {
             const synth = await synthesizeDeliverables(this.deps, payload.meetingId);
             await this.deps.db.query(
@@ -434,8 +475,9 @@ export class RunEngine {
                 WHERE id = $1`,
               [payload.runId, JSON.stringify(synth)],
             );
-            await writeProgress(
-              axesToRun.length,
+            await writeStep(
+              'synth',
+              1.0,
               `综合完成 · ${synth.generatedCount}/${synth.deliverables.length} 条 deliverable 已就绪`,
             );
           } catch (e) {
@@ -445,7 +487,7 @@ export class RunEngine {
 
         // Step3 第 6 步「多维度组装 · 张力 / 新认知 / 共识 / 观点对位」
         if (payload.meetingId) {
-          await writeProgress(axesToRun.length, '多维度组装中…');
+          await writeStep('render', 0.1, '多维度组装中…');
           try {
             const render = await renderMultiDim(this.deps, payload.meetingId);
             await this.deps.db.query(
@@ -456,8 +498,9 @@ export class RunEngine {
                 WHERE id = $1`,
               [payload.runId, JSON.stringify(render)],
             );
-            await writeProgress(
-              axesToRun.length,
+            await writeStep(
+              'render',
+              0.7,
               `多维度组装完成 · ${render.ready}/${render.dims.length} 维度就绪`,
             );
           } catch (e) {
@@ -465,7 +508,7 @@ export class RunEngine {
           }
 
           // Snapshot：把 getMeetingAxes 的完整数据落版本号 vN
-          await writeProgress(axesToRun.length, '生成快照…');
+          await writeStep('render', 0.95, '生成快照…');
           const snapshot = await this.getMeetingAxes(payload.meetingId);
           await this.versionStore.snapshot({
             runId: payload.runId,
