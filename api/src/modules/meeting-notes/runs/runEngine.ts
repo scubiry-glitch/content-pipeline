@@ -500,6 +500,14 @@ export class RunEngine {
           for (const ax of slot.axes) axisToExpertId.set(ax, slot.expertId);
         }
 
+        // Opt-4 (O5)：累计 per-axis 统计到 mn_runs.metadata.axisStats
+        // {axis: {durationMs, llmCallsDelta, inputTokensDelta, outputTokensDelta,
+        //         created, updated, skipped, errors, parseFailures}}
+        const axisStats: Record<string, any> = {};
+        let prevCalls = counter.calls;
+        let prevIn = counter.input;
+        let prevOut = counter.output;
+
         for (let i = 0; i < axesToRun.length; i++) {
           const ax = axesToRun[i];
           const expertId = axisToExpertId.get(ax);
@@ -507,6 +515,7 @@ export class RunEngine {
             await updateExpertSlot(dispatchPlan, expertId, { state: 'running' });
           }
           await writeStep('axes', i / Math.max(1, axesToRun.length), `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
+          const axisStartedAt = Date.now();
           const r = await runAxisAll(this.deps, ax, {
             meetingId: payload.meetingId,
             scopeId: payload.scope.id ?? null,
@@ -514,6 +523,38 @@ export class RunEngine {
             replaceExisting: true,
           }, payload.axis === 'all' ? undefined : payload.subDims);
           allResults.push(...r);
+
+          // 聚合 per-axis stats
+          const sumField = (k: 'created' | 'updated' | 'skipped' | 'errors' | 'parseFailures') =>
+            r.reduce((s, x) => s + (Number((x as any)[k] ?? 0) || 0), 0);
+          axisStats[ax] = {
+            durationMs: Date.now() - axisStartedAt,
+            llmCallsDelta: counter.calls - prevCalls,
+            inputTokensDelta: counter.input - prevIn,
+            outputTokensDelta: counter.output - prevOut,
+            subDimCount: r.length,
+            created: sumField('created'),
+            updated: sumField('updated'),
+            skipped: sumField('skipped'),
+            errors: sumField('errors'),
+            parseFailures: sumField('parseFailures'),
+          };
+          prevCalls = counter.calls;
+          prevIn = counter.input;
+          prevOut = counter.output;
+          // 增量写到 metadata.axisStats（前端可看每个 axis 实时进展）
+          try {
+            await this.deps.db.query(
+              `UPDATE mn_runs
+                  SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'axisStats', $2::jsonb
+                  )
+                WHERE id = $1`,
+              [payload.runId, JSON.stringify(axisStats)],
+            );
+          } catch (e) {
+            console.warn('[runEngine] axisStats write failed:', (e as Error).message);
+          }
 
           if (expertId) {
             const slot = dispatchPlan.experts.find((e) => e.expertId === expertId);
