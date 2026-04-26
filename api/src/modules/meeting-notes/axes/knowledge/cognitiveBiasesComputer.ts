@@ -1,8 +1,8 @@
 // axes/knowledge/cognitiveBiasesComputer.ts — 认知偏误 (cognitive_biases)
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_COGNITIVE_BIASES } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -41,9 +41,12 @@ export async function computeCognitiveBiases(
     );
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedBias[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedBias>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => `${(x.bias_type ?? '').toLowerCase()}|${(x.where_excerpt ?? '').slice(0, 30)}` },
+  );
 
   for (const item of items) {
     try {

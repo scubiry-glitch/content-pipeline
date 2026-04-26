@@ -2,9 +2,9 @@
 //
 // 抽取"被否决的路径"，以便 PR5 Longitudinal 去对比其 6 个月后实际走势
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_COUNTERFACTUALS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -41,9 +41,12 @@ export async function computeCounterfactuals(
     );
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedCounterfactual[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedCounterfactual>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => (x.rejected_path ?? '').toLowerCase().slice(0, 60) },
+  );
 
   for (const item of items) {
     try {

@@ -2,9 +2,9 @@
 //
 // 识别会议中被激活的心智模型 + 是否正确使用
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_MENTAL_MODELS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -43,9 +43,12 @@ export async function computeMentalModels(
     );
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedModel[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedModel>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => `${(x.model_name ?? '').trim().toLowerCase()}|${(x.by ?? '').trim()}` },
+  );
 
   for (const item of items) {
     try {

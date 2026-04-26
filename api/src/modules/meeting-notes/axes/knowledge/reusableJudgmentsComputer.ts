@@ -3,9 +3,9 @@
 // 从会议里抽象出"可以迁移到其他场景"的通用判断/经验
 // 写入 mn_judgments；若同文本已存在，则 reuse_count + linked_meeting_ids 追加
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_REUSABLE_JUDGMENTS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -37,9 +37,12 @@ export async function computeReusableJudgments(
   const bundle = await loadMeetingBundle(deps, args.meetingId);
   if (!bundle) return out;
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedJudgment[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedJudgment>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60) },
+  );
 
   for (const item of items) {
     try {
