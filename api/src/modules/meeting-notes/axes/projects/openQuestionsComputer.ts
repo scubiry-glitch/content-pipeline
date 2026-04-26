@@ -3,9 +3,9 @@
 // 抽取本会议提出但未决议的问题；若 scope 下已有相似 question 则 times_raised +1
 // 简易相似判定：PR3 用纯文本完全匹配 + lower-trim；PR5+ 可升级 embedding 去重
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_OPEN_QUESTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -37,9 +37,12 @@ export async function computeOpenQuestions(
   const bundle = await loadMeetingBundle(deps, args.meetingId);
   if (!bundle) return out;
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedQuestion[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedQuestion>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => normalizeText(x.text ?? '').slice(0, 60) },
+  );
 
   for (const item of items) {
     try {

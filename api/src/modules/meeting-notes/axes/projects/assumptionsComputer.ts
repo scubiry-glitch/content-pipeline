@@ -2,8 +2,8 @@
 //
 // 抽取支撑决策的假设 + 其证据等级（A/B/C/D）
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ASSUMPTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -38,9 +38,12 @@ export async function computeAssumptions(
     await deps.db.query(`DELETE FROM mn_assumptions WHERE meeting_id = $1`, [bundle.meetingId]);
   }
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedAssumption[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedAssumption>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => (x.text ?? '').slice(0, 50).toLowerCase() },
+  );
 
   for (const item of items) {
     try {

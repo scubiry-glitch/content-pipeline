@@ -3,8 +3,8 @@
 // heat_score = mention_count × severity_factor × (1 if !action_taken else 0.4)
 // severity_factor: low=1, med=2, high=3, critical=4
 
-import { loadMeetingBundle, budgetedExcerpt } from '../../parse/claimExtractor.js';
-import { callExpertOrLLM, emptyResult, safeJsonParse, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { loadMeetingBundle } from '../../parse/claimExtractor.js';
+import { extractListOverChunks, emptyResult, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_RISK_HEAT } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -35,9 +35,12 @@ export async function computeRiskHeat(
   const bundle = await loadMeetingBundle(deps, args.meetingId);
   if (!bundle) return out;
 
-  const raw = await callExpertOrLLM(deps, bundle.meetingKind, SYSTEM,
-    `标题：${bundle.title}\n\n正文：\n${budgetedExcerpt(bundle.content)}`);
-  const items = safeJsonParse<ExtractedRisk[]>(raw, []);
+  const items = await extractListOverChunks<ExtractedRisk>(
+    deps, bundle.meetingKind, SYSTEM,
+    (chunk, idx, total) => `标题：${bundle.title}\n\n正文（第 ${idx + 1}/${total} 段）：\n${chunk}`,
+    bundle.content,
+    { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60) },
+  );
 
   for (const item of items) {
     try {
