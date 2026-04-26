@@ -6,6 +6,8 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { useForceMock } from './_mockToggle';
+import { adaptApiAnalysis } from './_apiAdapters';
 
 // ── Mock transcript (right pane) ──
 const TRANSCRIPT = [
@@ -60,7 +62,9 @@ function WBTension({ a, selected, setSelected, isMock }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {isMock && <div style={{ textAlign: 'right', marginBottom: 2 }}><MockBadge /></div>}
         {a.tension.map((t) => {
-          const [p1, p2] = t.between.map(P);
+          const between = t.between ?? [];
+          const p1 = between.length > 0 ? P(between[0]) : null;
+          const p2 = between.length > 1 ? P(between[1]) : null;
           const active = t.id === selected;
           return (
             <button key={t.id} onClick={() => setSelected(t.id)} style={{
@@ -80,11 +84,9 @@ function WBTension({ a, selected, setSelected, isMock }: {
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--serif)' }}>{t.topic}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ink-3)' }}>
-                <Avatar p={p1} size={16} radius={3} />
-                <span>{p1.name}</span>
-                <span style={{ color: 'var(--ink-4)' }}>↔</span>
-                <Avatar p={p2} size={16} radius={3} />
-                <span>{p2.name}</span>
+                {p1 && <><Avatar p={p1} size={16} radius={3} /><span>{p1.name}</span></>}
+                {p1 && p2 && <span style={{ color: 'var(--ink-4)' }}>↔</span>}
+                {p2 && <><Avatar p={p2} size={16} radius={3} /><span>{p2.name}</span></>}
               </div>
             </button>
           );
@@ -96,7 +98,16 @@ function WBTension({ a, selected, setSelected, isMock }: {
       }}>
         {(() => {
           const t = a.tension.find((x) => x.id === selected) ?? a.tension[0];
-          const [p1, p2] = t.between.map(P);
+          if (!t) {
+            return (
+              <div style={{ padding: 28, color: 'var(--ink-3)', fontSize: 13 }}>
+                暂无张力数据
+              </div>
+            );
+          }
+          const between = t.between ?? [];
+          const p1 = between.length > 0 ? P(between[0]) : null;
+          const p2 = between.length > 1 ? P(between[1]) : null;
           return (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -110,7 +121,9 @@ function WBTension({ a, selected, setSelected, isMock }: {
                 {t.topic}
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 14, alignItems: 'stretch', marginBottom: 20 }}>
-                <Stance p={p1} stance={`${p1.name} 立场`} text={t.summary.split('；')[0] ?? t.summary} tone="accent" />
+                {p1 ? (
+                  <Stance p={p1} stance={`${p1.name} 立场`} text={t.summary.split('；')[0] ?? t.summary} tone="accent" />
+                ) : <div />}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{
                     width: 46, height: 46, borderRadius: 99, background: 'var(--paper-2)',
@@ -118,7 +131,9 @@ function WBTension({ a, selected, setSelected, isMock }: {
                     fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 18, color: 'var(--ink-3)',
                   }}>vs</div>
                 </div>
-                <Stance p={p2} stance={`${p2.name} 立场`} text={t.summary.split('；')[1]?.trim() ?? ''} tone="teal" />
+                {p2 ? (
+                  <Stance p={p2} stance={`${p2.name} 立场`} text={t.summary.split('；')[1]?.trim() ?? ''} tone="teal" />
+                ) : <div />}
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', fontFamily: 'var(--serif)' }}>
                 {t.summary}
@@ -389,6 +404,7 @@ function WBCrossView({ a }: { a: typeof ANALYSIS }) {
 // ── VariantWorkbench ──
 export function VariantWorkbench() {
   const { id } = useParams<{ id: string }>();
+  const forceMock = useForceMock();
   const [dim, setDim] = useState('tension');
   const [selectedT, setSelectedT] = useState('T1');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
@@ -396,10 +412,21 @@ export function VariantWorkbench() {
   const [tensionMock, setTensionMock] = useState(true);
 
   useEffect(() => {
+    if (forceMock) {
+      setA(ANALYSIS);
+      setUsingMock(true);
+      setTensionMock(true);
+      return;
+    }
     if (!id) return;
-    meetingNotesApi.getMeetingDetail(id, 'B')
+    // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
+    // view 'B' returns { left, center, right } which doesn't match render structure.
+    meetingNotesApi.getMeetingDetail(id, 'A')
       .then((data: any) => {
-        if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+        if (data?.analysis) {
+          setA(adaptApiAnalysis(data.analysis));
+          setUsingMock(false);
+        }
       })
       .catch(() => {});
     // Phase 15.15 · C.1 · tension probe
@@ -418,7 +445,7 @@ export function VariantWorkbench() {
         }
       })
       .catch(() => {});
-  }, [id]);
+  }, [id, forceMock]);
 
   const dimList = [
     { id: 'minutes',       icon: 'ledger'  as const, label: '常规纪要' },

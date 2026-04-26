@@ -7,7 +7,7 @@ import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock } from './_mockToggle';
+import { MockToggleProvider, MockToggleBar, useForceMock } from './_mockToggle';
 import './_tokens.css';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
@@ -21,16 +21,30 @@ export function MeetingDetailShell() {
 
   const [apiTitle, setApiTitle] = useState<string | null>(null);
   const [apiDate, setApiDate] = useState<string | null>(null);
+  const [apiResponded, setApiResponded] = useState(false);
 
   useEffect(() => {
-    if (forceMock || !id || !UUID_RE.test(id)) return;
-    meetingNotesApi.listMeetings({ limit: 200 })
+    if (forceMock || !id || !UUID_RE.test(id)) {
+      setApiResponded(false);
+      return;
+    }
+    setApiResponded(false);
+    let cancelled = false;
+    // Prefer getMeetingDetail (returns title/date directly from assets table).
+    // Falls back gracefully if not available.
+    meetingNotesApi.getMeetingDetail(id, 'A')
       .then((r: any) => {
-        const found = r?.items?.find((item: any) => String(item.id) === id);
-        if (found?.title) setApiTitle(String(found.title));
-        if (found?.created_at) setApiDate(String(found.created_at).slice(0, 10));
+        if (cancelled) return;
+        const a = r?.analysis ?? {};
+        if (a.title) setApiTitle(String(a.title));
+        if (a.date) setApiDate(String(a.date).slice(0, 10));
+        setApiResponded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setApiResponded(true);
+      });
+    return () => { cancelled = true; };
   }, [id, forceMock]);
 
   const views = [
@@ -40,6 +54,7 @@ export function MeetingDetailShell() {
   ];
 
   return (
+    <MockToggleProvider>
     <div
       className="meeting-proto"
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
@@ -72,7 +87,11 @@ export function MeetingDetailShell() {
           }}>
             {apiTitle ?? m.title}
           </div>
-          <MonoMeta>{apiDate ?? m.date} · {m.duration}</MonoMeta>
+          <MonoMeta>
+            {apiDate ?? m.date}
+            {/* duration 字段后端尚未返回，避免在 API 模式下泄漏 fixture “118 分钟”。 */}
+            {!apiResponded && ` · ${m.duration}`}
+          </MonoMeta>
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -105,7 +124,9 @@ export function MeetingDetailShell() {
       <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         <Outlet />
       </main>
+      <MockToggleBar />
     </div>
+    </MockToggleProvider>
   );
 }
 

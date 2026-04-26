@@ -180,6 +180,10 @@ export interface RunRecord {
   progressPct: number;
   errorMessage: string | null;
   metadata: Record<string, any>;
+  // Phase 15.6 surfaces — incremental progress + token cost during execute
+  tokens?: { input: number; output: number };
+  currentStep?: string | null;
+  llmCalls?: number;
 }
 
 export interface AxisVersionRef {

@@ -2,12 +2,35 @@
 // 原型来源：/tmp/mn-proto/strategy-panel.jsx FlowUpload / FlowExperts / FlowProcessing
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { EXPERTS, ExpertMock } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { bindingsApi, expertLibraryApi } from '../../api/client';
+import { EXPERT_API_KEYS } from '../../hooks/useExpertApi';
+import { useCachedData } from '../../hooks/useSWRConfig';
 import { useForceMock } from './_mockToggle';
+
+function adaptExpertFullRow(e: Record<string, unknown>): ExpertMock {
+  const profile = e.profile as Record<string, string> | undefined;
+  const philosophy = e.philosophy as { core?: string[]; quotes?: string[] } | undefined;
+  return {
+    id: String(e.id),
+    name: String(e.name ?? ''),
+    field: String(e.domainName ?? ''),
+    style: String(profile?.personality ?? profile?.title ?? ''),
+    match: 0.8,
+    calibration: '',
+    mentalModels: Array.isArray(philosophy?.core)
+      ? (philosophy.core as string[])
+      : Array.isArray(e.reviewDimensions)
+        ? (e.reviewDimensions as string[])
+        : [],
+    signature: String(philosophy?.quotes?.[0] ?? ''),
+    recommendedFor: [],
+    selected: false,
+  };
+}
 
 // ── Local presets (richer than _fixtures.ts) ─────────────────────────────────
 
@@ -62,6 +85,8 @@ function FlowUpload({ onNext, onUploaded }: {
   const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [uploadIssue, setUploadIssue] = useState<string | null>(null);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState('');
   const [bindingFolder, setBindingFolder] = useState(false);
@@ -95,6 +120,8 @@ function FlowUpload({ onNext, onUploaded }: {
     const file = files[0];
     setUploadedName(file.name);
     setUploadDone(false);
+    setSelectedAssetId(null);
+    setUploadIssue(null);
     if (forceMock) {
       onUploaded(null);
       setUploadDone(true);
@@ -104,7 +131,14 @@ function FlowUpload({ onNext, onUploaded }: {
     try {
       const sources = await meetingNotesApi.listSources();
       const sourceId = sources.items?.[0]?.id ?? 'meetings';
-      const r: { assetId?: string; assetIds?: string[]; id?: string } = await meetingNotesApi.uploadToSource(sourceId, file);
+      const r: {
+        assetId?: string;
+        assetIds?: string[];
+        id?: string;
+        status?: string;
+        errorMessage?: string | null;
+        itemsImported?: number;
+      } = await meetingNotesApi.uploadToSource(sourceId, file);
       // /sources/:id/upload 返回的是 import 记录，id 通常是 importId，不是 assets.id。
       // 这里必须优先使用 assetIds[0]（或显式 assetId），否则 parse 会拿错 id 返回 404。
       let resolvedAssetId = r.assetId ?? (Array.isArray(r.assetIds) ? (r.assetIds[0] ?? null) : null);
@@ -119,10 +153,22 @@ function FlowUpload({ onNext, onUploaded }: {
           console.warn('fallback getSourceHistory failed:', historyErr);
         }
       }
-      onUploaded(resolvedAssetId ?? null);
+      const finalAssetId = resolvedAssetId ?? null;
+      setSelectedAssetId(finalAssetId);
+      onUploaded(finalAssetId);
+      if (!finalAssetId) {
+        setUploadIssue(
+          r.errorMessage
+            || (r.status && r.status !== 'succeeded'
+              ? `上传入库失败（${r.status}）`
+              : '上传完成，但后端未返回可解析资产 ID')
+        );
+      }
     } catch (e) {
       console.warn('upload failed, demo fallback:', e);
+      setSelectedAssetId(null);
       onUploaded(null);
+      setUploadIssue(e instanceof Error ? e.message : '上传请求失败');
     } finally {
       setUploading(false);
       setUploadDone(true);
@@ -135,6 +181,7 @@ function FlowUpload({ onNext, onUploaded }: {
     if (forceMock) {
       setFolderHint(`已绑定目录: ${path}`);
       setUploadDone(true);
+      setSelectedAssetId(null);
       onUploaded(null);
       return;
     }
@@ -158,6 +205,7 @@ function FlowUpload({ onNext, onUploaded }: {
         console.warn('binding scan failed:', scanErr);
       }
       setActiveBindingId(binding.id);
+      setSelectedAssetId(null);
       onUploaded(null);
       setUploadDone(true);
       setFolderHint(`已绑定目录: ${path}`);
@@ -423,8 +471,9 @@ function FlowUpload({ onNext, onUploaded }: {
               key={x.id}
               onClick={() => {
                 setSelectedRecentId(x.id);
+                setSelectedAssetId(x.assetId);
                 onUploaded(x.assetId);
-                setUploadDone(true);
+                setUploadDone(Boolean(x.assetId));
               }}
               style={{
               display: 'grid', gridTemplateColumns: '120px 1fr 200px 24px', gap: 14, alignItems: 'center',
@@ -448,9 +497,10 @@ function FlowUpload({ onNext, onUploaded }: {
           onClick={onNext}
           disabled={
             (mode === 'files' && uploading)
+            || (mode === 'files' && (!uploadDone || !selectedAssetId))
             || (mode === 'folder' && bindingFolder)
             || (mode === 'folder' && !uploadDone)
-            || (mode === 'recent' && !uploadDone)
+            || (mode === 'recent' && (!uploadDone || !selectedAssetId))
           }
         >
           {uploading
@@ -462,6 +512,16 @@ function FlowUpload({ onNext, onUploaded }: {
                 : '继续 · 选择专家'}
         </button>
       </div>
+      {mode === 'files' && uploadDone && !selectedAssetId && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+          {uploadIssue ?? '上传已完成但未拿到可解析资产 ID，请重传一次文件或切换到“从历史中选”。'}
+        </div>
+      )}
+      {mode === 'recent' && selectedRecentId && !selectedAssetId && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+          该历史记录没有可用资产，请选择其他记录（需 itemsImported {'>'} 0）。
+        </div>
+      )}
     </div>
   );
 }
@@ -476,17 +536,55 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
   const pageSize = 8;
   const slowThresholdMs = 5000;
   const forceMock = useForceMock();
+  const expertsSwr = useCachedData(
+    forceMock ? null : EXPERT_API_KEYS.experts(),
+    () => expertLibraryApi.getExpertsFull(),
+  );
+  const { data: expertsPayload, isLoading: expertsLoading } = expertsSwr;
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [expertList, setExpertList] = useState<ExpertMock[]>([]);
   const [presetId, setPresetId] = useState('standard');
   const [nameKeyword, setNameKeyword] = useState('');
   const [page, setPage] = useState(1);
-  const [loadingExperts, setLoadingExperts] = useState(!forceMock);
   const [slowHint, setSlowHint] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const normalizedKeyword = nameKeyword.trim().toLowerCase();
+
+  const adaptedRemote = useMemo(() => {
+    const rows = expertsPayload?.experts ?? [];
+    return rows.map((e: Record<string, unknown>) => adaptExpertFullRow(e));
+  }, [expertsPayload]);
+
+  const expertList = useMemo(() => {
+    if (forceMock) return EXPERTS;
+    return adaptedRemote.length > 0 ? adaptedRemote : EXPERTS;
+  }, [forceMock, adaptedRemote]);
+
+  useEffect(() => {
+    if (!forceMock) return;
+    setSelectedIds(EXPERTS.filter(e => e.selected).map(e => e.id));
+  }, [forceMock]);
+
+  useEffect(() => {
+    if (forceMock || adaptedRemote.length === 0) return;
+    const ids = new Set(adaptedRemote.map(e => e.id));
+    setSelectedIds(prev => {
+      const next = prev.filter(id => ids.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [forceMock, adaptedRemote]);
+
+  useEffect(() => {
+    if (forceMock || !expertsLoading) {
+      setSlowHint(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlowHint(true), slowThresholdMs);
+    return () => window.clearTimeout(t);
+  }, [forceMock, expertsLoading]);
+
   const sortedExperts = useMemo(
     () => [...expertList].sort((a, b) => b.match - a.match),
     [expertList],
@@ -503,52 +601,6 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
     return filteredExperts.slice(start, start + pageSize);
   }, [filteredExperts, page]);
 
-  useEffect(() => {
-    if (forceMock) {
-      setExpertList(EXPERTS);
-      setSelectedIds(EXPERTS.filter(e => e.selected).map(e => e.id));
-      setLoadingExperts(false);
-      setSlowHint(false);
-      return;
-    }
-    setLoadingExperts(true);
-    setSlowHint(false);
-    const startedAt = performance.now();
-    expertLibraryApi.getExpertsFull()
-      .then((r: any) => {
-        const adapted: ExpertMock[] = (r?.experts ?? []).map((e: any) => ({
-          id: e.id,
-          name: e.name,
-          field: e.domainName || '',
-          style: e.profile?.personality || e.profile?.title || '',
-          match: 0.8,
-          calibration: '',
-          mentalModels: Array.isArray(e.philosophy?.core) ? e.philosophy.core
-            : Array.isArray(e.reviewDimensions) ? e.reviewDimensions : [],
-          signature: e.philosophy?.quotes?.[0] || '',
-          recommendedFor: [],
-          selected: false,
-        }));
-        const elapsedMs = Math.round(performance.now() - startedAt);
-        const slow = elapsedMs > slowThresholdMs;
-        setSlowHint(slow);
-        if (slow) {
-          console.info(`[FlowExperts] experts/full slow: ${elapsedMs}ms (> ${slowThresholdMs}ms)`);
-        } else {
-          console.info(`[FlowExperts] experts/full ok: ${elapsedMs}ms`);
-        }
-        setExpertList(adapted.length > 0 ? adapted : EXPERTS);
-      })
-      .catch((error: unknown) => {
-        const elapsedMs = Math.round(performance.now() - startedAt);
-        console.warn(`[FlowExperts] experts/full failed: ${elapsedMs}ms`, error);
-        setSlowHint(false);
-        setExpertList(EXPERTS);
-      });
-  }, [forceMock]);
-  useEffect(() => {
-    if (!forceMock && expertList.length > 0) setLoadingExperts(false);
-  }, [expertList, forceMock]);
   useEffect(() => {
     setPage(1);
   }, [normalizedKeyword, expertList.length]);
@@ -620,21 +672,20 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
             )}
             <MonoMeta>{filteredExperts.length} / {expertList.length}</MonoMeta>
           </div>
-          {loadingExperts && (
+          {!forceMock && expertsLoading && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              fontSize: 12.5, color: 'var(--ink-3)',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'var(--ink-3)',
               background: 'var(--paper)', border: '1px solid var(--line-2)',
-              borderRadius: 8, padding: '10px 12px',
+              borderRadius: 8, padding: '6px 10px',
             }}>
               <div style={{
-                width: 14, height: 14, borderRadius: 99,
+                width: 12, height: 12, borderRadius: 99, flexShrink: 0,
                 border: '2px solid var(--line)', borderTopColor: 'transparent',
-                animation: 'spin 1s linear infinite',
-              }}>
-                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-              </div>
-              <span>正在加载专家库…</span>
+                animation: 'mn-spin 0.85s linear infinite',
+              }} />
+              <style>{`@keyframes mn-spin{to{transform:rotate(360deg)}}`}</style>
+              <span>正在同步服务器专家名单… 下方可先选本地预览，完成后自动替换为库内数据。</span>
             </div>
           )}
           {slowHint && (
@@ -855,6 +906,7 @@ function FlowProcessing({
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
   const [realCurrentStep, setRealCurrentStep] = useState<string | null>(null);
+  const [realLlmCalls, setRealLlmCalls] = useState<number | null>(null);
   const [realState, setRealState] = useState<string | null>(null);
   const [realErrorMessage, setRealErrorMessage] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -869,6 +921,7 @@ function FlowProcessing({
     setRealTokens(null);
     setRealCostUsd(null);
     setRealCurrentStep(null);
+    setRealLlmCalls(null);
     setRealState(null);
     setRealErrorMessage(null);
     setRetryError(null);
@@ -883,6 +936,13 @@ function FlowProcessing({
   useEffect(() => {
     if (!runId) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+    const scheduleNext = (ms: number) => {
+      if (cancelled) return;
+      timer = setTimeout(poll, ms);
+    };
     const poll = async () => {
       try {
         const r: {
@@ -895,10 +955,12 @@ function FlowProcessing({
           costTokens?: number;
           costUsd?: number;
           currentStep?: string;
-          metadata?: { currentStep?: string };
+          llmCalls?: number;
+          metadata?: { currentStep?: string; llmCalls?: number };
           errorMessage?: string;
         } = await meetingNotesApi.getRun(runId);
         if (cancelled) return;
+        consecutiveErrors = 0;
         setRealRunId(runId);
         const state = (r.state ?? '').toLowerCase();
         setRealState(state || null);
@@ -916,21 +978,52 @@ function FlowProcessing({
         }
         if (typeof r.costUsd === 'number') setRealCostUsd(r.costUsd);
         if (r.currentStep || r.metadata?.currentStep) setRealCurrentStep(r.currentStep ?? r.metadata?.currentStep ?? null);
-        const mid = r.meetingId ?? r.result?.meetingId;
+        const llmCount = typeof r.llmCalls === 'number' ? r.llmCalls : (typeof r.metadata?.llmCalls === 'number' ? r.metadata.llmCalls : null);
+        if (llmCount != null) setRealLlmCalls(llmCount);
+        // API 返回 scope: { kind:'meeting', id:uuid } — meetingId 就在 scope.id 里
+        const mid = r.meetingId ?? r.result?.meetingId
+          ?? ((r as any).scope?.kind === 'meeting' ? (r as any).scope?.id : undefined);
         if (mid) setRealMeetingId(mid);
         if (state === 'done' || state === 'completed' || state === 'succeeded') {
           setDone(true);
         } else if (state === 'failed' || state === 'cancelled') {
           setDone(false);
         } else {
-          setTimeout(poll, 2000);
+          scheduleNext(2000);
         }
       } catch (e) {
-        console.warn('getRun failed, falling back to demo timing:', e);
+        if (cancelled) return;
+        consecutiveErrors += 1;
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[FlowProcessing] getRun failed (${consecutiveErrors}/${maxConsecutiveErrors}):`, msg);
+        // 404 一般代表 run 不存在；直接终止轮询并展示失败态。
+        if (msg.includes('→ 404')) {
+          setRealState('failed');
+          setRealErrorMessage('run 不存在或已失效（404），请返回上一步重新发起任务。');
+          return;
+        }
+        // 503 = 后端 DB 短暂不可用；不计入连续失败，直接 3s 后重试。
+        const is503 = msg.includes('→ 503');
+        if (is503) {
+          consecutiveErrors = Math.max(0, consecutiveErrors - 1);
+          scheduleNext(3000);
+          return;
+        }
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          setRealState('failed');
+          setRealErrorMessage('运行状态查询连续失败（可能是后端数据库超时），已停止自动轮询，请稍后重试。');
+          return;
+        }
+        // 500/网络异常：指数退避，避免刷爆后端日志。
+        const retryMs = Math.min(8000, 1500 * (2 ** (consecutiveErrors - 1)));
+        scheduleNext(retryMs);
       }
     };
     poll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [runId]);
 
   const stepDefs = [
@@ -941,15 +1034,17 @@ function FlowProcessing({
     { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          sub: '' },
     { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', sub: '' },
   ] as const;
+  // Fallback animation: monotonically increases from 5% → 90% over ~5min using elapsed time
   const fallbackProgress = runId
     ? (realState === 'queued'
       ? 5
       : realState === 'running'
-        ? Math.min(92, 12 + (tick % 72))
+        ? Math.min(90, 5 + ((Date.now() - startedAt) / 300000) * 85)
         : 0)
     : null;
+  // realProgress=0 means "backend not yet tracking"; use animated fallback until progress is meaningful
   const displayProgress = runId
-    ? (realProgress != null ? realProgress : fallbackProgress)
+    ? (realProgress != null && realProgress > 0 ? realProgress : fallbackProgress)
     : null;
   const steps = stepDefs.map((s, i) => {
     if (runId && displayProgress != null) {
@@ -1106,7 +1201,11 @@ function FlowProcessing({
                 const tiles = [
                   { l: 'input tokens',  v: realTokens ? realTokens.input.toLocaleString() : '41,382' },
                   { l: 'output tokens', v: realTokens ? realTokens.output.toLocaleString() : '8,240' },
-                  { l: realCostUsd != null ? 'cost (USD)' : 'experts called', v: realCostUsd != null ? `$${realCostUsd.toFixed(2)}` : '3' },
+                  realCostUsd != null
+                    ? { l: 'cost (USD)', v: `$${realCostUsd.toFixed(2)}` }
+                    : (realLlmCalls != null
+                        ? { l: 'LLM calls', v: realLlmCalls.toLocaleString() }
+                        : { l: 'experts called', v: '3' }),
                   { l: 'elapsed',       v: runId ? elapsedStr : '1m 32s' },
                 ];
                 return tiles.map(x => (
@@ -1216,11 +1315,30 @@ function FlowProcessing({
 
 export function NewMeeting() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const forceMock = useForceMock();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // Deep-link: /meeting/new?runId=xxx → resume on step 3 with that run loaded.
+  // Used when generation-center 队列点击 “查看进度”，或刷新页面/分享链接。
+  const runIdFromQuery = searchParams.get('runId');
+  const [step, setStep] = useState<1 | 2 | 3>(runIdFromQuery ? 3 : 1);
   const [assetId, setAssetId] = useState<string | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(runIdFromQuery);
   const [lastSubmitBody, setLastSubmitBody] = useState<{ presetId: string; expertIds: string[] } | null>(null);
+
+  // Persist runId → URL so refresh / back-button keep state.
+  useEffect(() => {
+    if (runId) {
+      if (searchParams.get('runId') !== runId) {
+        setSearchParams({ runId }, { replace: true });
+      }
+    } else if (searchParams.has('runId')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('runId');
+      setSearchParams(next, { replace: true });
+    }
+    // Don't depend on searchParams to avoid loops; setSearchParams is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
 
   async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<boolean> {
     setLastSubmitBody(body);

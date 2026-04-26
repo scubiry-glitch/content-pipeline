@@ -20,6 +20,7 @@ import { RunQueue } from './runQueue.js';
 import { VersionStore } from './versionStore.js';
 import { ALL_AXES, AXIS_SUBDIMS, runAxisAll } from '../axes/registry.js';
 import type { ComputeResult } from '../axes/_shared.js';
+import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
 
 interface QueuePayload {
   runId: string;
@@ -56,6 +57,9 @@ function normalizeScopeForDb(scope: ScopeRef & { ref?: unknown }): ScopeRef {
 }
 
 function mapRun(row: Record<string, any>): RunRecord {
+  const meta = row.metadata ?? {};
+  const inputTokens = Number(meta.inputTokens ?? 0);
+  const outputTokens = Number(meta.outputTokens ?? 0);
   return {
     id: row.id,
     scope: { kind: row.scope_kind, id: row.scope_id ?? undefined },
@@ -72,7 +76,11 @@ function mapRun(row: Record<string, any>): RunRecord {
     costMs: row.cost_ms ?? 0,
     progressPct: Number(row.progress_pct ?? 0),
     errorMessage: row.error_message,
-    metadata: row.metadata ?? {},
+    metadata: meta,
+    // Phase 15.6 surfaces — frontend reads these directly
+    tokens: { input: inputTokens, output: outputTokens },
+    currentStep: typeof meta.currentStep === 'string' ? meta.currentStep : null,
+    llmCalls: Number(meta.llmCalls ?? 0),
   };
 }
 
@@ -226,45 +234,88 @@ export class RunEngine {
     );
     await this.deps.eventBus.publish('mn.run.started', { runId: payload.runId });
 
+    // Plan stages so we can report incremental progress.
+    // For axis='all' we step through ALL_AXES; otherwise it's a single step.
+    const axesToRun: string[] = payload.axis === 'all'
+      ? [...ALL_AXES]
+      : payload.axis === 'longitudinal'
+        ? []
+        : [payload.axis];
+    // Reserve last 10% for snapshot + finalize.
+    const totalStages = Math.max(1, axesToRun.length) + 1;
+    const counter: LLMUsageCounter = { input: 0, output: 0, calls: 0 };
+
+    /** Persist progress + tokens + currentStep to mn_runs.metadata. */
+    const writeProgress = async (stageIdx: number, currentStep: string) => {
+      const pct = Math.min(99, Math.round((stageIdx / totalStages) * 100));
+      try {
+        await this.deps.db.query(
+          `UPDATE mn_runs
+              SET progress_pct = $2,
+                  cost_tokens  = $3,
+                  metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'currentStep', $4::text,
+                    'inputTokens', $5::int,
+                    'outputTokens', $6::int,
+                    'llmCalls', $7::int
+                  )
+            WHERE id = $1`,
+          [payload.runId, pct, counter.input + counter.output, currentStep, counter.input, counter.output, counter.calls],
+        );
+      } catch (e) {
+        // Progress writes are advisory; never break the run for a write error.
+        console.warn('[runEngine] progress write failed:', (e as Error)?.message);
+      }
+    };
+
     const allResults: ComputeResult[] = [];
     try {
-      const compute = async (ax: string) => {
-        const r = await runAxisAll(this.deps, ax, {
-          meetingId: payload.meetingId,
-          scopeId: payload.scope.id ?? null,
-          scopeKind: payload.scope.kind,
-          replaceExisting: true,
-        }, payload.axis === 'all' ? undefined : payload.subDims);
-        allResults.push(...r);
-      };
+      // Wrap the entire run in AsyncLocalStorage so every LLM call done inside
+      // any axis computer accumulates into our counter.
+      await llmUsageStorage.run(counter, async () => {
+        await writeProgress(0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
 
-      if (payload.axis === 'all') {
-        for (const ax of ALL_AXES) await compute(ax);
-      } else if (payload.axis === 'longitudinal') {
-        // PR5 实现；此处跳过
-      } else {
-        await compute(payload.axis);
-      }
+        for (let i = 0; i < axesToRun.length; i++) {
+          const ax = axesToRun[i];
+          await writeProgress(i, `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
+          const r = await runAxisAll(this.deps, ax, {
+            meetingId: payload.meetingId,
+            scopeId: payload.scope.id ?? null,
+            scopeKind: payload.scope.kind,
+            replaceExisting: true,
+          }, payload.axis === 'all' ? undefined : payload.subDims);
+          allResults.push(...r);
+          await writeProgress(i + 1, `${ax} 完成（${i + 1}/${axesToRun.length}）`);
+        }
 
-      // Snapshot （按单轴或 all 统一出一份 meeting 级视图）
-      if (payload.meetingId) {
-        const snapshot = await this.getMeetingAxes(payload.meetingId);
-        await this.versionStore.snapshot({
-          runId: payload.runId,
-          scopeKind: payload.scope.kind,
-          scopeId: payload.scope.id ?? null,
-          axis: payload.axis,
-          data: snapshot,
-        });
-      }
+        // Snapshot stage
+        if (payload.meetingId) {
+          await writeProgress(axesToRun.length, '生成快照…');
+          const snapshot = await this.getMeetingAxes(payload.meetingId);
+          await this.versionStore.snapshot({
+            runId: payload.runId,
+            scopeKind: payload.scope.kind,
+            scopeId: payload.scope.id ?? null,
+            axis: payload.axis,
+            data: snapshot,
+          });
+        }
+      });
 
-      // 标 succeeded
+      // Finalize: state=succeeded, progress=100, persist final tokens
       await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'succeeded', finished_at = NOW(),
-                cost_ms = $2, progress_pct = 100
+                cost_ms = $2, progress_pct = 100,
+                cost_tokens = $3,
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'currentStep', '已完成'::text,
+                  'inputTokens', $4::int,
+                  'outputTokens', $5::int,
+                  'llmCalls', $6::int
+                )
           WHERE id = $1`,
-        [payload.runId, Date.now() - startedAt],
+        [payload.runId, Date.now() - startedAt, counter.input + counter.output, counter.input, counter.output, counter.calls],
       );
       await this.deps.eventBus.publish('mn.run.completed', {
         runId: payload.runId,
@@ -275,9 +326,16 @@ export class RunEngine {
       await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'failed', finished_at = NOW(),
-                cost_ms = $2, error_message = $3
+                cost_ms = $2, error_message = $3,
+                cost_tokens = $4,
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'currentStep', '失败'::text,
+                  'inputTokens', $5::int,
+                  'outputTokens', $6::int,
+                  'llmCalls', $7::int
+                )
           WHERE id = $1`,
-        [payload.runId, Date.now() - startedAt, msg],
+        [payload.runId, Date.now() - startedAt, msg, counter.input + counter.output, counter.input, counter.output, counter.calls],
       );
       await this.deps.eventBus.publish('mn.run.failed', { runId: payload.runId, error: msg });
     }

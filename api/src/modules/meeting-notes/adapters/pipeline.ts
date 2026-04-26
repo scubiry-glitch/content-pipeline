@@ -1,6 +1,7 @@
 // Pipeline Adapter — 桥接 pipeline 已有服务到 Meeting Notes 模块（嵌入模式）
 // 参照 modules/expert-library/adapters/pipeline.ts 风格
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getLLMRouter } from '../../../providers/index.js';
 import type { GenerationParams } from '../../../types/index.js';
 import { LocalEventBus } from './local-event-bus.js';
@@ -38,16 +39,40 @@ function toRouterParams(options?: LLMOptions, systemPrompt?: string): Generation
   return p;
 }
 
+/**
+ * 每次 LLM 调用的 token 用量；通过 AsyncLocalStorage 与当前 run 关联，
+ * 这样 runEngine.execute() 包一层 llmUsageStorage.run(counter, ...) 就能
+ * 累加该 run 内所有 LLM 调用的 input/output tokens（无需修改任何 axis computer）。
+ */
+export interface LLMUsageCounter {
+  input: number;
+  output: number;
+  calls: number;
+}
+export const llmUsageStorage = new AsyncLocalStorage<LLMUsageCounter>();
+
+function recordUsage(usage: { inputTokens?: number; outputTokens?: number; promptTokens?: number; completionTokens?: number } | undefined) {
+  const counter = llmUsageStorage.getStore();
+  if (!counter) return;
+  const inp = usage?.inputTokens ?? usage?.promptTokens ?? 0;
+  const out = usage?.outputTokens ?? usage?.completionTokens ?? 0;
+  counter.input += inp;
+  counter.output += out;
+  counter.calls += 1;
+}
+
 export function createPipelineLLMAdapter(): LLMAdapter {
   return {
     async complete(prompt: string, options?: LLMOptions): Promise<string> {
       const router = getLLMRouter();
       const result = await router.generate(prompt, 'expert_library', toRouterParams(options));
+      recordUsage(result.usage);
       return result.content;
     },
     async completeWithSystem(systemPrompt: string, userPrompt: string, options?: LLMOptions): Promise<string> {
       const router = getLLMRouter();
       const result = await router.generate(userPrompt, 'expert_library', toRouterParams(options, systemPrompt));
+      recordUsage(result.usage);
       return result.content;
     },
   };

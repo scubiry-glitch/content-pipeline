@@ -6,6 +6,8 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { useForceMock } from './_mockToggle';
+import { adaptApiAnalysis } from './_apiAdapters';
 
 // ── Section header helper ──
 function sectionHeader(num: string, title: string, sub: string) {
@@ -38,12 +40,12 @@ function SecMinutes({ a }: { a: typeof ANALYSIS }) {
         <p style={{
           fontFamily: 'var(--serif)', fontSize: 18, lineHeight: 1.55, margin: '6px 0 0',
           color: 'var(--ink)',
-        }}>{a.summary.decision}</p>
+        }}>{a.summary?.decision ?? ''}</p>
       </div>
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '0 0 14px' }}>Action Items</h3>
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 720 }}>
-        {a.summary.actionItems.map((it) => (
+        {(a.summary?.actionItems ?? []).map((it) => (
           <div key={it.id} style={{
             display: 'grid', gridTemplateColumns: '42px 100px 1fr 92px', alignItems: 'center',
             padding: '14px 0', borderTop: '1px solid var(--line-2)', gap: 16,
@@ -62,7 +64,7 @@ function SecMinutes({ a }: { a: typeof ANALYSIS }) {
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '32px 0 14px' }}>Open Risks</h3>
       <ul style={{ margin: 0, paddingLeft: 18, maxWidth: 720, color: 'var(--ink)', fontSize: 14, lineHeight: 1.75 }}>
-        {a.summary.risks.map((r, i) => <li key={i}>{r}</li>)}
+        {(a.summary?.risks ?? []).map((r, i) => <li key={i}>{r}</li>)}
       </ul>
     </section>
   );
@@ -94,8 +96,10 @@ function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
         {isMock && <MockBadge style={{ marginTop: 6, flexShrink: 0 }} />}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 760 }}>
-        {a.tension.map((t) => {
-          const [a1, a2] = t.between.map(P);
+        {(a.tension ?? []).map((t) => {
+          const between = t.between ?? [];
+          const a1 = between.length > 0 ? P(between[0]) : null;
+          const a2 = between.length > 1 ? P(between[1]) : null;
           return (
             <article key={t.id} style={{
               border: '1px solid var(--line-2)', borderRadius: 6, padding: '20px 22px',
@@ -103,11 +107,9 @@ function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Avatar p={a1} size={26} />
-                  <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{a1.name}</span>
+                  {a1 && <><Avatar p={a1} size={26} /><span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{a1.name}</span></>}
                   <TensionArrow intensity={t.intensity} />
-                  <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{a2.name}</span>
-                  <Avatar p={a2} size={26} />
+                  {a2 && <><span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{a2.name}</span><Avatar p={a2} size={26} /></>}
                 </div>
                 <MonoMeta>强度 {(t.intensity * 100).toFixed(0)}</MonoMeta>
               </div>
@@ -115,9 +117,9 @@ function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
                 {t.topic}
               </div>
               <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.65, marginTop: 8 }}>{t.summary}</p>
-              {t.moments.length > 0 && (
+              {(t.moments ?? []).length > 0 && (
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {t.moments.map((m, i) => (
+                  {(t.moments ?? []).map((m, i) => (
                     <div key={i} style={{
                       fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 14,
                       color: 'var(--ink-2)', paddingLeft: 14, borderLeft: '2px solid var(--accent-soft)',
@@ -139,7 +141,7 @@ function SecNewCognition({ a }: { a: typeof ANALYSIS }) {
     <section>
       {sectionHeader('03', '新认知', '会议前后，谁的信念被更新？谁被什么触发？')}
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 800 }}>
-        {a.newCognition.map((n, idx) => {
+        {(a.newCognition ?? []).map((n, idx) => {
           const p = P(n.who);
           return (
             <div key={n.id} style={{
@@ -186,12 +188,12 @@ function SecNewCognition({ a }: { a: typeof ANALYSIS }) {
 
 // ── SecFocusMap ──
 function SecFocusMap({ a }: { a: typeof ANALYSIS }) {
-  const maxR = Math.max(...a.focusMap.map((x) => x.returnsTo));
+  const maxR = Math.max(1, ...(a.focusMap ?? []).map((x) => x.returnsTo));
   return (
     <section>
       {sectionHeader('04', '各自关注点', '每人反复回到的主题 · 圆点尺寸为回归次数。')}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 820 }}>
-        {a.focusMap.map((f) => {
+        {(a.focusMap ?? []).map((f) => {
           const p = P(f.who);
           return (
             <div key={f.who} style={{
@@ -209,7 +211,7 @@ function SecFocusMap({ a }: { a: typeof ANALYSIS }) {
                 </div>
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {f.themes.map((t, i) => <Chip key={i} tone="amber">{t}</Chip>)}
+                {(f.themes ?? []).map((t, i) => <Chip key={i} tone="amber">{t}</Chip>)}
               </div>
             </div>
           );
@@ -221,8 +223,8 @@ function SecFocusMap({ a }: { a: typeof ANALYSIS }) {
 
 // ── SecConsensus ──
 function SecConsensus({ a }: { a: typeof ANALYSIS }) {
-  const cons = a.consensus.filter((x) => x.kind === 'consensus');
-  const divs = a.consensus.filter((x) => x.kind === 'divergence');
+  const cons = (a.consensus ?? []).filter((x) => x.kind === 'consensus');
+  const divs = (a.consensus ?? []).filter((x) => x.kind === 'divergence');
   return (
     <section>
       {sectionHeader('05', '共识与分歧', '已对齐的默认共识 vs 仍在分岔的判断。')}
@@ -263,7 +265,7 @@ function SecConsensus({ a }: { a: typeof ANALYSIS }) {
               <div style={{ fontFamily: 'var(--serif)', fontSize: 14.5, lineHeight: 1.45, color: 'var(--ink)', marginBottom: 10 }}>
                 {d.text}
               </div>
-              {d.sides.map((s, i) => (
+              {(d.sides ?? []).map((s, i) => (
                 <div key={i} style={{
                   display: 'grid', gridTemplateColumns: '80px 1fr auto', gap: 10, alignItems: 'center',
                   padding: '8px 10px', marginTop: i === 0 ? 0 : 4,
@@ -297,7 +299,7 @@ function SecCrossView({ a }: { a: typeof ANALYSIS }) {
     <section>
       {sectionHeader('06', '观点对位 · Cross-view', '对一条关键主张，其他人如何回应？')}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 30, maxWidth: 800 }}>
-        {a.crossView.map((v) => {
+        {(a.crossView ?? []).map((v) => {
           const claimer = P(v.claimBy);
           return (
             <article key={v.id}>
@@ -314,7 +316,7 @@ function SecCrossView({ a }: { a: typeof ANALYSIS }) {
                 </div>
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
-                {v.responses.map((r, i) => {
+                {(v.responses ?? []).map((r, i) => {
                   const rp = P(r.who);
                   return (
                     <div key={i} style={{
@@ -339,19 +341,44 @@ function SecCrossView({ a }: { a: typeof ANALYSIS }) {
   );
 }
 
+// ── API meeting metadata ──
+interface ApiMeetingMeta {
+  title: string | null;
+  date: string | null;
+  participants: Array<{ name: string; role?: string }>;
+}
+
 // ── VariantEditorial ──
 export function VariantEditorial() {
   const { id } = useParams<{ id: string }>();
+  const forceMock = useForceMock();
   const [dim, setDim] = useState('minutes');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
   const [tensionMock, setTensionMock] = useState(true);
+  const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
 
   useEffect(() => {
+    // Reset to mock state when toggled back to mock mode
+    if (forceMock) {
+      setA(ANALYSIS);
+      setApiMeta(null);
+      setUsingMock(true);
+      setTensionMock(true);
+      return;
+    }
     if (!id) return;
     meetingNotesApi.getMeetingDetail(id, 'A')
       .then((data: any) => {
-        if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+        if (data?.analysis) {
+          setA(adaptApiAnalysis(data.analysis));
+          setApiMeta({
+            title: data.analysis.title ?? null,
+            date: data.analysis.date ?? null,
+            participants: Array.isArray(data.analysis.participants) ? data.analysis.participants : [],
+          });
+          setUsingMock(false);
+        }
       })
       .catch(() => {});
     // Phase 15.15 · C.1 · tension probe
@@ -370,7 +397,7 @@ export function VariantEditorial() {
         }
       })
       .catch(() => {});
-  }, [id]);
+  }, [id, forceMock]);
 
   const navItems = [
     { id: 'minutes',       label: '一、常规纪要',   num: '01' },
@@ -398,16 +425,18 @@ export function VariantEditorial() {
           <div style={{
             fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
             marginTop: 10, letterSpacing: 0.3,
-          }}>{MEETING.id}</div>
+          }}>{id ?? MEETING.id}</div>
           <div style={{
             fontFamily: 'var(--serif)', fontSize: 20, lineHeight: 1.25, fontWeight: 500,
             color: 'var(--ink)', marginTop: 8, letterSpacing: '-0.005em',
           }}>
-            {MEETING.title}
+            {apiMeta?.title ?? MEETING.title}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 12, lineHeight: 1.7 }}>
-            {MEETING.date} · {MEETING.duration}<br />
-            {MEETING.room}
+            {apiMeta?.date
+              ? apiMeta.date.slice(0, 10)
+              : `${MEETING.date} · ${MEETING.duration}`}
+            {!apiMeta?.date && <><br />{MEETING.room}</>}
           </div>
           {usingMock && <MockBadge style={{ marginTop: 8 }} />}
         </div>
@@ -439,18 +468,21 @@ export function VariantEditorial() {
         </div>
 
         <div>
-          <SectionLabel>Experts · 在场</SectionLabel>
+          <SectionLabel>Participants · 在场</SectionLabel>
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {EXPERTS.filter((e) => e.selected).map((e) => (
-              <div key={e.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            {(apiMeta && apiMeta.participants.length > 0
+              ? apiMeta.participants
+              : EXPERTS.filter((e) => e.selected).map((e) => ({ name: e.name, role: e.field }))
+            ).map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: 6, background: 'var(--paper-3)',
                   color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>{e.id.split('-')[0]}</div>
+                }}>{p.name.slice(0, 2)}</div>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{e.name}</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{e.field}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
+                  {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
                 </div>
               </div>
             ))}
@@ -475,10 +507,12 @@ export function VariantEditorial() {
             fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 44, lineHeight: 1.12,
             letterSpacing: '-0.02em', margin: '14px 0 8px',
           }}>
-            {MEETING.title}
+            {apiMeta?.title ?? MEETING.title}
           </h1>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
-            参与者 6 人 · 发言 237 段 · 处理 {MEETING.tokens} tokens · 生成用时 98 秒
+            {apiMeta
+              ? `参与者 ${apiMeta.participants.length} 人 · 深度解析`
+              : `参与者 6 人 · 发言 237 段 · 处理 ${MEETING.tokens} tokens · 生成用时 98 秒`}
           </div>
         </div>
 

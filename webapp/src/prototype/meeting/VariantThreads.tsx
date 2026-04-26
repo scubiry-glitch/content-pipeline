@@ -6,6 +6,8 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, PARTICIPANTS, ANALYSIS, P } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { useForceMock } from './_mockToggle';
+import { adaptApiAnalysis } from './_apiAdapters';
 
 // ── Belief thread events (hardcoded per prototype) ──
 const EVENTS: Record<string, Array<{ t: number; kind: string; label?: string; ref?: string }>> = {
@@ -530,6 +532,7 @@ function FocusNebula({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
 // ── VariantThreads ──
 export function VariantThreads() {
   const { id } = useParams<{ id: string }>();
+  const forceMock = useForceMock();
   const [view, setView] = useState<'threads' | 'consensus' | 'focus'>('threads');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
@@ -537,10 +540,22 @@ export function VariantThreads() {
   const [focusMapMock, setFocusMapMock] = useState(true);
 
   useEffect(() => {
+    if (forceMock) {
+      setA(ANALYSIS);
+      setUsingMock(true);
+      setConsensusMock(true);
+      setFocusMapMock(true);
+      return;
+    }
     if (!id) return;
-    meetingNotesApi.getMeetingDetail(id, 'C')
+    // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
+    // view 'C' returns { nodes, threads, influence } which doesn't match render structure.
+    meetingNotesApi.getMeetingDetail(id, 'A')
       .then((data: any) => {
-        if (data?.analysis) { setA(data.analysis); setUsingMock(false); }
+        if (data?.analysis) {
+          setA(adaptApiAnalysis(data.analysis));
+          setUsingMock(false);
+        }
         // Phase 15.15 · C.2 · consensus fork
         if (Array.isArray(data?.consensus) && data.consensus.length > 0) {
           const adapted = (data.consensus as any[]).map((c) => ({
@@ -564,7 +579,7 @@ export function VariantThreads() {
         }
       })
       .catch(() => {});
-  }, [id]);
+  }, [id, forceMock]);
 
   return (
     <div style={{

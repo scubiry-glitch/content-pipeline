@@ -220,12 +220,25 @@ function QueueView() {
                   </div>
                 )}
               </div>
-              <button onClick={() => handleRowAction(r)} style={{
-                border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
-                padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
-              }}>
-                {r.state === 'running' ? '暂停' : r.state === 'failed' ? '重试' : r.state === 'queued' ? '取消' : '查看'}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button onClick={() => handleRowAction(r)} style={{
+                  border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                  padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
+                }}>
+                  {r.state === 'running' ? '暂停' : r.state === 'failed' ? '重试' : r.state === 'queued' ? '取消' : '查看'}
+                </button>
+                {(r.state === 'running' || r.state === 'queued') && (
+                  <button
+                    onClick={() => navigate(`/meeting/new?runId=${r.id}`)}
+                    title="跳转到实时进度页"
+                    style={{
+                      border: '1px solid var(--line)', background: 'transparent', borderRadius: 4,
+                      padding: '4px 9px', fontSize: 10, cursor: 'pointer', color: 'var(--ink-3)',
+                      fontFamily: 'var(--mono)', letterSpacing: 0.2,
+                    }}
+                  >进度 →</button>
+                )}
+              </div>
             </div>
           );
         })}

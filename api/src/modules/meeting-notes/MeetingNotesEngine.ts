@@ -236,11 +236,52 @@ export class MeetingNotesEngine {
    *   C Threads:    以 person 为中心的网络
    */
   async getMeetingDetail(meetingId: string, view: 'A' | 'B' | 'C' = 'A'): Promise<Record<string, any>> {
-    const axes = await this.getMeetingAxes(meetingId);
+    const [axes, assetRows] = await Promise.all([
+      this.getMeetingAxes(meetingId),
+      this.deps.db.query(
+        `SELECT title,
+                metadata->>'occurred_at'   AS occurred_at,
+                metadata->>'participants'   AS participants_raw,
+                metadata->>'meeting_kind'  AS meeting_kind,
+                created_at
+           FROM assets WHERE id = $1 LIMIT 1`,
+        [meetingId],
+      ),
+    ]);
+    const asset = assetRows.rows[0] ?? null;
+    const title = asset?.title ?? null;
+    const occurredAt = asset?.occurred_at ?? null;
+    // Normalize Date object → ISO string; take the date-only portion (YYYY-MM-DD)
+    const toDateStr = (v: any): string | null => {
+      if (!v) return null;
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      const s = String(v);
+      // Try to parse as Date in case it's a locale string
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return s.slice(0, 10);
+    };
+    const dateStr = toDateStr(occurredAt) ?? toDateStr(asset?.created_at) ?? null;
+    let participants: Array<{ name: string; role?: string }> = [];
+    try {
+      const raw = asset?.participants_raw;
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(parsed)) {
+          participants = parsed.map((p: any) =>
+            typeof p === 'string' ? { name: p } : { name: String(p?.name ?? ''), role: p?.role },
+          );
+        }
+      }
+    } catch { /* ignore parse errors */ }
+
     if (view === 'A') {
       return {
         view: 'A',
         meetingId,
+        title,
+        date: dateStr,
+        participants,
         sections: [
           { id: 'minutes',     title: '纪要', body: axes.projects.decisions },
           { id: 'tension',     title: '张力点', body: axes.knowledge.cognitive_biases },
@@ -255,6 +296,9 @@ export class MeetingNotesEngine {
       return {
         view: 'B',
         meetingId,
+        title,
+        date: dateStr,
+        participants,
         left:   { speakers: axes.people.speech_quality, structure: axes.projects.decisions },
         center: { claims: axes.projects.assumptions, tensions: axes.knowledge.cognitive_biases },
         right:  { commitments: axes.people.commitments, openQuestions: axes.projects.open_questions },
@@ -263,6 +307,9 @@ export class MeetingNotesEngine {
     return {
       view: 'C',
       meetingId,
+      title,
+      date: dateStr,
+      participants,
       nodes: axes.people.role_trajectory,
       threads: axes.people.commitments,
       influence: axes.people.speech_quality,

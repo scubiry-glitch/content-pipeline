@@ -803,9 +803,17 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/runs/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
-      const r = await engine.getRun(id);
-      if (!r) { reply.status(404); return { error: 'Not Found' }; }
-      return r;
+      try {
+        const r = await engine.getRun(id);
+        if (!r) { reply.status(404); return { error: 'Not Found' }; }
+        return r;
+      } catch (error) {
+        if (isConnectionError(error)) {
+          reply.status(503);
+          return { error: 'Service Unavailable', message: 'database temporarily unavailable, please retry' };
+        }
+        throw error;
+      }
     });
 
     fastify.post('/runs/:id/cancel', { preHandler: authenticate }, async (request, reply) => {

@@ -294,6 +294,8 @@ export class MeetingNoteChannelService {
           [sourceId, draft.externalId],
         );
         if (dup.rows.length > 0) {
+          const existingId = String(dup.rows[0].id || '');
+          if (existingId) assetIds.push(existingId);
           duplicates += 1;
           continue;
         }
