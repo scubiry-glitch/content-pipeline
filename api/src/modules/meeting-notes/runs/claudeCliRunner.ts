@@ -94,6 +94,10 @@ export interface ClaudeCliRunnerResult {
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.CLAUDE_CLI_TIMEOUT_MS ?? 600_000);
 const CLAUDE_BIN = process.env.CLAUDE_CLI_BIN ?? 'claude';
+// 默认 opus —— 16K context + 17 axes + facts + wikiMarkdown 单次输出, 需要 opus 级深度
+// 'opus' / 'sonnet' alias 或完整 model id (claude-opus-4-7 等) 都行
+// 设为空字符串可以走 CLI 自带的 default
+const CLAUDE_MODEL = process.env.CLAUDE_CLI_MODEL ?? 'opus';
 
 async function loadTranscript(deps: MeetingNotesDeps, assetId: string): Promise<string> {
   const r = await deps.db.query(
@@ -222,9 +226,10 @@ export async function runClaudeCliMode(
 
   // shell escape：path 用单引号包住即可（runId 是 UUID，无 ' " 等特殊字符）
   const cliBinShell = CLAUDE_BIN.includes(' ') ? `"${CLAUDE_BIN}"` : CLAUDE_BIN;
+  const modelFlag = CLAUDE_MODEL && CLAUDE_MODEL.trim() ? ` --model '${CLAUDE_MODEL.replace(/'/g, "'\\''")}'` : '';
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
-  const cmd = `${cliBinShell} -p${resumeFlag} --output-format json --max-turns 1 < '${promptFile}'`;
+  const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag} --output-format json --max-turns 1 < '${promptFile}'`;
   const proc = spawn('sh', ['-c', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {

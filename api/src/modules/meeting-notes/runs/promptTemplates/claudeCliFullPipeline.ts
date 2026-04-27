@@ -216,22 +216,24 @@ const ANALYSIS_SCHEMA_SPEC = `
   },
 
   // —— tension —— 张力(未解的推拉, 不是冲突)
+  // 数量下限: ≥5 条 (除非会议特别短/平淡, 否则不应少于 5)
   tension: [{
     id: 'T1' | 'T2' | ...,
     between: string[],                                      // ['p1', 'p3'] 等参与人 localId
-    topic: string,                                          // 张力主题
+    topic: string,                                          // 张力主题, 形如 '简单包入 vs 下游改造太多'
     intensity: number,                                      // 0-1
-    summary: string,                                        // 多视角总结(2-3 句, 每方一两句)
-    moments: string[]                                       // ['永邦:「客户经理...」', '王丽:「销售...」'] 至少 2 条原文锚点
+    summary: string,                                        // ≥250 字, 必须分段呈现至少两方立场, 含原文短引用穿插
+    moments: string[]                                       // ≥4 条原文锚点, 'pX:「完整原话」' 格式; 不可意译, 必须照抄转写
   }],
 
   // —— newCognition —— 信念更新(谁的认知发生了变化)
+  // 数量下限: ≥6 条 (覆盖每个主要议题至少 1 条 cognition shift)
   newCognition: [{
     id: 'N1' | ...,
     who: 'p1' | ...,
-    before: string,                                         // 会前/初始信念
-    after: string,                                          // 会后/更新后信念
-    trigger: string                                         // 触发更新的事件/数据/论点
+    before: string,                                         // 会前/初始信念, 完整一句话
+    after: string,                                          // 会后/更新后信念, 完整一句话, 与 before 形成强对比
+    trigger: string                                         // 触发更新的事件/数据/论点, 必须含原话引用 'pX:「...」'
   }],
 
   // —— focusMap —— 各人物关注主题
@@ -242,6 +244,7 @@ const ANALYSIS_SCHEMA_SPEC = `
   }],
 
   // —— consensus / divergence —— 共识与分歧
+  // 数量下限: 合计 ≥10 条 (consensus + divergence 加起来), 每条都要有 supportedBy
   consensus: [
     { id: 'C1', kind: 'consensus', text: string, supportedBy: string[], sides: [] },
     { id: 'D1', kind: 'divergence', text: string, supportedBy: [], sides: [
@@ -505,8 +508,27 @@ export function buildFullPrompt(ctx: ClaudeCliPromptCtx): string {
 2. 数字 / 专有名词 / 引用原文 一律保留, 不做"行话化"包装; 分数保留 2 位小数。
 3. 人物 id 严格用 p1/p2/p3..., 与下方 participants 数组的 localId 一致, 任何引用人物处都用这些 id, 不要写名字。
 4. 日期 ISO 8601 (YYYY-MM-DD 或带 T 时间); 未知用 "—"。
-5. 张力 / 共识 / 分歧 / 决策 / 假设 等"事件类"字段, 必须给出至少 1-2 条原文 moments ("<name>:「quote」" 格式) 作为锚点。
-6. 不要编造数据。转写里没明确出现的字段填 null 或空数组。`);
+
+5. 输出密度硬性最低 (除非会议明显短/平淡, 任何"内容不够"的偷懒都视为低质):
+   - tension: ≥5 条; 每条 moments ≥4 句原话 (照抄不许意译); summary ≥250 字, 分段写出至少两方立场, 内嵌引语
+   - newCognition: ≥6 条; before/after 必须形成强对比, trigger 必须含 'pX:「原话」'
+   - consensus + divergence 合计 ≥10 条; 每条都要 supportedBy 至少 1 人
+   - crossView: ≥4 条; 每条 responses ≥2 个不同立场的人
+   - axes.knowledge.cognitiveBiases: ≥6 条; 每条要 where 引用原文短句 + by 具体人物
+   - axes.knowledge.mentalModels: ≥5 条; 每条要 invokedBy 具体人物 + 是否 correctlyUsed
+   - axes.knowledge.reusableJudgments: ≥6 条; 每条 generalityScore + 是否 reuseCount
+   - axes.knowledge.counterfactuals: ≥3 条
+   - axes.projects.decisionChain: ≥3 条 (即使本场没拍板, 也要列出"在某假设下若如何则如何"的潜在决策)
+   - axes.projects.assumptions: ≥4 条
+   - axes.projects.openQuestions: ≥4 条
+   - axes.projects.risks: ≥6 条
+   - facts (SPO 三元组): ≥10 条
+
+6. 任何"事件类"字段必须给原文 moments / quotes / where 锚点, "<pX>:「完整原话」" 格式;
+   引文必须是转写里能逐字找到的字符串, 不可改写、不可省略主语、不可拼接。
+
+7. 不要编造数据。转写里没明确出现的字段填 null 或空数组。
+   但: 如果 6 个张力议题里只能挑出 4 条具备充分原文支撑的, 宁可少一条也不要"凑"; 数量下限是常态指标, 不是硬性凑数指标。`);
 
   // ── 6. Output Schema ────────────────────────────────────────────────────
   sections.push(`=== OUTPUT SCHEMA · analysis 半边 ===\n${ANALYSIS_SCHEMA_SPEC}`);
