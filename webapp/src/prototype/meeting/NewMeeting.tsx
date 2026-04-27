@@ -1281,26 +1281,45 @@ function FlowProcessing({
   const decoratorAppliedList = Array.isArray((realSurfaces as any)?.decorators?.applied)
     ? ((realSurfaces as any).decorators.applied as string[])
     : null;
-  const stepDefs = [
-    { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              sub: '' },
-    { id: 'segment',   label: '发言切分 + 参与者归并',                       sub: '' },
-    {
-      id: 'dispatch',
-      label: dispatchExpertCount != null
-        ? `分派给 ${dispatchExpertCount} 位专家 · preset: ${realSurfaces?.dispatchPlan?.preset ?? 'standard'}`
-        : '分派给 3 位专家 · preset: standard',
-      sub: '',
-    },
-    {
-      id: 'dec',
-      label: '装饰器 stack · 注入证据 / 校准 confidence',
-      sub: decoratorAppliedList && decoratorAppliedList.length > 0
-        ? decoratorAppliedList.slice(0, 3).join(' → ')
-        : 'evidence_anchored → calibrated_confidence → knowledge_grounded',
-    },
-    { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          sub: '' },
-    { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', sub: '' },
-  ] as const;
+  // Phase G3 · CLI 模式按阶段切文字：runEngine 在 CLI 路径下 emit 的 currentStepKey
+  // 序列是 ingest → segment → dec(spawn) → axes(streaming) → synth(parsing) → render(persisting)。
+  // dispatch 阶段在 CLI 路径下不被 emit（专家/策略解析在 ingest 之前同步完成），所以
+  // dispatch 行用作"解析专家 + 策略链 + scope 配置"的占位说明。
+  const stepDefs = realMode === 'claude-cli'
+    ? [
+        { id: 'ingest',    label: '原始素材解析（CLI 模式）',                       sub: 'transcript / DOCX 清洗 + 参与者抽取' },
+        { id: 'segment',   label: '参与者归并 · mn_people 反查',                   sub: '' },
+        {
+          id: 'dispatch',
+          label: '解析专家上下文 + 策略链',
+          sub: decoratorAppliedList && decoratorAppliedList.length > 0
+            ? decoratorAppliedList.slice(0, 3).join(' → ')
+            : 'expert personas + decorator stack 烤入 system prompt',
+        },
+        { id: 'dec',       label: '启动 Claude · spawn',                            sub: 'sh -c claude -p < tmpfile · 等待首字节' },
+        { id: 'synth',     label: '解析 JSON · 校验 schema',                         sub: 'analysis + 17 axes + facts + wikiMarkdown' },
+        { id: 'render',    label: '写入 metadata.analysis + mn_* + content_facts + wiki/.md', sub: '同时写 cliPersonMap → mn_people' },
+      ] as const
+    : [
+        { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              sub: '' },
+        { id: 'segment',   label: '发言切分 + 参与者归并',                       sub: '' },
+        {
+          id: 'dispatch',
+          label: dispatchExpertCount != null
+            ? `分派给 ${dispatchExpertCount} 位专家 · preset: ${realSurfaces?.dispatchPlan?.preset ?? 'standard'}`
+            : '分派给 3 位专家 · preset: standard',
+          sub: '',
+        },
+        {
+          id: 'dec',
+          label: '装饰器 stack · 注入证据 / 校准 confidence',
+          sub: decoratorAppliedList && decoratorAppliedList.length > 0
+            ? decoratorAppliedList.slice(0, 3).join(' → ')
+            : 'evidence_anchored → calibrated_confidence → knowledge_grounded',
+        },
+        { id: 'synth',     label: '跨专家综合 · 7 条 deliverable 映射',          sub: '' },
+        { id: 'render',    label: '多维度组装 · 张力 / 新认知 / 共识 / 观点对位', sub: '' },
+      ] as const;
   // Fallback animation: monotonically increases from 5% → 90% over ~5min using elapsed time
   const fallbackProgress = runId
     ? (realState === 'queued'
@@ -1465,32 +1484,41 @@ function FlowProcessing({
           </div>
 
           <div style={{ flex: 1, background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'auto' }}>
-            {steps.map((s, i) => (
-              <div key={s.id} style={{
-                padding: '16px 22px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
-                display: 'grid', gridTemplateColumns: '22px 1fr 60px', gap: 14, alignItems: 'center',
-              }}>
-                <StepDot state={s.state} tick={tick} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 500, color: s.state === 'queued' ? 'var(--ink-3)' : 'var(--ink)' }}>
-                      {s.label}
-                    </span>
-                    {s.state === 'running' && <Chip tone="accent" style={{ padding: '1px 7px', fontSize: 10 }}>running</Chip>}
+            {steps.map((s, i) => {
+              // running 步显示后端 currentStep 实时文字（CLI 模式下尤其有效，能看到
+              // "启动 claude 进程" / "等待 claude 生成" / "解析 JSON" / "写入 mn_* 轴表"）
+              const liveSub = s.state === 'running' && realCurrentStep ? realCurrentStep : s.sub;
+              return (
+                <div key={s.id} style={{
+                  padding: '16px 22px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
+                  display: 'grid', gridTemplateColumns: '22px 1fr 60px', gap: 14, alignItems: 'center',
+                }}>
+                  <StepDot state={s.state} tick={tick} />
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 500, color: s.state === 'queued' ? 'var(--ink-3)' : 'var(--ink)' }}>
+                        {s.label}
+                      </span>
+                      {s.state === 'running' && <Chip tone="accent" style={{ padding: '1px 7px', fontSize: 10 }}>running</Chip>}
+                    </div>
+                    {liveSub && (
+                      <div style={{
+                        fontFamily: 'var(--mono)', fontSize: 11,
+                        color: s.state === 'running' ? 'var(--teal)' : 'var(--ink-3)',
+                        marginTop: 6,
+                      }}>{liveSub}</div>
+                    )}
+                    <div style={{ height: 3, background: 'var(--line-2)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${s.pct}%`, height: '100%',
+                        background: s.state === 'done' ? 'var(--accent)' : s.state === 'running' ? 'var(--teal)' : 'var(--line)',
+                      }} />
+                    </div>
                   </div>
-                  {s.sub && (
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', marginTop: 6 }}>{s.sub}</div>
-                  )}
-                  <div style={{ height: 3, background: 'var(--line-2)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-                    <div style={{
-                      width: `${s.pct}%`, height: '100%',
-                      background: s.state === 'done' ? 'var(--accent)' : s.state === 'running' ? 'var(--teal)' : 'var(--line)',
-                    }} />
-                  </div>
+                  <MonoMeta style={{ textAlign: 'right' }}>{s.pct}%</MonoMeta>
                 </div>
-                <MonoMeta style={{ textAlign: 'right' }}>{s.pct}%</MonoMeta>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
