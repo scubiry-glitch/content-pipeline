@@ -35,7 +35,11 @@ export async function computeSpeechQuality(
   if (!bundle) return out;
 
   if (args.replaceExisting) {
-    await deps.db.query(`DELETE FROM mn_speech_quality WHERE meeting_id = $1`, [bundle.meetingId]);
+    // P0 数据源契约：只删 LLM 行
+    await deps.db.query(
+      `DELETE FROM mn_speech_quality WHERE meeting_id = $1 AND source = 'llm_extracted'`,
+      [bundle.meetingId],
+    );
   }
 
   // per-person 单值；多 chunks 后按 who 聚合（entropy/followups 取均值，sample_quote 选最长）

@@ -47,7 +47,8 @@ export async function computeEvidenceGrading(
        dist_c = EXCLUDED.dist_c,
        dist_d = EXCLUDED.dist_d,
        weighted_score = EXCLUDED.weighted_score,
-       computed_at = NOW()`,
+       computed_at = NOW()
+     WHERE mn_evidence_grades.source NOT IN ('manual_import','human_edit')`,
     [args.meetingId, dist.A, dist.B, dist.C, dist.D, weightedScore],
   );
   out.created = 1;  // 视为一行聚合写入

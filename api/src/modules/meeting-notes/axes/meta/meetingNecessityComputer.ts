@@ -54,7 +54,8 @@ export async function computeMeetingNecessity(
          verdict = EXCLUDED.verdict,
          suggested_duration_min = EXCLUDED.suggested_duration_min,
          reasons = EXCLUDED.reasons,
-         computed_at = NOW()`,
+         computed_at = NOW()
+       WHERE mn_meeting_necessity.source NOT IN ('manual_import','human_edit')`,
       [
         bundle.meetingId,
         verdict,

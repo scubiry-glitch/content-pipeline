@@ -47,9 +47,12 @@ export async function computeReusableJudgments(
   for (const item of items) {
     try {
       const authorId = item.author ? await ensurePersonByName(deps, item.author) : null;
+      // P0 数据源契约：只跟 LLM 自己的合并
       const existing = await deps.db.query(
         `SELECT id, reuse_count, linked_meeting_ids FROM mn_judgments
-          WHERE lower(text) = lower($1) LIMIT 1`,
+          WHERE lower(text) = lower($1)
+            AND source = 'llm_extracted'
+          LIMIT 1`,
         [item.text],
       );
       if (existing.rows.length > 0) {

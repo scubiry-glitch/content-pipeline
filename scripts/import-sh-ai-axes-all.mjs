@@ -242,23 +242,24 @@ try {
   // ============================================================
   console.log('[step2] 清空两场 meeting 的旧 axis 数据...');
   const wipes = [
-    [`DELETE FROM mn_commitments WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_role_trajectory_points WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_speech_quality WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_silence_signals WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_decisions WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_assumptions WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_open_questions WHERE first_raised_meeting_id = ANY($1::uuid[]) OR last_raised_meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
+    // P0 数据源契约：wipe 限定 source='manual_import'，再跑 import 不连带删 LLM 行
+    [`DELETE FROM mn_commitments WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_role_trajectory_points WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_speech_quality WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_silence_signals WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_decisions WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_assumptions WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_open_questions WHERE (first_raised_meeting_id = ANY($1::uuid[]) OR last_raised_meeting_id = ANY($1::uuid[])) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
     // mn_risks: 没有 meeting_id 列；按 scope_id 清（保证幂等不重复）
-    [`DELETE FROM mn_risks WHERE scope_id = $1`, [scopeId]],
-    [`DELETE FROM mn_judgments WHERE abstracted_from_meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_mental_model_invocations WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_cognitive_biases WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_counterfactuals WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_evidence_grades WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_decision_quality WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_meeting_necessity WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
-    [`DELETE FROM mn_affect_curve WHERE meeting_id = ANY($1::uuid[])`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_risks WHERE scope_id = $1 AND source = 'manual_import'`, [scopeId]],
+    [`DELETE FROM mn_judgments WHERE abstracted_from_meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_mental_model_invocations WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_cognitive_biases WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_counterfactuals WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_evidence_grades WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_decision_quality WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_meeting_necessity WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
+    [`DELETE FROM mn_affect_curve WHERE meeting_id = ANY($1::uuid[]) AND source = 'manual_import'`, [ALL_MEETING_IDS]],
   ];
   for (const [sql, args] of wipes) {
     try {
@@ -280,8 +281,8 @@ try {
     const mid = meetingIdFromCode(c.meeting);
     if (!pid || !mid) { bump('commitments_skipped'); continue; }
     await client.query(
-      `INSERT INTO mn_commitments (meeting_id, person_id, text, due_at, state, progress, evidence_refs)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+      `INSERT INTO mn_commitments (meeting_id, person_id, text, due_at, state, progress, evidence_refs, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'manual_import')`,
       [
         mid,
         pid,
@@ -312,10 +313,10 @@ try {
       const role = t.role ?? '';
       // role_trajectory_points: 即便缺席也记录（可作为缺席信号），role_label 直接用 中文
       await client.query(
-        `INSERT INTO mn_role_trajectory_points (person_id, meeting_id, role_label, confidence)
-           VALUES ($1, $2, $3, $4)
+        `INSERT INTO mn_role_trajectory_points (person_id, meeting_id, role_label, confidence, source)
+           VALUES ($1, $2, $3, $4, 'manual_import')
          ON CONFLICT (person_id, meeting_id, scope_id) DO UPDATE
-           SET role_label = EXCLUDED.role_label`,
+           SET role_label = EXCLUDED.role_label, source = 'manual_import'`,
         [pid, mid, role.slice(0, 60), 0.8],
       );
       bump('role_trajectory_inserted');
@@ -328,13 +329,14 @@ try {
     const qualityScore = Math.round((entropyPct * 0.6 + Math.min(followups, 30) / 30 * 100 * 0.4) * 100) / 100;
     for (const mid of attendedMeetings) {
       await client.query(
-        `INSERT INTO mn_speech_quality (meeting_id, person_id, entropy_pct, followed_up_count, quality_score, sample_quotes)
-           VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        `INSERT INTO mn_speech_quality (meeting_id, person_id, entropy_pct, followed_up_count, quality_score, sample_quotes, source)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'manual_import')
          ON CONFLICT (meeting_id, person_id) DO UPDATE SET
            entropy_pct = EXCLUDED.entropy_pct,
            followed_up_count = EXCLUDED.followed_up_count,
            quality_score = EXCLUDED.quality_score,
-           sample_quotes = EXCLUDED.sample_quotes`,
+           sample_quotes = EXCLUDED.sample_quotes,
+           source = 'manual_import'`,
         [
           mid, pid,
           entropyPct, followups, qualityScore,
@@ -358,10 +360,10 @@ try {
         if (!topic || /几乎全部/.test(topic)) continue; // 缺席总览不当具体 topic
         const topicId = topic.slice(0, 80);
         await client.query(
-          `INSERT INTO mn_silence_signals (meeting_id, person_id, topic_id, state, anomaly_score)
-             VALUES ($1, $2, $3, 'abnormal_silence', $4)
+          `INSERT INTO mn_silence_signals (meeting_id, person_id, topic_id, state, anomaly_score, source)
+             VALUES ($1, $2, $3, 'abnormal_silence', $4, 'manual_import')
            ON CONFLICT (meeting_id, person_id, topic_id) DO UPDATE
-             SET state = EXCLUDED.state, anomaly_score = EXCLUDED.anomaly_score`,
+             SET state = EXCLUDED.state, anomaly_score = EXCLUDED.anomaly_score, source = 'manual_import'`,
           [mid, pid, topicId, 70.00],
         );
         bump('silence_signals_inserted');
@@ -382,8 +384,8 @@ try {
     if (!mid) { bump('decisions_skipped'); continue; }
     const ins = await client.query(
       `INSERT INTO mn_decisions
-         (scope_id, meeting_id, title, proposer_person_id, confidence, is_current, rationale, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+         (scope_id, meeting_id, title, proposer_person_id, confidence, is_current, rationale, metadata, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'manual_import')
          RETURNING id`,
       [
         scopeId,
@@ -431,8 +433,8 @@ try {
     await client.query(
       `INSERT INTO mn_assumptions
          (scope_id, meeting_id, text, evidence_grade, verification_state, verifier_person_id,
-          due_at, underpins_decision_ids, confidence, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10::jsonb)`,
+          due_at, underpins_decision_ids, confidence, metadata, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10::jsonb, 'manual_import')`,
       [
         scopeId,
         mid,
@@ -465,8 +467,8 @@ try {
     await client.query(
       `INSERT INTO mn_open_questions
          (scope_id, text, category, status, times_raised, first_raised_meeting_id,
-          last_raised_meeting_id, owner_person_id, due_at, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+          last_raised_meeting_id, owner_person_id, due_at, metadata, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'manual_import')`,
       [
         scopeId,
         q.text,
@@ -496,8 +498,8 @@ try {
     const trend = ['up','flat','down'].includes(r.trend) ? r.trend : 'flat';
     await client.query(
       `INSERT INTO mn_risks
-         (scope_id, text, severity, mention_count, heat_score, trend, action_taken, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+         (scope_id, text, severity, mention_count, heat_score, trend, action_taken, metadata, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'manual_import')`,
       [
         scopeId,
         r.text,
@@ -530,8 +532,8 @@ try {
     await client.query(
       `INSERT INTO mn_judgments
          (text, abstracted_from_meeting_id, author_person_id, domain,
-          generality_score, reuse_count, linked_meeting_ids, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::jsonb)`,
+          generality_score, reuse_count, linked_meeting_ids, metadata, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::jsonb, 'manual_import')`,
       [
         j.text,
         abstractedFromUuid,
@@ -559,8 +561,8 @@ try {
     for (const mid of [MEETING_KICKOFF_ID, MEETING_APRIL_ID]) {
       await client.query(
         `INSERT INTO mn_mental_model_invocations
-           (meeting_id, model_name, invoked_by_person_id, correctly_used, outcome, expert_source, confidence)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           (meeting_id, model_name, invoked_by_person_id, correctly_used, outcome, expert_source, confidence, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual_import')`,
         [
           mid,
           (m.name ?? '').slice(0, 120),
@@ -583,8 +585,8 @@ try {
     for (const mid of [MEETING_KICKOFF_ID, MEETING_APRIL_ID]) {
       await client.query(
         `INSERT INTO mn_cognitive_biases
-           (meeting_id, bias_type, where_excerpt, by_person_id, severity, mitigated, mitigation_strategy)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           (meeting_id, bias_type, where_excerpt, by_person_id, severity, mitigated, mitigation_strategy, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual_import')`,
         [
           mid,
           (b.name ?? '').slice(0, 60),
@@ -606,8 +608,8 @@ try {
       ? (personId[cf.rejectedBy[0]] ?? null) : null;
     await client.query(
       `INSERT INTO mn_counterfactuals
-         (meeting_id, rejected_path, rejected_by_person_id, tracking_note, next_validity_check_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+         (meeting_id, rejected_path, rejected_by_person_id, tracking_note, next_validity_check_at, source)
+         VALUES ($1, $2, $3, $4, $5, 'manual_import')`,
       [
         mid,
         cf.path,
@@ -645,12 +647,13 @@ try {
     [MEETING_APRIL_ID,   aA, bA, cA, dA],
   ]) {
     await client.query(
-      `INSERT INTO mn_evidence_grades (meeting_id, dist_a, dist_b, dist_c, dist_d, weighted_score)
-         VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO mn_evidence_grades (meeting_id, dist_a, dist_b, dist_c, dist_d, weighted_score, source)
+         VALUES ($1, $2, $3, $4, $5, $6, 'manual_import')
        ON CONFLICT (meeting_id) DO UPDATE SET
          dist_a = EXCLUDED.dist_a, dist_b = EXCLUDED.dist_b,
          dist_c = EXCLUDED.dist_c, dist_d = EXCLUDED.dist_d,
-         weighted_score = EXCLUDED.weighted_score, computed_at = NOW()`,
+         weighted_score = EXCLUDED.weighted_score, computed_at = NOW(),
+         source = 'manual_import'`,
       [mid, a, b, c, d, score(a, b, c, d)],
     );
     bump('evidence_grades_inserted');
@@ -671,8 +674,8 @@ try {
     const notesObj = Object.fromEntries(dims.map((x) => [x.id, x.note ?? '']));
     await client.query(
       `INSERT INTO mn_decision_quality
-         (meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+         (meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'manual_import')`,
       [
         mid,
         Number(dq.overall ?? 0),
@@ -690,8 +693,8 @@ try {
     const nc = m.necessity ?? {};
     await client.query(
       `INSERT INTO mn_meeting_necessity
-         (meeting_id, verdict, suggested_duration_min, reasons)
-         VALUES ($1, $2, $3, $4::jsonb)`,
+         (meeting_id, verdict, suggested_duration_min, reasons, source)
+         VALUES ($1, $2, $3, $4::jsonb, 'manual_import')`,
       [
         mid,
         mapNecessityVerdict(nc.verdict),
@@ -718,8 +721,8 @@ try {
       .map((s) => ({ t_sec: s.t_sec, tag: s.tag }));
     await client.query(
       `INSERT INTO mn_affect_curve
-         (meeting_id, samples, tension_peaks, insight_points)
-         VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb)`,
+         (meeting_id, samples, tension_peaks, insight_points, source)
+         VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, 'manual_import')`,
       [
         mid,
         JSON.stringify(samples),

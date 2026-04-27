@@ -64,7 +64,8 @@ export async function computeDecisionQuality(
          falsifiable = EXCLUDED.falsifiable,
          aligned = EXCLUDED.aligned,
          notes = EXCLUDED.notes,
-         computed_at = NOW()`,
+         computed_at = NOW()
+       WHERE mn_decision_quality.source NOT IN ('manual_import','human_edit')`,
       [bundle.meetingId, overall, c, a, t, f, al, JSON.stringify(parsed.notes ?? {})],
     );
     out.created = 1;

@@ -38,7 +38,8 @@ export async function computeMentalModels(
 
   if (args.replaceExisting) {
     await deps.db.query(
-      `DELETE FROM mn_mental_model_invocations WHERE meeting_id = $1`,
+      // P0 数据源契约：只删 LLM 行
+      `DELETE FROM mn_mental_model_invocations WHERE meeting_id = $1 AND source = 'llm_extracted'`,
       [bundle.meetingId],
     );
   }

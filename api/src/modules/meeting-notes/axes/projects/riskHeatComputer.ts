@@ -64,10 +64,12 @@ export async function computeRiskHeat(
     try {
       const sev = normalizeSeverity(item.severity);
       const taken = item.action_taken ?? false;
+      // P0 数据源契约：只跟 LLM 自己的合并
       const existing = await deps.db.query(
         `SELECT id, mention_count FROM mn_risks
           WHERE COALESCE(scope_id::text,'') = COALESCE($1::text,'')
             AND lower(text) = lower($2)
+            AND source = 'llm_extracted'
           LIMIT 1`,
         [persistScopeId, item.text],
       );

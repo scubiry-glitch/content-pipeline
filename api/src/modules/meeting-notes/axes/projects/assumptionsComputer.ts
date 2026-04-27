@@ -35,7 +35,11 @@ export async function computeAssumptions(
   if (!bundle) return out;
 
   if (args.replaceExisting) {
-    await deps.db.query(`DELETE FROM mn_assumptions WHERE meeting_id = $1`, [bundle.meetingId]);
+    // P0 数据源契约：只删 LLM 行
+    await deps.db.query(
+      `DELETE FROM mn_assumptions WHERE meeting_id = $1 AND source = 'llm_extracted'`,
+      [bundle.meetingId],
+    );
   }
 
   const items = await extractListOverChunks<ExtractedAssumption>(

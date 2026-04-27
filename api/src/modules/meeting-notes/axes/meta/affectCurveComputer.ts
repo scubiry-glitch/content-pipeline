@@ -54,7 +54,8 @@ export async function computeAffectCurve(
          samples = EXCLUDED.samples,
          tension_peaks = EXCLUDED.tension_peaks,
          insight_points = EXCLUDED.insight_points,
-         computed_at = NOW()`,
+         computed_at = NOW()
+       WHERE mn_affect_curve.source NOT IN ('manual_import','human_edit')`,
       [
         bundle.meetingId,
         JSON.stringify(parsed.samples ?? []),

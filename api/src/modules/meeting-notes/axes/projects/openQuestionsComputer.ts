@@ -49,11 +49,12 @@ export async function computeOpenQuestions(
     try {
       const ownerId = item.owner ? await ensurePersonByName(deps, item.owner) : null;
       const normalized = normalizeText(item.text);
-      // 同 scope 下相似问题累加
+      // 同 scope 下相似问题累加；P0 数据源契约：只跟 LLM 自己产出的合并，不动 manual_import
       const existing = await deps.db.query(
         `SELECT id, times_raised FROM mn_open_questions
           WHERE COALESCE(scope_id::text,'') = COALESCE($1::text,'')
             AND lower(btrim(regexp_replace(text, '\\s+', ' ', 'g'))) = $2
+            AND source = 'llm_extracted'
           LIMIT 1`,
         [persistScopeId, normalized],
       );
