@@ -436,6 +436,11 @@ export class MeetingNotesEngine {
     return this.runEngine.resume(id);
   }
 
+  /** F4 · run 队列 + DB 状态运维诊断 */
+  async getRunDiagnostics() {
+    return this.runEngine.getDiagnostics();
+  }
+
   async listAxisVersions(scope: ScopeRef, axis: AxisName): Promise<AxisVersionRef[]> {
     const rows = await this.versionStore.listVersions(scope.kind, scope.id ?? null, axis);
     return rows.map((r) => ({

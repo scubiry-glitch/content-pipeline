@@ -411,6 +411,41 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return result;
     });
 
+    // 不重跑 LLM 直接基于现有 axes 数据重新合成 ANALYSIS（写入 assets.metadata.analysis）。
+    // 用途：fix composeAnalysis 的 schema mapping bug 后无需 5 分钟跑完整 standard run，
+    // 也用于 standard run 卡死后单独完成 view A 渲染层。manualOverride 守护仍生效。
+    fastify.post('/meetings/:id/recompose-analysis', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'invalid meeting id' };
+      }
+      try {
+        const { composeAnalysisFromAxes, persistAnalysisToAsset } =
+          await import('./runs/composeAnalysis.js');
+        const analysis = await composeAnalysisFromAxes(engine.deps.db, id);
+        const wrote = await persistAnalysisToAsset(engine.deps.db, id, analysis);
+        return {
+          ok: true,
+          status: wrote,  // 'written' | 'skipped-manual' | 'failed'
+          summary: {
+            decision: (analysis.summary?.decision ?? '').slice(0, 80),
+            actionItems: analysis.summary?.actionItems?.length ?? 0,
+            risks: analysis.summary?.risks?.length ?? 0,
+            tension: analysis.tension.length,
+            newCognition: analysis.newCognition.length,
+            focusMap: analysis.focusMap.length,
+            consensus: analysis.consensus.length,
+            crossView: analysis.crossView.length,
+          },
+        };
+      } catch (e) {
+        request.log.warn({ id, err: e }, 'recompose-analysis failed');
+        reply.status(500);
+        return { ok: false, error: (e as Error).message };
+      }
+    });
+
     fastify.get('/meetings/:id/axes', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) return emptyAxes(id);
@@ -1109,6 +1144,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         if (Object.keys(cleaned).length > 0) expertRoles = cleaned;
       }
 
+      // mode：默认 'multi-axis'；只接受 'multi-axis' / 'claude-cli'
+      const mode = body.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
+
       const r = await engine.enqueueRun({
         scope: scope as any,
         axis: body.axis,
@@ -1117,6 +1155,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         strategy: body.strategy,
         triggeredBy: body.triggeredBy,
         parentRunId: body.parentRunId,
+        mode,
         expertRoles,
       });
       if (!r.ok) reply.status(400);
@@ -1133,6 +1172,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
       });
       return { items };
+    });
+
+    /**
+     * F4 · GET /runs/_diagnostics —— 运维诊断快照
+     *   - workerId（本进程）
+     *   - in-memory queue 状态（pending / running / concurrency）
+     *   - 24h DB state 分布
+     *   - 当前 running runs（含 worker_id + heartbeat 年龄）
+     *   - 滞留 5 min 以上的 queued runs（应被 reaper 自动 recover）
+     *
+     * 必须在 /runs/:id 之前注册，否则 _diagnostics 会被当成 id 路由到 getRun → 404 / 500
+     */
+    fastify.get('/runs/_diagnostics', { preHandler: authenticate }, async () => {
+      return engine.getRunDiagnostics();
     });
 
     fastify.get('/runs/:id', { preHandler: authenticate }, async (request, reply) => {

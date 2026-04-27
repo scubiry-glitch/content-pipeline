@@ -167,14 +167,22 @@ export class RunEngine {
     // - cleanupZombieRuns: started_at < NOW() - zombieTimeoutMin 的 running 标 failed
     // - recoverQueuedRuns: state='queued' 的 run 全部重 enqueue 到 in-memory，让 worker 接管
     const zombieMin = opts.zombieTimeoutMin ?? 30;
-    setImmediate(() => {
+    const initialReap = () => {
       this.cleanupZombieRuns(zombieMin).catch((e) =>
         console.warn('[RunEngine] zombie cleanup failed:', (e as Error).message),
       );
       this.recoverQueuedRuns().catch((e) =>
         console.warn('[RunEngine] queued run recovery failed:', (e as Error).message),
       );
-    });
+    };
+    setImmediate(initialReap);
+    // F4 · 周期 reaper：每 60 秒跑一次，让 zombie 检测 + 队列恢复持续生效
+    // 替代之前只在启动时跑一次的语义，覆盖了：
+    //   - 长跑进程中 worker 崩溃导致的 zombie（heartbeat 5min 超时 + 这里 60s 检测）
+    //   - 多进程时其它 worker 入了 queued 状态本进程没看到（重新捡回内存队列）
+    //   - 浏览器/外部直接 INSERT mn_runs(state='queued') 的运维口径
+    const reaperInterval = setInterval(initialReap, 60_000);
+    if (typeof reaperInterval.unref === 'function') reaperInterval.unref();
   }
 
   /**
@@ -371,6 +379,80 @@ export class RunEngine {
       [id],
     );
     return r.rows[0] ? mapRun(r.rows[0]) : null;
+  }
+
+  /**
+   * F4 · 运维诊断快照：把 in-memory queue + DB 状态打包返回
+   * 用法：GET /api/v1/meeting-notes/runs/_diagnostics
+   */
+  async getDiagnostics(): Promise<{
+    workerId: string;
+    queue: { pending: number; running: number; concurrency: number };
+    dbStateBreakdown: Array<{ state: string; n: number }>;
+    activeRuns: Array<{
+      id: string;
+      axis: string;
+      worker_id: string | null;
+      started_at: string | null;
+      heartbeat_age_s: number | null;
+      currentStep: string | null;
+    }>;
+    staleQueued: Array<{
+      id: string;
+      axis: string;
+      created_at: string;
+      age_s: number;
+    }>;
+  }> {
+    const queueStats = this.queue.stats();
+
+    const breakdownR = await this.deps.db.query(
+      `SELECT state, count(*)::int AS n
+         FROM mn_runs
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+        GROUP BY state ORDER BY state`,
+    );
+
+    const activeR = await this.deps.db.query(
+      `SELECT id::text, axis, worker_id,
+              started_at::text AS started_at,
+              EXTRACT(EPOCH FROM (NOW() - last_heartbeat_at))::int AS heartbeat_age_s,
+              metadata->>'currentStep' AS current_step
+         FROM mn_runs
+        WHERE state = 'running'
+        ORDER BY started_at DESC
+        LIMIT 20`,
+    );
+
+    const staleQR = await this.deps.db.query(
+      `SELECT id::text, axis, created_at::text,
+              EXTRACT(EPOCH FROM (NOW() - created_at))::int AS age_s
+         FROM mn_runs
+        WHERE state = 'queued'
+          AND created_at < NOW() - INTERVAL '5 minutes'
+        ORDER BY created_at ASC
+        LIMIT 20`,
+    );
+
+    return {
+      workerId: this.workerId,
+      queue: queueStats,
+      dbStateBreakdown: breakdownR.rows,
+      activeRuns: activeR.rows.map((r: any) => ({
+        id: r.id,
+        axis: r.axis,
+        worker_id: r.worker_id,
+        started_at: r.started_at,
+        heartbeat_age_s: r.heartbeat_age_s,
+        currentStep: r.current_step,
+      })),
+      staleQueued: staleQR.rows.map((r: any) => ({
+        id: r.id,
+        axis: r.axis,
+        created_at: r.created_at,
+        age_s: r.age_s,
+      })),
+    };
   }
 
   async list(filter: {
