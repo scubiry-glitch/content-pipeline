@@ -2,7 +2,7 @@
 // 原型来源：/tmp/mn-proto/dimensions-people.jsx DimensionPeople
 // 承诺与兑现 · 角色画像演化 · 发言质量 · 沉默信号
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
@@ -592,19 +592,39 @@ export function AxisPeople() {
   const [tab, setTab] = useState('commitments');
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
-  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const forceMock = useForceMock();
   const scope = useMeetingScope();
   const scopeId = scope.effectiveScopeId;
+
+  // F7 (sibling) · auto-pick scope 下首场会议；URL ?meetingId 优先；否则 fixture
+  const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
+    let cancelled = false;
+    meetingNotesApi
+      .listScopeMeetings(scopeId)
+      .then((r) => { if (!cancelled) setAutoMeetingId(r?.meetingIds?.[0] ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [searchParams, scopeId, forceMock]);
+  const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
+
+  // 一次性拉 getMeetingAxes 给 trajectory / speech / silence 三个 per-meeting tab 用
+  const [peopleData, setPeopleData] = useState<any>(null);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
-    if (forceMock) { setIsMock(true); return; }
+    if (forceMock) { setPeopleData(null); setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled && r) setIsMock(false); })
+      .then((r) => {
+        if (cancelled) return;
+        setPeopleData(r?.people ?? null);
+        setIsMock(false);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+
   const tabs = [
     { id: 'commitments', label: '承诺与兑现', sub: '说到做到率 · 跨会议承诺 ledger', icon: 'check' as const },
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },
@@ -615,9 +635,9 @@ export function AxisPeople() {
     <>
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
-        {tab === 'trajectory'  && <PTrajectory />}
-        {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
-        {tab === 'silence'     && <PSilence meetingId={meetingId} />}
+        {tab === 'trajectory'  && <PTrajectoryLive data={peopleData?.role_trajectory} fallback={<PTrajectory />} />}
+        {tab === 'speech'      && <PSpeechLive data={peopleData?.speech_quality} fallback={<PSpeech meetingId={meetingId} />} />}
+        {tab === 'silence'     && <PSilenceLive data={peopleData?.silence_signals} fallback={<PSilence meetingId={meetingId} />} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="people" onClose={() => setRegenOpen(false)} />
@@ -627,3 +647,92 @@ export function AxisPeople() {
 }
 
 export default AxisPeople;
+
+// ── F7 sibling · Live wrappers：有数据就渲染真实，否则 fallback 到原 mock ──
+
+function PTrajectoryLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        角色画像演化 · {data.length} 项
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_role_trajectory_points · 此场会议中各人的功能角色（决策者 / 提出者 / 质疑者 / …）
+      </div>
+      {data.map((r: any, i: number) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: '180px 120px 1fr 80px', gap: 14, alignItems: 'center',
+          padding: '10px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <MonoMeta style={{ fontSize: 11 }}>{(r.person_id ?? '').slice(0, 12)}…</MonoMeta>
+          <Chip tone="teal">{r.role_label}</Chip>
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>conf {Number(r.confidence ?? 0).toFixed(2)}</span>
+          <MonoMeta style={{ fontSize: 10 }}>{(r.source ?? '').slice(0, 12)}</MonoMeta>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PSpeechLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        发言质量 · {data.length} 人
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_speech_quality · entropy（信息熵）+ 被追问数 + 综合 quality_score
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '200px 100px 100px 100px',
+        padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
+        letterSpacing: 0.3, textTransform: 'uppercase', borderBottom: '1px solid var(--line-2)',
+      }}>
+        <span>person</span><span>entropy</span><span>followups</span><span>quality</span>
+      </div>
+      {data.map((s: any, i: number) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: '200px 100px 100px 100px', gap: 14, alignItems: 'center',
+          padding: '12px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <MonoMeta style={{ fontSize: 11 }}>{(s.person_id ?? '').slice(0, 12)}…</MonoMeta>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{Number(s.entropy_pct ?? 0).toFixed(0)}</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{s.followed_up_count ?? 0}</span>
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600 }}>{Number(s.quality_score ?? 0).toFixed(0)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PSilenceLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        沉默信号 · {data.length} 项
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_silence_signals · 谁在哪个议题上反常沉默 + anomaly_score
+      </div>
+      {data.map((s: any, i: number) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: '160px 1fr 120px 80px', gap: 14, alignItems: 'center',
+          padding: '10px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <MonoMeta style={{ fontSize: 11 }}>{(s.person_id ?? '').slice(0, 12)}…</MonoMeta>
+          <span style={{ fontSize: 13, fontFamily: 'var(--serif)' }}>{s.topic_id}</span>
+          <Chip tone={s.state === 'abnormal_silence' ? 'accent' : 'ghost'}>{s.state}</Chip>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+            {Number(s.anomaly_score ?? 0).toFixed(0)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}

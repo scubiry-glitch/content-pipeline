@@ -501,6 +501,39 @@ export function AxisKnowledge() {
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
 
+  // F7.1 · evidence_grades 跨 scope 聚合：单 meeting 经常 0/0/0/0（如 db866879
+  // 没跑 evidence_grading），需要把 scope 下三场会议的 dist_a/b/c/d 加总，重新
+  // 计算 weighted_score = (4A+3B+2C+1D)/total，才能反映项目级证据分布
+  const [aggregatedEvidence, setAggregatedEvidence] = useState<{
+    dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number;
+  } | null>(null);
+  useEffect(() => {
+    if (forceMock) { setAggregatedEvidence(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const meetings = await meetingNotesApi.listScopeMeetings(scopeId);
+        const ids = meetings?.meetingIds ?? [];
+        if (ids.length === 0) return;
+        const axesList = await Promise.all(ids.map((mid) => meetingNotesApi.getMeetingAxes(mid).catch(() => null)));
+        let A = 0, B = 0, C = 0, D = 0;
+        for (const a of axesList) {
+          const eg = a?.knowledge?.evidence_grades;
+          if (!eg) continue;
+          A += Number(eg.dist_a ?? 0);
+          B += Number(eg.dist_b ?? 0);
+          C += Number(eg.dist_c ?? 0);
+          D += Number(eg.dist_d ?? 0);
+        }
+        const total = A + B + C + D;
+        const weighted = total === 0 ? 0 : Math.round((4 * A + 3 * B + 2 * C + 1 * D) / total * 100) / 100;
+        if (cancelled) return;
+        setAggregatedEvidence({ dist_a: A, dist_b: B, dist_c: C, dist_d: D, weighted_score: weighted });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
   const tabs = [
     { id: 'judgments',       label: '可复用判断',    sub: '从具体案例提炼的通用结论',  icon: 'book' as const },
     { id: 'mental_models',   label: '心智模型激活',  sub: '谁用了什么模型，用得对吗',  icon: 'compass' as const },
@@ -513,7 +546,7 @@ export function AxisKnowledge() {
       <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'judgments'       && <Judgments scopeId={scopeId} />}
         {tab === 'mental_models'   && <MentalModelsLive data={knowledgeData?.mental_models} fallback={<MentalModels scopeId={scopeId} />} />}
-        {tab === 'evidence'        && <EvidenceLive data={knowledgeData?.evidence_grades} fallback={<Evidence />} />}
+        {tab === 'evidence'        && <EvidenceLive data={aggregatedEvidence ?? knowledgeData?.evidence_grades} fallback={<Evidence />} scopeAggregated={!!aggregatedEvidence} />}
         {tab === 'biases'          && <BiasesLive data={knowledgeData?.cognitive_biases} fallback={<Biases meetingId={meetingId} />} />}
         {tab === 'counterfactuals' && <CounterfactualsLive data={knowledgeData?.counterfactuals} fallback={<Counterfactuals />} />}
       </DimShell>
@@ -624,7 +657,7 @@ function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fall
   );
 }
 
-function EvidenceLive({ data, fallback }: { data: { dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number } | undefined | null; fallback: ReactNode }) {
+function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number } | undefined | null; fallback: ReactNode; scopeAggregated?: boolean }) {
   if (!data) return <>{fallback}</>;
   const total = (data.dist_a ?? 0) + (data.dist_b ?? 0) + (data.dist_c ?? 0) + (data.dist_d ?? 0);
   if (total === 0) return <>{fallback}</>;
@@ -640,7 +673,9 @@ function EvidenceLive({ data, fallback }: { data: { dist_a: number; dist_b: numb
         证据层级 · 总 {total} 条 · 加权 {Number(data.weighted_score ?? 0).toFixed(2)}
       </h3>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
-        来自 mn_evidence_grades · A=4 / B=3 / C=2 / D=1 加权均值
+        {scopeAggregated
+          ? '来自 mn_evidence_grades 跨 scope 聚合 · A=4 / B=3 / C=2 / D=1 加权均值'
+          : '来自 mn_evidence_grades 单 meeting · A=4 / B=3 / C=2 / D=1 加权均值'}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
         {grades.map((g) => {
