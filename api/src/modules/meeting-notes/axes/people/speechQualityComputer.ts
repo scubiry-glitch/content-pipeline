@@ -76,6 +76,7 @@ export async function computeSpeechQuality(
       const quality = entropy * 0.6 + Math.min(100, followups * 10) * 0.4;
       const samples = item.sample_quote ? [item.sample_quote] : [];
       await deps.db.query(
+        // P0 数据源契约：UPSERT 守护 manual_import / human_edit
         `INSERT INTO mn_speech_quality
            (meeting_id, person_id, entropy_pct, followed_up_count, quality_score, sample_quotes)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -84,7 +85,8 @@ export async function computeSpeechQuality(
                        followed_up_count = EXCLUDED.followed_up_count,
                        quality_score = EXCLUDED.quality_score,
                        sample_quotes = EXCLUDED.sample_quotes,
-                       computed_at = NOW()`,
+                       computed_at = NOW()
+         WHERE mn_speech_quality.source NOT IN ('manual_import','human_edit')`,
         [bundle.meetingId, personId, entropy, followups, quality, JSON.stringify(samples)],
       );
       out.created += 1;

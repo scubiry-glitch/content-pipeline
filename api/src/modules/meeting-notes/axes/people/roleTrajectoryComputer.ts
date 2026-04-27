@@ -65,11 +65,13 @@ export async function computeRoleTrajectory(
       const personId = await ensurePersonByName(deps, item.who);
       if (!personId) { out.skipped += 1; continue; }
       await deps.db.query(
+        // P0 数据源契约：UPSERT 守护 manual_import / human_edit
         `INSERT INTO mn_role_trajectory_points
            (person_id, meeting_id, scope_id, role_label, confidence)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (person_id, meeting_id, scope_id)
-         DO UPDATE SET role_label = EXCLUDED.role_label, confidence = EXCLUDED.confidence`,
+         DO UPDATE SET role_label = EXCLUDED.role_label, confidence = EXCLUDED.confidence
+         WHERE mn_role_trajectory_points.source NOT IN ('manual_import','human_edit')`,
         [personId, bundle.meetingId, persistScopeId, item.role_label, item.confidence ?? 0.5],
       );
       out.created += 1;

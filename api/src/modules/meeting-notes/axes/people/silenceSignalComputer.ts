@@ -56,11 +56,13 @@ export async function computeSilenceSignal(
       const personId = await ensurePersonByName(deps, item.who);
       if (!personId) { out.skipped += 1; continue; }
       await deps.db.query(
+        // P0 数据源契约：UPSERT 守护 manual_import / human_edit
         `INSERT INTO mn_silence_signals
            (meeting_id, person_id, topic_id, state, anomaly_score)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (meeting_id, person_id, topic_id)
-         DO UPDATE SET state = EXCLUDED.state, anomaly_score = EXCLUDED.anomaly_score`,
+         DO UPDATE SET state = EXCLUDED.state, anomaly_score = EXCLUDED.anomaly_score
+         WHERE mn_silence_signals.source NOT IN ('manual_import','human_edit')`,
         [bundle.meetingId, personId, item.topic_id, item.state, item.anomaly_score ?? 0],
       );
       out.created += 1;
