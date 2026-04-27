@@ -27,9 +27,12 @@ export async function ensurePersonByName(
   const canonical = normalizeName(rawName);
   if (!canonical) return null;
 
+  // F11 · alias-aware lookup：除了 canonical_name 还查 aliases[]，
+  // 这样用户改名后历史 transcript 里出现的旧名仍能映射到同一个 mn_people 行
   const existing = await deps.db.query(
     `SELECT id FROM mn_people
-      WHERE canonical_name = $1 AND COALESCE(org, '') = COALESCE($2, '')
+      WHERE (canonical_name = $1 OR $1 = ANY(aliases))
+        AND COALESCE(org, '') = COALESCE($2, '')
       LIMIT 1`,
     [canonical, org ?? null],
   );

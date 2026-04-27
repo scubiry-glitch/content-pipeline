@@ -716,6 +716,129 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { meetingIds: await engine.scopes.listMeetings(id) };
     });
 
+    // ============================================================
+    // F11 · 人物管理 · 改名 + alias 历史映射
+    // ============================================================
+
+    /** GET /scopes/:id/people · 列出该 scope 下所有出现过的人物（按相关 mn_* 反查） */
+    fastify.get('/scopes/:id/people', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      // 通过 mn_scope_members 找会议，再回看 mn_commitments / mn_speech_quality /
+      // mn_role_trajectory_points 涉及的 person_id 全集
+      const r = await engine.deps.db.query(
+        `WITH meets AS (
+           SELECT meeting_id::uuid AS mid FROM mn_scope_members WHERE scope_id = $1
+         ),
+         pids AS (
+           SELECT person_id FROM mn_commitments WHERE meeting_id IN (SELECT mid FROM meets)
+           UNION
+           SELECT person_id FROM mn_speech_quality WHERE meeting_id IN (SELECT mid FROM meets)
+           UNION
+           SELECT person_id FROM mn_role_trajectory_points WHERE meeting_id IN (SELECT mid FROM meets)
+           UNION
+           SELECT person_id FROM mn_silence_signals WHERE meeting_id IN (SELECT mid FROM meets)
+         )
+         SELECT p.id, p.canonical_name, p.aliases, p.role, p.org, p.created_at, p.updated_at,
+                (SELECT COUNT(*)::int FROM mn_commitments WHERE person_id = p.id
+                  AND meeting_id IN (SELECT mid FROM meets)) AS commitment_count
+           FROM mn_people p
+          WHERE p.id IN (SELECT person_id FROM pids WHERE person_id IS NOT NULL)
+          ORDER BY p.canonical_name`,
+        [uuid],
+      );
+      return { items: r.rows };
+    });
+
+    /** GET /people/:id · 单人详情（含 aliases） */
+    fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const r = await engine.deps.db.query(
+        `SELECT id, canonical_name, aliases, role, org, metadata, created_at, updated_at
+           FROM mn_people WHERE id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return r.rows[0];
+    });
+
+    /**
+     * PUT /people/:id · 改名
+     * Body: { canonical_name, role?, org? }
+     *
+     * 改名时自动把旧 canonical_name 入 aliases[]（如果还没在），新名字若在
+     * aliases 里则同步移除（保持互斥）。aliases 用 PG array 操作做幂等。
+     * 之后 ensurePersonByName 查时会用 `OR $1 = ANY(aliases)` 同时匹配旧名 →
+     * LLM 抽取转写里出现旧名时仍能 dedup 到同一行。
+     */
+    fastify.put('/people/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const body = (request.body ?? {}) as { canonical_name?: string; role?: string; org?: string };
+      const newName = (body.canonical_name ?? '').trim();
+      if (!newName) {
+        reply.status(400);
+        return { error: 'Bad Request', code: 'CANONICAL_NAME_REQUIRED', message: 'canonical_name 必填且非空' };
+      }
+      // 取旧记录
+      const cur = await engine.deps.db.query(
+        `SELECT canonical_name, aliases, role, org FROM mn_people WHERE id = $1`,
+        [id],
+      );
+      if (cur.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      const oldName = cur.rows[0].canonical_name as string;
+      const oldAliases: string[] = Array.isArray(cur.rows[0].aliases) ? cur.rows[0].aliases : [];
+
+      // 没改名 → no-op
+      if (newName === oldName) {
+        return { id, canonical_name: oldName, aliases: oldAliases, changed: false };
+      }
+
+      // 检查新 canonical 是否与"另一个人"冲突 (UNIQUE canonical_name + org)
+      const targetOrg = body.org ?? cur.rows[0].org ?? null;
+      const conflict = await engine.deps.db.query(
+        `SELECT id FROM mn_people
+          WHERE id <> $1
+            AND canonical_name = $2
+            AND COALESCE(org, '') = COALESCE($3, '')
+          LIMIT 1`,
+        [id, newName, targetOrg],
+      );
+      if (conflict.rows.length > 0) {
+        reply.status(409);
+        return {
+          error: 'Conflict',
+          code: 'CANONICAL_NAME_CONFLICT',
+          message: `已有同名人物 (canonical_name='${newName}', org='${targetOrg ?? ''}'). 若是同一个人请合并而非改名。`,
+          conflictPersonId: conflict.rows[0].id,
+        };
+      }
+
+      // 计算新 aliases：
+      //  - 旧名 push 进去（如不在）
+      //  - 新名如果之前在 aliases 里则移除
+      const newAliases = Array.from(new Set([...oldAliases, oldName])).filter((a) => a !== newName);
+
+      const upd = await engine.deps.db.query(
+        `UPDATE mn_people
+            SET canonical_name = $2,
+                aliases = $3::text[],
+                role = COALESCE($4, role),
+                org = COALESCE($5, org),
+                updated_at = NOW()
+          WHERE id = $1
+       RETURNING id, canonical_name, aliases, role, org`,
+        [id, newName, newAliases, body.role ?? null, targetOrg],
+      );
+      return {
+        ...upd.rows[0],
+        changed: true,
+        previousName: oldName,
+      };
+    });
+
     // --------------------------------------------------------
     // Phase 15.8 · AxisProjects data routes (decisions / assumptions / open-questions / risks)
     // --------------------------------------------------------

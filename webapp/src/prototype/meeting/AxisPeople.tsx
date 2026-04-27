@@ -630,6 +630,7 @@ export function AxisPeople() {
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },
     { id: 'speech',      label: '发言质量',   sub: '信息熵 · 被追问率 · 引用率', icon: 'mic' as const },
     { id: 'silence',     label: '沉默信号',   sub: '谁在什么议题上反常沉默', icon: 'wand' as const },
+    { id: 'manage',      label: '人物管理',   sub: '改名 · alias 历史映射', icon: 'users' as const },
   ];
   return (
     <>
@@ -638,6 +639,7 @@ export function AxisPeople() {
         {tab === 'trajectory'  && <PTrajectoryLive data={peopleData?.role_trajectory} fallback={<PTrajectory />} />}
         {tab === 'speech'      && <PSpeechLive data={peopleData?.speech_quality} fallback={<PSpeech meetingId={meetingId} />} />}
         {tab === 'silence'     && <PSilenceLive data={peopleData?.silence_signals} fallback={<PSilence meetingId={meetingId} />} />}
+        {tab === 'manage'      && <PeopleManage scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="people" onClose={() => setRegenOpen(false)} />
@@ -705,6 +707,174 @@ function PSpeechLive({ data, fallback }: { data: any[] | undefined; fallback: Re
           <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600 }}>{Number(s.quality_score ?? 0).toFixed(0)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── F11 · 人物管理：改名 + alias 历史映射 ──────────────────────────
+
+interface PersonRow {
+  id: string;
+  canonical_name: string;
+  aliases: string[];
+  role: string | null;
+  org: string | null;
+  commitment_count: number;
+  updated_at: string;
+}
+
+function PeopleManage({ scopeId }: { scopeId: string }) {
+  const [rows, setRows] = useState<PersonRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  async function reload() {
+    setRows(null); setErr(null);
+    try {
+      const r = await meetingNotesApi.listScopePeople(scopeId);
+      setRows(r.items);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [scopeId]);
+
+  async function submitRename() {
+    if (!editingId || !editName.trim()) return;
+    setSubmitting(true);
+    try {
+      const r = await meetingNotesApi.renamePerson(editingId, { canonical_name: editName.trim() });
+      setSubmitting(false);
+      setEditingId(null);
+      setEditName('');
+      if (r.changed) {
+        setToast({
+          kind: 'ok',
+          text: `已改名「${r.previousName}」 → 「${r.canonical_name}」（旧名进入 aliases，未来 LLM 抽取里若再出现旧名仍能映射到同一人）`,
+        });
+        reload();
+      }
+    } catch (e: any) {
+      setSubmitting(false);
+      const code = e?.code as string | undefined;
+      const msg = code === 'CANONICAL_NAME_CONFLICT'
+        ? `改名失败：scope 下已存在同名人物。要合并而非改名（合并能力暂未实现）。${e.message}`
+        : `改名失败：${e?.message ?? String(e)}`;
+      setToast({ kind: 'err', text: msg });
+    }
+    setTimeout(() => setToast(null), 7000);
+  }
+
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          人物管理 · {rows?.length ?? '-'} 人
+        </h3>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 720, lineHeight: 1.6 }}>
+        点 ✏ 改 canonical_name，旧名自动入 aliases[]。之后 LLM 抽取 / 导入时遇到旧名仍能 dedupe 到同一行（mn_people.aliases ANY 匹配），不会产生重复人物。
+      </div>
+
+      {toast && (
+        <div style={{
+          marginBottom: 14, padding: '10px 12px', borderRadius: 5, fontSize: 12.5,
+          background: toast.kind === 'ok' ? '#ecfdf5' : '#fef2f2',
+          color: toast.kind === 'ok' ? '#065f46' : '#991b1b',
+          border: '1px solid ' + (toast.kind === 'ok' ? '#a7f3d0' : '#fecaca'),
+        }}>{toast.text}</div>
+      )}
+
+      {err && <div style={{ color: '#991b1b', fontSize: 13 }}>加载失败：{err}</div>}
+      {!rows && !err && <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>载入中…</div>}
+      {rows?.length === 0 && (
+        <div style={{
+          padding: '20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13,
+          border: '1px dashed var(--line)', borderRadius: 6,
+        }}>
+          当前 scope 下还没有任何关联人物。先跑过 LLM 或导入数据后这里会出现。
+        </div>
+      )}
+      {rows && rows.length > 0 && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 100px 80px 50px',
+          padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
+          letterSpacing: 0.3, textTransform: 'uppercase', borderBottom: '1px solid var(--line-2)',
+        }}>
+          <span>姓名 · 历史别名</span><span>角色</span><span>承诺数</span><span></span>
+        </div>
+      )}
+      {rows?.map((p, i) => {
+        const isEditing = editingId === p.id;
+        return (
+          <div key={p.id} style={{
+            display: 'grid', gridTemplateColumns: '1fr 100px 80px 50px',
+            alignItems: 'center', gap: 10, padding: '12px 14px',
+            borderBottom: '1px solid var(--line-2)',
+            background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+          }}>
+            <div>
+              {isEditing ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setEditingId(null); }}
+                    style={{
+                      flex: 1, padding: '6px 10px', border: '1px solid var(--accent)',
+                      borderRadius: 4, fontSize: 13, fontFamily: 'var(--sans)',
+                    }}
+                  />
+                  <button
+                    onClick={submitRename}
+                    disabled={submitting || !editName.trim() || editName.trim() === p.canonical_name}
+                    style={{
+                      padding: '6px 12px', border: '1px solid var(--accent)',
+                      background: 'var(--accent)', color: 'var(--paper)', borderRadius: 4,
+                      fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)',
+                      opacity: (!editName.trim() || editName.trim() === p.canonical_name) ? 0.5 : 1,
+                    }}
+                  >{submitting ? '保存中…' : '保存'}</button>
+                  <button
+                    onClick={() => { setEditingId(null); setEditName(''); }}
+                    style={{
+                      padding: '6px 10px', border: '1px solid var(--line)', background: 'var(--paper)',
+                      color: 'var(--ink-2)', borderRadius: 4, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >取消</button>
+                </div>
+              ) : (
+                <div>
+                  <span style={{ fontFamily: 'var(--serif)', fontSize: 14.5, fontWeight: 600 }}>{p.canonical_name}</span>
+                  {p.aliases && p.aliases.length > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 8, fontStyle: 'italic' }}>
+                      曾用名：{p.aliases.join(' / ')}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{p.role ?? '—'}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-2)' }}>{p.commitment_count}</span>
+            <div>
+              {!isEditing && (
+                <button
+                  onClick={() => { setEditingId(p.id); setEditName(p.canonical_name); }}
+                  title="改名"
+                  style={{
+                    border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                    padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
+                  }}
+                >✏</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

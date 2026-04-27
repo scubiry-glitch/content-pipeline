@@ -152,6 +152,39 @@ export const meetingNotesApi = {
       warning?: string;
     }>('/versions', body),
 
+  // F11 · 人物管理（改名 + alias 历史映射）
+  listScopePeople: (scopeId: string) =>
+    jget<{
+      items: Array<{
+        id: string;
+        canonical_name: string;
+        aliases: string[];
+        role: string | null;
+        org: string | null;
+        commitment_count: number;
+        created_at: string;
+        updated_at: string;
+      }>;
+    }>(`/scopes/${scopeId}/people`),
+
+  getPerson: (id: string) =>
+    jget<{ id: string; canonical_name: string; aliases: string[]; role: string | null; org: string | null }>(`/people/${id}`),
+
+  /**
+   * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。
+   * 冲突响应：409 CANONICAL_NAME_CONFLICT（同 (canonical_name, org) 已被另一人占用）。
+   */
+  renamePerson: (id: string, body: { canonical_name: string; role?: string; org?: string }) =>
+    jput<{
+      id: string;
+      canonical_name: string;
+      aliases: string[];
+      role: string | null;
+      org: string | null;
+      changed: boolean;
+      previousName?: string;
+    }>(`/people/${id}`, body),
+
   /**
    * 把指定 mn_axis_version 反写回 mn_*。仅对 source 为 llm_extracted/restored 的行覆盖；
    * manual_import / human_edit 的行保留不动。dryRun=true 只返回 affected 计数不真改。
