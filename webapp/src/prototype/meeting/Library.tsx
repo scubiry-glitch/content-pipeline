@@ -14,6 +14,9 @@ import { useForceMock } from './_mockToggle';
 type GroupKey = 'project' | 'client' | 'topic';
 type ColorKey = 'accent' | 'teal' | 'amber' | 'ghost';
 
+// 区分 API 模式真实 UUID 与 fixture id（'p-yuanling-q2-infra' 等）
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface TreeNode {
   id: string;
   name: string;
@@ -143,10 +146,12 @@ function adaptApiMeeting(api: any): Meeting {
     date: String(api.created_at ?? '').slice(0, 10),
     duration: '—',
     attendees: 0,
+    // 注：以前优先 slug 让 fixture 风格 UI 渲染；切到 scopeId(UUID) 优先后，
+    // 树节点 id（apiScopes[*].id 也是 UUID）才能匹配上，filter / 移动到其他分组才能工作。
     groups: {
-      project: project?.slug ?? project?.scopeId ?? 'p-internal',
-      client: client?.slug ?? client?.scopeId ?? 'c-yuanling',
-      topic: topic?.slug ?? topic?.scopeId ?? 't-ai-infra',
+      project: project?.scopeId ?? project?.slug ?? 'p-internal',
+      client: client?.scopeId ?? client?.slug ?? 'c-yuanling',
+      topic: topic?.scopeId ?? topic?.slug ?? 't-ai-infra',
     },
     status: lastRun.state === 'succeeded' ? 'analyzed' : 'draft',
     tension: Number(api.tension_count ?? 0) || 0,
@@ -186,18 +191,23 @@ function folderRowStyle(active: boolean): CSSProperties {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0 }: {
+function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onCommitRename, onDelete }: {
   node: TreeNode;
   active: string | null;
   onSelect: (id: string) => void;
   onRename: (id: string | null) => void;
   renaming: string | null;
   depth?: number;
+  /** 双击 → 改名输入；Enter/Blur 时把新值通过这个回调发到上层做 PUT /scopes/:id */
+  onCommitRename?: (id: string, newName: string) => void;
+  /** 悬停时显示的删除按钮回调 */
+  onDelete?: (node: TreeNode) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [hover, setHover] = useState(false);
   const isActive = active === node.id;
   return (
-    <div>
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <button onClick={() => onSelect(node.id)} style={{
         ...folderRowStyle(isActive), paddingLeft: 8 + depth * 14,
       }}>
@@ -212,8 +222,21 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0 }: {
         <Dot color={dotColor[node.color ?? 'ghost']} size={7} />
         {renaming === node.id ? (
           <input autoFocus defaultValue={node.name}
-            onBlur={() => onRename(null)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') onRename(null); }}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              if (v && v !== node.name) onCommitRename?.(node.id, v);
+              onRename(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = (e.currentTarget as HTMLInputElement).value.trim();
+                if (v && v !== node.name) onCommitRename?.(node.id, v);
+                onRename(null);
+              } else if (e.key === 'Escape') {
+                onRename(null);
+              }
+            }}
             style={{
               flex: 1, border: '1px solid var(--accent)', borderRadius: 3, padding: '1px 5px',
               fontSize: 12.5, fontFamily: 'var(--sans)', outline: 'none', background: 'var(--paper)',
@@ -223,15 +246,28 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0 }: {
           <span
             onDoubleClick={e => { e.stopPropagation(); onRename(node.id); }}
             style={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title="双击改名"
           >{node.name}</span>
         )}
-        <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
+        {hover && onDelete && renaming !== node.id ? (
+          <span
+            role="button"
+            title="删除分组"
+            onClick={(e) => { e.stopPropagation(); onDelete(node); }}
+            style={{ display: 'flex', cursor: 'pointer', color: 'var(--ink-4)', padding: 2 }}
+          >
+            <Icon name="x" size={12} />
+          </span>
+        ) : (
+          <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
+        )}
       </button>
       {node.children && open && (
         <div>
           {node.children.map(c => (
             <FolderNode key={c.id} node={c} active={active} onSelect={onSelect}
-              onRename={onRename} renaming={renaming} depth={depth + 1} />
+              onRename={onRename} renaming={renaming} depth={depth + 1}
+              onCommitRename={onCommitRename} onDelete={onDelete} />
           ))}
         </div>
       )}
@@ -457,8 +493,12 @@ export function Library() {
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [scopesOk, setScopesOk] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  // Scopes by kind · API 优先；空/失败 → fallback 到 GROUP_TREES fixture
+  type ApiScope = { id: string; kind: 'project' | 'client' | 'topic'; slug: string; name: string; status?: string };
+  const [apiScopes, setApiScopes] = useState<Record<GroupKey, ApiScope[]> | null>(null);
+  const [scopeReloadTick, setScopeReloadTick] = useState(0);
   useEffect(() => {
-    if (forceMock) { setApiMeetings(null); setApiState('ok'); setScopesOk(false); return; }
+    if (forceMock) { setApiMeetings(null); setApiState('ok'); setScopesOk(false); setApiScopes(null); return; }
     let cancelled = false;
     setApiState('loading');
     meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' })
@@ -477,11 +517,20 @@ export function Library() {
       meetingNotesApi.listScopes({ kind: 'topic' }),
     ]).then((results) => {
       if (cancelled) return;
-      const ok = results.some((r) => r.status === 'fulfilled' && Array.isArray(r.value?.items) && r.value.items.length > 0);
-      setScopesOk(ok);
+      const next: Record<GroupKey, ApiScope[]> = { project: [], client: [], topic: [] };
+      const kinds: GroupKey[] = ['project', 'client', 'topic'];
+      let anyOk = false;
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && Array.isArray(r.value?.items)) {
+          next[kinds[i]] = (r.value.items as ApiScope[]).filter((x) => x?.id);
+          if (next[kinds[i]].length > 0) anyOk = true;
+        }
+      });
+      setScopesOk(anyOk);
+      setApiScopes(anyOk ? next : null);
     });
     return () => { cancelled = true; };
-  }, [forceMock, showArchived]);
+  }, [forceMock, showArchived, scopeReloadTick]);
   // forceMock → fixture；API ok → API 结果；loading → 空列表（避免闪 mock）；error → fixture
   const meetingsDisplay = forceMock || apiState === 'error'
     ? MEETINGS
@@ -491,7 +540,25 @@ export function Library() {
   const isMock = forceMock || apiState === 'error';
   const isLoading = !forceMock && apiState === 'loading';
 
-  const tree = GROUP_TREES[groupBy];
+  // 树结构：API 模式由 mn_scopes 拼，节点 count 用 apiMeetings.scope_bindings 实时聚合；
+  // 否则回 GROUP_TREES fixture（mock / error / 接口空都走这）
+  const tree: TreeNode[] = useMemo(() => {
+    if (apiScopes && apiScopes[groupBy]?.length) {
+      const counts = new Map<string, number>();
+      for (const m of (apiMeetings ?? [])) {
+        const gid = m.groups[groupBy];
+        if (gid) counts.set(gid, (counts.get(gid) ?? 0) + 1);
+      }
+      const colorPool: ColorKey[] = ['accent', 'teal', 'amber', 'ghost'];
+      return apiScopes[groupBy].map((s, i) => ({
+        id: s.id,
+        name: s.name,
+        color: colorPool[i % colorPool.length],
+        count: counts.get(s.id) ?? counts.get(s.slug) ?? 0,
+      }));
+    }
+    return GROUP_TREES[groupBy];
+  }, [apiScopes, groupBy, apiMeetings]);
 
   const allGroupIds = useMemo(() => {
     const collect = (nodes: TreeNode[]): string[] =>
@@ -513,19 +580,101 @@ export function Library() {
 
   const [busyAction, setBusyAction] = useState<PreviewAction | null>(null);
 
+  // ── Scope CRUD ────────────────────────────────────────────────────────────
+  const slugify = (s: string): string => {
+    // 中文 → 拼音是个大坑；这里用 base36 timestamp 作为后缀以保证 UNIQUE(kind,slug)
+    const ascii = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const tail = Date.now().toString(36).slice(-5);
+    return ascii ? `${ascii}-${tail}` : `s-${tail}`;
+  };
+  const reloadScopes = () => setScopeReloadTick((t) => t + 1);
+  const handleAddScope = async () => {
+    if (forceMock) { alert('Mock 模式不支持创建分组 · 请先切到 API 模式'); return; }
+    const name = window.prompt(`新建${groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}`)?.trim();
+    if (!name) return;
+    try {
+      await meetingNotesApi.createScope({ kind: groupBy, slug: slugify(name), name });
+      reloadScopes();
+    } catch (e: any) { alert(`创建失败：${e?.message ?? e}`); }
+  };
+  const handleRenameScope = async (id: string, newName: string) => {
+    const name = newName.trim();
+    if (!name) return;
+    if (!UUID_RE.test(id) || forceMock) { alert('Mock / fixture 分组不支持改名 · 请先切到 API 模式'); return; }
+    try {
+      await meetingNotesApi.updateScope(id, { name });
+      reloadScopes();
+    } catch (e: any) { alert(`改名失败：${e?.message ?? e}`); }
+  };
+  const handleDeleteScope = async (node: TreeNode) => {
+    if (!UUID_RE.test(node.id) || forceMock) { alert('Mock / fixture 分组不支持删除 · 请先切到 API 模式'); return; }
+    const confirmed = window.confirm(
+      `删除分组「${node.name}」？\n\n该分组下的会议绑定（mn_scope_members）会被解除，但会议本身不会被删除。`,
+    );
+    if (!confirmed) return;
+    try {
+      await meetingNotesApi.deleteScope(node.id);
+      if (activeGroup === node.id) setActiveGroup(null);
+      reloadScopes();
+    } catch (e: any) { alert(`删除失败：${e?.message ?? e}`); }
+  };
+
   const handlePreviewAction = async (action: PreviewAction, m: Meeting) => {
     if (action === 'view-a') return navigate(`/meeting/${m.id}/a`);
     if (action === 'view-b') return navigate(`/meeting/${m.id}/b`);
     if (action === 'view-c') return navigate(`/meeting/${m.id}/c`);
-    if (action === 'move')   return alert('移动到其他分组 · 后端 bindMeeting/unbindScope 待接入（Phase 10+）');
     if (action === 'export') return alert('导出 PDF/Markdown · 待接入 getMeetingDetail 下载');
 
-    // 归档 / 取消归档 / 删除 · 仅对 UUID id（API 模式）有效
+    // 移动到其他分组 / 归档 / 取消归档 / 删除 · 仅对 UUID id（API 模式）有效
     if (!UUID_RE.test(m.id) || forceMock) {
       alert('Mock 模式或 demo 数据不支持此操作 · 切换到 API 模式');
       return;
     }
     try {
+      if (action === 'move') {
+        if (!apiScopes) {
+          alert('未拉到 mn_scopes 列表 · 重启 api 后重试');
+          return;
+        }
+        const list = apiScopes[groupBy] ?? [];
+        if (list.length === 0) {
+          alert(`当前 ${groupBy} 维度没有可选分组 · 先在左栏 + 新建一个`);
+          return;
+        }
+        const currentScopeId = m.groups[groupBy];
+        const optionsText = list
+          .map((s, i) => `${i + 1}. ${s.name}${s.id === currentScopeId ? '  (当前)' : ''}`)
+          .join('\n');
+        const ans = window.prompt(
+          `移动会议「${m.title}」到 ${groupBy} 分组：\n\n${optionsText}\n\n输入序号 1-${list.length}，输入 0 取消所有 ${groupBy} 绑定。`,
+        );
+        if (ans === null) return;
+        const trimmed = ans.trim();
+        if (trimmed === '0') {
+          if (currentScopeId && UUID_RE.test(currentScopeId)) {
+            setBusyAction('move');
+            await meetingNotesApi.unbindScope(currentScopeId, m.id);
+          }
+        } else {
+          const idx = parseInt(trimmed, 10) - 1;
+          if (Number.isNaN(idx) || idx < 0 || idx >= list.length) {
+            alert('序号无效');
+            return;
+          }
+          const target = list[idx];
+          if (target.id === currentScopeId) return;
+          setBusyAction('move');
+          if (currentScopeId && UUID_RE.test(currentScopeId)) {
+            // 后端目前没有「换绑」语义 · 先解再绑
+            try { await meetingNotesApi.unbindScope(currentScopeId, m.id); } catch { /* 旧绑定不存在也继续 */ }
+          }
+          await meetingNotesApi.bindMeeting(target.id, m.id, '由 library 手动移动');
+        }
+        // 重新拉 meetings 拿最新 scope_bindings
+        const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
+        setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
+        return;
+      }
       if (action === 'archive') {
         setBusyAction('archive');
         await meetingNotesApi.archiveMeeting(m.id);
@@ -636,7 +785,10 @@ export function Library() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 4px' }}>
             <SectionLabel>{groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}</SectionLabel>
-            <button style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2, borderRadius: 3, display: 'flex' }} title="新建分组">
+            <button onClick={handleAddScope}
+              style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2, borderRadius: 3, display: 'flex' }}
+              title={forceMock ? 'Mock 模式不支持 · 切到 API 模式' : '新建分组'}
+            >
               <Icon name="plus" size={13} />
             </button>
           </div>
@@ -651,7 +803,8 @@ export function Library() {
 
           {tree.map(node => (
             <FolderNode key={node.id} node={node} active={activeGroup}
-              onSelect={setActiveGroup} onRename={setRenaming} renaming={renaming} />
+              onSelect={setActiveGroup} onRename={setRenaming} renaming={renaming}
+              onCommitRename={handleRenameScope} onDelete={handleDeleteScope} />
           ))}
 
           <div style={{ height: 18 }} />

@@ -231,7 +231,7 @@ export class MeetingNotesEngine {
         intra_meeting: await (async () => {
           try {
             const r = await this.deps.db.query(
-              `SELECT id, tension_key, between_ids, topic, intensity, summary, moments, created_at
+              `SELECT id, tension_key, between_ids, topic, intensity, summary, moments, computed_at
                  FROM mn_tensions
                 WHERE meeting_id = $1
                 ORDER BY intensity DESC`,

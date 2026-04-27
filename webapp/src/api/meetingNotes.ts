@@ -107,6 +107,9 @@ export const meetingNotesApi = {
   },
   getScope: (id: string) => jget<any>(`/scopes/${id}`),
   createScope: (body: any) => jpost<any>('/scopes', body),
+  updateScope: (id: string, body: { name?: string; status?: 'active' | 'archived'; description?: string; stewardPersonIds?: string[]; metadata?: Record<string, unknown> }) =>
+    jput<any>(`/scopes/${id}`, body),
+  deleteScope: (id: string) => jdelete<{ success: boolean }>(`/scopes/${id}`),
   bindMeeting: (scopeId: string, meetingId: string, reason?: string) =>
     jpost<any>(`/scopes/${scopeId}/bindings`, { meetingId, reason }),
   listScopeMeetings: (scopeId: string) => jget<{ meetingIds: string[] }>(`/scopes/${scopeId}/meetings`),

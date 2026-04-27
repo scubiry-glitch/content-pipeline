@@ -6,7 +6,7 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
-import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge, momentToText, momentSpeaker, momentBody } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
@@ -131,11 +131,10 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp }: {
             // 从 moments 里抽 per-person 引用
             const quoteFor = (name: string): string => {
               if (!name) return '';
-              for (const mom of (t.moments ?? []) as string[]) {
-                const colon = mom.search(/[:：]/);
-                if (colon < 0) continue;
-                const speaker = mom.slice(0, colon).trim();
-                if (speaker.includes(name) || name.includes(speaker)) return mom.slice(colon + 1).trim();
+              for (const mom of (t.moments ?? [])) {
+                const speaker = momentSpeaker(mom);
+                if (!speaker) continue;
+                if (speaker.includes(name) || name.includes(speaker)) return momentBody(mom);
               }
               return '';
             };
@@ -183,7 +182,7 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp }: {
                       fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 14,
                       color: 'var(--ink-2)', padding: '8px 14px',
                       background: 'var(--paper-2)', borderLeft: '2px solid var(--accent)', borderRadius: 3,
-                    }}>{m}</div>
+                    }}>{momentToText(m)}</div>
                   ))}
                 </div>
               )}
@@ -605,7 +604,7 @@ export function VariantWorkbench() {
         .map((b) => ({ b, s: score(`${b.bias_type ?? ''} ${b.where_excerpt ?? ''}`, kws) }))
         .filter((x) => x.s > 0)
         .sort((x, y) => y.s - x.s)
-        .slice(0, 2)
+        .slice(0, 3)
         .map((x) => ({
           id: String(x.b.id),
           bias_type: String(x.b.bias_type ?? ''),
@@ -616,7 +615,7 @@ export function VariantWorkbench() {
         .map((m) => ({ m, s: score(`${m.model_name ?? ''} ${m.outcome ?? ''}`, kws) }))
         .filter((x) => x.s > 0)
         .sort((x, y) => y.s - x.s)
-        .slice(0, 2)
+        .slice(0, 3)
         .map((x) => ({
           id: String(x.m.id),
           model_name: String(x.m.model_name ?? ''),
@@ -629,9 +628,9 @@ export function VariantWorkbench() {
           // 主题关键词权重 + generality_score 作为先验
           s: score(`${j.text ?? ''} ${j.domain ?? ''}`, kws) + Number(j.generality_score ?? 0),
         }))
-        .filter((x) => x.s >= 1.5) // 既要有关键词命中，也要 generality 不低
+        .filter((x) => x.s >= 1.0) // 阈值从 1.5 → 1.0：只要 generality 高（≥0.6）+ 单字关键词或单一好词命中即可
         .sort((x, y) => y.s - x.s)
-        .slice(0, 2)
+        .slice(0, 3)
         .map((x) => ({
           id: String(x.j.id),
           text: String(x.j.text ?? ''),
@@ -916,11 +915,10 @@ export function VariantWorkbench() {
               const blocks: Array<{ who: string; text: string; tag?: string }> = [];
               if (dim === 'tension') {
                 const t = a.tension.find((x) => x.id === selectedT) ?? a.tension[0];
-                for (const m of (t?.moments ?? []) as string[]) {
-                  const colon = m.search(/[:：]/);
-                  if (colon < 0) { blocks.push({ who: '?', text: m, tag: t?.id }); continue; }
-                  const speaker = m.slice(0, colon).trim();
-                  const quote = m.slice(colon + 1).trim();
+                for (const raw of (t?.moments ?? [])) {
+                  const speaker = momentSpeaker(raw) || '?';
+                  const quote = momentBody(raw);
+                  if (!quote) continue;
                   // 通过名字反查 pid（apiParticipants 名字前缀匹配）
                   const pid = apiParticipants.find((pp) => pp.name && (pp.name.includes(speaker) || speaker.includes(pp.name)))?.id ?? '?';
                   blocks.push({ who: pid, text: quote, tag: t?.id });

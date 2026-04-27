@@ -57,6 +57,43 @@ export function Icon({
   return <svg {...common}>{paths[name] || null}</svg>;
 }
 
+// ── Moment normalize ─────────────────────────────────────────
+// mn_tensions.moments 字段在 mock 里是字符串 "永邦：「...」"，从 API 拉过来时
+// 是 { who, text } 对象。React 不能直接渲染对象 → 4 处使用都得统一 normalize。
+// 这里给一个 helper：保留 string 形态、把 object 拼成 "who：text"。
+export type Moment = string | { who?: string; text?: string } | null | undefined;
+
+export function momentToText(m: Moment): string {
+  if (m == null) return '';
+  if (typeof m === 'string') return m;
+  if (typeof m !== 'object') return String(m);
+  const who = (m as any).who ? String((m as any).who) : '';
+  const text = (m as any).text ? String((m as any).text) : '';
+  return who ? `${who}：${text}` : text;
+}
+
+/** 用法等价：moment = { who: '永邦', text: '...' } → "永邦" / "永邦：..."  */
+export function momentSpeaker(m: Moment): string {
+  if (m == null) return '';
+  if (typeof m === 'string') {
+    const colon = m.search(/[:：]/);
+    return colon > 0 ? m.slice(0, colon).trim() : '';
+  }
+  if (typeof m === 'object') return String((m as any).who ?? '').trim();
+  return '';
+}
+
+/** 用法等价：moment = { who: '永邦', text: '...' } → 文字部分（不含 speaker） */
+export function momentBody(m: Moment): string {
+  if (m == null) return '';
+  if (typeof m === 'string') {
+    const colon = m.search(/[:：]/);
+    return colon > 0 ? m.slice(colon + 1).trim() : m.trim();
+  }
+  if (typeof m === 'object') return String((m as any).text ?? '').trim();
+  return String(m);
+}
+
 // ── Avatar ───────────────────────────────────────────────────
 export type Tone = 'warm' | 'cool' | 'neutral';
 

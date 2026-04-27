@@ -48,6 +48,11 @@ function cleanText(raw: string): string {
     .replace(/^﻿/, '')
     .replace(/\r\n?/g, '\n')
     .replace(/ /g, ' ')
+    // docx → 纯文本时，mammoth 常把 "说话人N HH:MM\n正文..." 同段不同 run 拼成单行
+    // ("说话人1 00:00在假设...")，导致 RE_CN_SPEAKER 因 `\s*$` 不命中、降级到 RE_COLON_SPEAKER
+    // 把时间戳后的内容当 name 切，结果产出几十上百个假 "说话人N MM" 参与者。
+    // 这里在 speaker label 后强插换行，让 RE_CN_SPEAKER 单行命中。
+    .replace(/(说话人\s*\d+\s+\d{1,2}:\d{2}(?::\d{2})?)\s*(?=\S)/g, '$1\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

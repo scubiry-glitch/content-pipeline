@@ -6,7 +6,7 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
-import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, MockBadge } from './_atoms';
+import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
@@ -127,7 +127,7 @@ function SecTension({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: 
                     <div key={i} style={{
                       fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 14,
                       color: 'var(--ink-2)', paddingLeft: 14, borderLeft: '2px solid var(--accent-soft)',
-                    }}>{m}</div>
+                    }}>{momentToText(m)}</div>
                   ))}
                 </div>
               )}

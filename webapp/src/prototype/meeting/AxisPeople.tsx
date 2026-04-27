@@ -595,7 +595,7 @@ export function AxisPeople() {
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const forceMock = useForceMock();
   const scope = useMeetingScope();
-  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
+  const scopeId = scope.effectiveScopeId;
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }

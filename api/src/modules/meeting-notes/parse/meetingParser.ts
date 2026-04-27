@@ -89,6 +89,24 @@ export async function parseMeeting(
   }
   const participantCount = persistedPeople.length;
 
+  // 3.4) 把 participants 写回 assets.metadata.participants：
+  //   getMeetingDetail 从这里读取顶部参与者卡片。之前只写 mn_people 不写 metadata
+  //   导致 view A 顶部 participants=0（即使 mn_people 有数据）。
+  if (persistedPeople.length > 0) {
+    try {
+      await deps.db.query(
+        `UPDATE assets
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+              'participants', $2::jsonb
+            )
+          WHERE id = $1`,
+        [assetId, JSON.stringify(persistedPeople)],
+      );
+    } catch (e) {
+      console.warn('[meetingParser] persist participants failed:', (e as Error).message);
+    }
+  }
+
   // 3.5) 持久化全量 segments：写到 assets.metadata.parse_segments（覆写）
   //      上限 5000 段（保护 jsonb 列）；超过则只存前 5000 + 总数。
   if (Array.isArray(parsed.segments) && parsed.segments.length > 0) {

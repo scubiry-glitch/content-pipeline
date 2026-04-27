@@ -24,6 +24,14 @@ export interface ScopeKindGroup {
 interface ScopeContextValue {
   kindId: string;       // 当前 kind id ('all' / 'project' / ...)
   instanceId: string;   // 当前 instance id ('all' / 'p-ai-q2' / ...)
+  /**
+   * 当前作用域用于 API 调用的 scope id：
+   *   - 当用户已选具体 instance（kindId !== 'all'）时 = instanceId
+   *   - 当 kindId === 'all'（默认）时 = 第一个 project 的 id（API 加载后替换 fixture）
+   *   - 没有任何 project 时退回 fixture id（保持原型可独立运行）
+   * 各 axis 页用这个值替换历史上硬编码的 'p-ai-q2'，从而无须用户先操作 ScopePill。
+   */
+  effectiveScopeId: string;
   kind: ScopeKind;
   label: string;
   meta: string;
@@ -102,16 +110,21 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ScopeContextValue>(() => {
     const group = kinds.find((g) => g.id === kindId) ?? kinds[0];
+    // 默认聚合：第一个 project（API 加载后即为真实 DB scope）→ 各 axis 页面 effectiveScopeId 用它
+    const projectGroup = kinds.find((g) => g.id === 'project');
+    const firstProjectId = projectGroup?.instances[0]?.id ?? 'p-ai-q2';
     if (group.id === 'all') {
       return {
-        kindId: 'all', instanceId: 'all', kind: 'LIBRARY',
+        kindId: 'all', instanceId: 'all', effectiveScopeId: firstProjectId,
+        kind: 'LIBRARY',
         label: group.label, meta: LIBRARY_META,
         kinds, loading, setKind: setKindId, setInstance,
       };
     }
     const inst = group.instances.find((i) => i.id === instanceIds[group.id]) ?? group.instances[0];
+    const instId = inst?.id ?? '';
     return {
-      kindId: group.id, instanceId: inst?.id ?? '',
+      kindId: group.id, instanceId: instId, effectiveScopeId: instId || firstProjectId,
       kind: group.kind, label: inst?.label ?? group.label, meta: inst?.meta ?? '',
       kinds, loading, setKind: setKindId, setInstance,
     };
@@ -125,7 +138,9 @@ export function useMeetingScope(): ScopeContextValue {
   if (!v) {
     // 不强依赖 Provider — 降级为 LIBRARY all，便于单独测试某个轴页
     return {
-      kindId: 'all', instanceId: 'all', kind: 'LIBRARY',
+      kindId: 'all', instanceId: 'all',
+      effectiveScopeId: DEFAULT_KINDS[1].instances[0]?.id ?? 'p-ai-q2',
+      kind: 'LIBRARY',
       label: '全库', meta: LIBRARY_META,
       kinds: DEFAULT_KINDS, loading: false,
       setKind: () => {}, setInstance: () => {},

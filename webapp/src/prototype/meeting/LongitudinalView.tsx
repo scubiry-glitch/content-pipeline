@@ -388,7 +388,7 @@ export function LongitudinalView() {
   const [tab, setTab] = useState('drift');
   const [regenOpen, setRegenOpen] = useState(false);
   const scope = useMeetingScope();
-  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
+  const scopeId = scope.effectiveScopeId;
   const forceMock = useForceMock();
   const [headerMock, setHeaderMock] = useState(true);
   useEffect(() => {

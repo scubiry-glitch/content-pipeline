@@ -10,6 +10,7 @@ import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -316,8 +317,20 @@ export function AxisMeta() {
   const [tab, setTab] = useState('quality');
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
-  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
+  const scope = useMeetingScope();
   const forceMock = useForceMock();
+  // 解析顺序：URL ?meetingId 显式指定 → 当前 scope 下首场会议（API 拉取）→ fixture
+  const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
+    let cancelled = false;
+    meetingNotesApi
+      .listScopeMeetings(scope.effectiveScopeId)
+      .then((r) => { if (!cancelled) setAutoMeetingId(r?.meetingIds?.[0] ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [searchParams, scope.effectiveScopeId, forceMock]);
+  const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }

@@ -639,7 +639,7 @@ export function AxisProjects() {
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const scope = useMeetingScope();
-  const scopeId = scope.kindId === 'all' ? 'p-ai-q2' : scope.instanceId;
+  const scopeId = scope.effectiveScopeId;
   const forceMock = useForceMock();
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
