@@ -1,14 +1,17 @@
 // VariantWorkbench — B 视图 · 三栏工作台
 // 原型来源：/tmp/mn-proto/variant-b.jsx VariantWorkbench
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { MEETING, EXPERTS, ANALYSIS, P } from './_fixtures';
+import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
+import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
+
+type PFn = (id: string) => Participant;
 
 // ── Mock transcript (right pane) ──
 const TRANSCRIPT = [
@@ -55,8 +58,8 @@ function Stance({ p, stance, text, tone }: {
 }
 
 // ── WBTension ──
-function WBTension({ a, selected, setSelected, isMock }: {
-  a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void; isMock?: boolean;
+function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
+  a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void; isMock?: boolean; P?: PFn;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: '100%' }}>
@@ -212,7 +215,7 @@ function WBMinutes({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── WBNewCognition ──
-function WBNewCognition({ a }: { a: typeof ANALYSIS }) {
+function WBNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {a.newCognition.map((n) => {
@@ -254,7 +257,7 @@ function WBNewCognition({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── WBFocusMap ──
-function WBFocusMap({ a }: { a: typeof ANALYSIS }) {
+function WBFocusMap({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const maxR = Math.max(...a.focusMap.map((x) => x.returnsTo));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -298,7 +301,7 @@ function WBFocusMap({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── WBConsensus ──
-function WBConsensus({ a }: { a: typeof ANALYSIS }) {
+function WBConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const cons = a.consensus.filter((x) => x.kind === 'consensus');
   const divs = a.consensus.filter((x) => x.kind === 'divergence');
   return (
@@ -351,7 +354,7 @@ function WBConsensus({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── WBCrossView ──
-function WBCrossView({ a }: { a: typeof ANALYSIS }) {
+function WBCrossView({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const tones: Record<string, 'accent' | 'teal' | 'amber' | 'ghost'> = {
     support: 'accent', oppose: 'teal', partial: 'amber', neutral: 'ghost',
   };
@@ -411,17 +414,40 @@ export function VariantWorkbench() {
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
   const [tensionMock, setTensionMock] = useState(true);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
+  const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || MEETING.title;
+
+  // 把 API 提供的 participants（带真实 id/name/role/tone）映射成局部 P()，
+  // 让 WB* 子组件按 'p1'/'p2'… 查询到真实人名（永邦、赵一濛…），而不是 fixture 的陈汀/王校长。
+  const P = useMemo<PFn>(() => {
+    const map = new Map<string, Participant>();
+    apiParticipants.forEach((p) => {
+      if (typeof p.id !== 'string' || !p.id) return;
+      map.set(p.id, {
+        id: p.id,
+        name: p.name || p.id,
+        role: p.role ?? '',
+        initials: p.initials ?? p.name.slice(0, 2),
+        tone: (p.tone as 'warm' | 'cool' | 'neutral') ?? 'neutral',
+        speakingPct: p.speakingPct ?? 0,
+      });
+    });
+    return (id: string) => map.get(id) ?? defaultP(id);
+  }, [apiParticipants]);
 
   useEffect(() => {
     if (forceMock) {
       setA(ANALYSIS);
       setUsingMock(true);
       setTensionMock(true);
+      setApiState('skipped');
+      setApiParticipants([]);
       return;
     }
-    if (!id) return;
+    if (!id) { setApiState('skipped'); return; }
+    setApiState('loading');
     // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
     // view 'B' returns { left, center, right } which doesn't match render structure.
     meetingNotesApi.getMeetingDetail(id, 'A')
@@ -429,9 +455,15 @@ export function VariantWorkbench() {
         if (data?.analysis) {
           setA(adaptApiAnalysis(data.analysis));
           setUsingMock(false);
+          setApiState('ok');
+          if (Array.isArray(data.analysis.participants)) {
+            setApiParticipants(data.analysis.participants);
+          }
+        } else {
+          setApiState('error');
         }
       })
-      .catch(() => {});
+      .catch(() => { setApiState('error'); });
     // Phase 15.15 · C.1 · tension probe
     meetingNotesApi.getMeetingTensions(id)
       .then((data) => {
@@ -461,6 +493,16 @@ export function VariantWorkbench() {
 
   const activeDim = dimList.find((x) => x.id === dim) ?? dimList[0];
 
+  if (apiState === 'loading') {
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: 'var(--paper-2)',
+        color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--sans)', fontSize: 13,
+      }}>加载中…</div>
+    );
+  }
+
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper-2)',
@@ -484,16 +526,20 @@ export function VariantWorkbench() {
         <div style={{ height: 22, width: 1, background: 'var(--line)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-2)' }}>
           <Icon name="folder" size={14} />
-          <span>{MEETING.id}</span>
+          <span>{id ?? MEETING.id}</span>
           <Icon name="chevron" size={12} style={{ color: 'var(--ink-4)' }} />
           <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{displayTitle}</span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {usingMock && <MockBadge />}
-          <Chip tone="ghost"><Icon name="mic" size={11} />m4a + docx</Chip>
-          <Chip tone="ghost">preset: standard</Chip>
-          <Chip tone="accent">3 experts active</Chip>
-          <div style={{ width: 1, height: 22, background: 'var(--line)' }} />
+          {/* 这三个 chip 当前没有真实数据来源（音视频源、preset、active experts 计数）·
+              API 模式下隐藏，避免误导；mock 模式保留作为 demo 风味。 */}
+          {usingMock && <>
+            <Chip tone="ghost"><Icon name="mic" size={11} />m4a + docx</Chip>
+            <Chip tone="ghost">preset: standard</Chip>
+            <Chip tone="accent">3 experts active</Chip>
+            <div style={{ width: 1, height: 22, background: 'var(--line)' }} />
+          </>}
           <TopBtn icon="search">搜索</TopBtn>
           <TopBtn icon="upload">导出</TopBtn>
         </div>
@@ -529,29 +575,41 @@ export function VariantWorkbench() {
             })}
           </nav>
 
-          <div style={{ padding: '22px 16px 10px' }}>
+          <div style={{ padding: '22px 16px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <SectionLabel>专家栈 Experts</SectionLabel>
+            {!usingMock && <MockBadge />}
           </div>
           <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
-            {EXPERTS.filter((e) => e.selected).map((e) => (
-              <div key={e.id} style={{
-                border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--paper-2)',
+            {usingMock ? (
+              <>
+                {EXPERTS.filter((e) => e.selected).map((e) => (
+                  <div key={e.id} style={{
+                    border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--paper-2)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>{e.id}</span>
+                      <Chip tone="ink" style={{ padding: '1px 6px', fontSize: 10 }}>{(e.match * 100).toFixed(0)}%</Chip>
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 4, lineHeight: 1.35 }}>{e.name}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{e.field}</div>
+                  </div>
+                ))}
+                <button style={{
+                  border: '1px dashed var(--line)', background: 'transparent', padding: '8px 10px',
+                  borderRadius: 6, color: 'var(--ink-3)', fontSize: 12, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+                }}>
+                  <Icon name="plus" size={12} /> 添加专家
+                </button>
+              </>
+            ) : (
+              <div style={{
+                fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.6,
+                padding: '10px 10px', border: '1px dashed var(--line-2)', borderRadius: 6,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>{e.id}</span>
-                  <Chip tone="ink" style={{ padding: '1px 6px', fontSize: 10 }}>{(e.match * 100).toFixed(0)}%</Chip>
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 4, lineHeight: 1.35 }}>{e.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{e.field}</div>
+                专家栈对应 run.expertRoles 与 expert-library；当前会议详情接口未透传该数据，留待后续接入。
               </div>
-            ))}
-            <button style={{
-              border: '1px dashed var(--line)', background: 'transparent', padding: '8px 10px',
-              borderRadius: 6, color: 'var(--ink-3)', fontSize: 12, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
-            }}>
-              <Icon name="plus" size={12} /> 添加专家
-            </button>
+            )}
           </div>
         </aside>
 
@@ -573,17 +631,20 @@ export function VariantWorkbench() {
               {dim === 'minutes'       && `${a.summary.actionItems.length} actions`}
             </MonoMeta>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <Chip tone="ghost"><Icon name="sparkle" size={10} />知识锚定已启用</Chip>
-              <Chip tone="ghost">置信度: 0.78</Chip>
+              {/* 知识锚定 / 置信度 当前没有真实指标来源 · 仅 mock 模式展示 */}
+              {usingMock && <>
+                <Chip tone="ghost"><Icon name="sparkle" size={10} />知识锚定已启用</Chip>
+                <Chip tone="ghost">置信度: 0.78</Chip>
+              </>}
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px' }}>
-            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} />}
+            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} />}
             {dim === 'minutes'       && <WBMinutes        a={a} />}
-            {dim === 'new_cognition' && <WBNewCognition   a={a} />}
-            {dim === 'focus_map'     && <WBFocusMap       a={a} />}
-            {dim === 'consensus'     && <WBConsensus      a={a} />}
-            {dim === 'cross_view'    && <WBCrossView      a={a} />}
+            {dim === 'new_cognition' && <WBNewCognition   a={a} P={P} />}
+            {dim === 'focus_map'     && <WBFocusMap       a={a} P={P} />}
+            {dim === 'consensus'     && <WBConsensus      a={a} P={P} />}
+            {dim === 'cross_view'    && <WBCrossView      a={a} P={P} />}
           </div>
         </section>
 
@@ -593,13 +654,16 @@ export function VariantWorkbench() {
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-            <SectionLabel>原文锚点 Evidence</SectionLabel>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <SectionLabel>原文锚点 Evidence</SectionLabel>
+              {!usingMock && <MockBadge />}
+            </div>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>
               每一条分析都回溯到 2-3 个原文段落
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {TRANSCRIPT.map((t, i) => (
+            {usingMock ? TRANSCRIPT.map((t, i) => (
               <div key={i} style={{
                 borderLeft: t.highlight ? '2px solid var(--accent)' : '2px solid var(--line-2)',
                 paddingLeft: 12,
@@ -622,7 +686,15 @@ export function VariantWorkbench() {
                   </div>
                 )}
               </div>
-            ))}
+            )) : (
+              <div style={{
+                fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7,
+                padding: '14px 14px', border: '1px dashed var(--line-2)', borderRadius: 6,
+              }}>
+                原文段落锚点对应 transcript + 高亮范围；当前会议详情接口未透传逐句 transcript，
+                等接入 <code>/meetings/:id/transcript</code> 后再展示。
+              </div>
+            )}
           </div>
         </aside>
       </div>

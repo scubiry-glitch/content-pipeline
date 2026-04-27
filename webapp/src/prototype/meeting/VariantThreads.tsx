@@ -1,13 +1,17 @@
 // VariantThreads — C 视图 · 人物编织
 // 原型来源：/tmp/mn-proto/variant-c.jsx VariantThreads
 
-import { useState, useEffect, type CSSProperties } from 'react';
+import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { MEETING, PARTICIPANTS, ANALYSIS, P } from './_fixtures';
+import { MEETING, PARTICIPANTS, ANALYSIS, P as defaultP } from './_fixtures';
+import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
+
+type PFn = (id: string) => Participant;
+type ThreadEvent = { t: number; kind: string; label?: string; ref?: string };
 
 // ── Belief thread events (hardcoded per prototype) ──
 const EVENTS: Record<string, Array<{ t: number; kind: string; label?: string; ref?: string }>> = {
@@ -47,7 +51,7 @@ function LegendDot({ color, label, ring, small, square }: {
 }
 
 // ── EventMark ──
-function EventMark({ e, x }: { e: typeof EVENTS['p1'][0]; x: number }) {
+function EventMark({ e, x }: { e: ThreadEvent; x: number }) {
   const base: CSSProperties = {
     position: 'absolute', left: x, top: '50%',
     transform: 'translate(-50%,-50%)', zIndex: 2,
@@ -115,7 +119,15 @@ function EventMark({ e, x }: { e: typeof EVENTS['p1'][0]; x: number }) {
 }
 
 // ── ThreadView ──
-function ThreadView({ a }: { a: typeof ANALYSIS }) {
+function ThreadView({ a, isMock, P = defaultP, participants, events }: {
+  a: typeof ANALYSIS; isMock?: boolean; P?: PFn;
+  /** 实际渲染的人物列表（API 模式来自 detail.participants，否则 fixture） */
+  participants?: Participant[];
+  /** 信念事件 dict（mock 模式来自模块级 EVENTS；API 模式从 analysis 派生） */
+  events?: Record<string, ThreadEvent[]>;
+}) {
+  const lanePeople = participants && participants.length > 0 ? participants : PARTICIPANTS;
+  const eventDict = events ?? EVENTS;
   const W = 1440 - 56 * 2;
   const laneH = 72;
   const startX = 170;
@@ -127,7 +139,7 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
     <div style={{ padding: '26px 56px 32px', overflowY: 'auto' }}>
       <div style={{ marginBottom: 18, display: 'flex', alignItems: 'baseline', gap: 18 }}>
         <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 26, margin: 0, letterSpacing: '-0.01em' }}>
-          信念演化 · Belief threads
+          信念演化 · Belief threads {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
         <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 560 }}>
           每条横轴是一个人的信念轨迹。标记点是：主张 · 冲击 · 更新 · 让步 · 决断。读图就像看一场辩论的 MRI。
@@ -144,7 +156,7 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
         <LegendDot color="var(--ink-2)" label="让步 · 决断" square />
       </div>
 
-      {/* Chart */}
+      {/* Chart · API 模式由 analysis 派生事件（无真实时间戳，按数组序号铺到时间轴） */}
       <div style={{
         position: 'relative', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
         borderRadius: 8, padding: '18px 0 30px',
@@ -160,7 +172,7 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
         </div>
 
         {/* Lanes */}
-        {PARTICIPANTS.map((p, i) => (
+        {lanePeople.map((p, i) => (
           <div key={p.id} style={{
             position: 'relative', height: laneH,
             borderTop: i === 0 ? 'none' : '1px dashed var(--line-2)',
@@ -195,28 +207,29 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
               borderRadius: 11, pointerEvents: 'none',
             }} />
             {/* Events */}
-            {(EVENTS[p.id] ?? []).map((e, j) => (
+            {(eventDict[p.id] ?? []).map((e, j) => (
               <EventMark key={j} e={e} x={xFor(e.t)} />
             ))}
           </div>
         ))}
 
-        {/* Clash vertical line between p2 and p3 at t=39 */}
-        <div style={{
-          position: 'absolute', left: xFor(39) + 56, top: 30 + 20,
-          height: laneH * 2 + 10, width: 0,
-          borderLeft: '1.5px dashed var(--accent)', opacity: 0.5,
-        }} />
-        {/* Decision moment */}
-        <div style={{
-          position: 'absolute', left: xFor(108) + 56, top: 20, bottom: 10,
-          width: 0, borderLeft: '1.5px solid var(--accent)', opacity: 0.3,
-        }} />
-        <div style={{
-          position: 'absolute', left: xFor(108) + 56, top: -4, transform: 'translateX(-50%)',
-          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)', letterSpacing: 0.3,
-          background: 'var(--paper)', padding: '1px 6px', borderRadius: 3,
-        }}>DECISION · 108m</div>
+        {/* mock 模式保留 demo 的两条参考线（API 派生事件没有时间戳，故隐藏） */}
+        {isMock && <>
+          <div style={{
+            position: 'absolute', left: xFor(39) + 56, top: 30 + 20,
+            height: laneH * 2 + 10, width: 0,
+            borderLeft: '1.5px dashed var(--accent)', opacity: 0.5,
+          }} />
+          <div style={{
+            position: 'absolute', left: xFor(108) + 56, top: 20, bottom: 10,
+            width: 0, borderLeft: '1.5px solid var(--accent)', opacity: 0.3,
+          }} />
+          <div style={{
+            position: 'absolute', left: xFor(108) + 56, top: -4, transform: 'translateX(-50%)',
+            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)', letterSpacing: 0.3,
+            background: 'var(--paper)', padding: '1px 6px', borderRadius: 3,
+          }}>DECISION · 108m</div>
+        </>}
       </div>
 
       {/* Belief updates summary */}
@@ -253,10 +266,27 @@ function ThreadView({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── ConsensusGraph ──
-function ConsensusGraph({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
+function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
+  a: typeof ANALYSIS; isMock?: boolean;
+  apiParticipants?: Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>;
+  P?: PFn;
+}) {
   const cons = a.consensus.filter((x) => x.kind === 'consensus');
   const divs = a.consensus.filter((x) => x.kind === 'divergence');
-  const participants = PARTICIPANTS;
+  // API 模式：participants 列表来自 /meetings/:id/detail.analysis.participants（含真实 UUID）
+  // 否则回落到 fixture PARTICIPANTS（id 是 p1-p6）
+  const participants = (apiParticipants && apiParticipants.length > 0)
+    ? apiParticipants
+        .filter((p): p is typeof p & { id: string } => typeof p.id === 'string' && p.id.length > 0)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role ?? '',
+          initials: p.initials ?? p.name.slice(0, 2),
+          tone: (p.tone as 'warm' | 'cool' | 'neutral') ?? 'neutral',
+          speakingPct: p.speakingPct ?? 0,
+        }))
+    : PARTICIPANTS;
 
   const cx = 450, cy = 360, ringR = 180;
   const nodePos: Record<string, { x: number; y: number }> = {};
@@ -423,7 +453,7 @@ function ConsensusGraph({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean })
 }
 
 // ── FocusNebula ──
-function FocusNebula({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
+function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: boolean; P?: PFn }) {
   const W = 900, H = 620;
   const clusters = a.focusMap.map((f, i) => {
     const angle = (i / a.focusMap.length) * Math.PI * 2 - Math.PI / 2;
@@ -538,6 +568,8 @@ export function VariantThreads() {
   const [usingMock, setUsingMock] = useState(true);
   const [consensusMock, setConsensusMock] = useState(true);
   const [focusMapMock, setFocusMapMock] = useState(true);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
+  const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
 
   useEffect(() => {
     if (forceMock) {
@@ -545,9 +577,12 @@ export function VariantThreads() {
       setUsingMock(true);
       setConsensusMock(true);
       setFocusMapMock(true);
+      setApiState('skipped');
+      setApiParticipants([]);
       return;
     }
-    if (!id) return;
+    if (!id) { setApiState('skipped'); return; }
+    setApiState('loading');
     // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
     // view 'C' returns { nodes, threads, influence } which doesn't match render structure.
     meetingNotesApi.getMeetingDetail(id, 'A')
@@ -555,6 +590,12 @@ export function VariantThreads() {
         if (data?.analysis) {
           setA(adaptApiAnalysis(data.analysis));
           setUsingMock(false);
+          setApiState('ok');
+          if (Array.isArray(data.analysis.participants)) {
+            setApiParticipants(data.analysis.participants);
+          }
+        } else {
+          setApiState('error');
         }
         // Phase 15.15 · C.2 · consensus fork
         if (Array.isArray(data?.consensus) && data.consensus.length > 0) {
@@ -578,8 +619,18 @@ export function VariantThreads() {
           setFocusMapMock(false);
         }
       })
-      .catch(() => {});
+      .catch(() => { setApiState('error'); });
   }, [id, forceMock]);
+
+  if (apiState === 'loading') {
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: 'var(--paper)',
+        color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--sans)', fontSize: 13,
+      }}>加载中…</div>
+    );
+  }
 
   return (
     <div style={{
@@ -614,13 +665,14 @@ export function VariantThreads() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        <Chip tone="ghost"><Icon name="clock" size={11} /> {MEETING.duration}</Chip>
-        <Chip tone="ghost"><Icon name="users" size={11} /> 6 人</Chip>
-        <Chip tone="accent">3 experts · standard</Chip>
+        {/* duration / 专家配置当前接口未透传 · API 模式只显示真实可得的人数 */}
+        {usingMock && <Chip tone="ghost"><Icon name="clock" size={11} /> {MEETING.duration}</Chip>}
+        <Chip tone="ghost"><Icon name="users" size={11} /> {usingMock ? '6 人' : `${apiParticipants.length} 人`}</Chip>
+        {usingMock && <Chip tone="accent">3 experts · standard</Chip>}
       </header>
 
-      {view === 'threads'   && <ThreadView    a={a} />}
-      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} />}
+      {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} />}
+      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={apiParticipants} />}
       {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} />}
     </div>
   );

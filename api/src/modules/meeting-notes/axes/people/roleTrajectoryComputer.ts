@@ -57,6 +57,14 @@ export async function computeRoleTrajectory(
   }
   const items = [...byPerson.values()];
 
+  // mn_role_trajectory_points.scope_id 是 nullable FK → mn_scopes(id)。
+  // 当 scopeKind='meeting' 时，args.scopeId 实际是 meeting 自己的 id（不在 mn_scopes 表里），
+  // 直接用会触发 FK 23503。把 'meeting' 形态显式 normalize 到 NULL，让记录归在"无 scope"维度。
+  const persistScopeId =
+    args.scopeKind && args.scopeKind !== 'meeting' && args.scopeId
+      ? args.scopeId
+      : null;
+
   for (const item of items) {
     try {
       const personId = await ensurePersonByName(deps, item.who);
@@ -67,7 +75,7 @@ export async function computeRoleTrajectory(
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (person_id, meeting_id, scope_id)
          DO UPDATE SET role_label = EXCLUDED.role_label, confidence = EXCLUDED.confidence`,
-        [personId, bundle.meetingId, args.scopeId ?? null, item.role_label, item.confidence ?? 0.5],
+        [personId, bundle.meetingId, persistScopeId, item.role_label, item.confidence ?? 0.5],
       );
       out.created += 1;
     } catch (e) {

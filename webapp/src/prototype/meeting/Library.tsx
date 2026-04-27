@@ -36,6 +36,7 @@ interface Meeting {
   starred: boolean;
   preset: string;
   tags: string[];
+  archived?: boolean;
 }
 
 // ── Mock data ───────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function adaptApiMeeting(api: any): Meeting {
     starred: false,
     preset: 'standard',
     tags: api.meeting_kind ? [String(api.meeting_kind)] : [],
+    archived: Boolean(api.archived),
   };
 }
 
@@ -316,11 +318,14 @@ function StatBox({ label, v, tone }: { label: string; v: number; tone: 'accent' 
   );
 }
 
-function PreviewPanel({ m, tree, groupBy, onAction }: {
+type PreviewAction = 'view-a' | 'view-b' | 'view-c' | 'move' | 'export' | 'archive' | 'unarchive' | 'delete';
+
+function PreviewPanel({ m, tree, groupBy, onAction, busy }: {
   m: Meeting; tree: TreeNode[]; groupBy: GroupKey;
-  onAction: (action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export', m: Meeting) => void;
+  onAction: (action: PreviewAction, m: Meeting) => void;
+  busy?: PreviewAction | null;
 }) {
-  const quickActions: Array<{ icon: IconName; label: string; action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export' }> = [
+  const quickActions: Array<{ icon: IconName; label: string; action: PreviewAction }> = [
     { icon: 'book',    label: '打开 Editorial 视图',     action: 'view-a' },
     { icon: 'layers',  label: '打开 Workbench',           action: 'view-b' },
     { icon: 'network', label: '打开 Threads',             action: 'view-c' },
@@ -381,6 +386,58 @@ function PreviewPanel({ m, tree, groupBy, onAction }: {
           ))}
         </div>
       </div>
+
+      {/* 归档 / 删除 · 不可逆操作单独分组，提示明显 */}
+      <div style={{ padding: '12px 14px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6 }}>
+        <SectionLabel>会议生命周期</SectionLabel>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {m.archived ? (
+            <button
+              onClick={() => onAction('unarchive', m)}
+              disabled={busy === 'unarchive'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                border: '1px solid var(--line-2)', background: 'var(--paper)', borderRadius: 5,
+                cursor: busy === 'unarchive' ? 'not-allowed' : 'pointer', fontSize: 12.5, fontFamily: 'var(--sans)', color: 'var(--ink-2)',
+                opacity: busy === 'unarchive' ? 0.6 : 1,
+              }}
+            >
+              <Icon name="folder" size={13} />
+              {busy === 'unarchive' ? '处理中…' : '取消归档 · 恢复到列表'}
+            </button>
+          ) : (
+            <button
+              onClick={() => onAction('archive', m)}
+              disabled={busy === 'archive'}
+              title="归档后从默认列表移除，可在「显示归档」下找回"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                border: '1px solid var(--line-2)', background: 'var(--paper)', borderRadius: 5,
+                cursor: busy === 'archive' ? 'not-allowed' : 'pointer', fontSize: 12.5, fontFamily: 'var(--sans)', color: 'var(--ink-2)',
+                opacity: busy === 'archive' ? 0.6 : 1,
+              }}
+            >
+              <Icon name="folder" size={13} />
+              {busy === 'archive' ? '处理中…' : '归档 · 逻辑删除'}
+            </button>
+          )}
+          <button
+            onClick={() => onAction('delete', m)}
+            disabled={busy === 'delete'}
+            title="物理删除会议及其全部解析记录，不可恢复"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+              border: '1px solid oklch(0.85 0.1 25)', background: 'oklch(0.98 0.02 25)',
+              borderRadius: 5, color: 'oklch(0.45 0.18 25)', fontSize: 12.5, fontFamily: 'var(--sans)',
+              cursor: busy === 'delete' ? 'not-allowed' : 'pointer',
+              opacity: busy === 'delete' ? 0.6 : 1,
+            }}
+          >
+            <Icon name="x" size={13} />
+            {busy === 'delete' ? '删除中…' : '永久删除 · 不可恢复'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -394,19 +451,26 @@ export function Library() {
   const [selectedId, setSelectedId] = useState('M-2026-04-11-0237');
   const [renaming, setRenaming] = useState<string | null>(null);
 
-  // API probe：成功即 un-mock + 拿到的 items 直接代替 fixture 显示
+  // API probe：默认 API 优先 · 加载期间不闪 mock · 仅 forceMock 或 API 失败时降级
   const forceMock = useForceMock();
   const [apiMeetings, setApiMeetings] = useState<Meeting[] | null>(null);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [scopesOk, setScopesOk] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   useEffect(() => {
-    if (forceMock) { setApiMeetings(null); setScopesOk(false); return; }
+    if (forceMock) { setApiMeetings(null); setApiState('ok'); setScopesOk(false); return; }
     let cancelled = false;
-    meetingNotesApi.listMeetings({ limit: 50 })
+    setApiState('loading');
+    meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' })
       .then((r) => {
         if (cancelled) return;
         setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
+        setApiState('ok');
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setApiState('error');
+      });
     Promise.allSettled([
       meetingNotesApi.listScopes({ kind: 'project' }),
       meetingNotesApi.listScopes({ kind: 'client' }),
@@ -417,9 +481,15 @@ export function Library() {
       setScopesOk(ok);
     });
     return () => { cancelled = true; };
-  }, [forceMock]);
-  const meetingsDisplay = apiMeetings ?? MEETINGS;
-  const isMock = forceMock || apiMeetings === null;
+  }, [forceMock, showArchived]);
+  // forceMock → fixture；API ok → API 结果；loading → 空列表（避免闪 mock）；error → fixture
+  const meetingsDisplay = forceMock || apiState === 'error'
+    ? MEETINGS
+    : apiState === 'loading'
+      ? []
+      : (apiMeetings ?? []);
+  const isMock = forceMock || apiState === 'error';
+  const isLoading = !forceMock && apiState === 'loading';
 
   const tree = GROUP_TREES[groupBy];
 
@@ -441,12 +511,44 @@ export function Library() {
   const visible = meetingsDisplay.filter(m => matchGroup(m, activeGroup));
   const selected = meetingsDisplay.find(m => m.id === selectedId) ?? visible[0];
 
-  const handlePreviewAction = (action: 'view-a' | 'view-b' | 'view-c' | 'move' | 'export', m: Meeting) => {
-    if (action === 'view-a') navigate(`/meeting/${m.id}/a`);
-    else if (action === 'view-b') navigate(`/meeting/${m.id}/b`);
-    else if (action === 'view-c') navigate(`/meeting/${m.id}/c`);
-    else if (action === 'move') alert('移动到其他分组 · 后端 bindMeeting/unbindScope 待接入（Phase 10+）');
-    else if (action === 'export') alert('导出 PDF/Markdown · 待接入 getMeetingDetail 下载');
+  const [busyAction, setBusyAction] = useState<PreviewAction | null>(null);
+
+  const handlePreviewAction = async (action: PreviewAction, m: Meeting) => {
+    if (action === 'view-a') return navigate(`/meeting/${m.id}/a`);
+    if (action === 'view-b') return navigate(`/meeting/${m.id}/b`);
+    if (action === 'view-c') return navigate(`/meeting/${m.id}/c`);
+    if (action === 'move')   return alert('移动到其他分组 · 后端 bindMeeting/unbindScope 待接入（Phase 10+）');
+    if (action === 'export') return alert('导出 PDF/Markdown · 待接入 getMeetingDetail 下载');
+
+    // 归档 / 取消归档 / 删除 · 仅对 UUID id（API 模式）有效
+    if (!UUID_RE.test(m.id) || forceMock) {
+      alert('Mock 模式或 demo 数据不支持此操作 · 切换到 API 模式');
+      return;
+    }
+    try {
+      if (action === 'archive') {
+        setBusyAction('archive');
+        await meetingNotesApi.archiveMeeting(m.id);
+        // 默认列表只显示 active：归档后从当前列表移除
+        setApiMeetings((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+        if (selectedId === m.id) setSelectedId('');
+      } else if (action === 'unarchive') {
+        setBusyAction('unarchive');
+        await meetingNotesApi.unarchiveMeeting(m.id);
+        setApiMeetings((prev) => (prev ?? []).map((x) => x.id === m.id ? { ...x, archived: false } : x));
+      } else if (action === 'delete') {
+        const ok = window.confirm(`确认永久删除会议「${m.title}」？\n\n此操作将从数据库删除会议及其全部解析记录（张力 / 共识 / 决策 / 假设 / …），不可恢复。`);
+        if (!ok) return;
+        setBusyAction('delete');
+        await meetingNotesApi.deleteMeeting(m.id);
+        setApiMeetings((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+        if (selectedId === m.id) setSelectedId('');
+      }
+    } catch (e: any) {
+      alert(`操作失败：${e?.message ?? e}`);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const groupTabs: Array<{ id: GroupKey; label: string }> = [
@@ -491,6 +593,19 @@ export function Library() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {isMock && <MockBadge />}
+          <button
+            onClick={() => setShowArchived((v) => !v)}
+            title={showArchived ? '当前显示归档会议 · 点击切回 active' : '切换到「归档」视图，可在那里取消归档或永久删除'}
+            style={{
+              padding: '5px 11px', border: '1px solid var(--line)',
+              background: showArchived ? 'var(--ink)' : 'var(--paper)',
+              color: showArchived ? 'var(--paper)' : 'var(--ink-2)',
+              fontSize: 12, borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--sans)',
+              fontWeight: showArchived ? 600 : 450,
+            }}
+          >
+            {showArchived ? '归档' : '显示归档'}
+          </button>
           <Chip tone="ghost">{meetingsDisplay.length} 条会议 · {allGroupIds.length} 个分组</Chip>
           <button
             onClick={() => alert('全文搜索 · 待接入（TODO: search API）')}
@@ -600,7 +715,7 @@ export function Library() {
                 textAlign: 'center', color: 'var(--ink-3)', fontSize: 13,
                 background: 'var(--paper-2)', borderRadius: 6, border: '1px dashed var(--line)',
               }}>
-                这个分组里还没有会议纪要
+                {isLoading ? '加载中…' : '这个分组里还没有会议纪要'}
               </div>
             )}
           </div>
@@ -608,7 +723,7 @@ export function Library() {
 
         {/* Right: preview panel */}
         <aside style={{ borderLeft: '1px solid var(--line-2)', background: 'var(--paper)', overflow: 'auto', padding: '22px 22px' }}>
-          {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} />}
+          {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} busy={busyAction} />}
         </aside>
       </div>
     </div>

@@ -122,14 +122,25 @@ export const meetingNotesApi = {
     jget<any>(`/scopes/${scopeId}/longitudinal/${kind}`),
 
   // Meetings
-  listMeetings: (q: { limit?: number } = {}) => {
-    const qs = q.limit ? `?limit=${q.limit}` : '';
-    return jget<{ items: any[]; libraryRuns: any[] }>(`/meetings${qs}`);
+  listMeetings: (q: { limit?: number; status?: 'active' | 'archived' | 'all' } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<{ items: any[]; libraryRuns: any[] }>(`/meetings${qs ? '?' + qs : ''}`);
   },
   createMeeting: (body: { title?: string; meetingKind?: string }) =>
     jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
   updateMeeting: (id: string, body: { title: string }) =>
     jput<{ id: string; title: string; created_at: string; updated_at: string }>(`/meetings/${id}`, body),
+  archiveMeeting: (id: string) =>
+    jpost<{ id: string; title: string; archived: boolean }>(`/meetings/${id}/archive`),
+  unarchiveMeeting: (id: string) =>
+    jpost<{ id: string; title: string; archived: boolean }>(`/meetings/${id}/unarchive`),
+  deleteMeeting: (id: string) =>
+    jdelete<{ ok: boolean }>(`/meetings/${id}`),
   unbindScope: (scopeId: string, meetingId: string) =>
     jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
 

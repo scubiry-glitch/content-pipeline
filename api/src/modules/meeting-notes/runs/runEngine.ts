@@ -60,6 +60,22 @@ function coercePreset(v: unknown): Preset | undefined {
   return typeof v === 'string' && PRESETS.has(v as Preset) ? (v as Preset) : undefined;
 }
 
+/**
+ * preset → 默认装饰器栈：当 meetingKindStrategyMap 没匹配上（如 workshop / general）
+ * 时回退到 preset 提供的合理默认值。否则会出现"用户选了 standard 但 strategy=null、
+ * 装饰器栈为空"的退化 — UI 上显示深度模式，实际生成跟 lite 没区别。
+ *
+ * 与 services/expert-application/presets.ts 的 PRESET_COMBOS 主旋律保持一致，
+ * 但提取成单一字符串（meeting-notes 侧只用单一 strategySpec，不按 task type 切分）。
+ */
+const PRESET_DEFAULT_STRATEGY: Record<Preset, string> = {
+  lite: 'failure_check|emm_iterative|signature_style|single',
+  standard:
+    'failure_check|emm_iterative|rubric_anchored_output|calibrated_confidence|signature_style|debate',
+  max:
+    'failure_check|emm_iterative|evidence_anchored|rubric_anchored_output|track_record_verify|signature_style|mental_model_rotation',
+};
+
 /** 校验 expertRoles：仅保留 people/projects/knowledge 三个角色 + 字符串 id */
 function sanitizeExpertRoles(raw: unknown): ExpertRoleAssignment | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
@@ -204,13 +220,20 @@ export class RunEngine {
     const triggeredBy = coerceRunTrigger(req.triggeredBy);
 
     // 1. 解析 strategy / preset
+    //    优先级：req.strategy > meetingKind 映射的 default > preset 兜底默认
+    //    最后这层兜底是关键：workshop / general 这种 kind 在 MEETING_KIND_STRATEGY 里
+    //    没条目，否则前端选 preset='standard' 但实际 strategy=null，装饰器栈全空。
     const meetingKind = await this.lookupMeetingKind(reqNorm);
     const strategyFromApp = this.deps.expertApplication.resolveForMeetingKind(meetingKind);
     const preset: Preset =
       coercePreset(req.preset)
       ?? coercePreset(strategyFromApp?.preset as unknown)
       ?? 'standard';
-    const strategySpec = req.strategy ?? strategyFromApp?.default ?? null;
+    const strategySpec =
+      req.strategy
+      ?? strategyFromApp?.default
+      ?? PRESET_DEFAULT_STRATEGY[preset]
+      ?? null;
 
     // 2. 拉直 subDims：若未指定，使用 axis 全量子维度
     const subDims = req.subDims && req.subDims.length > 0

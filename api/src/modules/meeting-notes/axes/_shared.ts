@@ -206,9 +206,24 @@ export async function extractListOverChunks<T = any>(
     }
     const trimmed = (raw ?? '').trim();
     if (trimmed.length === 0) return { items: [] };
-    const j = safeJsonParse<T[] | null>(trimmed, null);
-    if (!Array.isArray(j)) return { error: 'parse', message: 'non-array JSON', raw };
-    return { items: j as T[] };
+    const j = safeJsonParse<unknown>(trimmed, null);
+    if (Array.isArray(j)) return { items: j as T[] };
+    // 兜底：LLM 在 rubric_anchored_output / responseFormat=json 下经常返回
+    // {"items":[...]} / {"decisions":[...]} 这种 wrapper object 而非裸数组。
+    // 取首个 array-valued 字段当结果。注意 prefer 拥有 object 元素的字段，
+    // 避免误命中 ["key1","key2"] 这种纯字符串数组。
+    if (j && typeof j === 'object' && !Array.isArray(j)) {
+      const candidates: unknown[] = [];
+      for (const v of Object.values(j as Record<string, unknown>)) {
+        if (Array.isArray(v)) candidates.push(v);
+      }
+      const arrOfObj = candidates.find(
+        (a): a is unknown[] => Array.isArray(a) && a.length > 0 && typeof a[0] === 'object',
+      );
+      const pick = (arrOfObj ?? candidates[0]) as unknown[] | undefined;
+      if (Array.isArray(pick)) return { items: pick as T[] };
+    }
+    return { error: 'parse', message: 'non-array JSON', raw };
   }
 
   // Opt-5 (O6) chunks 并行：默认 chunks 数 ≤ 3 时全部并发，>3 时按 chunkConcurrency

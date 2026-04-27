@@ -32,6 +32,7 @@ export function MeetingDetailShell() {
   const [apiTitle, setApiTitle] = useState<string | null>(null);
   const [apiDate, setApiDate] = useState<string | null>(null);
   const [apiResponded, setApiResponded] = useState(false);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
@@ -39,10 +40,14 @@ export function MeetingDetailShell() {
   useEffect(() => {
     if (forceMock || !id || !UUID_RE.test(id)) {
       setApiResponded(false);
+      setApiState('skipped');
       setEditingTitle(false);
       return;
     }
     setApiResponded(false);
+    setApiState('loading');
+    setApiTitle(null);
+    setApiDate(null);
     setEditingTitle(false);
     let cancelled = false;
     // Prefer getMeetingDetail (returns title/date directly from assets table).
@@ -54,15 +59,19 @@ export function MeetingDetailShell() {
         if (a.title) setApiTitle(String(a.title));
         if (a.date) setApiDate(String(a.date).slice(0, 10));
         setApiResponded(true);
+        setApiState('ok');
       })
       .catch(() => {
         if (cancelled) return;
         setApiResponded(true);
+        setApiState('error');
       });
     return () => { cancelled = true; };
   }, [id, forceMock]);
 
-  const effectiveTitle = apiTitle ?? m.title;
+  // 默认 API 优先：加载中显示占位，避免闪 fixture 标题；仅 forceMock / API 错误时才回 mock
+  const effectiveTitle = apiTitle
+    ?? (forceMock || apiState === 'error' || apiState === 'skipped' ? m.title : '加载中…');
 
   const startEditTitle = () => {
     setTitleDraft(effectiveTitle);

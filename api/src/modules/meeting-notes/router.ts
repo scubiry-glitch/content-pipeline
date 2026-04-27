@@ -82,8 +82,10 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Meetings CRUD (list + create, detail in /meetings/:id/*)
     // --------------------------------------------------------
     fastify.get('/meetings', { preHandler: authenticate }, async (request) => {
-      const q = request.query as { limit?: string };
+      const q = request.query as { limit?: string; status?: string };
       const limit = Math.min(100, parseInt(q.limit ?? '50', 10));
+      // ?status=active（默认 · 排除归档）/ archived（仅归档）/ all（全部）
+      const status = q.status === 'archived' || q.status === 'all' ? q.status : 'active';
       try {
         const r = await engine.deps.db.query(
           `SELECT
@@ -92,6 +94,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            a.metadata->>'meeting_kind' AS meeting_kind,
            a.created_at,
            a.metadata AS metadata,
+           COALESCE((a.metadata->>'archived')::boolean, false) AS archived,
+           a.metadata->>'archived_at' AS archived_at,
            (SELECT row_to_json(rr) FROM (
              SELECT id, state, axis, finished_at, error_message
              FROM mn_runs WHERE scope_kind='meeting' AND scope_id::text = a.id
@@ -107,10 +111,15 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
              '[]'::json
            ) AS scope_bindings
          FROM assets a
-         WHERE a.type = 'meeting_note' OR (a.metadata ? 'meeting_kind')
+         WHERE (a.type = 'meeting_note' OR (a.metadata ? 'meeting_kind'))
+           AND (
+             $2::text = 'all'
+             OR ($2::text = 'active'   AND COALESCE((a.metadata->>'archived')::boolean, false) = false)
+             OR ($2::text = 'archived' AND COALESCE((a.metadata->>'archived')::boolean, false) = true)
+           )
          ORDER BY a.created_at DESC
          LIMIT $1`,
-          [limit],
+          [limit, status],
         );
         // library-scoped runs (not attached to a specific meeting asset)
         const libR = await engine.deps.db.query(
@@ -225,6 +234,98 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         return { error: 'Not Found' };
       }
       return r.rows[0];
+    });
+
+    // 归档（逻辑删除） · metadata.archived=true + archived_at；列表默认隐藏
+    fastify.post('/meetings/:id/archive', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const r = await engine.deps.db.query(
+        `UPDATE assets
+            SET metadata = COALESCE(metadata, '{}'::jsonb)
+                            || jsonb_build_object('archived', true,
+                                                  'archived_at', NOW()::text),
+                updated_at = NOW()
+          WHERE id::text = $1::text
+            AND (type = 'meeting_note' OR (metadata ? 'meeting_kind'))
+          RETURNING id, title, updated_at`,
+        [id],
+      );
+      if ((r as any).rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ...r.rows[0], archived: true };
+    });
+
+    // 取消归档 · 移除 archived / archived_at 标记
+    fastify.post('/meetings/:id/unarchive', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const r = await engine.deps.db.query(
+        `UPDATE assets
+            SET metadata = (COALESCE(metadata, '{}'::jsonb) - 'archived' - 'archived_at'),
+                updated_at = NOW()
+          WHERE id::text = $1::text
+            AND (type = 'meeting_note' OR (metadata ? 'meeting_kind'))
+          RETURNING id, title, updated_at`,
+        [id],
+      );
+      if ((r as any).rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+      return { ...r.rows[0], archived: false };
+    });
+
+    // 物理删除 · 不可恢复
+    // 清理顺序：先 mn_* 表（无 FK 的会成为孤儿，FK CASCADE 表会随 assets 删除自动清理）
+    // 表未迁移（42P01）静默跳过；任一步失败但已删除部分仍向前推进，最终 DELETE FROM assets。
+    fastify.delete('/meetings/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const probe = await engine.deps.db.query(
+        `SELECT id FROM assets
+          WHERE id::text = $1::text
+            AND (type = 'meeting_note' OR (metadata ? 'meeting_kind'))
+          LIMIT 1`,
+        [id],
+      );
+      if ((probe as any).rowCount === 0) { reply.status(404); return { error: 'Not Found' }; }
+
+      const childTables = [
+        // 001: scope memberships
+        'mn_scope_members',
+        // 002: people axis
+        'mn_speech_quality', 'mn_silence_signals', 'mn_role_trajectory_points', 'mn_commitments',
+        // 003: projects axis
+        'mn_decisions', 'mn_assumptions',
+        // 004: knowledge axis
+        'mn_judgments', 'mn_cognitive_biases', 'mn_counterfactuals', 'mn_evidence_grades',
+        'mn_mental_model_invocations',
+        // 005: meta axis
+        'mn_meeting_necessity', 'mn_decision_quality', 'mn_affect_curve',
+        // 010 (FK CASCADE) 也手动删一遍 · 防 FK 缺失或测试库只迁了 010 的状态
+        'mn_consensus_items', 'mn_focus_map', 'mn_tensions',
+      ];
+      for (const t of childTables) {
+        try {
+          await engine.deps.db.query(`DELETE FROM ${t} WHERE meeting_id::text = $1::text`, [id]);
+        } catch (e: any) {
+          // 42P01: undefined_table（迁移未跑）→ 跳过
+          if (e?.code !== '42P01') {
+            request.log.warn({ table: t, err: e }, 'meeting delete: child cleanup failed (continuing)');
+          }
+        }
+      }
+      // 兜底：mn_runs 由 scope_kind/scope_id 关联；同步清理本会议挂的 run 记录
+      try {
+        await engine.deps.db.query(
+          `DELETE FROM mn_runs WHERE scope_kind = 'meeting' AND scope_id::text = $1::text`,
+          [id],
+        );
+      } catch (e: any) {
+        if (e?.code !== '42P01') {
+          request.log.warn({ err: e }, 'meeting delete: mn_runs cleanup failed (continuing)');
+        }
+      }
+
+      await engine.deps.db.query(`DELETE FROM assets WHERE id::text = $1::text`, [id]);
+      return { ok: true };
     });
 
     // --------------------------------------------------------

@@ -67,12 +67,14 @@ function runToItem(run: ApiRun, meetings: ApiMeeting[]): TodayItem | null {
 export function MeetingToday() {
   const navigate = useNavigate();
   const forceMock = useForceMock();
-  const [items, setItems] = useState<TodayItem[]>(MOCK_ITEMS);
+  const [items, setItems] = useState<TodayItem[]>(forceMock ? MOCK_ITEMS : []);
   const [isMock, setIsMock] = useState(true);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error'>(forceMock ? 'ok' : 'loading');
 
   useEffect(() => {
-    if (forceMock) { setItems(MOCK_ITEMS); setIsMock(true); return; }
+    if (forceMock) { setItems(MOCK_ITEMS); setIsMock(true); setApiState('ok'); return; }
     let cancelled = false;
+    setApiState('loading');
     Promise.allSettled([
       meetingNotesApi.listRuns({ limit: 10, state: 'done' }),
       meetingNotesApi.listMeetings({ limit: 5 }),
@@ -81,10 +83,15 @@ export function MeetingToday() {
       const runs: ApiRun[] = rRuns.status === 'fulfilled' ? (rRuns.value.items ?? []) : [];
       const meetings: ApiMeeting[] = rMeetings.status === 'fulfilled' ? (rMeetings.value.items ?? []) : [];
       const apiResponded = rRuns.status === 'fulfilled' || rMeetings.status === 'fulfilled';
-      if (!apiResponded) return;
+      if (!apiResponded) {
+        // 全部失败：降级 mock + 标记 error
+        setItems(MOCK_ITEMS); setIsMock(true); setApiState('error');
+        return;
+      }
       const apiItems = runs.slice(0, 3).map((r) => runToItem(r, meetings)).filter((x): x is TodayItem => !!x);
       setItems(apiItems);
       setIsMock(false);
+      setApiState('ok');
     });
     return () => { cancelled = true; };
   }, [forceMock]);

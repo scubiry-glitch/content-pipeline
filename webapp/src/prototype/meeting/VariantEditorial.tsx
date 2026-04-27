@@ -371,6 +371,7 @@ export function VariantEditorial() {
   const [usingMock, setUsingMock] = useState(true);
   const [tensionMock, setTensionMock] = useState(true);
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
+  const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
 
@@ -381,9 +382,11 @@ export function VariantEditorial() {
       setApiMeta(null);
       setUsingMock(true);
       setTensionMock(true);
+      setApiState('skipped');
       return;
     }
-    if (!id) return;
+    if (!id) { setApiState('skipped'); return; }
+    setApiState('loading');
     meetingNotesApi.getMeetingDetail(id, 'A')
       .then((data: any) => {
         if (data?.analysis) {
@@ -394,9 +397,13 @@ export function VariantEditorial() {
             participants: Array.isArray(data.analysis.participants) ? data.analysis.participants : [],
           });
           setUsingMock(false);
+          setApiState('ok');
+        } else {
+          // analysis === null：后端无该会议数据 · 标记为 error 让 fixture 兜底显示
+          setApiState('error');
         }
       })
-      .catch(() => {});
+      .catch(() => { setApiState('error'); });
     // Phase 15.15 · C.1 · tension probe
     meetingNotesApi.getMeetingTensions(id)
       .then((data) => {
@@ -441,6 +448,17 @@ export function VariantEditorial() {
     { id: 'consensus',     label: '五、共识与分歧',  num: '05' },
     { id: 'cross_view',    label: '六、观点对位',    num: '06' },
   ];
+
+  // 默认 API 优先：UUID id 在 API 加载期间不渲染 fixture 内容，避免用户看到 mock 数据闪现
+  if (apiState === 'loading') {
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: 'var(--paper)',
+        color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--sans)', fontSize: 13,
+      }}>加载中…</div>
+    );
+  }
 
   return (
     <div style={{
