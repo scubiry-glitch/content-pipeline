@@ -6,6 +6,24 @@ import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useMeetingScope } from './_scopeContext';
 
+// P1：把后端 4xx 的 code 翻成给用户看的中文文案
+function mapEnqueueError(raw: string): string {
+  // raw 形如：POST /runs → 400 [INSUFFICIENT_TRANSCRIPT]: scope 下 ... 字符...
+  if (raw.includes('[SCOPE_ID_REQUIRED]')) {
+    return '入队失败：当前 scope 缺少具体 id。请在右上 ScopePill 选一个具体的项目/客户/主题，再重试。';
+  }
+  if (raw.includes('[EMPTY_SCOPE]')) {
+    return '入队失败：当前 scope 下还没绑定任何会议。请先到「会议纪要库」绑定至少一场会议。';
+  }
+  if (raw.includes('[INSUFFICIENT_TRANSCRIPT]')) {
+    return `入队失败：scope 下会议的 transcript 总字数不足，LLM 跑出来会是空集（直接覆盖原数据更危险）。请先把 transcript 文本上传到 assets.content。\n\n${raw}`;
+  }
+  if (raw.includes('[UNKNOWN_SUBDIMS]')) {
+    return `入队失败：选中的子维度后端不识别。请刷新前端代码（通常是 proto 用了过期的短 id）。\n\n${raw}`;
+  }
+  return `入队失败：${raw}`;
+}
+
 // ── Mock data ────────────────────────────────────────────────────────────────
 
 // 注意：subs[].id 必须与后端 axes/registry.ts 的 AXIS_SUBDIMS 一一对应，
@@ -155,9 +173,12 @@ export function AxisRegeneratePanel({
     setConfirmOpen(false);
     setSubmitting(true);
     try {
-      // 后端 router L605 校验 allowedKinds 全小写
+      // P1 闸门：必须显式传 scope.id（仅 library 例外）
+      // jsonb_typeof 把 undefined 编码为缺字段；library 时不传 id，其它必传
       const r: { runId?: string } = await meetingNotesApi.enqueueRun({
-        scope: { kind: scope.toLowerCase() },
+        scope: scope === 'library'
+          ? { kind: 'library' }
+          : { kind: scope, id: meetingScope.effectiveScopeId },
         axis,
         subDims: selected,
         preset,
@@ -172,7 +193,10 @@ export function AxisRegeneratePanel({
       }
     } catch (e) {
       setSubmitting(false);
-      alert(`入队失败：${e instanceof Error ? e.message : String(e)}`);
+      // 解析后端 4xx 的 P1 闸门 code，给具体提示文案
+      const raw = e instanceof Error ? e.message : String(e);
+      const friendly = mapEnqueueError(raw);
+      alert(friendly);
     }
   }
 

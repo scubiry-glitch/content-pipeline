@@ -13,9 +13,30 @@ const jsonHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
+/**
+ * 把响应体附到 Error.message + 暴露 code，让调用方能 parse 后端的 4xx code 字段。
+ * 不破坏现有 catch (e) { e.message }，只是 message 更长 / 多了 (e as any).code。
+ */
+async function throwHttpError(method: string, path: string, r: Response): Promise<never> {
+  let bodyText = '';
+  let bodyJson: any = null;
+  try {
+    bodyText = await r.text();
+    if (bodyText) bodyJson = JSON.parse(bodyText);
+  } catch { /* not JSON */ }
+  const code = bodyJson?.code as string | undefined;
+  const msg = bodyJson?.message as string | undefined;
+  const summary = msg ?? bodyText ?? r.statusText;
+  const err = new Error(`${method} ${path} → ${r.status}${code ? ` [${code}]` : ''}: ${summary}`);
+  (err as any).status = r.status;
+  (err as any).code = code;
+  (err as any).body = bodyJson ?? bodyText;
+  throw err;
+}
+
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`, { headers: authHeader() });
-  if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+  if (!r.ok) await throwHttpError('GET', path, r);
   return r.json();
 }
 
@@ -26,7 +47,7 @@ async function jpost<T>(path: string, body?: any): Promise<T> {
     headers: hasBody ? jsonHeaders() : authHeader(),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
-  if (!r.ok) throw new Error(`POST ${path} → ${r.status}`);
+  if (!r.ok) await throwHttpError('POST', path, r);
   return r.json();
 }
 

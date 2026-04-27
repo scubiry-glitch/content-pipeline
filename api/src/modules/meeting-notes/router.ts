@@ -9,13 +9,40 @@ import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { meetingNotesRoutes as ingestRoutes } from './ingest/routes.js';
 import { authenticate } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
+import { AXIS_SUBDIMS } from './axes/registry.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// P1 闸门 #3 阈值：scope 下所有 meetings.content 总字数 < 此值即拒绝重算
+// （避免用户点了重算才发现 transcript 没上传，silent succeeded 空集覆盖）
+const MIN_TRANSCRIPT_CHARS = parseInt(process.env.MN_MIN_TRANSCRIPT_CHARS ?? '2000', 10);
 
 async function resolveScopeUuid(db: any, idOrSlug: string): Promise<string | null> {
   if (UUID_RE.test(idOrSlug)) return idOrSlug;
   const r = await db.query(`SELECT id FROM mn_scopes WHERE slug = $1 LIMIT 1`, [idOrSlug]);
   return r.rows[0]?.id ?? null;
+}
+
+/** P1 闸门 helper：列出 scope 下所有 meeting asset.id（assets.id 是 varchar） */
+async function collectMeetingsInScope(
+  db: any,
+  scope: { kind: string; id?: string | null },
+): Promise<string[]> {
+  if (scope.kind === 'meeting') return scope.id ? [scope.id] : [];
+  if (scope.kind === 'library') {
+    const r = await db.query(
+      `SELECT id FROM assets
+        WHERE type = 'meeting_note' OR type = 'meeting_minutes' OR (metadata ? 'meeting_kind')`,
+    );
+    return r.rows.map((row: any) => String(row.id));
+  }
+  // project / client / topic
+  if (!scope.id) return [];
+  const r = await db.query(
+    `SELECT meeting_id::text AS meeting_id FROM mn_scope_members WHERE scope_id = $1`,
+    [scope.id],
+  );
+  return r.rows.map((row: any) => row.meeting_id);
 }
 
 function emptyAxes(meetingId: string) {
@@ -1007,6 +1034,66 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(400);
         return { error: 'Bad Request', message: `invalid scope kind: ${scope?.kind ?? 'unknown'}` };
       }
+
+      // ============================================================
+      // P1 前置闸门：拦下 silent-succeeded 空跑（详情见 docs/plans/P1-precheck-gates.md）
+      // ============================================================
+
+      // Gate 1: project / client / topic 必须传 scope.id（meeting/library 例外）
+      if (['project', 'client', 'topic'].includes(scope.kind) && !scope.id) {
+        reply.status(400);
+        return {
+          error: 'Bad Request',
+          code: 'SCOPE_ID_REQUIRED',
+          message: `scope.id required for kind=${scope.kind}; otherwise we can't resolve which meetings to compute over`,
+        };
+      }
+
+      // Gate 4: subDims 必须能映射到 computer（避免短 id 跑成 silent-succeeded 0 行）
+      if (Array.isArray(body.subDims) && body.subDims.length > 0 && body.axis !== 'all') {
+        const validSubDims = AXIS_SUBDIMS[body.axis] ?? [];
+        const invalid = body.subDims.filter((sd: unknown) => typeof sd !== 'string' || !validSubDims.includes(sd as string));
+        if (invalid.length > 0) {
+          reply.status(400);
+          return {
+            error: 'Bad Request',
+            code: 'UNKNOWN_SUBDIMS',
+            message: `subDims 含未注册项: ${invalid.join(', ')}. 合法值: ${validSubDims.join(', ')}.`,
+            detail: { invalid, valid: validSubDims },
+          };
+        }
+      }
+
+      // Gate 2: 解析 scope 下的 meetings；project/client/topic 为 0 则拒
+      const meetingIds = await collectMeetingsInScope(engine.deps.db, scope);
+      if (meetingIds.length === 0 && scope.kind !== 'library') {
+        reply.status(400);
+        return {
+          error: 'Bad Request',
+          code: 'EMPTY_SCOPE',
+          message: '该 scope 下没有任何会议绑定。请先到会议库绑定会议。',
+        };
+      }
+
+      // Gate 3: transcript 总字数充足（library/project/meeting 都校验）
+      // 跳过的场景：scope.kind=library 但全库为空（不太可能，且让用户能跑空 library 触发清理）
+      if (meetingIds.length > 0) {
+        const sumLen = await engine.deps.db.query(
+          `SELECT COALESCE(SUM(LENGTH(content)), 0)::int AS total FROM assets WHERE id = ANY($1::text[])`,
+          [meetingIds],
+        );
+        const totalChars = sumLen.rows[0]?.total ?? 0;
+        if (totalChars < MIN_TRANSCRIPT_CHARS) {
+          reply.status(400);
+          return {
+            error: 'Bad Request',
+            code: 'INSUFFICIENT_TRANSCRIPT',
+            message: `scope 下 ${meetingIds.length} 场会议 transcript 共 ${totalChars} 字符，不足 ${MIN_TRANSCRIPT_CHARS}。请先上传完整文本到 assets.content（或调小 MN_MIN_TRANSCRIPT_CHARS）。`,
+            detail: { totalChars, meetingCount: meetingIds.length, requiredMin: MIN_TRANSCRIPT_CHARS },
+          };
+        }
+      }
+
       // 校验 expertRoles：仅保留 people / projects / knowledge 三个角色 + 字符串 id
       let expertRoles: { people?: string[]; projects?: string[]; knowledge?: string[] } | undefined;
       if (body.expertRoles && typeof body.expertRoles === 'object') {

@@ -128,3 +128,55 @@ curl -X POST .../runs -d '{"scope":{"kind":"project","id":"..."},"axis":"knowled
 
 - 阈值 2000 字符可能太严或太松，先取保守值，做参数化（env `MN_MIN_TRANSCRIPT_CHARS`）便于调
 - 校验可绕过：用户直接调 API 时仍可绕过；前端只是 UX 兜底，后端是真正闸门
+
+---
+
+## 精修：实现细节锁定
+
+### Helper：collectMeetingsInScope
+
+`router.ts` 顶部加内联 helper（不抽到独立文件，避免新增依赖）：
+```ts
+async function collectMeetingsInScope(
+  db: any,
+  scope: { kind: string; id?: string },
+): Promise<string[]> {
+  if (scope.kind === 'meeting') return scope.id ? [scope.id] : [];
+  if (scope.kind === 'library') {
+    const r = await db.query(
+      `SELECT id FROM assets
+        WHERE type = 'meeting_note' OR type = 'meeting_minutes' OR (metadata ? 'meeting_kind')`,
+    );
+    return r.rows.map((row: any) => String(row.id));
+  }
+  // project / client / topic
+  if (!scope.id) return [];
+  const r = await db.query(
+    `SELECT meeting_id::text AS meeting_id FROM mn_scope_members WHERE scope_id = $1`,
+    [scope.id],
+  );
+  return r.rows.map((row: any) => row.meeting_id);
+}
+```
+
+### 错误码契约（前端要 parse）
+
+四种 `code` + HTTP 400：
+- `SCOPE_ID_REQUIRED` — scope.kind ∈ {project,client,topic} 但 scope.id 缺失
+- `EMPTY_SCOPE` — scope 下绑定 0 场会议
+- `INSUFFICIENT_TRANSCRIPT` — meetings.content 总字数 < 2000；附 `detail.totalChars`、`detail.meetingCount`、`detail.requiredMin`
+- `UNKNOWN_SUBDIMS` — subDims 含 registry 无的；附 `detail.invalid` 数组
+
+### 阈值 env
+
+`MN_MIN_TRANSCRIPT_CHARS` 默认 `2000`。在 .env / ecosystem.config.cjs 不显式设。
+
+### Library 行为决策
+
+scope=library 跳过 EMPTY_SCOPE 检查（全库总会议数应 > 0；如果是 0 那项目就没启动），仍走 INSUFFICIENT_TRANSCRIPT。
+
+### 不影响范围
+
+- `/compute/axis` 路由不加这套闸门（它是细粒度调试入口，不预期过严）
+- `mn_schedules` 触发的 cron run 走自己 `runEngine.enqueue` 不经 router → 这次不动它
+- `POST /versions`（snapshot）不需要 transcript，无需加
