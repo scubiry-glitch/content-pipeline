@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -300,6 +301,12 @@ function VersionsView() {
   const [searchParams] = useSearchParams();
   const axisParam = searchParams.get('axis') ?? 'people';
   const forceMock = useForceMock();
+  const meetingScope = useMeetingScope();
+  // F5：同 4 轴页面 / AxisRegeneratePanel 同源 — kindId='all' 时按 library 查；
+  // 其它（项目/客户/主题）按当前 scope.kind + effectiveScopeId 查。
+  // 这样 sh-ai-2026 项目下写入的 vN 在这里也能列出来。
+  const scopeKindForApi = meetingScope.kindId === 'all' ? 'library' : meetingScope.kindId;
+  const scopeIdForApi = meetingScope.kindId === 'all' ? undefined : meetingScope.effectiveScopeId;
   const [versions, setVersions] = useState<MockVersion[]>([]);
   const [isMock, setIsMock] = useState(true);
   const [sel, setSel] = useState<string[]>(['v14', 'v13']);
@@ -309,7 +316,7 @@ function VersionsView() {
   useEffect(() => {
     if (forceMock) { setVersions(MOCK_VERSIONS); setIsMock(true); return; }
     let cancelled = false;
-    meetingNotesApi.listVersions('library', axisParam)
+    meetingNotesApi.listVersions(scopeKindForApi, axisParam, scopeIdForApi)
       .then((r) => {
         if (cancelled) return;
         const mapped = (r?.items ?? []).map(mapApiVersion);
@@ -319,7 +326,7 @@ function VersionsView() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [axisParam, forceMock]);
+  }, [axisParam, scopeKindForApi, scopeIdForApi, forceMock]);
 
   // Phase 15.5 · 结构化 diff 适配 · 先试 ?structured=1，失败或 shape 不合则回落 mock 对比表
   useEffect(() => {
@@ -338,13 +345,61 @@ function VersionsView() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [sel, forceMock]);
+  const navigate = useNavigate();
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 22 }}>
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <SectionLabel>版本列表</SectionLabel>
           <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>勾选 2 个对比</span>
         </div>
+        {/* F5 · scope + axis 选择条 —— 没有这个的话用户只能看到 ?axis=people 默认轴 */}
+        <div style={{ marginBottom: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+          scope=<b style={{ color: 'var(--ink-2)' }}>{scopeKindForApi}</b>
+          {scopeIdForApi && <> · id=<code style={{ fontFamily: 'var(--mono)' }}>{scopeIdForApi.slice(0, 8)}…</code></>}
+          {' · '}{meetingScope.label}
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
+          {(['people', 'projects', 'knowledge', 'meta'] as const).map((ax) => {
+            const active = ax === axisParam;
+            return (
+              <button
+                key={ax}
+                onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${ax}`)}
+                style={{
+                  border: '1px solid var(--line)', borderRadius: 4, padding: '4px 10px',
+                  fontSize: 11, fontFamily: 'var(--mono)',
+                  background: active ? 'var(--ink)' : 'var(--paper)',
+                  color: active ? 'var(--paper)' : 'var(--ink-2)',
+                  fontWeight: active ? 600 : 500, cursor: 'pointer',
+                }}
+              >
+                {ax}
+              </button>
+            );
+          })}
+        </div>
+        {versions.length === 0 && !isMock && (
+          <div style={{
+            padding: '14px 12px', background: 'var(--paper-2)',
+            border: '1px dashed var(--line)', borderRadius: 5,
+            fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6,
+          }}>
+            当前 scope × axis 暂无快照。
+            {meetingScope.kindId === 'all' && (
+              <>
+                {' '}试试切到具体项目（ScopePill），或直接到{' '}
+                <a
+                  onClick={() => navigate('/meeting/axes/knowledge')}
+                  style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                >
+                  /meeting/axes/{axisParam}
+                </a>
+                {' '}点 📚 版本。
+              </>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {versions.map(v => {
             const on = sel.includes(v.v);
