@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
 import { useMeetingScope, type ScopeKind } from './_scopeContext';
+import { AxisVersionPanel } from './AxisVersionPanel';
 
 export type AxisName = '人物' | '项目' | '知识' | '会议本身' | '纵向视图 · 跨会议';
 
@@ -420,6 +421,15 @@ function RunBadge({ axis, run = 'run-237', version = 'v14', time = '08:03' }: { 
 
 // ── DimShell ─────────────────────────────────────────────────
 
+// 中文 axis label → 后端 canonical id（与 axes/registry.ts AXIS_SUBDIMS 一致）
+const AXIS_BACKEND_ID: Record<AxisName, string> = {
+  '人物': 'people',
+  '项目': 'projects',
+  '知识': 'knowledge',
+  '会议本身': 'meta',
+  '纵向视图 · 跨会议': 'longitudinal',
+};
+
 export function DimShell({
   axis, tabs, tab, setTab, children, onOpenRegenerate, mock,
 }: {
@@ -482,6 +492,7 @@ export function DimShell({
           ) : null)}
           <CrossAxisLink axis={axis} />
           <ScopePill />
+          <VersionsButton axis={axis} />
           <button
             onClick={onOpenRegenerate}
             disabled={!onOpenRegenerate}
@@ -502,6 +513,40 @@ export function DimShell({
 
       <div style={{ overflow: 'auto' }}>{children}</div>
     </div>
+  );
+}
+
+// ── Versions button — 打开 AxisVersionPanel 浮层 ────────────────
+
+function VersionsButton({ axis }: { axis: AxisName }) {
+  const [open, setOpen] = useState(false);
+  const backendAxis = AXIS_BACKEND_ID[axis];
+  // 纵向视图轴目前没接入 mn_axis_versions（snapshot 是 axis-bound 的，longitudinal 暂留空）
+  const supported = backendAxis !== 'longitudinal';
+  return (
+    <>
+      <button
+        onClick={() => supported && setOpen(true)}
+        disabled={!supported}
+        title={supported ? '查看此轴的版本历史 / 回滚' : '纵向视图暂无版本快照'}
+        style={{
+          border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 5,
+          padding: '5px 10px', fontSize: 11.5,
+          cursor: supported ? 'pointer' : 'not-allowed',
+          color: supported ? 'var(--ink-2)' : 'var(--ink-4)',
+          display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--sans)',
+          opacity: supported ? 1 : 0.6,
+        }}>
+        <span style={{ fontSize: 13, lineHeight: 1 }}>📚</span> 版本
+      </button>
+      {open && (
+        <AxisVersionPanel
+          axis={backendAxis}
+          scopeKind="project"
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
