@@ -2,7 +2,7 @@
 // 原型来源：/tmp/mn-proto/dimensions-knowledge.jsx DimensionKnowledge
 // 可复用判断 · 心智模型激活 · 证据层级 · 认知偏差探测 · 反事实
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
@@ -466,19 +466,41 @@ export function AxisKnowledge() {
   const [tab, setTab] = useState('judgments');
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
-  const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const scope = useMeetingScope();
   const scopeId = scope.effectiveScopeId;
   const forceMock = useForceMock();
+
+  // F7 · 自动选 scope 下首场会议（沿用 F2 AxisMeta 模式）
+  // URL ?meetingId 优先；否则走 listScopeMeetings；最后兜底 fixture
+  const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
+    let cancelled = false;
+    meetingNotesApi
+      .listScopeMeetings(scopeId)
+      .then((r) => { if (!cancelled) setAutoMeetingId(r?.meetingIds?.[0] ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [searchParams, scopeId, forceMock]);
+  const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
+
+  // 一次性拉 getMeetingAxes，让 5 个 tab 读取真实 mn_* 数据（之前 mental_models /
+  // evidence / counterfactuals 都查错表或纯 mock）
+  const [knowledgeData, setKnowledgeData] = useState<any>(null);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
-    if (forceMock) { setIsMock(true); return; }
+    if (forceMock) { setKnowledgeData(null); setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled && r) setIsMock(false); })
+      .then((r) => {
+        if (cancelled) return;
+        setKnowledgeData(r?.knowledge ?? null);
+        setIsMock(false);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+
   const tabs = [
     { id: 'judgments',       label: '可复用判断',    sub: '从具体案例提炼的通用结论',  icon: 'book' as const },
     { id: 'mental_models',   label: '心智模型激活',  sub: '谁用了什么模型，用得对吗',  icon: 'compass' as const },
@@ -490,15 +512,153 @@ export function AxisKnowledge() {
     <>
       <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'judgments'       && <Judgments scopeId={scopeId} />}
-        {tab === 'mental_models'   && <MentalModels scopeId={scopeId} />}
-        {tab === 'evidence'        && <Evidence />}
-        {tab === 'biases'          && <Biases meetingId={meetingId} />}
-        {tab === 'counterfactuals' && <Counterfactuals />}
+        {tab === 'mental_models'   && <MentalModelsLive data={knowledgeData?.mental_models} fallback={<MentalModels scopeId={scopeId} />} />}
+        {tab === 'evidence'        && <EvidenceLive data={knowledgeData?.evidence_grades} fallback={<Evidence />} />}
+        {tab === 'biases'          && <BiasesLive data={knowledgeData?.cognitive_biases} fallback={<Biases meetingId={meetingId} />} />}
+        {tab === 'counterfactuals' && <CounterfactualsLive data={knowledgeData?.counterfactuals} fallback={<Counterfactuals />} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
+  );
+}
+
+// ── F7 · Live wrappers：有数据 → 渲染真实；无数据 → fallback 到原 mock 组件 ──
+
+function MentalModelsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+          心智模型激活 · {data.length} 项
+        </h3>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_mental_model_invocations · 该会议被激活的心智模型 + LLM 判断
+      </div>
+      {data.map((m: any, i: number) => (
+        <div key={m.id ?? i} style={{
+          padding: '12px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600 }}>{m.model_name}</span>
+            {m.correctly_used === true  && <Chip tone="teal">用对</Chip>}
+            {m.correctly_used === false && <Chip tone="accent">滥用</Chip>}
+            {m.correctly_used == null   && <Chip tone="ghost">未判断</Chip>}
+            <MonoMeta style={{ fontSize: 10 }}>conf {Number(m.confidence ?? 0).toFixed(2)}</MonoMeta>
+          </div>
+          {m.outcome && (
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, fontFamily: 'var(--serif)' }}>{m.outcome}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BiasesLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        认知偏差 · {data.length} 项
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_cognitive_biases · 此会议被识别的偏差类型 + 原文摘录
+      </div>
+      {data.map((b: any, i: number) => (
+        <div key={b.id ?? i} style={{
+          padding: '12px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <Chip tone={b.severity === 'high' ? 'accent' : b.severity === 'med' ? 'amber' : 'ghost'}>{b.bias_type}</Chip>
+            <MonoMeta style={{ fontSize: 10 }}>severity={b.severity}</MonoMeta>
+            {b.mitigated && <Chip tone="teal">已缓解</Chip>}
+          </div>
+          {b.where_excerpt && (
+            <div style={{
+              fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, fontFamily: 'var(--serif)',
+              borderLeft: '2px solid var(--line)', paddingLeft: 10, fontStyle: 'italic',
+            }}>「{b.where_excerpt}」</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  if (!data || data.length === 0) return <>{fallback}</>;
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        反事实 / 未走的路 · {data.length} 条
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_counterfactuals · 此会议明确否决或未选的路径，用于事后回看
+      </div>
+      {data.map((c: any, i: number) => (
+        <div key={c.id ?? i} style={{
+          padding: '12px 14px', borderBottom: '1px solid var(--line-2)',
+          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <Chip tone={c.current_validity === 'invalid' ? 'accent' : c.current_validity === 'valid' ? 'teal' : 'ghost'}>
+              {c.current_validity ?? 'unclear'}
+            </Chip>
+            {c.next_validity_check_at && (
+              <MonoMeta style={{ fontSize: 10 }}>下次复核 {new Date(c.next_validity_check_at).toLocaleDateString()}</MonoMeta>
+            )}
+          </div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>{c.rejected_path}</div>
+          {c.tracking_note && (
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5 }}>追踪：{c.tracking_note}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvidenceLive({ data, fallback }: { data: { dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number } | undefined | null; fallback: ReactNode }) {
+  if (!data) return <>{fallback}</>;
+  const total = (data.dist_a ?? 0) + (data.dist_b ?? 0) + (data.dist_c ?? 0) + (data.dist_d ?? 0);
+  if (total === 0) return <>{fallback}</>;
+  const grades = [
+    { k: 'A', n: data.dist_a, label: '硬数据', color: 'oklch(0.7 0.14 145)' },
+    { k: 'B', n: data.dist_b, label: '类比/案例', color: 'oklch(0.78 0.12 95)' },
+    { k: 'C', n: data.dist_c, label: '直觉/口述', color: 'oklch(0.78 0.13 70)' },
+    { k: 'D', n: data.dist_d, label: '道听途说', color: 'oklch(0.65 0.18 30)' },
+  ];
+  return (
+    <div style={{ padding: '22px 32px 36px' }}>
+      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
+        证据层级 · 总 {total} 条 · 加权 {Number(data.weighted_score ?? 0).toFixed(2)}
+      </h3>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
+        来自 mn_evidence_grades · A=4 / B=3 / C=2 / D=1 加权均值
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        {grades.map((g) => {
+          const pct = total > 0 ? ((g.n ?? 0) / total) * 100 : 0;
+          return (
+            <div key={g.k} style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: 14 }}>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: g.color }}>{g.k}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8 }}>{g.label}</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600 }}>{g.n ?? 0}</div>
+              <div style={{ height: 6, background: 'var(--line-2)', borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: g.color }} />
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 4 }}>{pct.toFixed(0)}%</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
