@@ -534,6 +534,11 @@ export function VariantWorkbench() {
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
   // Phase: 张力 → 解读（从 axes.knowledge + meta.affect_curve 抽取，按主题关键词与强度排名近似匹配）
   const [apiAxes, setApiAxes] = useState<any>(null);
+  // 专家栈：detail API 透传的 expertRoles + JOIN expert_profiles 后的卡片数据
+  const [apiExperts, setApiExperts] = useState<Array<{
+    id: string; name: string; role: 'people' | 'projects' | 'knowledge';
+    roleLabel: string; field: string; style: string; mentalModels: string[]; match: number;
+  }>>([]);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || MEETING.title;
 
@@ -670,6 +675,9 @@ export function VariantWorkbench() {
           setApiState('ok');
           if (Array.isArray(data.analysis.participants)) {
             setApiParticipants(data.analysis.participants);
+          }
+          if (Array.isArray(data.analysis.experts)) {
+            setApiExperts(data.analysis.experts);
           }
           // analysis.tension 来自 metadata.analysis.tension（旧路径）·
           // 即便 mn_tensions 表空，仍是真实数据，不要被打上 MockBadge
@@ -821,12 +829,45 @@ export function VariantWorkbench() {
                   <Icon name="plus" size={12} /> 添加专家
                 </button>
               </>
+            ) : apiExperts.length > 0 ? (
+              <>
+                {apiExperts.map((e) => {
+                  const tone =
+                    e.role === 'people' ? 'teal' :
+                    e.role === 'projects' ? 'amber' : 'accent';
+                  return (
+                    <div key={e.id} style={{
+                      border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--paper-2)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>{e.id}</span>
+                        <Chip tone={tone} style={{ padding: '1px 6px', fontSize: 10 }}>{e.roleLabel}</Chip>
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 4, lineHeight: 1.35 }}>{e.name}</div>
+                      {e.field && (
+                        <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{e.field}</div>
+                      )}
+                      {e.mentalModels.length > 0 && (
+                        <div style={{ marginTop: 6, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                          {e.mentalModels.slice(0, 3).map((m, i) => (
+                            <span key={i} style={{
+                              fontFamily: 'var(--mono)', fontSize: 9.5, padding: '1px 5px',
+                              background: 'var(--paper)', border: '1px solid var(--line-2)',
+                              borderRadius: 3, color: 'var(--ink-3)',
+                            }}>{m}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             ) : (
               <div style={{
                 fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.6,
                 padding: '10px 10px', border: '1px dashed var(--line-2)', borderRadius: 6,
               }}>
-                专家栈对应 run.expertRoles 与 expert-library；当前会议详情接口未透传该数据，留待后续接入。
+                本会议无 run.expertRoles 数据（未跑过专家分析的 standard run）。
               </div>
             )}
           </div>

@@ -153,6 +153,9 @@ export interface ScopeRef {
   id?: string; // library 时为空
 }
 
+/** Run 生成模式：默认 multi-axis（按轴循环 LLM）；claude-cli = spawn 一次 claude -p */
+export type RunMode = 'multi-axis' | 'claude-cli';
+
 export interface EnqueueRunRequest {
   scope: ScopeRef;
   axis: AxisName;
@@ -172,6 +175,13 @@ export interface EnqueueRunRequest {
     projects?: string[];
     knowledge?: string[];
   };
+  /**
+   * 生成模式：
+   * - 'multi-axis'（默认）：按 16 轴循环 LLM，跑现有 dispatchPlan + decorator 栈
+   * - 'claude-cli'：把转写 + schema + 专家 personas + 装饰指令一次喂给 claude -p，单次生成
+   *   两种模式都会走完 parseMeeting + 专家加载 + strategy 解析的共享上下文。
+   */
+  mode?: RunMode;
 }
 
 export interface RunRecord {

@@ -508,8 +508,99 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
               [id],
             ),
           ]);
-          payload = { ...base, consensus: cRows.rows, focusMap: fRows.rows };
+          let consensus: any[] = cRows.rows;
+          let focusMap: any[] = fRows.rows;
+
+          // 兜底：mn_consensus_items / mn_focus_map 没 axis computer 写入时表永远是空。
+          // 读 assets.metadata.analysis（composeAnalysis 已用 mn_assumptions+mn_open_questions
+          // 拼出了 consensus，用 mn_speech_quality 拼出了 focusMap），作为 view C 的兜底来源。
+          if (consensus.length === 0 || focusMap.length === 0) {
+            try {
+              const ar = await db.query(
+                `SELECT metadata->>'analysis' AS analysis_raw FROM assets WHERE id = $1`,
+                [id],
+              );
+              const raw = ar.rows[0]?.analysis_raw;
+              const analysis = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null;
+              if (consensus.length === 0 && Array.isArray(analysis?.consensus)) {
+                consensus = analysis.consensus;
+              }
+              if (focusMap.length === 0 && Array.isArray(analysis?.focusMap)) {
+                focusMap = analysis.focusMap;
+              }
+            } catch (e) {
+              request.log.warn({ id, err: e }, 'view-C metadata.analysis fallback failed');
+            }
+          }
+
+          payload = { ...base, consensus, focusMap };
         }
+
+        // 专家栈 (view B 用):从该 meeting 最新 succeeded run 的 metadata.expertRoles 取 ID,
+        // JOIN expert_profiles 拿名字 / 领域 / display_metadata 拼成前端能渲染的卡片数据。
+        // 之前前端这块写死 "未透传该数据,留待后续接入" — 这里把它接上。
+        try {
+          const db = engine.deps.db;
+          // 优先取 axis='all' 的 succeeded run（含完整 expertRoles 三角色），
+          // 没有时退到任意 succeeded run（避免 axis='tension' 只返回 knowledge 角色）
+          const runRes = await db.query(
+            `SELECT metadata FROM mn_runs
+              WHERE scope_kind = 'meeting' AND scope_id::text = $1 AND state = 'succeeded'
+              ORDER BY (axis = 'all') DESC, finished_at DESC NULLS LAST LIMIT 1`,
+            [id],
+          );
+          const meta = runRes.rows[0]?.metadata ?? {};
+          // 不兜底：没跑过 run / run 里没 expertRoles → experts 留空，前端显示"未跑过"提示
+          const expertRoles = meta?.expertRoles ?? null;
+          let experts: any[] = [];
+          if (expertRoles && typeof expertRoles === 'object') {
+            const ids = Array.from(new Set([
+              ...(expertRoles.people ?? []),
+              ...(expertRoles.projects ?? []),
+              ...(expertRoles.knowledge ?? []),
+            ].filter((x: unknown) => typeof x === 'string' && x.length > 0)));
+            if (ids.length > 0) {
+              const er = await db.query(
+                `SELECT expert_id, name, domain, display_metadata, signature_phrases
+                   FROM expert_profiles
+                  WHERE expert_id = ANY($1::text[]) AND is_active = true`,
+                [ids],
+              );
+              const profileById = new Map<string, any>();
+              for (const row of er.rows) profileById.set(String(row.expert_id), row);
+              const roleLabel: Record<string, string> = {
+                people: '人事/团队', projects: '项目/决策', knowledge: '知识/认知/张力',
+              };
+              for (const role of ['people', 'projects', 'knowledge'] as const) {
+                for (const eid of (expertRoles[role] ?? [])) {
+                  const p = profileById.get(String(eid));
+                  if (!p) continue;
+                  const dm = (typeof p.display_metadata === 'string'
+                    ? (() => { try { return JSON.parse(p.display_metadata); } catch { return {}; } })()
+                    : (p.display_metadata ?? {})) as Record<string, any>;
+                  const profile = (dm.profile ?? {}) as Record<string, any>;
+                  const philosophy = (dm.philosophy ?? {}) as Record<string, any>;
+                  experts.push({
+                    id: p.expert_id,
+                    name: p.name,
+                    role,
+                    roleLabel: roleLabel[role],
+                    field: dm.domainName ?? (Array.isArray(p.domain) ? p.domain[0] : p.domain) ?? '',
+                    style: profile.personality ?? profile.title ?? '',
+                    mentalModels: Array.isArray(philosophy.core) ? philosophy.core.slice(0, 4) : [],
+                    signaturePhrases: Array.isArray(p.signature_phrases) ? p.signature_phrases.slice(0, 3) : [],
+                    match: 1.0,
+                  });
+                }
+              }
+            }
+          }
+          payload = { ...payload, experts, expertRoles };
+        } catch (e) {
+          request.log.warn({ id, err: e }, 'detail experts join failed');
+          payload = { ...payload, experts: [], expertRoles: null };
+        }
+
         // 包一层 { analysis } 让 VariantEditorial/Workbench/Threads 的
         // `data?.analysis` 探针生效；具体字段（summary/tension/...）按
         // 前端 ANALYSIS 形态映射，缺失字段在前端 fallback 到 mock

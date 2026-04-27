@@ -15,20 +15,53 @@ export interface ExpertRoleAssignment {
   knowledge?: string[];
 }
 
-/** 一位专家被拉出来后的 prompt 友好快照 */
+/** Method (方法论) 块 · expert_profiles.method JSONB 解析后的形态 */
+export interface ExpertMethod {
+  frameworks?: string[];
+  reasoning?: string;
+  analysis_steps?: string[];
+  reviewLens?: {
+    firstGlance?: string;
+    deepDive?: string[];
+    killShot?: string;
+    bonusPoints?: string[];
+  };
+  dataPreference?: string;
+  evidenceStandard?: string;
+}
+
+/** EMM Gate Logic 块 · expert_profiles.emm JSONB 解析后的形态 */
+export interface ExpertEmm {
+  critical_factors?: string[];
+  factor_hierarchy?: Record<string, number>;
+  veto_rules?: string[];
+  aggregation_logic?: string; // 'weighted_score' | 'majority_vote' | 'strictest' | …
+}
+
+/** 一位专家被拉出来后的 prompt 友好快照（按 plan §E.2 扩展，CLI 模式按场景挑字段用） */
 export interface ExpertSnapshot {
   expertId: string;
   name: string;
-  /** 风格短语：personality / tone */
-  style: string;
-  /** 思想内核：philosophy.core */
-  core: string[];
-  /** 签名口头禅：signature_phrases / philosophy.quotes */
-  signaturePhrases: string[];
-  /** 评审关注维度：reviewDimensions / emm.critical_factors */
-  reviewDimensions: string[];
   /** 领域名 */
   domain: string;
+  /** 风格短语：personality / tone（来自 persona / display_metadata.profile） */
+  style: string;
+  /** 背景：display_metadata.profile.background */
+  background?: string;
+  /** 思想内核：philosophy.core / persona.bias */
+  core: string[];
+  /** 签名口头禅：signature_phrases TEXT[]（首选） */
+  signaturePhrases: string[];
+  /** 哲学引用 fallback：display_metadata.philosophy.quotes */
+  philosophyQuotes: string[];
+  /** 评审关注维度：reviewDimensions / emm.critical_factors（向下兼容字段） */
+  reviewDimensions: string[];
+  /** Methodology 块（method JSONB） */
+  method: ExpertMethod;
+  /** EMM Gate Logic 块（emm JSONB） */
+  emm: ExpertEmm;
+  /** 反向约束：anti_patterns TEXT[] */
+  antiPatterns: string[];
 }
 
 /** role → 该角色覆盖的 axis 列表 */
@@ -84,7 +117,10 @@ export async function loadExpertSnapshots(
   if (ids.length === 0) return out;
   try {
     const r = await db.query(
-      `SELECT expert_id, name, domain, persona, display_metadata, signature_phrases, emm
+      `SELECT expert_id, name, domain,
+              persona, method, emm,
+              signature_phrases, anti_patterns,
+              display_metadata
          FROM expert_profiles
         WHERE expert_id = ANY($1::text[])
           AND is_active = true`,
@@ -95,16 +131,48 @@ export async function loadExpertSnapshots(
       const dm = coerceJson(row.display_metadata);
       const philosophy = coerceJson(dm.philosophy);
       const profile = coerceJson(dm.profile);
-      const emm = coerceJson(row.emm);
+      const emmRaw = coerceJson(row.emm);
+      const methodRaw = coerceJson(row.method);
+      const reviewLensRaw = coerceJson(methodRaw.reviewLens);
       const domainArr = coerceStringArray(row.domain);
+
+      const method: ExpertMethod = {
+        frameworks: coerceStringArray(methodRaw.frameworks),
+        reasoning: typeof methodRaw.reasoning === 'string' ? methodRaw.reasoning : undefined,
+        analysis_steps: coerceStringArray(methodRaw.analysis_steps),
+        reviewLens: Object.keys(reviewLensRaw).length === 0 ? undefined : {
+          firstGlance: typeof reviewLensRaw.firstGlance === 'string' ? reviewLensRaw.firstGlance : undefined,
+          deepDive: coerceStringArray(reviewLensRaw.deepDive),
+          killShot: typeof reviewLensRaw.killShot === 'string' ? reviewLensRaw.killShot : undefined,
+          bonusPoints: coerceStringArray(reviewLensRaw.bonusPoints),
+        },
+        dataPreference: typeof methodRaw.dataPreference === 'string' ? methodRaw.dataPreference : undefined,
+        evidenceStandard: typeof methodRaw.evidenceStandard === 'string' ? methodRaw.evidenceStandard : undefined,
+      };
+
+      const factorHierarchy = coerceJson(emmRaw.factor_hierarchy);
+      const emm: ExpertEmm = {
+        critical_factors: coerceStringArray(emmRaw.critical_factors),
+        factor_hierarchy: Object.fromEntries(
+          Object.entries(factorHierarchy).filter(([, v]) => typeof v === 'number'),
+        ) as Record<string, number>,
+        veto_rules: coerceStringArray(emmRaw.veto_rules),
+        aggregation_logic: typeof emmRaw.aggregation_logic === 'string' ? emmRaw.aggregation_logic : undefined,
+      };
+
       out.set(row.expert_id, {
         expertId: row.expert_id,
         name: row.name ?? row.expert_id,
-        style: String(profile.personality ?? persona.style ?? persona.tone ?? '').trim(),
-        core: coerceStringArray(philosophy.core ?? persona.bias),
-        signaturePhrases: coerceStringArray(row.signature_phrases ?? philosophy.quotes),
-        reviewDimensions: coerceStringArray(dm.reviewDimensions ?? emm.critical_factors),
         domain: String(dm.domainName ?? domainArr[0] ?? '').trim(),
+        style: String(profile.personality ?? persona.style ?? persona.tone ?? '').trim(),
+        background: typeof profile.background === 'string' ? profile.background : undefined,
+        core: coerceStringArray(philosophy.core ?? persona.bias),
+        signaturePhrases: coerceStringArray(row.signature_phrases),
+        philosophyQuotes: coerceStringArray(philosophy.quotes),
+        reviewDimensions: coerceStringArray(dm.reviewDimensions ?? emmRaw.critical_factors),
+        method,
+        emm,
+        antiPatterns: coerceStringArray(row.anti_patterns),
       });
     }
   } catch (e) {

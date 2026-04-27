@@ -393,13 +393,41 @@ export class MeetingNotesEngine {
         right:  { commitments: axes.people.commitments, openQuestions: axes.projects.open_questions },
       };
     }
+    // nodes 兜底：mn_role_trajectory_points 表空时（LLM 没抽到角色或表没建好），
+    // 从 mn_speech_quality 派生角色——quality_score 高的当 'decider'，followed_up_count
+    // 高的当 'moderator'，其余 'contributor'。让 view C 的 trajectory 区段不再空白。
+    let nodes: any[] = axes.people.role_trajectory ?? [];
+    if (nodes.length === 0 && Array.isArray(axes.people.speech_quality)) {
+      const sq = axes.people.speech_quality as Array<any>;
+      // 复制一份按 quality_score 排序
+      const byScore = [...sq].sort((a, b) => Number(b.quality_score ?? 0) - Number(a.quality_score ?? 0));
+      const top = new Set<string>(byScore.slice(0, 1).map((r) => String(r.person_id)));
+      const byFollowup = [...sq].sort((a, b) => Number(b.followed_up_count ?? 0) - Number(a.followed_up_count ?? 0));
+      const moderator = byFollowup[0] && Number(byFollowup[0].followed_up_count ?? 0) >= 2
+        ? String(byFollowup[0].person_id)
+        : null;
+      nodes = sq
+        .filter((r) => r.person_id)
+        .map((r) => {
+          const pid = String(r.person_id);
+          let role: string = 'contributor';
+          if (top.has(pid)) role = 'decider';
+          else if (pid === moderator) role = 'moderator';
+          return {
+            person_id: pid,
+            role_label: role,
+            confidence: 0.5,  // 派生值标 0.5 区别于 LLM 高置信
+          };
+        });
+    }
+
     return {
       view: 'C',
       meetingId,
       title,
       date: dateStr,
       participants,
-      nodes: axes.people.role_trajectory,
+      nodes,
       threads: axes.people.commitments,
       influence: axes.people.speech_quality,
     };

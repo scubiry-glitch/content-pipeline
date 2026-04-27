@@ -728,9 +728,16 @@ export class RunEngine {
     try {
       // ─── Claude CLI 模式分叉 ───────────────────────────────
       // 不进 16 轴循环，spawn 一次 claude -p 完成全部生成，落 metadata.analysis + 17 张 mn_* 表。
+      // §F.2 双层 session：spawn #1 = meeting session (assets.metadata.claudeSession)
+      //                    spawn #2 = scope session (mn_scopes.metadata.claudeSession，仅 scope=project/client/topic)
+      // §F.3 wiki 双写：spawn #1 完成后落 content_facts (persistClaudeFacts) + sources/.md (persistClaudeWiki)
       if (payload.mode === 'claude-cli' && payload.meetingId) {
         const { runClaudeCliMode } = await import('./claudeCliRunner.js');
         const { persistClaudeAxes } = await import('./persistClaudeAxes.js');
+        const { persistClaudeFacts } = await import('./persistClaudeFacts.js');
+        const { persistClaudeWiki } = await import('./persistClaudeWiki.js');
+        const { buildScopePrompt, buildMeetingDigest } = await import('./promptTemplates/claudeCliScope.js');
+        const { ensurePersonByName } = await import('../parse/participantExtractor.js');
 
         // 1) parseMeeting：CLI 模式同样需要先把 transcript 切段、participants 入 mn_people
         await writeStep('ingest', 0.1, '原始素材解析（CLI 模式）');
@@ -741,22 +748,66 @@ export class RunEngine {
         await writeStep('ingest', 1.0, `素材解析完成 · ${parseResult.segmentCount ?? 0} 段`);
         await writeStep('segment', 1.0, `参与者归并完成 · ${parseResult.participantCount} 位`);
 
-        // 2) 收集 strategy 解析后的 decoratorChain（payload.strategySpec 已经是 enqueue 时解析过的）
+        // 2) 收集 strategy 解析后的 decoratorChain
         const decoratorChain = (payload.strategySpec ?? '').split('|').map((s) => s.trim()).filter(Boolean);
 
-        // 3) 拉 meeting title + meetingKind（从 assets metadata 拿 title 给 prompt 用）
+        // 3) 拉 meeting title + meetingKind + 已有的 claudeSession（如果之前跑过）
         let meetingTitle = '';
         let meetingKind: string | null = null;
+        let meetingSessionId: string | null = null;
         try {
           const r = await this.deps.db.query(
-            `SELECT title, metadata->>'meeting_kind' AS meeting_kind FROM assets WHERE id = $1`,
+            `SELECT title,
+                    metadata->>'meeting_kind' AS meeting_kind,
+                    metadata->'claudeSession'->>'sessionId' AS claude_session_id
+               FROM assets WHERE id = $1`,
             [payload.meetingId],
           );
           meetingTitle = String(r.rows[0]?.title ?? '');
           meetingKind = (r.rows[0]?.meeting_kind as string | null) ?? null;
+          const sid = r.rows[0]?.claude_session_id;
+          meetingSessionId = typeof sid === 'string' && sid.length > 0 ? sid : null;
         } catch {/* 缺 title 不阻塞 */}
 
-        // 4) 调 Claude CLI（在 llmUsageStorage 内, 但不需要 strategyStorage —— prompt 已自带专家上下文）
+        // 4) 拉 scope info（仅 scope.kind 是 project/client/topic 时；meeting scope 无意义）
+        let scopeRow: { id: string; kind: string; name: string; sessionId: string | null; metadata: any } | null = null;
+        if (payload.scope.kind === 'project' || payload.scope.kind === 'client' || payload.scope.kind === 'topic') {
+          if (payload.scope.id) {
+            try {
+              const sr = await this.deps.db.query(
+                `SELECT id::text AS id, kind, name, metadata,
+                        metadata->'claudeSession'->>'sessionId' AS scope_session_id
+                   FROM mn_scopes WHERE id = $1`,
+                [payload.scope.id],
+              );
+              if (sr.rows[0]) {
+                const sid = sr.rows[0].scope_session_id;
+                scopeRow = {
+                  id: sr.rows[0].id,
+                  kind: sr.rows[0].kind,
+                  name: sr.rows[0].name,
+                  sessionId: typeof sid === 'string' && sid.length > 0 ? sid : null,
+                  metadata: sr.rows[0].metadata ?? {},
+                };
+              }
+            } catch {/* mn_scopes 不可用时降级 */}
+          }
+        }
+
+        // 5) cliSessions 快照写到 mn_runs.metadata（便于排错）
+        try {
+          await this.deps.db.query(
+            `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliSessions', $2::jsonb) WHERE id = $1`,
+            [payload.runId, JSON.stringify({
+              meetingSessionId,
+              scopeSessionId: scopeRow?.sessionId ?? null,
+              isMeetingSessionFresh: !meetingSessionId,
+              isScopeSessionFresh: scopeRow ? !scopeRow.sessionId : null,
+            })],
+          );
+        } catch {/* swallow */}
+
+        // 6) spawn #1 — meeting session run
         await llmUsageStorage.run(counter, async () => {
           const cliResult = await runClaudeCliMode(
             this.deps,
@@ -766,14 +817,15 @@ export class RunEngine {
               expertSnapshots: expertSnapshotsForDispatch ?? new Map(),
               preset: payload.preset,
               decoratorChain,
-              scopeConfig: null, // TODO Phase 14 路由 live 后接入
+              scopeConfig: null,
               meetingKind,
               meetingTitle,
               participantsFromParse: (parseResult.participants ?? []).map((p) => ({ id: p.id, name: p.name })),
+              resumeSessionId: meetingSessionId,
+              promptKind: 'meeting',
             },
             {
               writeStep: async (key, ratio, msg) => {
-                // 把 CLI 子步骤映射到 step3 的 dec/axes/synth 几个段
                 const stageMap = { spawn: 'dec', streaming: 'axes', parsing: 'synth', persisting: 'render' } as const;
                 await writeStep(stageMap[key] as Step3Key, ratio, msg ?? '');
               },
@@ -789,9 +841,26 @@ export class RunEngine {
             },
           );
 
-          // 5) 持久化：metadata.analysis + 17 张 mn_* 表
-          await writeStep('render', 0.5, '写入 metadata.analysis');
-          // 给 analysis 打 _generated 标记便于前端区分两种生成路径
+          // 7) 持久化：metadata.analysis + 17 张 mn_* 表 + content_facts + wiki .md
+          await writeStep('render', 0.35, '写入 metadata.analysis + participants');
+
+          // 7a) 重建 cliPersonMap —— 用 Claude 输出的 participants 当权威，反查 / INSERT mn_people
+          //     之前依赖 parseMeeting.participants 在转写没有 speaker label 的会议上抽不到，
+          //     导致 cliPersonMap 全空，所有 axis 行被 resolvePersonId 跳过。
+          const claudeParticipants = Array.isArray(cliResult.participants) ? cliResult.participants : [];
+          const cliPersonMap: Record<string, string> = {};
+          for (const p of claudeParticipants) {
+            const localId = String(p?.id ?? '').trim();
+            const rawName = String(p?.name ?? '').trim();
+            if (!localId || !rawName) continue;
+            try {
+              const uuid = await ensurePersonByName(this.deps, rawName, p?.role);
+              if (uuid) cliPersonMap[localId] = uuid;
+            } catch (e) {
+              console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
+            }
+          }
+
           const stampedAnalysis = {
             ...(cliResult.analysis as any),
             _generated: {
@@ -802,25 +871,198 @@ export class RunEngine {
             },
           };
           await persistAnalysisToAsset(this.deps.db, payload.meetingId!, stampedAnalysis);
-          await writeStep('render', 0.7, '写入 mn_* 轴表');
+
+          // 7b) 写 assets.metadata.participants 让 detail endpoint (engine.getMeetingDetail) 能读到
+          //     形态需跟 VariantEditorial / Workbench 期待的 participants[] 对齐：
+          //     [{ id: 'p1', name, role, initials, tone, speakingPct }]
+          if (claudeParticipants.length > 0) {
+            try {
+              await this.deps.db.query(
+                `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('participants', $2::jsonb) WHERE id = $1`,
+                [payload.meetingId, JSON.stringify(claudeParticipants)],
+              );
+            } catch (e) {
+              console.warn('[runEngine] write metadata.participants failed:', (e as Error).message);
+            }
+          }
+
+          await writeStep('render', 0.55, '写入 mn_* 轴表');
           await persistClaudeAxes(this.deps, payload.meetingId!, {
             meeting: cliResult.meeting,
             participants: cliResult.participants,
             analysis: cliResult.analysis as any,
             axes: cliResult.axes as any,
-          }, cliResult.cliPersonMap);
+          }, cliPersonMap);
 
-          // 6) cliPersonMap 落到 mn_runs.metadata 便于运维
+          await writeStep('render', 0.65, '写入 content_facts（wiki SPO）');
+          try {
+            await persistClaudeFacts(this.deps, payload.meetingId!, cliResult.facts ?? []);
+          } catch (e) {
+            console.warn('[runEngine] persistClaudeFacts failed:', (e as Error).message);
+          }
+
+          await writeStep('render', 0.75, '写入 wiki sources/.md');
+          try {
+            await persistClaudeWiki(this.deps, payload.meetingId!, cliResult.wikiMarkdown ?? {});
+          } catch (e) {
+            console.warn('[runEngine] persistClaudeWiki failed:', (e as Error).message);
+          }
+
+          // 8) 写回 meeting session id (assets.metadata.claudeSession) + cliPersonMap
+          if (cliResult.sessionId) {
+            try {
+              await this.deps.db.query(
+                `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                   'claudeSession', jsonb_build_object(
+                     'sessionId', $2::text,
+                     'lastResumedAt', NOW()::text,
+                     'runCount', COALESCE((metadata->'claudeSession'->>'runCount')::int, 0) + 1
+                   )
+                 ) WHERE id = $1`,
+                [payload.meetingId, cliResult.sessionId],
+              );
+            } catch (e) {
+              console.warn('[runEngine] write claudeSession to assets failed:', (e as Error).message);
+            }
+          }
           try {
             await this.deps.db.query(
-              `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliPersonMap', $2::jsonb) WHERE id = $1`,
-              [payload.runId, JSON.stringify(cliResult.cliPersonMap)],
+              `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                 'cliPersonMap', $2::jsonb,
+                 'cliMeetingResult', jsonb_build_object(
+                   'sessionId', $3::text,
+                   'inputTokens', $4::int,
+                   'cacheReadTokens', $5::int,
+                   'factsWritten', $6::int,
+                   'wikiSourceWritten', $7::boolean,
+                   'participantsResolved', $8::int
+                 )
+               ) WHERE id = $1`,
+              [
+                payload.runId,
+                JSON.stringify(cliPersonMap),
+                cliResult.sessionId,
+                cliResult.inputTokens,
+                cliResult.cacheReadTokens,
+                Array.isArray(cliResult.facts) ? cliResult.facts.length : 0,
+                Boolean((cliResult.wikiMarkdown as any)?.sourceEntry),
+                Object.keys(cliPersonMap).length,
+              ],
             );
-          } catch {/* swallow */}
+          } catch (e) {
+            console.warn('[runEngine] write cliMeetingResult to mn_runs failed:', (e as Error).message);
+          }
+
+          // 9) spawn #2 — scope session run（可选，仅 scope=project/client/topic 才跑）
+          if (scopeRow) {
+            await writeStep('render', 0.85, `启动 scope session · ${scopeRow.name}`);
+            const newMeetingDigest = buildMeetingDigest({
+              analysis: cliResult.analysis,
+              axes: cliResult.axes,
+            });
+            const scopePrompt = buildScopePrompt({
+              scope: {
+                kind: scopeRow.kind as 'project' | 'client' | 'topic',
+                id: scopeRow.id,
+                name: scopeRow.name,
+                config: null, // TODO Phase 14 expert-config live 后接入
+              },
+              newMeeting: {
+                meetingId: payload.meetingId!,
+                title: meetingTitle,
+                date: stampedAnalysis?.summary?.date ?? null,
+                digest: newMeetingDigest,
+              },
+              isFreshSession: !scopeRow.sessionId,
+            });
+
+            try {
+              const scopeResult = await runClaudeCliMode(
+                this.deps,
+                { runId: payload.runId, meetingId: payload.meetingId!, assetId: payload.meetingId! },
+                {
+                  expertRoles: null,
+                  expertSnapshots: new Map(),
+                  preset: payload.preset,
+                  decoratorChain: [],
+                  scopeConfig: null,
+                  meetingKind: null,
+                  meetingTitle,
+                  participantsFromParse: [],
+                  resumeSessionId: scopeRow.sessionId,
+                  promptKind: 'scope',
+                  prebuiltPrompt: scopePrompt,
+                },
+                {
+                  writeStep: async () => {/* scope spawn 不动主进度 */},
+                  bumpUsage: (i, o) => { counter.input += i; counter.output += o; counter.calls += 1; },
+                  recordCliRaw: async (raw) => {
+                    try {
+                      await this.deps.db.query(
+                        `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliScopeRaw', $2::text) WHERE id = $1`,
+                        [payload.runId, raw],
+                      );
+                    } catch {/* swallow */}
+                  },
+                },
+              );
+
+              // 9a) 写回 scope session id（如果 input_tokens > 150K 触发 fresh 重置）
+              const shouldReset = scopeResult.inputTokens > 150_000;
+              try {
+                await this.deps.db.query(
+                  `UPDATE mn_scopes SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                     'claudeSession', jsonb_build_object(
+                       'sessionId', $2::text,
+                       'lastResumedAt', NOW()::text,
+                       'runCount', COALESCE((metadata->'claudeSession'->>'runCount')::int, 0) + 1
+                     )
+                   ) WHERE id = $1`,
+                  [scopeRow.id, shouldReset ? null : scopeResult.sessionId],
+                );
+              } catch (e) {
+                console.warn('[runEngine] write claudeSession to mn_scopes failed:', (e as Error).message);
+              }
+
+              // 9b) 把 scopeUpdates 落到 mn_runs.metadata（前端 / 排错可见）
+              try {
+                await this.deps.db.query(
+                  `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                     'cliScopeResult', jsonb_build_object(
+                       'sessionId', $2::text,
+                       'inputTokens', $3::int,
+                       'scopeUpdates', $4::jsonb,
+                       'sessionResetTriggered', $5::boolean
+                     )
+                   ) WHERE id = $1`,
+                  [
+                    payload.runId,
+                    scopeResult.sessionId,
+                    scopeResult.inputTokens,
+                    JSON.stringify(scopeResult.scopeUpdates ?? {}),
+                    shouldReset,
+                  ],
+                );
+              } catch {/* swallow */}
+
+              // 9c) TODO（v2）: 把 scopeUpdates.judgmentsToReuse / openQuestionsToReopen 落到
+              // mn_judgments / mn_open_questions（reuse_count++ / status='chronic'）。
+              // 第一版先把 scopeUpdates 摆到 metadata 里供观察，效果可见后再接 DB 写入。
+            } catch (e) {
+              console.warn('[runEngine] scope session spawn failed:', (e as Error).message);
+              try {
+                await this.deps.db.query(
+                  `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliScopeError', $2::text) WHERE id = $1`,
+                  [payload.runId, (e as Error).message.slice(0, 500)],
+                );
+              } catch {/* swallow */}
+              // scope session 失败不阻塞主流程（meeting 部分已经成功）
+            }
+          }
         });
 
         await writeStep('render', 1.0, 'CLI 模式生成完成');
-        // 跳过 multi-axis 流程（strategyStorage.run 不调用），fall-through 到下面的 success-finalize
+        // 跳过 multi-axis 流程，fall-through 到下面的 success-finalize
       } else {
       // ─── 默认 multi-axis 模式 ──────────────────────────────
       // Wrap the entire run in two nested AsyncLocalStorage:

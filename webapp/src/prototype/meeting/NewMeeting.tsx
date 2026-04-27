@@ -558,7 +558,12 @@ function guessRoleFromExpert(e: ExpertMock): MnRoleId {
 function FlowExperts({ onNext, onBack, onSubmit }: {
   onNext: () => void;
   onBack: () => void;
-  onSubmit: (body: { presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> }) => Promise<boolean>;
+  onSubmit: (body: {
+    presetId: string;
+    expertIds: string[];
+    expertRoles: Record<MnRoleId, string[]>;
+    mode: 'multi-axis' | 'claude-cli';
+  }) => Promise<boolean>;
 }) {
   const pageSize = 8;
   const slowThresholdMs = 5000;
@@ -572,6 +577,9 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [roleMap, setRoleMap] = useState<Record<string, MnRoleId>>({});
   const [presetId, setPresetId] = useState('standard');
+  /** Claude CLI 一次性生成模式：开了之后 preset 仍然保留（作为 strategy 解析的 fallback），
+      但生成路径不走 16 轴循环，spawn 一次 claude -p 完成全部。 */
+  const [useClaudeCli, setUseClaudeCli] = useState(false);
   const [nameKeyword, setNameKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [slowHint, setSlowHint] = useState(false);
@@ -1011,18 +1019,39 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
             <SectionLabel>调用预设</SectionLabel>
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {PRESETS_FLOW.map(p => {
-                const active = p.id === presetId;
+                const active = !useClaudeCli && p.id === presetId;
                 return (
                   <div key={p.id} onClick={() => setPresetId(p.id)} style={{
                     padding: '10px 12px', borderRadius: 6,
                     border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
-                    background: active ? 'var(--accent-soft)' : 'transparent', cursor: 'pointer',
+                    background: active ? 'var(--accent-soft)' : 'transparent',
+                    cursor: 'pointer',
+                    opacity: useClaudeCli ? 0.55 : 1,
                   }}>
                     <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, fontWeight: 600 }}>{p.id}</div>
                     <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.4 }}>{p.position}</div>
                   </div>
                 );
               })}
+
+              {/* Claude Code · 一次性生成（实验模式 · plan §A.1） */}
+              <div
+                onClick={() => setUseClaudeCli((v) => !v)}
+                style={{
+                  padding: '10px 12px', borderRadius: 6, marginTop: 4,
+                  border: useClaudeCli ? '2px solid var(--accent)' : '1px dashed var(--line-2)',
+                  background: useClaudeCli ? 'var(--accent-soft)' : 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, fontWeight: 600 }}>
+                  🤖 Claude Code · 一次性生成
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.4 }}>
+                  实验：把整段转写 + schema + 选中专家 + 当前 strategy 一次喂给 claude CLI。
+                  专家 persona / 策略链 / scope preset 仍然生效。
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1043,7 +1072,12 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
                   const role = roleMap[id];
                   if (role) expertRoles[role].push(id);
                 }
-                const ok = await onSubmit({ presetId, expertIds: selectedIds, expertRoles });
+                const ok = await onSubmit({
+                  presetId,
+                  expertIds: selectedIds,
+                  expertRoles,
+                  mode: useClaudeCli ? 'claude-cli' : 'multi-axis',
+                });
                 setEnqueueing(false);
                 if (ok) onNext();
                 else setSubmitError('任务未成功入队：请先上传可解析的会议纪要文件，再重试。');
@@ -1110,6 +1144,8 @@ function FlowProcessing({
   const [realLlmCalls, setRealLlmCalls] = useState<number | null>(null);
   const [realState, setRealState] = useState<string | null>(null);
   const [realErrorMessage, setRealErrorMessage] = useState<string | null>(null);
+  /** 'multi-axis' (默认) / 'claude-cli' — 从 mn_runs.metadata.mode 拉到，UI 用来显示对应 chip */
+  const [realMode, setRealMode] = useState<'multi-axis' | 'claude-cli' | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
@@ -1127,6 +1163,7 @@ function FlowProcessing({
     setRealLlmCalls(null);
     setRealState(null);
     setRealErrorMessage(null);
+    setRealMode(null);
     setRetryError(null);
   }, [runId]);
 
@@ -1160,7 +1197,7 @@ function FlowProcessing({
           currentStep?: string;
           currentStepKey?: string;
           llmCalls?: number;
-          metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number };
+          metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number; mode?: 'multi-axis' | 'claude-cli' };
           surfaces?: { dispatchPlan?: any; decorators?: any; synthesis?: any; render?: any };
           errorMessage?: string;
         } = await meetingNotesApi.getRun(runId);
@@ -1185,6 +1222,8 @@ function FlowProcessing({
         if (r.currentStep || r.metadata?.currentStep) setRealCurrentStep(r.currentStep ?? r.metadata?.currentStep ?? null);
         const stepKey = r.currentStepKey ?? r.metadata?.currentStepKey ?? null;
         if (stepKey) setRealCurrentStepKey(stepKey);
+        const md = r.metadata?.mode;
+        if (md === 'multi-axis' || md === 'claude-cli') setRealMode(md);
         if (r.surfaces) setRealSurfaces(r.surfaces);
         const llmCount = typeof r.llmCalls === 'number' ? r.llmCalls : (typeof r.metadata?.llmCalls === 'number' ? r.metadata.llmCalls : null);
         if (llmCount != null) setRealLlmCalls(llmCount);
@@ -1400,6 +1439,13 @@ function FlowProcessing({
                 background: 'oklch(0.93 0.08 165)', color: 'oklch(0.35 0.12 165)',
                 border: '1px solid oklch(0.80 0.10 165)', marginLeft: 4,
               }}>API · 轮询中</span>
+            )}
+            {realMode === 'claude-cli' && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 3, fontFamily: 'var(--mono)',
+                background: 'oklch(0.93 0.08 280)', color: 'oklch(0.35 0.15 280)',
+                border: '1px solid oklch(0.80 0.10 280)', marginLeft: 4,
+              }}>Claude CLI · 一次性生成</span>
             )}
             <div style={{ marginLeft: 'auto' }}>
               {!runId && (
@@ -1631,7 +1677,12 @@ export function NewMeeting() {
   const [step, setStep] = useState<1 | 2 | 3>(runIdFromQuery ? 3 : 1);
   const [assetId, setAssetId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(runIdFromQuery);
-  const [lastSubmitBody, setLastSubmitBody] = useState<{ presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> } | null>(null);
+  const [lastSubmitBody, setLastSubmitBody] = useState<{
+    presetId: string;
+    expertIds: string[];
+    expertRoles: Record<MnRoleId, string[]>;
+    mode: 'multi-axis' | 'claude-cli';
+  } | null>(null);
 
   // Persist runId → URL so refresh / back-button keep state.
   useEffect(() => {
@@ -1648,7 +1699,12 @@ export function NewMeeting() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  async function handleSubmit(body: { presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> }): Promise<boolean> {
+  async function handleSubmit(body: {
+    presetId: string;
+    expertIds: string[];
+    expertRoles: Record<MnRoleId, string[]>;
+    mode: 'multi-axis' | 'claude-cli';
+  }): Promise<boolean> {
     setLastSubmitBody(body);
     if (forceMock) return true;
     if (!assetId) {
@@ -1673,6 +1729,7 @@ export function NewMeeting() {
         axis: 'all',
         preset: body.presetId,
         triggeredBy: 'new-meeting-wizard',
+        mode: body.mode,
         ...(Object.keys(cleanedRoles).length > 0 ? { expertRoles: cleanedRoles } : {}),
       });
       if (r.runId) {

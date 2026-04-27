@@ -94,6 +94,12 @@ export const meetingNotesApi = {
      * system prompt 顶部注入这位/这些专家的 persona。
      */
     expertRoles?: { people?: string[]; projects?: string[]; knowledge?: string[] };
+    /**
+     * 生成模式：
+     * - 'multi-axis'（默认）：原 16 轴 LLM 循环
+     * - 'claude-cli'：spawn 一次 claude -p，prompt 里把转写 + schema + 专家 personas + 装饰指令一起喂进去
+     */
+    mode?: 'multi-axis' | 'claude-cli';
   }) => {
     // 后端 router L605 要求 scope.kind 全小写 ['library','project','client','topic','meeting']
     // 多个调用点历史上传 'MEETING'/'PROJECT' 会触发 400 · 这里统一 normalize
