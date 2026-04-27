@@ -623,12 +623,243 @@ function ScheduleView() {
   );
 }
 
+// ── Wiki View · G2 · claude-cli wiki 批量初始化 ─────────────────────────────
+
+interface WikiRow {
+  id: string;
+  title: string;
+  occurredAt: string | null;
+  createdAt: string;
+  attendees: number | null;
+  claudeSessionId: string | null;
+  archived: boolean;
+}
+
+function mapApiMeetingToWiki(it: Record<string, unknown>): WikiRow {
+  return {
+    id: String(it.id ?? ''),
+    title: String(it.title ?? '(untitled)'),
+    occurredAt: (it.occurred_at as string | null) ?? null,
+    createdAt: String(it.created_at ?? ''),
+    attendees: (it.attendee_count as number | null) ?? null,
+    claudeSessionId: (it.claude_session_id as string | null) ?? null,
+    archived: Boolean(it.archived),
+  };
+}
+
+function WikiView() {
+  const navigate = useNavigate();
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<WikiRow[]>([]);
+  const [isMock, setIsMock] = useState(true);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [batching, setBatching] = useState(false);
+
+  const refetch = () => {
+    if (forceMock) { setRows([]); setIsMock(true); return; }
+    meetingNotesApi.listMeetings({ limit: 200, status: 'active' })
+      .then((r) => {
+        setRows((r?.items ?? []).map(mapApiMeetingToWiki));
+        setIsMock(false);
+      })
+      .catch(() => {});
+  };
+  useEffect(() => { refetch(); }, [forceMock]);
+
+  const generated = rows.filter((r) => r.claudeSessionId);
+  const pending = rows.filter((r) => !r.claudeSessionId);
+
+  async function enqueueOne(id: string) {
+    setBusy((b) => ({ ...b, [id]: true }));
+    try {
+      await meetingNotesApi.enqueueRun({
+        scope: { kind: 'meeting', id },
+        axis: 'all',
+        preset: 'standard',
+        triggeredBy: 'generation-center-wiki',
+        mode: 'claude-cli',
+      });
+    } catch (e: any) {
+      alert(`入队失败 · ${e?.message ?? e}`);
+    } finally {
+      setBusy((b) => { const next = { ...b }; delete next[id]; return next; });
+      refetch();
+    }
+  }
+
+  async function batchEnqueuePending() {
+    if (pending.length === 0) return;
+    if (!confirm(`将批量入队 ${pending.length} 场未生成 wiki 的会议（claude-cli 模式 · 一场约 4-5 分钟）？`)) return;
+    setBatching(true);
+    try {
+      for (const r of pending) {
+        try {
+          await meetingNotesApi.enqueueRun({
+            scope: { kind: 'meeting', id: r.id },
+            axis: 'all',
+            preset: 'standard',
+            triggeredBy: 'generation-center-wiki-batch',
+            mode: 'claude-cli',
+          });
+          await new Promise((res) => setTimeout(res, 200));
+        } catch {
+          // 不打断批处理 · 单条失败继续
+        }
+      }
+    } finally {
+      setBatching(false);
+      refetch();
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        {isMock && <MockBadge />}
+        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+          listMeetings · claude-cli 模式跑过的会议在 metadata.claudeSession.sessionId 留下 session id
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 18 }}>
+        {[
+          { l: '总数',           v: String(rows.length),       c: 'var(--ink)' },
+          { l: '已生成 wiki',    v: String(generated.length),  c: 'var(--accent)' },
+          { l: '未生成',         v: String(pending.length),    c: 'var(--amber)' },
+        ].map((s) => (
+          <div key={s.l} style={{
+            padding: '14px 16px', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+            borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 4,
+          }}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{s.l}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: s.c }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <SectionLabel>会议列表 · {rows.length}</SectionLabel>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => navigate('/content-library/wiki')}
+            style={{
+              border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+              padding: '6px 12px', fontSize: 11.5, cursor: 'pointer', color: 'var(--ink-2)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <Icon name="arrow" size={11} />
+            打开 wiki
+          </button>
+          <button
+            onClick={batchEnqueuePending}
+            disabled={pending.length === 0 || batching}
+            style={{
+              border: '1px solid var(--ink)',
+              background: pending.length === 0 || batching ? 'var(--paper-2)' : 'var(--ink)',
+              color: pending.length === 0 || batching ? 'var(--ink-3)' : 'var(--paper)',
+              borderRadius: 5, padding: '7px 14px', fontSize: 12,
+              cursor: pending.length === 0 || batching ? 'not-allowed' : 'pointer',
+              fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <Icon name="play" size={11} />
+            {batching ? '入队中…' : `批量入队所有未生成 · ${pending.length}`}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
+        {rows.length === 0 && (
+          <div style={{ padding: '20px 24px', fontSize: 12, color: 'var(--ink-3)' }}>
+            {isMock ? '当前为 mock 模式 · 无数据。切到真实 API 查看。' : '暂无会议。'}
+          </div>
+        )}
+        {rows.map((r, i) => {
+          const has = !!r.claudeSessionId;
+          const isBusy = !!busy[r.id];
+          return (
+            <div key={r.id} style={{
+              padding: '14px 18px', display: 'grid',
+              gridTemplateColumns: '90px 1fr 160px 200px',
+              gap: 14, alignItems: 'center',
+              borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
+            }}>
+              <div>
+                {has ? (
+                  <Chip tone="accent">已生成</Chip>
+                ) : (
+                  <Chip tone="ghost">未生成</Chip>
+                )}
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{r.title}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 11, color: 'var(--ink-3)' }}>
+                  <MonoMeta>{r.id.slice(0, 8)}…</MonoMeta>
+                  {r.occurredAt && <><span>·</span><span>{r.occurredAt.slice(0, 10)}</span></>}
+                  {r.attendees != null && <><span>·</span><span>{r.attendees} 人</span></>}
+                  {has && (
+                    <>
+                      <span>·</span>
+                      <span style={{ color: 'var(--accent)' }}>session {r.claudeSessionId!.slice(0, 8)}…</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                {has ? '已落 sources/.md' : '尚未运行 claude-cli'}
+              </div>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => enqueueOne(r.id)}
+                  disabled={isBusy}
+                  style={{
+                    border: '1px solid var(--line)',
+                    background: has ? 'var(--paper)' : 'var(--ink)',
+                    color: has ? 'var(--ink-2)' : 'var(--paper)',
+                    borderRadius: 4, padding: '5px 9px', fontSize: 11,
+                    cursor: isBusy ? 'wait' : 'pointer',
+                    opacity: isBusy ? 0.5 : 1,
+                  }}
+                >
+                  {isBusy ? '入队中…' : has ? '重新生成' : '生成 wiki'}
+                </button>
+                <button
+                  onClick={() => navigate(`/meeting/${r.id}/a`)}
+                  style={{
+                    border: '1px solid var(--line)', background: 'transparent', borderRadius: 4,
+                    padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-3)',
+                  }}
+                >会议页 →</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        marginTop: 22, padding: '16px 22px', background: 'var(--paper-2)',
+        border: '1px solid var(--line-2)', borderRadius: 8,
+      }}>
+        <SectionLabel>说明</SectionLabel>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.7 }}>
+          点击「生成 wiki」后台会以 <code style={{ fontFamily: 'var(--mono)' }}>mode=claude-cli</code> 入队一次完整 run，
+          一场约 4-5 分钟，concurrency=2。结束后：<br />
+          · <code style={{ fontFamily: 'var(--mono)' }}>content_facts</code> 写入 SPO 三元组<br />
+          · <code style={{ fontFamily: 'var(--mono)' }}>data/content-wiki/default/sources/&lt;meetingId&gt;.md</code> 落地<br />
+          · 同 meeting 的 session id 写入 <code style={{ fontFamily: 'var(--mono)' }}>assets.metadata.claudeSession.sessionId</code>，下次重跑 prompt cache 命中
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ──────────────────────────────────────────────────────────────
 
 export function GenerationCenter() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = (searchParams.get('tab') as 'queue' | 'versions' | 'schedule' | null) ?? 'queue';
-  const [tab, setTab] = useState<'queue' | 'versions' | 'schedule'>(tabFromUrl);
+  const tabFromUrl = (searchParams.get('tab') as 'queue' | 'versions' | 'schedule' | 'wiki' | null) ?? 'queue';
+  const [tab, setTab] = useState<'queue' | 'versions' | 'schedule' | 'wiki'>(tabFromUrl);
   useEffect(() => {
     if (tab !== tabFromUrl) {
       setSearchParams((prev) => {
@@ -651,13 +882,14 @@ export function GenerationCenter() {
           <MonoMeta>generation.center</MonoMeta>
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, maxWidth: 820, lineHeight: 1.55 }}>
-          所有跨会议生成任务的统一入口。queue 看当前队列 · versions 对比历史版本 · schedule 配置定时任务。
+          所有跨会议生成任务的统一入口。queue 看当前队列 · versions 对比历史版本 · schedule 配置定时任务 · wiki 批量入队 claude-cli 生成。
         </div>
         <div style={{ display: 'flex', gap: 2, marginTop: 18 }}>
           {[
             { id: 'queue' as const,    label: '队列 · Queue',       count: MOCK_RUNS.filter(r => r.state !== 'done' && r.state !== 'failed').length },
             { id: 'versions' as const, label: '历史版本 · Versions', count: MOCK_VERSIONS.length },
             { id: 'schedule' as const, label: '定时 · Schedule',     count: MOCK_SCHEDULES.filter(s => s.on).length },
+            { id: 'wiki' as const,     label: 'Wiki · Claude CLI',  count: 0 },
           ].map(t => {
             const active = t.id === tab;
             return (
@@ -679,6 +911,7 @@ export function GenerationCenter() {
         {tab === 'queue'    && <QueueView />}
         {tab === 'versions' && <VersionsView />}
         {tab === 'schedule' && <ScheduleView />}
+        {tab === 'wiki'     && <WikiView />}
       </div>
     </div>
   );
