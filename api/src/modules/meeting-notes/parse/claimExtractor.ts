@@ -28,10 +28,18 @@ export async function loadMeetingBundle(
   const typeExpr = hasAssetTypeCol.rows.length > 0
     ? `COALESCE(asset_type::text, type::text, content_type::text, '')`
     : `COALESCE(type::text, content_type::text, '')`;
+  // F9 fix · 放开 type 白名单：早期约定只接 'meeting_minutes'，但实际新建会议
+  // 默认 type='meeting_note'，导致绝大多数会议被 loadMeetingBundle 直接 return null
+  // → axis computer 早 return → 整个 axis 跑出来 0 行（典型 silent-zero）
+  // 改为接受 meeting_minutes / meeting_note；或 metadata 里有 meeting_kind 标记
   const r = await deps.db.query(
     `SELECT id, title, content, metadata, created_at
        FROM assets
-      WHERE id = $1 AND ${typeExpr} = 'meeting_minutes'`,
+      WHERE id = $1
+        AND (
+          ${typeExpr} IN ('meeting_minutes', 'meeting_note')
+          OR (metadata ? 'meeting_kind')
+        )`,
     [meetingId],
   );
   if (r.rows.length === 0) return null;

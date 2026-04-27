@@ -470,16 +470,33 @@ export function AxisKnowledge() {
   const scopeId = scope.effectiveScopeId;
   const forceMock = useForceMock();
 
-  // F7 · 自动选 scope 下首场会议（沿用 F2 AxisMeta 模式）
-  // URL ?meetingId 优先；否则走 listScopeMeetings；最后兜底 fixture
+  // F7 → F9.1 · 智能 auto-pick：listScopeMeetings 后预拉 axes，选第一个 mental_models /
+  // cognitive_biases / counterfactuals 任一非空的会议；都为空则用第一个（兜底）。
+  // 之前按 created_at 顺序硬选，常落到刚建的"空会议"上 → tab 永远空。
   const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
   useEffect(() => {
     if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
     let cancelled = false;
-    meetingNotesApi
-      .listScopeMeetings(scopeId)
-      .then((r) => { if (!cancelled) setAutoMeetingId(r?.meetingIds?.[0] ?? null); })
-      .catch(() => {});
+    (async () => {
+      try {
+        const list = await meetingNotesApi.listScopeMeetings(scopeId);
+        const ids: string[] = list?.meetingIds ?? [];
+        if (ids.length === 0) return;
+        // 并行拉每场 axes，找第一个 knowledge 三个 list-output subDim 任一非空的
+        const axesArr = await Promise.all(ids.map((id) => meetingNotesApi.getMeetingAxes(id).catch(() => null)));
+        let chosen = ids[0];
+        for (let i = 0; i < ids.length; i++) {
+          const k = axesArr[i]?.knowledge;
+          if (!k) continue;
+          const hasContent = (k.mental_models?.length ?? 0) > 0
+            || (k.cognitive_biases?.length ?? 0) > 0
+            || (k.counterfactuals?.length ?? 0) > 0
+            || (k.judgments?.length ?? 0) > 0;
+          if (hasContent) { chosen = ids[i]; break; }
+        }
+        if (!cancelled) setAutoMeetingId(chosen);
+      } catch { /* ignore */ }
+    })();
     return () => { cancelled = true; };
   }, [searchParams, scopeId, forceMock]);
   const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
