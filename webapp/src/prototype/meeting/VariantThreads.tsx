@@ -51,15 +51,23 @@ function LegendDot({ color, label, ring, small, square }: {
 }
 
 // ── EventMark ──
-function EventMark({ e, x }: { e: ThreadEvent; x: number }) {
+function EventMark({ e, x, slot = 0 }: { e: ThreadEvent; x: number; slot?: number }) {
   const base: CSSProperties = {
     position: 'absolute', left: x, top: '50%',
     transform: 'translate(-50%,-50%)', zIndex: 2,
   };
-  // 标签共享样式：限宽 + 省略，避免相邻事件 label 横向叠覆
+  // 标签共享样式：限宽 + 省略
+  // slot 决定 label 的垂直偏移（dot 始终在 line 上）：
+  //   slot 0 → 0px,  slot 1 → +14px (下),  slot 2 → -14px (上),  slot 3 → +28px,  slot 4 → -28px ...
+  // lane 高度 72，半高 36，offset 控在 ±28 内不串入相邻 lane。
+  const labelDy = slot === 0 ? 0 : (slot % 2 === 1 ? 1 : -1) * Math.ceil(slot / 2) * 14;
   const labelStyle: CSSProperties = {
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
     maxWidth: 96, display: 'inline-block',
+    transform: labelDy ? `translateY(${labelDy}px)` : undefined,
+    background: labelDy ? 'var(--paper-2)' : undefined,
+    padding: labelDy ? '0 4px' : undefined,
+    borderRadius: labelDy ? 3 : undefined,
   };
   switch (e.kind) {
     case 'claim':
@@ -215,10 +223,27 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
               } ${Math.min(95, p.speakingPct * 2)}%, transparent)`,
               borderRadius: 11, pointerEvents: 'none',
             }} />
-            {/* Events */}
-            {(eventDict[p.id] ?? []).map((e, j) => (
-              <EventMark key={j} e={e} x={xFor(e.t)} />
-            ))}
+            {/* Events · 贪心 slot 分配，相邻 label 自动上下错开避让 */}
+            {(() => {
+              const events = (eventDict[p.id] ?? []).slice().sort((a, b) => a.t - b.t);
+              const MIN_DIST = 96; // 与 labelStyle.maxWidth 一致：相邻 label 至少留 96px
+              const slotEnds: number[] = [];
+              const slots: number[] = events.map((e) => {
+                if (!e.label) return 0; // 无 label 不占 slot
+                const ex = xFor(e.t);
+                for (let s = 0; s < slotEnds.length; s++) {
+                  if (ex - slotEnds[s] >= MIN_DIST) {
+                    slotEnds[s] = ex;
+                    return s;
+                  }
+                }
+                slotEnds.push(ex);
+                return slotEnds.length - 1;
+              });
+              return events.map((e, j) => (
+                <EventMark key={j} e={e} x={xFor(e.t)} slot={slots[j]} />
+              ));
+            })()}
           </div>
         ))}
 

@@ -325,7 +325,7 @@ export async function composeAnalysisFromAxes(
   });
 
   // ── consensus / divergence ──
-  // mn_consensus_items.kind ∈ {'consensus','divergence'}，对应参考 schema 的 kind 字段
+  // 优先级：mn_consensus_items（如有 axis computer 写入）→ 没有则用 assumptions+open_questions 兜底
   const sidesByItem = new Map<string, Array<{ stance: string; reason: string; by: string[] }>>();
   for (const s of (consensusSidesRows.rows ?? [])) {
     const arr = sidesByItem.get(String(s.item_id)) ?? [];
@@ -336,20 +336,135 @@ export async function composeAnalysisFromAxes(
     });
     sidesByItem.set(String(s.item_id), arr);
   }
-  const consensus: AnalysisConsensusItem[] = (consensusItemsRows.rows ?? []).map((r: any, i: number) => {
+  const consensus: AnalysisConsensusItem[] = [];
+  let cIdx = 0, dIdx = 0;
+  // 1) 主路径：mn_consensus_items
+  for (const r of (consensusItemsRows.rows ?? []) as any[]) {
     const kind: 'consensus' | 'divergence' = r.kind === 'divergence' ? 'divergence' : 'consensus';
-    const prefix = kind === 'consensus' ? 'C' : 'D';
-    return {
-      id: `${prefix}${i + 1}`,
+    if (kind === 'consensus') cIdx++; else dIdx++;
+    consensus.push({
+      id: `${kind === 'consensus' ? 'C' : 'D'}${kind === 'consensus' ? cIdx : dIdx}`,
       kind,
       text: nonEmpty(r.item_text),
       supportedBy: Array.isArray(r.supported_by) ? r.supported_by.map((x: any) => String(x)) : [],
       sides: sidesByItem.get(String(r.id)) ?? [],
-    };
-  });
+    });
+  }
+  // 2) 兜底：mn_consensus_items 为空时，从 assumptions（高置信 → 共识）+ open_questions（争议 → 分歧）拼
+  if (consensus.length === 0) {
+    for (const a of (assumptionsRows.rows ?? []) as any[]) {
+      const conf = Number(a.confidence ?? 0);
+      const grade = String(a.evidence_grade ?? '');
+      // A/B 级证据 或 confidence ≥ 0.7：视作团队达成共识的假设
+      if ((grade === 'A' || grade === 'B' || conf >= 0.7) && nonEmpty(a.text)) {
+        cIdx++;
+        consensus.push({
+          id: `C${cIdx}`,
+          kind: 'consensus',
+          text: nonEmpty(a.text),
+          supportedBy: [],
+          sides: [],
+        });
+      }
+    }
+    for (const oq of (openQuestionsRows.rows ?? []) as any[]) {
+      const times = Number(oq.times_raised ?? 1);
+      // chronic（多次提出未决）或 times_raised ≥ 2：视作分歧
+      if ((oq.status === 'chronic' || times >= 2) && nonEmpty(oq.text)) {
+        dIdx++;
+        consensus.push({
+          id: `D${dIdx}`,
+          kind: 'divergence',
+          text: nonEmpty(oq.text),
+          supportedBy: [],
+          sides: oq.owner_person_id ? [{
+            stance: '负责人',
+            reason: '该问题由此人 owns',
+            by: [String(oq.owner_person_id)],
+          }] : [],
+        });
+      }
+    }
+    // 若 chronic 还不够，把 mention_count ≥ 1 的 risks 也归到 divergence（风险本身就是反对意见）
+    if (dIdx < 3) {
+      for (const r of (risksRows.rows ?? []) as any[]) {
+        if (!nonEmpty(r.text)) continue;
+        dIdx++;
+        consensus.push({
+          id: `D${dIdx}`,
+          kind: 'divergence',
+          text: `（风险）${r.text}`,
+          supportedBy: [],
+          sides: [],
+        });
+        if (dIdx >= 6) break;
+      }
+    }
+  }
 
-  // ── crossView：Phase 1 暂留空（需要 LLM 抽 claim+responses 才有意义） ──
+  // ── crossView ──
+  // 兜底链：decisions（claim+proposer 最理想）→ judgments（claim 但无 author）→ tensions（topic+between）
+  // Phase 2 需要 LLM 抽显式 claim+respond 对；当前是基于 axes raw 数据的近似。
   const crossView: AnalysisCrossView[] = [];
+
+  // 1) 主路径：mn_decisions
+  for (const d of (decisionsRows.rows ?? []).slice(0, 6) as any[]) {
+    const claim = nonEmpty(d.rationale)
+      ? `${nonEmpty(d.title)}：${nonEmpty(d.rationale)}`
+      : nonEmpty(d.title);
+    if (!claim) continue;
+    const claimBy = String(d.proposer_person_id ?? '');
+    const responses = (cognitiveBiasesRows.rows ?? []).slice(0, 3).map((b: any) => {
+      const by = String(b.by_person_id ?? '');
+      const stance: 'support' | 'partial' | 'against' = (by && by === claimBy) ? 'partial' : 'against';
+      return {
+        who: by,
+        stance,
+        text: nonEmpty(b.where_excerpt) || nonEmpty(b.mitigation_strategy) || '',
+      };
+    }).filter((r: any) => r.text);
+    crossView.push({ id: `V${crossView.length + 1}`, claimBy, claim, responses });
+  }
+
+  // 2) 兜底：decisions 为空时，用 high-generality judgments 当 claim（机器抽出的"团队习得的判断"）
+  if (crossView.length === 0) {
+    for (const j of (judgmentsRows.rows ?? []).slice(0, 6) as any[]) {
+      if (!nonEmpty(j.text)) continue;
+      // 找跟此 judgment domain 相关的 biases 当 responses（同 domain → 同议题不同视角）
+      const responses = (cognitiveBiasesRows.rows ?? []).slice(0, 2).map((b: any) => ({
+        who: String(b.by_person_id ?? ''),
+        stance: 'partial' as const,
+        text: nonEmpty(b.where_excerpt) || nonEmpty(b.mitigation_strategy) || '',
+      })).filter((r: any) => r.text);
+      crossView.push({
+        id: `V${crossView.length + 1}`,
+        claimBy: '',  // judgment 表无 author 列
+        claim: nonEmpty(j.text),
+        responses,
+      });
+    }
+  }
+
+  // 3) 再兜底：还为空就用 tensions（双方对立点 → 可视作多方观点）
+  if (crossView.length === 0) {
+    for (const t of (tensionsRows.rows ?? []).slice(0, 4) as any[]) {
+      if (!nonEmpty(t.topic)) continue;
+      const between: string[] = Array.isArray(t.between_ids) ? t.between_ids.map(String) : [];
+      const moments = normalizeMoments(t.moments);
+      // 把 moments 拆成 responses（每条原话当一个发言）
+      const responses = moments.slice(0, 4).map((m, i) => ({
+        who: between[Math.min(i, between.length - 1)] ?? '',
+        stance: 'partial' as const,
+        text: m,
+      }));
+      crossView.push({
+        id: `V${crossView.length + 1}`,
+        claimBy: between[0] ?? '',
+        claim: `（张力议题）${t.topic}` + (nonEmpty(t.summary) ? `：${t.summary}` : ''),
+        responses,
+      });
+    }
+  }
 
   return {
     summary: { decision, actionItems, risks },
