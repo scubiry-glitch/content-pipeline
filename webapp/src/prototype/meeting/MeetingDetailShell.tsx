@@ -36,6 +36,8 @@ export function MeetingDetailShell() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
+  // claude-cli 模式标记 — 取自 assets.metadata.claudeSession
+  const [claudeSession, setClaudeSession] = useState<{ sessionId?: string; lastResumedAt?: string; runCount?: number } | null>(null);
 
   useEffect(() => {
     if (forceMock || !id || !UUID_RE.test(id)) {
@@ -58,6 +60,7 @@ export function MeetingDetailShell() {
         const a = r?.analysis ?? {};
         if (a.title) setApiTitle(String(a.title));
         if (a.date) setApiDate(String(a.date).slice(0, 10));
+        setClaudeSession(a.claudeSession ?? null);
         setApiResponded(true);
         setApiState('ok');
       })
@@ -219,6 +222,24 @@ export function MeetingDetailShell() {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {claudeSession?.sessionId && (
+            <span
+              title={`Claude CLI session ${claudeSession.sessionId}${claudeSession.runCount ? ` · ${claudeSession.runCount} runs` : ''}${claudeSession.lastResumedAt ? ` · last ${claudeSession.lastResumedAt}` : ''}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px', borderRadius: 4,
+                background: 'oklch(0.93 0.04 285)',
+                color: 'oklch(0.32 0.12 285)',
+                border: '1px solid oklch(0.78 0.08 285)',
+                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                letterSpacing: 0.2,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.55 0.18 285)' }} />
+              Claude CLI
+              <span style={{ opacity: 0.6, fontWeight: 500 }}>· {claudeSession.sessionId.slice(0, 8)}…</span>
+            </span>
+          )}
           <Chip tone="ghost">{m.id}</Chip>
 
           <div style={{

@@ -603,6 +603,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           payload = { ...payload, experts: [], expertRoles: null };
         }
 
+        // claude-cli 模式标记：从 assets.metadata.claudeSession 取 sessionId/lastResumedAt/runCount
+        // 前端 MeetingDetailShell 顶栏据此显示「By Claude CLI」chip
+        try {
+          const sr = await engine.deps.db.query(
+            `SELECT metadata->'claudeSession' AS claude_session FROM assets WHERE id = $1`,
+            [id],
+          );
+          const cs = sr.rows[0]?.claude_session ?? null;
+          payload = { ...payload, claudeSession: cs };
+        } catch (e) {
+          request.log.warn({ id, err: e }, 'detail claudeSession lookup failed');
+          payload = { ...payload, claudeSession: null };
+        }
+
         // 包一层 { analysis } 让 VariantEditorial/Workbench/Threads 的
         // `data?.analysis` 探针生效；具体字段（summary/tension/...）按
         // 前端 ANALYSIS 形态映射，缺失字段在前端 fallback 到 mock
