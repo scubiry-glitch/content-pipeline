@@ -135,3 +135,111 @@ psql -c "\dt pgboss.*"
 
 - A: ~半天
 - B: ~1-2 天（含测试 + 回滚开关）
+
+---
+
+## 精修 · 范围聚焦
+
+本 iteration **只做 A + recovery**，不做 B（pg-boss 引入 + adapter 层）。
+
+理由：
+1. A 修了已观察到的真实卡死（964f2cb3 例）
+2. recovery 让 PM2 重启不再丢 queued runs（见过 zombie cleanup 1h 才 mark cancelled 的现象）
+3. B 引入新依赖 + 跨进程并发的新风险，留给独立 PR
+
+### A 实现细节锁定
+
+`RunQueue` 替换 drain() 为 worker-pool 模式：
+
+```ts
+export class RunQueue<T = any> {
+  private items: QueueItem<T>[] = [];
+  private active = 0;
+  private handler: ((item: QueueItem<T>) => Promise<void>) | null = null;
+
+  constructor(private readonly concurrency = 2) {}
+
+  start(handler: (item: QueueItem<T>) => Promise<void>): void {
+    this.handler = handler;
+    this.tick();
+  }
+
+  enqueue(item: QueueItem<T>): void {
+    this.items.push(item);
+    this.tick();
+  }
+
+  private tick(): void {
+    while (this.active < this.concurrency && this.items.length > 0 && this.handler) {
+      const item = this.items.shift()!;
+      this.active++;
+      this.handler(item)
+        .catch((e) => console.error('[RunQueue] handler error:', e))
+        .finally(() => {
+          this.active--;
+          this.tick();   // 完成后再 tick → 新入队的会被立刻 picked up
+        });
+    }
+  }
+
+  stats() { return { pending: this.items.length, running: this.active, concurrency: this.concurrency }; }
+
+  // 保留 drain() 别名作为向后兼容（标 deprecated）—— 现有 runEngine 的 drainSoon
+  // 替换后将不再调用 drain()
+}
+```
+
+`RunEngine`：
+- 构造里 `this.queue.start((item) => this.execute(item.payload))`
+- 删 `drainSoon` 私有方法
+- `enqueue` / `resume` 不再调 drainSoon（queue 自驱）
+
+### Recovery 实现细节锁定
+
+新增 `RunEngine.recoverQueuedRuns()`：
+
+```ts
+async recoverQueuedRuns(): Promise<{ recovered: number }> {
+  const r = await this.deps.db.query(
+    `SELECT id, scope_kind, scope_id::text, axis, sub_dims, preset, strategy_spec,
+            triggered_by, parent_run_id, metadata
+       FROM mn_runs
+      WHERE state = 'queued'
+      ORDER BY created_at ASC`,
+  );
+  for (const row of r.rows) {
+    this.queue.enqueue({
+      id: row.id,
+      payload: {
+        runId: row.id,
+        scope: { kind: row.scope_kind, id: row.scope_id ?? undefined },
+        axis: row.axis,
+        subDims: row.sub_dims ?? [],
+        preset: row.preset,
+        strategySpec: row.strategy_spec ?? null,
+        triggeredBy: row.triggered_by,
+        parentRunId: row.parent_run_id,
+        meetingId: row.scope_kind === 'meeting' ? row.scope_id : undefined,
+        expertRoles: undefined,  // not stored in mn_runs; recovered runs lose 角色定向
+      },
+      enqueuedAt: Date.now(),
+    });
+  }
+  if (r.rows.length > 0) console.log(`[RunEngine] recovered ${r.rows.length} queued runs from DB`);
+  return { recovered: r.rows.length };
+}
+```
+
+构造里 `setImmediate(() => this.recoverQueuedRuns())` 与 zombie cleanup 并行启动。
+
+### 验证
+
+1. **drain 并发 bug fixed**：开 2 个 long-running run 占满 concurrency，第 3 个入队 → DB 见 created_at 早 1s 但仍 queued；前 2 个完成时第 3 个应立刻 state=running（之前要等到 drain 整批完成才 picked up）
+2. **recovery on restart**：手工 INSERT mn_runs(state='queued') → PM2 restart → 重启后 5s 内 state 应转为 running 或 succeeded（recover → execute 正常路径）
+3. **回归**：先入队的还按 FIFO 跑
+
+### 不在本次
+
+- pg-boss 持久化（B）
+- 横向扩展（多 API 进程消费同一队列，需要 worker fence）
+- worker-id / heartbeat 字段（mn_runs 加列）

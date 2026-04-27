@@ -145,7 +145,6 @@ function mapRun(row: Record<string, any>): RunRecord {
 export class RunEngine {
   private readonly queue: RunQueue<QueuePayload>;
   private readonly versionStore: VersionStore;
-  private draining = false;
 
   constructor(
     private readonly deps: MeetingNotesDeps,
@@ -154,17 +153,67 @@ export class RunEngine {
   ) {
     this.queue = new RunQueue<QueuePayload>(opts.concurrency ?? 2);
     this.versionStore = new VersionStore(deps);
+    // P2 worker-pool：queue 自驱，不再用 drainSoon
+    this.queue.start((item) => this.execute(item.payload));
 
-    // Opt-3 (O4): 启动时清扫僵尸 running run
-    // RunQueue 是 in-memory，进程重启 / 崩溃后 mn_runs.state='running' 永久卡住
-    // 这里把 started_at < NOW() - zombieTimeoutMin 的 running 标 failed
-    // zombieTimeoutMin 默认 30 分钟（远大于正常 run 时长 ~5-25 分钟）
+    // Opt-3 (O4) + P2 recovery：启动时清扫僵尸 + 把 DB 里残留的 queued runs 重新捡回内存队列
+    // RunQueue 是 in-memory，进程重启 / 崩溃后 mn_runs.state='running'/'queued' 会丢失内存追踪。
+    // - cleanupZombieRuns: started_at < NOW() - zombieTimeoutMin 的 running 标 failed
+    // - recoverQueuedRuns: state='queued' 的 run 全部重 enqueue 到 in-memory，让 worker 接管
     const zombieMin = opts.zombieTimeoutMin ?? 30;
     setImmediate(() => {
       this.cleanupZombieRuns(zombieMin).catch((e) =>
         console.warn('[RunEngine] zombie cleanup failed:', (e as Error).message),
       );
+      this.recoverQueuedRuns().catch((e) =>
+        console.warn('[RunEngine] queued run recovery failed:', (e as Error).message),
+      );
     });
+  }
+
+  /**
+   * P2 recovery：把 mn_runs 中 state='queued' 的 run 重新 enqueue 到内存队列。
+   * PM2 重启 / 进程崩溃后 in-memory queue 会丢，但 DB 里的 run 行还在；
+   * 没有这个方法，那些 run 会等 1 小时后 cleanupZombieRuns 把它们标 cancelled，
+   * 用户看到 stuck-queued。
+   *
+   * expertRoles 在 mn_runs 没存（run 入队时只在 in-memory payload 里），recover 时丢失。
+   * 影响：恢复跑的 run 不会按用户上次指定的真实专家展开 → 用 strategy/preset 默认。
+   */
+  async recoverQueuedRuns(): Promise<{ recovered: number }> {
+    let recovered = 0;
+    try {
+      const r = await this.deps.db.query(
+        `SELECT id, scope_kind, scope_id::text AS scope_id, axis, sub_dims, preset,
+                strategy_spec, triggered_by, parent_run_id, metadata
+           FROM mn_runs
+          WHERE state = 'queued'
+          ORDER BY created_at ASC`,
+      );
+      for (const row of r.rows) {
+        this.queue.enqueue({
+          id: row.id,
+          payload: {
+            runId: row.id,
+            scope: { kind: row.scope_kind, id: row.scope_id ?? undefined },
+            axis: row.axis,
+            subDims: row.sub_dims ?? [],
+            preset: row.preset,
+            strategySpec: row.strategy_spec ?? null,
+            triggeredBy: row.triggered_by,
+            parentRunId: row.parent_run_id ?? null,
+            meetingId: row.scope_kind === 'meeting' ? row.scope_id : undefined,
+            expertRoles: undefined,
+          },
+          enqueuedAt: Date.now(),
+        });
+        recovered += 1;
+      }
+      if (recovered > 0) console.log(`[RunEngine] recovered ${recovered} queued runs from DB`);
+    } catch (e) {
+      console.warn('[RunEngine] recoverQueuedRuns failed:', (e as Error).message);
+    }
+    return { recovered };
   }
 
   /**
@@ -286,8 +335,7 @@ export class RunEngine {
       enqueuedAt: Date.now(),
     });
 
-    // 5. 立即异步驱动一次（不 await）
-    this.drainSoon();
+    // 5. P2 worker-pool：queue.enqueue 已自动 tick 拉走 idle worker，不需手动 drainSoon
     await this.deps.eventBus.publish('mn.run.enqueued', { runId });
 
     return { ok: true, runId };
@@ -383,28 +431,13 @@ export class RunEngine {
       },
       enqueuedAt: Date.now(),
     });
-    this.drainSoon();
+    // P2 worker-pool：queue 自驱
     return { ok: true };
   }
 
   // ============================================================
   // 内部驱动
   // ============================================================
-
-  private drainSoon(): void {
-    if (this.draining) return;
-    this.draining = true;
-    setImmediate(() => {
-      this.queue
-        .drain((item) => this.execute(item.payload))
-        .catch((e) => console.error('[RunEngine] drain error:', e))
-        .finally(() => {
-          this.draining = false;
-          // 有剩余则再踩一脚
-          if (this.queue.stats().pending > 0) this.drainSoon();
-        });
-    });
-  }
 
   private async execute(payload: QueuePayload): Promise<void> {
     const startedAt = Date.now();
