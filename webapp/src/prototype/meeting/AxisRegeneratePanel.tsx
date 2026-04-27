@@ -4,9 +4,12 @@
 import { useState } from 'react';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
+// 注意：subs[].id 必须与后端 axes/registry.ts 的 AXIS_SUBDIMS 一一对应，
+// 否则 enqueueRun 时 resolveComputer(axis, sd) 返回 null → run "succeeded" 但 created/updated/llmCalls 全 0（空跑）
 const AXIS_SUB: Record<string, {
   label: string;
   color: string;
@@ -15,36 +18,37 @@ const AXIS_SUB: Record<string, {
   people: {
     label: '人物轴', color: 'var(--accent)',
     subs: [
-      { id: 'commit',  label: '承诺兑现', cost: 'medium', depsOn: ['commitment_trace','track_record_verify'] },
-      { id: 'role',    label: '角色演化', cost: 'low',    depsOn: ['evidence_anchored'] },
-      { id: 'voice',   label: '发言质量', cost: 'low',    depsOn: ['rubric_anchored_output'] },
-      { id: 'silence', label: '沉默信号', cost: 'medium', depsOn: ['failure_check'] },
+      { id: 'commitments',     label: '承诺兑现', cost: 'medium', depsOn: ['commitment_trace','track_record_verify'] },
+      { id: 'role_trajectory', label: '角色演化', cost: 'low',    depsOn: ['evidence_anchored'] },
+      { id: 'speech_quality',  label: '发言质量', cost: 'low',    depsOn: ['rubric_anchored_output'] },
+      { id: 'silence_signal',  label: '沉默信号', cost: 'medium', depsOn: ['failure_check'] },
     ],
   },
   projects: {
     label: '项目轴', color: 'var(--teal)',
     subs: [
-      { id: 'decision', label: '决议溯源', cost: 'high',   depsOn: ['knowledge_grounded','evidence_anchored'] },
-      { id: 'hypo',     label: '假设清单', cost: 'medium', depsOn: ['contradictions_surface'] },
-      { id: 'open',     label: '开放问题', cost: 'low',    depsOn: ['chronic_question_surface'] },
-      { id: 'risk',     label: '风险热度', cost: 'medium', depsOn: ['calibrated_confidence'] },
+      { id: 'decision_provenance', label: '决议溯源', cost: 'high',   depsOn: ['knowledge_grounded','evidence_anchored'] },
+      { id: 'assumptions',         label: '假设清单', cost: 'medium', depsOn: ['contradictions_surface'] },
+      { id: 'open_questions',      label: '开放问题', cost: 'low',    depsOn: ['chronic_question_surface'] },
+      { id: 'risk_heat',           label: '风险热度', cost: 'medium', depsOn: ['calibrated_confidence'] },
     ],
   },
   knowledge: {
     label: '知识轴', color: 'oklch(0.55 0.08 280)',
     subs: [
-      { id: 'judgement', label: '可复用判断',    cost: 'medium', depsOn: ['knowledge_grounded'] },
-      { id: 'mmodel',    label: '心智模型命中率', cost: 'high',   depsOn: ['model_hitrate_audit'] },
-      { id: 'bias',      label: '认知偏误',      cost: 'medium', depsOn: ['drift_detect'] },
-      { id: 'counter',   label: '反事实',        cost: 'high',   depsOn: ['contradictions_surface','debate'] },
+      { id: 'reusable_judgments', label: '可复用判断',    cost: 'medium', depsOn: ['knowledge_grounded'] },
+      { id: 'mental_models',      label: '心智模型命中率', cost: 'high',   depsOn: ['model_hitrate_audit'] },
+      { id: 'cognitive_biases',   label: '认知偏误',      cost: 'medium', depsOn: ['drift_detect'] },
+      { id: 'counterfactuals',    label: '反事实',        cost: 'high',   depsOn: ['contradictions_surface','debate'] },
+      { id: 'evidence_grading',   label: '证据分级',      cost: 'low',    depsOn: ['evidence_anchored'] },
     ],
   },
   meta: {
     label: '会议本身', color: 'var(--amber)',
     subs: [
-      { id: 'quality', label: '质量分',     cost: 'low',    depsOn: ['rubric_anchored_output'] },
-      { id: 'need',    label: '必要性评估', cost: 'low',    depsOn: ['failure_check'] },
-      { id: 'heat',    label: '情绪热力图', cost: 'medium', depsOn: ['evidence_anchored'] },
+      { id: 'decision_quality',   label: '质量分',     cost: 'low',    depsOn: ['rubric_anchored_output'] },
+      { id: 'meeting_necessity',  label: '必要性评估', cost: 'low',    depsOn: ['failure_check'] },
+      { id: 'affect_curve',       label: '情绪热力图', cost: 'medium', depsOn: ['evidence_anchored'] },
     ],
   },
 };
@@ -85,7 +89,11 @@ export function AxisRegeneratePanel({
   onClose?: () => void;
 } = {}) {
   const [axis, setAxis] = useState(initialAxis);
-  const [selected, setSelected] = useState<string[]>(['mmodel', 'bias']);
+  const [selected, setSelected] = useState<string[]>(() => {
+    // 默认选中初始 axis 的全部 subDims；用户取消勾选保留交互
+    const meta = AXIS_SUB[initialAxis];
+    return meta ? meta.subs.map((s) => s.id) : [];
+  });
   const [preset, setPreset] = useState<'lite' | 'standard' | 'max'>('standard');
   const [scope, setScope] = useState<'project' | 'library'>('project');
   const axisMeta = AXIS_SUB[axis];
@@ -100,9 +108,51 @@ export function AxisRegeneratePanel({
   const toggle = (id: string) =>
     setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
+  const meetingScope = useMeetingScope();
   const [submitting, setSubmitting] = useState(false);
-  async function handleEnqueue() {
+  // 确认对话框：LLM 重算会 DELETE 现有 axis 数据后重写，是不可撤销的覆盖动作
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // 二次确认输入框：用户必须键入 "重算" 才能解锁红色按钮
+  const [confirmText, setConfirmText] = useState('');
+  // 三道闸门 #2：复选框确认（必须在临时版本快照成功后才能勾）
+  const [confirmCheck, setConfirmCheck] = useState(false);
+  // 三道闸门 #1：弹窗一打开就自动 POST /versions 把当前数据快照为 vN
+  // saved 后才允许勾选复选框 + 解锁红色按钮，相当于"先备份，后覆盖"。
+  type SnapshotState =
+    | { kind: 'idle' }
+    | { kind: 'saving' }
+    | { kind: 'saved'; versionLabel: string; versionId: string; meetingCount: number; warning?: string }
+    | { kind: 'failed'; message: string };
+  const [snapshot, setSnapshot] = useState<SnapshotState>({ kind: 'idle' });
+
+  async function openConfirm() {
     if (selected.length === 0) return;
+    setConfirmText('');
+    setConfirmCheck(false);
+    setSnapshot({ kind: 'saving' });
+    setConfirmOpen(true);
+    try {
+      const r = await meetingNotesApi.createVersion({
+        scopeKind: scope, // 'project' | 'library'
+        scopeId: scope === 'library' ? null : meetingScope.effectiveScopeId,
+        axis,
+      });
+      setSnapshot({
+        kind: 'saved',
+        versionLabel: r.versionLabel,
+        versionId: r.versionId,
+        meetingCount: r.meetingCount,
+        warning: r.warning,
+      });
+    } catch (e) {
+      setSnapshot({
+        kind: 'failed',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  async function handleEnqueue() {
+    setConfirmOpen(false);
     setSubmitting(true);
     try {
       // 后端 router L605 校验 allowedKinds 全小写
@@ -288,7 +338,7 @@ export function AxisRegeneratePanel({
               flex: 1, padding: '11px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
               color: 'var(--paper)', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
               opacity: (selected.length === 0 || submitting) ? 0.4 : 1,
-            }} disabled={selected.length === 0 || submitting} onClick={handleEnqueue}>
+            }} disabled={selected.length === 0 || submitting} onClick={openConfirm}>
               {submitting ? '入队中…' : '入队 · 开始重算 →'}
             </button>
           </div>
@@ -297,6 +347,203 @@ export function AxisRegeneratePanel({
           </div>
         </aside>
       </div>
+
+      {confirmOpen && (
+        <div
+          onClick={() => setConfirmOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0, 0, 0, 0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--sans)',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--paper)', borderRadius: 10, maxWidth: 560, width: '90%',
+              border: '2px solid #b91c1c', boxShadow: '0 24px 64px -16px rgba(0,0,0,0.4)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Red banner header */}
+            <div style={{
+              background: '#fef2f2', borderBottom: '1px solid #fecaca',
+              padding: '14px 22px', display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 22 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#991b1b', letterSpacing: '-0.005em' }}>
+                  此操作会删除并覆盖现有数据
+                </div>
+                <div style={{ fontSize: 11.5, color: '#7f1d1d', fontFamily: 'var(--mono)', marginTop: 2 }}>
+                  axis-regenerate · destructive
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '18px 22px 6px', fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)' }}>
+              {/* 闸门 #1：临时版本快照状态条（弹窗一打开自动 fire） */}
+              {snapshot.kind === 'saving' && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 12px', borderRadius: 6, fontSize: 12.5,
+                  background: 'var(--paper-2)', color: 'var(--ink-2)',
+                  border: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <span style={{ fontSize: 16 }}>⏳</span>
+                  <span>正在快照当前 <b>「{axisMeta.label}」</b> 数据到临时版本…</span>
+                </div>
+              )}
+              {snapshot.kind === 'saved' && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 12px', borderRadius: 6, fontSize: 12.5,
+                  background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 16 }}>✓</span>
+                    <span>
+                      已快照为 <b>{snapshot.versionLabel}</b>
+                      {' '}<code style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#047857' }}>
+                        id={snapshot.versionId.slice(0, 8)}…
+                      </code>
+                      （覆盖 {snapshot.meetingCount} 场会议） · 即使重算翻车也能从此版本回溯
+                    </span>
+                  </div>
+                  {snapshot.warning && (
+                    <div style={{
+                      marginTop: 6, padding: '6px 8px', borderRadius: 4,
+                      background: '#fffbeb', color: '#92400e', fontSize: 11.5,
+                      border: '1px solid #fde68a',
+                    }}>
+                      ⚠ {snapshot.warning}
+                    </div>
+                  )}
+                </div>
+              )}
+              {snapshot.kind === 'failed' && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 12px', borderRadius: 6, fontSize: 12.5,
+                  background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 16 }}>✗</span>
+                    <span><b>临时版本快照失败</b>：{snapshot.message}</span>
+                  </div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: '#7f1d1d' }}>
+                    继续按钮已锁死。请关闭弹窗重试，或检查后端 <code style={{ fontFamily: 'var(--mono)' }}>POST /versions</code> 路由。
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 10 }}>
+                即将对 <b>「{axisMeta.label}」</b> · scope=<b>{scope}</b> · 子维度
+                {' '}<b>{selected.length}</b> 个 触发 LLM 重算。开始后将发生：
+              </div>
+              <ul style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 12.5 }}>
+                <li>
+                  对每个所选子维度，<b style={{ color: '#991b1b' }}>先 DELETE 现有 mn_* 行</b>，再用 LLM 抽取重写
+                  （后端 <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>replaceExisting=true</code>）
+                </li>
+                <li>
+                  调用真实 LLM（DeepSeek/Kimi）· 估算 <b>~{total.toFixed(0)}k tokens</b> · 不可中途回滚
+                </li>
+                <li>
+                  会议 transcript（<code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>assets.content</code>）必须有内容，否则抽取空集 → 旧数据被删却没新数据填回
+                </li>
+                <li style={{ color: '#991b1b' }}>
+                  <b>已手工导入的高质量人工聚合数据将永久丢失</b>，被 LLM 自动抽取（质量较低）替换
+                </li>
+              </ul>
+
+              <div style={{
+                background: 'var(--paper-2)', borderRadius: 6, padding: '10px 12px', marginBottom: 12,
+                fontSize: 12, color: 'var(--ink-3)', borderLeft: '3px solid #b91c1c',
+              }}>
+                <b style={{ color: 'var(--ink-2)' }}>建议</b>：上面的临时版本是兜底，
+                出问题可在 <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>mn_axis_versions</code>
+                {' '}表按 <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>id</code> 找回原 snapshot。
+              </div>
+
+              {/* 闸门 #2：复选框（仅快照成功后可勾） */}
+              <label style={{
+                display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, marginBottom: 10,
+                cursor: snapshot.kind === 'saved' ? 'pointer' : 'not-allowed',
+                opacity: snapshot.kind === 'saved' ? 1 : 0.5,
+                color: 'var(--ink-2)',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={confirmCheck}
+                  disabled={snapshot.kind !== 'saved'}
+                  onChange={(e) => setConfirmCheck(e.target.checked)}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  我确认临时版本{' '}
+                  <b>{snapshot.kind === 'saved' ? snapshot.versionLabel : '(未保存)'}</b>
+                  {' '}已存档，可以覆盖现有数据
+                </span>
+              </label>
+
+              {/* 闸门 #3：键入"重算"（仅复选框勾选后才能聚焦） */}
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-2)', marginBottom: 6 }}>
+                输入 <code style={{
+                  fontFamily: 'var(--mono)', fontSize: 12, background: 'var(--paper-2)',
+                  padding: '1px 6px', borderRadius: 3, color: '#991b1b',
+                }}>重算</code> 以解锁继续按钮：
+              </label>
+              <input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                disabled={snapshot.kind !== 'saved' || !confirmCheck}
+                placeholder={snapshot.kind === 'saved' && confirmCheck ? '重算' : '先勾选上方复选框'}
+                style={{
+                  width: '100%', padding: '8px 10px', border: '1px solid var(--line)',
+                  borderRadius: 4, fontSize: 13, fontFamily: 'var(--sans)', boxSizing: 'border-box',
+                  marginBottom: 14,
+                  opacity: snapshot.kind === 'saved' && confirmCheck ? 1 : 0.5,
+                }}
+              />
+            </div>
+
+            <div style={{
+              padding: '12px 22px 18px', display: 'flex', gap: 10, justifyContent: 'flex-end',
+              borderTop: '1px solid var(--line-2)', background: 'var(--paper-2)',
+            }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                style={{
+                  padding: '8px 16px', border: '1px solid var(--line)', background: 'var(--paper)',
+                  color: 'var(--ink-2)', borderRadius: 5, fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'var(--sans)',
+                }}
+              >
+                取消（不改任何运行数据；快照保留）
+              </button>
+              <button
+                onClick={handleEnqueue}
+                disabled={
+                  snapshot.kind !== 'saved'
+                  || !confirmCheck
+                  || confirmText.trim() !== '重算'
+                }
+                style={{
+                  padding: '8px 18px', border: '1px solid #991b1b',
+                  background: (snapshot.kind === 'saved' && confirmCheck && confirmText.trim() === '重算')
+                    ? '#b91c1c' : '#fca5a5',
+                  color: 'var(--paper)', borderRadius: 5, fontSize: 13, fontWeight: 600,
+                  cursor: (snapshot.kind === 'saved' && confirmCheck && confirmText.trim() === '重算')
+                    ? 'pointer' : 'not-allowed',
+                  fontFamily: 'var(--sans)',
+                  opacity: (snapshot.kind === 'saved' && confirmCheck && confirmText.trim() === '重算') ? 1 : 0.7,
+                }}
+              >
+                我已确认 · 继续重算
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

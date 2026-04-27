@@ -3,38 +3,45 @@
 
 const API_BASE = '/api/v1/meeting-notes';
 
-const headers = () => ({
-  'Content-Type': 'application/json',
+// Fastify 4 默认对 Content-Type: application/json 的 DELETE / 空 POST 校验 body 非空，
+// 否则抛 FST_ERR_CTP_EMPTY_JSON_BODY (400)。所以无 body 时只发 X-API-Key，不带 Content-Type。
+const authHeader = () => ({
   'X-API-Key': (import.meta as any).env?.VITE_API_KEY || 'dev-api-key',
+});
+const jsonHeaders = () => ({
+  ...authHeader(),
+  'Content-Type': 'application/json',
 });
 
 async function jget<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { headers: headers() });
+  const r = await fetch(`${API_BASE}${path}`, { headers: authHeader() });
   if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
   return r.json();
 }
 
 async function jpost<T>(path: string, body?: any): Promise<T> {
+  const hasBody = body !== undefined && body !== null;
   const r = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: headers(),
-    body: body ? JSON.stringify(body) : undefined,
+    headers: hasBody ? jsonHeaders() : authHeader(),
+    body: hasBody ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) throw new Error(`POST ${path} → ${r.status}`);
   return r.json();
 }
 
 async function jdelete<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: headers() });
+  const r = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: authHeader() });
   if (!r.ok) throw new Error(`DELETE ${path} → ${r.status}`);
   return r.json();
 }
 
 async function jput<T>(path: string, body?: any): Promise<T> {
+  const hasBody = body !== undefined && body !== null;
   const r = await fetch(`${API_BASE}${path}`, {
     method: 'PUT',
-    headers: headers(),
-    body: body ? JSON.stringify(body) : undefined,
+    headers: hasBody ? jsonHeaders() : authHeader(),
+    body: hasBody ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
   return r.json();
@@ -99,6 +106,24 @@ export const meetingNotesApi = {
     return jget<{ items: any[] }>(`/versions/${scopeKind}/${axis}${qs}`);
   },
   diffVersions: (a: string, b: string) => jget<any>(`/versions/${a}/diff?vs=${b}`),
+
+  /**
+   * 主动写一份 axis 快照（"临时版本/备份"）。
+   * AxisRegeneratePanel 在弹危险确认弹窗时调用，用户输入"重算"+勾选确认前先把现有数据备份成 vN。
+   * 后端会写一行 mn_runs（triggered_by='manual', metadata.kind='manual_snapshot'）作为 FK 锚点，
+   * 然后 versionStore.snapshot 自动算 vN + diff_vs_prev 入 mn_axis_versions。
+   */
+  createVersion: (body: { scopeKind: string; scopeId: string | null; axis: string; label?: string }) =>
+    jpost<{
+      versionId: string;
+      versionLabel: string;
+      prevVersionId: string | null;
+      diff: { added: string[]; changed: string[]; removed: string[] };
+      runId: string;
+      sizeBytes: number;
+      meetingCount: number;
+      warning?: string;
+    }>('/versions', body),
 
   // Scopes
   listScopes: (q: { kind?: string; status?: string } = {}) => {

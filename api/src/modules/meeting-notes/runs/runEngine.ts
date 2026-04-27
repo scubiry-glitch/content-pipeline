@@ -30,6 +30,8 @@ import {
 import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
 import { synthesizeDeliverables } from './synthesis.js';
 import { renderMultiDim } from './renderMultiDim.js';
+import { composeAnalysisFromAxes, persistAnalysisToAsset } from './composeAnalysis.js';
+import { autoMatchAndBindScopes } from './scopeMatcher.js';
 import { parseMeeting } from '../parse/meetingParser.js';
 
 interface QueuePayload {
@@ -628,6 +630,53 @@ export class RunEngine {
           `装饰器栈就绪 · ${sample.applied.length} 项已生效（${sample.applied.join(' → ') || 'base'}）`,
         );
 
+        // Auto scope match：在 dispatch + dec 完成后、axes 之前，按内容关键词
+        // 自动绑定该 meeting 到相关的 project / client / topic scope。
+        // axes 阶段的 mn_*.scope_id 写入会优先使用这次绑定到的 scope（通过
+        // mn_scope_members 关联），避免所有 row 都落到 NULL scope 的孤岛。
+        if (payload.meetingId && payload.scope.kind === 'meeting') {
+          try {
+            const matchResult = await autoMatchAndBindScopes(
+              this.deps.db,
+              payload.meetingId,
+              { runId: payload.runId },
+            );
+            // 把匹配结果落到 mn_runs.metadata.scopeMatch（前端可显示"自动绑定到 X 个 scope"）
+            await this.deps.db.query(
+              `UPDATE mn_runs
+                  SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'scopeMatch', $2::jsonb
+                  )
+                WHERE id = $1`,
+              [payload.runId, JSON.stringify(matchResult)],
+            );
+            if (matchResult.matchedCount > 0) {
+              const labels = matchResult.matched
+                .slice(0, 3)
+                .map((m) => `${m.kind}:${m.name}`)
+                .join('、');
+              console.log(
+                `[runEngine] scopeMatcher ${payload.runId.slice(0, 8)}: matched=${matchResult.matchedCount}` +
+                  ` newlyBound=${matchResult.newlyBoundCount} → ${labels}`,
+              );
+            }
+          } catch (e) {
+            const msg = (e as Error).message ?? String(e);
+            const stack = (e as Error).stack?.split('\n').slice(0, 5).join('\n') ?? '';
+            console.warn('[runEngine] scopeMatcher failed:', msg);
+            try {
+              await this.deps.db.query(
+                `UPDATE mn_runs
+                    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                      'scopeMatch', jsonb_build_object('error', $2::text, 'stack', $3::text)
+                    )
+                  WHERE id = $1`,
+                [payload.runId, msg, stack],
+              );
+            } catch { /* swallow secondary error */ }
+          }
+        }
+
         await writeStep('axes', 0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
 
         // 把每个 axis 反查它属于哪位专家，跑完后更新该专家的 completedSubDims
@@ -811,6 +860,21 @@ export class RunEngine {
             );
           } catch (e) {
             console.warn('[runEngine] renderMultiDim failed:', (e as Error).message);
+          }
+
+          // 把 axes 数据 schema-map 成参考 ANALYSIS object 写到 assets.metadata.analysis。
+          // 此后 view A 自动走 storedAnalysis fast-path，schema 与手工分析对齐
+          // （tension.between / newCognition.before/after / consensus.kind 等字段命名一致）。
+          // 已有手工版本（无 _generated 字段或 manualOverride=true）会被守护跳过。
+          try {
+            await writeStep('render', 0.85, '合成 view-A 分析对象（compose-analysis）…');
+            const analysis = await composeAnalysisFromAxes(this.deps.db, payload.meetingId, payload.runId);
+            const wrote = await persistAnalysisToAsset(this.deps.db, payload.meetingId, analysis);
+            console.log(`[runEngine] composeAnalysis ${payload.runId.slice(0,8)}: ${wrote}` +
+              ` · tension=${analysis.tension.length} newCog=${analysis.newCognition.length}` +
+              ` consensus=${analysis.consensus.length} focusMap=${analysis.focusMap.length}`);
+          } catch (e) {
+            console.warn('[runEngine] composeAnalysis failed:', (e as Error).message);
           }
 
           // Snapshot：把 getMeetingAxes 的完整数据落版本号 vN

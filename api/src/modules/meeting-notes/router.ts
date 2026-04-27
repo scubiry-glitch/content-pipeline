@@ -96,6 +96,48 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            a.metadata AS metadata,
            COALESCE((a.metadata->>'archived')::boolean, false) AS archived,
            a.metadata->>'archived_at' AS archived_at,
+           -- 会议实际发生时间：优先 occurred_at，回退 analysis.date（可能只有日期），最后 NULL
+           COALESCE(a.metadata->>'occurred_at', a.metadata->'analysis'->>'date') AS occurred_at,
+           -- 与会人数：四级兜底
+           --   1) metadata.attendee_count（整数字符串）
+           --   2) metadata.analysis 是 jsonb object → analysis.participants 数组长度
+           --   3) metadata.analysis 是 jsonb string（stringified JSON）→ 解析后取
+           --   4) mn_speech_quality 表 distinct person_id（axes 跑过但 analysis 未回写时）
+           COALESCE(
+             CASE WHEN a.metadata->>'attendee_count' ~ '^-?\d+$'
+                    THEN (a.metadata->>'attendee_count')::int
+                  ELSE NULL END,
+             CASE WHEN jsonb_typeof(a.metadata->'analysis'->'participants') = 'array'
+                    THEN jsonb_array_length(a.metadata->'analysis'->'participants')
+                  ELSE NULL END,
+             CASE WHEN jsonb_typeof(a.metadata->'analysis') = 'string'
+                    THEN (
+                      SELECT jsonb_array_length(p.parsed->'participants')
+                      FROM (SELECT (a.metadata->>'analysis')::jsonb AS parsed) p
+                      WHERE jsonb_typeof(p.parsed->'participants') = 'array'
+                    )
+                  ELSE NULL END,
+             NULLIF(
+               (SELECT COUNT(DISTINCT person_id)::int FROM mn_speech_quality
+                 WHERE meeting_id::text = a.id::text),
+               0
+             )
+           ) AS attendee_count,
+           -- 时长（分钟）：两级兜底
+           --   1) metadata.duration_min（整数 / 小数字符串都吃 · floor 后转 int）
+           --   2) mn_affect_curve.samples 最后一个样本的 t_sec / 60
+           COALESCE(
+             CASE WHEN a.metadata->>'duration_min' ~ '^-?\d+(\.\d+)?$'
+                    THEN FLOOR((a.metadata->>'duration_min')::numeric)::int
+                  ELSE NULL END,
+             (
+               SELECT FLOOR(((samples->-1->>'t_sec')::numeric) / 60)::int
+               FROM mn_affect_curve
+               WHERE meeting_id::text = a.id::text
+                 AND jsonb_typeof(samples) = 'array'
+                 AND jsonb_array_length(samples) > 0
+             )
+           ) AS duration_min,
            (SELECT row_to_json(rr) FROM (
              SELECT id, state, axis, finished_at, error_message
              FROM mn_runs WHERE scope_kind='meeting' AND scope_id::text = a.id
@@ -1047,6 +1089,199 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // --------------------------------------------------------
     // Versions (PR4)
     // --------------------------------------------------------
+
+    /**
+     * POST /versions —— 主动写入一份 axis 快照到 mn_axis_versions（"临时版本/备份"）
+     *
+     * 主要用途：AxisRegeneratePanel 在弹出危险确认弹窗时，先调本路由把当前 scope×axis 数据
+     * 快照成 vN，让用户在勾选确认+输入"重算"+点继续之前能看到具体版本号。
+     *
+     * 与 runEngine 的 post-run 快照（runEngine.ts L869-878）独立共存：那个是 LLM 跑完后写，
+     * 本路由是 LLM 跑之前手动写。两者都通过 mn_runs FK 锚定 — 本路由插一行
+     * triggered_by='manual' + metadata.kind='manual_snapshot' 的占位 run。
+     */
+    fastify.post('/versions', { preHandler: authenticate }, async (request, reply) => {
+      const body = request.body as {
+        scopeKind?: string;
+        scopeId?: string | null;
+        axis?: string;
+        label?: string;
+      };
+
+      // 1. 校验
+      const allowedScopeKinds = new Set(['library', 'project', 'client', 'topic', 'meeting']);
+      const allowedAxes = new Set(['people', 'projects', 'knowledge', 'meta', 'longitudinal', 'all']);
+      if (!body?.scopeKind || !allowedScopeKinds.has(body.scopeKind)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: `invalid scopeKind: ${body?.scopeKind}` };
+      }
+      if (!body?.axis || !allowedAxes.has(body.axis)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: `invalid axis: ${body?.axis}` };
+      }
+      const scopeKind = body.scopeKind as 'library' | 'project' | 'client' | 'topic' | 'meeting';
+      const axis = body.axis as 'people' | 'projects' | 'knowledge' | 'meta' | 'longitudinal' | 'all';
+
+      // scopeId: library 时为 null；其它 kind 必填，slug 走 resolveScopeUuid
+      let scopeId: string | null = null;
+      if (scopeKind === 'library') {
+        scopeId = null;
+      } else if (scopeKind === 'meeting') {
+        if (!body.scopeId) { reply.status(400); return { error: 'Bad Request', message: 'scopeId required for kind=meeting' }; }
+        scopeId = body.scopeId; // assets.id 是 varchar，直接用
+      } else {
+        if (!body.scopeId) { reply.status(400); return { error: 'Bad Request', message: `scopeId required for kind=${scopeKind}` }; }
+        const uuid = UUID_RE.test(body.scopeId)
+          ? body.scopeId
+          : await resolveScopeUuid(engine.deps.db, body.scopeId);
+        if (!uuid) { reply.status(400); return { error: 'Bad Request', message: `unknown scope: ${body.scopeId}` }; }
+        scopeId = uuid;
+      }
+
+      // 2. 列出涉及的 meeting ids
+      let meetingIds: string[] = [];
+      if (scopeKind === 'meeting') {
+        meetingIds = [scopeId as string];
+      } else if (scopeKind === 'library') {
+        const r = await engine.deps.db.query(
+          `SELECT id FROM assets
+            WHERE type = 'meeting_note' OR type = 'meeting_minutes' OR (metadata ? 'meeting_kind')
+            ORDER BY created_at DESC`,
+        );
+        meetingIds = r.rows.map((row: any) => String(row.id));
+      } else {
+        // project / client / topic：通过 mn_scope_members
+        const r = await engine.deps.db.query(
+          `SELECT meeting_id::text AS meeting_id FROM mn_scope_members WHERE scope_id = $1`,
+          [scopeId],
+        );
+        meetingIds = r.rows.map((row: any) => row.meeting_id);
+      }
+
+      // 3. 聚合 axis 数据 —— 形状必须是 { [axis]: { [subDim]: [...] } } 才能让
+      //    versionStore.computeDiff 的 flatten（versionStore.ts:154-170）正确比对
+      const axisesToCapture = axis === 'all'
+        ? ['people', 'projects', 'knowledge', 'meta'] as const
+        : [axis] as const;
+
+      const captureOne = (axisName: string, perMeetingAxes: Array<Record<string, any>>) => {
+        const axisBlocks = perMeetingAxes.map((m) => m?.[axisName] ?? {});
+        if (axisBlocks.length === 0) return {};
+        // 收集所有 subDim key 的并集
+        const subDimKeys = new Set<string>();
+        for (const b of axisBlocks) for (const k of Object.keys(b)) subDimKeys.add(k);
+        const out: Record<string, any> = {};
+        for (const key of subDimKeys) {
+          const samples = axisBlocks.map((b) => b[key]).filter((v) => v !== undefined && v !== null);
+          if (samples.length === 0) { out[key] = []; continue; }
+          // 数组型 subDim（commitments, decisions, ...）：concat 所有 meeting
+          if (Array.isArray(samples[0])) {
+            out[key] = ([] as any[]).concat(...(samples as any[][]));
+          } else {
+            // 单例对象（evidence_grades / decision_quality / meeting_necessity / affect_curve）
+            // → 多 meeting 时按 meeting_id 索引保留
+            if (axisBlocks.length === 1) {
+              out[key] = samples[0];
+            } else {
+              const map: Record<string, any> = {};
+              axisBlocks.forEach((b, i) => { if (b[key] !== undefined && b[key] !== null) map[meetingIds[i]] = b[key]; });
+              out[key] = map;
+            }
+          }
+        }
+        return out;
+      };
+
+      let capturedData: Record<string, any> = {};
+      let captureFailed: { meetingId: string; message: string } | null = null;
+      try {
+        const perMeeting: Array<Record<string, any>> = [];
+        for (const mid of meetingIds) {
+          try {
+            perMeeting.push(await engine.getMeetingAxes(mid));
+          } catch (e) {
+            captureFailed = { meetingId: mid, message: (e as Error).message };
+            throw e;
+          }
+        }
+        for (const a of axisesToCapture) {
+          capturedData[a] = captureOne(a, perMeeting);
+        }
+      } catch (e) {
+        request.log.error({ scopeKind, scopeId, axis, captureFailed }, 'snapshot capture failed');
+        reply.status(500);
+        return {
+          error: 'Internal Server Error',
+          message: `snapshot capture failed${captureFailed ? ` (meeting ${captureFailed.meetingId.slice(0, 8)}: ${captureFailed.message})` : ''}`,
+        };
+      }
+
+      // 4. library × all 大尺寸警告
+      let warning: string | undefined;
+      const sizeBytes = Buffer.byteLength(JSON.stringify(capturedData), 'utf8');
+      if (scopeKind === 'library' && axis === 'all' && sizeBytes > 5 * 1024 * 1024) {
+        warning = `snapshot ~${(sizeBytes / 1024 / 1024).toFixed(1)} MB across ${meetingIds.length} meetings, consider narrowing scope`;
+      } else if (sizeBytes > 5 * 1024 * 1024) {
+        warning = `snapshot ~${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+      }
+
+      // 5. 写占位 mn_runs（满足 mn_axis_versions.run_id NOT NULL FK）
+      let runId: string;
+      try {
+        const r = await engine.deps.db.query(
+          `INSERT INTO mn_runs (scope_kind, scope_id, axis, state, triggered_by, started_at, finished_at, metadata)
+             VALUES ($1, $2, $3, 'succeeded', 'manual', NOW(), NOW(), $4::jsonb)
+             RETURNING id`,
+          [
+            scopeKind,
+            scopeKind === 'library' || scopeKind === 'meeting' ? null : scopeId, // mn_runs.scope_id 是 UUID，meeting 的 assets.id 不一定符合 → 保留在 metadata
+            axis,
+            JSON.stringify({
+              kind: 'manual_snapshot',
+              snapshotOnly: true,
+              meetingCount: meetingIds.length,
+              meetingScopeId: scopeKind === 'meeting' ? scopeId : null,
+              labelHint: body.label ?? null,
+            }),
+          ],
+        );
+        runId = r.rows[0].id as string;
+      } catch (e) {
+        request.log.error({ err: e }, 'placeholder mn_runs insert failed');
+        reply.status(500);
+        return { error: 'Internal Server Error', message: 'snapshot run-anchor insert failed' };
+      }
+
+      // 6. 调 versionStore.snapshot 写入（已自动算 vN + diff_vs_prev）
+      try {
+        const result = await engine.versionStore.snapshot({
+          runId,
+          scopeKind,
+          // mn_axis_versions.scope_id 是 UUID；对 scopeKind='meeting'（assets.id 可能不是 uuid）
+          // 写 null，把真实 meetingId 留在 metadata（已存在 mn_runs.metadata.meetingScopeId）。
+          // project/client/topic 的 scopeId 已是 UUID，直接传。
+          scopeId: scopeKind === 'library' || scopeKind === 'meeting' ? null : (scopeId as string),
+          axis,
+          data: capturedData,
+        });
+        return {
+          versionId: result.id,
+          versionLabel: result.versionLabel,
+          prevVersionId: result.prevVersionId,
+          diff: result.diff,
+          runId,
+          sizeBytes,
+          meetingCount: meetingIds.length,
+          warning,
+        };
+      } catch (e) {
+        request.log.error({ err: e, runId }, 'versionStore.snapshot failed');
+        // 占位 run 已写但 version 未写入 → run 是孤儿，可接受（无 FK 反向影响）
+        reply.status(500);
+        return { error: 'Internal Server Error', message: `snapshot insert failed: ${(e as Error).message}` };
+      }
+    });
+
     fastify.get('/versions/:scopeKind/:axis', { preHandler: authenticate }, async (request) => {
       const { scopeKind, axis } = request.params as { scopeKind: string; axis: string };
       const q = request.query as { scopeId?: string; limit?: string };

@@ -56,19 +56,24 @@ function EventMark({ e, x }: { e: ThreadEvent; x: number }) {
     position: 'absolute', left: x, top: '50%',
     transform: 'translate(-50%,-50%)', zIndex: 2,
   };
+  // 标签共享样式：限宽 + 省略，避免相邻事件 label 横向叠覆
+  const labelStyle: CSSProperties = {
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    maxWidth: 96, display: 'inline-block',
+  };
   switch (e.kind) {
     case 'claim':
       return (
         <div style={{ ...base, display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 10, height: 10, background: 'var(--ink)', borderRadius: 99, boxShadow: '0 0 0 3px var(--paper-2)' }} />
-          {e.label && <span style={{ fontSize: 10.5, whiteSpace: 'nowrap', color: 'var(--ink)', fontWeight: 500 }}>{e.label}</span>}
+          {e.label && <span title={e.label} style={{ ...labelStyle, fontSize: 10.5, color: 'var(--ink)', fontWeight: 500 }}>{e.label}</span>}
         </div>
       );
     case 'clash':
       return (
         <div style={{ ...base, display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 14, height: 14, border: '2px solid var(--accent)', borderRadius: 99, background: 'var(--paper-2)' }} />
-          {e.label && <span style={{ fontSize: 10.5, whiteSpace: 'nowrap', color: 'var(--accent)', fontWeight: 500, marginLeft: 2 }}>{e.label}</span>}
+          {e.label && <span title={e.label} style={{ ...labelStyle, fontSize: 10.5, color: 'var(--accent)', fontWeight: 500, marginLeft: 2 }}>{e.label}</span>}
         </div>
       );
     case 'update':
@@ -82,7 +87,7 @@ function EventMark({ e, x }: { e: ThreadEvent; x: number }) {
       return (
         <div style={{ ...base, display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 9, height: 9, background: 'var(--amber)', borderRadius: 99, boxShadow: '0 0 0 3px var(--paper-2)' }} />
-          {e.label && <span style={{ fontSize: 10, whiteSpace: 'nowrap', color: 'oklch(0.42 0.09 75)' }}>{e.label}</span>}
+          {e.label && <span title={e.label} style={{ ...labelStyle, fontSize: 10, color: 'oklch(0.42 0.09 75)' }}>{e.label}</span>}
         </div>
       );
     case 'listen':
@@ -95,14 +100,14 @@ function EventMark({ e, x }: { e: ThreadEvent; x: number }) {
       return (
         <div style={{ ...base, display: 'flex', alignItems: 'center', gap: 5 }}>
           <Icon name="git" size={14} style={{ color: 'var(--accent)' }} />
-          {e.label && <span style={{ fontSize: 10, whiteSpace: 'nowrap', color: 'var(--accent)', fontWeight: 500 }}>{e.label}</span>}
+          {e.label && <span title={e.label} style={{ ...labelStyle, fontSize: 10, color: 'var(--accent)', fontWeight: 500 }}>{e.label}</span>}
         </div>
       );
     case 'flag':
       return (
         <div style={{ ...base, display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '9px solid var(--amber)' }} />
-          {e.label && <span style={{ fontSize: 10, whiteSpace: 'nowrap', color: 'oklch(0.4 0.09 75)' }}>{e.label}</span>}
+          {e.label && <span title={e.label} style={{ ...labelStyle, fontSize: 10, color: 'oklch(0.4 0.09 75)' }}>{e.label}</span>}
         </div>
       );
     case 'yield':
@@ -180,11 +185,15 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
           }}>
             <div style={{ width: startX - 14, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <Avatar p={p} size={28} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }}>{p.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {p.role}
-                </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontSize: 12.5, fontWeight: 500,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }} title={p.name}>{p.name}</div>
+                <div style={{
+                  fontSize: 10.5, color: 'var(--ink-3)',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }} title={p.role}>{p.role}</div>
               </div>
             </div>
             {/* Track */}
@@ -358,7 +367,7 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
             );
           })}
 
-          {/* Participant nodes */}
+          {/* Participant nodes — 圆 + initials 留在 SVG；人名移到外层 HTML 以便单行 ellipsis */}
           {participants.map((p) => {
             const { x, y } = nodePos[p.id];
             const fill = p.tone === 'warm'
@@ -370,11 +379,23 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
               <g key={p.id}>
                 <circle cx={x} cy={y} r={22} fill={fill} stroke="var(--paper)" strokeWidth={3} />
                 <text x={x} y={y + 4} textAnchor="middle" fontFamily="var(--sans)" fontSize="11" fontWeight="600" fill="var(--ink)">{p.initials}</text>
-                <text x={x} y={y + 38} textAnchor="middle" fontFamily="var(--sans)" fontSize="10.5" fill="var(--ink-2)">{p.name}</text>
               </g>
             );
           })}
         </svg>
+        {/* 人名 HTML 层（absolute · 跟 svg 用同一坐标系：svg top:40 已被 SectionLabel 占位，此层 top:40 起算） */}
+        {participants.map((p) => {
+          const { x, y } = nodePos[p.id];
+          return (
+            <div key={`name-${p.id}`} style={{
+              position: 'absolute', left: x - 50, top: 40 + y + 28, width: 100,
+              textAlign: 'center', fontSize: 10.5, color: 'var(--ink-2)',
+              fontFamily: 'var(--sans)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              pointerEvents: 'none',
+            }} title={p.name}>{p.name}</div>
+          );
+        })}
 
         {/* Consensus HTML cards */}
         {cons.map((c, idx) => (
@@ -507,9 +528,11 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
                   fontFamily: 'var(--sans)', fontWeight: 600, fontSize: 13,
                 }}>{p.initials}</div>
                 <div style={{
-                  position: 'absolute', left: c.cx - 60, top: c.cy + 26, width: 120,
+                  position: 'absolute', left: c.cx - 50, top: c.cy + 26, width: 100,
                   textAlign: 'center', fontSize: 11, color: 'var(--ink-3)',
-                }}>{p.name}</div>
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  pointerEvents: 'none',
+                }} title={p.name}>{p.name}</div>
                 {c.themes.map((th, i) => {
                   const angle = (i / c.themes.length) * Math.PI * 2 - Math.PI / 4;
                   const r = 90;
@@ -522,7 +545,8 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
                       border: '1px solid oklch(0.85 0.07 75)',
                       color: 'oklch(0.38 0.09 75)', fontSize: 11, fontWeight: 500,
                       borderRadius: 99, whiteSpace: 'nowrap',
-                    }}>{th}</div>
+                      maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis',
+                    }} title={String(th)}>{th}</div>
                   );
                 })}
               </div>

@@ -133,6 +133,17 @@ const MEETINGS: Meeting[] = [
 
 // 后端 GET /meetings 返回 { id, title, meeting_kind, created_at, last_run, scope_bindings }
 // 字段比 Meeting 少很多 · 缺失字段填默认值，让 fixture 风格的 UI 仍能渲染
+function formatMeetingDate(api: any): string {
+  // 显示优先级：metadata.occurred_at（YYYY-MM-DD 或带时间）> created_at（带时间）
+  // 带时间的 ISO 串 → 'YYYY-MM-DD HH:mm'，纯日期串原样显示
+  const raw = String(api.occurred_at ?? api.created_at ?? '');
+  if (!raw) return '';
+  const datePart = raw.slice(0, 10);
+  // 检测时间分量：包含 'T' 或 ' ' 后跟数字
+  const m = raw.match(/[T\s](\d{2}:\d{2})/);
+  return m ? `${datePart} ${m[1]}` : datePart;
+}
+
 function adaptApiMeeting(api: any): Meeting {
   const scopes: Array<{ scopeId: string; kind: string; name?: string; slug?: string }> = api.scope_bindings ?? [];
   const findScope = (kind: string) => scopes.find((s) => s.kind === kind);
@@ -140,12 +151,13 @@ function adaptApiMeeting(api: any): Meeting {
   const client = findScope('client');
   const topic = findScope('topic');
   const lastRun = api.last_run ?? {};
+  const durMin = Number(api.duration_min);
   return {
     id: String(api.id),
     title: String(api.title ?? '未命名会议'),
-    date: String(api.created_at ?? '').slice(0, 10),
-    duration: '—',
-    attendees: 0,
+    date: formatMeetingDate(api),
+    duration: Number.isFinite(durMin) && durMin > 0 ? `${durMin}m` : '—',
+    attendees: Number.isFinite(Number(api.attendee_count)) ? Number(api.attendee_count) : 0,
     // 注：以前优先 slug 让 fixture 风格 UI 渲染；切到 scopeId(UUID) 优先后，
     // 树节点 id（apiScopes[*].id 也是 UUID）才能匹配上，filter / 移动到其他分组才能工作。
     groups: {
@@ -249,14 +261,31 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onC
             title="双击改名"
           >{node.name}</span>
         )}
-        {hover && onDelete && renaming !== node.id ? (
-          <span
-            role="button"
-            title="删除分组"
-            onClick={(e) => { e.stopPropagation(); onDelete(node); }}
-            style={{ display: 'flex', cursor: 'pointer', color: 'var(--ink-4)', padding: 2 }}
-          >
-            <Icon name="x" size={12} />
+        {hover && (onCommitRename || onDelete) && renaming !== node.id ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {onCommitRename && (
+              <span
+                role="button"
+                title="改名（也可双击节点名）"
+                onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
+                style={{
+                  cursor: 'pointer', color: 'var(--ink-4)',
+                  padding: '0 4px', fontSize: 11, lineHeight: 1, fontFamily: 'var(--sans)',
+                }}
+              >
+                改名
+              </span>
+            )}
+            {onDelete && (
+              <span
+                role="button"
+                title="删除分组"
+                onClick={(e) => { e.stopPropagation(); onDelete(node); }}
+                style={{ display: 'flex', cursor: 'pointer', color: 'var(--ink-4)', padding: 2 }}
+              >
+                <Icon name="x" size={12} />
+              </span>
+            )}
           </span>
         ) : (
           <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
@@ -314,7 +343,7 @@ function MeetingCard({ m, active, onClick, onOpen, groupName }: {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--ink-3)' }}>
         <Icon name="clock" size={11} /> {m.duration}
-        <Icon name="users" size={11} style={{ marginLeft: 4 }} /> {m.attendees}
+        <Icon name="users" size={11} style={{ marginLeft: 4 }} /> {m.attendees > 0 ? `${m.attendees} 人` : '—'}
         {groupName && <>
           <span style={{ color: 'var(--ink-4)' }}>·</span>
           <span>{groupName}</span>
@@ -377,7 +406,7 @@ function PreviewPanel({ m, tree, groupBy, onAction, busy }: {
           {m.title}
         </h3>
         <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7 }}>
-          {m.date} · {m.duration} · {m.attendees} 人 · preset: {m.preset}
+          {m.date} · {m.duration} · {m.attendees > 0 ? `${m.attendees} 人` : '—'} · preset: {m.preset}
         </div>
       </div>
 
