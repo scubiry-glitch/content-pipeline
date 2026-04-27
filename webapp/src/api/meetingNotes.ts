@@ -81,6 +81,22 @@ export const meetingNotesApi = {
   computeAxis: (body: { meetingId?: string; scope?: any; axis: string; subDims?: string[]; replaceExisting?: boolean }) =>
     jpost<any>('/compute/axis', body),
 
+  /**
+   * 跨轴线索：当前 axis 上的问题在其他 axis 的真实映射（基于 mn_*.row 实算）。
+   * 替换 _axisShared.tsx 写死的 mock。返回空 items 时前端显示"本会议无跨轴线索"。
+   */
+  getCrossAxisClues: (id: string, axis: 'people' | 'projects' | 'knowledge' | 'meta') =>
+    jget<{
+      items: Array<{
+        targetAxis: string;
+        label: string;
+        detail: string;
+        count: number;
+        to: string;
+        anchor?: { kind: string; ids: string[] };
+      }>;
+    }>(`/meetings/${id}/cross-axis-clues?axis=${axis}`),
+
   enqueueRun: (body: {
     scope: any;
     axis: string;
@@ -169,6 +185,29 @@ export const meetingNotesApi = {
 
   getPerson: (id: string) =>
     jget<{ id: string; canonical_name: string; aliases: string[]; role: string | null; org: string | null }>(`/people/${id}`),
+
+  /**
+   * 合并两个人物：把 fromId 合并到 :id（target 胜出）。
+   * 11 张引用表 person_id reassign，source 的 canonical+aliases 并入 target.aliases，
+   * 最后 DELETE source 行。整个操作 atomic（plpgsql 函数体隐式 transactional）。
+   * dryRun=true 只返回引用计数 + 预览合并后的 aliases。
+   */
+  mergePeople: (targetId: string, body: { fromId: string; dryRun?: boolean }) =>
+    jpost<
+      | {
+          dryRun: true;
+          target: { id: string; canonical_name: string };
+          source: { id: string; canonical_name: string };
+          refs: Array<{ t: string; n: number }>;
+          previewMergedAliases: string[];
+        }
+      | {
+          ok: true;
+          target: { id: string; canonical_name: string; aliases: string[]; updated_at: string };
+          source: { id: string; canonical_name: string; deleted: true };
+          affected: Array<{ table_name: string; rows_reassigned: number; rows_dropped: number }>;
+        }
+    >(`/people/${targetId}/merge`, body),
 
   /**
    * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。

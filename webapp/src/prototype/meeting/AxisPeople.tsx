@@ -731,6 +731,17 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
+  // F11.1 · merge UI 状态机：
+  //   idle → mergeSource selected → mergeTarget selected → preview (dryRun) → confirm → done
+  const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
+  const [mergePreview, setMergePreview] = useState<{
+    targetId: string;
+    targetName: string;
+    sourceName: string;
+    refs: Array<{ t: string; n: number }>;
+    previewMergedAliases: string[];
+  } | null>(null);
+
   async function reload() {
     setRows(null); setErr(null);
     try {
@@ -741,6 +752,49 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
     }
   }
   useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [scopeId]);
+
+  async function startMerge(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    try {
+      const r = await meetingNotesApi.mergePeople(targetId, { fromId: sourceId, dryRun: true });
+      if (!('dryRun' in r) || !r.dryRun) throw new Error('expected dryRun preview');
+      setMergePreview({
+        targetId,
+        targetName: r.target.canonical_name,
+        sourceName: r.source.canonical_name,
+        refs: r.refs,
+        previewMergedAliases: r.previewMergedAliases,
+      });
+    } catch (e: any) {
+      setToast({ kind: 'err', text: `合并预览失败：${e?.message ?? String(e)}` });
+      setMergeSourceId(null);
+      setMergePreview(null);
+    }
+  }
+
+  async function confirmMerge() {
+    if (!mergePreview || !mergeSourceId) return;
+    setSubmitting(true);
+    try {
+      const r = await meetingNotesApi.mergePeople(mergePreview.targetId, { fromId: mergeSourceId });
+      setSubmitting(false);
+      if ('ok' in r && r.ok) {
+        const reassigned = r.affected.reduce((s, x) => s + (x.rows_reassigned ?? 0), 0);
+        const dropped = r.affected.reduce((s, x) => s + (x.rows_dropped ?? 0), 0) - 1; // -1 减掉 mn_people 那行
+        setToast({
+          kind: 'ok',
+          text: `已合并「${mergePreview.sourceName}」 → 「${mergePreview.targetName}」· 重路由 ${reassigned} 行引用 · 删去 ${Math.max(0, dropped)} 行 UNIQUE 冲突 · target.aliases 现含 ${r.target.aliases.length} 项`,
+        });
+        setMergeSourceId(null);
+        setMergePreview(null);
+        reload();
+      }
+    } catch (e: any) {
+      setSubmitting(false);
+      setToast({ kind: 'err', text: `合并失败：${e?.message ?? String(e)}` });
+    }
+    setTimeout(() => setToast(null), 9000);
+  }
 
   async function submitRename() {
     if (!editingId || !editName.trim()) return;
@@ -798,24 +852,54 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
           当前 scope 下还没有任何关联人物。先跑过 LLM 或导入数据后这里会出现。
         </div>
       )}
+      {/* 合并模式提示 banner */}
+      {mergeSourceId && !mergePreview && (() => {
+        const src = rows?.find((p) => p.id === mergeSourceId);
+        return (
+          <div style={{
+            marginBottom: 12, padding: '10px 14px', borderRadius: 5,
+            background: '#eff6ff', color: '#1e3a8a', border: '1px solid #bfdbfe',
+            display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5,
+          }}>
+            <span>🔗 合并模式 · 已选源：<b>{src?.canonical_name}</b> · 现在请点列表中要合并到的目标人物 ↓</span>
+            <button
+              onClick={() => setMergeSourceId(null)}
+              style={{
+                marginLeft: 'auto', padding: '4px 10px', borderRadius: 3, fontSize: 11,
+                border: '1px solid #93c5fd', background: '#fff', color: '#1e3a8a', cursor: 'pointer',
+              }}
+            >退出合并模式</button>
+          </div>
+        );
+      })()}
+
       {rows && rows.length > 0 && (
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 100px 80px 50px',
+          display: 'grid', gridTemplateColumns: '1fr 100px 80px 100px',
           padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
           letterSpacing: 0.3, textTransform: 'uppercase', borderBottom: '1px solid var(--line-2)',
         }}>
-          <span>姓名 · 历史别名</span><span>角色</span><span>承诺数</span><span></span>
+          <span>姓名 · 历史别名</span><span>角色</span><span>承诺数</span><span>操作</span>
         </div>
       )}
       {rows?.map((p, i) => {
         const isEditing = editingId === p.id;
+        const isMergeSource = mergeSourceId === p.id;
+        const isMergeTargetable = mergeSourceId && mergeSourceId !== p.id;
         return (
           <div key={p.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr 100px 80px 50px',
+            display: 'grid', gridTemplateColumns: '1fr 100px 80px 100px',
             alignItems: 'center', gap: 10, padding: '12px 14px',
             borderBottom: '1px solid var(--line-2)',
-            background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
-          }}>
+            background: isMergeSource
+              ? '#fef3c7'
+              : isMergeTargetable
+              ? '#ecfdf5'
+              : i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
+            cursor: isMergeTargetable ? 'pointer' : 'default',
+          }}
+          onClick={() => { if (isMergeTargetable) startMerge(mergeSourceId!, p.id); }}
+          >
             <div>
               {isEditing ? (
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -860,21 +944,124 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
             </div>
             <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{p.role ?? '—'}</span>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-2)' }}>{p.commitment_count}</span>
-            <div>
-              {!isEditing && (
-                <button
-                  onClick={() => { setEditingId(p.id); setEditName(p.canonical_name); }}
-                  title="改名"
-                  style={{
-                    border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
-                    padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
-                  }}
-                >✏</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {!isEditing && !mergeSourceId && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingId(p.id); setEditName(p.canonical_name); }}
+                    title="改名"
+                    style={{
+                      border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                      padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
+                    }}
+                  >✏</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setMergeSourceId(p.id); }}
+                    title="合并到另一个人物"
+                    style={{
+                      border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                      padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
+                    }}
+                  >🔗</button>
+                </>
+              )}
+              {isMergeSource && (
+                <span style={{ fontSize: 11, color: '#92400e', fontFamily: 'var(--mono)' }}>← 源</span>
+              )}
+              {isMergeTargetable && (
+                <span style={{ fontSize: 11, color: '#065f46', fontFamily: 'var(--mono)' }}>点击设为目标</span>
               )}
             </div>
           </div>
         );
       })}
+
+      {/* 合并确认对话框 */}
+      {mergePreview && (
+        <div
+          onClick={() => { setMergePreview(null); setMergeSourceId(null); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--sans)',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--paper)', borderRadius: 10, width: 560, maxHeight: '80vh',
+              overflow: 'auto', boxShadow: '0 24px 64px -16px rgba(0,0,0,0.4)',
+              border: '2px solid #d97706',
+            }}
+          >
+            <div style={{
+              padding: '14px 22px', borderBottom: '1px solid #fde68a',
+              background: '#fffbeb', display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 22 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#92400e' }}>合并人物 · 不可回退</div>
+                <MonoMeta style={{ fontSize: 11, color: '#78350f' }}>people.merge · destructive</MonoMeta>
+              </div>
+            </div>
+            <div style={{ padding: '18px 22px', fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)' }}>
+              <div style={{ marginBottom: 10 }}>
+                即将把 <b>「{mergePreview.sourceName}」</b> 合并到 <b>「{mergePreview.targetName}」</b>。
+              </div>
+              <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--paper-2)', borderRadius: 5 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                  源在 mn_* 表的引用（合并后将全部 reassign 到目标）：
+                </div>
+                {mergePreview.refs.length === 0 ? (
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>（源没有任何引用，仅合并 aliases + 删除源行）</div>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5 }}>
+                    {mergePreview.refs.map((r) => (
+                      <li key={r.t}><code style={{ fontFamily: 'var(--mono)' }}>{r.t}</code>: <b>{r.n}</b> 行</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>合并后 target.aliases 预览：</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                  [{mergePreview.previewMergedAliases.map((a) => `"${a}"`).join(', ')}]
+                </div>
+              </div>
+              <div style={{
+                padding: '10px 12px', background: '#fef2f2', borderRadius: 5, color: '#991b1b',
+                fontSize: 11.5, lineHeight: 1.55,
+              }}>
+                ⚠ 源行将被永久删除。3 张 UNIQUE 表（role_trajectory / speech_quality / silence_signals）
+                若源和目标在同一 meeting 都有行，源的对撞行会被 DELETE（target 胜出）。
+                所有操作在 PG 函数内原子完成，任一步失败全 rollback。
+              </div>
+            </div>
+            <div style={{
+              padding: '12px 22px 18px', display: 'flex', gap: 10, justifyContent: 'flex-end',
+              borderTop: '1px solid var(--line-2)',
+            }}>
+              <button
+                onClick={() => { setMergePreview(null); setMergeSourceId(null); }}
+                style={{
+                  padding: '8px 16px', border: '1px solid var(--line)', background: 'var(--paper)',
+                  color: 'var(--ink-2)', borderRadius: 5, fontSize: 13, cursor: 'pointer',
+                }}
+              >取消</button>
+              <button
+                onClick={confirmMerge}
+                disabled={submitting}
+                style={{
+                  padding: '8px 18px', border: '1px solid #92400e',
+                  background: submitting ? '#fde68a' : '#d97706',
+                  color: 'var(--paper)', borderRadius: 5, fontSize: 13, fontWeight: 600,
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                }}
+              >{submitting ? '合并中…' : '确认合并'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

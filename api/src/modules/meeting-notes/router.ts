@@ -123,6 +123,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            a.metadata AS metadata,
            COALESCE((a.metadata->>'archived')::boolean, false) AS archived,
            a.metadata->>'archived_at' AS archived_at,
+           -- claude-cli 模式跑过的 meeting 在 metadata.claudeSession.sessionId 留下 UUID
+           a.metadata->'claudeSession'->>'sessionId' AS claude_session_id,
            -- 会议实际发生时间：优先 occurred_at，回退 analysis.date（可能只有日期），最后 NULL
            COALESCE(a.metadata->>'occurred_at', a.metadata->'analysis'->>'date') AS occurred_at,
            -- 与会人数：四级兜底
@@ -762,6 +764,97 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       );
       if (r.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
       return r.rows[0];
+    });
+
+    /**
+     * POST /people/:id/merge · 合并两个人物（F11.1）
+     * Body: { fromId, dryRun? }
+     *
+     * 把 fromId 合并到 :id（target 胜出）：所有 11 张表的 person_id 引用 reassign，
+     * fromId 的 canonical_name + aliases 全部并入 target.aliases，最后 DELETE fromId。
+     * UNIQUE 冲突（mn_role_trajectory_points / mn_speech_quality / mn_silence_signals）
+     * 由 plpgsql 函数 mn_merge_people 处理：先 DELETE 源的对撞行（target 版本胜出），
+     * 再 UPDATE 剩余。整个操作原子（PG 函数体隐式 transactional）。
+     *
+     * dryRun=true 时只返回 fromId 在各表的引用计数 + 合并后 aliases 预览，不真改。
+     */
+    fastify.post('/people/:id/merge', { preHandler: authenticate }, async (request, reply) => {
+      const { id: targetId } = request.params as { id: string };
+      const body = (request.body ?? {}) as { fromId?: string; dryRun?: boolean };
+      const fromId = body.fromId;
+      if (!UUID_RE.test(targetId) || !fromId || !UUID_RE.test(fromId)) {
+        reply.status(400);
+        return { error: 'Bad Request', code: 'INVALID_ID', message: 'targetId / fromId 都需要是 UUID' };
+      }
+      if (targetId === fromId) {
+        reply.status(400);
+        return { error: 'Bad Request', code: 'SAME_ID', message: '不能合并到自己' };
+      }
+      const both = await engine.deps.db.query(
+        `SELECT id, canonical_name, aliases FROM mn_people WHERE id = ANY($1::uuid[])`,
+        [[targetId, fromId]],
+      );
+      if (both.rows.length !== 2) {
+        reply.status(404);
+        return { error: 'Not Found', code: 'PERSON_NOT_FOUND', message: 'target 或 source 不存在' };
+      }
+      const target = both.rows.find((r: any) => r.id === targetId);
+      const source = both.rows.find((r: any) => r.id === fromId);
+
+      if (body.dryRun) {
+        const refs = await engine.deps.db.query(
+          `SELECT 'mn_commitments' AS t, count(*)::int AS n FROM mn_commitments WHERE person_id = $1
+           UNION ALL SELECT 'mn_role_trajectory_points', count(*)::int FROM mn_role_trajectory_points WHERE person_id = $1
+           UNION ALL SELECT 'mn_speech_quality', count(*)::int FROM mn_speech_quality WHERE person_id = $1
+           UNION ALL SELECT 'mn_silence_signals', count(*)::int FROM mn_silence_signals WHERE person_id = $1
+           UNION ALL SELECT 'mn_decisions', count(*)::int FROM mn_decisions WHERE proposer_person_id = $1
+           UNION ALL SELECT 'mn_assumptions', count(*)::int FROM mn_assumptions WHERE verifier_person_id = $1
+           UNION ALL SELECT 'mn_open_questions', count(*)::int FROM mn_open_questions WHERE owner_person_id = $1
+           UNION ALL SELECT 'mn_judgments', count(*)::int FROM mn_judgments WHERE author_person_id = $1
+           UNION ALL SELECT 'mn_mental_model_invocations', count(*)::int FROM mn_mental_model_invocations WHERE invoked_by_person_id = $1
+           UNION ALL SELECT 'mn_cognitive_biases', count(*)::int FROM mn_cognitive_biases WHERE by_person_id = $1
+           UNION ALL SELECT 'mn_counterfactuals', count(*)::int FROM mn_counterfactuals WHERE rejected_by_person_id = $1
+           ORDER BY 1`,
+          [fromId],
+        );
+        const previewAliases = Array.from(new Set([
+          ...(target.aliases ?? []),
+          source.canonical_name,
+          ...(source.aliases ?? []),
+        ])).filter((a: string) => a && a !== target.canonical_name);
+        return {
+          dryRun: true,
+          target: { id: target.id, canonical_name: target.canonical_name },
+          source: { id: source.id, canonical_name: source.canonical_name },
+          refs: refs.rows.filter((r: any) => r.n > 0),
+          previewMergedAliases: previewAliases,
+        };
+      }
+
+      try {
+        const r = await engine.deps.db.query(
+          `SELECT * FROM mn_merge_people($1::uuid, $2::uuid)`,
+          [targetId, fromId],
+        );
+        const after = await engine.deps.db.query(
+          `SELECT id, canonical_name, aliases, updated_at FROM mn_people WHERE id = $1`,
+          [targetId],
+        );
+        return {
+          ok: true,
+          target: after.rows[0],
+          source: { id: source.id, canonical_name: source.canonical_name, deleted: true },
+          affected: r.rows,
+        };
+      } catch (e: any) {
+        request.log.error({ err: e, targetId, fromId }, 'mn_merge_people failed');
+        reply.status(500);
+        return {
+          error: 'Internal Server Error',
+          code: 'MERGE_FAILED',
+          message: `合并失败：${e?.message ?? String(e)}`,
+        };
+      }
     });
 
     /**
@@ -1931,6 +2024,156 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           itemId: q.itemId,
         }),
       };
+    });
+
+    /**
+     * GET /meetings/:id/cross-axis-clues?axis=people|projects|knowledge|meta
+     *
+     * 计算"此轴上的问题在其他轴的映射"的真实线索（替换 _axisShared.tsx 的 mock）。
+     * 三条最高 leverage 关联（方案 2）：
+     *   C1 人物→项目: 决策密度 × 高 heat 风险密度（"提议人 N 个决策对应 M 条高风险"）
+     *   C2 项目→人物: 决策 owner 的承诺兑现率（"决策 owner 历史 commitment 兑现 X/Y"）
+     *   C3 知识→项目: judgment 关联的未验证假设数（"判断 J 关联 N 条 untested assumption"）
+     *
+     * 纯 SQL，零 LLM。表都不存在 / count 为 0 时返空数组。
+     */
+    fastify.get('/meetings/:id/cross-axis-clues', { preHandler: authenticate }, async (request, reply) => {
+      const { id: meetingId } = request.params as { id: string };
+      const q = request.query as { axis?: string };
+      if (!UUID_RE.test(meetingId)) {
+        return { items: [] };
+      }
+      const axis = (q.axis ?? 'people') as 'people' | 'projects' | 'knowledge' | 'meta';
+      const db = engine.deps.db;
+      const items: Array<{
+        targetAxis: string;
+        label: string;
+        detail: string;
+        count: number;
+        to: string;
+        anchor?: { kind: string; ids: string[] };
+      }> = [];
+
+      try {
+        if (axis === 'people') {
+          // C1 人物→项目: 该会上提议人 × 关联风险数。heat 阈值放宽到 ≥1（含所有 mention）
+          // 提议人门槛降到 ≥1（小会议只有几条决策也能命中）
+          const r = await db.query(
+            `WITH proposers AS (
+               SELECT proposer_person_id AS pid, COUNT(*)::int AS dcount,
+                      array_agg(id) AS decision_ids
+                 FROM mn_decisions
+                WHERE meeting_id = $1::uuid AND proposer_person_id IS NOT NULL
+                GROUP BY proposer_person_id
+             ),
+             scope_risks AS (
+               SELECT COUNT(*)::int AS rcount FROM mn_risks
+                WHERE COALESCE(heat_score, 0) >= 1
+                  AND (scope_id IN (SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1::uuid)
+                       OR scope_id IS NULL)
+             )
+             SELECT p.pid, p.dcount, sr.rcount, mp.canonical_name AS pname,
+                    p.decision_ids
+               FROM proposers p
+               CROSS JOIN scope_risks sr
+               LEFT JOIN mn_people mp ON mp.id = p.pid
+              WHERE sr.rcount > 0
+              ORDER BY p.dcount DESC LIMIT 5`,
+            [meetingId],
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            items.push({
+              targetAxis: '项目',
+              label: '项目轴 · 风险热度',
+              detail: `${row.pname ?? row.pid?.slice(0, 6)} 提的 ${row.dcount} 项决策，本会议（含 scope）共 ${row.rcount} 条风险`,
+              count: row.rcount,
+              to: `/meeting/${meetingId}/a`,
+              anchor: { kind: 'risk-by-proposer', ids: [String(row.pid)] },
+            });
+          }
+        }
+
+        if (axis === 'projects') {
+          // C2 项目→人物: 决策 owner 的承诺兑现统计
+          // 区分有意义的 state：'done' 真完成；'at_risk'/'slipped' 真脱轨；'on_track' 默认状态视作未明
+          // 用"明确兑现率 = done / (done + slipped)"避免被默认 on_track 噪音拉到 100%
+          const r = await db.query(
+            `WITH proposers AS (
+               SELECT DISTINCT proposer_person_id AS pid FROM mn_decisions
+                WHERE meeting_id = $1::uuid AND proposer_person_id IS NOT NULL
+             ),
+             stats AS (
+               SELECT c.person_id AS pid,
+                      COUNT(*) FILTER (WHERE c.state = 'done')::int AS done_count,
+                      COUNT(*) FILTER (WHERE c.state = 'slipped')::int AS slipped_count,
+                      COUNT(*) FILTER (WHERE c.state = 'at_risk')::int AS at_risk_count,
+                      COUNT(*)::int AS total_count
+                 FROM mn_commitments c
+                 JOIN proposers p ON p.pid = c.person_id
+                GROUP BY c.person_id
+             )
+             SELECT s.pid, s.done_count, s.slipped_count, s.at_risk_count, s.total_count,
+                    mp.canonical_name AS pname
+               FROM stats s
+               LEFT JOIN mn_people mp ON mp.id = s.pid
+              WHERE s.total_count >= 1
+              ORDER BY (s.slipped_count + s.at_risk_count) DESC, s.total_count DESC LIMIT 5`,
+            [meetingId],
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            const issues = row.slipped_count + row.at_risk_count;
+            const detail = issues > 0
+              ? `${row.pname ?? row.pid?.slice(0, 6)} 的 ${row.total_count} 条 commitment 中 ${row.slipped_count} 条已脱轨、${row.at_risk_count} 条 at_risk`
+              : `${row.pname ?? row.pid?.slice(0, 6)} 共 ${row.total_count} 条 commitment（${row.done_count} 已完成，其余 on_track 待跟进）`;
+            items.push({
+              targetAxis: '人物',
+              label: '人物轴 · 承诺兑现',
+              detail,
+              count: issues > 0 ? issues : row.total_count,
+              to: `/meeting/${meetingId}/c`,
+              anchor: { kind: 'commitments-by-person', ids: [String(row.pid)] },
+            });
+          }
+        }
+
+        if (axis === 'knowledge') {
+          // C3 知识→项目: high-generality judgment 关联的 untested assumption 数
+          // mn_assumptions.underpins_decision_ids 与 mn_decisions.based_on_ids 没直接 join，
+          // 改用同 meeting 的所有未 verified assumption 作粗略代理
+          const r = await db.query(
+            `WITH top_judgments AS (
+               SELECT id, text, generality_score FROM mn_judgments
+                WHERE $1::uuid = ANY(linked_meeting_ids)
+                  AND COALESCE(generality_score, 0) >= 0.7
+                ORDER BY generality_score DESC LIMIT 3
+             ),
+             untested AS (
+               SELECT COUNT(*)::int AS acount FROM mn_assumptions
+                WHERE meeting_id = $1::uuid
+                  AND COALESCE(verification_state, 'untested') NOT IN ('verified','falsified')
+             )
+             SELECT j.id, j.text, j.generality_score, u.acount
+               FROM top_judgments j CROSS JOIN untested u
+              WHERE u.acount > 0`,
+            [meetingId],
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            const snippet = String(row.text ?? '').slice(0, 30);
+            items.push({
+              targetAxis: '项目',
+              label: '项目轴 · 假设清单',
+              detail: `判断「${snippet}…」关联 ${row.acount} 条未验证假设`,
+              count: row.acount,
+              to: `/meeting/${meetingId}/a`,
+              anchor: { kind: 'assumptions', ids: [String(row.id)] },
+            });
+          }
+        }
+      } catch (e) {
+        request.log.warn({ meetingId, axis, err: e }, 'cross-axis-clues compute failed');
+      }
+
+      return { items };
     });
 
     fastify.post('/crosslinks/recompute', { preHandler: authenticate }, async (request) => {
