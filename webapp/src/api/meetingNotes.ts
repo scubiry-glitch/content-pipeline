@@ -53,7 +53,20 @@ export const meetingNotesApi = {
   computeAxis: (body: { meetingId?: string; scope?: any; axis: string; subDims?: string[]; replaceExisting?: boolean }) =>
     jpost<any>('/compute/axis', body),
 
-  enqueueRun: (body: { scope: any; axis: string; subDims?: string[]; preset?: string; strategy?: string; triggeredBy?: string }) => {
+  enqueueRun: (body: {
+    scope: any;
+    axis: string;
+    subDims?: string[];
+    preset?: string;
+    strategy?: string;
+    triggeredBy?: string;
+    /**
+     * Step 2 用户为不同会议纪要角色指定的真实专家 id 列表。
+     * 后端 dispatchPlan 会按真实专家展开 expert slot，axis computer 在 LLM
+     * system prompt 顶部注入这位/这些专家的 persona。
+     */
+    expertRoles?: { people?: string[]; projects?: string[]; knowledge?: string[] };
+  }) => {
     // 后端 router L605 要求 scope.kind 全小写 ['library','project','client','topic','meeting']
     // 多个调用点历史上传 'MEETING'/'PROJECT' 会触发 400 · 这里统一 normalize
     const scope = body.scope && typeof body.scope === 'object' && 'kind' in body.scope
@@ -115,6 +128,8 @@ export const meetingNotesApi = {
   },
   createMeeting: (body: { title?: string; meetingKind?: string }) =>
     jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
+  updateMeeting: (id: string, body: { title: string }) =>
+    jput<{ id: string; title: string; created_at: string; updated_at: string }>(`/meetings/${id}`, body),
   unbindScope: (scopeId: string, meetingId: string) =>
     jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
 

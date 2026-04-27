@@ -8,6 +8,7 @@ import { MEETING, EXPERTS, ANALYSIS, P } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
+import { useMeetingShellTitle } from './MeetingDetailShell';
 
 // ── Mock transcript (right pane) ──
 const TRANSCRIPT = [
@@ -410,6 +411,8 @@ export function VariantWorkbench() {
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
   const [tensionMock, setTensionMock] = useState(true);
+  const shellTitle = useMeetingShellTitle();
+  const displayTitle = shellTitle || MEETING.title;
 
   useEffect(() => {
     if (forceMock) {
@@ -483,7 +486,7 @@ export function VariantWorkbench() {
           <Icon name="folder" size={14} />
           <span>{MEETING.id}</span>
           <Icon name="chevron" size={12} style={{ color: 'var(--ink-4)' }} />
-          <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{MEETING.title}</span>
+          <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{displayTitle}</span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {usingMock && <MockBadge />}

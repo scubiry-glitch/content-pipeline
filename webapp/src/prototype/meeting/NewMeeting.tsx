@@ -528,10 +528,37 @@ function FlowUpload({ onNext, onUploaded }: {
 
 // ── Step 2: FlowExperts ───────────────────────────────────────────────────────
 
+type MnRoleId = 'people' | 'projects' | 'knowledge';
+
+const MN_ROLE_OPTIONS: Array<{ id: MnRoleId; label: string; hint: string }> = [
+  { id: 'people',    label: '人事/团队',     hint: '承诺、发言质量、沉默信号、角色轨迹' },
+  { id: 'projects',  label: '项目/决策',     hint: '决策出处、假设、开放问题、风险热度' },
+  { id: 'knowledge', label: '知识/认知/张力', hint: '判断、心智模型、偏差、反事实、情绪曲线、张力' },
+];
+
+/**
+ * 首次加载时的默认选择（按用户配置）。expertsReady 后若 expertList 里存在这些 id，
+ * 就直接预选并落 role；缺失的 role 再 fallback 到 guessRoleFromExpert + match 排序。
+ */
+const DEFAULT_EXPERT_PICKS: Array<{ id: string; role: MnRoleId }> = [
+  { id: 'E08-08', role: 'people' },     // 左晖
+  { id: 'S-06',   role: 'projects' },   // 任正非
+  { id: 'S-03',   role: 'projects' },   // 马斯克
+  { id: 'S-40',   role: 'knowledge' },  // Andrej Karpathy
+];
+
+function guessRoleFromExpert(e: ExpertMock): MnRoleId {
+  // 极简启发：从 field/style/mentalModels 里搜关键词，命中即给对应角色；否则默认 knowledge
+  const txt = `${e.field} ${e.style} ${(e.mentalModels ?? []).join(' ')}`.toLowerCase();
+  if (/团队|人事|沟通|承诺|领导|hr|管理|coaching/.test(txt)) return 'people';
+  if (/决策|风险|项目|战略|财务|商业|产品/.test(txt)) return 'projects';
+  return 'knowledge';
+}
+
 function FlowExperts({ onNext, onBack, onSubmit }: {
   onNext: () => void;
   onBack: () => void;
-  onSubmit: (body: { presetId: string; expertIds: string[] }) => Promise<boolean>;
+  onSubmit: (body: { presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> }) => Promise<boolean>;
 }) {
   const pageSize = 8;
   const slowThresholdMs = 5000;
@@ -543,13 +570,13 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
   const { data: expertsPayload, isLoading: expertsLoading } = expertsSwr;
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [roleMap, setRoleMap] = useState<Record<string, MnRoleId>>({});
   const [presetId, setPresetId] = useState('standard');
   const [nameKeyword, setNameKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [slowHint, setSlowHint] = useState(false);
   const [enqueueing, setEnqueueing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const normalizedKeyword = nameKeyword.trim().toLowerCase();
 
   const adaptedRemote = useMemo(() => {
@@ -562,19 +589,128 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
     return adaptedRemote.length > 0 ? adaptedRemote : EXPERTS;
   }, [forceMock, adaptedRemote]);
 
-  useEffect(() => {
-    if (!forceMock) return;
-    setSelectedIds(EXPERTS.filter(e => e.selected).map(e => e.id));
-  }, [forceMock]);
+  /**
+   * 真实专家库是否已就绪：mock 模式直接 ready；非 mock 模式需等 SWR 完成且后端真返了数据。
+   * 没 ready 时 expertList 是 EXPERTS（mock fallback），不要 auto-select 进 selectedIds，
+   * 否则会被后续 prune 移走（产业链测绘师等 mock-only id），又触发新一轮 auto-select 重复添加。
+   */
+  const expertsReady = forceMock || (!expertsLoading && adaptedRemote.length > 0);
+
+  const toggle = (id: string) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      return [...prev, id];
+    });
+    setRoleMap(prev => {
+      if (prev[id]) {
+        const { [id]: _, ...rest } = prev;
+        return rest;
+      }
+      const e = expertList.find(x => x.id === id);
+      if (!e) return prev;
+      return { ...prev, [id]: guessRoleFromExpert(e) };
+    });
+  };
+  const setExpertRole = (id: string, role: MnRoleId) => {
+    setRoleMap(prev => ({ ...prev, [id]: role }));
+  };
 
   useEffect(() => {
-    if (forceMock || adaptedRemote.length === 0) return;
-    const ids = new Set(adaptedRemote.map(e => e.id));
-    setSelectedIds(prev => {
-      const next = prev.filter(id => ids.has(id));
-      return next.length === prev.length ? prev : next;
+    if (!forceMock) return;
+    const ids = EXPERTS.filter(e => e.selected).map(e => e.id);
+    setSelectedIds(ids);
+    // mock 默认选中也要带 role
+    setRoleMap(prev => {
+      const next: Record<string, MnRoleId> = { ...prev };
+      for (const id of ids) {
+        if (!next[id]) {
+          const e = EXPERTS.find(x => x.id === id);
+          if (e) next[id] = guessRoleFromExpert(e);
+        }
+      }
+      return next;
     });
-  }, [forceMock, adaptedRemote]);
+  }, [forceMock]);
+
+  // 当真实 expertList 切换（SWR 完成 / 切到/出 mock）时，把 selectedIds 限制在 expertList 内
+  // 同时去重，去掉之前的 mock-only id（如 E04-12 产业链测绘师）和重复添加
+  useEffect(() => {
+    if (!expertsReady) return;
+    const valid = new Set(expertList.map(e => e.id));
+    setSelectedIds(prev => {
+      const seen = new Set<string>();
+      const next: string[] = [];
+      for (const id of prev) {
+        if (valid.has(id) && !seen.has(id)) {
+          seen.add(id);
+          next.push(id);
+        }
+      }
+      return next.length === prev.length && next.every((v, i) => v === prev[i]) ? prev : next;
+    });
+    setRoleMap(prev => {
+      const next: Record<string, MnRoleId> = {};
+      for (const [id, role] of Object.entries(prev)) {
+        if (valid.has(id)) next[id] = role;
+      }
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [expertsReady, expertList]);
+
+  // 自动选择：等专家库 ready 后，先按 DEFAULT_EXPERT_PICKS 预选；剩余缺口再按
+  // match 降序 + guessRole 启发补；候选只来自 expertList，不会选到 mock-only id。
+  useEffect(() => {
+    if (!expertsReady) return;
+    if (expertList.length === 0) return;
+    const ALL_ROLES: MnRoleId[] = ['people', 'projects', 'knowledge'];
+    const adds: Array<{ id: string; role: MnRoleId }> = [];
+    const used = new Set<string>(selectedIds);
+    const validIds = new Set(expertList.map(e => e.id));
+
+    // 1) 首次预选：DEFAULT_EXPERT_PICKS 中存在于专家库的项，全部追加
+    if (selectedIds.length === 0) {
+      for (const pick of DEFAULT_EXPERT_PICKS) {
+        if (validIds.has(pick.id) && !used.has(pick.id)) {
+          adds.push(pick);
+          used.add(pick.id);
+        }
+      }
+    }
+
+    // 2) 再做"每个角色至少一位"补缺：合并 selectedIds 已有 role 与本轮 adds 的 role
+    const haveRoles = new Set<MnRoleId>();
+    for (const id of selectedIds) {
+      const r = roleMap[id];
+      if (r) haveRoles.add(r);
+    }
+    for (const a of adds) haveRoles.add(a.role);
+    const missing = ALL_ROLES.filter(role => !haveRoles.has(role));
+
+    if (missing.length > 0) {
+      const sorted = [...expertList].sort((a, b) => b.match - a.match);
+      for (const role of missing) {
+        let cand = sorted.find(e => !used.has(e.id) && guessRoleFromExpert(e) === role);
+        if (!cand) cand = sorted.find(e => !used.has(e.id));
+        if (cand) {
+          adds.push({ id: cand.id, role });
+          used.add(cand.id);
+        }
+      }
+    }
+
+    if (adds.length === 0) return;
+    // 用 union 而非 append：double-invoke 或 race 也不会重复
+    setSelectedIds(prev => {
+      const set = new Set(prev);
+      for (const a of adds) set.add(a.id);
+      return set.size === prev.length ? prev : [...set];
+    });
+    setRoleMap(prev => {
+      const next = { ...prev };
+      for (const a of adds) next[a.id] = a.role;
+      return next;
+    });
+  }, [expertsReady, expertList, selectedIds, roleMap]);
 
   useEffect(() => {
     if (forceMock || !expertsLoading) {
@@ -802,18 +938,69 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '16px 18px' }}>
             <SectionLabel>已选 · {selectedIds.length} 位</SectionLabel>
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>
+              请为每位专家指定角色：决定 Step 3 哪一组维度（人事/项目/知识）会以这位专家的视角输出。
+            </div>
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {selectedIds.map(id => {
                 const e = expertList.find(x => x.id === id);
                 if (!e) return null;
+                const role = roleMap[id] ?? 'knowledge';
                 return (
                   <div key={id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5,
-                    padding: '6px 8px', background: 'var(--paper-2)', borderRadius: 4,
+                    display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5,
+                    padding: '8px 10px', background: 'var(--paper-2)', borderRadius: 4,
                   }}>
-                    <MonoMeta>{e.id}</MonoMeta>
-                    <span style={{ fontWeight: 500 }}>{e.name.split(' · ')[0]}</span>
-                    <Icon name="x" size={12} style={{ marginLeft: 'auto', color: 'var(--ink-4)', cursor: 'pointer' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <MonoMeta>{e.id}</MonoMeta>
+                      <span style={{ fontWeight: 500 }}>{e.name.split(' · ')[0]}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggle(id)}
+                        title="移除该专家"
+                        style={{
+                          marginLeft: 'auto',
+                          width: 22,
+                          height: 22,
+                          padding: 0,
+                          border: '1px solid var(--line-2)',
+                          background: 'var(--paper)',
+                          color: 'var(--ink-3)',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name="x" size={12} />
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {MN_ROLE_OPTIONS.map(opt => {
+                        const active = role === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            title={opt.hint}
+                            onClick={() => setExpertRole(id, opt.id)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 4,
+                              border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
+                              background: active ? 'var(--accent-soft)' : 'var(--paper)',
+                              color: active ? 'oklch(0.35 0.1 40)' : 'var(--ink-2)',
+                              fontSize: 11.5,
+                              fontFamily: 'var(--sans)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
@@ -850,7 +1037,13 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
               onClick={async () => {
                 setEnqueueing(true);
                 setSubmitError(null);
-                const ok = await onSubmit({ presetId, expertIds: selectedIds });
+                // 聚合已选专家 → 角色 id 列表
+                const expertRoles: Record<MnRoleId, string[]> = { people: [], projects: [], knowledge: [] };
+                for (const id of selectedIds) {
+                  const role = roleMap[id];
+                  if (role) expertRoles[role].push(id);
+                }
+                const ok = await onSubmit({ presetId, expertIds: selectedIds, expertRoles });
                 setEnqueueing(false);
                 if (ok) onNext();
                 else setSubmitError('任务未成功入队：请先上传可解析的会议纪要文件，再重试。');
@@ -1438,7 +1631,7 @@ export function NewMeeting() {
   const [step, setStep] = useState<1 | 2 | 3>(runIdFromQuery ? 3 : 1);
   const [assetId, setAssetId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(runIdFromQuery);
-  const [lastSubmitBody, setLastSubmitBody] = useState<{ presetId: string; expertIds: string[] } | null>(null);
+  const [lastSubmitBody, setLastSubmitBody] = useState<{ presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> } | null>(null);
 
   // Persist runId → URL so refresh / back-button keep state.
   useEffect(() => {
@@ -1455,7 +1648,7 @@ export function NewMeeting() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  async function handleSubmit(body: { presetId: string; expertIds: string[] }): Promise<boolean> {
+  async function handleSubmit(body: { presetId: string; expertIds: string[]; expertRoles: Record<MnRoleId, string[]> }): Promise<boolean> {
     setLastSubmitBody(body);
     if (forceMock) return true;
     if (!assetId) {
@@ -1470,11 +1663,17 @@ export function NewMeeting() {
       }
       // 解析成功后按 meeting scope 发起 run，避免落到 library 级“空跑成功”
       const scope = { kind: 'meeting', id: assetId };
+      // 仅传非空角色：避免后端拿到空数组时去查不存在的 expertId
+      const cleanedRoles: { people?: string[]; projects?: string[]; knowledge?: string[] } = {};
+      if (body.expertRoles.people.length)    cleanedRoles.people = body.expertRoles.people;
+      if (body.expertRoles.projects.length)  cleanedRoles.projects = body.expertRoles.projects;
+      if (body.expertRoles.knowledge.length) cleanedRoles.knowledge = body.expertRoles.knowledge;
       const r: { runId?: string; ok?: boolean } = await meetingNotesApi.enqueueRun({
         scope,
         axis: 'all',
         preset: body.presetId,
         triggeredBy: 'new-meeting-wizard',
+        ...(Object.keys(cleanedRoles).length > 0 ? { expertRoles: cleanedRoles } : {}),
       });
       if (r.runId) {
         setRunId(r.runId);

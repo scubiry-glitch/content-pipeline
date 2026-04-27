@@ -5,7 +5,7 @@
 // args.replaceExisting=false（默认）= 增量追加
 
 import type { MeetingNotesDeps } from '../types.js';
-import { applyDecoratorStack, getCurrentStrategy } from './decoratorStack.js';
+import { applyDecoratorStack, getCurrentStrategy, getCurrentExpertPersona } from './decoratorStack.js';
 import { chunkedContent } from '../parse/claimExtractor.js';
 
 export interface ComputeArgs {
@@ -122,8 +122,13 @@ export async function callExpertOrLLM(
   const strategy = getCurrentStrategy();
   const { prompt: decorated } = applyDecoratorStack(systemPrompt, strategy?.strategySpec ?? null);
 
+  // Step 2 选中的真实专家 persona：从 strategyStorage.currentAxis 取，
+  // axis computer 无需感知 — runEngine 在 axes loop 嵌套 strategyStorage.run() 时已注入
+  const personaBlock = getCurrentExpertPersona();
+  const personaSection = personaBlock ? `\n${personaBlock}\n` : '';
+
   // 全局前缀：保留原文细节、避免套话
-  const fullSystem = GLOBAL_DIRECTIVE + decorated;
+  const fullSystem = GLOBAL_DIRECTIVE + personaSection + decorated;
 
   return deps.llm.completeWithSystem(fullSystem, userPrompt, {
     temperature: options?.temperature ?? 0.2,

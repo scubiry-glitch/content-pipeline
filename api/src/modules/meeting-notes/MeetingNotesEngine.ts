@@ -261,6 +261,7 @@ export class MeetingNotesEngine {
                 metadata->>'occurred_at'   AS occurred_at,
                 metadata->>'participants'   AS participants_raw,
                 metadata->>'meeting_kind'  AS meeting_kind,
+                metadata->>'analysis'       AS analysis_raw,
                 created_at
            FROM assets WHERE id = $1 LIMIT 1`,
         [meetingId],
@@ -280,20 +281,66 @@ export class MeetingNotesEngine {
       return s.slice(0, 10);
     };
     const dateStr = toDateStr(occurredAt) ?? toDateStr(asset?.created_at) ?? null;
-    let participants: Array<{ name: string; role?: string }> = [];
+    // Pass through full participant shape (id/initials/tone/speakingPct) so
+    // VariantEditorial 的 P() 能用 API 提供的 ID 解析人名/头像，而不是回落到 mock。
+    let participants: Array<{
+      id?: string;
+      name: string;
+      role?: string;
+      initials?: string;
+      tone?: string;
+      speakingPct?: number;
+    }> = [];
     try {
       const raw = asset?.participants_raw;
       if (raw) {
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
         if (Array.isArray(parsed)) {
-          participants = parsed.map((p: any) =>
-            typeof p === 'string' ? { name: p } : { name: String(p?.name ?? ''), role: p?.role },
-          );
+          participants = parsed.map((p: any) => {
+            if (typeof p === 'string') return { name: p };
+            return {
+              id: typeof p?.id === 'string' ? p.id : undefined,
+              name: String(p?.name ?? ''),
+              role: p?.role,
+              initials: typeof p?.initials === 'string' ? p.initials : undefined,
+              tone: typeof p?.tone === 'string' ? p.tone : undefined,
+              speakingPct: typeof p?.speakingPct === 'number' ? p.speakingPct : undefined,
+            };
+          });
         }
       }
     } catch { /* ignore parse errors */ }
 
+    // metadata.analysis fast-path: 当 assets.metadata.analysis 是结构化对象时，
+    // 直接按前端 _apiAdapters 期望的 sections 形状返回；解决了原本把多张轴表数组
+    // 硬塞进 minutes/tension/... body 的 schema mismatch（adapter 期望对象/特定字段）。
+    let storedAnalysis: any = null;
+    try {
+      const raw = asset?.analysis_raw;
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed && typeof parsed === 'object') storedAnalysis = parsed;
+      }
+    } catch { /* ignore parse errors */ }
+
     if (view === 'A') {
+      if (storedAnalysis) {
+        return {
+          view: 'A',
+          meetingId,
+          title,
+          date: dateStr,
+          participants,
+          sections: [
+            { id: 'minutes',       title: '纪要',      body: storedAnalysis.summary       ?? {} },
+            { id: 'tension',       title: '张力点',    body: storedAnalysis.tension       ?? [] },
+            { id: 'new-cognition', title: '新认知',    body: storedAnalysis.newCognition  ?? [] },
+            { id: 'focus-map',     title: '焦点地图',  body: storedAnalysis.focusMap      ?? [] },
+            { id: 'consensus',     title: '共识/分歧', body: storedAnalysis.consensus     ?? [] },
+            { id: 'cross-view',    title: '跨视角',    body: storedAnalysis.crossView     ?? [] },
+          ],
+        };
+      }
       return {
         view: 'A',
         meetingId,

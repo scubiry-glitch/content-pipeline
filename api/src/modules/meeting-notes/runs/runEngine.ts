@@ -22,6 +22,11 @@ import { ALL_AXES, AXIS_SUBDIMS, runAxisAll } from '../axes/registry.js';
 import type { ComputeResult } from '../axes/_shared.js';
 import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
 import { buildDispatchPlan, type DispatchPlan, type ExpertSlot } from './dispatchPlan.js';
+import {
+  loadExpertSnapshots,
+  buildExpertPersonaByAxis,
+  type ExpertRoleAssignment,
+} from './expertProfileLoader.js';
 import { strategyStorage, splitDecorators, applyDecoratorStack } from '../axes/decoratorStack.js';
 import { synthesizeDeliverables } from './synthesis.js';
 import { renderMultiDim } from './renderMultiDim.js';
@@ -37,6 +42,8 @@ interface QueuePayload {
   triggeredBy: RunTrigger;
   parentRunId: string | null;
   meetingId?: string;
+  /** Step 2 用户为各角色指定的真实 expert id 列表（持久化在 mn_runs.metadata.expertRoles） */
+  expertRoles?: ExpertRoleAssignment | null;
 }
 
 const RUN_TRIGGERS = new Set<RunTrigger>(['auto', 'manual', 'schedule', 'cascade']);
@@ -51,6 +58,25 @@ function coerceRunTrigger(v: unknown): RunTrigger {
 
 function coercePreset(v: unknown): Preset | undefined {
   return typeof v === 'string' && PRESETS.has(v as Preset) ? (v as Preset) : undefined;
+}
+
+/** 校验 expertRoles：仅保留 people/projects/knowledge 三个角色 + 字符串 id */
+function sanitizeExpertRoles(raw: unknown): ExpertRoleAssignment | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const allowed = ['people', 'projects', 'knowledge'] as const;
+  const cleaned: ExpertRoleAssignment = {};
+  let any = false;
+  for (const role of allowed) {
+    const ids = (raw as Record<string, unknown>)[role];
+    if (Array.isArray(ids)) {
+      const filtered = ids.filter((x): x is string => typeof x === 'string' && x.length > 0);
+      if (filtered.length > 0) {
+        cleaned[role] = filtered;
+        any = true;
+      }
+    }
+  }
+  return any ? cleaned : undefined;
 }
 
 /** 兼容 scope.ref；非 UUID 的 id/ref 不写入 scope_id（DB 列为 UUID） */
@@ -191,7 +217,12 @@ export class RunEngine {
       ? req.subDims
       : (req.axis === 'all' ? [] : (AXIS_SUBDIMS[req.axis] ?? []));
 
+    // 2.5 校验 expertRoles：丢空角色、仅保留字符串 id
+    const expertRoles = sanitizeExpertRoles(req.expertRoles);
+
     // 3. 落 mn_runs(queued)
+    const initialMeta: Record<string, any> = { meetingKind };
+    if (expertRoles) initialMeta.expertRoles = expertRoles;
     const ins = await this.deps.db.query(
       `INSERT INTO mn_runs
          (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
@@ -207,7 +238,7 @@ export class RunEngine {
         strategySpec,
         triggeredBy,
         req.parentRunId ?? null,
-        JSON.stringify({ meetingKind }),
+        JSON.stringify(initialMeta),
       ],
     );
     const runId = ins.rows[0].id as string;
@@ -225,6 +256,7 @@ export class RunEngine {
         triggeredBy,
         parentRunId: req.parentRunId ?? null,
         meetingId: scopeNorm.kind === 'meeting' ? scopeNorm.id : undefined,
+        expertRoles,
       },
       enqueuedAt: Date.now(),
     });
@@ -308,7 +340,8 @@ export class RunEngine {
         WHERE id = $1`,
       [id, row.state],
     );
-    // 重新入队
+    // 重新入队（从 metadata 还原 expertRoles，保证 resume 沿用同一组专家）
+    const resumedExpertRoles = sanitizeExpertRoles((row.metadata as Record<string, unknown> | null)?.expertRoles);
     this.queue.enqueue({
       id,
       payload: {
@@ -321,6 +354,7 @@ export class RunEngine {
         triggeredBy: row.triggered_by,
         parentRunId: row.parent_run_id,
         meetingId: row.scope_kind === 'meeting' ? row.scope_id : undefined,
+        expertRoles: resumedExpertRoles,
       },
       enqueuedAt: Date.now(),
     });
@@ -460,14 +494,38 @@ export class RunEngine {
     };
 
     const allResults: ComputeResult[] = [];
+
+    // 加载用户在 Step 2 选中的真实专家档案 → axis 级 persona block
+    // 没指定时返回空对象，callExpertOrLLM 走原通用提示词路径
+    let expertPersonaByAxis: Record<string, string> | undefined;
+    let expertSnapshotsForDispatch: Awaited<ReturnType<typeof loadExpertSnapshots>> | undefined;
+    if (payload.expertRoles) {
+      const allIds = [
+        ...(payload.expertRoles.people ?? []),
+        ...(payload.expertRoles.projects ?? []),
+        ...(payload.expertRoles.knowledge ?? []),
+      ];
+      try {
+        expertSnapshotsForDispatch = await loadExpertSnapshots(this.deps.db, allIds);
+        expertPersonaByAxis = await buildExpertPersonaByAxis(
+          this.deps.db,
+          payload.expertRoles,
+          expertSnapshotsForDispatch,
+        );
+      } catch (e) {
+        console.warn('[runEngine] expert profile load failed:', (e as Error).message);
+      }
+    }
+
     try {
       // Wrap the entire run in two nested AsyncLocalStorage:
       //  · llmUsageStorage —— LLM token 累计
-      //  · strategyStorage —— 当前 run 的 strategy/decorator 栈，axis computer
-      //     的 callExpertOrLLM 会读到，自动把装饰器追加到 system prompt
+      //  · strategyStorage —— 当前 run 的 strategy/decorator 栈 + 用户指定的 expert persona，
+      //     axis computer 的 callExpertOrLLM 会读到 strategy + 当前 axis 对应 persona
       const strategyCtx = {
         strategySpec: payload.strategySpec,
         preset: payload.preset,
+        expertPersonaByAxis,
       };
       await strategyStorage.run(strategyCtx, async () => {
       await llmUsageStorage.run(counter, async () => {
@@ -501,10 +559,17 @@ export class RunEngine {
           }
         }
 
-        // Step3 第 3 步「分派给 3 位专家」：把 axes 按 AXIS_TO_EXPERT 分组，
+        // Step3 第 3 步「分派给专家」：把 axes 按角色分组，
         // 落 dispatchPlan 到 mn_runs.metadata。前端可读 metadata.dispatchPlan
-        // 渲染真实的"专家×子维度"清单，而不是空文案。
-        const dispatchPlan = buildDispatchPlan(axesToRun, payload.preset, payload.strategySpec);
+        // 渲染真实的"专家×子维度"清单。
+        // 当 payload.expertRoles 存在时，用 Step 2 用户选中的真实专家替代虚拟专家。
+        const dispatchPlan = buildDispatchPlan(
+          axesToRun,
+          payload.preset,
+          payload.strategySpec,
+          payload.expertRoles ?? null,
+          expertSnapshotsForDispatch ?? null,
+        );
         await writeDispatchPlan(dispatchPlan);
         await writeStep(
           'dispatch',
@@ -592,12 +657,17 @@ export class RunEngine {
           }
           await writeStep('axes', i / Math.max(1, axesToRun.length), `分析中 · ${ax}（${i + 1}/${axesToRun.length}）`);
           const axisStartedAt = Date.now();
-          const r = await runAxisAll(this.deps, ax, {
-            meetingId: payload.meetingId,
-            scopeId: payload.scope.id ?? null,
-            scopeKind: payload.scope.kind,
-            replaceExisting: true,
-          }, payload.axis === 'all' ? undefined : payload.subDims);
+          // 嵌套一层 strategyStorage 把 currentAxis 推进上下文，
+          // 让 callExpertOrLLM 能按 axis 取对应专家 persona 拼到 system prompt。
+          const r = await strategyStorage.run(
+            { ...strategyCtx, currentAxis: ax },
+            () => runAxisAll(this.deps, ax, {
+              meetingId: payload.meetingId,
+              scopeId: payload.scope.id ?? null,
+              scopeKind: payload.scope.kind,
+              replaceExisting: true,
+            }, payload.axis === 'all' ? undefined : payload.subDims),
+          );
           allResults.push(...r);
 
           // 聚合 per-axis stats

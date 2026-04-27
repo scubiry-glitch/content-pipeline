@@ -17,6 +17,18 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface StrategyContext {
   strategySpec: string | null;
   preset: 'lite' | 'standard' | 'max';
+  /**
+   * Step 2 用户为不同角色指定的真实专家 → 拼成的 persona system prompt 段，
+   * 按 axis 索引。callExpertOrLLM 在跑某个 axis 时会读这里把 persona 注入。
+   * 没有指定专家时为 undefined，表示沿用通用提示词。
+   */
+  expertPersonaByAxis?: Record<string, string>;
+  /**
+   * runEngine 在 axes loop 内部嵌套 strategyStorage.run() 时把当前 axis 推进来，
+   * 让 callExpertOrLLM 不必改签名就能按 axis 取 persona。axis computer 内部
+   * 是否需要它无关紧要。
+   */
+  currentAxis?: string;
 }
 
 export const strategyStorage = new AsyncLocalStorage<StrategyContext>();
@@ -111,4 +123,12 @@ export function applyDecoratorStack(
 /** 给 axis computer 用：返回当前 run 的 strategy。 */
 export function getCurrentStrategy(): StrategyContext | undefined {
   return strategyStorage.getStore();
+}
+
+/** 给 callExpertOrLLM 用：取当前 axis 对应的 expert persona system prompt 段（无则空串）。 */
+export function getCurrentExpertPersona(): string {
+  const ctx = strategyStorage.getStore();
+  const axis = ctx?.currentAxis;
+  if (!axis || !ctx?.expertPersonaByAxis) return '';
+  return ctx.expertPersonaByAxis[axis] ?? '';
 }

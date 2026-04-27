@@ -161,6 +161,17 @@ export interface EnqueueRunRequest {
   strategy?: string; // 覆盖 expertApplication.resolveForMeetingKind
   triggeredBy?: RunTrigger;
   parentRunId?: string | null;
+  /**
+   * Step 2 用户为不同会议纪要角色（people / projects / knowledge）指定的真实专家 id 列表。
+   * 缺省则 dispatchPlan 退回硬编码的 3 位虚拟专家，axis computer 用通用提示词。
+   * 给定时：dispatchPlan 按真实专家展开 expert slot；axis computer 在 LLM system prompt
+   * 顶部注入这位/这些专家的 persona（风格 + 信条 + 口头禅 + 关注维度）。
+   */
+  expertRoles?: {
+    people?: string[];
+    projects?: string[];
+    knowledge?: string[];
+  };
 }
 
 export interface RunRecord {

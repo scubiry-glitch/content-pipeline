@@ -91,6 +91,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            COALESCE(a.title, a.metadata->>'title', 'Untitled') AS title,
            a.metadata->>'meeting_kind' AS meeting_kind,
            a.created_at,
+           a.metadata AS metadata,
            (SELECT row_to_json(rr) FROM (
              SELECT id, state, axis, finished_at, error_message
              FROM mn_runs WHERE scope_kind='meeting' AND scope_id::text = a.id
@@ -118,7 +119,65 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
          ORDER BY created_at DESC LIMIT $1`,
           [Math.min(limit, 20)],
         );
-        return { items: r.rows, libraryRuns: libR.rows };
+
+        // Phase 16 · 库列表 mini-stat：count tension / consensus / divergence
+        // 单独查 · 表未迁移时静默降级为 0，不影响 /meetings 主响应
+        const meetingIds: string[] = (r.rows as any[]).map((row) => String(row.id));
+        const counts: Record<string, { tension: number; consensus: number; divergence: number }> = {};
+        if (meetingIds.length > 0) {
+          const [tensionRes, consensusRes] = await Promise.allSettled([
+            engine.deps.db.query(
+              `SELECT meeting_id::text AS meeting_id, COUNT(*)::int AS n
+                 FROM mn_tensions
+                WHERE meeting_id::text = ANY($1::text[])
+                GROUP BY meeting_id`,
+              [meetingIds],
+            ),
+            engine.deps.db.query(
+              `SELECT meeting_id::text AS meeting_id, kind, COUNT(*)::int AS n
+                 FROM mn_consensus_items
+                WHERE meeting_id::text = ANY($1::text[])
+                  AND kind IN ('consensus', 'divergence')
+                GROUP BY meeting_id, kind`,
+              [meetingIds],
+            ),
+          ]);
+          const ensure = (id: string) => {
+            if (!counts[id]) counts[id] = { tension: 0, consensus: 0, divergence: 0 };
+            return counts[id];
+          };
+          if (tensionRes.status === 'fulfilled') {
+            for (const row of (tensionRes.value as any).rows) ensure(String(row.meeting_id)).tension = Number(row.n) || 0;
+          }
+          if (consensusRes.status === 'fulfilled') {
+            for (const row of (consensusRes.value as any).rows) {
+              const slot = ensure(String(row.meeting_id));
+              if (row.kind === 'consensus') slot.consensus = Number(row.n) || 0;
+              else if (row.kind === 'divergence') slot.divergence = Number(row.n) || 0;
+            }
+          }
+        }
+        // JSON fallback：metadata.analysis.{tension,consensus} 旧路径写入时
+        // 取数组长度填补为 0 的字段；consensus JSON 是合并数组，按 type 字段拆分
+        const items = (r.rows as any[]).map((row) => {
+          const id = String(row.id);
+          const c = counts[id] ?? { tension: 0, consensus: 0, divergence: 0 };
+          const analysis = row.metadata?.analysis;
+          if (analysis && typeof analysis === 'object') {
+            if (c.tension === 0 && Array.isArray(analysis.tension)) c.tension = analysis.tension.length;
+            if (c.consensus === 0 && c.divergence === 0 && Array.isArray(analysis.consensus)) {
+              for (const it of analysis.consensus) {
+                const k = it && typeof it === 'object' ? (it as any).kind ?? (it as any).type : null;
+                if (k === 'divergence') c.divergence += 1;
+                else c.consensus += 1;
+              }
+            }
+          }
+          // metadata 字段对前端无用，剥离回历史响应形状
+          const { metadata: _drop, ...rest } = row;
+          return { ...rest, tension_count: c.tension, consensus_count: c.consensus, divergence_count: c.divergence };
+        });
+        return { items, libraryRuns: libR.rows };
       } catch (error) {
         if (isConnectionError(error)) {
           request.log.warn({ err: error }, 'meeting list degraded: database unavailable');
@@ -138,6 +197,33 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         [body.title ?? 'New Meeting', JSON.stringify(meta)],
       );
       reply.status(201);
+      return r.rows[0];
+    });
+
+    fastify.put('/meetings/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) {
+        reply.status(404);
+        return { error: 'Not Found' };
+      }
+      const body = request.body as { title?: string };
+      const nextTitle = typeof body?.title === 'string' ? body.title.trim() : '';
+      if (!nextTitle) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'title is required' };
+      }
+      const r = await engine.deps.db.query(
+        `UPDATE assets
+            SET title = $1,
+                updated_at = NOW()
+          WHERE id::text = $2::text
+          RETURNING id, title, created_at, updated_at`,
+        [nextTitle, id],
+      );
+      if ((r as any).rowCount === 0) {
+        reply.status(404);
+        return { error: 'Not Found' };
+      }
       return r.rows[0];
     });
 
@@ -776,6 +862,21 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(400);
         return { error: 'Bad Request', message: `invalid scope kind: ${scope?.kind ?? 'unknown'}` };
       }
+      // 校验 expertRoles：仅保留 people / projects / knowledge 三个角色 + 字符串 id
+      let expertRoles: { people?: string[]; projects?: string[]; knowledge?: string[] } | undefined;
+      if (body.expertRoles && typeof body.expertRoles === 'object') {
+        const allowedRoles = ['people', 'projects', 'knowledge'] as const;
+        const cleaned: Record<string, string[]> = {};
+        for (const role of allowedRoles) {
+          const ids = (body.expertRoles as any)[role];
+          if (Array.isArray(ids)) {
+            const filtered = ids.filter((x: unknown) => typeof x === 'string' && x.length > 0);
+            if (filtered.length > 0) cleaned[role] = filtered;
+          }
+        }
+        if (Object.keys(cleaned).length > 0) expertRoles = cleaned;
+      }
+
       const r = await engine.enqueueRun({
         scope: scope as any,
         axis: body.axis,
@@ -784,6 +885,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         strategy: body.strategy,
         triggeredBy: body.triggeredBy,
         parentRunId: body.parentRunId,
+        expertRoles,
       });
       if (!r.ok) reply.status(400);
       return r;

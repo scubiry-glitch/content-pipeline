@@ -1,13 +1,17 @@
 // VariantEditorial — A 视图 · 文档精读
 // 原型来源：/tmp/mn-proto/variant-a.jsx VariantEditorial
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { MEETING, EXPERTS, ANALYSIS, P } from './_fixtures';
+import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
+import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
+import { useMeetingShellTitle } from './MeetingDetailShell';
+
+type PFn = (id: string) => Participant;
 
 // ── Section header helper ──
 function sectionHeader(num: string, title: string, sub: string) {
@@ -27,7 +31,7 @@ function sectionHeader(num: string, title: string, sub: string) {
 }
 
 // ── SecMinutes ──
-function SecMinutes({ a }: { a: typeof ANALYSIS }) {
+function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   return (
     <section>
       {sectionHeader('01', '常规会议纪要', '以事实与行动为主干的标准纪要，保留决议链条。')}
@@ -88,7 +92,7 @@ function TensionArrow({ intensity }: { intensity: number }) {
 }
 
 // ── SecTension ──
-function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
+function SecTension({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: boolean; P?: PFn }) {
   return (
     <section>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -136,7 +140,7 @@ function SecTension({ a, isMock }: { a: typeof ANALYSIS; isMock?: boolean }) {
 }
 
 // ── SecNewCognition ──
-function SecNewCognition({ a }: { a: typeof ANALYSIS }) {
+function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   return (
     <section>
       {sectionHeader('03', '新认知', '会议前后，谁的信念被更新？谁被什么触发？')}
@@ -187,7 +191,7 @@ function SecNewCognition({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── SecFocusMap ──
-function SecFocusMap({ a }: { a: typeof ANALYSIS }) {
+function SecFocusMap({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const maxR = Math.max(1, ...(a.focusMap ?? []).map((x) => x.returnsTo));
   return (
     <section>
@@ -222,7 +226,7 @@ function SecFocusMap({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── SecConsensus ──
-function SecConsensus({ a }: { a: typeof ANALYSIS }) {
+function SecConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const cons = (a.consensus ?? []).filter((x) => x.kind === 'consensus');
   const divs = (a.consensus ?? []).filter((x) => x.kind === 'divergence');
   return (
@@ -288,7 +292,7 @@ function SecConsensus({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── SecCrossView ──
-function SecCrossView({ a }: { a: typeof ANALYSIS }) {
+function SecCrossView({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const stanceTone: Record<string, 'accent' | 'teal' | 'amber' | 'ghost'> = {
     support: 'accent', oppose: 'teal', partial: 'amber', neutral: 'ghost',
   };
@@ -342,10 +346,20 @@ function SecCrossView({ a }: { a: typeof ANALYSIS }) {
 }
 
 // ── API meeting metadata ──
+// 后端透传 assets.metadata.participants 的全部字段（含 id/initials/tone/speakingPct），
+// 这样 P() 解析人物时可以优先用 API ID（如 'p1'），不会回落到 mock 的陈汀/沈岚。
+interface ApiParticipant {
+  id?: string;
+  name: string;
+  role?: string;
+  initials?: string;
+  tone?: string;
+  speakingPct?: number;
+}
 interface ApiMeetingMeta {
   title: string | null;
   date: string | null;
-  participants: Array<{ name: string; role?: string }>;
+  participants: ApiParticipant[];
 }
 
 // ── VariantEditorial ──
@@ -357,6 +371,8 @@ export function VariantEditorial() {
   const [usingMock, setUsingMock] = useState(true);
   const [tensionMock, setTensionMock] = useState(true);
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
+  const shellTitle = useMeetingShellTitle();
+  const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
 
   useEffect(() => {
     // Reset to mock state when toggled back to mock mode
@@ -399,6 +415,24 @@ export function VariantEditorial() {
       .catch(() => {});
   }, [id, forceMock]);
 
+  // Build a P() that prefers API-provided participants (with id/initials/tone)
+  // over the mock _fixtures.PARTICIPANTS. Falls back to default P for unknown IDs.
+  const P = useMemo<PFn>(() => {
+    const map = new Map<string, Participant>();
+    (apiMeta?.participants ?? []).forEach((p) => {
+      if (!p.id) return;
+      map.set(p.id, {
+        id: p.id,
+        name: p.name || p.id,
+        role: p.role ?? '',
+        initials: p.initials ?? (p.name ? p.name.slice(0, 1) : '?'),
+        tone: (p.tone as Participant['tone']) ?? 'neutral',
+        speakingPct: typeof p.speakingPct === 'number' ? p.speakingPct : 0,
+      });
+    });
+    return (id: string) => map.get(id) ?? defaultP(id);
+  }, [apiMeta]);
+
   const navItems = [
     { id: 'minutes',       label: '一、常规纪要',   num: '01' },
     { id: 'tension',       label: '二、张力',        num: '02' },
@@ -430,7 +464,7 @@ export function VariantEditorial() {
             fontFamily: 'var(--serif)', fontSize: 20, lineHeight: 1.25, fontWeight: 500,
             color: 'var(--ink)', marginTop: 8, letterSpacing: '-0.005em',
           }}>
-            {apiMeta?.title ?? MEETING.title}
+            {displayTitle}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 12, lineHeight: 1.7 }}>
             {apiMeta?.date
@@ -507,7 +541,7 @@ export function VariantEditorial() {
             fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 44, lineHeight: 1.12,
             letterSpacing: '-0.02em', margin: '14px 0 8px',
           }}>
-            {apiMeta?.title ?? MEETING.title}
+            {displayTitle}
           </h1>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
             {apiMeta
@@ -519,12 +553,12 @@ export function VariantEditorial() {
         <div style={{ height: 1, background: 'var(--line-2)', margin: '36px 0 44px', maxWidth: 860 }} />
 
         {/* Dimension content */}
-        {dim === 'minutes'       && <SecMinutes       a={a} />}
-        {dim === 'tension'       && <SecTension       a={a} isMock={tensionMock} />}
-        {dim === 'new_cognition' && <SecNewCognition  a={a} />}
-        {dim === 'focus_map'     && <SecFocusMap      a={a} />}
-        {dim === 'consensus'     && <SecConsensus     a={a} />}
-        {dim === 'cross_view'    && <SecCrossView     a={a} />}
+        {dim === 'minutes'       && <SecMinutes       a={a} P={P} />}
+        {dim === 'tension'       && <SecTension       a={a} isMock={tensionMock} P={P} />}
+        {dim === 'new_cognition' && <SecNewCognition  a={a} P={P} />}
+        {dim === 'focus_map'     && <SecFocusMap      a={a} P={P} />}
+        {dim === 'consensus'     && <SecConsensus     a={a} P={P} />}
+        {dim === 'cross_view'    && <SecCrossView     a={a} P={P} />}
       </main>
     </div>
   );
