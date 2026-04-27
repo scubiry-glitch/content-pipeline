@@ -78,3 +78,95 @@ SELECT source, count(*) FROM mn_judgments WHERE source = 'manual_import';
 
 - restore 是**单向**操作（写回会覆盖现有 LLM 数据），但因为它本身又快照成新版本（步 6），实际上是可逆的（再 restore 回新版本即可）
 - snapshot 形状若跨版本演化（schema migration），restore 老版本可能字段不全 —— 加 schema_version 字段的能力以后再加
+
+---
+
+## 精修 · 实现细节锁定
+
+### Snapshot 格式升级（破坏性 → 引入 `_meta.snapshotVersion=1`）
+
+旧 snapshot 形状 `{ [axis]: { [subDim]: [...]/{} } }` 把多 meeting 的数组 concat 后**丢失了 meeting_id 归属**——restore 不知道每条 row 该写回哪场会议。
+
+新形状（仍然兼容旧 diff，因为 flatten 只看 `it.id`）：
+
+```json
+{
+  "_meta": {
+    "snapshotVersion": 1,
+    "meetingIds": ["1ace56ff-...", "eff87d6c-..."],
+    "scopeKind": "project",
+    "scopeId": "f6cf3f51-..."
+  },
+  "knowledge": {
+    "judgments": [
+      { "id": "...", "__meeting_id": "1ace56ff-...", "text": "...", ... }
+    ],
+    "evidence_grades": {
+      "1ace56ff-...": { "dist_a": 3, ... },
+      "eff87d6c-...": { "dist_a": 2, ... }
+    }
+  }
+}
+```
+
+数组型 subDim 每条 row 加 `__meeting_id` 字段。单例型 subDim（evidence_grades / decision_quality / meeting_necessity / affect_curve）用 meeting_id 做 key（已经是这样）。
+
+### 改动 1：POST /versions 加 tagging
+
+`router.ts` `POST /versions` handler 内 `captureOne(...)`：
+- concat 数组前给每条 item 加 `__meeting_id`
+- 包外加 `_meta` 块
+
+### 改动 2：POST /versions/:id/restore（新路由）
+
+```http
+POST /api/v1/meeting-notes/versions/:id/restore
+Body: { dryRun?: boolean }
+Response: {
+  fromVersion: { id, label, axis, scopeKind, scopeId },
+  affected: { [axis]: { [subDim]: { deleted, inserted, skipped } } },
+  newVersionId: string,
+  newVersionLabel: string,        // "restored-from-vN"
+  newRunId: string
+}
+```
+
+算法：
+1. SELECT snapshot, scope_kind, scope_id, axis FROM mn_axis_versions WHERE id=$1
+2. 校验 `snapshot._meta.snapshotVersion === 1`，否则 422 LEGACY_SNAPSHOT
+3. 拿 `meetingIds = snapshot._meta.meetingIds`
+4. 遍历 axes × subDims：按 mn_* 表的列做反写
+5. dryRun=true：只算 deleted/inserted 计数，不真改 → 返回 affected
+6. dryRun=false：BEGIN TRANSACTION → 各表 DELETE WHERE meeting_id=ANY AND source IN ('llm_extracted','restored') → INSERT each item with source='restored' → 写新 mn_runs(triggered_by='manual', metadata.kind='restore', fromVersionId=$1) → 写新 mn_axis_versions(label='restored-from-vN'，data 直接复用 snapshot) → COMMIT
+
+### 改动 3：subDim → INSERT 字段映射表
+
+需要在 router 里硬编码每个 subDim 写哪些列。给个简洁映射：
+
+```ts
+const RESTORE_SCHEMA: Record<string, {
+  table: string;
+  scope: 'meeting' | 'singleton' | 'global';  // global=mn_judgments 跨 meeting 用 linked_meeting_ids
+  cols: string[];   // 从 snapshot row 取的字段名（不含 source/meeting_id 由系统补）
+  uniqKey?: string[];  // for singleton: meeting_id；for upsert：UNIQUE 列
+}> = {
+  'people.commitments':    { table: 'mn_commitments', scope: 'meeting',
+    cols: ['id', 'person_id', 'text', 'due_at', 'state', 'progress'] },
+  'people.role_trajectory':{ table: 'mn_role_trajectory_points', scope: 'meeting',
+    cols: ['person_id', 'role_label', 'confidence'], uniqKey: ['person_id', 'meeting_id'] },
+  // ... 其它 14 个
+};
+```
+
+(把 mn_judgments 当 'global'：用 `linked_meeting_ids` overlap，全删 source IN(...) 的 → 全 INSERT)
+
+### 改动 4：前端
+
+- `meetingNotes.ts` 加 `restoreVersion(id, body)`
+- 不在本 iteration 接 VersionTimeline UI（留给下一轮 polish）
+
+### 兼容性
+
+- 现有 v1/v2/... 老 snapshot 没 `_meta.snapshotVersion`，restore 路由直接 422 LEGACY_SNAPSHOT，提示用户「先用新版本再试 restore」
+- 重新跑一次 POST /versions（弹窗自动触发）就有了新版本
+- 不删旧 snapshot

@@ -252,10 +252,28 @@ export async function composeAnalysisFromAxes(
     ).catch(() => ({ rows: [] as any[] })),
   ]);
 
-  // ── summary ──
-  const decision = nonEmpty(decisionsRows.rows[0]?.title)
-    || nonEmpty(decisionsRows.rows[0]?.rationale)
-    || '（本次会议未抽取出明确决议）';
+  // ── summary.decision ──
+  // 兜底链：mn_decisions（最理想，明确决策语句） → mn_judgments（团队习得的核心判断当
+  // "会议级总体决议") → mn_consensus_items 高置信项 → mn_assumptions A/B 级
+  // 因为 decisionProvenanceComputer 的 LLM prompt 只认"明确决策语句"，探索讨论型会议
+  // 经常 0 条，但参考分析里 decision 通常是"会议综合性结论"。
+  let decision = nonEmpty(decisionsRows.rows[0]?.title);
+  if (!decision) {
+    decision = nonEmpty(decisionsRows.rows[0]?.rationale);
+  }
+  if (!decision && (judgmentsRows.rows ?? []).length > 0) {
+    // 取 generality 最高的 judgment（首条已按 generality_score DESC 排序）当总体判断
+    decision = nonEmpty(judgmentsRows.rows[0]?.text);
+  }
+  if (!decision && (consensusItemsRows.rows ?? []).length > 0) {
+    decision = nonEmpty((consensusItemsRows.rows[0] as any)?.item_text);
+  }
+  if (!decision) {
+    // 取首条高置信 assumption
+    const top = (assumptionsRows.rows ?? []).find((a: any) => Number(a.confidence ?? 0) >= 0.7);
+    if (top) decision = nonEmpty((top as any).text);
+  }
+  if (!decision) decision = '（本次会议未抽取出明确决议）';
 
   const actionItems: AnalysisActionItem[] = commitmentsRows.rows.slice(0, 12).map((r: any, i: number) => ({
     id: `A${i + 1}`,

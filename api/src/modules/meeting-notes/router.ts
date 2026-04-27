@@ -1251,6 +1251,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         ? ['people', 'projects', 'knowledge', 'meta'] as const
         : [axis] as const;
 
+      // P3 snapshot v1：数组项加 __meeting_id 让 restore 知道每条 row 该写回哪场会议
       const captureOne = (axisName: string, perMeetingAxes: Array<Record<string, any>>) => {
         const axisBlocks = perMeetingAxes.map((m) => m?.[axisName] ?? {});
         if (axisBlocks.length === 0) return {};
@@ -1261,9 +1262,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         for (const key of subDimKeys) {
           const samples = axisBlocks.map((b) => b[key]).filter((v) => v !== undefined && v !== null);
           if (samples.length === 0) { out[key] = []; continue; }
-          // 数组型 subDim（commitments, decisions, ...）：concat 所有 meeting
+          // 数组型 subDim（commitments, decisions, ...）：concat 所有 meeting；每条 row 加 __meeting_id
           if (Array.isArray(samples[0])) {
-            out[key] = ([] as any[]).concat(...(samples as any[][]));
+            const tagged: any[] = [];
+            axisBlocks.forEach((b, i) => {
+              const arr = b[key];
+              if (Array.isArray(arr)) {
+                for (const item of arr) tagged.push({ __meeting_id: meetingIds[i], ...item });
+              }
+            });
+            out[key] = tagged;
           } else {
             // 单例对象（evidence_grades / decision_quality / meeting_necessity / affect_curve）
             // → 多 meeting 时按 meeting_id 索引保留
@@ -1294,6 +1302,15 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         for (const a of axisesToCapture) {
           capturedData[a] = captureOne(a, perMeeting);
         }
+        // P3 snapshot v1：附 _meta 让 restore 路由识别格式 + 拿到原始 meeting list
+        capturedData._meta = {
+          snapshotVersion: 1,
+          meetingIds,
+          scopeKind,
+          scopeId,
+          axis,
+          capturedAt: new Date().toISOString(),
+        };
       } catch (e) {
         request.log.error({ scopeKind, scopeId, axis, captureFailed }, 'snapshot capture failed');
         reply.status(500);
@@ -1367,6 +1384,240 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(500);
         return { error: 'Internal Server Error', message: `snapshot insert failed: ${(e as Error).message}` };
       }
+    });
+
+    /**
+     * POST /versions/:id/restore —— 把 mn_axis_versions.snapshot 反向写回 mn_*
+     *
+     * 配套 P0 source 列：写回行 source='restored'，仅清掉
+     * source IN ('llm_extracted','restored') 的旧行，manual_import / human_edit 保留。
+     *
+     * 仅处理 snapshotVersion=1 格式（数组项有 __meeting_id 标记 + _meta.meetingIds）。
+     * 旧 snapshot（无 _meta.snapshotVersion）→ 422 LEGACY_SNAPSHOT，提示先 POST /versions 再试。
+     */
+    fastify.post('/versions/:id/restore', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as { dryRun?: boolean };
+      const dryRun = body.dryRun === true;
+      if (!UUID_RE.test(id)) {
+        reply.status(404);
+        return { error: 'Not Found' };
+      }
+
+      // 1. 读 snapshot
+      const verR = await engine.deps.db.query(
+        `SELECT id, scope_kind, scope_id::text AS scope_id, axis, version_label, snapshot
+           FROM mn_axis_versions WHERE id = $1`,
+        [id],
+      );
+      if (verR.rows.length === 0) {
+        reply.status(404);
+        return { error: 'Not Found', message: `version ${id.slice(0, 8)}… not found` };
+      }
+      const ver = verR.rows[0];
+      const snapshot = ver.snapshot ?? {};
+      if (snapshot._meta?.snapshotVersion !== 1) {
+        reply.status(422);
+        return {
+          error: 'Unprocessable Entity',
+          code: 'LEGACY_SNAPSHOT',
+          message: `version ${ver.version_label} 是早期格式（缺 _meta.snapshotVersion），无法反向解构。请先 POST /versions 写一份新快照再试。`,
+        };
+      }
+
+      const meetingIds: string[] = Array.isArray(snapshot._meta.meetingIds) ? snapshot._meta.meetingIds : [];
+      const scopeKindFromSnap = snapshot._meta.scopeKind ?? ver.scope_kind;
+      const scopeIdFromSnap = snapshot._meta.scopeId ?? ver.scope_id;
+
+      // 2. 反写 schema 表 —— subDim → mn_* 列映射
+      // 数组型: 用 __meeting_id 路由到原 meeting，DELETE source IN llm/restored 后逐行 INSERT
+      // 单例型: 按 meeting_id 索引（也支持单 meeting 直接对象）
+      type RestoreEntry = {
+        table: string;
+        kind: 'array_per_meeting' | 'singleton_per_meeting' | 'global_judgments';
+        cols: string[];                  // 数组型 row 取的列
+        scopeIdCol?: 'scope_id' | null;  // 写回是否填 scope_id（risks/decisions/assumptions/open_questions 是）
+      };
+      const SCHEMA: Record<string, RestoreEntry> = {
+        'people.commitments':       { table: 'mn_commitments', kind: 'array_per_meeting',
+          cols: ['id', 'person_id', 'text', 'due_at', 'state', 'progress'] },
+        'people.role_trajectory':   { table: 'mn_role_trajectory_points', kind: 'array_per_meeting',
+          cols: ['person_id', 'role_label', 'confidence'] },
+        'people.speech_quality':    { table: 'mn_speech_quality', kind: 'array_per_meeting',
+          cols: ['person_id', 'entropy_pct', 'followed_up_count', 'quality_score', 'sample_quotes'] },
+        'people.silence_signals':   { table: 'mn_silence_signals', kind: 'array_per_meeting',
+          cols: ['person_id', 'topic_id', 'state', 'anomaly_score'] },
+        'projects.decisions':       { table: 'mn_decisions', kind: 'array_per_meeting',
+          cols: ['id', 'title', 'proposer_person_id', 'confidence', 'is_current', 'rationale', 'based_on_ids', 'superseded_by_id'],
+          scopeIdCol: 'scope_id' },
+        'projects.assumptions':     { table: 'mn_assumptions', kind: 'array_per_meeting',
+          cols: ['id', 'text', 'evidence_grade', 'verification_state', 'confidence', 'underpins_decision_ids'],
+          scopeIdCol: 'scope_id' },
+        'projects.open_questions':  { table: 'mn_open_questions', kind: 'array_per_meeting',
+          cols: ['id', 'text', 'category', 'status', 'times_raised', 'owner_person_id'],
+          scopeIdCol: 'scope_id' },
+        'projects.risks':           { table: 'mn_risks', kind: 'array_per_meeting',
+          cols: ['id', 'text', 'severity', 'mention_count', 'heat_score', 'trend', 'action_taken'],
+          scopeIdCol: 'scope_id' },
+        'knowledge.judgments':      { table: 'mn_judgments', kind: 'global_judgments',
+          cols: ['id', 'text', 'domain', 'generality_score', 'reuse_count'] },
+        'knowledge.mental_models':  { table: 'mn_mental_model_invocations', kind: 'array_per_meeting',
+          cols: ['id', 'model_name', 'invoked_by_person_id', 'correctly_used', 'outcome', 'confidence'] },
+        'knowledge.cognitive_biases': { table: 'mn_cognitive_biases', kind: 'array_per_meeting',
+          cols: ['id', 'bias_type', 'where_excerpt', 'by_person_id', 'severity', 'mitigated'] },
+        'knowledge.counterfactuals':{ table: 'mn_counterfactuals', kind: 'array_per_meeting',
+          cols: ['id', 'rejected_path', 'rejected_by_person_id', 'tracking_note', 'next_validity_check_at', 'current_validity'] },
+        'knowledge.evidence_grades': { table: 'mn_evidence_grades', kind: 'singleton_per_meeting',
+          cols: ['dist_a', 'dist_b', 'dist_c', 'dist_d', 'weighted_score'] },
+        'meta.decision_quality':    { table: 'mn_decision_quality', kind: 'singleton_per_meeting',
+          cols: ['overall', 'clarity', 'actionable', 'traceable', 'falsifiable', 'aligned', 'notes'] },
+        'meta.meeting_necessity':   { table: 'mn_meeting_necessity', kind: 'singleton_per_meeting',
+          cols: ['verdict', 'suggested_duration_min', 'reasons'] },
+        'meta.affect_curve':        { table: 'mn_affect_curve', kind: 'singleton_per_meeting',
+          cols: ['samples', 'tension_peaks', 'insight_points'] },
+      };
+
+      const affected: Record<string, Record<string, { deleted: number; inserted: number; skipped: number }>> = {};
+
+      // 3. 遍历 snapshot.{axis}.{subDim} 反写
+      const axesInSnap = Object.keys(snapshot).filter((k) => k !== '_meta');
+      const client = engine.deps.db; // 简化：复用 pool 上的 query；事务用一个连接更安全，但 dryRun 不改不需要
+
+      const exec = async (sql: string, args: unknown[]) => {
+        if (dryRun) return { rowCount: 0 };
+        return client.query(sql, args);
+      };
+
+      for (const ax of axesInSnap) {
+        const axisData = snapshot[ax];
+        if (!axisData || typeof axisData !== 'object') continue;
+        affected[ax] = {};
+        for (const [sub, val] of Object.entries(axisData as Record<string, any>)) {
+          const key = `${ax}.${sub}`;
+          const def = SCHEMA[key];
+          if (!def) {
+            affected[ax][sub] = { deleted: 0, inserted: 0, skipped: 1 };
+            continue;
+          }
+          const stat = { deleted: 0, inserted: 0, skipped: 0 };
+
+          // ---- array_per_meeting / global_judgments：DELETE source IN(llm,restored) → INSERT each ----
+          if (def.kind === 'array_per_meeting' || def.kind === 'global_judgments') {
+            const items: any[] = Array.isArray(val) ? val : [];
+            // delete preexisting LLM/restored rows for these meetings
+            if (def.kind === 'array_per_meeting' && meetingIds.length > 0) {
+              const delR = await exec(
+                `DELETE FROM ${def.table} WHERE meeting_id = ANY($1::uuid[]) AND source IN ('llm_extracted', 'restored')`,
+                [meetingIds],
+              );
+              stat.deleted = (delR as any).rowCount ?? 0;
+            } else if (def.kind === 'global_judgments' && meetingIds.length > 0) {
+              // mn_judgments 没有 meeting_id，按 abstracted_from_meeting_id / linked_meeting_ids 过滤
+              const delR = await exec(
+                `DELETE FROM ${def.table}
+                  WHERE source IN ('llm_extracted','restored')
+                    AND (abstracted_from_meeting_id = ANY($1::uuid[]) OR linked_meeting_ids && $1::uuid[])`,
+                [meetingIds],
+              );
+              stat.deleted = (delR as any).rowCount ?? 0;
+            }
+
+            // INSERT each item
+            for (const item of items) {
+              try {
+                const mid = item.__meeting_id ?? meetingIds[0]; // global_judgments fallback
+                const cols = def.kind === 'array_per_meeting'
+                  ? ['meeting_id', ...(def.scopeIdCol ? ['scope_id'] : []), ...def.cols, 'source']
+                  : ['abstracted_from_meeting_id', ...def.cols, 'linked_meeting_ids', 'source'];
+                const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+                const values: any[] = def.kind === 'array_per_meeting'
+                  ? [mid, ...(def.scopeIdCol ? [scopeIdFromSnap] : []), ...def.cols.map((c) => item[c] ?? null), 'restored']
+                  : [mid, ...def.cols.map((c) => item[c] ?? null), Array.isArray(item.linked_meeting_ids) ? item.linked_meeting_ids : meetingIds, 'restored'];
+                // mn_judgments.linked_meeting_ids 是 uuid[] → 强制 cast 防止 pg 选错类型
+                const sqlBody = def.kind === 'global_judgments'
+                  ? `INSERT INTO ${def.table} (${cols.join(', ')}) VALUES (${placeholders.replace(/\$(\d+),\s*'restored'\)$/, "$$$1::uuid[], 'restored')")})`
+                  : `INSERT INTO ${def.table} (${cols.join(', ')}) VALUES (${placeholders})`;
+                await exec(sqlBody, values);
+                stat.inserted += 1;
+              } catch (e) {
+                stat.skipped += 1;
+                request.log.warn({ table: def.table, err: (e as Error).message }, 'restore item insert failed');
+              }
+            }
+          }
+
+          // ---- singleton_per_meeting：UPSERT per meeting ----
+          if (def.kind === 'singleton_per_meeting') {
+            // 形态可能是 { mid1: {...}, mid2: {...} } 或者 单 meeting 直接 {...}
+            const perMeeting: Array<[string, any]> =
+              meetingIds.length === 1 && typeof val === 'object' && val !== null && !Object.keys(val).some((k) => k.length > 30)
+                ? [[meetingIds[0], val]]
+                : Object.entries(val as Record<string, any>);
+            for (const [mid, payload] of perMeeting) {
+              if (!payload || typeof payload !== 'object') { stat.skipped += 1; continue; }
+              const cols = ['meeting_id', ...def.cols, 'source'];
+              const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+              const values = [mid, ...def.cols.map((c) => {
+                const v = payload[c];
+                if (v && typeof v === 'object') return JSON.stringify(v);
+                return v ?? null;
+              }), 'restored'];
+              const updateSet = def.cols.map((c) => `${c} = EXCLUDED.${c}`).join(', ');
+              const sqlBody = `INSERT INTO ${def.table} (${cols.join(', ')}) VALUES (${placeholders})
+                  ON CONFLICT (meeting_id) DO UPDATE SET ${updateSet}, source = 'restored'
+                  WHERE ${def.table}.source NOT IN ('manual_import','human_edit')`;
+              try {
+                await exec(sqlBody, values);
+                stat.inserted += 1;
+              } catch (e) {
+                stat.skipped += 1;
+                request.log.warn({ table: def.table, err: (e as Error).message }, 'restore singleton upsert failed');
+              }
+            }
+          }
+
+          affected[ax][sub] = stat;
+        }
+      }
+
+      if (dryRun) {
+        return {
+          fromVersion: { id: ver.id, label: ver.version_label, axis: ver.axis, scopeKind: ver.scope_kind, scopeId: ver.scope_id },
+          dryRun: true,
+          affected,
+        };
+      }
+
+      // 4. 写新 mn_runs 占位 + 新 mn_axis_versions（label='restored-from-vN'）
+      const runIns = await engine.deps.db.query(
+        `INSERT INTO mn_runs (scope_kind, scope_id, axis, state, triggered_by, started_at, finished_at, metadata)
+           VALUES ($1, $2, $3, 'succeeded', 'manual', NOW(), NOW(), $4::jsonb)
+           RETURNING id`,
+        [
+          ver.scope_kind,
+          ver.scope_kind === 'library' || ver.scope_kind === 'meeting' ? null : ver.scope_id,
+          ver.axis,
+          JSON.stringify({ kind: 'restore', fromVersionId: ver.id, fromVersionLabel: ver.version_label }),
+        ],
+      );
+      const newRunId = runIns.rows[0].id as string;
+
+      const newVer = await engine.versionStore.snapshot({
+        runId: newRunId,
+        scopeKind: ver.scope_kind,
+        scopeId: ver.scope_kind === 'library' || ver.scope_kind === 'meeting' ? null : ver.scope_id,
+        axis: ver.axis,
+        data: snapshot, // 同一份内容复用，确保 vN 时间轴线性
+      });
+
+      return {
+        fromVersion: { id: ver.id, label: ver.version_label, axis: ver.axis, scopeKind: ver.scope_kind, scopeId: ver.scope_id },
+        dryRun: false,
+        affected,
+        newRunId,
+        newVersionId: newVer.id,
+        newVersionLabel: `restored-from-${ver.version_label}`,
+      };
     });
 
     fastify.get('/versions/:scopeKind/:axis', { preHandler: authenticate }, async (request) => {

@@ -146,6 +146,20 @@ export const meetingNotesApi = {
       warning?: string;
     }>('/versions', body),
 
+  /**
+   * 把指定 mn_axis_version 反写回 mn_*。仅对 source 为 llm_extracted/restored 的行覆盖；
+   * manual_import / human_edit 的行保留不动。dryRun=true 只返回 affected 计数不真改。
+   */
+  restoreVersion: (versionId: string, body: { dryRun?: boolean } = {}) =>
+    jpost<{
+      fromVersion: { id: string; label: string; axis: string; scopeKind: string; scopeId: string | null };
+      dryRun: boolean;
+      affected: Record<string, Record<string, { deleted: number; inserted: number; skipped: number }>>;
+      newRunId?: string;
+      newVersionId?: string;
+      newVersionLabel?: string;
+    }>(`/versions/${versionId}/restore`, body),
+
   // Scopes
   listScopes: (q: { kind?: string; status?: string } = {}) => {
     const qs = new URLSearchParams(q as any).toString();
