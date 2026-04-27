@@ -448,6 +448,179 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       }
     });
 
+    /**
+     * GET /meetings/:id/grep?q=张总&limit=50
+     *
+     * 跨 mn_*.text 字段做全文搜索（含转写 mn_segments），返回所有命中行 + 所属 axis + 片段。
+     * 用途：会议中被称呼但非发言人的角色（张总/刘总等）追踪——这些人没在 mn_people 表，
+     * cross-axis 线索查不到他们；这个端点直接用关键词从原始文本里捞出所有相关 axis 行。
+     *
+     * 返回 schema:
+     *   { items: [{ axis, table, id, kind?, snippet, person_id?, person_name? }] }
+     * snippet 是 keyword 前后 ~80 字的上下文，已 trim 换行。
+     */
+    fastify.get('/meetings/:id/grep', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const q = (request.query as { q?: string; limit?: string }).q?.trim() ?? '';
+      const limit = Math.min(200, parseInt((request.query as any).limit ?? '50', 10));
+      if (!UUID_RE.test(id)) {
+        reply.status(400);
+        return { error: 'Bad Request', message: 'invalid meeting id' };
+      }
+      if (q.length < 1) {
+        return { items: [], q };
+      }
+
+      const db = engine.deps.db;
+      const items: Array<{
+        axis: string; table: string; id: string; kind?: string;
+        snippet: string; person_id?: string; person_name?: string;
+      }> = [];
+
+      // 通用 LIKE pattern；为防 ReDoS / SQL 注入，只用参数绑定 + ILIKE
+      const pattern = `%${q}%`;
+
+      const queries: Array<{
+        axis: string; table: string; sql: string; mapper: (r: any) => any;
+      }> = [
+        {
+          axis: 'people', table: 'mn_commitments',
+          sql: `SELECT c.id, c.text, c.person_id, p.canonical_name AS pname
+                  FROM mn_commitments c
+                  LEFT JOIN mn_people p ON p.id = c.person_id
+                 WHERE c.meeting_id = $1::uuid AND c.text ILIKE $2
+                 LIMIT $3`,
+          mapper: (r) => ({ kind: 'commitment', text: r.text, person_id: r.person_id, person_name: r.pname }),
+        },
+        {
+          axis: 'projects', table: 'mn_decisions',
+          sql: `SELECT d.id, d.title AS text, d.proposer_person_id AS person_id,
+                       p.canonical_name AS pname
+                  FROM mn_decisions d
+                  LEFT JOIN mn_people p ON p.id = d.proposer_person_id
+                 WHERE d.meeting_id = $1::uuid AND (d.title ILIKE $2 OR d.rationale ILIKE $2)
+                 LIMIT $3`,
+          mapper: (r) => ({ kind: 'decision', text: r.text, person_id: r.person_id, person_name: r.pname }),
+        },
+        {
+          axis: 'projects', table: 'mn_assumptions',
+          sql: `SELECT id, text FROM mn_assumptions
+                 WHERE meeting_id = $1::uuid AND text ILIKE $2 LIMIT $3`,
+          mapper: (r) => ({ kind: 'assumption', text: r.text }),
+        },
+        {
+          axis: 'projects', table: 'mn_open_questions',
+          sql: `SELECT id, text FROM mn_open_questions
+                 WHERE (first_raised_meeting_id = $1::uuid OR last_raised_meeting_id = $1::uuid)
+                   AND text ILIKE $2 LIMIT $3`,
+          mapper: (r) => ({ kind: 'open_question', text: r.text }),
+        },
+        {
+          axis: 'projects', table: 'mn_risks',
+          sql: `SELECT id, text FROM mn_risks
+                 WHERE text ILIKE $2
+                   AND (scope_id IN (SELECT scope_id FROM mn_scope_members WHERE meeting_id = $1::uuid)
+                        OR scope_id IS NULL)
+                 LIMIT $3`,
+          mapper: (r) => ({ kind: 'risk', text: r.text }),
+        },
+        {
+          axis: 'knowledge', table: 'mn_judgments',
+          sql: `SELECT id, text FROM mn_judgments
+                 WHERE $1::uuid = ANY(linked_meeting_ids) AND text ILIKE $2 LIMIT $3`,
+          mapper: (r) => ({ kind: 'judgment', text: r.text }),
+        },
+        {
+          axis: 'knowledge', table: 'mn_cognitive_biases',
+          sql: `SELECT b.id, b.where_excerpt AS text, b.by_person_id AS person_id,
+                       p.canonical_name AS pname
+                  FROM mn_cognitive_biases b
+                  LEFT JOIN mn_people p ON p.id = b.by_person_id
+                 WHERE b.meeting_id = $1::uuid AND b.where_excerpt ILIKE $2 LIMIT $3`,
+          mapper: (r) => ({ kind: 'cognitive_bias', text: r.text, person_id: r.person_id, person_name: r.pname }),
+        },
+        {
+          axis: 'tension', table: 'mn_tensions',
+          sql: `SELECT id, topic AS text, summary FROM mn_tensions
+                 WHERE meeting_id = $1::uuid AND (topic ILIKE $2 OR summary ILIKE $2 OR moments::text ILIKE $2)
+                 LIMIT $3`,
+          mapper: (r) => ({ kind: 'tension', text: r.text + (r.summary ? `：${r.summary}` : '') }),
+        },
+      ];
+
+      for (const Q of queries) {
+        try {
+          const r = await db.query(Q.sql, [id, pattern, limit]);
+          for (const row of r.rows) {
+            const m = Q.mapper(row);
+            const text = String(m.text ?? '');
+            // 取 keyword 前后 ~80 字做 snippet（保留位置感）
+            const idx = text.toLowerCase().indexOf(q.toLowerCase());
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(text.length, idx + q.length + 80);
+            const prefix = start > 0 ? '…' : '';
+            const suffix = end < text.length ? '…' : '';
+            const snippet = `${prefix}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${suffix}`;
+            items.push({
+              axis: Q.axis,
+              table: Q.table,
+              id: String(row.id),
+              kind: m.kind,
+              snippet,
+              person_id: m.person_id,
+              person_name: m.person_name,
+            });
+            if (items.length >= limit) break;
+          }
+        } catch (e) {
+          request.log.warn({ table: Q.table, err: e }, 'grep query failed');
+        }
+        if (items.length >= limit) break;
+      }
+
+      // 兜底：从 assets.metadata.parse_segments.segments 里 grep 原始转写文本
+      // 这是 parseMeeting 写入的 1204 段原文，含 speaker / start / text
+      // 当 axes 表都 0 命中时，让用户至少能看到原文里"张总/刘总"出现的段落
+      if (items.length < limit) {
+        try {
+          const segRes = await db.query(
+            `SELECT metadata->'parse_segments'->'segments' AS segs FROM assets WHERE id = $1`,
+            [id],
+          );
+          const raw = segRes.rows[0]?.segs;
+          const segs = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
+          const lower = q.toLowerCase();
+          let segIdx = 0;
+          for (const s of segs) {
+            const text = String((s as any)?.text ?? '');
+            if (!text) continue;
+            const lc = text.toLowerCase();
+            if (!lc.includes(lower)) continue;
+            const idx = lc.indexOf(lower);
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(text.length, idx + q.length + 80);
+            const prefix = start > 0 ? '…' : '';
+            const suffix = end < text.length ? '…' : '';
+            const snippet = `${prefix}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${suffix}`;
+            items.push({
+              axis: 'transcript',
+              table: 'metadata.parse_segments',
+              id: `seg-${segIdx}`,
+              kind: 'segment',
+              snippet,
+              person_name: typeof (s as any)?.speaker === 'string' ? (s as any).speaker : undefined,
+            });
+            segIdx++;
+            if (items.length >= limit) break;
+          }
+        } catch (e) {
+          request.log.warn({ id, err: e }, 'grep parse_segments fallback failed');
+        }
+      }
+
+      return { items, q, totalLimit: limit };
+    });
+
     fastify.get('/meetings/:id/axes', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) return emptyAxes(id);
@@ -730,6 +903,50 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.get('/scopes/:id/meetings', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       return { meetingIds: await engine.scopes.listMeetings(id) };
+    });
+
+    /**
+     * GET /scopes/:id/role-trajectory
+     *   返回 scope 下每人按时间排序的角色演化点。供 AxisPeople · 角色画像演化 tab 渲染
+     *   多场会议的"漂移"——和 mock 的 `roleTrajectory: [{role, m: 'YYYY-MM'}, ...]` 同形。
+     */
+    fastify.get('/scopes/:id/role-trajectory', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      const r = await engine.deps.db.query(
+        `WITH meets AS (
+           SELECT meeting_id::uuid AS mid FROM mn_scope_members WHERE scope_id = $1
+         ),
+         pts AS (
+           SELECT t.person_id, t.meeting_id, t.role_label, t.confidence,
+                  COALESCE(a.metadata->>'occurred_at', a.metadata->'analysis'->>'date', t.detected_at::text) AS occurred_at,
+                  COALESCE(a.title, a.metadata->>'title', '会议') AS meeting_title
+             FROM mn_role_trajectory_points t
+             JOIN assets a ON a.id = t.meeting_id::text
+            WHERE t.meeting_id IN (SELECT mid FROM meets)
+         )
+         SELECT p.id          AS person_id,
+                p.canonical_name,
+                p.role,
+                p.org,
+                COALESCE(
+                  jsonb_agg(jsonb_build_object(
+                    'meeting_id',    pts.meeting_id,
+                    'meeting_title', pts.meeting_title,
+                    'occurred_at',   pts.occurred_at,
+                    'role_label',    pts.role_label,
+                    'confidence',    pts.confidence
+                  ) ORDER BY pts.occurred_at) FILTER (WHERE pts.person_id IS NOT NULL),
+                  '[]'::jsonb
+                ) AS points
+           FROM mn_people p
+           JOIN pts ON pts.person_id = p.id
+          GROUP BY p.id, p.canonical_name, p.role, p.org
+          ORDER BY p.canonical_name`,
+        [uuid],
+      );
+      return { items: r.rows };
     });
 
     // ============================================================
@@ -2185,6 +2402,135 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         }
       } catch (e) {
         request.log.warn({ meetingId, axis, err: e }, 'cross-axis-clues compute failed');
+      }
+
+      return { items };
+    });
+
+    /**
+     * GET /cross-axis-clues?axis=&scopeKind=&scopeId=
+     *
+     * scope 级聚合 — 给 /meeting/axes/* axis 聚合页用。同 schema、跨该 scope 下所有 meeting。
+     * scopeId 为空时跨全库。
+     */
+    fastify.get('/cross-axis-clues', { preHandler: authenticate }, async (request, reply) => {
+      const q = request.query as { axis?: string; scopeKind?: string; scopeId?: string };
+      const axis = (q.axis ?? 'people') as 'people' | 'projects' | 'knowledge' | 'meta';
+      const db = engine.deps.db;
+      const items: Array<{
+        targetAxis: string; label: string; detail: string; count: number;
+        to: string; anchor?: { kind: string; ids: string[] };
+      }> = [];
+
+      const scopeId = q.scopeId && UUID_RE.test(q.scopeId) ? q.scopeId : null;
+      const meetingFilter = scopeId
+        ? `meeting_id IN (SELECT meeting_id FROM mn_scope_members WHERE scope_id = $1::uuid)`
+        : `TRUE`;
+      const params: any[] = scopeId ? [scopeId] : [];
+
+      try {
+        if (axis === 'people') {
+          const r = await db.query(
+            `WITH proposers AS (
+               SELECT proposer_person_id AS pid, COUNT(*)::int AS dcount
+                 FROM mn_decisions
+                WHERE proposer_person_id IS NOT NULL AND ${meetingFilter}
+                GROUP BY proposer_person_id
+                HAVING COUNT(*) >= 2
+             ),
+             scope_risks AS (
+               SELECT COUNT(*)::int AS rcount FROM mn_risks
+                WHERE COALESCE(heat_score, 0) >= 1
+                  ${scopeId ? `AND scope_id = $1::uuid` : ``}
+             )
+             SELECT p.pid, p.dcount, sr.rcount, mp.canonical_name AS pname
+               FROM proposers p CROSS JOIN scope_risks sr
+               LEFT JOIN mn_people mp ON mp.id = p.pid
+              WHERE sr.rcount > 0
+              ORDER BY p.dcount DESC LIMIT 5`,
+            params,
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            items.push({
+              targetAxis: '项目',
+              label: '项目轴 · 风险热度',
+              detail: `${row.pname ?? row.pid?.slice(0,6)} 在该 scope 下提了 ${row.dcount} 项决策；scope 累积 ${row.rcount} 条风险`,
+              count: row.dcount,
+              to: '/meeting/axes/projects',
+              anchor: { kind: 'risk-by-proposer', ids: [String(row.pid)] },
+            });
+          }
+        }
+
+        if (axis === 'projects') {
+          const r = await db.query(
+            `WITH proposers AS (
+               SELECT DISTINCT proposer_person_id AS pid FROM mn_decisions
+                WHERE proposer_person_id IS NOT NULL AND ${meetingFilter}
+             ),
+             stats AS (
+               SELECT c.person_id AS pid,
+                      COUNT(*) FILTER (WHERE c.state = 'done')::int AS done_count,
+                      COUNT(*) FILTER (WHERE c.state = 'slipped')::int AS slipped_count,
+                      COUNT(*) FILTER (WHERE c.state = 'at_risk')::int AS at_risk_count,
+                      COUNT(*)::int AS total_count
+                 FROM mn_commitments c
+                 JOIN proposers p ON p.pid = c.person_id
+                GROUP BY c.person_id
+             )
+             SELECT s.pid, s.done_count, s.slipped_count, s.at_risk_count, s.total_count,
+                    mp.canonical_name AS pname
+               FROM stats s
+               LEFT JOIN mn_people mp ON mp.id = s.pid
+              WHERE s.total_count >= 1
+              ORDER BY (s.slipped_count + s.at_risk_count) DESC, s.total_count DESC LIMIT 5`,
+            params,
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            const issues = row.slipped_count + row.at_risk_count;
+            const detail = issues > 0
+              ? `${row.pname ?? row.pid?.slice(0,6)} 跨 scope 共 ${row.total_count} 条 commitment：${row.slipped_count} 已脱轨 / ${row.at_risk_count} at_risk`
+              : `${row.pname ?? row.pid?.slice(0,6)} 跨 scope 共 ${row.total_count} 条 commitment（${row.done_count} 完成，其余 on_track）`;
+            items.push({
+              targetAxis: '人物', label: '人物轴 · 承诺兑现',
+              detail, count: issues > 0 ? issues : row.total_count,
+              to: '/meeting/axes/people',
+              anchor: { kind: 'commitments-by-person', ids: [String(row.pid)] },
+            });
+          }
+        }
+
+        if (axis === 'knowledge') {
+          const r = await db.query(
+            `WITH top_judgments AS (
+               SELECT id, text, generality_score FROM mn_judgments
+                WHERE COALESCE(generality_score, 0) >= 0.7
+                  ${scopeId ? `AND linked_meeting_ids && (SELECT array_agg(meeting_id::uuid) FROM mn_scope_members WHERE scope_id = $1::uuid)` : ``}
+                ORDER BY generality_score DESC LIMIT 3
+             ),
+             untested AS (
+               SELECT COUNT(*)::int AS acount FROM mn_assumptions
+                WHERE COALESCE(verification_state,'untested') NOT IN ('verified','falsified')
+                  AND ${meetingFilter}
+             )
+             SELECT j.id, j.text, j.generality_score, u.acount
+               FROM top_judgments j CROSS JOIN untested u
+              WHERE u.acount > 0`,
+            params,
+          ).catch(() => ({ rows: [] as any[] }));
+          for (const row of r.rows) {
+            const snippet = String(row.text ?? '').slice(0, 30);
+            items.push({
+              targetAxis: '项目', label: '项目轴 · 假设清单',
+              detail: `判断「${snippet}…」该 scope 下关联 ${row.acount} 条未验证假设`,
+              count: row.acount,
+              to: '/meeting/axes/projects',
+              anchor: { kind: 'assumptions', ids: [String(row.id)] },
+            });
+          }
+        }
+      } catch (e) {
+        request.log.warn({ axis, scopeId, err: e }, 'scope cross-axis-clues failed');
       }
 
       return { items };

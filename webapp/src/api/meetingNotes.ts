@@ -97,6 +97,48 @@ export const meetingNotesApi = {
       }>;
     }>(`/meetings/${id}/cross-axis-clues?axis=${axis}`),
 
+  /**
+   * 跨 mn_*.text 字段的全文搜索（含转写 metadata.parse_segments 兜底）。
+   * 用途：会议中被称呼但非发言人的角色（张总/刘总等）追踪，或任意关键词原文搜索。
+   * snippet 是 keyword 前后 ~80 字的上下文。
+   */
+  grepMeeting: (id: string, q: string, limit = 50) =>
+    jget<{
+      items: Array<{
+        axis: string;
+        table: string;
+        id: string;
+        kind?: string;
+        snippet: string;
+        person_id?: string;
+        person_name?: string;
+      }>;
+      q: string;
+      totalLimit: number;
+    }>(`/meetings/${id}/grep?q=${encodeURIComponent(q)}&limit=${limit}`),
+
+  /**
+   * scope 级 cross-axis-clues：聚合该 scope 下所有 meeting。
+   * 用于 /meeting/axes/* 这种 axis 聚合页（不绑特定 meeting）。
+   * scopeId 缺省时跨全库。
+   */
+  getCrossAxisCluesByScope: (params: { axis: 'people' | 'projects' | 'knowledge' | 'meta'; scopeKind?: string; scopeId?: string }) => {
+    const qs = new URLSearchParams();
+    qs.set('axis', params.axis);
+    if (params.scopeKind) qs.set('scopeKind', params.scopeKind);
+    if (params.scopeId) qs.set('scopeId', params.scopeId);
+    return jget<{
+      items: Array<{
+        targetAxis: string;
+        label: string;
+        detail: string;
+        count: number;
+        to: string;
+        anchor?: { kind: string; ids: string[] };
+      }>;
+    }>(`/cross-axis-clues?${qs.toString()}`);
+  },
+
   enqueueRun: (body: {
     scope: any;
     axis: string;
@@ -167,6 +209,24 @@ export const meetingNotesApi = {
       meetingCount: number;
       warning?: string;
     }>('/versions', body),
+
+  // F12 · scope 级角色演化（多场会议漂移）
+  getScopeRoleTrajectory: (scopeId: string) =>
+    jget<{
+      items: Array<{
+        person_id: string;
+        canonical_name: string;
+        role: string | null;
+        org: string | null;
+        points: Array<{
+          meeting_id: string;
+          meeting_title: string;
+          occurred_at: string;
+          role_label: string;
+          confidence: number;
+        }>;
+      }>;
+    }>(`/scopes/${scopeId}/role-trajectory`),
 
   // F11 · 人物管理（改名 + alias 历史映射）
   listScopePeople: (scopeId: string) =>

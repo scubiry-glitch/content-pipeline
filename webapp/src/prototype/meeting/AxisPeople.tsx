@@ -2,7 +2,7 @@
 // 原型来源：/tmp/mn-proto/dimensions-people.jsx DimensionPeople
 // 承诺与兑现 · 角色画像演化 · 发言质量 · 沉默信号
 
-import { useState, useEffect, Fragment, type ReactNode } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
@@ -259,14 +259,79 @@ function PCommitments({ scopeId }: { scopeId: string }) {
 
 // ── P2 · 角色画像演化 ───────────────────────────────────────────────────────
 
-function PTrajectory() {
+// LLM 抽出的 role_label 多为英文小写，前端配色表是中文 — 这里映射一次
+const ROLE_LABEL_ZH: Record<string, string> = {
+  proposer: '提出者', challenger: '质疑者', executor: '执行者',
+  decider: '决策者', moderator: '决策者', observer: '旁观者',
+  '提出者': '提出者', '质疑者': '质疑者', '执行者': '执行者',
+  '决策者': '决策者', '主持者': '决策者', '旁观者': '旁观者',
+};
+
+interface TrajectoryRow {
+  who: string;            // person id (real uuid 或 mock 'p1')
+  name: string;
+  role: string | null;
+  points: { role: string; m: string }[];   // m = 'YYYY-MM' 或 'M-YYYY-MM'
+}
+
+function PTrajectory({ scopeId }: { scopeId: string }) {
+  const forceMock = useForceMock();
+  const [rows, setRows] = useState<TrajectoryRow[]>([]);
+  const [isMock, setIsMock] = useState(true);
+
+  useEffect(() => {
+    if (forceMock) {
+      setRows(PEOPLE_STATS.map(s => ({
+        who: s.who, name: P(s.who).name, role: P(s.who).role,
+        points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
+      })));
+      setIsMock(true);
+      return;
+    }
+    let cancelled = false;
+    meetingNotesApi.getScopeRoleTrajectory(scopeId)
+      .then((r) => {
+        if (cancelled) return;
+        const items = r?.items ?? [];
+        if (items.length === 0) {
+          setRows(PEOPLE_STATS.map(s => ({
+            who: s.who, name: P(s.who).name, role: P(s.who).role,
+            points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
+          })));
+          setIsMock(true);
+          return;
+        }
+        const mapped: TrajectoryRow[] = items.map(it => ({
+          who: it.person_id,
+          name: it.canonical_name,
+          role: it.role,
+          points: (it.points ?? []).map(p => ({
+            role: ROLE_LABEL_ZH[p.role_label] ?? p.role_label,
+            m: (p.occurred_at ?? '').slice(0, 7) || '?',
+          })),
+        }));
+        setRows(mapped);
+        setIsMock(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scopeId, forceMock]);
+
+  const allMonths = rows.flatMap(r => r.points.map(p => p.m)).sort();
+  const monthRange = allMonths.length > 0
+    ? `${allMonths[0]} → ${allMonths[allMonths.length - 1]}`
+    : '—';
+
   return (
     <div style={{ padding: '24px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
-        角色画像演化 · 6 个月
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
+          角色画像演化 · {rows.length} 人
+        </h3>
+        {isMock && <MockBadge />}
+      </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 20, maxWidth: 660 }}>
-        每场会议，系统按发言模式把参与者归类到一个功能角色。半年下来，<i>漂移</i> 本身就是信号：
+        每场会议，系统按发言模式把参与者归类到一个功能角色。<i>漂移</i> 本身就是信号：
         一个从"决策者"漂到"质疑者"的人，可能是在主动让位，也可能是在失去主导权。
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -274,11 +339,11 @@ function PTrajectory() {
           display: 'grid', gridTemplateColumns: '200px 1fr 100px', padding: '8px 14px',
           fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', letterSpacing: 0.3, textTransform: 'uppercase',
         }}>
-          <span>PARTICIPANT</span><span>TRAJECTORY (2025-11 → 2026-04)</span><span style={{ textAlign: 'right' }}>DRIFT</span>
+          <span>PARTICIPANT</span><span>TRAJECTORY ({monthRange})</span><span style={{ textAlign: 'right' }}>DRIFT</span>
         </div>
-        {PEOPLE_STATS.map(s => {
-          const p = P(s.who);
-          const drift = s.roleTrajectory[0].role !== s.roleTrajectory[s.roleTrajectory.length - 1].role;
+        {rows.map(s => {
+          const p = isMock ? P(s.who) : { id: s.who, name: s.name, role: s.role ?? '', initials: s.name.slice(0, 2), tone: 'neutral' as const, speakingPct: 0 };
+          const drift = s.points.length > 1 && s.points[0].role !== s.points[s.points.length - 1].role;
           return (
             <div key={s.who} style={{
               display: 'grid', gridTemplateColumns: '200px 1fr 100px', alignItems: 'center', gap: 14,
@@ -292,7 +357,7 @@ function PTrajectory() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative' }}>
-                {s.roleTrajectory.map((r, i) => {
+                {s.points.map((r, i) => {
                   const tone = ROLE_TONES[r.role] ?? { bg: 'var(--paper-3)', fg: 'var(--ink-3)' };
                   return (
                     <Fragment key={i}>
@@ -301,19 +366,22 @@ function PTrajectory() {
                         fontSize: 12, fontWeight: 600, borderRadius: 5, whiteSpace: 'nowrap',
                         border: `1px solid ${tone.fg}22`,
                       }}>{r.role}</div>
-                      {i < s.roleTrajectory.length - 1 && (
+                      {i < s.points.length - 1 && (
                         <div style={{ flex: 1, maxWidth: 60, height: 1.5, background: 'var(--line)', position: 'relative' }}>
                           <div style={{
                             position: 'absolute', left: '50%', top: -7, transform: 'translateX(-50%)',
                             fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-4)', whiteSpace: 'nowrap',
                           }}>
-                            {s.roleTrajectory[i + 1].m.slice(5)}
+                            {s.points[i + 1].m.slice(-5)}
                           </div>
                         </div>
                       )}
                     </Fragment>
                   );
                 })}
+                {s.points.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>· 无角色样本</span>
+                )}
               </div>
               <div style={{ textAlign: 'right' }}>
                 {drift ? <Chip tone="accent">漂移</Chip> : <Chip tone="ghost">稳定</Chip>}
@@ -323,16 +391,18 @@ function PTrajectory() {
         })}
       </div>
 
-      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <CalloutCard title="读图示例 · 陈汀" tone="accent">
-          提出者 → 质疑者 → <b>决策者</b>。从半年前在提方案，到现在专门做最终拍板。
-          <i>团队正在把决策权上收给他</i>，这可能是健康的（抗干扰），也可能是不健康的（单点故障）。
-        </CalloutCard>
-        <CalloutCard title="读图示例 · Wei Tan" tone="teal">
-          决策者 → 质疑者 → 质疑者。过去主导决策，近 4 个月固定在质疑者位置。
-          需要问：他是在防守立场、还是在给别人让路？
-        </CalloutCard>
-      </div>
+      {isMock && (
+        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <CalloutCard title="读图示例 · 陈汀" tone="accent">
+            提出者 → 质疑者 → <b>决策者</b>。从半年前在提方案，到现在专门做最终拍板。
+            <i>团队正在把决策权上收给他</i>，这可能是健康的（抗干扰），也可能是不健康的（单点故障）。
+          </CalloutCard>
+          <CalloutCard title="读图示例 · Wei Tan" tone="teal">
+            决策者 → 质疑者 → 质疑者。过去主导决策，近 4 个月固定在质疑者位置。
+            需要问：他是在防守立场、还是在给别人让路？
+          </CalloutCard>
+        </div>
+      )}
     </div>
   );
 }
@@ -609,18 +679,14 @@ export function AxisPeople() {
   }, [searchParams, scopeId, forceMock]);
   const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
 
-  // 一次性拉 getMeetingAxes 给 trajectory / speech / silence 三个 per-meeting tab 用
-  const [peopleData, setPeopleData] = useState<any>(null);
+  // 各 sub-tab 自己拉 live（PTrajectory/PSpeech/PSilence 都内置 live 拉取）
+  // 这里只判一次 isMock 给 DimShell 顶部 badge 用
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
-    if (forceMock) { setPeopleData(null); setIsMock(true); return; }
+    if (forceMock) { setIsMock(true); return; }
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => {
-        if (cancelled) return;
-        setPeopleData(r?.people ?? null);
-        setIsMock(false);
-      })
+      .then((r) => { if (!cancelled) setIsMock(!r?.people); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
@@ -636,9 +702,9 @@ export function AxisPeople() {
     <>
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
-        {tab === 'trajectory'  && <PTrajectoryLive data={peopleData?.role_trajectory} fallback={<PTrajectory />} />}
-        {tab === 'speech'      && <PSpeechLive data={peopleData?.speech_quality} fallback={<PSpeech meetingId={meetingId} />} />}
-        {tab === 'silence'     && <PSilenceLive data={peopleData?.silence_signals} fallback={<PSilence meetingId={meetingId} />} />}
+        {tab === 'trajectory'  && <PTrajectory scopeId={scopeId} />}
+        {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
+        {tab === 'silence'     && <PSilence meetingId={meetingId} />}
         {tab === 'manage'      && <PeopleManage scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
@@ -649,67 +715,6 @@ export function AxisPeople() {
 }
 
 export default AxisPeople;
-
-// ── F7 sibling · Live wrappers：有数据就渲染真实，否则 fallback 到原 mock ──
-
-function PTrajectoryLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
-  if (!data || data.length === 0) return <>{fallback}</>;
-  return (
-    <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        角色画像演化 · {data.length} 项
-      </h3>
-      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
-        来自 mn_role_trajectory_points · 此场会议中各人的功能角色（决策者 / 提出者 / 质疑者 / …）
-      </div>
-      {data.map((r: any, i: number) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: '180px 120px 1fr 80px', gap: 14, alignItems: 'center',
-          padding: '10px 14px', borderBottom: '1px solid var(--line-2)',
-          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
-        }}>
-          <MonoMeta style={{ fontSize: 11 }}>{(r.person_id ?? '').slice(0, 12)}…</MonoMeta>
-          <Chip tone="teal">{r.role_label}</Chip>
-          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>conf {Number(r.confidence ?? 0).toFixed(2)}</span>
-          <MonoMeta style={{ fontSize: 10 }}>{(r.source ?? '').slice(0, 12)}</MonoMeta>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PSpeechLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
-  if (!data || data.length === 0) return <>{fallback}</>;
-  return (
-    <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        发言质量 · {data.length} 人
-      </h3>
-      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
-        来自 mn_speech_quality · entropy（信息熵）+ 被追问数 + 综合 quality_score
-      </div>
-      <div style={{
-        display: 'grid', gridTemplateColumns: '200px 100px 100px 100px',
-        padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
-        letterSpacing: 0.3, textTransform: 'uppercase', borderBottom: '1px solid var(--line-2)',
-      }}>
-        <span>person</span><span>entropy</span><span>followups</span><span>quality</span>
-      </div>
-      {data.map((s: any, i: number) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: '200px 100px 100px 100px', gap: 14, alignItems: 'center',
-          padding: '12px 14px', borderBottom: '1px solid var(--line-2)',
-          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
-        }}>
-          <MonoMeta style={{ fontSize: 11 }}>{(s.person_id ?? '').slice(0, 12)}…</MonoMeta>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{Number(s.entropy_pct ?? 0).toFixed(0)}</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{s.followed_up_count ?? 0}</span>
-          <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600 }}>{Number(s.quality_score ?? 0).toFixed(0)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── F11 · 人物管理：改名 + alias 历史映射 ──────────────────────────
 
@@ -1066,30 +1071,3 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
   );
 }
 
-function PSilenceLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
-  if (!data || data.length === 0) return <>{fallback}</>;
-  return (
-    <div style={{ padding: '22px 32px 36px' }}>
-      <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-        沉默信号 · {data.length} 项
-      </h3>
-      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18 }}>
-        来自 mn_silence_signals · 谁在哪个议题上反常沉默 + anomaly_score
-      </div>
-      {data.map((s: any, i: number) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: '160px 1fr 120px 80px', gap: 14, alignItems: 'center',
-          padding: '10px 14px', borderBottom: '1px solid var(--line-2)',
-          background: i % 2 === 0 ? 'var(--paper-2)' : 'var(--paper)',
-        }}>
-          <MonoMeta style={{ fontSize: 11 }}>{(s.person_id ?? '').slice(0, 12)}…</MonoMeta>
-          <span style={{ fontSize: 13, fontFamily: 'var(--serif)' }}>{s.topic_id}</span>
-          <Chip tone={s.state === 'abnormal_silence' ? 'accent' : 'ghost'}>{s.state}</Chip>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-            {Number(s.anomaly_score ?? 0).toFixed(0)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
