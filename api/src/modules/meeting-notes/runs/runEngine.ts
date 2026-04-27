@@ -382,6 +382,33 @@ export class RunEngine {
   }
 
   /**
+   * F6 · 列出 run payload 对应的 meeting id 列表
+   *   - scope=meeting: 单个 meetingId（payload.meetingId 已设）
+   *   - scope=project/client/topic: 走 mn_scope_members
+   *   - scope=library: 全量 assets type='meeting_note'/'meeting_minutes'
+   * 修了 execute() 在 project/library scope 下 silent-zero 的根本原因
+   * （之前只把 payload.meetingId 传给 computer，多 meeting scope 下永远 undefined）
+   */
+  private async collectMeetingIdsForScope(payload: QueuePayload): Promise<string[]> {
+    if (payload.scope.kind === 'meeting' && payload.meetingId) {
+      return [payload.meetingId];
+    }
+    if (payload.scope.kind === 'library') {
+      const r = await this.deps.db.query(
+        `SELECT id FROM assets
+          WHERE type = 'meeting_note' OR type = 'meeting_minutes' OR (metadata ? 'meeting_kind')`,
+      );
+      return r.rows.map((row: any) => String(row.id));
+    }
+    if (!payload.scope.id) return [];
+    const r = await this.deps.db.query(
+      `SELECT meeting_id::text AS meeting_id FROM mn_scope_members WHERE scope_id = $1`,
+      [payload.scope.id],
+    );
+    return r.rows.map((row: any) => row.meeting_id);
+  }
+
+  /**
    * F4 · 运维诊断快照：把 in-memory queue + DB 状态打包返回
    * 用法：GET /api/v1/meeting-notes/runs/_diagnostics
    */
@@ -984,15 +1011,22 @@ export class RunEngine {
           const axisStartedAt = Date.now();
           // 嵌套一层 strategyStorage 把 currentAxis 推进上下文，
           // 让 callExpertOrLLM 能按 axis 取对应专家 persona 拼到 system prompt。
-          const r = await strategyStorage.run(
-            { ...strategyCtx, currentAxis: ax },
-            () => runAxisAll(this.deps, ax, {
-              meetingId: payload.meetingId,
-              scopeId: payload.scope.id ?? null,
-              scopeKind: payload.scope.kind,
-              replaceExisting: true,
-            }, payload.axis === 'all' ? undefined : payload.subDims),
-          );
+          // F6 fix · scope=project/client/topic/library 时按 mn_scope_members 展开
+          // 到每场会议跑一次 runAxisAll，否则 computer 早 return（!args.meetingId）→ silent-zero
+          const meetingIdsForRun: string[] = await this.collectMeetingIdsForScope(payload);
+          const r: ComputeResult[] = [];
+          for (const mid of meetingIdsForRun) {
+            const partial = await strategyStorage.run(
+              { ...strategyCtx, currentAxis: ax },
+              () => runAxisAll(this.deps, ax, {
+                meetingId: mid,
+                scopeId: payload.scope.id ?? null,
+                scopeKind: payload.scope.kind,
+                replaceExisting: true,
+              }, payload.axis === 'all' ? undefined : payload.subDims),
+            );
+            r.push(...partial);
+          }
           allResults.push(...r);
 
           // 聚合 per-axis stats
