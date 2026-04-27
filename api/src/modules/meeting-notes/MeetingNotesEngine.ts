@@ -253,7 +253,11 @@ export class MeetingNotesEngine {
    *   B Workbench: 三栏（structure / claims / experts & actions）
    *   C Threads:    以 person 为中心的网络
    */
-  async getMeetingDetail(meetingId: string, view: 'A' | 'B' | 'C' = 'A'): Promise<Record<string, any>> {
+  async getMeetingDetail(
+    meetingId: string,
+    view: 'A' | 'B' | 'C' = 'A',
+    opts: { forceAxes?: boolean } = {},
+  ): Promise<Record<string, any>> {
     const [axes, assetRows] = await Promise.all([
       this.getMeetingAxes(meetingId),
       this.deps.db.query(
@@ -324,7 +328,8 @@ export class MeetingNotesEngine {
     } catch { /* ignore parse errors */ }
 
     if (view === 'A') {
-      if (storedAnalysis) {
+      // forceAxes：调试 / 对比新生成质量时绕过 metadata.analysis fast-path
+      if (storedAnalysis && !opts.forceAxes) {
         return {
           view: 'A',
           meetingId,
@@ -341,6 +346,14 @@ export class MeetingNotesEngine {
           ],
         };
       }
+      // axes-driven：用真实计算的 axes 数据组装成 view A schema
+      // 与 storedAnalysis 字段一致，让前端 _apiAdapters 能直接渲染
+      const minutesBody = {
+        decision: '',
+        actionItems: axes.people.commitments ?? [],
+        risks: (axes.projects.risks ?? []).map((r: any) => r?.text ?? '').filter(Boolean),
+        decisions: axes.projects.decisions ?? [],
+      };
       return {
         view: 'A',
         meetingId,
@@ -348,12 +361,23 @@ export class MeetingNotesEngine {
         date: dateStr,
         participants,
         sections: [
-          { id: 'minutes',     title: '纪要', body: axes.projects.decisions },
-          { id: 'tension',     title: '张力点', body: axes.knowledge.cognitive_biases },
-          { id: 'new-cognition', title: '新认知', body: axes.knowledge.judgments },
-          { id: 'focus-map',   title: '焦点地图', body: axes.projects.open_questions },
-          { id: 'consensus',   title: '共识/分歧', body: axes.projects.assumptions },
-          { id: 'cross-view',  title: '跨视角', body: axes.knowledge.counterfactuals },
+          { id: 'minutes',       title: '纪要',      body: minutesBody },
+          // 张力点用 tension axis 的 intra_meeting（之前错配到 cognitive_biases）
+          { id: 'tension',       title: '张力点',    body: axes.tension?.intra_meeting ?? [] },
+          // 新认知 = judgments + counterfactuals（认知翻转的两类原料）
+          { id: 'new-cognition', title: '新认知',    body: [
+            ...(axes.knowledge.judgments ?? []),
+            ...(axes.knowledge.counterfactuals ?? []),
+          ] },
+          // 焦点地图 = speech_quality（每人的发言质量分布）
+          { id: 'focus-map',     title: '焦点地图',  body: axes.people.speech_quality ?? [] },
+          // 共识/分歧 = assumptions + open_questions（机器版 C/D 集合）
+          { id: 'consensus',     title: '共识/分歧', body: [
+            ...(axes.projects.assumptions ?? []),
+            ...(axes.projects.open_questions ?? []),
+          ] },
+          // 跨视角 = cognitive_biases（含 by_person 的 cross-references）
+          { id: 'cross-view',    title: '跨视角',    body: axes.knowledge.cognitive_biases ?? [] },
         ],
       };
     }

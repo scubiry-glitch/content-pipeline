@@ -368,12 +368,14 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/meetings/:id/detail', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
-      const q = request.query as { view?: string };
+      const q = request.query as { view?: string; source?: string };
       const view = q.view === 'B' || q.view === 'C' ? q.view : 'A';
+      // ?source=axes 强制 axes-driven（绕过 storedAnalysis fast-path）；调试 / 对比新生成质量用
+      const forceAxes = q.source === 'axes';
       // 非 UUID（demo meeting id）直接返回 null · 让前端 fallback mock
       if (!UUID_RE.test(id)) return { analysis: null };
       try {
-        const base = await engine.getMeetingDetail(id, view as 'A' | 'B' | 'C');
+        const base = await engine.getMeetingDetail(id, view as 'A' | 'B' | 'C', { forceAxes });
         let payload: Record<string, unknown> = base;
         if (view === 'C') {
           // Phase 15.15 · C view: append consensus (C.2) + focusMap (C.3)

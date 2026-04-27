@@ -6,7 +6,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_TENSIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -62,6 +62,7 @@ export async function computeTensions(
     },
   );
 
+  const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
       // 解析 between 人名 → person_id 数组
@@ -93,7 +94,7 @@ export async function computeTensions(
          RETURNING id`,
         [
           bundle.meetingId,
-          args.scopeId ?? null,
+          persistScopeId,
           item.tension_key ?? null,
           personIds,
           item.topic ?? '(unspecified)',

@@ -4,7 +4,7 @@
 // severity_factor: low=1, med=2, high=3, critical=4
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_RISK_HEAT } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -26,6 +26,23 @@ ${EX_RISK_HEAT}`;
 
 const SEVERITY_FACTOR: Record<string, number> = { low: 1, med: 2, high: 3, critical: 4 };
 
+/** mn_risks_severity_check 只接受白名单值；LLM 偶尔出 'urgent' / 'medium' / '中' 等 → fallback 到 'med' */
+const SEVERITY_WHITELIST = new Set(['low', 'med', 'high', 'critical']);
+const SEVERITY_ALIAS: Record<string, 'low' | 'med' | 'high' | 'critical'> = {
+  medium: 'med', mid: 'med', moderate: 'med',
+  '中': 'med', '中等': 'med',
+  '低': 'low', '高': 'high',
+  urgent: 'critical', severe: 'critical', '严重': 'critical', '紧急': 'critical',
+};
+function normalizeSeverity(raw: unknown): 'low' | 'med' | 'high' | 'critical' {
+  if (typeof raw !== 'string') return 'med';
+  const k = raw.trim().toLowerCase();
+  if (SEVERITY_WHITELIST.has(k)) return k as 'low' | 'med' | 'high' | 'critical';
+  if (SEVERITY_ALIAS[k]) return SEVERITY_ALIAS[k];
+  if (SEVERITY_ALIAS[raw.trim()]) return SEVERITY_ALIAS[raw.trim()];
+  return 'med';
+}
+
 export async function computeRiskHeat(
   deps: MeetingNotesDeps,
   args: ComputeArgs,
@@ -42,16 +59,17 @@ export async function computeRiskHeat(
     { dedupeKey: (x) => (x.text ?? '').toLowerCase().slice(0, 60), statsSink: out },
   );
 
+  const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
-      const sev = item.severity ?? 'med';
+      const sev = normalizeSeverity(item.severity);
       const taken = item.action_taken ?? false;
       const existing = await deps.db.query(
         `SELECT id, mention_count FROM mn_risks
           WHERE COALESCE(scope_id::text,'') = COALESCE($1::text,'')
             AND lower(text) = lower($2)
           LIMIT 1`,
-        [args.scopeId ?? null, item.text],
+        [persistScopeId, item.text],
       );
       if (existing.rows.length > 0) {
         const mentions = Number(existing.rows[0].mention_count ?? 1) + 1;
@@ -74,7 +92,7 @@ export async function computeRiskHeat(
           `INSERT INTO mn_risks
              (scope_id, text, severity, mention_count, heat_score, trend, action_taken)
            VALUES ($1, $2, $3, 1, $4, $5, $6)`,
-          [args.scopeId ?? null, item.text, sev, heat, item.trend ?? 'flat', taken],
+          [persistScopeId, item.text, sev, heat, item.trend ?? 'flat', taken],
         );
         out.created += 1;
       }

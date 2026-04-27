@@ -425,28 +425,31 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
       {/* Right stats panel */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
-          <SectionLabel>对齐度</SectionLabel>
+          <SectionLabel>共识 / 分歧条目</SectionLabel>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 34, fontWeight: 500, marginTop: 8, letterSpacing: '-0.02em' }}>
-            0.62
+            {cons.length} / {divs.length}
           </div>
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>
-            共识条目 {cons.length} / 分歧条目 {divs.length} · 基线 0.48
+            {isMock ? '基线 0.48 · 对齐度 0.62（demo）' : '基于 mn_consensus_items 的实时计数'}
           </div>
         </div>
-        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
-          <SectionLabel>分歧结构</SectionLabel>
-          <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', marginTop: 8 }}>
-            主要分歧集中在 <b style={{ color: 'var(--ink)' }}>陈汀 ↔ 林雾</b> 的风险偏好轴，
-            以及 <b style={{ color: 'var(--ink)' }}>沈岚 ↔ Wei Tan</b> 的产业判断轴。两者在决议时点汇合。
+        {/* 「分歧结构」「专家附议」当前没有 API 数据 · 仅 mock 模式展示 */}
+        {isMock && <>
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
+            <SectionLabel>分歧结构</SectionLabel>
+            <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', marginTop: 8 }}>
+              主要分歧集中在 <b style={{ color: 'var(--ink)' }}>陈汀 ↔ 林雾</b> 的风险偏好轴，
+              以及 <b style={{ color: 'var(--ink)' }}>沈岚 ↔ Wei Tan</b> 的产业判断轴。两者在决议时点汇合。
+            </div>
           </div>
-        </div>
-        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
-          <SectionLabel>专家附议 · E09-09</SectionLabel>
-          <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--ink-2)', marginTop: 8, fontFamily: 'var(--serif)' }}>
-            分歧 D1 并非真正的分歧，而是 <i>风险预算谁承担</i> 的代理争论。建议把单笔上限的讨论
-            挪到 LP 委员会层面，而不是投决会层面。
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
+            <SectionLabel>专家附议 · E09-09</SectionLabel>
+            <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--ink-2)', marginTop: 8, fontFamily: 'var(--serif)' }}>
+              分歧 D1 并非真正的分歧，而是 <i>风险预算谁承担</i> 的代理争论。建议把单笔上限的讨论
+              挪到 LP 委员会层面，而不是投决会层面。
+            </div>
           </div>
-        </div>
+        </>}
       </div>
     </div>
   );
@@ -528,15 +531,31 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* 重叠主题：API 模式从 a.focusMap 计算（同一 theme 被多人关注则归为重叠） */}
         <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
           <SectionLabel>重叠主题</SectionLabel>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              { theme: '推理层', who: ['p1', 'p2'] },
-              { theme: '毛利',   who: ['p2'] },
-              { theme: '合规 / LP', who: ['p1', 'p5'] },
-              { theme: '退出路径', who: ['p3'] },
-            ].map((x, i) => (
+            {(() => {
+              if (isMock) {
+                return [
+                  { theme: '推理层', who: ['p1', 'p2'] },
+                  { theme: '毛利',   who: ['p2'] },
+                  { theme: '合规 / LP', who: ['p1', 'p5'] },
+                  { theme: '退出路径', who: ['p3'] },
+                ];
+              }
+              const themeMap = new Map<string, Set<string>>();
+              for (const f of a.focusMap) {
+                for (const th of (f.themes ?? [])) {
+                  if (!themeMap.has(th)) themeMap.set(th, new Set());
+                  themeMap.get(th)!.add(f.who);
+                }
+              }
+              return Array.from(themeMap.entries())
+                .filter(([, who]) => who.size >= 2)
+                .map(([theme, who]) => ({ theme, who: Array.from(who) }))
+                .slice(0, 6);
+            })().map((x, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                 <Chip tone="amber">{x.theme}</Chip>
                 <div style={{ display: 'flex', gap: 3 }}>
@@ -545,15 +564,21 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
                 <MonoMeta style={{ marginLeft: 'auto' }}>×{x.who.length}</MonoMeta>
               </div>
             ))}
+            {!isMock && a.focusMap.length === 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>暂无 focusMap 数据</div>
+            )}
           </div>
         </div>
-        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
-          <SectionLabel>沉默 / Under-spoken</SectionLabel>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 8, lineHeight: 1.6, fontFamily: 'var(--serif)' }}>
-            「估值模型校准」是所有人在口头上都认同、但没有一人将其作为关注主题反复回归的议题。
-            这是一个典型的 <i style={{ color: 'var(--accent)' }}>伪共识</i>。
+        {/* 「沉默 / Under-spoken」当前没有 API 数据来源 · 仅 mock 模式展示 */}
+        {isMock && (
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
+            <SectionLabel>沉默 / Under-spoken</SectionLabel>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 8, lineHeight: 1.6, fontFamily: 'var(--serif)' }}>
+              「估值模型校准」是所有人在口头上都认同、但没有一人将其作为关注主题反复回归的议题。
+              这是一个典型的 <i style={{ color: 'var(--accent)' }}>伪共识</i>。
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -570,6 +595,67 @@ export function VariantThreads() {
   const [focusMapMock, setFocusMapMock] = useState(true);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
+
+  const P = useMemo<PFn>(() => {
+    const map = new Map<string, Participant>();
+    apiParticipants.forEach((p) => {
+      if (typeof p.id !== 'string' || !p.id) return;
+      map.set(p.id, {
+        id: p.id, name: p.name || p.id, role: p.role ?? '',
+        initials: p.initials ?? p.name.slice(0, 2),
+        tone: (p.tone as 'warm' | 'cool' | 'neutral') ?? 'neutral',
+        speakingPct: p.speakingPct ?? 0,
+      });
+    });
+    return (id: string) => map.get(id) ?? defaultP(id);
+  }, [apiParticipants]);
+
+  // 把 lanePeople 在 mock / API 间切换；API 但 participants 缺失则保留 fixture 占位
+  const lanePeople: Participant[] = useMemo(() => {
+    if (usingMock) return PARTICIPANTS;
+    const fromApi = apiParticipants
+      .filter((p): p is typeof p & { id: string } => typeof p.id === 'string' && p.id.length > 0)
+      .map((p) => P(p.id));
+    return fromApi.length > 0 ? fromApi : PARTICIPANTS;
+  }, [usingMock, apiParticipants, P]);
+
+  // API 模式下从 a（已 adapt）派生信念事件 dict — 没有真实时间戳，按数组序号匀分到 0~118m
+  const derivedEvents = useMemo<Record<string, ThreadEvent[]>>(() => {
+    if (usingMock) return EVENTS;
+    const dict: Record<string, ThreadEvent[]> = {};
+    const push = (who: string, e: ThreadEvent) => {
+      if (!who) return;
+      if (!dict[who]) dict[who] = [];
+      dict[who].push(e);
+    };
+    const trim = (s: string, n = 22) => (s.length > n ? s.slice(0, n) + '…' : s);
+    // claim: crossView.claimBy
+    (a.crossView ?? []).forEach((v: any, i: number) => {
+      const t = 6 + (i * 12) % 100;
+      push(v.claimBy, { t, kind: 'claim', label: trim(String(v.claim ?? '')) });
+    });
+    // clash: tension.between (取首两位)
+    (a.tension ?? []).forEach((tn: any, i: number) => {
+      const t = 30 + (i * 14) % 70;
+      const between = tn.between ?? [];
+      between.slice(0, 2).forEach((pid: string) => {
+        push(pid, { t, kind: 'clash', label: trim(String(tn.topic ?? '')) });
+      });
+    });
+    // update: newCognition.who
+    (a.newCognition ?? []).forEach((n: any, i: number) => {
+      const t = 50 + (i * 9) % 60;
+      push(n.who, { t, kind: 'update', ref: n.id, label: trim(String(n.after ?? '')) });
+    });
+    // decide: consensus(kind=consensus).supportedBy
+    (a.consensus ?? []).filter((c: any) => c.kind === 'consensus').forEach((c: any, i: number) => {
+      const t = 90 + (i * 4) % 25;
+      (c.supportedBy ?? []).slice(0, 2).forEach((pid: string) => push(pid, { t, kind: 'decide' }));
+    });
+    // 每条按 t 排序，避免视觉上交错
+    Object.keys(dict).forEach((k) => dict[k].sort((x, y) => x.t - y.t));
+    return dict;
+  }, [usingMock, a]);
 
   useEffect(() => {
     if (forceMock) {
@@ -594,6 +680,13 @@ export function VariantThreads() {
           if (Array.isArray(data.analysis.participants)) {
             setApiParticipants(data.analysis.participants);
           }
+          // analysis.consensus / analysis.focusMap 也是真实数据（即便 mn_* 表为空）·
+          // 不要被打上 MockBadge
+          const sectionAt = (id: string) => (data.analysis.sections ?? []).find((s: any) => s.id === id);
+          const cArr = Array.isArray(data.analysis.consensus) ? data.analysis.consensus : sectionAt('consensus')?.body;
+          if (Array.isArray(cArr) && cArr.length > 0) setConsensusMock(false);
+          const fArr = Array.isArray(data.analysis.focusMap) ? data.analysis.focusMap : sectionAt('focus-map')?.body;
+          if (Array.isArray(fArr) && fArr.length > 0) setFocusMapMock(false);
         } else {
           setApiState('error');
         }
@@ -671,9 +764,9 @@ export function VariantThreads() {
         {usingMock && <Chip tone="accent">3 experts · standard</Chip>}
       </header>
 
-      {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} />}
-      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={apiParticipants} />}
-      {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} />}
+      {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} P={P} participants={lanePeople} events={derivedEvents} />}
+      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={apiParticipants} P={P} />}
+      {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} P={P} />}
     </div>
   );
 }

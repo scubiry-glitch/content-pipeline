@@ -143,6 +143,24 @@ export function emptyResult(subDim: string): ComputeResult {
 }
 
 /**
+ * 把 ComputeArgs 里的 scopeId 规整成可以安全写入 mn_*.scope_id（FK → mn_scopes.id）的值。
+ *
+ * 背景：很多 axis 表（mn_assumptions / mn_open_questions / mn_risks /
+ * mn_role_trajectory_points / mn_decisions / mn_commitments / mn_judgments …）
+ * 的 scope_id 列都是 nullable FK 到 mn_scopes(id)。runEngine 在 meeting 形态下
+ * 会把 args.scopeId 设成 **meeting 自己的 id**（不在 mn_scopes 里），
+ * 直接 INSERT 触发 FK 23503 → 整个 axis subDim 被全量拦下。
+ *
+ * 规则：scopeKind === 'meeting' 时一律 NULL（让记录归在"无 scope"维度，meeting_id 仍区分）；
+ * 其它 kind（library/project/client/topic）才透传 scopeId。
+ */
+export function normalizeScopeIdForPersist(args: ComputeArgs): string | null {
+  if (!args.scopeId) return null;
+  if (args.scopeKind && args.scopeKind !== 'meeting') return args.scopeId;
+  return null;
+}
+
+/**
  * P0-1 滑窗 LLM 抽取：把 content 切成多个 chunks，每个 chunk 调一次 LLM，
  * 结果合并并按 dedupeKey 去重。用于 LIST-OUTPUT axis（commitments、
  * assumptions 等）替代 budgetedExcerpt 的"开头+结尾"腰斩做法。
@@ -222,6 +240,14 @@ export async function extractListOverChunks<T = any>(
       );
       const pick = (arrOfObj ?? candidates[0]) as unknown[] | undefined;
       if (Array.isArray(pick)) return { items: pick as T[] };
+      // wrapper object 但里面没有数组字段（例如 LLM 出 `{"reason":"无内容"}`）
+      // → 视作真无内容，不再算 parse error 触发 retry
+      return { items: [] };
+    }
+    // null / scalar (string / number / bool)：LLM 偶尔在没匹配内容时返回 `null`
+    // 或一行解释文本。视作"本 chunk 没找到内容"，不计 parse error。
+    if (j === null || typeof j !== 'object') {
+      return { items: [] };
     }
     return { error: 'parse', message: 'non-array JSON', raw };
   }

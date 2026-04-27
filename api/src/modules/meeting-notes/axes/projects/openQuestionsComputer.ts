@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_OPEN_QUESTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -44,6 +44,7 @@ export async function computeOpenQuestions(
     { dedupeKey: (x) => normalizeText(x.text ?? '').slice(0, 60), statsSink: out },
   );
 
+  const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
       const ownerId = item.owner ? await ensurePersonByName(deps, item.owner) : null;
@@ -54,7 +55,7 @@ export async function computeOpenQuestions(
           WHERE COALESCE(scope_id::text,'') = COALESCE($1::text,'')
             AND lower(btrim(regexp_replace(text, '\\s+', ' ', 'g'))) = $2
           LIMIT 1`,
-        [args.scopeId ?? null, normalized],
+        [persistScopeId, normalized],
       );
       if (existing.rows.length > 0) {
         const id = existing.rows[0].id;
@@ -77,7 +78,7 @@ export async function computeOpenQuestions(
               first_raised_meeting_id, last_raised_meeting_id, owner_person_id)
            VALUES ($1, $2, $3, $4, 1, $5, $5, $6)`,
           [
-            args.scopeId ?? null,
+            persistScopeId,
             item.text,
             item.category ?? 'operational',
             ownerId ? 'assigned' : 'open',

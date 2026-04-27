@@ -3,7 +3,7 @@
 // 抽取支撑决策的假设 + 其证据等级（A/B/C/D）
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ASSUMPTIONS } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -45,6 +45,7 @@ export async function computeAssumptions(
     { dedupeKey: (x) => (x.text ?? '').slice(0, 50).toLowerCase(), statsSink: out },
   );
 
+  const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
       const grade = ['A', 'B', 'C', 'D'].includes(item.evidence_grade) ? item.evidence_grade : 'C';
@@ -52,7 +53,7 @@ export async function computeAssumptions(
         `INSERT INTO mn_assumptions
            (scope_id, meeting_id, text, evidence_grade, confidence)
          VALUES ($1, $2, $3, $4, $5)`,
-        [args.scopeId ?? null, bundle.meetingId, item.text, grade, item.confidence ?? 0.5],
+        [persistScopeId, bundle.meetingId, item.text, grade, item.confidence ?? 0.5],
       );
       out.created += 1;
     } catch (e) {

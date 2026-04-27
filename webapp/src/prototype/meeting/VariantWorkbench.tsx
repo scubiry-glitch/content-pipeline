@@ -58,8 +58,15 @@ function Stance({ p, stance, text, tone }: {
 }
 
 // ── WBTension ──
-function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
+type TensionInterp = {
+  biases: Array<{ id: string; bias_type: string; severity?: string; where_excerpt?: string }>;
+  models: Array<{ id: string; model_name: string; outcome?: string; correctly_used?: boolean }>;
+  judgments: Array<{ id: string; text: string; domain?: string; generality_score?: number }>;
+  peakNote?: string;
+};
+function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp }: {
   a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void; isMock?: boolean; P?: PFn;
+  interp?: Record<string, TensionInterp>;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: '100%' }}>
@@ -112,6 +119,32 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
           const between = t.between ?? [];
           const p1 = between.length > 0 ? P(between[0]) : null;
           const p2 = between.length > 1 ? P(between[1]) : null;
+          // 立场文本来源优先级（fixture 用「；」分隔, API 用「;」/逗号 + moments）：
+          //   1) summary 用「；」/「;」/「。」可拆成两半 → 直接对半分
+          //   2) moments 里抽 "<name>:「quote」" 形式按 P(pid).name 前缀匹配
+          //   3) summary 第一句给 p1, 第二句兜底
+          const stanceText = (() => {
+            const s = String(t.summary ?? '');
+            // 先尝试 ；/ ; / 。 三种分隔
+            const m = s.split(/[；;]\s*/);
+            if (m.length >= 2) return [m[0], m.slice(1).join('；').trim()] as const;
+            // 从 moments 里抽 per-person 引用
+            const quoteFor = (name: string): string => {
+              if (!name) return '';
+              for (const mom of (t.moments ?? []) as string[]) {
+                const colon = mom.search(/[:：]/);
+                if (colon < 0) continue;
+                const speaker = mom.slice(0, colon).trim();
+                if (speaker.includes(name) || name.includes(speaker)) return mom.slice(colon + 1).trim();
+              }
+              return '';
+            };
+            const q1 = p1 ? quoteFor(p1.name) : '';
+            const q2 = p2 ? quoteFor(p2.name) : '';
+            if (q1 || q2) return [q1, q2] as const;
+            // 最后兜底：summary 全文给 p1
+            return [s, ''] as const;
+          })();
           return (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -126,7 +159,7 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 14, alignItems: 'stretch', marginBottom: 20 }}>
                 {p1 ? (
-                  <Stance p={p1} stance={`${p1.name} 立场`} text={t.summary.split('；')[0] ?? t.summary} tone="accent" />
+                  <Stance p={p1} stance={`${p1.name} 立场`} text={stanceText[0] || '（无对应引用段落）'} tone="accent" />
                 ) : <div />}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{
@@ -136,7 +169,7 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
                   }}>vs</div>
                 </div>
                 {p2 ? (
-                  <Stance p={p2} stance={`${p2.name} 立场`} text={t.summary.split('；')[1]?.trim() ?? ''} tone="teal" />
+                  <Stance p={p2} stance={`${p2.name} 立场`} text={stanceText[1] || '（无对应引用段落）'} tone="teal" />
                 ) : <div />}
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', fontFamily: 'var(--serif)' }}>
@@ -154,17 +187,101 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP }: {
                   ))}
                 </div>
               )}
-              <div style={{
-                marginTop: 22, padding: '14px 16px', background: 'var(--paper-2)',
-                border: '1px solid var(--line-2)', borderRadius: 6,
-              }}>
-                <SectionLabel>专家解读 · E09-09</SectionLabel>
-                <p style={{ fontSize: 13.5, lineHeight: 1.7, margin: '8px 0 0', color: 'var(--ink-2)' }}>
-                  从二阶效应看，这里的真正问题不是"哪一层更好"，而是一个组合敞口问题。若推理层胜出，我们的头部布局已
-                  足够；若训练层胜出，现有仓位会被摊薄稀释。当前分歧其实是在 hedge 的粒度上没有对齐。
-                  <Chip tone="ghost" style={{ marginLeft: 6 }}>[M#42]</Chip>
-                </p>
-              </div>
+              {/* 解读面板：mock 用 demo 文案；API 用 axes（cognitive_biases / mental_models / tension_peaks）按主题关键词匹配 */}
+              {isMock ? (
+                <div style={{
+                  marginTop: 22, padding: '14px 16px', background: 'var(--paper-2)',
+                  border: '1px solid var(--line-2)', borderRadius: 6,
+                }}>
+                  <SectionLabel>专家解读 · E09-09</SectionLabel>
+                  <p style={{ fontSize: 13.5, lineHeight: 1.7, margin: '8px 0 0', color: 'var(--ink-2)' }}>
+                    从二阶效应看，这里的真正问题不是"哪一层更好"，而是一个组合敞口问题。若推理层胜出，我们的头部布局已
+                    足够；若训练层胜出，现有仓位会被摊薄稀释。当前分歧其实是在 hedge 的粒度上没有对齐。
+                    <Chip tone="ghost" style={{ marginLeft: 6 }}>[M#42]</Chip>
+                  </p>
+                </div>
+              ) : (() => {
+                const ip = interp?.[t.id];
+                const has = ip && (ip.biases.length > 0 || ip.models.length > 0 || ip.judgments.length > 0 || ip.peakNote);
+                return (
+                  <div style={{
+                    marginTop: 22, padding: '14px 16px', background: 'var(--paper-2)',
+                    border: '1px solid var(--line-2)', borderRadius: 6,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <SectionLabel>解读 · 来自 axes</SectionLabel>
+                      <MonoMeta style={{ fontSize: 10, color: 'var(--ink-4)' }}>
+                        knowledge · meta.affect_curve
+                      </MonoMeta>
+                    </div>
+                    {!has && (
+                      <p style={{ fontSize: 12.5, color: 'var(--ink-3)', margin: '8px 0 0', lineHeight: 1.7 }}>
+                        当前张力主题与 cognitive_biases / mental_models / judgments 无强关键词匹配，且
+                        affect_curve.tension_peaks 没有对应排名条目。
+                      </p>
+                    )}
+                    {!!ip?.biases.length && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: 0.3,
+                          textTransform: 'uppercase' as const, marginBottom: 4,
+                        }}>cognitive_biases</div>
+                        {ip.biases.map((b) => (
+                          <div key={b.id} style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', marginTop: 4 }}>
+                            <Chip tone="accent" style={{ fontSize: 10, padding: '1px 6px', marginRight: 6 }}>
+                              {b.bias_type}{b.severity ? ` · ${b.severity}` : ''}
+                            </Chip>
+                            <span style={{ fontFamily: 'var(--serif)', fontStyle: 'italic' }}>「{b.where_excerpt ?? ''}」</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!!ip?.models.length && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: 0.3,
+                          textTransform: 'uppercase' as const, marginBottom: 4,
+                        }}>mental_models</div>
+                        {ip.models.map((m) => (
+                          <div key={m.id} style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', marginTop: 4 }}>
+                            <Chip tone="teal" style={{ fontSize: 10, padding: '1px 6px', marginRight: 6 }}>
+                              {m.model_name}{m.correctly_used === false ? ' · ⚠ 未对位' : ''}
+                            </Chip>
+                            <span>{m.outcome ?? ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!!ip?.judgments.length && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: 0.3,
+                          textTransform: 'uppercase' as const, marginBottom: 4,
+                        }}>judgments（高泛化度 + 主题相关）</div>
+                        {ip.judgments.map((j) => (
+                          <div key={j.id} style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', marginTop: 4 }}>
+                            <Chip tone="ghost" style={{ fontSize: 10, padding: '1px 6px', marginRight: 6 }}>
+                              {j.domain ?? '通用'}{typeof j.generality_score === 'number' ? ` · ${(j.generality_score).toFixed(2)}` : ''}
+                            </Chip>
+                            <span style={{ fontFamily: 'var(--serif)' }}>{j.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {ip?.peakNote && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: 0.3,
+                          textTransform: 'uppercase' as const, marginBottom: 4,
+                        }}>affect_curve · tension_peak（按强度排名匹配）</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--ink-2)', fontFamily: 'var(--serif)' }}>
+                          {ip.peakNote}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           );
         })()}
@@ -416,6 +533,8 @@ export function VariantWorkbench() {
   const [tensionMock, setTensionMock] = useState(true);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
+  // Phase: 张力 → 解读（从 axes.knowledge + meta.affect_curve 抽取，按主题关键词与强度排名近似匹配）
+  const [apiAxes, setApiAxes] = useState<any>(null);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || MEETING.title;
 
@@ -437,6 +556,96 @@ export function VariantWorkbench() {
     return (id: string) => map.get(id) ?? defaultP(id);
   }, [apiParticipants]);
 
+  // 张力解读：用主题关键词（停用词过滤后 ≥2 char tokens）匹配 axes 的 where_excerpt / outcome；
+  // tension_peaks 按 intensity 排名映射到 analysis.tension 同 rank 那条。
+  // 没有匹配项时返回 null 让 WBTension 渲染兜底文案。
+  type TensionInterp = {
+    biases: Array<{ id: string; bias_type: string; severity?: string; where_excerpt?: string }>;
+    models: Array<{ id: string; model_name: string; outcome?: string; correctly_used?: boolean }>;
+    judgments: Array<{ id: string; text: string; domain?: string; generality_score?: number }>;
+    peakNote?: string;
+  };
+  const tensionInterp = useMemo<Record<string, TensionInterp>>(() => {
+    const out: Record<string, TensionInterp> = {};
+    if (!apiAxes) return out;
+    const biases: any[] = apiAxes?.knowledge?.cognitive_biases ?? [];
+    const models: any[] = apiAxes?.knowledge?.mental_models ?? [];
+    const judgments: any[] = apiAxes?.knowledge?.judgments ?? [];
+    const peaks: any[] = apiAxes?.meta?.affect_curve?.tension_peaks ?? [];
+
+    // 中文 ≥2 字 token；剥常见标点
+    const tokenize = (s: string): string[] => {
+      const cleaned = (s ?? '').replace(/[，。、；：?？!！"「」『』()（）/\\\-—_.…]/g, ' ');
+      const tokens = cleaned.split(/\s+/).filter((t) => t.length >= 2);
+      // 也加入 1+1 的滑窗（捕获双字关键词），但只在 token 长度 >= 3 时才滑
+      const grams: string[] = [];
+      for (const t of tokens) {
+        grams.push(t);
+        if (t.length >= 3) for (let i = 0; i + 2 <= t.length; i++) grams.push(t.slice(i, i + 2));
+      }
+      return Array.from(new Set(grams));
+    };
+    const score = (haystack: string, kws: string[]): number => {
+      if (!haystack) return 0;
+      let s = 0;
+      for (const k of kws) if (k.length >= 2 && haystack.includes(k)) s += k.length >= 3 ? 2 : 1;
+      return s;
+    };
+
+    // 按 intensity 排名映射 tension_peaks
+    const peaksByRank = peaks.slice().sort((a, b) => {
+      const ai = Number(a.intensity ?? 0), bi = Number(b.intensity ?? 0);
+      return bi - ai;
+    });
+    const tensionsByIntensity = (a.tension ?? []).slice().sort((x: any, y: any) => Number(y.intensity ?? 0) - Number(x.intensity ?? 0));
+
+    for (const t of (a.tension ?? [])) {
+      const kws = tokenize(`${t.topic ?? ''} ${t.summary ?? ''}`);
+      const scoredBiases = biases
+        .map((b) => ({ b, s: score(`${b.bias_type ?? ''} ${b.where_excerpt ?? ''}`, kws) }))
+        .filter((x) => x.s > 0)
+        .sort((x, y) => y.s - x.s)
+        .slice(0, 2)
+        .map((x) => ({
+          id: String(x.b.id),
+          bias_type: String(x.b.bias_type ?? ''),
+          severity: x.b.severity,
+          where_excerpt: x.b.where_excerpt,
+        }));
+      const scoredModels = models
+        .map((m) => ({ m, s: score(`${m.model_name ?? ''} ${m.outcome ?? ''}`, kws) }))
+        .filter((x) => x.s > 0)
+        .sort((x, y) => y.s - x.s)
+        .slice(0, 2)
+        .map((x) => ({
+          id: String(x.m.id),
+          model_name: String(x.m.model_name ?? ''),
+          outcome: x.m.outcome,
+          correctly_used: x.m.correctly_used,
+        }));
+      const scoredJudgments = judgments
+        .map((j) => ({
+          j,
+          // 主题关键词权重 + generality_score 作为先验
+          s: score(`${j.text ?? ''} ${j.domain ?? ''}`, kws) + Number(j.generality_score ?? 0),
+        }))
+        .filter((x) => x.s >= 1.5) // 既要有关键词命中，也要 generality 不低
+        .sort((x, y) => y.s - x.s)
+        .slice(0, 2)
+        .map((x) => ({
+          id: String(x.j.id),
+          text: String(x.j.text ?? ''),
+          domain: x.j.domain,
+          generality_score: Number(x.j.generality_score ?? 0),
+        }));
+      // 找到 t 在 intensity 排序中的下标，对应同一下标的 peak
+      const rank = tensionsByIntensity.findIndex((x: any) => x.id === t.id);
+      const peakNote = rank >= 0 && peaksByRank[rank]?.note ? String(peaksByRank[rank].note) : undefined;
+      out[t.id] = { biases: scoredBiases, models: scoredModels, judgments: scoredJudgments, peakNote };
+    }
+    return out;
+  }, [apiAxes, a]);
+
   useEffect(() => {
     if (forceMock) {
       setA(ANALYSIS);
@@ -444,10 +653,14 @@ export function VariantWorkbench() {
       setTensionMock(true);
       setApiState('skipped');
       setApiParticipants([]);
+      setApiAxes(null);
       return;
     }
     if (!id) { setApiState('skipped'); return; }
     setApiState('loading');
+    // 并行拉 axes（cognitive_biases / mental_models / affect_curve · 用于张力解读）·
+    // 失败静默 · 没有 axes 时解读面板会回退到「暂无解读」
+    meetingNotesApi.getMeetingAxes(id).then((axes) => setApiAxes(axes)).catch(() => {});
     // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
     // view 'B' returns { left, center, right } which doesn't match render structure.
     meetingNotesApi.getMeetingDetail(id, 'A')
@@ -459,6 +672,13 @@ export function VariantWorkbench() {
           if (Array.isArray(data.analysis.participants)) {
             setApiParticipants(data.analysis.participants);
           }
+          // analysis.tension 来自 metadata.analysis.tension（旧路径）·
+          // 即便 mn_tensions 表空，仍是真实数据，不要被打上 MockBadge
+          const tensionsInAnalysis = Array.isArray(data.analysis.tension) && data.analysis.tension.length > 0;
+          // sections 路径：sections[id=tension].body 是数组
+          const sectionTension = (data.analysis.sections ?? []).find((s: any) => s.id === 'tension');
+          const tensionsInSections = Array.isArray(sectionTension?.body) && sectionTension.body.length > 0;
+          if (tensionsInAnalysis || tensionsInSections) setTensionMock(false);
         } else {
           setApiState('error');
         }
@@ -639,7 +859,7 @@ export function VariantWorkbench() {
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px' }}>
-            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} />}
+            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} interp={tensionInterp} />}
             {dim === 'minutes'       && <WBMinutes        a={a} />}
             {dim === 'new_cognition' && <WBNewCognition   a={a} P={P} />}
             {dim === 'focus_map'     && <WBFocusMap       a={a} P={P} />}
@@ -663,7 +883,7 @@ export function VariantWorkbench() {
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {usingMock ? TRANSCRIPT.map((t, i) => (
+            {usingMock && TRANSCRIPT.map((t, i) => (
               <div key={i} style={{
                 borderLeft: t.highlight ? '2px solid var(--accent)' : '2px solid var(--line-2)',
                 paddingLeft: 12,
@@ -686,15 +906,71 @@ export function VariantWorkbench() {
                   </div>
                 )}
               </div>
-            )) : (
-              <div style={{
-                fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7,
-                padding: '14px 14px', border: '1px dashed var(--line-2)', borderRadius: 6,
-              }}>
-                原文段落锚点对应 transcript + 高亮范围；当前会议详情接口未透传逐句 transcript，
-                等接入 <code>/meetings/:id/transcript</code> 后再展示。
-              </div>
-            )}
+            ))}
+            {/* API 模式：把当前 dim 关联的 moments / trigger 当原文锚点展示
+                · tension     → 选中条目的 moments[]（"name:「quote」" 形式拆解）
+                · new_cog     → 每条 newCognition 的 trigger
+                · cross_view  → claim 的发言（claimBy + claim）+ responses
+                · 其他 dim 暂无逐句锚点，显示提示。 */}
+            {!usingMock && (() => {
+              const blocks: Array<{ who: string; text: string; tag?: string }> = [];
+              if (dim === 'tension') {
+                const t = a.tension.find((x) => x.id === selectedT) ?? a.tension[0];
+                for (const m of (t?.moments ?? []) as string[]) {
+                  const colon = m.search(/[:：]/);
+                  if (colon < 0) { blocks.push({ who: '?', text: m, tag: t?.id }); continue; }
+                  const speaker = m.slice(0, colon).trim();
+                  const quote = m.slice(colon + 1).trim();
+                  // 通过名字反查 pid（apiParticipants 名字前缀匹配）
+                  const pid = apiParticipants.find((pp) => pp.name && (pp.name.includes(speaker) || speaker.includes(pp.name)))?.id ?? '?';
+                  blocks.push({ who: pid, text: quote, tag: t?.id });
+                }
+              } else if (dim === 'new_cognition') {
+                for (const n of a.newCognition) {
+                  if (n.trigger) blocks.push({ who: n.who, text: n.trigger, tag: n.id });
+                }
+              } else if (dim === 'cross_view') {
+                for (const v of a.crossView as any[]) {
+                  blocks.push({ who: v.claimBy, text: v.claim, tag: v.id });
+                  for (const r of (v.responses ?? [])) {
+                    blocks.push({ who: r.who, text: r.text, tag: v.id });
+                  }
+                }
+              }
+              if (blocks.length === 0) {
+                return (
+                  <div style={{
+                    fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7,
+                    padding: '14px 14px', border: '1px dashed var(--line-2)', borderRadius: 6,
+                  }}>
+                    当前维度暂无逐句原文锚点。
+                    {dim === 'tension' && '（选中左侧任一张力条目以查看其 moments）'}
+                  </div>
+                );
+              }
+              return blocks.map((b, i) => {
+                const p = P(b.who);
+                return (
+                  <div key={i} style={{
+                    borderLeft: '2px solid var(--accent)', paddingLeft: 12,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <Avatar p={p} size={16} radius={3} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</span>
+                    </div>
+                    <div style={{
+                      fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink)',
+                      fontFamily: 'var(--serif)',
+                    }}>{b.text}</div>
+                    {b.tag && (
+                      <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
+                        <Chip tone="accent" style={{ fontSize: 10, padding: '1px 6px' }}>{b.tag}</Chip>
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </aside>
       </div>

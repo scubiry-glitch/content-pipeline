@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_ROLE_TRAJECTORY } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -57,13 +57,7 @@ export async function computeRoleTrajectory(
   }
   const items = [...byPerson.values()];
 
-  // mn_role_trajectory_points.scope_id 是 nullable FK → mn_scopes(id)。
-  // 当 scopeKind='meeting' 时，args.scopeId 实际是 meeting 自己的 id（不在 mn_scopes 表里），
-  // 直接用会触发 FK 23503。把 'meeting' 形态显式 normalize 到 NULL，让记录归在"无 scope"维度。
-  const persistScopeId =
-    args.scopeKind && args.scopeKind !== 'meeting' && args.scopeId
-      ? args.scopeId
-      : null;
+  const persistScopeId = normalizeScopeIdForPersist(args);
 
   for (const item of items) {
     try {

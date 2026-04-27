@@ -5,7 +5,7 @@
 
 import { loadMeetingBundle } from '../../parse/claimExtractor.js';
 import { ensurePersonByName } from '../../parse/participantExtractor.js';
-import { extractListOverChunks, emptyResult, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
+import { extractListOverChunks, emptyResult, normalizeScopeIdForPersist, pushErrorSample, type ComputeArgs, type ComputeResult } from '../_shared.js';
 import { FEW_SHOT_HEADER, EX_DECISION_PROVENANCE } from '../_examples.js';
 import type { MeetingNotesDeps } from '../../types.js';
 
@@ -47,6 +47,7 @@ export async function computeDecisionProvenance(
     { dedupeKey: (x) => (x.title ?? '').slice(0, 40), statsSink: out },
   );
 
+  const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
       const proposerId = item.proposer ? await ensurePersonByName(deps, item.proposer) : null;
@@ -56,7 +57,7 @@ export async function computeDecisionProvenance(
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [
-          args.scopeId ?? null,
+          persistScopeId,
           bundle.meetingId,
           item.title,
           proposerId,
