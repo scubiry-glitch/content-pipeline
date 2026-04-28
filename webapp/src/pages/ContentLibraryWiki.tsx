@@ -336,27 +336,22 @@ export function ContentLibraryWiki() {
           {activeWiki ? (
             <>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">文件</h3>
-              {(['root', 'meeting-notes', 'entities', 'concepts', 'domains', 'sources', 'axes', 'scopes'] as const).map(cat => {
-                // Phase H+ · meeting-notes 是虚拟分组（meeting app 工作台）, 含 axes + scopes + sources/meeting
+              {(['root', 'meeting-notes', 'entities', 'concepts', 'domains', 'sources'] as const).map(cat => {
+                // Phase H+ · meeting-notes 是虚拟分组 · sources/meeting/ 内的所有内容
+                //   (单会议主页 + axes/ + scopes/ 都在 sources/meeting/ 下)
                 const items = cat === 'meeting-notes'
-                  ? [
-                      ...(filesByCategory['axes'] || []),
-                      ...(filesByCategory['scopes'] || []),
-                      ...((filesByCategory['sources'] || []).filter(f => f.path.startsWith('sources/meeting/'))),
-                    ]
+                  ? (filesByCategory['sources'] || []).filter(f => f.path.startsWith('sources/meeting/'))
                   : cat === 'sources'
                     ? (filesByCategory[cat] || []).filter(f => !f.path.startsWith('sources/meeting/'))
                     : (filesByCategory[cat] || []);
                 if (items.length === 0) return null;
                 const labels: Record<string, string> = {
                   root: '顶层',
-                  'meeting-notes': '会议纪要 · meeting app',
+                  'meeting-notes': '会议纪要 · meeting app (sources/meeting/)',
                   entities: '实体 entities (具体)',
                   concepts: '概念 concepts (抽象)',
                   domains: '领域 domains (taxonomy)',
                   sources: '来源 sources (非会议)',
-                  axes: '4 轴 axes (跨场)',
-                  scopes: 'scope (项目/客户/主题)',
                 };
                 // 二级分组 (按 path 第二段)
                 const grouped = items.reduce<Record<string, typeof items>>((acc, f) => {
