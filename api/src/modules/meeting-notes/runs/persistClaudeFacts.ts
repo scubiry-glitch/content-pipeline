@@ -9,16 +9,20 @@
 // 用户在 /content-library/wiki 点 generate 就能看到这场会议的 facts 进入 wiki。
 
 import type { MeetingNotesDeps } from '../types.js';
+import { isValidTaxonomyCode } from '../../content-library/wiki/wikiFrontmatter.js';
 
 export interface ClaudeFact {
   subject: string;
   predicate: string;
   object: string;
   confidence?: number;
+  /** Phase H · 必填 (claude prompt 已强制); 不合法时回退 'E99.OTHER' */
+  taxonomy_code?: string;
   context?: { quote?: string };
 }
 
 const SOURCE_TAG = 'claude_cli';
+const TAXONOMY_FALLBACK = 'E99.OTHER';
 
 /**
  * 把 facts 写入 content_facts。每条带 context.source='claude_cli' 标记，重跑只清这批不动别的。
@@ -52,10 +56,14 @@ export async function persistClaudeFacts(
     if (!subject || !predicate || !object) continue;
 
     const confidence = clamp(Number(f?.confidence ?? 0.5), 0, 1, 0.5);
+    // Phase H · taxonomy_code 必填 + 校验 (84 个 L2 候选), 不合法降级 E99.OTHER
+    const rawCode = typeof f?.taxonomy_code === 'string' ? f.taxonomy_code.trim() : '';
+    const taxonomy_code = rawCode && isValidTaxonomyCode(rawCode) ? rawCode : TAXONOMY_FALLBACK;
     const context = {
       meetingId,
       source: SOURCE_TAG,
       quote: typeof f?.context?.quote === 'string' ? f.context.quote : null,
+      taxonomy_code,
     };
 
     try {

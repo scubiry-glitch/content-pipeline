@@ -80,10 +80,35 @@ export interface ClaudeCliRunnerResult {
   inputTokens: number;
   /** 是否命中 prompt cache（cache_read_input_tokens > 0 的话说明 --resume 起作用了） */
   cacheReadTokens: number;
-  /** Claude 输出的 facts SPO 数组（直接透传，由 persistClaudeFacts 落 content_facts） */
-  facts: any[];
-  /** Claude 输出的 wikiMarkdown 块（sourceEntry + entityUpdates） */
-  wikiMarkdown: { sourceEntry?: string; entityUpdates?: Array<{ entityName: string; appendMarkdown: string }> };
+  /** Claude 输出的 facts SPO 数组（直接透传，由 persistClaudeFacts 落 content_facts）
+   *  Phase H: 每条多了 taxonomy_code (E07.LLM 等) */
+  facts: Array<{
+    subject?: string;
+    predicate?: string;
+    object?: string;
+    confidence?: number;
+    taxonomy_code?: string;
+    context?: { quote?: string; [k: string]: unknown };
+    [k: string]: unknown;
+  }>;
+  /** Claude 输出的 wikiMarkdown 块（sourceEntry + entityUpdates）
+   *  Phase H: entityUpdates 改契约为 type/subtype/canonicalName/initialContent/blockContent */
+  wikiMarkdown: {
+    sourceEntry?: string;
+    entityUpdates?: Array<{
+      // Phase H 新形态
+      type?: 'entity' | 'concept';
+      subtype?: 'person' | 'org' | 'product' | 'project' | 'event'
+              | 'mental-model' | 'judgment' | 'bias' | 'counterfactual';
+      canonicalName?: string;
+      aliases?: string[];
+      initialContent?: string;
+      blockContent?: string;
+      // 旧契约（兼容老 prompt 输出，过渡期保留）
+      entityName?: string;
+      appendMarkdown?: string;
+    }>;
+  };
   /** scope-level run 才用：scopeUpdates 块 */
   scopeUpdates?: Record<string, any>;
 }
