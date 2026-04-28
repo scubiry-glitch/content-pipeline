@@ -1,48 +1,75 @@
-// runs/persistClaudeWiki.ts — 把 Claude CLI 输出的 wikiMarkdown 直接写到 obsidian vault
+// runs/persistClaudeWiki.ts — Phase H · 把 Claude CLI 输出的 wikiMarkdown 写到 obsidian vault
 //
-// 默认 vault 根: <repo-root>/data/content-wiki/default/{entities,sources,concepts,.obsidian}/
-// 跟现有 wikiGenerator.generate() 用的同一目录约定（兼容 /content-library/wiki 页面）。
+// vault 根: <repo-root>/data/content-wiki/default/
+//   ├── sources/<meetingId>.md       ← claude-cli 写 (覆盖)
+//   ├── entities/{person,org,...}/<slug>.md  ← claude-cli 创建 + dedup 追加
+//   └── concepts/{mental-model,judgment,bias,counterfactual}/<slug>.md  ← 同上
 //
-// 写法：
-//   1. sources/<meetingId>.md ← wiki.sourceEntry 直接 fs.writeFile (覆盖)。这是 claude 写完
-//      就立刻可读的会议级索引页 (wikiGenerator 之后跑也会重写这个文件，基于 content_facts，
-//      两者基本同信源不冲突)。
-//   2. entities/<entityName>.md ← wiki.entityUpdates[].appendMarkdown 选择性追加：
-//      a) SELECT id FROM content_entities WHERE name = entityName 命中才处理（不创建新 entity）
-//      b) 文件不存在则跳过 (wikiGenerator 还没生成 → 留给它先建)
-//      c) 命中 + 文件存在 → 末尾 append "\n## Claude CLI · meeting <id>\n<appendMarkdown>\n"
+// 写入规则 (per plan §C.2):
+//   - 文件不存在 → 用 frontmatter (app=meeting-notes, generatedBy=claude-cli) + initialContent
+//                  + wrapBlock(blockId, blockContent) 创建
+//   - 文件存在 → 读 → parseFrontmatter → upsertBlock(blockId, blockContent) → 写回
+//                · 不动 owner app (preserve), 只更新 lastEditedBy / lastEditedAt
+//                · blocks 数组 dedup by id 后追加
+//
+// 兼容旧契约 (entityName + appendMarkdown): 仍走老 "必须 content_entities 命中 + 文件存在才追加" 路径
 
 import type { MeetingNotesDeps } from '../types.js';
-import { writeFile, appendFile, mkdir, access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { writeFile, readFile, mkdir } from 'node:fs/promises';
+import { join, resolve, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import {
+  parseFrontmatter,
+  renderFrontmatter,
+  hasBlock,
+  upsertBlock,
+  wrapBlock,
+  type WikiFrontmatter,
+  type WikiBlockMeta,
+} from '../../content-library/wiki/wikiFrontmatter.js';
+import { slugify } from '../../content-library/wiki/templates.js';
 
 export interface ClaudeWikiOutput {
   sourceEntry?: string;
-  entityUpdates?: Array<{ entityName: string; appendMarkdown: string }>;
+  entityUpdates?: Array<{
+    // Phase H 新形态
+    type?: 'entity' | 'concept';
+    subtype?: 'person' | 'org' | 'product' | 'project' | 'event'
+            | 'mental-model' | 'judgment' | 'bias' | 'counterfactual';
+    canonicalName?: string;
+    aliases?: string[];
+    initialContent?: string;
+    blockContent?: string;
+    // 旧契约兼容
+    entityName?: string;
+    appendMarkdown?: string;
+  }>;
 }
 
-const REPO_ROOT_FALLBACK = process.cwd().replace(/\/api(?:\/.*)?$/, ''); // 万一 cwd 在 api/ 里
+const REPO_ROOT_FALLBACK = process.cwd().replace(/\/api(?:\/.*)?$/, '');
 const DEFAULT_WIKI_ROOT_REL = 'data/content-wiki/default';
 
-/**
- * 解析 wikiRoot：env > fallback。返回绝对路径。
- */
+const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event'] as const;
+const CONCEPT_SUBTYPES = ['mental-model', 'judgment', 'bias', 'counterfactual'] as const;
+
 export function resolveWikiRoot(): string {
   const envRoot = process.env.MN_CLAUDE_WIKI_ROOT;
   if (envRoot && envRoot.trim().length > 0) {
     return resolve(envRoot.trim());
   }
-  // 项目内默认路径：<repo>/data/content-wiki/default
   return resolve(REPO_ROOT_FALLBACK, DEFAULT_WIKI_ROOT_REL);
 }
 
 async function ensureWikiDirs(wikiRoot: string): Promise<void> {
   await mkdir(join(wikiRoot, 'sources'), { recursive: true });
-  await mkdir(join(wikiRoot, 'entities'), { recursive: true });
+  for (const sub of ENTITY_SUBTYPES) {
+    await mkdir(join(wikiRoot, 'entities', sub), { recursive: true });
+  }
+  for (const sub of CONCEPT_SUBTYPES) {
+    await mkdir(join(wikiRoot, 'concepts', sub), { recursive: true });
+  }
 }
 
-/** 文件名 sanitize: 替换斜杠 / 控制符 / 系统保留字符，避免 fs 写错路径 */
 function sanitizeFilename(name: string): string {
   return name
     .replace(/[/\\?%*:|"<>]/g, '_')
@@ -50,25 +77,51 @@ function sanitizeFilename(name: string): string {
     .slice(0, 200);
 }
 
+/** 计算 entity / concept 在 vault 内的相对路径 */
+function resolveEntityPath(
+  wikiRoot: string,
+  type: 'entity' | 'concept',
+  subtype: string,
+  canonicalName: string,
+): string {
+  const slug = slugify(canonicalName);
+  const dir = type === 'entity' ? `entities/${subtype}` : `concepts/${subtype}`;
+  return join(wikiRoot, dir, `${sanitizeFilename(slug)}.md`);
+}
+
+function isValidEntitySubtype(s: string | undefined, type: 'entity' | 'concept'): boolean {
+  if (!s) return false;
+  if (type === 'entity') return (ENTITY_SUBTYPES as readonly string[]).includes(s);
+  return (CONCEPT_SUBTYPES as readonly string[]).includes(s);
+}
+
 export async function persistClaudeWiki(
   deps: MeetingNotesDeps,
   meetingId: string,
   wiki: ClaudeWikiOutput,
   wikiRoot?: string,
-): Promise<{ sourceWritten: boolean; entityAppended: number }> {
+): Promise<{
+  sourceWritten: boolean;
+  entityCreated: number;
+  entityUpdated: number;
+  legacyAppended: number;
+  skipped: number;
+}> {
   const root = wikiRoot ?? resolveWikiRoot();
   let sourceWritten = false;
-  let entityAppended = 0;
+  let entityCreated = 0;
+  let entityUpdated = 0;
+  let legacyAppended = 0;
+  let skipped = 0;
 
-  // 启动时确保目录存在
   try {
     await ensureWikiDirs(root);
   } catch (e: any) {
     console.warn('[persistClaudeWiki] mkdir failed:', e?.message, '· root=', root);
-    return { sourceWritten, entityAppended };
+    return { sourceWritten, entityCreated, entityUpdated, legacyAppended, skipped };
   }
 
-  // 1) sources/<meetingId>.md
+  // ─── 1. sources/<meetingId>.md (覆盖) ─────────────────────────────────────
   if (typeof wiki?.sourceEntry === 'string' && wiki.sourceEntry.trim().length > 0) {
     const sourcePath = join(root, 'sources', `${sanitizeFilename(meetingId)}.md`);
     try {
@@ -79,48 +132,197 @@ export async function persistClaudeWiki(
     }
   }
 
-  // 2) entities/<entityName>.md 选择性追加
+  // ─── 2. entityUpdates 路由 (新契约 vs 旧契约) ─────────────────────────────
   const updates = Array.isArray(wiki?.entityUpdates) ? wiki.entityUpdates : [];
-  for (const u of updates) {
-    const entityName = String(u?.entityName ?? '').trim();
-    const appendMd = String(u?.appendMarkdown ?? '').trim();
-    if (!entityName || !appendMd) continue;
+  const blockId = `meeting-${meetingId.slice(0, 8)}`;
+  const now = new Date().toISOString();
 
-    // 2a) content_entities 命中检查
-    let exists = false;
-    try {
-      const r = await deps.db.query(
-        `SELECT id FROM content_entities WHERE name = $1 LIMIT 1`,
-        [entityName],
+  for (const u of updates) {
+    // 新契约: type + subtype + canonicalName + blockContent (initialContent 可选)
+    if (u?.type && u?.subtype && u?.canonicalName && u?.blockContent) {
+      const result = await handleNewEntityUpdate(
+        root,
+        u as Required<Pick<NonNullable<ClaudeWikiOutput['entityUpdates']>[number],
+          'type' | 'subtype' | 'canonicalName' | 'blockContent'>> & { aliases?: string[]; initialContent?: string },
+        meetingId,
+        blockId,
+        now,
       );
-      exists = (r.rows?.length ?? 0) > 0;
-    } catch (e: any) {
-      console.warn('[persistClaudeWiki] content_entities check failed:', e?.message);
+      if (result === 'created') entityCreated += 1;
+      else if (result === 'updated') entityUpdated += 1;
+      else skipped += 1;
       continue;
     }
-    if (!exists) continue; // 跳过未在 content_entities 注册过的实体，避免脏数据
 
-    // 2b) 文件存在检查（wikiGenerator 还没建过则跳过）
-    const entityPath = join(root, 'entities', `${sanitizeFilename(entityName)}.md`);
-    if (!existsSync(entityPath)) continue;
+    // 旧契约: entityName + appendMarkdown (兼容期保留)
+    if (u?.entityName && u?.appendMarkdown) {
+      const ok = await handleLegacyEntityUpdate(
+        deps, root, u.entityName, u.appendMarkdown, meetingId,
+      );
+      if (ok) legacyAppended += 1;
+      else skipped += 1;
+      continue;
+    }
 
-    // 2c) 追加内容
-    const block = `\n\n## Claude CLI · meeting ${meetingId}\n${appendMd}\n`;
+    skipped += 1;
+  }
+
+  if (sourceWritten || entityCreated > 0 || entityUpdated > 0 || legacyAppended > 0) {
+    console.log(
+      `[persistClaudeWiki] meeting ${meetingId}: source=${sourceWritten ? '✓' : '✗'}, ` +
+      `created=${entityCreated}, updated=${entityUpdated}, legacy=${legacyAppended}, skip=${skipped}, ` +
+      `root=${root}`,
+    );
+  }
+  return { sourceWritten, entityCreated, entityUpdated, legacyAppended, skipped };
+}
+
+// ============================================================
+// 新契约 · 创建或 dedup 追加
+// ============================================================
+
+async function handleNewEntityUpdate(
+  wikiRoot: string,
+  upd: {
+    type: 'entity' | 'concept';
+    subtype: string;
+    canonicalName: string;
+    aliases?: string[];
+    initialContent?: string;
+    blockContent: string;
+  },
+  meetingId: string,
+  blockId: string,
+  now: string,
+): Promise<'created' | 'updated' | 'skipped'> {
+  if (!isValidEntitySubtype(upd.subtype, upd.type)) {
+    console.warn(`[persistClaudeWiki] invalid subtype '${upd.subtype}' for type '${upd.type}', skip ${upd.canonicalName}`);
+    return 'skipped';
+  }
+
+  const filePath = resolveEntityPath(wikiRoot, upd.type, upd.subtype, upd.canonicalName);
+  const blockMeta: WikiBlockMeta = {
+    id: blockId, app: 'meeting-notes', via: 'claude-cli', meetingId, addedAt: now,
+  };
+  // 顶部 ## 标题让用户在 obsidian 看清楚来源；包在 <!-- block:xxx --> 注释里
+  const blockBody = `## Claude CLI · meeting ${meetingId} · ${now.slice(0, 10)}\n\n${upd.blockContent.trim()}`;
+
+  if (!existsSync(filePath)) {
+    // 创建
+    const fm: WikiFrontmatter = {
+      type: upd.type,
+      subtype: upd.subtype,
+      canonical_name: upd.canonicalName,
+      aliases: upd.aliases ?? [],
+      slug: slugify(upd.canonicalName),
+      app: 'meeting-notes',
+      generatedBy: 'claude-cli',
+      firstCreatedBy: 'claude-cli',
+      firstCreatedAt: now,
+      lastEditedBy: 'claude-cli',
+      lastEditedAt: now,
+      blocks: [blockMeta],
+    };
+    const body =
+      `# ${upd.canonicalName}\n\n` +
+      (upd.initialContent ? `${upd.initialContent.trim()}\n\n` : '') +
+      `${wrapBlock(blockId, blockBody)}\n`;
     try {
-      await appendFile(entityPath, block, 'utf8');
-      entityAppended += 1;
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, `${renderFrontmatter(fm)}\n\n${body}`, 'utf8');
+      return 'created';
     } catch (e: any) {
-      console.warn('[persistClaudeWiki] appendFile entities failed:', e?.message, '| entity:', entityName);
+      console.warn('[persistClaudeWiki] create failed:', e?.message, '· file=', filePath);
+      return 'skipped';
     }
   }
 
-  if (sourceWritten || entityAppended > 0) {
-    console.log(
-      `[persistClaudeWiki] meeting ${meetingId}: source=${sourceWritten ? 'written' : 'skip'}, entities appended=${entityAppended}, root=${root}`,
-    );
+  // 更新
+  try {
+    const cur = await readFile(filePath, 'utf8');
+    const { frontmatter, body } = parseFrontmatter(cur);
+    const newBody = upsertBlock(body, blockId, blockBody);
+
+    // blocks 数组 dedup by id
+    const existingBlocks = (frontmatter.blocks ?? []) as WikiBlockMeta[];
+    const blocks = existingBlocks.filter((b) => b?.id !== blockId);
+    blocks.push(blockMeta);
+
+    const updatedFm: WikiFrontmatter = {
+      ...frontmatter,
+      blocks,
+      lastEditedBy: 'claude-cli',
+      lastEditedAt: now,
+    };
+    await writeFile(filePath, `${renderFrontmatter(updatedFm)}\n\n${newBody.trimStart()}`, 'utf8');
+    return 'updated';
+  } catch (e: any) {
+    console.warn('[persistClaudeWiki] update failed:', e?.message, '· file=', filePath);
+    return 'skipped';
   }
-  return { sourceWritten, entityAppended };
 }
 
-// 防止 access 未使用导致 unused-import warning（保留 import 以备后续 ENOENT 检测扩展）
-void access;
+// ============================================================
+// 旧契约 · "必须 content_entities 命中 + 文件存在才追加"
+// ============================================================
+
+async function handleLegacyEntityUpdate(
+  deps: MeetingNotesDeps,
+  wikiRoot: string,
+  entityName: string,
+  appendMarkdown: string,
+  meetingId: string,
+): Promise<boolean> {
+  const trimmedName = entityName.trim();
+  const appendMd = appendMarkdown.trim();
+  if (!trimmedName || !appendMd) return false;
+
+  // a) content_entities 命中
+  let exists = false;
+  try {
+    const r = await deps.db.query(
+      `SELECT id FROM content_entities WHERE canonical_name = $1 OR name = $1 LIMIT 1`,
+      [trimmedName],
+    );
+    exists = (r.rows?.length ?? 0) > 0;
+  } catch (e: any) {
+    console.warn('[persistClaudeWiki/legacy] content_entities check failed:', e?.message);
+    return false;
+  }
+  if (!exists) return false;
+
+  // b) 文件存在（旧路径：entities/<slug>.md 平铺，因为 wikiGenerator 还在写老路径）
+  const entityPath = join(wikiRoot, 'entities', `${sanitizeFilename(slugify(trimmedName))}.md`);
+  if (!existsSync(entityPath)) return false;
+
+  // c) 用 block 模式追加（即使是 legacy 也升级到 block 包装，避免重复 append）
+  try {
+    const cur = await readFile(entityPath, 'utf8');
+    const { frontmatter, body } = parseFrontmatter(cur);
+    const blockId = `meeting-${meetingId.slice(0, 8)}`;
+    const blockBody = `## Claude CLI · meeting ${meetingId}\n\n${appendMd}`;
+    const alreadyHasBlock = hasBlock(body, blockId);
+    const newBody = upsertBlock(body, blockId, blockBody);
+
+    if (Object.keys(frontmatter).length > 0) {
+      // 有 frontmatter：更新 blocks + lastEditedAt 后写回
+      const blocks = ((frontmatter.blocks ?? []) as WikiBlockMeta[]).filter((b) => b?.id !== blockId);
+      blocks.push({
+        id: blockId, app: 'meeting-notes', via: 'claude-cli',
+        meetingId, addedAt: new Date().toISOString(),
+      });
+      const updatedFm: WikiFrontmatter = {
+        ...frontmatter, blocks,
+        lastEditedBy: 'claude-cli', lastEditedAt: new Date().toISOString(),
+      };
+      await writeFile(entityPath, `${renderFrontmatter(updatedFm)}\n\n${newBody.trimStart()}`, 'utf8');
+    } else {
+      // 没 frontmatter：直接写带 block 包装的 body
+      await writeFile(entityPath, newBody, 'utf8');
+    }
+    return !alreadyHasBlock; // 仅当本次新增 block 才计为成功
+  } catch (e: any) {
+    console.warn('[persistClaudeWiki/legacy] append failed:', e?.message, '| entity:', trimmedName);
+    return false;
+  }
+}
