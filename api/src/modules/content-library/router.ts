@@ -24,6 +24,8 @@ import {
   subscribeZepSyncJob,
   listZepSyncJobs,
 } from './zepSyncJob.js';
+import { resolveWikiRoot, DEFAULT_WIKI_ROOT_ABS } from '../../lib/wikiRoot.js';
+import { dirname } from 'node:path';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
   return async function contentLibraryRoutes(fastify: FastifyInstance) {
@@ -993,10 +995,10 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // v7.1: Wiki 生成层 (Obsidian 兼容物化视图)
     // ============================================================
 
-    // 生成 wiki
+    // 生成 wiki · wikiRoot 用 lib/wikiRoot 统一解析 (env: MN_CLAUDE_WIKI_ROOT > CONTENT_LIBRARY_WIKI_ROOT > WIKI_ROOT)
     fastify.post('/wiki/generate', async (request, reply) => {
       const body = (request.body || {}) as any;
-      const wikiRoot = body.wikiRoot || process.env.CONTENT_LIBRARY_WIKI_ROOT || './data/content-wiki/default';
+      const wikiRoot = resolveWikiRoot(body.wikiRoot);
       return engine.wikiGenerator.generate({
         wikiRoot,
         domainFilter: body.domainFilter,
@@ -1005,10 +1007,10 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       });
     });
 
-    // 列出所有已生成的 wiki
+    // 列出所有已生成的 wiki · rootDir 是装多个 wiki 的父目录, 默认是 wikiRoot 的 parent
     fastify.get('/wiki/list', async (request, reply) => {
       const query = request.query as any;
-      const rootDir = query.rootDir || process.env.CONTENT_LIBRARY_WIKI_ROOT_DIR || './data/content-wiki';
+      const rootDir = query.rootDir || process.env.CONTENT_LIBRARY_WIKI_ROOT_DIR || dirname(DEFAULT_WIKI_ROOT_ABS);
       const wikis = await engine.wikiGenerator.listWikis(rootDir);
       return { rootDir, wikis };
     });

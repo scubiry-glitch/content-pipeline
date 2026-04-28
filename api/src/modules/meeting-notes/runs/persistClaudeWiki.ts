@@ -16,7 +16,7 @@
 
 import type { MeetingNotesDeps } from '../types.js';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
-import { join, resolve, dirname } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
   parseFrontmatter,
@@ -46,9 +46,6 @@ export interface ClaudeWikiOutput {
   }>;
 }
 
-const REPO_ROOT_FALLBACK = process.cwd().replace(/\/api(?:\/.*)?$/, '');
-const DEFAULT_WIKI_ROOT_REL = 'data/content-wiki/default';
-
 const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event', 'location'] as const;
 const CONCEPT_SUBTYPES = [
   'mental-model', 'judgment', 'bias', 'counterfactual',
@@ -56,13 +53,9 @@ const CONCEPT_SUBTYPES = [
   'regulation', 'demographic',
 ] as const;
 
-export function resolveWikiRoot(): string {
-  const envRoot = process.env.MN_CLAUDE_WIKI_ROOT;
-  if (envRoot && envRoot.trim().length > 0) {
-    return resolve(envRoot.trim());
-  }
-  return resolve(REPO_ROOT_FALLBACK, DEFAULT_WIKI_ROOT_REL);
-}
+// Re-export shared resolver, so existing callers (runEngine 等) 仍能从这里 import
+import { resolveWikiRoot } from '../../../lib/wikiRoot.js';
+export { resolveWikiRoot };
 
 async function ensureWikiDirs(wikiRoot: string): Promise<void> {
   // Phase H+ · sources/<kind>/ 分子目录
