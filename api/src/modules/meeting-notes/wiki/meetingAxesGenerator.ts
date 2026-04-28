@@ -1,11 +1,11 @@
 // Phase H+ · MeetingAxesGenerator
 //
-// 把 17 张 mn_* 表跨场聚合, 物化为 axes/ 顶级目录下 16 个 deliverable .md 页:
-//   axes/_index.md
-//   axes/people/_index.md + commitments.md + role-trajectory.md + speech-quality.md + silence-signals.md
-//   axes/projects/_index.md + decisions.md + assumptions.md + open-questions.md + risks.md
-//   axes/knowledge/_index.md + reusable-judgments.md + mental-models.md + cognitive-biases.md + counterfactuals.md + evidence-grades.md
-//   axes/meta/_index.md + decision-quality.md + necessity-audit.md + affect-curve.md
+// 把 17 张 mn_* 表跨场聚合, 物化为 meeting/axes/ 子目录下 16 个 deliverable .md 页:
+//   meeting/axes/_index.md
+//   sources/sources/meeting/axes/people/_index.md + commitments.md + role-trajectory.md + speech-quality.md + silence-signals.md
+//   sources/sources/meeting/axes/projects/_index.md + decisions.md + assumptions.md + open-questions.md + risks.md
+//   sources/sources/meeting/axes/knowledge/_index.md + reusable-judgments.md + mental-models.md + cognitive-biases.md + counterfactuals.md + evidence-grades.md
+//   sources/sources/meeting/axes/meta/_index.md + decision-quality.md + necessity-audit.md + affect-curve.md
 //
 // 调用:
 //   const gen = new MeetingAxesGenerator(deps);
@@ -57,14 +57,14 @@ export class MeetingAxesGenerator {
 
     // 准备目录
     for (const sub of ['people', 'projects', 'knowledge', 'meta']) {
-      await fs.mkdir(path.join(wikiRoot, 'axes', sub), { recursive: true });
+      await fs.mkdir(path.join(wikiRoot, 'sources/meeting/axes', sub), { recursive: true });
     }
 
     // ── people 轴 ──────────────────────────────────────────────
     {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['commitments', () => this.deps.db.query(
-          `SELECT c.id, c.text, c.due_at, c.state, c.progress_pct,
+          `SELECT c.id, c.text, c.due_at, c.state, c.progress,
                   c.meeting_id, c.person_id, c.created_at,
                   mp.canonical_name AS person_name, mp.aliases
              FROM mn_commitments c
@@ -74,17 +74,17 @@ export class MeetingAxesGenerator {
         ), rows => this.renderCommitments(rows)],
 
         ['role-trajectory', () => this.deps.db.query(
-          `SELECT rt.id, rt.role_label, rt.confidence, rt.computed_at,
+          `SELECT rt.id, rt.role_label, rt.confidence, rt.detected_at AS computed_at,
                   rt.meeting_id, rt.person_id,
                   mp.canonical_name AS person_name
              FROM mn_role_trajectory_points rt
              LEFT JOIN mn_people mp ON mp.id = rt.person_id
-            ORDER BY rt.computed_at DESC NULLS LAST LIMIT $1`,
+            ORDER BY rt.detected_at DESC NULLS LAST LIMIT $1`,
           [limit],
         ), rows => this.renderRoleTrajectory(rows)],
 
         ['speech-quality', () => this.deps.db.query(
-          `SELECT sq.id, sq.entropy_pct, sq.followed_up_count, sq.qa_ratio, sq.term_density,
+          `SELECT sq.id, sq.entropy_pct, sq.followed_up_count, sq.quality_score,
                   sq.meeting_id, sq.person_id, sq.computed_at,
                   mp.canonical_name AS person_name
              FROM mn_speech_quality sq
@@ -108,7 +108,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'axes/people', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/people', `${name}.md`), md, 'utf8');
           axes.people[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -118,7 +118,7 @@ export class MeetingAxesGenerator {
       // _index.md
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'axes/people/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/people/_index.md'),
           this.renderAxisIndex('people', '人物', axes.people),
           'utf8',
         );
@@ -172,7 +172,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'axes/projects', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/projects', `${name}.md`), md, 'utf8');
           axes.projects[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -181,7 +181,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'axes/projects/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/projects/_index.md'),
           this.renderAxisIndex('projects', '项目', axes.projects),
           'utf8',
         );
@@ -228,7 +228,7 @@ export class MeetingAxesGenerator {
         ), rows => this.renderCognitiveBiases(rows)],
 
         ['counterfactuals', () => this.deps.db.query(
-          `SELECT cf.id, cf.rejected_path, cf.tracking_note, cf.validity_check_at,
+          `SELECT cf.id, cf.rejected_path, cf.tracking_note, cf.next_validity_check_at AS validity_check_at,
                   cf.created_at, cf.meeting_id, cf.rejected_by_person_id,
                   mp.canonical_name AS person_name
              FROM mn_counterfactuals cf
@@ -248,7 +248,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'axes/knowledge', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/knowledge', `${name}.md`), md, 'utf8');
           axes.knowledge[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -257,7 +257,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'axes/knowledge/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/knowledge/_index.md'),
           this.renderAxisIndex('knowledge', '知识', axes.knowledge),
           'utf8',
         );
@@ -271,9 +271,8 @@ export class MeetingAxesGenerator {
     {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['decision-quality', () => this.deps.db.query(
-          `SELECT dq.meeting_id, dq.overall, dq.score_evidence, dq.score_alternatives,
-                  dq.score_assumptions, dq.score_dissent, dq.score_clarity,
-                  dq.team_avg, dq.computed_at
+          `SELECT dq.meeting_id, dq.overall, dq.clarity, dq.actionable, dq.traceable,
+                  dq.falsifiable, dq.aligned, dq.computed_at
              FROM mn_decision_quality dq
             ORDER BY dq.computed_at DESC NULLS LAST LIMIT $1`,
           [limit],
@@ -298,7 +297,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'axes/meta', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/meta', `${name}.md`), md, 'utf8');
           axes.meta[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -307,7 +306,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'axes/meta/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/meta/_index.md'),
           this.renderAxisIndex('meta', '元信息', axes.meta),
           'utf8',
         );
@@ -338,13 +337,13 @@ export class MeetingAxesGenerator {
         '',
         '## 轴入口',
         '',
-        `- [[axes/people/_index|人物轴]] · ${Object.keys(axes.people).length} deliverables`,
-        `- [[axes/projects/_index|项目轴]] · ${Object.keys(axes.projects).length} deliverables`,
-        `- [[axes/knowledge/_index|知识轴]] · ${Object.keys(axes.knowledge).length} deliverables`,
-        `- [[axes/meta/_index|元信息轴]] · ${Object.keys(axes.meta).length} deliverables`,
+        `- [[sources/meeting/axes/people/_index|人物轴]] · ${Object.keys(axes.people).length} deliverables`,
+        `- [[sources/meeting/axes/projects/_index|项目轴]] · ${Object.keys(axes.projects).length} deliverables`,
+        `- [[sources/meeting/axes/knowledge/_index|知识轴]] · ${Object.keys(axes.knowledge).length} deliverables`,
+        `- [[sources/meeting/axes/meta/_index|元信息轴]] · ${Object.keys(axes.meta).length} deliverables`,
         '',
       ].join('\n');
-      await fs.writeFile(path.join(wikiRoot, 'axes/_index.md'), md, 'utf8');
+      await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/_index.md'), md, 'utf8');
       filesWritten++;
     } catch (e) {
       errors.push(`axes/_index: ${(e as Error).message}`);
@@ -533,10 +532,10 @@ export class MeetingAxesGenerator {
 
   private renderDecisionQuality(rows: any[]): string {
     const out = [this.fmHeader('meta', 'decision-quality', rows.length, '决策质量 · Decision Quality')];
-    out.push('| meeting | 总分 | 证据 | 替代 | 假设 | 异议 | 清晰 |');
+    out.push('| meeting | 总分 | 清晰 | 可执行 | 可追踪 | 可证伪 | 对齐 |');
     out.push('|---|---|---|---|---|---|---|');
     for (const r of rows) {
-      out.push(`| ${this.meetingLink(r.meeting_id)} | ${Number(r.overall ?? 0).toFixed(2)} | ${Number(r.score_evidence ?? 0).toFixed(2)} | ${Number(r.score_alternatives ?? 0).toFixed(2)} | ${Number(r.score_assumptions ?? 0).toFixed(2)} | ${Number(r.score_dissent ?? 0).toFixed(2)} | ${Number(r.score_clarity ?? 0).toFixed(2)} |`);
+      out.push(`| ${this.meetingLink(r.meeting_id)} | ${Number(r.overall ?? 0).toFixed(2)} | ${Number(r.clarity ?? 0).toFixed(2)} | ${Number(r.actionable ?? 0).toFixed(2)} | ${Number(r.traceable ?? 0).toFixed(2)} | ${Number(r.falsifiable ?? 0).toFixed(2)} | ${Number(r.aligned ?? 0).toFixed(2)} |`);
     }
     return out.join('\n');
   }

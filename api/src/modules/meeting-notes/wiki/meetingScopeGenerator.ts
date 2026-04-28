@@ -74,7 +74,7 @@ export class MeetingScopeGenerator {
 
     // 准备目录
     for (const sub of ['project', 'client', 'topic']) {
-      await fs.mkdir(path.join(wikiRoot, 'scopes', sub), { recursive: true });
+      await fs.mkdir(path.join(wikiRoot, 'sources/meeting/scopes', sub), { recursive: true });
     }
 
     // ── 加载 scopes ──
@@ -107,7 +107,7 @@ export class MeetingScopeGenerator {
     if (!opts.scopeId) {
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'scopes', '_index.md'),
+          path.join(wikiRoot, 'sources/meeting/scopes', '_index.md'),
           this.renderTopIndex(summary),
           'utf8',
         );
@@ -155,7 +155,7 @@ export class MeetingScopeGenerator {
     const [commitmentsRes, decisionsRes, openQRes, risksRes, judgmentsRes, dqRes] = await Promise.all([
       meetingIds.length > 0
         ? this.deps.db.query(
-            `SELECT c.id, c.text, c.due_at, c.state, c.progress_pct, c.meeting_id,
+            `SELECT c.id, c.text, c.due_at, c.state, c.progress, c.meeting_id,
                     mp.canonical_name AS person_name
                FROM mn_commitments c
                LEFT JOIN mn_people mp ON mp.id = c.person_id
@@ -203,8 +203,8 @@ export class MeetingScopeGenerator {
         : Promise.resolve({ rows: [] }),
       meetingIds.length > 0
         ? this.deps.db.query(
-            `SELECT meeting_id, overall, score_evidence, score_alternatives,
-                    score_assumptions, score_dissent, score_clarity
+            `SELECT meeting_id, overall, clarity, actionable, traceable,
+                    falsifiable, aligned
                FROM mn_decision_quality
               WHERE meeting_id::text = ANY($1::text[])`,
             [meetingIds],
@@ -241,7 +241,7 @@ export class MeetingScopeGenerator {
     });
 
     const slug = `${scope.slug || slugify(scope.name)}`;
-    const filePath = path.join(wikiRoot, 'scopes', scope.kind, slug, '_index.md');
+    const filePath = path.join(wikiRoot, 'sources/meeting/scopes', scope.kind, slug, '_index.md');
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, md, 'utf8');
 
@@ -355,7 +355,7 @@ export class MeetingScopeGenerator {
         decisionQuality.reduce((s, x) => s + Number(x[k] ?? 0), 0) / decisionQuality.length;
       out.push('## 决策质量平均', '');
       out.push(`- overall: ${avg('overall').toFixed(2)}`);
-      out.push(`- evidence: ${avg('score_evidence').toFixed(2)} · alternatives: ${avg('score_alternatives').toFixed(2)} · assumptions: ${avg('score_assumptions').toFixed(2)} · dissent: ${avg('score_dissent').toFixed(2)} · clarity: ${avg('score_clarity').toFixed(2)}`);
+      out.push(`- 清晰: ${avg('clarity').toFixed(2)} · 可执行: ${avg('actionable').toFixed(2)} · 可追踪: ${avg('traceable').toFixed(2)} · 可证伪: ${avg('falsifiable').toFixed(2)} · 对齐: ${avg('aligned').toFixed(2)}`);
       out.push('');
     }
 
