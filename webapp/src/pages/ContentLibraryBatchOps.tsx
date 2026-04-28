@@ -837,6 +837,28 @@ export function ContentLibraryBatchOps() {
     );
   };
 
+  /**
+   * batch-ops 改进 #3: Step 间质量门
+   * - Step 3 verdict='poor' 时 Step 4/5/6 按钮置灰，避免低质量数据进图谱
+   * - Step 2 / Step 3 都没跑过时 Step 4 按钮置灰
+   * 用户可"强制继续"绕过（点提示文本里的"仍要继续"），但默认拦下
+   */
+  const [forceContinue, setForceContinue] = useState(false);
+  const downstreamGate: { blocked: boolean; reason: string } = (() => {
+    if (forceContinue) return { blocked: false, reason: '' };
+    // 没跑过 Step 2 + 没跑过 Step 3 → 下游按钮全锁
+    if (steps.ai.status !== 'done' && steps.extract.status !== 'done') {
+      return { blocked: true, reason: '请先完成 Step 2 (AI 分析) 或 Step 3 (事实提取)' };
+    }
+    if (extractQuality && extractQuality.verdict === 'poor') {
+      return {
+        blocked: true,
+        reason: `Step 3 产出质量较差（avg confidence ${extractQuality.totals.avgConfidence.toFixed(2)} · 占位率 ${extractQuality.totals.placeholderRate}%），建议先重跑`,
+      };
+    }
+    return { blocked: false, reason: '' };
+  })();
+
   const statusIcon = (s: StepStatus['status']) => {
     switch (s) {
       case 'idle': return '⚪';
@@ -1069,6 +1091,23 @@ export function ContentLibraryBatchOps() {
           {extractQuality && <QualityPanel q={extractQuality} />}
         </div>
 
+        {/* batch-ops 改进 #3: 下游质量门 banner */}
+        {downstreamGate.blocked && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 flex items-start gap-3">
+            <span className="text-lg leading-none">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-amber-800 dark:text-amber-300">下游 Step 4-6 已锁定</div>
+              <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">{downstreamGate.reason}</div>
+            </div>
+            <button
+              onClick={() => setForceContinue(true)}
+              className="text-[11px] px-2 py-1 rounded border border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0"
+            >
+              仍要继续
+            </button>
+          </div>
+        )}
+
         {/* Step 4: 知识图谱 + Zep 回填 */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -1123,8 +1162,10 @@ export function ContentLibraryBatchOps() {
               {steps.graph.message && <p className="text-xs text-gray-500 mt-0.5">{steps.graph.message}</p>}
               {steps.graph.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.graph.lastRun).toLocaleString()}</p>}
             </div>
-            <button onClick={triggerGraphRecompute} disabled={steps.graph.status === 'running'}
-              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 shrink-0">
+            <button onClick={triggerGraphRecompute}
+              disabled={steps.graph.status === 'running' || downstreamGate.blocked}
+              title={downstreamGate.blocked ? downstreamGate.reason : undefined}
+              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
               🔗 重算图谱
             </button>
           </div>
@@ -1151,7 +1192,9 @@ export function ContentLibraryBatchOps() {
                   </button>
                 ) : (
                   <button onClick={startZepSync}
-                    className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700">
+                    disabled={downstreamGate.blocked}
+                    title={downstreamGate.blocked ? downstreamGate.reason : undefined}
+                    className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     🧠 回填 Zep
                   </button>
                 )}
@@ -1226,8 +1269,10 @@ export function ContentLibraryBatchOps() {
               {steps.topics.message && <p className="text-xs text-gray-500 mt-0.5">{steps.topics.message}</p>}
               {steps.topics.lastRun && <p className="text-[10px] text-gray-400">上次: {new Date(steps.topics.lastRun).toLocaleString()}</p>}
             </div>
-            <button onClick={triggerTopicEnrich} disabled={steps.topics.status === 'running'}
-              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50 shrink-0">
+            <button onClick={triggerTopicEnrich}
+              disabled={steps.topics.status === 'running' || downstreamGate.blocked}
+              title={downstreamGate.blocked ? downstreamGate.reason : undefined}
+              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
               ✍️ 生成叙事
             </button>
           </div>
@@ -1257,7 +1302,9 @@ export function ContentLibraryBatchOps() {
                   </button>
                 ) : (
                   <button onClick={startSynthesisJob}
-                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                    disabled={downstreamGate.blocked}
+                    title={downstreamGate.blocked ? downstreamGate.reason : undefined}
+                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     🧠 预生成
                   </button>
                 )}
@@ -1336,8 +1383,10 @@ export function ContentLibraryBatchOps() {
             <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               {statusIcon(steps.wiki.status)} Step 6: Wiki 重生成
             </h3>
-            <button onClick={triggerWikiGenerate} disabled={steps.wiki.status === 'running'}
-              className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
+            <button onClick={triggerWikiGenerate}
+              disabled={steps.wiki.status === 'running' || downstreamGate.blocked}
+              title={downstreamGate.blocked ? downstreamGate.reason : undefined}
+              className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
               📖 生成 Wiki
             </button>
           </div>
