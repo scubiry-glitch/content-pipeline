@@ -7,6 +7,7 @@
 // - 幂等: 每次 generate() 会覆盖 wikiRoot，等于重新物化一次
 
 import { promises as fs } from 'fs';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import type { DatabaseAdapter, ContentEntity, ContentFact } from '../types.js';
 import {
@@ -16,8 +17,19 @@ import {
   renderIndexPage,
   renderOverviewPlaceholder,
   renderObsidianConfig,
+  renderL2DomainPage,
+  renderL1IndexPage,
+  mapEntityTypeToTypeSubtype,
   slugify,
 } from './templates.js';
+import {
+  flattenTaxonomy,
+  getTaxonomyNode,
+  parseFrontmatter,
+  extractBlocks,
+  type WikiBlockMeta,
+  type TaxonomyFlatNode,
+} from './wikiFrontmatter.js';
 
 export interface WikiGenerateOptions {
   /** 本地文件系统根目录 (绝对路径) */
@@ -28,14 +40,25 @@ export interface WikiGenerateOptions {
   maxEntities?: number;
   /** 每实体的事实上限 */
   maxFactsPerEntity?: number;
+  /** Phase H · 跳过 sources/.md 写入 (claude-cli 全权写) */
+  skipSources?: boolean;
+  /** Phase H · 重生时保留 frontmatter.app === 'meeting-notes' 的整文件不覆盖,
+   *  以及 body 中 app=meeting-notes 的 blocks (来自 frontmatter.blocks 标记的) */
+  preserveAppMeetingNotes?: boolean;
+  /** Phase H · 旧扁平布局兜底: entities/<slug>.md (不进 subtype 子目录).
+   *  默认 false (新分级布局) */
+  legacyFlatLayout?: boolean;
 }
 
 export interface WikiGenerateResult {
   wikiRoot: string;
   filesWritten: number;
   entities: number;
-  concepts: number;
+  concepts: number;             // 旧字段 (legacyConceptPage 数量, Phase H 不再写)
+  domains: number;              // Phase H · L2 domain page 数量
+  domainIndexes: number;        // Phase H · L1 _index.md 数量
   sources: number;
+  preservedFiles: number;       // Phase H · 因 app=meeting-notes 而被跳过的文件数
   durationMs: number;
   errors: string[];
 }
@@ -54,13 +77,26 @@ export class WikiGenerator {
     const maxFactsPerEntity = options.maxFactsPerEntity || 50;
     const errors: string[] = [];
     let filesWritten = 0;
+    let preservedFiles = 0;
 
-    // 1. 准备目录结构
+    // 1. 准备目录结构 (Phase H · 加 subtype 子目录 + domains)
     await fs.mkdir(wikiRoot, { recursive: true });
-    await fs.mkdir(path.join(wikiRoot, 'entities'), { recursive: true });
-    await fs.mkdir(path.join(wikiRoot, 'concepts'), { recursive: true });
-    await fs.mkdir(path.join(wikiRoot, 'sources'), { recursive: true });
     await fs.mkdir(path.join(wikiRoot, '.obsidian'), { recursive: true });
+    if (options.legacyFlatLayout) {
+      await fs.mkdir(path.join(wikiRoot, 'entities'), { recursive: true });
+      await fs.mkdir(path.join(wikiRoot, 'concepts'), { recursive: true });
+    } else {
+      for (const sub of ['person', 'org', 'product', 'project', 'event']) {
+        await fs.mkdir(path.join(wikiRoot, 'entities', sub), { recursive: true });
+      }
+      for (const sub of ['mental-model', 'judgment', 'bias', 'counterfactual']) {
+        await fs.mkdir(path.join(wikiRoot, 'concepts', sub), { recursive: true });
+      }
+      // domains/<L1-code-name>/ 在写入时按需 mkdir (避免空目录)
+    }
+    if (!options.skipSources) {
+      await fs.mkdir(path.join(wikiRoot, 'sources'), { recursive: true });
+    }
 
     // 2. 加载数据
     const entities = await this.loadEntities(options.domainFilter, maxEntities);
@@ -74,7 +110,6 @@ export class WikiGenerator {
       const list = factsBySubject.get(f.subject) || [];
       list.push(f);
       factsBySubject.set(f.subject, list);
-      // object 也可能是一个实体
       if (f.object) {
         const objList = factsBySubject.get(f.object) || [];
         objList.push(f);
@@ -82,15 +117,75 @@ export class WikiGenerator {
       }
     }
 
-    // 4. 生成实体页
+    // 4. 生成实体页 (Phase H · 路由到 entities/<subtype>/<slug>.md 或 concepts/<subtype>/<slug>.md)
     let entityCount = 0;
     for (const entity of entities) {
       const entityFacts = (factsBySubject.get(entity.canonicalName) || []).slice(0, maxFactsPerEntity);
       const neighbors = this.computeNeighbors(entity.canonicalName, entityFacts);
-      const content = renderEntityPage({ entity, facts: entityFacts, neighbors });
-      const filename = `${slugify(entity.canonicalName)}.md`;
+
+      // 路由路径
+      const filePath = options.legacyFlatLayout
+        ? path.join(wikiRoot, 'entities', `${slugify(entity.canonicalName)}.md`)
+        : (() => {
+            const { type, subtype } = mapEntityTypeToTypeSubtype(entity.entityType);
+            const dir = type === 'entity' ? `entities/${subtype}` : `concepts/${subtype}`;
+            return path.join(wikiRoot, dir, `${slugify(entity.canonicalName)}.md`);
+          })();
+
+      // Phase H · preserveAppMeetingNotes 检查
+      let preserveBlocks: string[] | undefined;
+      let preserveBlockMetas: WikiBlockMeta[] | undefined;
+      if (options.preserveAppMeetingNotes && existsSync(filePath)) {
+        try {
+          const cur = await fs.readFile(filePath, 'utf8');
+          const { frontmatter, body } = parseFrontmatter(cur);
+          if (frontmatter.app === 'meeting-notes') {
+            // 整文件由 meeting-notes 拥有 → 跳过
+            preservedFiles += 1;
+            continue;
+          }
+          // 只保留 app=meeting-notes 的 blocks
+          const blockMetas = ((frontmatter.blocks ?? []) as WikiBlockMeta[]).filter((b) => b?.app === 'meeting-notes');
+          if (blockMetas.length > 0) {
+            const allBlocks = extractBlocks(body);
+            preserveBlocks = blockMetas
+              .map((m) => allBlocks.find((b) => b.id === m.id)?.raw)
+              .filter((x): x is string => Boolean(x));
+            preserveBlockMetas = blockMetas;
+          }
+        } catch (err) {
+          errors.push(`preserve check ${entity.canonicalName}: ${(err as Error).message}`);
+        }
+      }
+
+      // 选 taxonomy_code (出现频次最高的 L2)
+      const taxonomyCounts = new Map<string, number>();
+      for (const f of entityFacts) {
+        const code = String(f.context?.taxonomy_code ?? '');
+        if (code && code !== 'E99.OTHER') {
+          taxonomyCounts.set(code, (taxonomyCounts.get(code) ?? 0) + 1);
+        }
+      }
+      const taxonomyCode = Array.from(taxonomyCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+      const taxonomyCodesSecondary = Array.from(taxonomyCounts.entries())
+        .filter(([c]) => c !== taxonomyCode)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([c]) => c);
+
+      const content = renderEntityPage({
+        entity,
+        facts: entityFacts,
+        neighbors,
+        taxonomyCode,
+        taxonomyCodesSecondary,
+        preserveBlocks,
+        preserveBlockMetas,
+      });
+
       try {
-        await fs.writeFile(path.join(wikiRoot, 'entities', filename), content, 'utf8');
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, content, 'utf8');
         filesWritten++;
         entityCount++;
       } catch (err) {
@@ -98,67 +193,197 @@ export class WikiGenerator {
       }
     }
 
-    // 5. 按 domain 分组 facts → 生成概念页
-    const factsByDomain = new Map<string, ContentFact[]>();
-    for (const f of facts) {
-      const domain = String(f.context?.domain || 'uncategorized');
-      const list = factsByDomain.get(domain) || [];
-      list.push(f);
-      factsByDomain.set(domain, list);
-    }
-    let conceptCount = 0;
-    for (const [domain, domainFacts] of factsByDomain.entries()) {
-      if (domainFacts.length < 2) continue;  // 太少的领域不生成页面
-      const entityCountMap = new Map<string, number>();
-      for (const f of domainFacts) {
-        if (f.subject) entityCountMap.set(f.subject, (entityCountMap.get(f.subject) || 0) + 1);
-      }
-      const topEntities = Array.from(entityCountMap.entries())
-        .map(([name, count]) => ({ name, factCount: count }))
-        .sort((a, b) => b.factCount - a.factCount)
-        .slice(0, 30);
+    // 5. Phase H · 按 taxonomy_code 分组 facts → 生成 domains/<L1>/<L2>.md + _index.md
+    let domainCount = 0;
+    let domainIndexCount = 0;
+    let conceptCount = 0;  // 仅当 legacyFlatLayout 写老 concepts/ 时
 
-      const content = renderConceptPage({ domain, facts: domainFacts, topEntities });
-      const filename = `${slugify(domain)}.md`;
-      try {
-        await fs.writeFile(path.join(wikiRoot, 'concepts', filename), content, 'utf8');
-        filesWritten++;
-        conceptCount++;
-      } catch (err) {
-        errors.push(`concept ${domain}: ${(err as Error).message}`);
+    if (options.legacyFlatLayout) {
+      // 旧路径：concepts/<free-text-domain>.md
+      const factsByDomain = new Map<string, ContentFact[]>();
+      for (const f of facts) {
+        const domain = String(f.context?.domain || 'uncategorized');
+        const list = factsByDomain.get(domain) || [];
+        list.push(f);
+        factsByDomain.set(domain, list);
       }
+      for (const [domain, domainFacts] of factsByDomain.entries()) {
+        if (domainFacts.length < 2) continue;
+        const entityCountMap = new Map<string, number>();
+        for (const f of domainFacts) {
+          if (f.subject) entityCountMap.set(f.subject, (entityCountMap.get(f.subject) || 0) + 1);
+        }
+        const topEntities = Array.from(entityCountMap.entries())
+          .map(([name, count]) => ({ name, factCount: count }))
+          .sort((a, b) => b.factCount - a.factCount)
+          .slice(0, 30);
+        try {
+          await fs.writeFile(
+            path.join(wikiRoot, 'concepts', `${slugify(domain)}.md`),
+            renderConceptPage({ domain, facts: domainFacts, topEntities }),
+            'utf8',
+          );
+          filesWritten++;
+          conceptCount++;
+        } catch (err) {
+          errors.push(`concept ${domain}: ${(err as Error).message}`);
+        }
+      }
+    } else {
+      // Phase H · 新路径：按 taxonomy_code 分组
+      const taxonomy = flattenTaxonomy();
+      const factsByCode = new Map<string, ContentFact[]>();
+      for (const f of facts) {
+        const code = String(f.context?.taxonomy_code ?? 'E99.OTHER');
+        const list = factsByCode.get(code) || [];
+        list.push(f);
+        factsByCode.set(code, list);
+      }
+
+      // 5a) L2 domain page · domains/<L1>/<L2>.md
+      const l1Stats = new Map<string, { l1: TaxonomyFlatNode; l2List: Array<{ node: TaxonomyFlatNode; factCount: number }>; total: number }>();
+      for (const [code, codeFacts] of factsByCode.entries()) {
+        if (codeFacts.length < 2) continue;
+        const node = getTaxonomyNode(code);
+        if (!node || node.level !== 2 || !node.parentCode) continue;
+
+        const l1 = getTaxonomyNode(node.parentCode);
+        if (!l1) continue;
+
+        // 累计到 L1 stats
+        let l1Stat = l1Stats.get(l1.code);
+        if (!l1Stat) {
+          l1Stat = { l1, l2List: [], total: 0 };
+          l1Stats.set(l1.code, l1Stat);
+        }
+        l1Stat.l2List.push({ node, factCount: codeFacts.length });
+        l1Stat.total += codeFacts.length;
+
+        // 写 L2 文件
+        const entityCountMap = new Map<string, number>();
+        for (const f of codeFacts) {
+          if (f.subject) entityCountMap.set(f.subject, (entityCountMap.get(f.subject) || 0) + 1);
+        }
+        const topEntities = Array.from(entityCountMap.entries())
+          .map(([name, count]) => ({ name, factCount: count }))
+          .sort((a, b) => b.factCount - a.factCount)
+          .slice(0, 30);
+
+        const l1Dir = `${l1.code}-${slugify(l1.name)}`;
+        const l2Filename = `${node.code}-${slugify(node.name)}.md`;
+        const filePath = path.join(wikiRoot, 'domains', l1Dir, l2Filename);
+
+        // preserveAppMeetingNotes
+        let preserveBlocks: string[] | undefined;
+        if (options.preserveAppMeetingNotes && existsSync(filePath)) {
+          try {
+            const cur = await fs.readFile(filePath, 'utf8');
+            const { frontmatter, body } = parseFrontmatter(cur);
+            if (frontmatter.app === 'meeting-notes') { preservedFiles += 1; continue; }
+            const metas = ((frontmatter.blocks ?? []) as WikiBlockMeta[]).filter((b) => b?.app === 'meeting-notes');
+            if (metas.length > 0) {
+              const allBlocks = extractBlocks(body);
+              preserveBlocks = metas.map((m) => allBlocks.find((b) => b.id === m.id)?.raw).filter((x): x is string => Boolean(x));
+            }
+          } catch { /* skip preserve on error */ }
+        }
+
+        try {
+          await fs.mkdir(path.dirname(filePath), { recursive: true });
+          await fs.writeFile(
+            filePath,
+            renderL2DomainPage({ node, facts: codeFacts, topEntities, preserveBlocks }),
+            'utf8',
+          );
+          filesWritten++;
+          domainCount++;
+        } catch (err) {
+          errors.push(`domain L2 ${node.code}: ${(err as Error).message}`);
+        }
+      }
+
+      // 5b) L1 _index.md (只为有 L2 内容的 L1 生成)
+      for (const stat of l1Stats.values()) {
+        const l1Dir = `${stat.l1.code}-${slugify(stat.l1.name)}`;
+        const indexPath = path.join(wikiRoot, 'domains', l1Dir, '_index.md');
+
+        // 跨 L2 高频 entity
+        const allEntities = new Map<string, number>();
+        for (const l2 of stat.l2List) {
+          const codeFacts = factsByCode.get(l2.node.code) ?? [];
+          for (const f of codeFacts) {
+            if (f.subject) allEntities.set(f.subject, (allEntities.get(f.subject) ?? 0) + 1);
+          }
+        }
+        const topEntities = Array.from(allEntities.entries())
+          .map(([name, count]) => ({ name, factCount: count }))
+          .sort((a, b) => b.factCount - a.factCount)
+          .slice(0, 30);
+
+        try {
+          await fs.mkdir(path.dirname(indexPath), { recursive: true });
+          await fs.writeFile(
+            indexPath,
+            renderL1IndexPage({
+              l1: stat.l1,
+              l2Children: stat.l2List,
+              totalFactCount: stat.total,
+              topEntities,
+            }),
+            'utf8',
+          );
+          filesWritten++;
+          domainIndexCount++;
+        } catch (err) {
+          errors.push(`domain L1 ${stat.l1.code}: ${(err as Error).message}`);
+        }
+      }
+      // 标避免 unused 警告
+      void taxonomy;
     }
 
-    // 6. 生成来源页 (每个独立 asset_id)
+    // 6. 生成来源页 (Phase H · skipSources 时跳过, 让 claude-cli 全权)
     let sourceCount = 0;
-    const factsByAsset = new Map<string, ContentFact[]>();
-    for (const f of facts) {
-      if (!f.assetId) continue;
-      const list = factsByAsset.get(f.assetId) || [];
-      list.push(f);
-      factsByAsset.set(f.assetId, list);
-    }
-    for (const [assetId, assetFacts] of factsByAsset.entries()) {
-      const row = assetRows.get(assetId);
-      const entityNames = Array.from(new Set([
-        ...assetFacts.map(f => f.subject).filter(Boolean),
-        ...assetFacts.map(f => f.object).filter(Boolean),
-      ])).slice(0, 30);
-      const content = renderSourcePage({
-        assetId,
-        title: row?.source || assetId,
-        l0Summary: row?.l0_summary,
-        source: row?.source,
-        factCount: assetFacts.length,
-        entityNames,
-      });
-      const filename = `${slugify(assetId)}.md`;
-      try {
-        await fs.writeFile(path.join(wikiRoot, 'sources', filename), content, 'utf8');
-        filesWritten++;
-        sourceCount++;
-      } catch (err) {
-        errors.push(`source ${assetId}: ${(err as Error).message}`);
+    if (!options.skipSources) {
+      const factsByAsset = new Map<string, ContentFact[]>();
+      for (const f of facts) {
+        if (!f.assetId) continue;
+        const list = factsByAsset.get(f.assetId) || [];
+        list.push(f);
+        factsByAsset.set(f.assetId, list);
+      }
+      for (const [assetId, assetFacts] of factsByAsset.entries()) {
+        const row = assetRows.get(assetId);
+        const entityNames = Array.from(new Set([
+          ...assetFacts.map(f => f.subject).filter(Boolean),
+          ...assetFacts.map(f => f.object).filter(Boolean),
+        ])).slice(0, 30);
+
+        const filePath = path.join(wikiRoot, 'sources', `${slugify(assetId)}.md`);
+        // preserveAppMeetingNotes: claude-cli 写过的 source 跳过
+        if (options.preserveAppMeetingNotes && existsSync(filePath)) {
+          try {
+            const cur = await fs.readFile(filePath, 'utf8');
+            const { frontmatter } = parseFrontmatter(cur);
+            if (frontmatter.app === 'meeting-notes') { preservedFiles += 1; continue; }
+          } catch { /* fall through */ }
+        }
+
+        const content = renderSourcePage({
+          assetId,
+          title: row?.source || assetId,
+          l0Summary: row?.l0_summary,
+          source: row?.source,
+          factCount: assetFacts.length,
+          entityNames,
+        });
+        try {
+          await fs.writeFile(filePath, content, 'utf8');
+          filesWritten++;
+          sourceCount++;
+        } catch (err) {
+          errors.push(`source ${assetId}: ${(err as Error).message}`);
+        }
       }
     }
 
@@ -167,12 +392,28 @@ export class WikiGenerator {
       .map(([name, list]) => ({ name, count: list.length }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 50);
-    const domains = Array.from(factsByDomain.keys()).filter(d => (factsByDomain.get(d) || []).length >= 2);
+
+    // Phase H · domains 列表：legacyFlatLayout 时按 free-text，否则用 taxonomy_code
+    const domainsList: string[] = [];
+    if (options.legacyFlatLayout) {
+      const seen = new Set<string>();
+      for (const f of facts) {
+        const d = String(f.context?.domain || '');
+        if (d && !seen.has(d)) { seen.add(d); domainsList.push(d); }
+      }
+    } else {
+      const codeCount = new Map<string, number>();
+      for (const f of facts) {
+        const c = String(f.context?.taxonomy_code ?? '');
+        if (c) codeCount.set(c, (codeCount.get(c) ?? 0) + 1);
+      }
+      for (const [c, n] of codeCount.entries()) if (n >= 2) domainsList.push(c);
+    }
     const indexContent = renderIndexPage({
       entityCount,
       factCount: facts.length,
       sourceCount,
-      domains,
+      domains: domainsList,
       topEntities: topEntitiesGlobal,
     });
     await fs.writeFile(path.join(wikiRoot, 'index.md'), indexContent, 'utf8');
@@ -181,7 +422,7 @@ export class WikiGenerator {
     const overviewContent = renderOverviewPlaceholder({
       entityCount,
       factCount: facts.length,
-      domains,
+      domains: domainsList,
     });
     await fs.writeFile(path.join(wikiRoot, 'overview.md'), overviewContent, 'utf8');
     filesWritten++;
@@ -199,7 +440,10 @@ export class WikiGenerator {
       filesWritten,
       entities: entityCount,
       concepts: conceptCount,
+      domains: domainCount,
+      domainIndexes: domainIndexCount,
       sources: sourceCount,
+      preservedFiles,
       durationMs: Date.now() - started,
       errors,
     };
@@ -245,17 +489,40 @@ export class WikiGenerator {
     }
   }
 
-  /** 列出 wiki 目录下所有 markdown 文件 */
+  /** 列出 wiki 目录下所有 markdown 文件 (Phase H · 递归到子目录) */
   async listFiles(wikiRoot: string): Promise<Array<{ path: string; category: string }>> {
     const out: Array<{ path: string; category: string }> = [];
-    for (const cat of ['entities', 'concepts', 'sources']) {
+
+    // entities/ + concepts/ + domains/: 递归一级 (subtype 子目录)
+    for (const cat of ['entities', 'concepts', 'domains']) {
+      const catPath = path.join(wikiRoot, cat);
       try {
-        const files = await fs.readdir(path.join(wikiRoot, cat));
-        for (const f of files.filter(f => f.endsWith('.md'))) {
-          out.push({ path: `${cat}/${f}`, category: cat });
+        const items = await fs.readdir(catPath, { withFileTypes: true });
+        for (const it of items) {
+          if (it.isDirectory()) {
+            // 子目录: entities/person/<f>.md, domains/E07-人工智能/<f>.md 等
+            try {
+              const subFiles = await fs.readdir(path.join(catPath, it.name));
+              for (const f of subFiles.filter((x) => x.endsWith('.md'))) {
+                out.push({ path: `${cat}/${it.name}/${f}`, category: cat });
+              }
+            } catch { /* 子目录读不到 */ }
+          } else if (it.name.endsWith('.md')) {
+            // 平铺文件 (legacyFlatLayout 或 _index.md)
+            out.push({ path: `${cat}/${it.name}`, category: cat });
+          }
         }
       } catch { /* 目录不存在 */ }
     }
+
+    // sources/ 不分子目录
+    try {
+      const files = await fs.readdir(path.join(wikiRoot, 'sources'));
+      for (const f of files.filter((x) => x.endsWith('.md'))) {
+        out.push({ path: `sources/${f}`, category: 'sources' });
+      }
+    } catch { /* */ }
+
     // 顶层
     try {
       for (const f of ['index.md', 'overview.md']) {
