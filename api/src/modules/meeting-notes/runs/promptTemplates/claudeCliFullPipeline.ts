@@ -571,8 +571,10 @@ wikiMarkdown: 给 data/content-wiki/default/ 直接写文件用的 markdown 内�
     sourceEntry: string,    // sources/meeting/<meetingId>/_index.md 全文 markdown, 见下方 9 段模板
     entityUpdates: Array<{
       type: 'entity' | 'concept',                  // entity = 具体事物 / concept = 抽象
-      subtype: 'person' | 'org' | 'product' | 'project' | 'event'
-             | 'mental-model' | 'judgment' | 'bias' | 'counterfactual',
+      subtype: 'person' | 'org' | 'product' | 'project' | 'event' | 'location'
+             | 'mental-model' | 'judgment' | 'bias' | 'counterfactual'
+             | 'metric' | 'technology' | 'financial-instrument'
+             | 'business-model' | 'regulation' | 'demographic',
       canonicalName: string,                       // 与 mn_* 表 / content_entities canonical_name 对齐
       aliases?: string[],
       initialContent?: string,                     // 文件不存在时的 baseline body (1-2 段简介);
