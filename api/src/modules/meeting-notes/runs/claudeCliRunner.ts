@@ -133,12 +133,32 @@ async function loadTranscript(deps: MeetingNotesDeps, assetId: string): Promise<
   return typeof content === 'string' ? content : '';
 }
 
-function drainStream(stream: NodeJS.ReadableStream): Promise<string> {
+function drainStream(stream: NodeJS.ReadableStream, label = 'stream', runId = ''): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    stream.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    stream.on('error', reject);
+    let bytesSeen = 0;
+    let lastDataAt = Date.now();
+    stream.on('data', (c) => {
+      const buf = Buffer.isBuffer(c) ? c : Buffer.from(c);
+      chunks.push(buf);
+      bytesSeen += buf.length;
+      lastDataAt = Date.now();
+      if (bytesSeen <= 256 || bytesSeen === buf.length) {
+        console.log(`[claudeCliRunner ${runId.slice(0, 8)}] ${label}: first/early bytes ${bytesSeen}B`);
+      }
+    });
+    stream.on('end', () => {
+      const total = Buffer.concat(chunks).toString('utf8');
+      console.log(`[claudeCliRunner ${runId.slice(0, 8)}] ${label}: end · total ${bytesSeen}B (lastData ${Date.now() - lastDataAt}ms ago)`);
+      resolve(total);
+    });
+    stream.on('error', (err) => {
+      console.warn(`[claudeCliRunner ${runId.slice(0, 8)}] ${label}: error · ${(err as Error).message}`);
+      reject(err);
+    });
+    stream.on('close', () => {
+      console.log(`[claudeCliRunner ${runId.slice(0, 8)}] ${label}: close (bytes=${bytesSeen})`);
+    });
   });
 }
 
@@ -279,12 +299,24 @@ export async function runClaudeCliMode(
     } catch {}
   }, DEFAULT_TIMEOUT_MS);
 
-  // 收尾
+  // 收尾 (Phase H+ debug · 加大量日志看卡哪)
+  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] spawn pid=${proc.pid} cmd=${cmd.slice(0, 120)}...`);
+  proc.on('exit', (code, sig) => {
+    console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc exit code=${code} sig=${sig}`);
+  });
+  proc.on('close', (code, sig) => {
+    console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc close code=${code} sig=${sig}`);
+  });
+  proc.on('error', (err) => {
+    console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc error ${(err as Error).message}`);
+  });
+  const t0 = Date.now();
   const [stdout, stderr, exitCode] = await Promise.all([
-    drainStream(proc.stdout),
-    drainStream(proc.stderr),
+    drainStream(proc.stdout, 'stdout', payload.runId),
+    drainStream(proc.stderr, 'stderr', payload.runId),
     new Promise<number>((res) => proc.on('close', (code) => res(code ?? -1))),
   ]);
+  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] all done (${Date.now() - t0}ms) · exitCode=${exitCode} · stdout=${stdout.length}B stderr=${stderr.length}B`);
   clearTimeout(timer);
 
   // 清理 tmpfile（无论成败）
