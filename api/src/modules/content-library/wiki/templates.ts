@@ -58,20 +58,58 @@ function escapeYaml(s: string): string {
 // Phase H: subtype 细分 + frontmatter blocks 保留 + taxonomy_code 注入
 // ============================================================
 
-const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event'] as const;
+const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event', 'location'] as const;
+const CONCEPT_SUBTYPES = [
+  'mental-model', 'judgment', 'bias', 'counterfactual',
+  'metric', 'technology', 'financial-instrument', 'business-model',
+  'regulation', 'demographic',
+] as const;
 
-/** 把 entity_type 字符串映射到 type/subtype */
+/** 把 entity_type 字符串映射到 type/subtype (含中文 entity_type 别名) */
 export function mapEntityTypeToTypeSubtype(entityType: string | undefined): {
   type: 'entity' | 'concept';
   subtype: string;
 } {
   const t = String(entityType ?? 'concept').toLowerCase();
+
+  // 直接命中标准 subtype
   if ((ENTITY_SUBTYPES as readonly string[]).includes(t)) return { type: 'entity', subtype: t };
-  // concept 子类
-  if (['mental-model', 'judgment', 'bias', 'counterfactual'].includes(t)) {
-    return { type: 'concept', subtype: t };
+  if ((CONCEPT_SUBTYPES as readonly string[]).includes(t)) return { type: 'concept', subtype: t };
+
+  // entity 别名映射
+  if (t === 'person' || t === '人物') return { type: 'entity', subtype: 'person' };
+  if (
+    t === 'company' || t === 'organization' ||
+    t === '机构' || t === '研究机构' || t === '行业协会' ||
+    t === '公司类型' || t === '企业群体' || t === '企业类型' ||
+    t === '政府' || t === '政府部门' || t === '政府机构' ||
+    t === '金融机构' || t === '金融机构部门' ||
+    t === '服务提供商类型' || t === '平台类型' || t === '市场参与者'
+  ) return { type: 'entity', subtype: 'org' };
+  if (
+    t === '金融产品' || t === '金融产品类别' || t === '金融服务' ||
+    t === '户型' || t === '房产类型' || t === '土地类型' || t === '房源获取方式' ||
+    t === '住房供应类型' || t === '门店类型'
+  ) return { type: 'entity', subtype: 'product' };
+  if (t === '政策' || t === '政策计划' || t === '政策试点范围' || t === '法律') {
+    return { type: 'entity', subtype: 'event' };
   }
-  // 兜底（旧数据 entity_type='concept' 或自由值）
+  if (t === '项目') return { type: 'entity', subtype: 'project' };
+  if (
+    t === '城市' || t === '城市类别' || t === '城市集合' || t === '城市群' ||
+    t === '区域' || t === '国家' || t === '国家类别' || t === '经济部门'
+  ) return { type: 'entity', subtype: 'location' };
+
+  // concept 别名映射
+  if (
+    t === 'index' || t === '市场指标' || t === '经济指标' ||
+    t === '市场模式' || t === '市场类别'
+  ) return { type: 'concept', subtype: 'metric' };
+  if (t === '技术' || t === '产业链' || t === '产业链环节' || t === '行业' || t === '行业领域') {
+    return { type: 'concept', subtype: 'technology' };
+  }
+
+  // 兜底
   return { type: 'concept', subtype: 'mental-model' };
 }
 

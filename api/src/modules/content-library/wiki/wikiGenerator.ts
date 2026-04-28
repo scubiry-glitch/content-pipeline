@@ -121,10 +121,14 @@ export class WikiGenerator {
       await fs.mkdir(path.join(wikiRoot, 'entities'), { recursive: true });
       await fs.mkdir(path.join(wikiRoot, 'concepts'), { recursive: true });
     } else {
-      for (const sub of ['person', 'org', 'product', 'project', 'event']) {
+      for (const sub of ['person', 'org', 'product', 'project', 'event', 'location']) {
         await fs.mkdir(path.join(wikiRoot, 'entities', sub), { recursive: true });
       }
-      for (const sub of ['mental-model', 'judgment', 'bias', 'counterfactual']) {
+      for (const sub of [
+        'mental-model', 'judgment', 'bias', 'counterfactual',
+        'metric', 'technology', 'financial-instrument', 'business-model',
+        'regulation', 'demographic',
+      ]) {
         await fs.mkdir(path.join(wikiRoot, 'concepts', sub), { recursive: true });
       }
       // domains/<L1-code-name>/ 在写入时按需 mkdir (避免空目录)

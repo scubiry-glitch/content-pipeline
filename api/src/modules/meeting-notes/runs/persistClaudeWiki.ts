@@ -49,8 +49,12 @@ export interface ClaudeWikiOutput {
 const REPO_ROOT_FALLBACK = process.cwd().replace(/\/api(?:\/.*)?$/, '');
 const DEFAULT_WIKI_ROOT_REL = 'data/content-wiki/default';
 
-const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event'] as const;
-const CONCEPT_SUBTYPES = ['mental-model', 'judgment', 'bias', 'counterfactual'] as const;
+const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event', 'location'] as const;
+const CONCEPT_SUBTYPES = [
+  'mental-model', 'judgment', 'bias', 'counterfactual',
+  'metric', 'technology', 'financial-instrument', 'business-model',
+  'regulation', 'demographic',
+] as const;
 
 export function resolveWikiRoot(): string {
   const envRoot = process.env.MN_CLAUDE_WIKI_ROOT;
