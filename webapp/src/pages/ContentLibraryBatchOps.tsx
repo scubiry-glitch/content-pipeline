@@ -23,6 +23,34 @@ interface StepStatus {
   lastRun?: string;
 }
 
+/** batch-ops Step 1 局部生成: binding 行结构（GET /bindings 返回） */
+interface BindingRow {
+  id: string;
+  name: string;
+  path: string;
+  theme_id?: string | null;
+  theme_name?: string | null;
+  theme_icon?: string | null;
+  is_active?: boolean;
+  auto_import?: boolean;
+  last_scan_at?: string | null;
+  total_imported?: number;
+  tracked_count?: number;
+}
+
+/** batch-ops Step 1 局部生成: 单 binding 扫描进度 */
+interface BindingScanState {
+  status: 'pending' | 'running' | 'done' | 'error';
+  scanned?: number;
+  imported?: number;
+  filtered?: number;
+  unchanged?: number;
+  errors?: number;
+  addedAssetIds?: string[];
+  message?: string;
+  dryRun?: boolean;
+}
+
 interface ErrorSample {
   assetId: string;
   assetTitle?: string;
@@ -203,39 +231,163 @@ export function ContentLibraryBatchOps() {
   const [dedupResult, setDedupResult] = useState<DedupResult | null>(null);
   const [dedupMessage, setDedupMessage] = useState<string>('');
 
+  /** batch-ops Step 1 局部生成: 多 binding 选择 + 并发扫描 */
+  const [bindings, setBindings] = useState<BindingRow[]>([]);
+  const [bindingsLoading, setBindingsLoading] = useState(false);
+  const [bindingsSelected, setBindingsSelected] = useState<Set<string>>(new Set());
+  const [bindingProgress, setBindingProgress] = useState<Record<string, BindingScanState>>({});
+  /** 增量模式: sinceMtime='last_scan' 让后端只扫上次以来变更的文件 */
+  const [bindingIncremental, setBindingIncremental] = useState(true);
+  /** 上次扫描新增的 assetIds，用于自动透传给 Step 2/3 */
+  const [lastAddedAssetIds, setLastAddedAssetIds] = useState<string[]>([]);
+
   // 通用 step 状态更新
   const setStep = (key: string, update: Partial<StepStatus>) => {
     setSteps(prev => ({ ...prev, [key]: { ...prev[key], ...update } }));
   };
 
-  // Step 1: 素材来源 — 触发目录扫描
-  const triggerDirectoryScan = async () => {
-    setStep('import', { status: 'running', message: '正在扫描目录...' });
+  // Step 1: 素材来源 — 加载 binding 列表（支持手动刷新）
+  const loadBindings = async () => {
+    setBindingsLoading(true);
     try {
       const res = await fetch('/api/v1/assets/bindings', { method: 'GET' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const bindings = await res.json();
-      const items = Array.isArray(bindings) ? bindings : bindings.items || [];
-      let totalImported = 0, totalErrors = 0, scanned = 0;
-      for (const b of items.slice(0, 5)) {
-        try {
-          const scanRes = await fetch(`/api/v1/assets/bindings/${b.id}/scan`, { method: 'POST' });
-          if (scanRes.ok) {
-            const scanData = await scanRes.json();
-            totalImported += scanData.imported || 0;
-            totalErrors += scanData.errors || 0;
-          }
-          scanned++;
-        } catch { /* ignore */ }
-      }
-      setStep('import', {
-        status: 'done',
-        message: `扫描 ${scanned} 个目录 · 新素材 ${totalImported} · 错误 ${totalErrors}`,
-        lastRun: new Date().toISOString(),
-      });
+      const data = await res.json();
+      const items: BindingRow[] = Array.isArray(data) ? data : data.items || [];
+      setBindings(items);
     } catch (err) {
-      setStep('import', { status: 'error', message: (err as Error).message });
+      setStep('import', { status: 'error', message: `加载 binding 失败: ${(err as Error).message}` });
+    } finally {
+      setBindingsLoading(false);
     }
+  };
+
+  // 启动时拉一次
+  useEffect(() => { loadBindings(); }, []);
+
+  /** 扫描单个 binding（dryRun 或真扫） */
+  const scanOneBinding = async (
+    bindingId: string,
+    options: { sinceMtime?: string; dryRun?: boolean }
+  ): Promise<BindingScanState> => {
+    setBindingProgress(prev => ({ ...prev, [bindingId]: { status: 'running' } }));
+    try {
+      const res = await fetch(`/api/v1/assets/bindings/${bindingId}/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const state: BindingScanState = {
+        status: 'done',
+        scanned: data.scanned ?? 0,
+        imported: data.imported ?? 0,
+        filtered: data.filtered ?? 0,
+        unchanged: data.unchanged ?? 0,
+        errors: data.errors ?? 0,
+        addedAssetIds: data.addedAssetIds ?? [],
+        dryRun: data.dryRun ?? false,
+      };
+      setBindingProgress(prev => ({ ...prev, [bindingId]: state }));
+      return state;
+    } catch (err) {
+      const state: BindingScanState = {
+        status: 'error',
+        message: (err as Error).message,
+      };
+      setBindingProgress(prev => ({ ...prev, [bindingId]: state }));
+      return state;
+    }
+  };
+
+  /** 并发扫描选中的 binding (4-way concurrency) */
+  const runSelectedScan = async (dryRun: boolean) => {
+    const ids = Array.from(bindingsSelected);
+    if (ids.length === 0) {
+      setStep('import', { status: 'error', message: '请先勾选要扫描的 binding' });
+      return;
+    }
+
+    const verb = dryRun ? '预估' : '扫描';
+    setStep('import', { status: 'running', message: `正在${verb} ${ids.length} 个目录...` });
+    // 标 pending
+    setBindingProgress(prev => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = { status: 'pending' };
+      return next;
+    });
+
+    const sinceMtime = bindingIncremental ? 'last_scan' : undefined;
+
+    // 4-way concurrency
+    const concurrency = 4;
+    const queue = [...ids];
+    let totalScanned = 0, totalImported = 0, totalErrors = 0;
+    const allAddedIds: string[] = [];
+
+    const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const id = queue.shift();
+        if (!id) break;
+        const state = await scanOneBinding(id, { sinceMtime, dryRun });
+        totalScanned += state.scanned ?? 0;
+        totalImported += state.imported ?? 0;
+        totalErrors += state.errors ?? 0;
+        if (state.addedAssetIds) allAddedIds.push(...state.addedAssetIds);
+      }
+    });
+    await Promise.allSettled(workers);
+
+    setStep('import', {
+      status: totalErrors > 0 ? 'error' : 'done',
+      message: dryRun
+        ? `预估完成 · 命中 ${totalImported} 个新文件 · 已存在 ${totalScanned - totalImported - totalErrors}`
+        : `扫描 ${ids.length} 个 binding · 新素材 ${totalImported} · 错误 ${totalErrors}`,
+      lastRun: new Date().toISOString(),
+    });
+
+    if (!dryRun && allAddedIds.length > 0) {
+      setLastAddedAssetIds(allAddedIds);
+    }
+    // 刷新 binding 列表（更新 last_scan_at / tracked_count）
+    if (!dryRun) loadBindings();
+  };
+
+  // 兼容性: 保留无参版（一键全量更新会调用）
+  const triggerDirectoryScan = async () => {
+    if (bindingsSelected.size === 0) {
+      // 默认扫所有 active
+      setBindingsSelected(new Set(bindings.filter(b => b.is_active !== false).map(b => b.id)));
+      // 等下一帧 selectedBindings 生效后调用
+      setTimeout(() => runSelectedScan(false), 0);
+    } else {
+      await runSelectedScan(false);
+    }
+  };
+
+  // Step 1 快捷选择器
+  const selectAllBindings = () => setBindingsSelected(new Set(bindings.map(b => b.id)));
+  const invertBindingSelection = () => {
+    setBindingsSelected(prev => {
+      const next = new Set<string>();
+      for (const b of bindings) if (!prev.has(b.id)) next.add(b.id);
+      return next;
+    });
+  };
+  const selectStaleBindings = () => {
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    const staleIds = bindings
+      .filter(b => !b.last_scan_at || new Date(b.last_scan_at).getTime() < cutoff)
+      .map(b => b.id);
+    setBindingsSelected(new Set(staleIds));
+  };
+  const toggleBinding = (id: string) => {
+    setBindingsSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   const runAssetDeduplicate = async (mode: 'dry-run' | 'apply') => {
@@ -995,23 +1147,123 @@ export function ContentLibraryBatchOps() {
       </div>
 
       <div className="space-y-4 max-w-3xl">
-        {/* Step 1: 素材来源 */}
+        {/* Step 1: 素材来源 — 多 binding 选择 + 并发扫描 + 增量/dryRun */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               {statusIcon(steps.import.status)} Step 1: 素材导入
             </h3>
-            <div className="flex gap-2">
-              <button onClick={triggerDirectoryScan} disabled={steps.import.status === 'running'}
+            <div className="flex gap-2 items-center">
+              <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+                <input type="checkbox" checked={bindingIncremental}
+                  onChange={e => setBindingIncremental(e.target.checked)}
+                  className="rounded accent-blue-600" />
+                增量(只扫上次后变更)
+              </label>
+              <button onClick={() => runSelectedScan(true)}
+                disabled={steps.import.status === 'running' || bindingsSelected.size === 0}
+                className="px-3 py-1.5 text-xs bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50">
+                🔍 预估
+              </button>
+              <button onClick={() => runSelectedScan(false)}
+                disabled={steps.import.status === 'running' || bindingsSelected.size === 0}
                 className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-                📂 扫描目录
+                📂 扫描选中 ({bindingsSelected.size})
               </button>
               <a href="/assets" className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200">
                 手动上传
               </a>
             </div>
           </div>
-          {steps.import.message && <p className="text-sm text-gray-500">{steps.import.message}</p>}
+
+          {/* 快捷选择栏 */}
+          <div className="flex flex-wrap gap-2 mb-2 text-xs">
+            <button onClick={selectAllBindings}
+              className="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              全选 ({bindings.length})
+            </button>
+            <button onClick={invertBindingSelection}
+              className="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              反选
+            </button>
+            <button onClick={selectStaleBindings}
+              className="px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950">
+              ⏰ 超 24h 未扫
+            </button>
+            <button onClick={() => setBindingsSelected(new Set())}
+              className="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+              清空
+            </button>
+            <button onClick={loadBindings} disabled={bindingsLoading}
+              className="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+              {bindingsLoading ? '⏳' : '🔄'} 刷新
+            </button>
+          </div>
+
+          {/* binding 列表 */}
+          {bindings.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">
+              {bindingsLoading ? '加载中...' : '暂无目录绑定，请先在 /assets 配置'}
+            </p>
+          ) : (
+            <div className="max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded">
+              {bindings.map((b) => {
+                const prog = bindingProgress[b.id];
+                const lastScan = b.last_scan_at ? new Date(b.last_scan_at) : null;
+                const isStale = !lastScan || (Date.now() - lastScan.getTime() > 24 * 3600 * 1000);
+                return (
+                  <label key={b.id}
+                    className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer">
+                    <input type="checkbox"
+                      checked={bindingsSelected.has(b.id)}
+                      onChange={() => toggleBinding(b.id)}
+                      className="rounded accent-blue-600" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-gray-900 dark:text-white truncate">
+                          {b.theme_icon ? `${b.theme_icon} ` : ''}{b.name}
+                        </span>
+                        {b.theme_name && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            {b.theme_name}
+                          </span>
+                        )}
+                        {b.is_active === false && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-700 text-gray-500">已停用</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{b.path}</div>
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500 flex gap-3 mt-0.5">
+                        <span>已 import: <strong className="text-gray-600 dark:text-gray-300">{b.tracked_count ?? 0}</strong></span>
+                        <span className={isStale ? 'text-amber-600 dark:text-amber-400' : ''}>
+                          上次扫描: {lastScan ? lastScan.toLocaleString() : '从未'}
+                        </span>
+                      </div>
+                      {prog && prog.status !== 'pending' && (
+                        <div className="text-[11px] mt-0.5">
+                          {prog.status === 'running' && <span className="text-blue-600">⏳ 扫描中...</span>}
+                          {prog.status === 'done' && (
+                            <span className={prog.dryRun ? 'text-slate-600' : 'text-green-600'}>
+                              {prog.dryRun ? '🔍 预估' : '✅'} scanned={prog.scanned} · {prog.dryRun ? '将' : ''}新增={prog.imported} · 已有={prog.unchanged} · 过滤={prog.filtered}
+                              {(prog.errors ?? 0) > 0 && <span className="text-red-600 ml-1">· 错误={prog.errors}</span>}
+                            </span>
+                          )}
+                          {prog.status === 'error' && <span className="text-red-600">❌ {prog.message}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {steps.import.message && <p className="text-sm text-gray-500 mt-2">{steps.import.message}</p>}
+          {lastAddedAssetIds.length > 0 && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              💡 上次扫描新增 {lastAddedAssetIds.length} 个素材，已记录（Step 2 启动时可优先处理）
+            </p>
+          )}
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
