@@ -29,9 +29,34 @@ export class RunQueue<T = any> {
     this.tick();
   }
 
-  enqueue(item: QueueItem<T>): void {
+  /**
+   * F5 · 入队 dedupe：同一个 runId 在 pending 队列里只保留一条。
+   * recoverQueuedRuns 每 60s 重 enqueue 全量 DB queued 行，没有这层 dedupe 会爆炸性堆积
+   * (实测过 2664 条全是同 6 条 run 的重复入队)。
+   * 返回 true=入队成功 / false=已存在被 skip。
+   */
+  enqueue(item: QueueItem<T>): boolean {
+    if (this.items.some((existing) => existing.id === item.id)) {
+      return false;
+    }
     this.items.push(item);
     this.tick();
+    return true;
+  }
+
+  /** 检查某个 id 是否已在 pending 队列 */
+  has(id: string): boolean {
+    return this.items.some((item) => item.id === id);
+  }
+
+  /** F5 · diagnostics 用：返回 pending items 的 id + enqueuedAt（最多 N 条） */
+  peek(limit = 50): Array<{ id: string; enqueuedAt: number; ageMs: number }> {
+    const now = Date.now();
+    return this.items.slice(0, limit).map((item) => ({
+      id: item.id,
+      enqueuedAt: item.enqueuedAt,
+      ageMs: now - item.enqueuedAt,
+    }));
   }
 
   /**

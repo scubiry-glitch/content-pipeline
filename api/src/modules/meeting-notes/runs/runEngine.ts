@@ -273,13 +273,15 @@ export class RunEngine {
       console.warn('[RunEngine] cleanup running zombies failed:', (e as Error).message);
     }
     try {
-      // queued 超过 1 小时无人处理 → 标 cancelled（队列已丢）
+      // F5 · queued 超过 6 小时无人处理 → 标 cancelled
+      // 阈值从 1h 上调到 6h：用户实测下午入队的 run 因 concurrency=2 排队等几小时是正常的，
+      // 1h 太激进会误杀。错误信息也改为更诚实的字面意思（不假设是重启）。
       const r2 = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'cancelled', finished_at = NOW(),
-                error_message = COALESCE(error_message, 'queued-orphan: in-memory queue lost on restart')
+                error_message = COALESCE(error_message, 'queued-timeout: not picked up by worker within 6h')
           WHERE state = 'queued'
-            AND created_at < NOW() - INTERVAL '1 hour'
+            AND created_at < NOW() - INTERVAL '6 hours'
           RETURNING id`,
       );
       cancelledQueued = (r2 as any).rowCount ?? r2.rows?.length ?? 0;
@@ -415,6 +417,13 @@ export class RunEngine {
   async getDiagnostics(): Promise<{
     workerId: string;
     queue: { pending: number; running: number; concurrency: number };
+    /** F5 · 内存队列里 pending items 的实际成分（dedupe 后 id → 出现次数）+ db 状态对照 */
+    queuePending?: Array<{
+      id: string;
+      enqueuedAt: number;
+      ageMs: number;
+      dbState?: string | null;
+    }>;
     dbStateBreakdown: Array<{ state: string; n: number }>;
     activeRuns: Array<{
       id: string;
@@ -432,6 +441,7 @@ export class RunEngine {
     }>;
   }> {
     const queueStats = this.queue.stats();
+    const peekItems = this.queue.peek(50);
 
     const breakdownR = await this.deps.db.query(
       `SELECT state, count(*)::int AS n
@@ -461,9 +471,35 @@ export class RunEngine {
         LIMIT 20`,
     );
 
+    // F5 · 把 peek 出的内存 pending items 跟 DB state 对照，让运维一眼看出有多少是 stale
+    let queuePending: Array<{ id: string; enqueuedAt: number; ageMs: number; dbState?: string | null }> = peekItems.map((p) => ({
+      id: p.id,
+      enqueuedAt: p.enqueuedAt,
+      ageMs: p.ageMs,
+    }));
+    if (peekItems.length > 0) {
+      const ids = peekItems.map((p) => p.id);
+      try {
+        const stateR = await this.deps.db.query(
+          `SELECT id::text, state FROM mn_runs WHERE id = ANY($1::uuid[])`,
+          [ids],
+        );
+        const stateMap = new Map<string, string>(stateR.rows.map((r: any) => [r.id, r.state]));
+        queuePending = peekItems.map((p) => ({
+          id: p.id,
+          enqueuedAt: p.enqueuedAt,
+          ageMs: p.ageMs,
+          dbState: stateMap.get(p.id) ?? null,
+        }));
+      } catch (e) {
+        console.warn('[RunEngine] queuePending dbState lookup failed:', (e as Error).message);
+      }
+    }
+
     return {
       workerId: this.workerId,
       queue: queueStats,
+      queuePending,
       dbStateBreakdown: breakdownR.rows,
       activeRuns: activeR.rows.map((r: any) => ({
         id: r.id,
@@ -578,13 +614,21 @@ export class RunEngine {
   private async execute(payload: QueuePayload): Promise<void> {
     const startedAt = Date.now();
     // F3 · 标记 worker_id + 初次 heartbeat（也覆盖 resume 路径上 state='queued' 的回切）
-    await this.deps.db.query(
+    // F5 · 用 RETURNING 确认 UPDATE 命中：若 0 行说明 run 已不是 queued
+    //      （被 reaper cancel / 已 succeeded / 重复入队的 stale 副本），直接 skip 不跑 LLM
+    const claim = await this.deps.db.query(
       `UPDATE mn_runs
           SET state = 'running', started_at = NOW(),
               worker_id = $2, last_heartbeat_at = NOW()
-        WHERE id = $1 AND state = 'queued'`,
+        WHERE id = $1 AND state = 'queued'
+        RETURNING id`,
       [payload.runId, this.workerId],
     );
+    const claimed = ((claim as any).rowCount ?? claim.rows?.length ?? 0) > 0;
+    if (!claimed) {
+      console.log(`[RunEngine] skip stale enqueue ${payload.runId} (no longer queued)`);
+      return;
+    }
     await this.deps.eventBus.publish('mn.run.started', { runId: payload.runId });
 
     // F3 · 每 30s 更新一次 heartbeat；execute 退出时清掉 timer 防泄漏
