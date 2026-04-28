@@ -11,6 +11,7 @@ import { CrossAxisLinkInline } from './_axisShared';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
+import { MeetingChatDrawer } from './MeetingChatDrawer';
 
 type PFn = (id: string) => Participant;
 
@@ -65,9 +66,10 @@ type TensionInterp = {
   judgments: Array<{ id: string; text: string; domain?: string; generality_score?: number }>;
   peakNote?: string;
 };
-function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp }: {
+function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp, onAskAboutTension }: {
   a: typeof ANALYSIS; selected: string; setSelected: (id: string) => void; isMock?: boolean; P?: PFn;
   interp?: Record<string, TensionInterp>;
+  onAskAboutTension?: (t: typeof ANALYSIS.tension[number]) => void;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: '100%' }}>
@@ -150,6 +152,22 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp }: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                 <MonoMeta>{t.id}</MonoMeta>
                 <Chip tone="accent">强度 {(t.intensity * 100).toFixed(0)}</Chip>
+                {onAskAboutTension && (
+                  <button
+                    type="button"
+                    onClick={() => onAskAboutTension(t)}
+                    style={{
+                      marginLeft: 'auto',
+                      display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+                      border: '1px solid var(--accent)', background: 'var(--accent-soft)',
+                      color: 'oklch(0.32 0.1 40)', fontSize: 11.5, borderRadius: 4, cursor: 'pointer',
+                      fontFamily: 'var(--sans)', fontWeight: 600,
+                    }}
+                    title="在抽屉里就这条张力追问"
+                  >
+                    💬 追问此会
+                  </button>
+                )}
               </div>
               <h3 style={{
                 fontFamily: 'var(--serif)', fontSize: 22, margin: '0 0 12px',
@@ -543,6 +561,14 @@ export function VariantWorkbench() {
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || MEETING.title;
 
+  // 「追问此会」抽屉：drawerTension=null 时为会议级（顶栏入口）；非空为张力级（详情按钮入口）
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [chatDrawerTension, setChatDrawerTension] = useState<typeof ANALYSIS.tension[number] | null>(null);
+  const openChatDrawer = (t: typeof ANALYSIS.tension[number] | null) => {
+    setChatDrawerTension(t);
+    setChatDrawerOpen(true);
+  };
+
   // 把 API 提供的 participants（带真实 id/name/role/tone）映射成局部 P()，
   // 让 WB* 子组件按 'p1'/'p2'… 查询到真实人名（永邦、赵一濛…），而不是 fixture 的陈汀/王校长。
   const P = useMemo<PFn>(() => {
@@ -768,6 +794,19 @@ export function VariantWorkbench() {
             <Chip tone="accent">3 experts active</Chip>
             <div style={{ width: 1, height: 22, background: 'var(--line)' }} />
           </>}
+          <button
+            type="button"
+            onClick={() => openChatDrawer(null)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+              border: '1px solid var(--accent)', background: 'var(--accent-soft)',
+              color: 'oklch(0.32 0.1 40)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
+              fontFamily: 'var(--sans)', fontWeight: 600,
+            }}
+            title="基于会议上下文向 Claude 或专家追问"
+          >
+            💬 追问此会
+          </button>
           <TopBtn icon="search">搜索</TopBtn>
           <TopBtn icon="upload">导出</TopBtn>
         </div>
@@ -906,7 +945,7 @@ export function VariantWorkbench() {
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px' }}>
-            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} interp={tensionInterp} />}
+            {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} interp={tensionInterp} onAskAboutTension={openChatDrawer} />}
             {dim === 'minutes'       && <WBMinutes        a={a} />}
             {dim === 'new_cognition' && <WBNewCognition   a={a} P={P} />}
             {dim === 'focus_map'     && <WBFocusMap       a={a} P={P} />}
@@ -1020,6 +1059,16 @@ export function VariantWorkbench() {
           </div>
         </aside>
       </div>
+
+      {/* 「追问此会」抽屉：会议级 + 张力级两种入口共用 */}
+      <MeetingChatDrawer
+        open={chatDrawerOpen}
+        onClose={() => setChatDrawerOpen(false)}
+        meetingId={id ?? null}
+        meetingTitle={displayTitle}
+        tension={chatDrawerTension}
+        resolveParticipant={P}
+      />
     </div>
   );
 }

@@ -1,0 +1,195 @@
+/* PrintableChat — A4 printable layout for html2pdf.
+   不能用 oklch / CSS variable —— html2canvas 老版本对 modern color spaces 不友好。
+   全部 hex / rgb 表示。
+*/
+
+.printable-chat {
+  /* 大约 A4 印刷可见宽度 (210mm - 24mm margin = 186mm ≈ 700px @ 96dpi) */
+  width: 720px;
+  padding: 28px 32px;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+               'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.65;
+  box-sizing: border-box;
+}
+
+/* ===== Header ===== */
+.printable-chat__header {
+  border-bottom: 2px solid #111827;
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+
+.printable-chat__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.printable-chat__meeting {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+
+.printable-chat__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  font-size: 11px;
+  color: #374151;
+  margin-top: 6px;
+}
+
+.printable-chat__meta-row--secondary {
+  color: #6b7280;
+}
+
+.printable-chat__meta-row code {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.printable-chat__mode-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+
+.printable-chat__mode-badge--resume {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.printable-chat__mode-badge--expert {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.printable-chat__meta-item strong {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ===== Context block ===== */
+.printable-chat__context {
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 11px;
+  page-break-inside: avoid;
+}
+
+.printable-chat__context-label {
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 4px;
+  letter-spacing: 0.4px;
+}
+
+.printable-chat__context-body {
+  color: #374151;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+/* ===== Messages ===== */
+.printable-chat__messages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.printable-chat__msg {
+  border-radius: 5px;
+  padding: 12px 14px;
+  page-break-inside: avoid;
+}
+
+.printable-chat__msg--user {
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+}
+
+.printable-chat__msg--assistant {
+  background: #f9fafb;
+  border-left: 3px solid #6b7280;
+}
+
+.printable-chat__msg-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.printable-chat__msg-role {
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.3px;
+}
+
+.printable-chat__msg-ts {
+  color: #9ca3af;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+
+.printable-chat__msg-reasoning {
+  background: #f3f4f6;
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  color: #6b7280;
+  line-height: 1.55;
+}
+
+.printable-chat__msg-reasoning-label {
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+.printable-chat__msg-reasoning-body {
+  white-space: pre-wrap;
+  font-style: italic;
+}
+
+.printable-chat__msg-content {
+  color: #1f2937;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  font-size: 12px;
+}
+
+/* ===== Footer ===== */
+.printable-chat__footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  color: #9ca3af;
+  text-align: center;
+  letter-spacing: 0.3px;
+}

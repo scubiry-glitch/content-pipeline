@@ -7,6 +7,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { meetingNotesRoutes as ingestRoutes } from './ingest/routes.js';
+import { createMeetingChatRoutes } from './meetingChat.js';
 import { authenticate } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
@@ -104,6 +105,12 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Ingest routes (PR2)
     // --------------------------------------------------------
     await fastify.register(ingestRoutes, { pathPrefix: '/sources' });
+
+    // --------------------------------------------------------
+    // Meeting Chat (resume Claude CLI session for /b 抽屉)
+    // GET /meetings/:id/chat/history · POST /meetings/:id/chat/stream
+    // --------------------------------------------------------
+    await fastify.register(createMeetingChatRoutes(engine));
 
     // --------------------------------------------------------
     // Meetings CRUD (list + create, detail in /meetings/:id/*)
