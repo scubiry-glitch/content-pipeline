@@ -30,6 +30,23 @@ interface ErrorSample {
   kind: string;
 }
 
+/** batch-ops 改进 #1: Step 3 质量面板的后端响应形态 */
+interface QualityStats {
+  jobId: string;
+  window: { startedAt: string; completedAt: string };
+  totals: {
+    facts: number;
+    errors: number;
+    avgConfidence: number;
+    placeholderRate: number;
+    highConfRate: number;
+  };
+  confidenceBuckets: Array<{ range: string; label: string; count: number }>;
+  placeholderByField: { subject: number; predicate: number; object: number };
+  errorByKind: Record<string, number>;
+  verdict: 'good' | 'fair' | 'poor';
+}
+
 interface JobProgress {
   processed: number;
   total: number;
@@ -72,6 +89,8 @@ export function ContentLibraryBatchOps() {
   });
   const [extractJobId, setExtractJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState<JobProgress | null>(null);
+  /** batch-ops 改进 #1: Step 3 完成后拉一次质量面板数据 */
+  const [extractQuality, setExtractQuality] = useState<QualityStats | null>(null);
   const [extractLimit, setExtractLimit] = useState(50);
   const [extractSource, setExtractSource] = useState<'assets' | 'rss'>('assets');
   /** v7.3 调整1: 质量分门槛 (0=不过滤, >0 = 过滤低于此分的素材) */
@@ -271,6 +290,7 @@ export function ContentLibraryBatchOps() {
   const startExtractJob = async () => {
     setStep('extract', { status: 'running', message: '启动两段式提取 job...' });
     setProgress(null);
+    setExtractQuality(null); // 清掉上次的质量面板
     try {
       const res = await fetch(`${API}/reextract/start`, {
         method: 'POST',
@@ -320,6 +340,13 @@ export function ContentLibraryBatchOps() {
         try {
           const d = JSON.parse(e.data);
           setStep('extract', { status: d.status === 'completed' ? 'done' : 'error', lastRun: new Date().toISOString() });
+          // batch-ops 改进 #1: 完成后拉质量面板（confidence 分布 / 占位率 / verdict）
+          if (d.status === 'completed') {
+            fetch(`${API}/reextract/jobs/${jobId}/quality`)
+              .then(r => r.ok ? r.json() : null)
+              .then(q => { if (q && q.totals) setExtractQuality(q); })
+              .catch(() => {});
+          }
         } catch { /* ignore */ }
         es.close();
       });
@@ -690,6 +717,84 @@ export function ContentLibraryBatchOps() {
     );
   };
 
+  /**
+   * batch-ops 改进 #1: Step 3 质量面板组件
+   * 跑完事实提取后展示 confidence 分布 / 占位率 / 错误分类，让用户判断
+   * 这次 run 产出"是否值得进入 Step 4-6"。
+   */
+  const QualityPanel = ({ q }: { q: QualityStats }) => {
+    const VERDICT_TONE: Record<QualityStats['verdict'], { label: string; cls: string }> = {
+      good: { label: '✓ 质量良好', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+      fair: { label: '⚠ 质量一般', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+      poor: { label: '✗ 质量较差', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' },
+    };
+    const v = VERDICT_TONE[q.verdict];
+    const totalBucket = q.confidenceBuckets.reduce((s, b) => s + b.count, 0);
+    return (
+      <div className="mt-3 p-3 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">📊 产出质量面板</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${v.cls}`}>{v.label}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-2 text-[11px]">
+          <div className="bg-white dark:bg-gray-900 rounded p-1.5 border border-gray-100 dark:border-gray-700">
+            <div className="text-gray-400 text-[9px]">本次新增</div>
+            <div className="font-semibold text-gray-700 dark:text-gray-200">{q.totals.facts} fact</div>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded p-1.5 border border-gray-100 dark:border-gray-700">
+            <div className="text-gray-400 text-[9px]">平均 confidence</div>
+            <div className="font-semibold text-gray-700 dark:text-gray-200">
+              {q.totals.avgConfidence.toFixed(2)}
+              <span className="text-[9px] text-gray-400 ml-1">/ 1.0</span>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded p-1.5 border border-gray-100 dark:border-gray-700">
+            <div className="text-gray-400 text-[9px]">占位率</div>
+            <div className={`font-semibold ${q.totals.placeholderRate > 10 ? 'text-rose-600' : 'text-gray-700 dark:text-gray-200'}`}>
+              {q.totals.placeholderRate}%
+            </div>
+          </div>
+        </div>
+        {totalBucket > 0 && (
+          <div className="mb-2">
+            <div className="text-[10px] text-gray-500 mb-1">Confidence 分布</div>
+            <div className="flex h-3 rounded overflow-hidden bg-gray-200 dark:bg-gray-700">
+              {q.confidenceBuckets.map((b, i) => {
+                const pct = b.count / totalBucket * 100;
+                if (pct === 0) return null;
+                const colors = ['bg-rose-400', 'bg-amber-400', 'bg-emerald-400', 'bg-emerald-600'];
+                return (
+                  <div key={i} className={colors[i] ?? 'bg-gray-400'} style={{ width: `${pct}%` }}
+                    title={`${b.range} (${b.label}): ${b.count} 条 / ${pct.toFixed(0)}%`} />
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[9px] text-gray-400 mt-0.5">
+              {q.confidenceBuckets.map((b, i) => (
+                <span key={i}>{b.range}: {b.count}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {(q.placeholderByField.subject + q.placeholderByField.predicate + q.placeholderByField.object) > 0 && (
+          <div className="text-[10px] text-gray-500 mb-1">
+            占位字段：subject {q.placeholderByField.subject} · predicate {q.placeholderByField.predicate} · object {q.placeholderByField.object}
+          </div>
+        )}
+        {Object.keys(q.errorByKind).length > 0 && (
+          <div className="text-[10px] text-gray-500">
+            错误分类：{Object.entries(q.errorByKind).map(([k, n]) => `${k} × ${n}`).join(' · ')}
+          </div>
+        )}
+        {q.verdict !== 'good' && (
+          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-[10px] text-amber-600 dark:text-amber-400">
+            ⚠ 建议在进入 Step 4 之前重跑此次 job（提高质量门槛 / 切深度模式 / 修 prompt），避免低质量数据污染图谱。
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const statusIcon = (s: StepStatus['status']) => {
     switch (s) {
       case 'idle': return '⚪';
@@ -877,6 +982,7 @@ export function ContentLibraryBatchOps() {
             </div>
           )}
           {steps.extract.message && <p className="text-sm text-gray-500 mt-1">{steps.extract.message}</p>}
+          {extractQuality && <QualityPanel q={extractQuality} />}
         </div>
 
         {/* Step 4: 知识图谱 + Zep 回填 */}

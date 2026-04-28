@@ -230,6 +230,105 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       return { cancelled };
     });
 
+    /**
+     * batch-ops 改进 #1: Step 3 质量面板
+     *
+     * 返回该 job 时间窗内新写入 content_facts 的质量分布：
+     *   - confidence buckets: ≤0.5 / 0.5-0.7 / 0.7-0.9 / ≥0.9
+     *   - 占位率：subject/predicate/object 含 'unknown' / 'n/a' / '' 的比例
+     *   - 平均 confidence + 中位数
+     *   - errorSamples 按 kind 聚合（来自 job state）
+     * 让用户跑完 Step 3 一眼看出"产出质量是否值得进入 Step 4-6"。
+     */
+    fastify.get('/reextract/jobs/:jobId/quality', async (request) => {
+      const { jobId } = request.params as any;
+      const state = getReextractJob(String(jobId));
+      if (!state) return { error: 'Job not found' };
+
+      const startedAt = state.startedAt;
+      const completedAt = state.completedAt ?? new Date().toISOString();
+      try {
+        const r = await (engine as any).deps.db.query(
+          `SELECT
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE confidence <= 0.5)::int AS bucket_low,
+             COUNT(*) FILTER (WHERE confidence > 0.5 AND confidence <= 0.7)::int AS bucket_mid,
+             COUNT(*) FILTER (WHERE confidence > 0.7 AND confidence <= 0.9)::int AS bucket_high,
+             COUNT(*) FILTER (WHERE confidence > 0.9)::int AS bucket_top,
+             AVG(confidence)::numeric(4,3) AS avg_confidence,
+             COUNT(*) FILTER (
+               WHERE lower(subject) IN ('unknown', 'n/a', '', 'null')
+                  OR lower(predicate) IN ('unknown', 'n/a', '', 'null')
+                  OR lower(object) IN ('unknown', 'n/a', '', 'null')
+             )::int AS placeholder_count,
+             COUNT(*) FILTER (WHERE lower(subject) IN ('unknown','n/a','','null'))::int AS subject_placeholder,
+             COUNT(*) FILTER (WHERE lower(predicate) IN ('unknown','n/a','','null'))::int AS predicate_placeholder,
+             COUNT(*) FILTER (WHERE lower(object) IN ('unknown','n/a','','null'))::int AS object_placeholder
+           FROM content_facts
+          WHERE created_at >= $1::timestamptz
+            AND created_at <= $2::timestamptz
+            AND is_current = true`,
+          [startedAt, completedAt],
+        );
+        const row = r.rows[0] ?? {};
+        const total = Number(row.total ?? 0);
+
+        // 按 errorSamples.kind 聚合
+        const errorByKind: Record<string, number> = {};
+        for (const s of (state.errorSamples ?? [])) {
+          errorByKind[s.kind] = (errorByKind[s.kind] ?? 0) + 1;
+        }
+
+        // 质量分判定（前端可直接显示绿/黄/红）
+        const avgConf = Number(row.avg_confidence ?? 0);
+        const placeholderRate = total > 0 ? Number(row.placeholder_count) / total : 0;
+        const highConfRate = total > 0
+          ? (Number(row.bucket_high) + Number(row.bucket_top)) / total
+          : 0;
+        const verdict = (avgConf >= 0.7 && placeholderRate < 0.05 && highConfRate >= 0.5)
+          ? 'good'
+          : (avgConf >= 0.55 && placeholderRate < 0.15)
+            ? 'fair' : 'poor';
+
+        return {
+          jobId: state.jobId,
+          window: { startedAt, completedAt },
+          totals: {
+            facts: total,
+            errors: state.errors,
+            avgConfidence: avgConf,
+            placeholderRate: Math.round(placeholderRate * 1000) / 10,  // %
+            highConfRate: Math.round(highConfRate * 1000) / 10,
+          },
+          confidenceBuckets: [
+            { range: '≤0.5', label: '低', count: Number(row.bucket_low ?? 0) },
+            { range: '0.5–0.7', label: '中', count: Number(row.bucket_mid ?? 0) },
+            { range: '0.7–0.9', label: '高', count: Number(row.bucket_high ?? 0) },
+            { range: '>0.9', label: '极高', count: Number(row.bucket_top ?? 0) },
+          ],
+          placeholderByField: {
+            subject: Number(row.subject_placeholder ?? 0),
+            predicate: Number(row.predicate_placeholder ?? 0),
+            object: Number(row.object_placeholder ?? 0),
+          },
+          errorByKind,
+          verdict,
+        };
+      } catch (e) {
+        request.log.warn({ jobId, err: e }, 'reextract quality stat failed');
+        return {
+          jobId: state.jobId,
+          window: { startedAt, completedAt },
+          totals: { facts: 0, errors: state.errors, avgConfidence: 0, placeholderRate: 0, highConfRate: 0 },
+          confidenceBuckets: [],
+          placeholderByField: { subject: 0, predicate: 0, object: 0 },
+          errorByKind: {},
+          verdict: 'poor',
+          error: (e as Error).message,
+        };
+      }
+    });
+
     // SSE 进度流
     fastify.get('/reextract/jobs/:jobId/stream', async (request, reply) => {
       const { jobId } = request.params as any;
