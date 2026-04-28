@@ -19,7 +19,9 @@ const AXIS_SUB: Record<string, { label: string; color: string; subs: { id: strin
 
 interface MockRun {
   id: string;
-  state: 'running' | 'queued' | 'done' | 'failed';
+  // F5 · 加 'succeeded' / 'cancelled' 对齐后端 mn_runs.state 真实取值；
+  //      之前只有 'done'，把后端的 'succeeded' 强转过来后 counts.done filter 永远 0
+  state: 'running' | 'queued' | 'succeeded' | 'done' | 'failed' | 'cancelled';
   axis: string;
   subs: string[];
   preset: string;
@@ -136,11 +138,13 @@ function QueueView() {
     return () => { cancelled = true; };
   }, [forceMock]);
 
+  // F5 · counts 修：后端 state 是 'succeeded' / 'cancelled'，之前 filter 'done'
+  // 永远 0；'cancelled' 也没进任何统计。改成 succeeded + 兼容老 mock 'done'。
   const counts = {
     running: runs.filter((r) => r.state === 'running').length,
     queued:  runs.filter((r) => r.state === 'queued').length,
-    done:    runs.filter((r) => r.state === 'done').length,
-    failed:  runs.filter((r) => r.state === 'failed').length,
+    done:    runs.filter((r) => r.state === 'succeeded' || r.state === 'done').length,
+    failed:  runs.filter((r) => r.state === 'failed' || r.state === 'cancelled').length,
   };
 
   async function handleRowAction(r: MockRun) {
@@ -169,10 +173,12 @@ function QueueView() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
         {[
-          { l: 'running',    v: String(counts.running),  c: 'var(--teal)' },
-          { l: 'queued',     v: String(counts.queued),   c: 'var(--amber)' },
-          { l: 'done · 24h', v: String(counts.done),     c: 'var(--accent)' },
-          { l: 'failed · 24h', v: String(counts.failed), c: 'oklch(0.55 0.16 25)' },
+          { l: 'running',                 v: String(counts.running),  c: 'var(--teal)' },
+          { l: 'queued',                  v: String(counts.queued),   c: 'var(--amber)' },
+          // F5 · 'done · 24h' / 'failed · 24h' 标签虚假声称按 24h 窗口（实际是
+          // 最近 50 条 listRuns），改为不带时间限定的口径
+          { l: 'succeeded',               v: String(counts.done),     c: 'var(--accent)' },
+          { l: 'failed / cancelled',      v: String(counts.failed),   c: 'oklch(0.55 0.16 25)' },
         ].map(s => (
           <div key={s.l} style={{
             padding: '14px 16px', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
@@ -208,7 +214,14 @@ function QueueView() {
       </div>
       <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
         {runs.map((r, i) => {
-          const color = r.state === 'running' ? 'var(--teal)' : r.state === 'done' ? 'var(--accent)' : r.state === 'failed' ? 'oklch(0.55 0.16 25)' : 'var(--amber)';
+          // F5 · 'succeeded' 跟 'done' 同色（绿）；'cancelled' 跟 'failed' 同色（红）
+          const color = r.state === 'running'
+            ? 'var(--teal)'
+            : (r.state === 'done' || r.state === 'succeeded')
+              ? 'var(--accent)'
+              : (r.state === 'failed' || r.state === 'cancelled')
+                ? 'oklch(0.55 0.16 25)'
+                : 'var(--amber)';
           const axisMeta = AXIS_SUB[r.axis] ?? { label: r.axis, color: 'var(--ink-3)', subs: [] };
           return (
             <div key={r.id} style={{
