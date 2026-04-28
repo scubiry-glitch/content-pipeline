@@ -25,30 +25,27 @@ export async function loadMeetingBundle(
       WHERE table_name = 'assets' AND column_name = 'asset_type'
       LIMIT 1`,
   );
-  // 列前缀 a. 是因为下面 SELECT 加了 LEFT JOIN mn_meetings m，需要消歧义
   const typeExpr = hasAssetTypeCol.rows.length > 0
-    ? `COALESCE(a.asset_type::text, a.type::text, a.content_type::text, '')`
-    : `COALESCE(a.type::text, a.content_type::text, '')`;
+    ? `COALESCE(asset_type::text, type::text, content_type::text, '')`
+    : `COALESCE(type::text, content_type::text, '')`;
   // F9 fix · 放开 type 白名单：早期约定只接 'meeting_minutes'，但实际新建会议
   // 默认 type='meeting_note'，导致绝大多数会议被 loadMeetingBundle 直接 return null
   // → axis computer 早 return → 整个 axis 跑出来 0 行（典型 silent-zero）
   // 改为接受 meeting_minutes / meeting_note；或 metadata 里有 meeting_kind 标记
   //
-  // F5 silent-zero fix · 再加一条 fallback：assets 行存在于 mn_meetings 也认。
-  // 实测有 asset 上传时 type=NULL/'txt' 且 metadata={} 的（"新录音.txt" 走的
-  // 是 generic 上传链路而非 meeting wizard），但 mn_meetings 里 meeting_kind
-  // 写好了。前两个白名单都不命中 → silent-zero。LEFT JOIN mn_meetings 后用它
-  // 的 meeting_kind 兜底，无需手工 UPDATE 修每条 asset。
+  // F5 silent-zero fix · 加 mn_scope_members 兜底（之前误用 mn_meetings 不存在
+  // 的表，导致 SQL throws 把 silent-zero 又加重一档）。语义：只要这条 asset 在
+  // mn_scope_members.meeting_id 里有 binding（已被绑到某个 project/topic/library
+  // scope），就当成 meeting 接进来。覆盖通过 generic 上传链路上来、type=NULL
+  // 且 metadata 暂时没 meeting_kind 的"新录音.txt"这类资产。
   const r = await deps.db.query(
-    `SELECT a.id, a.title, a.content, a.metadata, a.created_at,
-            m.meeting_kind AS mn_meeting_kind
-       FROM assets a
-       LEFT JOIN mn_meetings m ON m.id = a.id
-      WHERE a.id = $1
+    `SELECT id, title, content, metadata, created_at
+       FROM assets
+      WHERE id = $1
         AND (
           ${typeExpr} IN ('meeting_minutes', 'meeting_note')
-          OR (a.metadata ? 'meeting_kind')
-          OR m.id IS NOT NULL
+          OR (metadata ? 'meeting_kind')
+          OR EXISTS (SELECT 1 FROM mn_scope_members WHERE meeting_id::text = $1)
         )`,
     [meetingId],
   );
@@ -60,8 +57,7 @@ export async function loadMeetingBundle(
     content: a.content ?? '',
     metadata: a.metadata ?? {},
     occurredAt: a.metadata?.occurred_at,
-    // 优先 metadata.meeting_kind；回退到 mn_meetings.meeting_kind
-    meetingKind: a.metadata?.meeting_kind ?? a.mn_meeting_kind ?? null,
+    meetingKind: a.metadata?.meeting_kind,
   };
 }
 
