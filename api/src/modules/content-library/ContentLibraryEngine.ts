@@ -45,6 +45,23 @@ import {
   type EvolutionPattern,
 } from './reasoning/beliefPatternDetector.js';
 
+/**
+ * batch-ops 改进 #2: 把 LLM / DB / 解析等错误归类，让前端用户看到具体失败模式
+ * 而不是只看到"错误 N"这个数字。
+ */
+function classifyError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (/timeout|etimedout|aborted/.test(m)) return 'timeout';
+  if (/rate.?limit|429|too many requests/.test(m)) return 'rate_limit';
+  if (/balance|余额|insufficient|402|403/.test(m)) return 'quota';
+  if (/json|parse|unexpected token|non-array/.test(m)) return 'json_parse';
+  if (/null value|not.?null|violates.*constraint/.test(m)) return 'db_constraint';
+  if (/foreign key|fk_|references/.test(m)) return 'db_fk';
+  if (/network|econn|socket|fetch failed/.test(m)) return 'network';
+  if (/invalid byte|encoding|utf-?8/.test(m)) return 'encoding';
+  return 'other';
+}
+
 export class ContentLibraryEngine {
   private deps: ContentLibraryDeps;
   private options: Required<ContentLibraryOptions>;
@@ -343,6 +360,8 @@ export class ContentLibraryEngine {
     tokenEstimate: number;
     resumable: boolean;
     filteredByQuality: number;
+    /** batch-ops 改进 #2: 错误样例（前 5 条），让前端展开看具体失败模式 */
+    errorSamples?: Array<{ assetId: string; assetTitle?: string; message: string; kind: string }>;
   }> {
     const limit = Math.min(options.limit || 20, 200);
     const minConf = options.minConfidence ?? this.options.factConfidenceThreshold;
@@ -408,6 +427,9 @@ export class ContentLibraryEngine {
     let errors = 0;
     let tokenEstimate = 0;
     let filteredByQuality = 0;
+    // batch-ops 改进 #2: 错误样例展开 — 收集前 5 条具体失败信息（含 assetId / kind）
+    // 之前只累计 errors 数字，用户在前端只看到"错误 N"无法定位是 LLM 超时 / JSON parse fail / schema 错位等
+    const errorSamples: Array<{ assetId: string; assetTitle?: string; message: string; kind: string }> = [];
 
     for (const row of assets.rows) {
       try {
@@ -482,10 +504,20 @@ export class ContentLibraryEngine {
       } catch (err) {
         console.warn('[reextractBatch] Asset failed:', row._assetId || row.id, err);
         errors++;
+        // 收集错误样例（前 5 条），供 job 层透传给前端展开"错误样例"
+        if (errorSamples.length < 5) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errorSamples.push({
+            assetId: String(row._assetId || row.id || 'unknown'),
+            assetTitle: typeof row.title === 'string' ? row.title.slice(0, 80) : undefined,
+            message: msg.slice(0, 240),
+            kind: classifyError(msg),
+          });
+        }
       }
     }
 
-    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed, filteredByQuality };
+    return { processed, newFacts, updatedFacts, skipped, errors, tokenEstimate, resumable: onlyUnprocessed, filteredByQuality, errorSamples };
   }
 
   /** WHERE 子句构建（事实表）— 供 queryFacts / queryFactsPage 共用 */

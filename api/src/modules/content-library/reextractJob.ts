@@ -20,6 +20,11 @@ export interface ReextractJobState {
   errorMessages: string[];
   /** Round 2: 深度模式标记 */
   deep?: boolean;
+  /**
+   * batch-ops 改进 #2: 错误样例（前 5 条），含 assetId / message / kind 让前端能定位问题。
+   * 之前只暴露错误总数，用户看到"错误 3"无法判断是 LLM 超时还是 schema 错位。
+   */
+  errorSamples?: Array<{ assetId: string; assetTitle?: string; message: string; kind: string }>;
 }
 
 export interface ReextractJobOptions {
@@ -85,6 +90,7 @@ export function startReextractJob(
     tokenEstimate: 0,
     startedAt: new Date().toISOString(),
     errorMessages: [],
+    errorSamples: [],
     deep: options.enableDeep === true,
   };
   jobs.set(jobId, state);
@@ -123,6 +129,15 @@ export function startReextractJob(
         state.updatedFacts += batch.updatedFacts;
         state.skipped += batch.skipped;
         state.errors += batch.errors;
+        // batch-ops 改进 #2: 累计错误样例（去重 by assetId+kind，保留前 5 条）
+        if (Array.isArray((batch as any).errorSamples) && state.errorSamples) {
+          for (const s of (batch as any).errorSamples) {
+            if (state.errorSamples.length >= 5) break;
+            const key = `${s.assetId}:${s.kind}`;
+            if (state.errorSamples.find((x) => `${x.assetId}:${x.kind}` === key)) continue;
+            state.errorSamples.push(s);
+          }
+        }
         remaining -= (batch.processed + batch.skipped);
 
         emit(jobId, 'progress', {
@@ -132,6 +147,7 @@ export function startReextractJob(
           skipped: state.skipped,
           errors: state.errors,
           total: state.total,
+          errorSamples: state.errorSamples,
         });
 
         // 防 LLM 限速

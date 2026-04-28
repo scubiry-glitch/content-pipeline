@@ -23,12 +23,21 @@ interface StepStatus {
   lastRun?: string;
 }
 
+interface ErrorSample {
+  assetId: string;
+  assetTitle?: string;
+  message: string;
+  kind: string;
+}
+
 interface JobProgress {
   processed: number;
   total: number;
   newFacts: number;
   updatedFacts: number;
   errors: number;
+  /** batch-ops 改进 #2: 错误样例展开（前 5 条） */
+  errorSamples?: ErrorSample[];
 }
 
 interface SynthesisProgress {
@@ -286,7 +295,14 @@ export function ContentLibraryBatchOps() {
         try {
           const data = JSON.parse(e.data);
           if (data.processed !== undefined) {
-            setProgress({ processed: data.processed, total: data.total || extractLimit, newFacts: data.newFacts || 0, updatedFacts: data.updatedFacts || 0, errors: data.errors || 0 });
+            setProgress({
+              processed: data.processed,
+              total: data.total || extractLimit,
+              newFacts: data.newFacts || 0,
+              updatedFacts: data.updatedFacts || 0,
+              errors: data.errors || 0,
+              errorSamples: Array.isArray(data.errorSamples) ? data.errorSamples : undefined,
+            });
           }
           if (data.status && data.status !== 'running') {
             setStep('extract', { status: data.status === 'completed' ? 'done' : 'error', message: `处理 ${data.processed || 0} 条`, lastRun: new Date().toISOString() });
@@ -623,6 +639,57 @@ export function ContentLibraryBatchOps() {
     };
   }, []);
 
+  /**
+   * batch-ops 改进 #2: 错误样例展开组件
+   * "错误 N" 旁加 [查看] 按钮，点开显示前 5 条具体失败（assetId / kind / message）。
+   * 让用户能立刻判断是 LLM 超时 / quota / json parse / DB 约束，而不是面对一个数字。
+   */
+  const ErrorSamplesPanel = ({ samples, label }: { samples?: ErrorSample[]; label?: string }) => {
+    const [open, setOpen] = useState(false);
+    if (!samples || samples.length === 0) return null;
+    const KIND_TONE: Record<string, string> = {
+      timeout: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+      rate_limit: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+      quota: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+      json_parse: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+      db_constraint: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+      db_fk: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+      network: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300',
+      encoding: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+      other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+    };
+    return (
+      <div className="mt-2">
+        <button onClick={() => setOpen((o) => !o)}
+          className="text-[10px] text-amber-600 hover:text-amber-700 underline">
+          {open ? '收起' : '查看'}错误样例（{samples.length}{label ? ` ${label}` : ''}）
+        </button>
+        {open && (
+          <ul className="mt-1.5 space-y-1.5 pl-2 border-l-2 border-amber-200 dark:border-amber-800">
+            {samples.map((s, i) => (
+              <li key={i} className="text-[11px]">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${KIND_TONE[s.kind] ?? KIND_TONE.other}`}>
+                    {s.kind}
+                  </span>
+                  <span className="font-mono text-[10px] text-gray-400">
+                    {s.assetId.slice(0, 8)}…
+                  </span>
+                  {s.assetTitle && (
+                    <span className="text-gray-500 dark:text-gray-400 truncate max-w-[180px]">
+                      {s.assetTitle}
+                    </span>
+                  )}
+                </div>
+                <div className="text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">{s.message}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
   const statusIcon = (s: StepStatus['status']) => {
     switch (s) {
       case 'idle': return '⚪';
@@ -806,6 +873,7 @@ export function ContentLibraryBatchOps() {
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div className="bg-indigo-600 rounded-full h-2 transition-all" style={{ width: `${progressPct}%` }} />
               </div>
+              <ErrorSamplesPanel samples={progress.errorSamples} />
             </div>
           )}
           {steps.extract.message && <p className="text-sm text-gray-500 mt-1">{steps.extract.message}</p>}
