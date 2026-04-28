@@ -1702,9 +1702,13 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/runs', { preHandler: authenticate }, async (request) => {
       const q = request.query as any;
+      // F5 · 修：之前 `q.scopeId ?? null` 把没传 scopeId 的请求强制变成 null，
+      // engine.list 又把 scopeId=null 解释成"只看 library scope (scope_id IS NULL)"，
+      // 导致 GenerationCenter 不传 scopeId 时看不到 project/meeting scope 的 running/queued。
+      // 现改成不传就 undefined，engine 不加 scope_id 过滤。
       const items = await engine.listRuns({
         scopeKind: q.scopeKind,
-        scopeId: q.scopeId ?? null,
+        scopeId: q.scopeId,
         axis: q.axis,
         state: q.state,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
