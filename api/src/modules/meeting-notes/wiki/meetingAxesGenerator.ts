@@ -1,11 +1,13 @@
 // Phase H+ · MeetingAxesGenerator
 //
-// 把 17 张 mn_* 表跨场聚合, 物化为 meeting/axes/ 子目录下 16 个 deliverable .md 页:
-//   meeting/axes/_index.md
-//   sources/sources/meeting/axes/people/_index.md + commitments.md + role-trajectory.md + speech-quality.md + silence-signals.md
-//   sources/sources/meeting/axes/projects/_index.md + decisions.md + assumptions.md + open-questions.md + risks.md
-//   sources/sources/meeting/axes/knowledge/_index.md + reusable-judgments.md + mental-models.md + cognitive-biases.md + counterfactuals.md + evidence-grades.md
-//   sources/sources/meeting/axes/meta/_index.md + decision-quality.md + necessity-audit.md + affect-curve.md
+// 把 17 张 mn_* 表跨场聚合, 物化为 sources/meeting/axes/ 下:
+//   sources/meeting/axes/_index.md
+//   sources/meeting/axes/people-人物/_index.md + 承诺兑现.md + 角色变迁.md + 发言质量.md + 沉默信号.md
+//   sources/meeting/axes/projects-项目/_index.md + 决策链.md + 假设清单.md + 待决问题.md + 风险热度.md
+//   sources/meeting/axes/knowledge-知识/_index.md + 可复用判断.md + 心智模型.md + 认知偏误.md + 反事实.md + 证据等级.md
+//   sources/meeting/axes/meta-元信息/_index.md + 决策质量.md + 必要性审计.md + 情绪曲线.md
+//
+// 命名规则: 中英对照目录 + 中文文件 (选项 A)
 //
 // 调用:
 //   const gen = new MeetingAxesGenerator(deps);
@@ -39,10 +41,79 @@ export interface MeetingAxesGenerateResult {
 
 const DEFAULT_LIMIT = 200;
 
+// Phase H+ · 中文友好命名 (选项 A: 中英对照目录 + 中文文件)
+const AXIS_DIR: Record<string, string> = {
+  people: 'people-人物',
+  projects: 'projects-项目',
+  knowledge: 'knowledge-知识',
+  meta: 'meta-元信息',
+};
+
+const DELIVERABLE_LABEL: Record<string, string> = {
+  // people
+  commitments: '承诺兑现',
+  'role-trajectory': '角色变迁',
+  'speech-quality': '发言质量',
+  'silence-signals': '沉默信号',
+  // projects
+  decisions: '决策链',
+  assumptions: '假设清单',
+  'open-questions': '待决问题',
+  risks: '风险热度',
+  // knowledge
+  'reusable-judgments': '可复用判断',
+  'mental-models': '心智模型',
+  'cognitive-biases': '认知偏误',
+  counterfactuals: '反事实',
+  'evidence-grades': '证据等级',
+  // meta
+  'decision-quality': '决策质量',
+  'necessity-audit': '必要性审计',
+  'affect-curve': '情绪曲线',
+};
+
+function axisDirName(axis: string): string {
+  return AXIS_DIR[axis] ?? axis;
+}
+
+function fileLabelFor(deliverable: string): string {
+  return DELIVERABLE_LABEL[deliverable] ?? deliverable;
+}
+
+/** title → slugified directory name 的统一规则 */
+function buildMeetingDirSlug(id: string, title: string | null | undefined): string {
+  const cleanTitle = String(title || 'untitled')
+    .replace(/\.docx?$|\.txt$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  return `${cleanTitle}-${id.slice(0, 8)}`;
+}
+
 export class MeetingAxesGenerator {
   private deps: MeetingNotesDeps;
+  /** Phase H+ · meeting id → dir slug 映射, 用于 wikilink */
+  private meetingDirById: Map<string, string> = new Map();
+
   constructor(deps: MeetingNotesDeps) {
     this.deps = deps;
+  }
+
+  private async loadMeetingDirMap(): Promise<void> {
+    try {
+      const r = await this.deps.db.query(`
+        SELECT id::text AS id, COALESCE(title, metadata->>'title', 'Untitled') AS title
+        FROM assets
+        WHERE type IN ('meeting_note','meeting_minutes','transcript')
+           OR (metadata ? 'meeting_kind')
+      `);
+      for (const row of r.rows) {
+        this.meetingDirById.set(row.id, buildMeetingDirSlug(row.id, row.title));
+      }
+    } catch (e) {
+      console.warn('[MeetingAxesGenerator] loadMeetingDirMap failed:', (e as Error).message);
+    }
   }
 
   async generate(opts: MeetingAxesGenerateOptions): Promise<MeetingAxesGenerateResult> {
@@ -55,9 +126,12 @@ export class MeetingAxesGenerator {
       people: {}, projects: {}, knowledge: {}, meta: {},
     };
 
-    // 准备目录
+    // Phase H+ · 预加载 meeting id → dir slug map (供 wikilink 用)
+    await this.loadMeetingDirMap();
+
+    // 准备目录 (中英对照目录名)
     for (const sub of ['people', 'projects', 'knowledge', 'meta']) {
-      await fs.mkdir(path.join(wikiRoot, 'sources/meeting/axes', sub), { recursive: true });
+      await fs.mkdir(path.join(wikiRoot, 'sources/meeting/axes', axisDirName(sub)), { recursive: true });
     }
 
     // ── people 轴 ──────────────────────────────────────────────
@@ -108,7 +182,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/people', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes', axisDirName('people'), `${fileLabelFor(name)}.md`), md, 'utf8');
           axes.people[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -118,7 +192,7 @@ export class MeetingAxesGenerator {
       // _index.md
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'sources/meeting/axes/people/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/' + axisDirName('people') + '/_index.md'),
           this.renderAxisIndex('people', '人物', axes.people),
           'utf8',
         );
@@ -172,7 +246,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/projects', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes', axisDirName('projects'), `${fileLabelFor(name)}.md`), md, 'utf8');
           axes.projects[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -181,7 +255,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'sources/meeting/axes/projects/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/' + axisDirName('projects') + '/_index.md'),
           this.renderAxisIndex('projects', '项目', axes.projects),
           'utf8',
         );
@@ -248,7 +322,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/knowledge', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes', axisDirName('knowledge'), `${fileLabelFor(name)}.md`), md, 'utf8');
           axes.knowledge[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -257,7 +331,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'sources/meeting/axes/knowledge/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/' + axisDirName('knowledge') + '/_index.md'),
           this.renderAxisIndex('knowledge', '知识', axes.knowledge),
           'utf8',
         );
@@ -297,7 +371,7 @@ export class MeetingAxesGenerator {
         try {
           const r = await query();
           const md = render(r.rows);
-          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/meta', `${name}.md`), md, 'utf8');
+          await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes', axisDirName('meta'), `${fileLabelFor(name)}.md`), md, 'utf8');
           axes.meta[name] = r.rows.length;
           filesWritten++;
         } catch (e) {
@@ -306,7 +380,7 @@ export class MeetingAxesGenerator {
       }
       try {
         await fs.writeFile(
-          path.join(wikiRoot, 'sources/meeting/axes/meta/_index.md'),
+          path.join(wikiRoot, 'sources/meeting/axes/' + axisDirName('meta') + '/_index.md'),
           this.renderAxisIndex('meta', '元信息', axes.meta),
           'utf8',
         );
@@ -337,10 +411,10 @@ export class MeetingAxesGenerator {
         '',
         '## 轴入口',
         '',
-        `- [[sources/meeting/axes/people/_index|人物轴]] · ${Object.keys(axes.people).length} deliverables`,
-        `- [[sources/meeting/axes/projects/_index|项目轴]] · ${Object.keys(axes.projects).length} deliverables`,
-        `- [[sources/meeting/axes/knowledge/_index|知识轴]] · ${Object.keys(axes.knowledge).length} deliverables`,
-        `- [[sources/meeting/axes/meta/_index|元信息轴]] · ${Object.keys(axes.meta).length} deliverables`,
+        `- [[${axisDirName('people')}/_index|人物轴]] · ${Object.keys(axes.people).length} deliverables`,
+        `- [[${axisDirName('projects')}/_index|项目轴]] · ${Object.keys(axes.projects).length} deliverables`,
+        `- [[${axisDirName('knowledge')}/_index|知识轴]] · ${Object.keys(axes.knowledge).length} deliverables`,
+        `- [[${axisDirName('meta')}/_index|元信息轴]] · ${Object.keys(axes.meta).length} deliverables`,
         '',
       ].join('\n');
       await fs.writeFile(path.join(wikiRoot, 'sources/meeting/axes/_index.md'), md, 'utf8');
@@ -398,7 +472,8 @@ export class MeetingAxesGenerator {
       '',
     ];
     for (const [name, n] of Object.entries(deliverables).sort()) {
-      lines.push(`- [[${name}|${name}]] (${n} 行)`);
+      const cn = fileLabelFor(name);
+      lines.push(`- [[${cn}|${cn}]] (${n} 行)`);
     }
     return lines.join('\n');
   }
@@ -410,7 +485,14 @@ export class MeetingAxesGenerator {
 
   private meetingLink(id: string | null | undefined): string {
     if (!id) return '—';
-    return `[[meeting/${id.slice(0, 8)}|${id.slice(0, 8)}…]]`;
+    // 优先用预加载的 title-id8 dir slug; 没命中则降级到 id-8
+    const dirSlug = this.meetingDirById.get(id);
+    if (dirSlug) {
+      // wikilink 用 dir slug + 简短显示标签 (取 title 部分, 去 -<id8> 后缀)
+      const display = dirSlug.replace(/-[0-9a-f]{8}$/, '').slice(0, 30) || id.slice(0, 8);
+      return `[[${dirSlug}|${display}]]`;
+    }
+    return `[[${id.slice(0, 8)}|${id.slice(0, 8)}…]]`;
   }
 
   private renderCommitments(rows: any[]): string {

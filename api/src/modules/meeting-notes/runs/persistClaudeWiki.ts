@@ -96,11 +96,23 @@ function isValidEntitySubtype(s: string | undefined, type: 'entity' | 'concept')
   return (CONCEPT_SUBTYPES as readonly string[]).includes(s);
 }
 
+/** 把 meeting title 变成 fs-friendly slug + id 后缀, 与 axes/scope generator 同步 */
+function buildMeetingDirSlug(id: string, title: string | null | undefined): string {
+  const cleanTitle = String(title || 'untitled')
+    .replace(/\.docx?$|\.txt$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  return `${cleanTitle || 'untitled'}-${id.slice(0, 8)}`;
+}
+
 export async function persistClaudeWiki(
   deps: MeetingNotesDeps,
   meetingId: string,
   wiki: ClaudeWikiOutput,
   wikiRoot?: string,
+  meetingTitle?: string | null,
 ): Promise<{
   sourceWritten: boolean;
   entityCreated: number;
@@ -122,9 +134,21 @@ export async function persistClaudeWiki(
     return { sourceWritten, entityCreated, entityUpdated, legacyAppended, skipped };
   }
 
-  // ─── 1. sources/meeting/<meetingId>/_index.md (覆盖, Phase H+ 路径) ───
+  // ─── 1. sources/meeting/<title-slug>-<id8>/_index.md (覆盖, Phase H+ 路径) ───
   if (typeof wiki?.sourceEntry === 'string' && wiki.sourceEntry.trim().length > 0) {
-    const meetingDir = join(root, 'sources', 'meeting', sanitizeFilename(meetingId));
+    // 优先用 caller 传入的 title; 没传则从 assets 表 lookup; 都不行 fallback 到 meetingId 形态
+    let title = meetingTitle ?? null;
+    if (!title) {
+      try {
+        const r = await deps.db.query(
+          `SELECT COALESCE(title, metadata->>'title') AS title FROM assets WHERE id::text = $1 LIMIT 1`,
+          [meetingId],
+        );
+        title = r.rows[0]?.title ?? null;
+      } catch {/* swallow */}
+    }
+    const dirSlug = buildMeetingDirSlug(meetingId, title);
+    const meetingDir = join(root, 'sources', 'meeting', sanitizeFilename(dirSlug));
     const sourcePath = join(meetingDir, '_index.md');
     try {
       await mkdir(meetingDir, { recursive: true });

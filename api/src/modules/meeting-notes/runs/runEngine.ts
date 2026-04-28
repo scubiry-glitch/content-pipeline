@@ -947,7 +947,13 @@ export class RunEngine {
 
           await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
           try {
-            await persistClaudeWiki(this.deps, payload.meetingId!, cliResult.wikiMarkdown ?? {});
+            await persistClaudeWiki(
+              this.deps,
+              payload.meetingId!,
+              cliResult.wikiMarkdown ?? {},
+              undefined,
+              (cliResult as any)?.meeting?.title,
+            );
           } catch (e) {
             console.warn('[runEngine] persistClaudeWiki failed:', (e as Error).message);
           }

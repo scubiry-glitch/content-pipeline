@@ -59,6 +59,26 @@ interface MeetingRow {
   meeting_kind: string | null;
 }
 
+/** 把任意字符串变成文件系统友好 slug, 保留中文 */
+function cleanForFs(s: string): string {
+  return String(s || '')
+    .replace(/\.docx?$|\.txt$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+}
+
+/** scope dir slug: <name>-<id8> 形式 */
+function buildScopeDirSlug(id: string, name: string): string {
+  return `${cleanForFs(name) || 'untitled'}-${id.slice(0, 8)}`;
+}
+
+/** meeting dir slug: <title>-<id8> 形式, 与 axes generator 同步 */
+function buildMeetingDirSlug(id: string, title: string | null | undefined): string {
+  return `${cleanForFs(title || 'untitled') || 'untitled'}-${id.slice(0, 8)}`;
+}
+
 export class MeetingScopeGenerator {
   private deps: MeetingNotesDeps;
   constructor(deps: MeetingNotesDeps) {
@@ -240,8 +260,9 @@ export class MeetingScopeGenerator {
       speakers: speakers.rows,
     });
 
-    const slug = `${scope.slug || slugify(scope.name)}`;
-    const filePath = path.join(wikiRoot, 'sources/meeting/scopes', scope.kind, slug, '_index.md');
+    // Phase H+ · 用 name-id8 命名 scope dir (而不是 mn_scopes.slug 字段, 那个不可读)
+    const dirSlug = buildScopeDirSlug(scope.id, scope.name);
+    const filePath = path.join(wikiRoot, 'sources/meeting/scopes', scope.kind, dirSlug, '_index.md');
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, md, 'utf8');
 
@@ -289,7 +310,7 @@ export class MeetingScopeGenerator {
       for (const m of meetings) {
         const date = m.occurred_at ? String(m.occurred_at).slice(0, 10) : '—';
         const kind = m.meeting_kind ? ` \`${m.meeting_kind}\`` : '';
-        out.push(`- [[${m.id.slice(0, 8)}|${m.title}]] · ${date}${kind}`);
+        out.push(`- [[${buildMeetingDirSlug(m.id, m.title)}|${m.title}]] · ${date}${kind}`);
       }
       out.push('');
     }
@@ -387,7 +408,7 @@ export class MeetingScopeGenerator {
       const list = byKind[kindName[0]] ?? [];
       out.push(`## ${kindName[1]} · ${kindName[0]} (${list.length})`, '');
       for (const s of list.sort((a, b) => b.meetingCount - a.meetingCount)) {
-        out.push(`- [[${s.kind}/${slugify(s.name)}/_index|${s.name}]] · ${s.meetingCount} 场会议`);
+        out.push(`- [[${s.kind}/${buildScopeDirSlug(s.id, s.name)}/_index|${s.name}]] · ${s.meetingCount} 场会议`);
       }
       out.push('');
     }
