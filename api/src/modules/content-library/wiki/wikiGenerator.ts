@@ -31,6 +31,40 @@ import {
   type TaxonomyFlatNode,
 } from './wikiFrontmatter.js';
 
+// ============================================================
+// Phase H+ · 来源 kind 路由
+// ============================================================
+
+/** wiki 内 source 的 kind 分类, 决定写入 sources/<kind>/ 子目录 */
+export type SourceKind = 'meeting' | 'research-report' | 'rss' | 'document';
+
+export interface AssetMeta {
+  kind: SourceKind;
+  rawType?: string;          // 原始 assets.type 或 asset_library.content_type
+  source?: string;
+  title?: string;
+  l0_summary?: string;
+}
+
+/** assets.type → SourceKind */
+export function mapAssetTypeToKind(type: string | null | undefined): SourceKind {
+  const t = String(type ?? '').toLowerCase();
+  if (t === 'meeting_note' || t === 'meeting_minutes' || t === 'transcript') return 'meeting';
+  if (t === 'report') return 'research-report';
+  if (t === 'rss' || t === 'rss_item') return 'rss';
+  if (t === 'file' || t === 'document') return 'document';
+  return 'document';
+}
+
+/** asset_library.content_type → SourceKind */
+export function mapContentTypeToKind(ct: string | null | undefined): SourceKind {
+  const t = String(ct ?? '').toLowerCase();
+  if (t.includes('meeting')) return 'meeting';
+  if (t === 'rss' || t === 'rss_item' || t.includes('rss')) return 'rss';
+  if (t === 'report' || t === 'research_report' || t === 'research-report') return 'research-report';
+  return 'document';
+}
+
 export interface WikiGenerateOptions {
   /** 本地文件系统根目录 (绝对路径) */
   wikiRoot: string;
@@ -58,6 +92,7 @@ export interface WikiGenerateResult {
   domains: number;              // Phase H · L2 domain page 数量
   domainIndexes: number;        // Phase H · L1 _index.md 数量
   sources: number;
+  sourceKindBreakdown?: Record<string, number>;  // Phase H+ · 按 kind 拆分的 source page 数
   preservedFiles: number;       // Phase H · 因 app=meeting-notes 而被跳过的文件数
   durationMs: number;
   errors: string[];
@@ -342,9 +377,17 @@ export class WikiGenerator {
       void taxonomy;
     }
 
-    // 6. 生成来源页 (Phase H · skipSources 时跳过, 让 claude-cli 全权)
+    // 6. Phase H+ · 生成来源页 · 按 kind 路由 sources/<kind>/<id>(.md|/_index.md)
+    //    skipSources=true 时跳过整个 6 步 (claude-cli 全权).
+    //    meeting kind 单独跳过 (始终由 claude-cli 写, 不论 skipSources).
     let sourceCount = 0;
+    const sourceKindCounts: Record<string, number> = { meeting: 0, 'research-report': 0, rss: 0, document: 0 };
     if (!options.skipSources) {
+      // 创建 sources/<kind>/ 子目录
+      for (const kind of ['research-report', 'rss', 'document'] as const) {
+        await fs.mkdir(path.join(wikiRoot, 'sources', kind), { recursive: true });
+      }
+
       const factsByAsset = new Map<string, ContentFact[]>();
       for (const f of facts) {
         if (!f.assetId) continue;
@@ -352,14 +395,23 @@ export class WikiGenerator {
         list.push(f);
         factsByAsset.set(f.assetId, list);
       }
+
       for (const [assetId, assetFacts] of factsByAsset.entries()) {
-        const row = assetRows.get(assetId);
+        const meta = assetRows.get(assetId);
+        const kind: SourceKind = meta?.kind ?? 'document';
+
+        // meeting kind: 永远 skip (claude-cli 全权写到 sources/meeting/<id>/_index.md)
+        if (kind === 'meeting') {
+          preservedFiles += 1;
+          continue;
+        }
+
         const entityNames = Array.from(new Set([
           ...assetFacts.map(f => f.subject).filter(Boolean),
           ...assetFacts.map(f => f.object).filter(Boolean),
         ])).slice(0, 30);
 
-        const filePath = path.join(wikiRoot, 'sources', `${slugify(assetId)}.md`);
+        const filePath = path.join(wikiRoot, 'sources', kind, `${slugify(assetId)}.md`);
         // preserveAppMeetingNotes: claude-cli 写过的 source 跳过
         if (options.preserveAppMeetingNotes && existsSync(filePath)) {
           try {
@@ -369,20 +421,23 @@ export class WikiGenerator {
           } catch { /* fall through */ }
         }
 
+        // 按 kind 选模板 (P0: 沿用 renderSourcePage; 后续可加 renderResearchReportPage / renderRssItemPage)
         const content = renderSourcePage({
           assetId,
-          title: row?.source || assetId,
-          l0Summary: row?.l0_summary,
-          source: row?.source,
+          title: meta?.title || meta?.source || assetId,
+          l0Summary: meta?.l0_summary,
+          source: meta?.source,
           factCount: assetFacts.length,
           entityNames,
         });
+
         try {
           await fs.writeFile(filePath, content, 'utf8');
           filesWritten++;
           sourceCount++;
+          sourceKindCounts[kind] = (sourceKindCounts[kind] ?? 0) + 1;
         } catch (err) {
-          errors.push(`source ${assetId}: ${(err as Error).message}`);
+          errors.push(`source [${kind}] ${assetId}: ${(err as Error).message}`);
         }
       }
     }
@@ -443,6 +498,7 @@ export class WikiGenerator {
       domains: domainCount,
       domainIndexes: domainIndexCount,
       sources: sourceCount,
+      sourceKindBreakdown: sourceKindCounts,
       preservedFiles,
       durationMs: Date.now() - started,
       errors,
@@ -576,24 +632,62 @@ export class WikiGenerator {
     }));
   }
 
-  private async loadAssets(facts: ContentFact[]): Promise<Map<string, any>> {
-    const assetIds = Array.from(new Set(facts.map(f => f.assetId).filter(Boolean)));
+  /**
+   * Phase H+ · 双表 loadAssets · 同时查 assets 和 asset_library, 拼出 { kind, source, title, l0_summary }
+   *
+   * content_facts.asset_id 现在有两类:
+   *   - UUID (8-4-4-4-12) 形态 → assets.id (主要是 type=meeting_note / report / file)
+   *   - asset_xxxxxxxx (varchar prefix) → asset_library.id (主要是 content_type=...)
+   *
+   * 路由 kind 字段决定 sources/<kind>/<id>(.md|/_index.md) 落地位置。
+   */
+  private async loadAssets(facts: ContentFact[]): Promise<Map<string, AssetMeta>> {
+    const assetIds = Array.from(new Set(facts.map((f) => f.assetId).filter(Boolean) as string[]));
     if (assetIds.length === 0) return new Map();
-    const out = new Map<string, any>();
+    const out = new Map<string, AssetMeta>();
+
+    // 1. assets 表 (UUID id, 字段 type)
     try {
-      const result = await this.db.query(
-        `SELECT id, source, content FROM asset_library WHERE id = ANY($1::varchar[])`,
-        [assetIds]
+      const r = await this.db.query(
+        `SELECT id::text AS id, type, COALESCE(title, metadata->>'title') AS title,
+                metadata->>'source' AS source, content
+         FROM assets WHERE id::text = ANY($1::text[])`,
+        [assetIds],
       );
-      for (const row of result.rows) {
+      for (const row of r.rows) {
         out.set(row.id, {
+          kind: mapAssetTypeToKind(row.type),
+          rawType: row.type,
           source: row.source,
+          title: row.title,
           l0_summary: typeof row.content === 'string' ? row.content.slice(0, 200) : undefined,
         });
       }
     } catch (err) {
-      console.warn('[WikiGenerator] loadAssets failed:', err);
+      console.warn('[WikiGenerator] loadAssets (assets) failed:', err);
     }
+
+    // 2. asset_library 表 (varchar id, 字段 content_type)
+    try {
+      const r = await this.db.query(
+        `SELECT id, content_type, source, content
+         FROM asset_library WHERE id = ANY($1::varchar[])`,
+        [assetIds],
+      );
+      for (const row of r.rows) {
+        if (out.has(row.id)) continue;  // assets 已有, 不覆盖
+        out.set(row.id, {
+          kind: mapContentTypeToKind(row.content_type),
+          rawType: row.content_type,
+          source: row.source,
+          title: undefined,
+          l0_summary: typeof row.content === 'string' ? row.content.slice(0, 200) : undefined,
+        });
+      }
+    } catch (err) {
+      console.warn('[WikiGenerator] loadAssets (asset_library) failed:', err);
+    }
+
     return out;
   }
 
