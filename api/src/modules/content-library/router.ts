@@ -241,6 +241,98 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
      * 让用户跑完 Step 3 一眼看出"产出质量是否值得进入 Step 4-6"。
      */
     /**
+     * batch-ops 改进 #6: 低质量 fact 扫描器
+     *
+     * 扫 content_facts 找 confidence ≤ threshold 或含占位词的 fact，按 asset 聚合返回。
+     * 让用户在重跑 reextract 前能看到"哪些资产里有几条低质量 fact"，决定是否重提。
+     */
+    fastify.get('/facts/low-quality', async (request) => {
+      const q = request.query as { threshold?: string; placeholder?: string; limit?: string };
+      const threshold = Math.min(0.95, Math.max(0, parseFloat(q.threshold ?? '0.5')));
+      const includePlaceholder = q.placeholder !== 'false';
+      const limit = Math.min(500, Math.max(1, parseInt(q.limit ?? '200', 10)));
+      try {
+        const r = await (engine as any).deps.db.query(
+          `SELECT
+             cf.asset_id,
+             COALESCE(a.title, cf.asset_id) AS asset_title,
+             COUNT(*)::int AS fact_count,
+             ROUND(AVG(cf.confidence)::numeric, 3) AS avg_confidence,
+             COUNT(*) FILTER (WHERE cf.confidence <= $1)::int AS low_conf_count,
+             COUNT(*) FILTER (
+               WHERE lower(cf.subject) IN ('unknown','n/a','','null')
+                  OR lower(cf.predicate) IN ('unknown','n/a','','null')
+                  OR lower(cf.object) IN ('unknown','n/a','','null')
+             )::int AS placeholder_count,
+             MAX(cf.created_at) AS last_extracted_at
+           FROM content_facts cf
+           LEFT JOIN assets a ON a.id = cf.asset_id
+          WHERE cf.is_current = true
+            AND cf.asset_id IS NOT NULL
+            AND (
+              cf.confidence <= $1
+              ${includePlaceholder ? `OR lower(cf.subject) IN ('unknown','n/a','','null')
+              OR lower(cf.predicate) IN ('unknown','n/a','','null')
+              OR lower(cf.object) IN ('unknown','n/a','','null')` : ''}
+            )
+          GROUP BY cf.asset_id, a.title
+          ORDER BY (placeholder_count + low_conf_count) DESC, fact_count DESC
+          LIMIT $2`,
+          [threshold, limit],
+        );
+        return {
+          items: r.rows,
+          threshold,
+          totalAffectedAssets: r.rows.length,
+          totalLowQualityFacts: r.rows.reduce((s: number, x: any) =>
+            s + Number(x.low_conf_count) + Number(x.placeholder_count), 0),
+        };
+      } catch (e) {
+        return { items: [], error: (e as Error).message, threshold, totalAffectedAssets: 0, totalLowQualityFacts: 0 };
+      }
+    });
+
+    /**
+     * batch-ops 改进 #6: 标记重提
+     * 把指定 asset_ids 的 last_reextracted_at 设回 NULL（或删除该列），
+     * 下次 reextract 跑 onlyUnprocessed=true 会自动包含它们。
+     * 同时（可选）软删除已有的低质量 fact（is_current = false）。
+     */
+    fastify.post('/facts/mark-for-reextract', async (request, reply) => {
+      const body = request.body as { assetIds?: string[]; softDeleteOldFacts?: boolean };
+      const assetIds = (body?.assetIds ?? []).filter((x) => typeof x === 'string' && x.length > 0);
+      if (assetIds.length === 0) {
+        reply.status(400);
+        return { error: 'assetIds required' };
+      }
+      try {
+        const db = (engine as any).deps.db;
+        // 清 last_reextracted_at（让 onlyUnprocessed=true 重新 pick）
+        const cleared = await db.query(
+          `UPDATE assets SET last_reextracted_at = NULL
+            WHERE id = ANY($1::text[])`,
+          [assetIds],
+        ).catch(() => ({ rowCount: 0 }));
+        let softDeleted = 0;
+        if (body?.softDeleteOldFacts) {
+          const r = await db.query(
+            `UPDATE content_facts SET is_current = false
+              WHERE asset_id = ANY($1::text[]) AND is_current = true`,
+            [assetIds],
+          );
+          softDeleted = r.rowCount ?? 0;
+        }
+        return {
+          ok: true,
+          markedAssets: (cleared as any).rowCount ?? assetIds.length,
+          softDeletedFacts: softDeleted,
+        };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    });
+
+    /**
      * batch-ops 改进 #5: Step 3 dry-run 预估
      * 不真跑，调 reextractBatch 的 dryRun 拿 total + tokenEstimate；
      * 加上 deep 模式倍数（~1.5x for extract deep）+ 平均处理速率得到耗时估算

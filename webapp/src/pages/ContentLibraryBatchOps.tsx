@@ -98,6 +98,20 @@ export function ContentLibraryBatchOps() {
     llmCallsEstimate: number; etaSeconds: number; deep: boolean;
   } | null>(null);
   const [extractPreviewLoading, setExtractPreviewLoading] = useState(false);
+  /** batch-ops 改进 #6: 低质量 fact 扫描结果 */
+  const [lowQualityScan, setLowQualityScan] = useState<{
+    items: Array<{
+      asset_id: string; asset_title: string;
+      fact_count: number; avg_confidence: number;
+      low_conf_count: number; placeholder_count: number;
+      last_extracted_at?: string;
+    }>;
+    threshold: number;
+    totalAffectedAssets: number;
+    totalLowQualityFacts: number;
+  } | null>(null);
+  const [lowQualitySelected, setLowQualitySelected] = useState<Set<string>>(new Set());
+  const [lowQualityLoading, setLowQualityLoading] = useState(false);
   const [extractLimit, setExtractLimit] = useState(50);
   const [extractSource, setExtractSource] = useState<'assets' | 'rss'>('assets');
   /** v7.3 调整1: 质量分门槛 (0=不过滤, >0 = 过滤低于此分的素材) */
@@ -407,6 +421,39 @@ export function ContentLibraryBatchOps() {
     } catch (err) {
       setStep('extract', { status: 'error', message: (err as Error).message });
     }
+  };
+
+  // batch-ops 改进 #6: 扫描低质量 fact
+  const fetchLowQualityFacts = async () => {
+    setLowQualityLoading(true);
+    try {
+      const r = await fetch(`${API}/facts/low-quality?threshold=0.5&limit=200`);
+      if (r.ok) {
+        const data = await r.json();
+        setLowQualityScan(data);
+        setLowQualitySelected(new Set());
+      }
+    } catch { /* ignore */ }
+    finally { setLowQualityLoading(false); }
+  };
+  const markForReextract = async (softDeleteOldFacts: boolean) => {
+    if (lowQualitySelected.size === 0) return;
+    if (!window.confirm(
+      `将清掉 ${lowQualitySelected.size} 个 asset 的 last_reextracted_at${softDeleteOldFacts ? '\n并把它们的 is_current=true fact 全部置为 false（软删除）' : ''}\n\n确认继续？`
+    )) return;
+    try {
+      const r = await fetch(`${API}/facts/mark-for-reextract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: Array.from(lowQualitySelected), softDeleteOldFacts }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        alert(`已标记 ${d.markedAssets} 个 asset${softDeleteOldFacts ? `，软删除 ${d.softDeletedFacts} 条 fact` : ''}\n下次 Step 3 启动会自动重提`);
+        setLowQualityScan(null);
+        setLowQualitySelected(new Set());
+      }
+    } catch (e) { alert(`失败：${(e as Error).message}`); }
   };
 
   // batch-ops 改进 #5: 拉 dry-run 预估
@@ -1161,6 +1208,74 @@ export function ContentLibraryBatchOps() {
           )}
           {steps.extract.message && <p className="text-sm text-gray-500 mt-1">{steps.extract.message}</p>}
           {extractQuality && <QualityPanel q={extractQuality} />}
+
+          {/* batch-ops 改进 #6: 低质量 fact 扫描 + 重提入口 */}
+          <div className="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] text-gray-500">🧹 历史 fact 质量清扫（confidence ≤ 0.5 / 含占位词）</span>
+              <button onClick={fetchLowQualityFacts} disabled={lowQualityLoading}
+                className="text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+                {lowQualityLoading ? '扫描中…' : '扫描'}
+              </button>
+            </div>
+            {lowQualityScan && (
+              <div className="mt-2 p-2 rounded border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20">
+                <div className="text-[11px] text-rose-700 dark:text-rose-300 mb-2">
+                  发现 <b>{lowQualityScan.totalAffectedAssets}</b> 个 asset 含
+                  <b> {lowQualityScan.totalLowQualityFacts}</b> 条低质量 fact（threshold ≤ {lowQualityScan.threshold}）
+                </div>
+                <ul className="max-h-40 overflow-y-auto space-y-0.5 mb-2">
+                  {lowQualityScan.items.slice(0, 30).map((it) => {
+                    const checked = lowQualitySelected.has(it.asset_id);
+                    return (
+                      <li key={it.asset_id}>
+                        <label className="flex items-center gap-1.5 text-[10px] py-0.5 px-1 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded">
+                          <input type="checkbox" checked={checked}
+                            onChange={(e) => setLowQualitySelected(prev => {
+                              const next = new Set(prev);
+                              e.target.checked ? next.add(it.asset_id) : next.delete(it.asset_id);
+                              return next;
+                            })}
+                            className="rounded accent-rose-600" />
+                          <span className="font-mono text-gray-400">{it.asset_id.slice(0, 8)}</span>
+                          <span className="truncate flex-1 text-gray-700 dark:text-gray-300">{it.asset_title}</span>
+                          <span className="text-rose-600 shrink-0">
+                            {it.low_conf_count + it.placeholder_count}/{it.fact_count} 条 · avg {Number(it.avg_confidence).toFixed(2)}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {lowQualityScan.items.length > 30 && (
+                  <div className="text-[9px] text-gray-400 mb-1.5">仅显示前 30 条，可在数据库直接处理剩余</div>
+                )}
+                <div className="flex gap-2 items-center text-[10px]">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox"
+                      checked={lowQualitySelected.size === lowQualityScan.items.length}
+                      onChange={(e) => setLowQualitySelected(
+                        e.target.checked ? new Set(lowQualityScan.items.map(x => x.asset_id)) : new Set()
+                      )}
+                      className="rounded accent-rose-600" />
+                    全选/全不选
+                  </label>
+                  <span className="text-gray-400">({lowQualitySelected.size} 已选)</span>
+                  <div className="flex-1" />
+                  <button onClick={() => markForReextract(false)}
+                    disabled={lowQualitySelected.size === 0}
+                    className="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 disabled:opacity-50">
+                    标记重提（保留旧 fact）
+                  </button>
+                  <button onClick={() => markForReextract(true)}
+                    disabled={lowQualitySelected.size === 0}
+                    className="px-2 py-1 rounded bg-rose-600 text-white disabled:opacity-50">
+                    标记重提 + 软删旧 fact
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* batch-ops 改进 #3: 下游质量门 banner */}
