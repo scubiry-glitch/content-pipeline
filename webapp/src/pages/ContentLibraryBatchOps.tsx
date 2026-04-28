@@ -91,6 +91,13 @@ export function ContentLibraryBatchOps() {
   const [progress, setProgress] = useState<JobProgress | null>(null);
   /** batch-ops 改进 #1: Step 3 完成后拉一次质量面板数据 */
   const [extractQuality, setExtractQuality] = useState<QualityStats | null>(null);
+  /** batch-ops 改进 #5: Step 3 dry-run 预估结果 */
+  const [extractPreview, setExtractPreview] = useState<{
+    target: number; alreadyProcessed: number; willProcess: number;
+    filteredByQuality: number; tokenEstimate: number;
+    llmCallsEstimate: number; etaSeconds: number; deep: boolean;
+  } | null>(null);
+  const [extractPreviewLoading, setExtractPreviewLoading] = useState(false);
   const [extractLimit, setExtractLimit] = useState(50);
   const [extractSource, setExtractSource] = useState<'assets' | 'rss'>('assets');
   /** v7.3 调整1: 质量分门槛 (0=不过滤, >0 = 过滤低于此分的素材) */
@@ -333,6 +340,7 @@ export function ContentLibraryBatchOps() {
     setStep('extract', { status: 'running', message: '启动两段式提取 job...' });
     setProgress(null);
     setExtractQuality(null); // 清掉上次的质量面板
+    setExtractPreview(null); // 清掉预估
     try {
       const res = await fetch(`${API}/reextract/start`, {
         method: 'POST',
@@ -399,6 +407,22 @@ export function ContentLibraryBatchOps() {
     } catch (err) {
       setStep('extract', { status: 'error', message: (err as Error).message });
     }
+  };
+
+  // batch-ops 改进 #5: 拉 dry-run 预估
+  const fetchExtractPreview = async () => {
+    setExtractPreviewLoading(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(extractLimit),
+        source: extractSource,
+        ...(extractMinQuality > 0 ? { minQualityScore: String(extractMinQuality) } : {}),
+        ...(extractDeep ? { enableDeep: 'true' } : {}),
+      });
+      const r = await fetch(`${API}/reextract/preview?${params}`);
+      if (r.ok) setExtractPreview(await r.json());
+    } catch { /* ignore */ }
+    finally { setExtractPreviewLoading(false); }
   };
 
   const cancelExtractJob = async () => {
@@ -1049,9 +1073,17 @@ export function ContentLibraryBatchOps() {
                   ⏹ 取消
                 </button>
               ) : (
-                <button onClick={startExtractJob} className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700">
-                  📋 启动提取
-                </button>
+                <>
+                  <button onClick={fetchExtractPreview}
+                    disabled={extractPreviewLoading}
+                    className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-200 disabled:opacity-50"
+                    title="dry-run 预估：不真跑 LLM，看本次会处理多少素材、估算 token / 时长">
+                    {extractPreviewLoading ? '预估中…' : '📊 预估'}
+                  </button>
+                  <button onClick={startExtractJob} className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700">
+                    📋 启动提取
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1074,6 +1106,46 @@ export function ContentLibraryBatchOps() {
           </div>
           {extractDeep && (
             <StrategyPanel stepId="step3" value={step3Strategy} onChange={setStep3Strategy} />
+          )}
+          {/* batch-ops 改进 #5: 预估面板 */}
+          {extractPreview && !progress && (
+            <div className="mt-3 p-2.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-[11px]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">📊 预估（dry-run）</span>
+                <button onClick={() => setExtractPreview(null)}
+                  className="text-gray-400 hover:text-gray-600 text-[10px]">× 关闭</button>
+              </div>
+              {extractPreview.target === 0 ? (
+                <div className="text-gray-500">无待处理素材（{extractSource} 源中已全部 reextracted）</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div>
+                    <div className="text-gray-400 text-[9px]">将处理</div>
+                    <div className="font-semibold">{extractPreview.willProcess}<span className="text-gray-400 text-[9px] ml-1">/ {extractPreview.target}</span></div>
+                    {extractPreview.alreadyProcessed > 0 && (
+                      <div className="text-[9px] text-gray-400">已 reextracted {extractPreview.alreadyProcessed} 跳过</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-[9px]">LLM 调用</div>
+                    <div className="font-semibold">~ {extractPreview.llmCallsEstimate}</div>
+                    {extractPreview.deep && <div className="text-[9px] text-amber-600">深度 ×1.5</div>}
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-[9px]">Token 估算</div>
+                    <div className="font-semibold">~ {(extractPreview.tokenEstimate / 1000).toFixed(1)}k</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-[9px]">预计耗时</div>
+                    <div className="font-semibold">
+                      {extractPreview.etaSeconds < 60
+                        ? `~ ${extractPreview.etaSeconds}s`
+                        : `~ ${Math.round(extractPreview.etaSeconds / 60)} min`}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {progress && (
             <div className="mt-3">

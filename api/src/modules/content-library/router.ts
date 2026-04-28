@@ -240,6 +240,46 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
      *   - errorSamples 按 kind 聚合（来自 job state）
      * 让用户跑完 Step 3 一眼看出"产出质量是否值得进入 Step 4-6"。
      */
+    /**
+     * batch-ops 改进 #5: Step 3 dry-run 预估
+     * 不真跑，调 reextractBatch 的 dryRun 拿 total + tokenEstimate；
+     * 加上 deep 模式倍数（~1.5x for extract deep）+ 平均处理速率得到耗时估算
+     */
+    fastify.get('/reextract/preview', async (request) => {
+      const q = request.query as {
+        limit?: string; source?: string;
+        minQualityScore?: string; enableDeep?: string;
+      };
+      const limit = Math.min(500, Math.max(1, parseInt(q.limit ?? '50', 10)));
+      try {
+        const dry = await engine.reextractBatch({
+          limit,
+          dryRun: true,
+          onlyUnprocessed: true,
+          source: (q.source === 'rss' ? 'rss' : 'assets') as 'assets' | 'rss',
+          minQualityScore: q.minQualityScore ? parseFloat(q.minQualityScore) : undefined,
+          enableDeep: q.enableDeep === 'true',
+        });
+        const deepMultiplier = q.enableDeep === 'true' ? 1.5 : 1;
+        // 单 asset 平均 LLM 调用 = 2 段 * (deep ? 3 : 2) 个 fact
+        const llmCalls = Math.round((dry.processed + dry.skipped) * 2 * deepMultiplier);
+        // 平均耗时 6s/asset (lite) / 9s (deep) — 经验值
+        const etaSeconds = Math.round((dry.processed + dry.skipped) * (q.enableDeep === 'true' ? 9 : 6));
+        return {
+          target: dry.processed + dry.skipped,
+          alreadyProcessed: dry.skipped,
+          willProcess: dry.processed,
+          filteredByQuality: dry.filteredByQuality ?? 0,
+          tokenEstimate: dry.tokenEstimate,
+          llmCallsEstimate: llmCalls,
+          etaSeconds,
+          deep: q.enableDeep === 'true',
+        };
+      } catch (e) {
+        return { error: (e as Error).message, target: 0, willProcess: 0, tokenEstimate: 0, llmCallsEstimate: 0, etaSeconds: 0 };
+      }
+    });
+
     fastify.get('/reextract/jobs/:jobId/quality', async (request) => {
       const { jobId } = request.params as any;
       const state = getReextractJob(String(jobId));
