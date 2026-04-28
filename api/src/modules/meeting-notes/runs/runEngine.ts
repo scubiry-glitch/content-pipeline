@@ -901,11 +901,54 @@ export class RunEngine {
             console.warn('[runEngine] persistClaudeFacts failed:', (e as Error).message);
           }
 
-          await writeStep('render', 0.75, '写入 wiki sources/.md');
+          await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
           try {
             await persistClaudeWiki(this.deps, payload.meetingId!, cliResult.wikiMarkdown ?? {});
           } catch (e) {
             console.warn('[runEngine] persistClaudeWiki failed:', (e as Error).message);
+          }
+
+          // 7f) Phase H · 触发 wikiGenerator 全量重生 (基于最新 content_facts 重新聚合
+          //      entity 全局画像 + L2 domain page + L1 _index)
+          //      · skipSources: true → 不重写 claude-cli 写的 sources/.md
+          //      · preserveAppMeetingNotes: true → 保留 app=meeting-notes 整文件 + blocks
+          await writeStep('render', 0.85, '触发 wikiGenerator 重生 entities/concepts/domains');
+          try {
+            const { WikiGenerator } = await import('../../content-library/wiki/wikiGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const wg = new WikiGenerator(this.deps.db as any);
+            const result = await wg.generate({
+              wikiRoot: resolveWikiRoot(),
+              maxEntities: 500,
+              skipSources: true,
+              preserveAppMeetingNotes: true,
+            });
+            try {
+              await this.deps.db.query(
+                `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                   'cliWikiResult', jsonb_build_object(
+                     'entitiesGenerated', $2::int,
+                     'domainsGenerated',  $3::int,
+                     'domainIndexes',     $4::int,
+                     'preservedFiles',    $5::int,
+                     'durationMs',        $6::int
+                   )
+                 ) WHERE id = $1`,
+                [payload.runId, result.entities, result.domains, result.domainIndexes, result.preservedFiles, result.durationMs],
+              );
+            } catch (e) {
+              console.warn('[runEngine] write cliWikiResult failed:', (e as Error).message);
+            }
+            console.log(`[runEngine] wikiGenerator regen: ${result.entities} entities + ${result.domains} L2 domains + ${result.domainIndexes} L1 indexes (${result.durationMs}ms, preserved ${result.preservedFiles})`);
+          } catch (e) {
+            console.warn('[runEngine] wikiGenerator regenerate failed:', (e as Error).message);
+            // 不 fail run · sources/.md + entities/<人名>.md 已经手写, regen 失败只是聚合页缺最新
+            try {
+              await this.deps.db.query(
+                `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliWikiError', $2::text) WHERE id = $1`,
+                [payload.runId, (e as Error).message.slice(0, 500)],
+              );
+            } catch {/* swallow */}
           }
 
           // 8) 写回 meeting session id (assets.metadata.claudeSession) + cliPersonMap

@@ -12,13 +12,15 @@ import type { MeetingNotesDeps } from '../types.js';
 import { isValidTaxonomyCode } from '../../content-library/wiki/wikiFrontmatter.js';
 
 export interface ClaudeFact {
-  subject: string;
-  predicate: string;
-  object: string;
+  /** 三元组主语; runtime 校验空字符串后跳过 */
+  subject?: string;
+  predicate?: string;
+  object?: string;
   confidence?: number;
   /** Phase H · 必填 (claude prompt 已强制); 不合法时回退 'E99.OTHER' */
   taxonomy_code?: string;
-  context?: { quote?: string };
+  context?: { quote?: string; [k: string]: unknown };
+  [k: string]: unknown;
 }
 
 const SOURCE_TAG = 'claude_cli';
