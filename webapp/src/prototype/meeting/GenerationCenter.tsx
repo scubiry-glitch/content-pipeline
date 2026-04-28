@@ -99,10 +99,14 @@ function QueueView() {
   const forceMock = useForceMock();
   const [runs, setRuns] = useState<MockRun[]>([]);
   const [isMock, setIsMock] = useState(true);
+  /** F5 · scope filter: 让 meeting 队列单独可看 */
+  const [scopeFilter, setScopeFilter] = useState<string>('');
+  /** F5 · meetingId → title 反查表，让 meeting-scope 的 row 显示真名 */
+  const [meetingTitles, setMeetingTitles] = useState<Record<string, string>>({});
 
   const refetch = () => {
     if (forceMock) { setRuns(MOCK_RUNS); setIsMock(true); return; }
-    meetingNotesApi.listRuns({ limit: 50 })
+    meetingNotesApi.listRuns({ limit: 50, scopeKind: scopeFilter || undefined })
       .then((r) => {
         setRuns((r?.items ?? []).map(mapApiRun));
         setIsMock(false);
@@ -114,7 +118,22 @@ function QueueView() {
     if (forceMock) return;
     const t = setInterval(refetch, 5000);
     return () => clearInterval(t);
+  }, [forceMock, scopeFilter]);
 
+  // 拉一次 meetings 列表做 id→title 反查；100 条够用
+  useEffect(() => {
+    if (forceMock) return;
+    let cancelled = false;
+    meetingNotesApi.listMeetings({ limit: 100 })
+      .then((r: any) => {
+        if (cancelled) return;
+        const items: any[] = Array.isArray(r) ? r : (r?.items ?? []);
+        const map: Record<string, string> = {};
+        for (const m of items) if (m?.id) map[m.id] = m.title || '(未命名)';
+        setMeetingTitles(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [forceMock]);
 
   const counts = {
@@ -165,7 +184,28 @@ function QueueView() {
         ))}
       </div>
 
-      <SectionLabel>所有任务 · 近 48 小时</SectionLabel>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <SectionLabel>所有任务 · 近 48 小时</SectionLabel>
+        {/* F5 · scope filter — 选 meeting 单独看会议级队列 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
+          <span style={{ color: 'var(--ink-3)' }}>scope</span>
+          <select
+            value={scopeFilter}
+            onChange={(e) => setScopeFilter(e.target.value)}
+            style={{
+              border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+              padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
+            }}
+          >
+            <option value="">全部</option>
+            <option value="meeting">📄 meeting</option>
+            <option value="project">📁 project</option>
+            <option value="topic">🏷 topic</option>
+            <option value="client">🏢 client</option>
+            <option value="library">📚 library</option>
+          </select>
+        </div>
+      </div>
       <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
         {runs.map((r, i) => {
           const color = r.state === 'running' ? 'var(--teal)' : r.state === 'done' ? 'var(--accent)' : r.state === 'failed' ? 'oklch(0.55 0.16 25)' : 'var(--amber)';
@@ -198,8 +238,19 @@ function QueueView() {
                 </div>
               </div>
               <div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>{r.scope} · {r.preset}</div>
-                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{r.scopeLabel}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
+                  {r.scope === 'meeting' && '📄 '}
+                  {r.scope === 'project' && '📁 '}
+                  {r.scope === 'topic' && '🏷 '}
+                  {r.scope === 'library' && '📚 '}
+                  {r.scope} · {r.preset}
+                </div>
+                {/* F5 · meeting-scope 优先显示真实标题；其它 scope 保留原 scopeLabel */}
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink-2)', marginTop: 3, lineHeight: 1.35 }}>
+                  {r.scope === 'meeting' && meetingTitles[r.scopeLabel]
+                    ? meetingTitles[r.scopeLabel]
+                    : r.scopeLabel}
+                </div>
               </div>
               <div>
                 <MonoMeta>{r.started}</MonoMeta>
