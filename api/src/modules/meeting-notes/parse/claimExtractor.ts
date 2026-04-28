@@ -19,34 +19,16 @@ export async function loadMeetingBundle(
   deps: MeetingNotesDeps,
   meetingId: string,
 ): Promise<MeetingBundle | null> {
-  const hasAssetTypeCol = await deps.db.query(
-    `SELECT 1
-       FROM information_schema.columns
-      WHERE table_name = 'assets' AND column_name = 'asset_type'
-      LIMIT 1`,
-  );
-  const typeExpr = hasAssetTypeCol.rows.length > 0
-    ? `COALESCE(asset_type::text, type::text, content_type::text, '')`
-    : `COALESCE(type::text, content_type::text, '')`;
-  // F9 fix · 放开 type 白名单：早期约定只接 'meeting_minutes'，但实际新建会议
-  // 默认 type='meeting_note'，导致绝大多数会议被 loadMeetingBundle 直接 return null
-  // → axis computer 早 return → 整个 axis 跑出来 0 行（典型 silent-zero）
-  // 改为接受 meeting_minutes / meeting_note；或 metadata 里有 meeting_kind 标记
-  //
-  // F5 silent-zero fix · 加 mn_scope_members 兜底（之前误用 mn_meetings 不存在
-  // 的表，导致 SQL throws 把 silent-zero 又加重一档）。语义：只要这条 asset 在
-  // mn_scope_members.meeting_id 里有 binding（已被绑到某个 project/topic/library
-  // scope），就当成 meeting 接进来。覆盖通过 generic 上传链路上来、type=NULL
-  // 且 metadata 暂时没 meeting_kind 的"新录音.txt"这类资产。
+  // F5 silent-zero fix · 之前的 type/metadata 白名单 + mn_meetings JOIN 都不
+  // 可靠，连续被同一类 silent-zero 咬。改成最朴素：只要 assets 里有这条 id
+  // 且 content 非空，就视为 meeting bundle。content 空的（比如还没解析完
+  // 的占位 asset）直接 return null 让 axis early-exit。
   const r = await deps.db.query(
     `SELECT id, title, content, metadata, created_at
        FROM assets
       WHERE id = $1
-        AND (
-          ${typeExpr} IN ('meeting_minutes', 'meeting_note')
-          OR (metadata ? 'meeting_kind')
-          OR EXISTS (SELECT 1 FROM mn_scope_members WHERE meeting_id::text = $1)
-        )`,
+        AND content IS NOT NULL
+        AND length(content) > 0`,
     [meetingId],
   );
   if (r.rows.length === 0) return null;
