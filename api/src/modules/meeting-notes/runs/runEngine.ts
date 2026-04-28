@@ -243,9 +243,10 @@ export class RunEngine {
     let cancelledQueued = 0;
     try {
       // F3 · 用 last_heartbeat_at 替代 started_at 检测 zombie：
-      //   - 有 heartbeat 列：last_heartbeat_at < NOW() - 5min（远小于 zombieMin=30min，反应快）
+      //   - 有 heartbeat 列：last_heartbeat_at < NOW() - 15min（claude-cli opus 单次 run 7-10min,
+      //     5min 太激进会误杀正常 run; 远小于 zombieMin=30min, 反应仍及时）
       //   - 没 heartbeat 列（旧 run 或 worker 崩溃前 30s 内）：fallback 走 started_at < NOW() - zombieMin
-      const heartbeatStaleMin = 5;
+      const heartbeatStaleMin = Number(process.env.MN_HEARTBEAT_STALE_MIN ?? 15);
       const r1 = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'failed', finished_at = NOW(),
