@@ -107,6 +107,48 @@ export function ContentLibraryBatchOps() {
   const [synthesisDeep, setSynthesisDeep] = useState(false);
   const [topicsDeep, setTopicsDeep] = useState(false);
   const [graphDeep, setGraphDeep] = useState(false);
+  /**
+   * batch-ops 改进 #4: 质量档全局开关
+   * fast: 全部 deep 关 / balanced: Step 3 + 5b 开（核心抽取+综合走深度）/ deep: 全开
+   * 用户切档后自动同步 5 个 deep state；切到 'custom' 表示用户单独调过、不再受全局控制
+   */
+  type QualityTier = 'fast' | 'balanced' | 'deep' | 'custom';
+  const [qualityTier, setQualityTier] = useState<QualityTier>('fast');
+  const applyQualityTier = (tier: QualityTier) => {
+    if (tier === 'custom') { setQualityTier('custom'); return; }
+    setQualityTier(tier);
+    if (tier === 'fast') {
+      setEnableDeepAnalysis(false);
+      setExtractDeep(false);
+      setGraphDeep(false);
+      setTopicsDeep(false);
+      setSynthesisDeep(false);
+    } else if (tier === 'balanced') {
+      setEnableDeepAnalysis(false);  // Step 2 不开（最贵 + 收益靠 Step 3）
+      setExtractDeep(true);          // Step 3 核心抽取开深度
+      setGraphDeep(false);            // Step 4a 默认关，需要 L3 张力时手动开
+      setTopicsDeep(false);
+      setSynthesisDeep(true);         // Step 5b 综合走 CDT
+    } else {
+      setEnableDeepAnalysis(true);
+      setExtractDeep(true);
+      setGraphDeep(true);
+      setTopicsDeep(true);
+      setSynthesisDeep(true);
+    }
+  };
+  // 任一 deep 开关被单独修改时把 tier 标 'custom'，避免被下次 tier 切换覆盖
+  // 注意：applyQualityTier 内部 setX 也会触发这些 useEffect，所以用 ref 标记防递归
+  const tierGuard = useRef(false);
+  useEffect(() => {
+    if (tierGuard.current) { tierGuard.current = false; return; }
+    // 检查当前组合是否匹配某个预设
+    const all = [enableDeepAnalysis, extractDeep, graphDeep, topicsDeep, synthesisDeep];
+    if (all.every((x) => !x) && qualityTier !== 'fast') setQualityTier('custom');
+    else if (all.every((x) => x) && qualityTier !== 'deep') setQualityTier('custom');
+    else if (!enableDeepAnalysis && extractDeep && !graphDeep && !topicsDeep && synthesisDeep && qualityTier !== 'balanced') setQualityTier('custom');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableDeepAnalysis, extractDeep, graphDeep, topicsDeep, synthesisDeep]);
   const [graphDeepLimit, setGraphDeepLimit] = useState(30);
   const [graphProgress, setGraphProgress] = useState<{ done: number; total: number; label: string } | null>(null);
   const [topicsLimit, setTopicsLimit] = useState(20);
@@ -815,6 +857,48 @@ export function ContentLibraryBatchOps() {
         <p className="text-gray-500 dark:text-gray-400 mt-1">
           从素材导入到知识图谱，一站式完成内容库全量更新
         </p>
+      </div>
+
+      {/* batch-ops 改进 #4: 质量档全局开关 — 同步 5 个 step 的 deep 模式默认值 */}
+      <div className="mb-4 max-w-3xl bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <div>
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">质量档</span>
+            <span className="text-xs text-gray-500 ml-2">
+              一键设置 Step 2 / 3 / 4a / 5a / 5b 深度模式默认值
+            </span>
+          </div>
+          {qualityTier === 'custom' && (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+              已手动调整 · 全局档无效
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { id: 'fast', label: '⚡ Fast', desc: '全部走 lite，~1× 速度' },
+            { id: 'balanced', label: '⚖ Balanced', desc: 'Step 3+5b 走 CDT，~2× 速度' },
+            { id: 'deep', label: '🧬 Deep', desc: '全开深度，~5× 速度，最高质量' },
+          ] as const).map((tier) => {
+            const active = qualityTier === tier.id;
+            return (
+              <button
+                key={tier.id}
+                onClick={() => { tierGuard.current = true; applyQualityTier(tier.id); }}
+                className={`text-left p-3 rounded-md border transition-all ${
+                  active
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-300'
+                }`}
+              >
+                <div className="font-semibold text-sm">{tier.label}</div>
+                <div className={`text-[11px] mt-0.5 ${active ? 'text-indigo-100' : 'text-gray-500'}`}>
+                  {tier.desc}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="space-y-4 max-w-3xl">
