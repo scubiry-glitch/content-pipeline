@@ -654,6 +654,7 @@ function WikiView() {
   const [isMock, setIsMock] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [batching, setBatching] = useState(false);
+  const [lastEnqueued, setLastEnqueued] = useState<{ id: string; at: number } | null>(null);
 
   const refetch = () => {
     if (forceMock) { setRows([]); setIsMock(true); return; }
@@ -670,15 +671,21 @@ function WikiView() {
   const pending = rows.filter((r) => !r.claudeSessionId);
 
   async function enqueueOne(id: string) {
+    if (isMock || forceMock) {
+      alert('当前为 mock 模式 · 请关闭右下角 mock 开关再试');
+      return;
+    }
     setBusy((b) => ({ ...b, [id]: true }));
     try {
-      await meetingNotesApi.enqueueRun({
+      const r = await meetingNotesApi.enqueueRun({
         scope: { kind: 'meeting', id },
         axis: 'all',
         preset: 'standard',
         triggeredBy: 'generation-center-wiki',
         mode: 'claude-cli',
       });
+      // toast 替代 alert · 不打断用户视线
+      setLastEnqueued({ id: r?.runId ?? '?', at: Date.now() });
     } catch (e: any) {
       alert(`入队失败 · ${e?.message ?? e}`);
     } finally {
@@ -712,6 +719,9 @@ function WikiView() {
     }
   }
 
+  // 5 秒内显示最近一次入队成功的 toast
+  const toastVisible = lastEnqueued && Date.now() - lastEnqueued.at < 5000;
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -719,6 +729,16 @@ function WikiView() {
         <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
           listMeetings · claude-cli 模式跑过的会议在 metadata.claudeSession.sessionId 留下 session id
         </span>
+        {toastVisible && (
+          <span style={{
+            marginLeft: 'auto', padding: '3px 10px', borderRadius: 4,
+            background: 'var(--accent-soft)', color: 'oklch(0.32 0.12 285)',
+            border: '1px solid oklch(0.78 0.08 285)',
+            fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+          }}>
+            ✓ 入队 {String(lastEnqueued!.id).slice(0, 8)}…
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 18 }}>
