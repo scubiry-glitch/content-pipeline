@@ -1651,8 +1651,12 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       // Gate 3: transcript 总字数充足（library/project/meeting 都校验）
       // 跳过的场景：scope.kind=library 但全库为空（不太可能，且让用户能跑空 library 触发清理）
       if (meetingIds.length > 0) {
+        // F5 修：原 SQL 用 `id = ANY($1::text[])`，把 text[] 跟 UUID 列比，
+        // PG 不隐式 cast 导致始终 0 命中，所有有内容的会议都被错判为 "0 字符"。
+        // 改成 id::text 比对，跟 collectMeetingsInScope 返回的 string[] 对齐。
         const sumLen = await engine.deps.db.query(
-          `SELECT COALESCE(SUM(LENGTH(content)), 0)::int AS total FROM assets WHERE id = ANY($1::text[])`,
+          `SELECT COALESCE(SUM(LENGTH(content)), 0)::int AS total
+             FROM assets WHERE id::text = ANY($1::text[])`,
           [meetingIds],
         );
         const totalChars = sumLen.rows[0]?.total ?? 0;
