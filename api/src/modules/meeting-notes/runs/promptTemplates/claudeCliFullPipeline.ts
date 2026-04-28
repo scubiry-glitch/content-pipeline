@@ -568,7 +568,7 @@ ${renderTaxonomyForPrompt()}
 wikiMarkdown: 给 data/content-wiki/default/ 直接写文件用的 markdown 内容。
   形态:
   {
-    sourceEntry: string,    // sources/<meetingId>.md 全文 markdown, 见下方 9 段模板
+    sourceEntry: string,    // sources/meeting/<meetingId>/_index.md 全文 markdown, 见下方 9 段模板
     entityUpdates: Array<{
       type: 'entity' | 'concept',                  // entity = 具体事物 / concept = 抽象
       subtype: 'person' | 'org' | 'product' | 'project' | 'event'

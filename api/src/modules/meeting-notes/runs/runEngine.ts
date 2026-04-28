@@ -913,42 +913,99 @@ export class RunEngine {
           //      · skipSources: true → 不重写 claude-cli 写的 sources/.md
           //      · preserveAppMeetingNotes: true → 保留 app=meeting-notes 整文件 + blocks
           await writeStep('render', 0.85, '触发 wikiGenerator 重生 entities/concepts/domains');
+          let wikiResultStats = {
+            entities: 0, domains: 0, domainIndexes: 0,
+            preservedFiles: 0, durationMs: 0,
+            axesFiles: 0, scopesFiles: 0, scopesCount: 0,
+          };
           try {
             const { WikiGenerator } = await import('../../content-library/wiki/wikiGenerator.js');
             const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const wikiRoot = resolveWikiRoot();
             const wg = new WikiGenerator(this.deps.db as any);
             const result = await wg.generate({
-              wikiRoot: resolveWikiRoot(),
+              wikiRoot,
               maxEntities: 500,
               skipSources: true,
               preserveAppMeetingNotes: true,
             });
-            try {
-              await this.deps.db.query(
-                `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-                   'cliWikiResult', jsonb_build_object(
-                     'entitiesGenerated', $2::int,
-                     'domainsGenerated',  $3::int,
-                     'domainIndexes',     $4::int,
-                     'preservedFiles',    $5::int,
-                     'durationMs',        $6::int
-                   )
-                 ) WHERE id = $1`,
-                [payload.runId, result.entities, result.domains, result.domainIndexes, result.preservedFiles, result.durationMs],
-              );
-            } catch (e) {
-              console.warn('[runEngine] write cliWikiResult failed:', (e as Error).message);
-            }
-            console.log(`[runEngine] wikiGenerator regen: ${result.entities} entities + ${result.domains} L2 domains + ${result.domainIndexes} L1 indexes (${result.durationMs}ms, preserved ${result.preservedFiles})`);
+            wikiResultStats.entities = result.entities;
+            wikiResultStats.domains = result.domains;
+            wikiResultStats.domainIndexes = result.domainIndexes;
+            wikiResultStats.preservedFiles = result.preservedFiles;
+            wikiResultStats.durationMs = result.durationMs;
+            console.log(`[runEngine] wikiGenerator regen: ${result.entities} entities + ${result.domains} L2 + ${result.domainIndexes} L1 (${result.durationMs}ms, preserved ${result.preservedFiles})`);
           } catch (e) {
             console.warn('[runEngine] wikiGenerator regenerate failed:', (e as Error).message);
-            // 不 fail run · sources/.md + entities/<人名>.md 已经手写, regen 失败只是聚合页缺最新
-            try {
-              await this.deps.db.query(
-                `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliWikiError', $2::text) WHERE id = $1`,
-                [payload.runId, (e as Error).message.slice(0, 500)],
-              );
-            } catch {/* swallow */}
+          }
+
+          // 7g) Phase H+ · 触发 MeetingAxesGenerator (axes/ 16 deliverables)
+          await writeStep('render', 0.90, '触发 MeetingAxesGenerator (axes/ 16 deliverables)');
+          try {
+            const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const ag = new MeetingAxesGenerator(this.deps);
+            const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+            wikiResultStats.axesFiles = r.filesWritten;
+            console.log(`[runEngine] MeetingAxesGenerator: ${r.filesWritten} files (${r.durationMs}ms)`);
+          } catch (e) {
+            console.warn('[runEngine] MeetingAxesGenerator failed:', (e as Error).message);
+          }
+
+          // 7h) Phase H+ · 触发 MeetingScopeGenerator (scopes/<kind>/<slug>/_index.md)
+          //     仅重生 该会议绑定的 scopes (从 mn_scope_members 拉)
+          await writeStep('render', 0.95, '触发 MeetingScopeGenerator (scopes/)');
+          try {
+            const { MeetingScopeGenerator } = await import('../wiki/meetingScopeGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const sg = new MeetingScopeGenerator(this.deps);
+
+            const scopesR = await this.deps.db.query(
+              `SELECT scope_id::text AS scope_id FROM mn_scope_members WHERE meeting_id::text = $1`,
+              [payload.meetingId!],
+            );
+            const wikiRoot = resolveWikiRoot();
+            let totalFiles = 0;
+            for (const row of scopesR.rows) {
+              const r = await sg.generate({ wikiRoot, scopeId: row.scope_id });
+              totalFiles += r.filesWritten;
+            }
+            wikiResultStats.scopesFiles = totalFiles;
+            wikiResultStats.scopesCount = scopesR.rows.length;
+            console.log(`[runEngine] MeetingScopeGenerator: ${scopesR.rows.length} scopes / ${totalFiles} files`);
+          } catch (e) {
+            console.warn('[runEngine] MeetingScopeGenerator failed:', (e as Error).message);
+          }
+
+          // 7i) 合并写 cliWikiResult 到 mn_runs.metadata
+          try {
+            await this.deps.db.query(
+              `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                 'cliWikiResult', jsonb_build_object(
+                   'entitiesGenerated', $2::int,
+                   'domainsGenerated',  $3::int,
+                   'domainIndexes',     $4::int,
+                   'preservedFiles',    $5::int,
+                   'wikiGenDurationMs', $6::int,
+                   'axesFiles',         $7::int,
+                   'scopesCount',       $8::int,
+                   'scopesFiles',       $9::int
+                 )
+               ) WHERE id = $1`,
+              [
+                payload.runId,
+                wikiResultStats.entities,
+                wikiResultStats.domains,
+                wikiResultStats.domainIndexes,
+                wikiResultStats.preservedFiles,
+                wikiResultStats.durationMs,
+                wikiResultStats.axesFiles,
+                wikiResultStats.scopesCount,
+                wikiResultStats.scopesFiles,
+              ],
+            );
+          } catch (e) {
+            console.warn('[runEngine] write cliWikiResult failed:', (e as Error).message);
           }
 
           // 8) 写回 meeting session id (assets.metadata.claudeSession) + cliPersonMap

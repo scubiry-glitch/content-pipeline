@@ -1,8 +1,8 @@
-// runs/persistClaudeWiki.ts — Phase H · 把 Claude CLI 输出的 wikiMarkdown 写到 obsidian vault
+// runs/persistClaudeWiki.ts — Phase H+ · 把 Claude CLI 输出的 wikiMarkdown 写到 obsidian vault
 //
 // vault 根: <repo-root>/data/content-wiki/default/
-//   ├── sources/<meetingId>.md       ← claude-cli 写 (覆盖)
-//   ├── entities/{person,org,...}/<slug>.md  ← claude-cli 创建 + dedup 追加
+//   ├── sources/meeting/<meetingId>/_index.md   ← claude-cli 写 (覆盖, Phase H+ 路径)
+//   ├── entities/{person,org,...}/<slug>.md      ← claude-cli 创建 + dedup 追加
 //   └── concepts/{mental-model,judgment,bias,counterfactual}/<slug>.md  ← 同上
 //
 // 写入规则 (per plan §C.2):
@@ -61,7 +61,8 @@ export function resolveWikiRoot(): string {
 }
 
 async function ensureWikiDirs(wikiRoot: string): Promise<void> {
-  await mkdir(join(wikiRoot, 'sources'), { recursive: true });
+  // Phase H+ · sources/<kind>/ 分子目录
+  await mkdir(join(wikiRoot, 'sources', 'meeting'), { recursive: true });
   for (const sub of ENTITY_SUBTYPES) {
     await mkdir(join(wikiRoot, 'entities', sub), { recursive: true });
   }
@@ -121,14 +122,16 @@ export async function persistClaudeWiki(
     return { sourceWritten, entityCreated, entityUpdated, legacyAppended, skipped };
   }
 
-  // ─── 1. sources/<meetingId>.md (覆盖) ─────────────────────────────────────
+  // ─── 1. sources/meeting/<meetingId>/_index.md (覆盖, Phase H+ 路径) ───
   if (typeof wiki?.sourceEntry === 'string' && wiki.sourceEntry.trim().length > 0) {
-    const sourcePath = join(root, 'sources', `${sanitizeFilename(meetingId)}.md`);
+    const meetingDir = join(root, 'sources', 'meeting', sanitizeFilename(meetingId));
+    const sourcePath = join(meetingDir, '_index.md');
     try {
+      await mkdir(meetingDir, { recursive: true });
       await writeFile(sourcePath, wiki.sourceEntry, 'utf8');
       sourceWritten = true;
     } catch (e: any) {
-      console.warn('[persistClaudeWiki] writeFile sources failed:', e?.message);
+      console.warn('[persistClaudeWiki] writeFile sources/meeting failed:', e?.message);
     }
   }
 
