@@ -115,11 +115,15 @@ export async function callExpertOrLLM(
   userPrompt: string,
   options?: { temperature?: number; maxTokens?: number },
 ): Promise<string> {
-  if (deps.expertApplication.shouldSkipExpertAnalysis(meetingKind)) {
-    return '';
-  }
   // 注入装饰器栈（静态 import，避免每次调用走 dynamic import 解析开销）
   const strategy = getCurrentStrategy();
+  // F5 · B 方案：strategyCtx.bypassKindSkip 为 true（用户手动 trigger 一条
+  // meeting-scope run）时绕过守门。用户都点了重算就该真跑，不该被
+  // internal_ops 等"省钱默认"吞掉。自动批跑保持原行为。
+  if (!strategy?.bypassKindSkip
+      && deps.expertApplication.shouldSkipExpertAnalysis(meetingKind)) {
+    return '';
+  }
   const { prompt: decorated } = applyDecoratorStack(systemPrompt, strategy?.strategySpec ?? null);
 
   // Step 2 选中的真实专家 persona：从 strategyStorage.currentAxis 取，

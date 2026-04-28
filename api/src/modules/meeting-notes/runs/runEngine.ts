@@ -1244,10 +1244,17 @@ export class RunEngine {
       //  · llmUsageStorage —— LLM token 累计
       //  · strategyStorage —— 当前 run 的 strategy/decorator 栈 + 用户指定的 expert persona，
       //     axis computer 的 callExpertOrLLM 会读到 strategy + 当前 axis 对应 persona
+      // F5 · B 方案：用户手动重算一条 meeting-scope run 时，绕过
+      //   shouldSkipExpertAnalysis(meetingKind) 这层"省钱守门"。
+      //   自动批跑（triggeredBy='auto'/'schedule'）保持原行为，仍跳过 internal_ops 等。
+      const isManualMeetingRun =
+        payload.triggeredBy !== 'auto' && payload.triggeredBy !== 'schedule'
+        && payload.scope.kind === 'meeting';
       const strategyCtx = {
         strategySpec: payload.strategySpec,
         preset: payload.preset,
         expertPersonaByAxis,
+        bypassKindSkip: isManualMeetingRun,
       };
       await strategyStorage.run(strategyCtx, async () => {
       await llmUsageStorage.run(counter, async () => {

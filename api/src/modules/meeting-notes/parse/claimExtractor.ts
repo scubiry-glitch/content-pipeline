@@ -31,12 +31,8 @@ export async function loadMeetingBundle(
         AND length(content) > 0`,
     [meetingId],
   );
-  if (r.rows.length === 0) {
-    console.log(`[loadMeetingBundle] meetingId=${meetingId} NO ROW`);
-    return null;
-  }
+  if (r.rows.length === 0) return null;
   const a = r.rows[0];
-  console.log(`[loadMeetingBundle] meetingId=${meetingId} contentLen=${(a.content ?? '').length} title=${(a.title ?? '').slice(0, 30)}`);
   return {
     meetingId: a.id,
     title: a.title ?? '',

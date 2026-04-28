@@ -29,6 +29,13 @@ export interface StrategyContext {
    * 是否需要它无关紧要。
    */
   currentAxis?: string;
+  /**
+   * F5 · 是否绕过 shouldSkipExpertAnalysis(meetingKind) 这层守门。
+   * 用户手动 trigger 一条 meeting-scope run 时（runEngine 设 true），
+   * 绕过"internal_ops 默认跳过 LLM"的省钱守门 — 用户都点了重算就该真跑。
+   * 自动批跑（triggeredBy='auto' / 'schedule'）保持原行为。
+   */
+  bypassKindSkip?: boolean;
 }
 
 export const strategyStorage = new AsyncLocalStorage<StrategyContext>();
