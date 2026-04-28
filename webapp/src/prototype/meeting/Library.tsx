@@ -604,8 +604,54 @@ export function Library() {
     return false;
   };
 
-  const visible = meetingsDisplay.filter(m => matchGroup(m, activeGroup));
+  // 搜索：本地过滤 (title / kind / scope_bindings) + enter 触发跨会议全文 grep
+  const [searchQuery, setSearchQuery] = useState('');
+  const [grepResults, setGrepResults] = useState<Array<{
+    meetingId: string; meetingTitle: string;
+    axis: string; kind?: string; snippet: string; person_name?: string;
+  }> | null>(null);
+  const [grepLoading, setGrepLoading] = useState(false);
+  const normalizedQ = searchQuery.trim().toLowerCase();
+  const localFiltered = normalizedQ.length === 0
+    ? meetingsDisplay
+    : meetingsDisplay.filter((m) => {
+        const hay = [
+          m.title,
+          (m as any).meeting_kind,
+          ...(((m as any).scope_bindings ?? []).map((s: any) => s?.name)),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(normalizedQ);
+      });
+  const visible = localFiltered.filter(m => matchGroup(m, activeGroup));
   const selected = meetingsDisplay.find(m => m.id === selectedId) ?? visible[0];
+
+  // 跨可见会议全文 grep（每个会议串行调；可见 ≤ 12 时 ok，多了截断防雪崩）
+  async function runFulltextGrep() {
+    const q = searchQuery.trim();
+    if (q.length < 1) { setGrepResults(null); return; }
+    if (forceMock) { alert('Mock 模式不支持全文搜索'); return; }
+    setGrepLoading(true);
+    setGrepResults([]);
+    const targets = visible.slice(0, 12);  // 可见前 12 条
+    const accum: typeof grepResults = [];
+    for (const m of targets) {
+      try {
+        const r = await meetingNotesApi.grepMeeting(m.id, q, 8);
+        for (const it of (r.items ?? [])) {
+          accum!.push({
+            meetingId: m.id,
+            meetingTitle: m.title,
+            axis: it.axis,
+            kind: it.kind,
+            snippet: it.snippet,
+            person_name: it.person_name,
+          });
+        }
+      } catch { /* skip */ }
+    }
+    setGrepResults(accum);
+    setGrepLoading(false);
+  }
 
   const [busyAction, setBusyAction] = useState<PreviewAction | null>(null);
 
@@ -629,14 +675,28 @@ export function Library() {
   const handleRenameScope = async (id: string, newName: string) => {
     const name = newName.trim();
     if (!name) return;
-    if (!UUID_RE.test(id) || forceMock) { alert('Mock / fixture 分组不支持改名 · 请先切到 API 模式'); return; }
+    if (forceMock) { alert('Mock 模式下不支持改名 · 请关闭 Mock 后再操作'); return; }
+    if (!UUID_RE.test(id)) {
+      alert(
+        `该「${groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}」分组是预置示例，数据库里还没创建对应的真实分组。\n\n` +
+        `请用左侧「+ 添加」按钮先创建一个新分组，再对它改名。`,
+      );
+      return;
+    }
     try {
       await meetingNotesApi.updateScope(id, { name });
       reloadScopes();
     } catch (e: any) { alert(`改名失败：${e?.message ?? e}`); }
   };
   const handleDeleteScope = async (node: TreeNode) => {
-    if (!UUID_RE.test(node.id) || forceMock) { alert('Mock / fixture 分组不支持删除 · 请先切到 API 模式'); return; }
+    if (forceMock) { alert('Mock 模式下不支持删除 · 请关闭 Mock 后再操作'); return; }
+    if (!UUID_RE.test(node.id)) {
+      alert(
+        `该分组是预置示例，数据库里没有对应行，无法删除。\n\n` +
+        `预置示例分组只是 demo 占位，刷新页面或切换 group kind 它们会自动隐藏（如果数据库里有真实分组）。`,
+      );
+      return;
+    }
     const confirmed = window.confirm(
       `删除分组「${node.name}」？\n\n该分组下的会议绑定（mn_scope_members）会被解除，但会议本身不会被删除。`,
     );
@@ -655,8 +715,12 @@ export function Library() {
     if (action === 'export') return alert('导出 PDF/Markdown · 待接入 getMeetingDetail 下载');
 
     // 移动到其他分组 / 归档 / 取消归档 / 删除 · 仅对 UUID id（API 模式）有效
-    if (!UUID_RE.test(m.id) || forceMock) {
-      alert('Mock 模式或 demo 数据不支持此操作 · 切换到 API 模式');
+    if (forceMock) {
+      alert('Mock 模式下不支持此操作 · 请关闭 Mock 后再操作');
+      return;
+    }
+    if (!UUID_RE.test(m.id)) {
+      alert('该会议是预置示例（不在数据库），不支持移动 / 归档 / 删除');
       return;
     }
     try {
@@ -857,9 +921,120 @@ export function Library() {
             </h2>
             <MonoMeta>{visible.length} 条</MonoMeta>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 16 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 12 }}>
             按生成时间倒序 · 点击卡片预览 · 拖拽到左侧分组移动
           </div>
+          {/* 搜索：即时过滤 title/kind，按 Enter 或点全文搜按钮跨可见会议 grep */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
+            padding: '8px 10px', background: 'var(--paper-2)',
+            border: '1px solid var(--line-2)', borderRadius: 6,
+          }}>
+            <Icon name="search" size={14} style={{ color: 'var(--ink-3)' }} />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  runFulltextGrep();
+                } else if (e.key === 'Escape') {
+                  setSearchQuery('');
+                  setGrepResults(null);
+                }
+              }}
+              placeholder={'搜会议标题 / 类型 / 分组 — 回车跨会议全文搜索（如「张总」、「刘总」、「装修分期」…）'}
+              style={{
+                flex: 1, padding: '4px 6px', border: 0, background: 'transparent',
+                fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--sans)', outline: 'none',
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); setGrepResults(null); }}
+                style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 11 }}
+              >清空</button>
+            )}
+            <button
+              onClick={runFulltextGrep}
+              disabled={!searchQuery.trim() || grepLoading || forceMock}
+              title={forceMock ? 'Mock 模式不支持全文搜索' : `跨当前可见会议（最多 12 条）做全文 grep`}
+              style={{
+                padding: '4px 10px', border: '1px solid var(--accent)',
+                background: grepLoading ? 'var(--paper)' : 'var(--accent)',
+                color: grepLoading ? 'var(--ink-3)' : 'var(--paper)',
+                borderRadius: 4, fontSize: 11.5,
+                cursor: !searchQuery.trim() || grepLoading || forceMock ? 'not-allowed' : 'pointer',
+                opacity: !searchQuery.trim() || forceMock ? 0.5 : 1,
+              }}
+            >{grepLoading ? '搜索中…' : '全文搜索'}</button>
+          </div>
+
+          {/* 全文 grep 结果面板（按会议分组） */}
+          {grepResults !== null && (
+            <div style={{
+              marginBottom: 16, padding: '10px 14px',
+              border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--paper)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <SectionLabel>全文搜索 · "{searchQuery}"</SectionLabel>
+                <MonoMeta>{grepResults.length} 条命中</MonoMeta>
+                <button
+                  onClick={() => setGrepResults(null)}
+                  style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer', fontSize: 11, color: 'var(--ink-4)' }}
+                >× 关闭</button>
+              </div>
+              {grepResults.length === 0 && !grepLoading && (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '6px 0' }}>
+                  在当前可见会议（{Math.min(visible.length, 12)} 条）的 axes 数据 + 转写文本里没找到 "{searchQuery}"
+                </div>
+              )}
+              {grepResults.length > 0 && (() => {
+                const byMeeting: Record<string, { title: string; rows: typeof grepResults }> = {};
+                for (const r of grepResults) {
+                  if (!byMeeting[r.meetingId]) byMeeting[r.meetingId] = { title: r.meetingTitle, rows: [] as any };
+                  byMeeting[r.meetingId].rows!.push(r);
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {Object.entries(byMeeting).map(([mid, bucket]) => (
+                      <div key={mid}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <button
+                            onClick={() => navigate(`/meeting/${mid}/a`)}
+                            style={{
+                              border: 0, background: 'transparent', cursor: 'pointer',
+                              fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 600, color: 'var(--accent)', padding: 0,
+                            }}
+                          >{bucket.title.slice(0, 60)}</button>
+                          <MonoMeta>{bucket.rows!.length} 条</MonoMeta>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
+                          {bucket.rows!.slice(0, 6).map((r, i) => (
+                            <div key={i} style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                              <span style={{
+                                display: 'inline-block', minWidth: 90,
+                                fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
+                              }}>[{r.axis}/{r.kind}]</span>
+                              {r.person_name && (
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', marginRight: 6 }}>
+                                  {r.person_name}:
+                                </span>
+                              )}
+                              {r.snippet}
+                            </div>
+                          ))}
+                          {bucket.rows!.length > 6 && (
+                            <MonoMeta>+ {bucket.rows!.length - 6} 条更多…</MonoMeta>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Sub-folders if current group has children */}
           {activeGroup && (() => {

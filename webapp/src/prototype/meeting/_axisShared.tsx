@@ -4,11 +4,13 @@
 //   - ScopePill / RunBadge / CrossAxisLink：main-shell.jsx L463-868
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
 import { useMeetingScope, type ScopeKind } from './_scopeContext';
 import { AxisVersionPanel } from './AxisVersionPanel';
+import { meetingNotesApi } from '../../api/meetingNotes';
+import { useForceMock } from './_mockToggle';
 
 export type AxisName = '人物' | '项目' | '知识' | '会议本身' | '纵向视图 · 跨会议';
 
@@ -58,10 +60,56 @@ const AXIS_TONE: Record<string, string> = {
   '会议': 'var(--ink)', '纵向': 'var(--ink-2)',
 };
 
+// AxisName(中文) → 后端 axis(英文 enum)
+const CN_AXIS_TO_API: Record<string, 'people' | 'projects' | 'knowledge' | 'meta'> = {
+  '人物': 'people',
+  '项目': 'projects',
+  '知识': 'knowledge',
+  '会议本身': 'meta',
+};
+
+/** 给 view A/B/C 顶栏复用：相同弹层逻辑、相同数据源 */
+export function CrossAxisLinkInline(props: { axis: AxisName }) {
+  return <CrossAxisLink {...props} />;
+}
+
 function CrossAxisLink({ axis }: { axis: AxisName }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const related = CROSSAXIS_RELATED[axis] ?? CROSSAXIS_RELATED['人物'];
+  // 双数据源：优先 meetingId（view A/B/C 路由 /meeting/:id/...），
+  // 没有时退到 scope context（axis 聚合页 /meeting/axes/* 没 :id）
+  const { id: meetingId } = useParams<{ id: string }>();
+  const scope = useMeetingScope();
+  const forceMock = useForceMock();
+  const apiAxis = CN_AXIS_TO_API[axis as string];
+  const [apiItems, setApiItems] = useState<Array<{
+    targetAxis: string; label: string; detail: string; count: number; to: string;
+    anchor?: { kind: string; ids: string[] };
+  }> | null>(null);
+  const [apiState, setApiState] = useState<'idle' | 'loading' | 'ok' | 'empty' | 'error'>('idle');
+
+  useEffect(() => {
+    if (forceMock || !apiAxis) { setApiItems(null); setApiState('idle'); return; }
+    setApiState('loading');
+    const promise = meetingId
+      ? meetingNotesApi.getCrossAxisClues(meetingId, apiAxis)
+      : meetingNotesApi.getCrossAxisCluesByScope({
+          axis: apiAxis,
+          scopeKind: scope?.kind?.toLowerCase(),
+          // scope.kindId === 'all' 时不传 scopeId（端点跨全库）
+          ...(scope?.kindId !== 'all' && scope?.effectiveScopeId
+              ? { scopeId: scope.effectiveScopeId } : {}),
+        });
+    promise
+      .then((r) => {
+        setApiItems(r.items ?? []);
+        setApiState((r.items?.length ?? 0) > 0 ? 'ok' : 'empty');
+      })
+      .catch(() => setApiState('error'));
+  }, [forceMock, meetingId, apiAxis, scope?.kind, scope?.kindId, scope?.effectiveScopeId]);
+
+  const fallback = CROSSAXIS_RELATED[axis] ?? CROSSAXIS_RELATED['人物'];
+  const related = (apiItems && apiItems.length > 0) ? apiItems : (forceMock ? fallback : []);
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -92,7 +140,21 @@ function CrossAxisLink({ axis }: { axis: AxisName }) {
             <div style={{
               fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--ink-4)',
               letterSpacing: 0.4, textTransform: 'uppercase', padding: '4px 6px 8px',
-            }}>跨轴线索 · 此轴发现的问题在别处的映射</div>
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span>跨轴线索 · 此轴发现的问题在别处的映射</span>
+              {forceMock && <MockBadge />}
+            </div>
+            {related.length === 0 && (
+              <div style={{
+                fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.6,
+                padding: '12px 12px', border: '1px dashed var(--line-2)', borderRadius: 6,
+              }}>
+                {apiState === 'loading' ? '加载中…'
+                  : apiState === 'empty' ? (meetingId ? '本会议无跨轴线索（数据不足或该 axis 上没有可关联的诊断指标）' : '当前 scope 下无跨轴线索（scope 内无 standard run 数据）')
+                  : (meetingId ? '本会议尚未跑过 standard run，无跨轴线索可计算' : '加载失败')}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {related.map((r, i) => {
                 const tone = AXIS_TONE[r.targetAxis] ?? 'var(--ink)';

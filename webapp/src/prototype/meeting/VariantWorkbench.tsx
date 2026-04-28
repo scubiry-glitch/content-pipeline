@@ -7,6 +7,7 @@ import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge, momentToText, momentSpeaker, momentBody } from './_atoms';
+import { CrossAxisLinkInline } from './_axisShared';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
@@ -890,7 +891,13 @@ export function VariantWorkbench() {
               {dim === 'cross_view'    && `${a.crossView.length} claims`}
               {dim === 'minutes'       && `${a.summary.actionItems.length} actions`}
             </MonoMeta>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+              {/* dim → axis 映射，把当前 dim 的"跨轴线索"挂到 header 右上角 */}
+              <CrossAxisLinkInline axis={
+                dim === 'minutes' || dim === 'consensus' ? '项目'
+                : dim === 'focus_map' ? '人物'
+                : '知识' /* tension / new_cognition / cross_view 都归到知识轴 */
+              } />
               {/* 知识锚定 / 置信度 当前没有真实指标来源 · 仅 mock 模式展示 */}
               {usingMock && <>
                 <Chip tone="ghost"><Icon name="sparkle" size={10} />知识锚定已启用</Chip>

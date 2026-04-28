@@ -1,24 +1,24 @@
 {
   "main": {
-    "id": "0bdab18ff64aeb05",
+    "id": "832580f468456c24",
     "type": "split",
     "children": [
       {
-        "id": "5b8865bdc5b281af",
+        "id": "0a75f6d44ef3e038",
         "type": "tabs",
         "children": [
           {
-            "id": "d4f474b8f85b04ac",
+            "id": "5e7e97c03da9616a",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "overview.md",
+                "file": "全鑫.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "overview"
+              "title": "全鑫"
             }
           }
         ]
@@ -27,15 +27,15 @@
     "direction": "vertical"
   },
   "left": {
-    "id": "217fc90386548cd9",
+    "id": "7ad2333fb1ce7e06",
     "type": "split",
     "children": [
       {
-        "id": "10f655ee895da5ad",
+        "id": "960d34e76a9ad1ce",
         "type": "tabs",
         "children": [
           {
-            "id": "e0bcf37fc7ab0716",
+            "id": "21a5035915820f6c",
             "type": "leaf",
             "state": {
               "type": "file-explorer",
@@ -48,7 +48,7 @@
             }
           },
           {
-            "id": "5f457003c88cd935",
+            "id": "b3efe32478c3f9d3",
             "type": "leaf",
             "state": {
               "type": "search",
@@ -65,7 +65,7 @@
             }
           },
           {
-            "id": "860161f2e762b758",
+            "id": "9adfea6cdac5cf1d",
             "type": "leaf",
             "state": {
               "type": "bookmarks",
@@ -81,20 +81,20 @@
     "width": 300
   },
   "right": {
-    "id": "41cf30ee047d0970",
+    "id": "3797a118a81ec433",
     "type": "split",
     "children": [
       {
-        "id": "dc538606a56c3084",
+        "id": "8608e2ab55318d77",
         "type": "tabs",
         "children": [
           {
-            "id": "d2c5409135629e03",
+            "id": "7b0391fe63429091",
             "type": "leaf",
             "state": {
               "type": "backlink",
               "state": {
-                "file": "entities/《1940年投资顾问法》.md",
+                "file": "全鑫.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,25 +104,25 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "《1940年投资顾问法》 的反向链接列表"
+              "title": "全鑫 的反向链接列表"
             }
           },
           {
-            "id": "ba9b317cd3782ed2",
+            "id": "73e9bcf94af79db2",
             "type": "leaf",
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "entities/《1940年投资顾问法》.md",
+                "file": "全鑫.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "《1940年投资顾问法》 的出链列表"
+              "title": "全鑫 的出链列表"
             }
           },
           {
-            "id": "f1b394a2dd33ce02",
+            "id": "e26220662101e898",
             "type": "leaf",
             "state": {
               "type": "tag",
@@ -137,7 +137,7 @@
             }
           },
           {
-            "id": "522f409ad5faa886",
+            "id": "9dd873f39312fde5",
             "type": "leaf",
             "state": {
               "type": "all-properties",
@@ -151,18 +151,18 @@
             }
           },
           {
-            "id": "14bbfbe9f7137e8d",
+            "id": "7212733f741088ef",
             "type": "leaf",
             "state": {
               "type": "outline",
               "state": {
-                "file": "entities/《1940年投资顾问法》.md",
+                "file": "全鑫.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "《1940年投资顾问法》 的大纲"
+              "title": "全鑫 的大纲"
             }
           }
         ]
@@ -180,44 +180,12 @@
       "daily-notes:打开/创建今天的日记": false,
       "templates:插入模板": false,
       "command-palette:打开命令面板": false,
-      "bases:新建数据库": false,
-      "audio-recorder:开始/结束录音": false,
-      "nutstore-sync:Start sync": false,
-      "nutstore-sync:Stop sync": false
+      "bases:新建数据库": false
     }
   },
-  "active": "d4f474b8f85b04ac",
+  "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
-    "index.md",
-    "entities/2018年.md",
-    "concepts/公司财务.md",
-    "concepts/电影行业.md",
-    "concepts/房地产租赁.md",
-    "未命名 1.canvas",
-    "未命名.canvas",
-    "未命名 2.canvas",
-    "entities/北京.md",
-    "entities/《1940年投资顾问法》.md",
-    "entities/未命名 1.base",
-    "concepts/金融_房地产.md",
-    "concepts/金融_财富管理.md",
-    "entities/高靖.md",
-    "entities/富达投资.md",
-    "entities/福州.md",
-    "entities/房地产租赁.md",
-    "entities/非接触式支付.md",
-    "entities/分散式.md",
-    "entities/二居室.md",
-    "entities/东北证券.md",
-    "entities/蛋壳公寓.md",
-    "concepts/房地产_租赁_政策.md",
-    "entities/未命名.base",
-    "entities/新派公寓权益型房托资产支持专项计划.md",
-    "concepts/房地产_租赁_金融.md",
-    "concepts/房地产_租赁.md",
-    "entities/2017年.md",
-    "entities/2019年中央政策.md",
-    "entities/36氪研究院.md",
-    "sources/asset_4d0f05ec.md"
+    "default/sources/2fcd4400-5fde-429d-8252-ea99a212bcb9.md",
+    "全鑫.md"
   ]
 }
