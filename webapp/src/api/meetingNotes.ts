@@ -73,6 +73,16 @@ async function jput<T>(path: string, body?: any): Promise<T> {
 export const meetingNotesApi = {
   // Meeting-level
   parseMeeting: (assetId: string) => jpost<any>('/ingest/parse', { assetId }),
+  /** 列最近 meetings（assets WHERE type='meeting_note' OR metadata?'meeting_kind'），含 title / meeting_kind / last_run / scope_bindings */
+  listMeetings: (q: { limit?: number; status?: 'active' | 'archived' | 'all' } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<any>(`/meetings${qs ? '?' + qs : ''}`);
+  },
   getMeetingAxes: (id: string) => jget<any>(`/meetings/${id}/axes`),
   getMeetingDetail: (id: string, view: 'A' | 'B' | 'C' = 'A') =>
     jget<any>(`/meetings/${id}/detail?view=${view}`),

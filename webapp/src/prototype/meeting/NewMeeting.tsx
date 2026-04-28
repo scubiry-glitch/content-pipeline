@@ -99,6 +99,10 @@ function FlowUpload({ onNext, onUploaded }: {
     title: string;
     n: string;
     assetId: string | null;
+    /** 'succeeded' | 'failed' | 'running' | 'queued' | 'cancelled' | null（未跑过） */
+    runState: string | null;
+    /** 最后一次 run 跑出的时间 */
+    runFinishedAt: string | null;
   }>>([]);
   const [selectedRecentId, setSelectedRecentId] = useState<string | null>(null);
   const [folderPreviewLoading, setFolderPreviewLoading] = useState(false);
@@ -270,29 +274,38 @@ function FlowUpload({ onNext, onUploaded }: {
     if (mode !== 'recent') return;
     if (forceMock) {
       setRecentItems([
-        { id: 'mock-1', t: '2026-03-28', title: '远翎资本 · Q1 复盘 · 基础设施方向', n: '8 人 · 142 分钟', assetId: null },
-        { id: 'mock-2', t: '2026-03-14', title: '团队内部 · 推理层 subadvisor 选择讨论', n: '4 人 · 68 分钟', assetId: null },
-        { id: 'mock-3', t: '2026-02-22', title: 'LP 沟通会 · Q1 进度披露', n: '12 人 · 95 分钟', assetId: null },
+        { id: 'mock-1', t: '2026-03-28', title: '远翎资本 · Q1 复盘 · 基础设施方向', n: '8 人 · 142 分钟', assetId: null, runState: 'succeeded', runFinishedAt: null },
+        { id: 'mock-2', t: '2026-03-14', title: '团队内部 · 推理层 subadvisor 选择讨论', n: '4 人 · 68 分钟', assetId: null, runState: null, runFinishedAt: null },
+        { id: 'mock-3', t: '2026-02-22', title: 'LP 沟通会 · Q1 进度披露', n: '12 人 · 95 分钟', assetId: null, runState: 'failed', runFinishedAt: null },
       ]);
       return;
     }
     setRecentLoading(true);
     setRecentError(null);
-    meetingNotesApi.getSourceHistory({ limit: 20 })
-      .then((r) => {
-        const mapped = (r.items ?? []).map((x: any, idx: number) => {
-          const dt = x.startedAt || x.finishedAt || new Date().toISOString();
+    // 改用 /meetings 直接拉真实文件名 + last_run 状态。之前走 /sources/history
+    // 显示的是导入批次抽象（"导入 succeeded · source ABCDEF12"），看不出文件名也
+    // 看不出有没生成。
+    meetingNotesApi.listMeetings({ limit: 30 })
+      .then((r: any) => {
+        const items: any[] = Array.isArray(r) ? r : (r.items ?? []);
+        const mapped = items.map((m: any, idx: number) => {
+          const dt = m.created_at || new Date().toISOString();
           const timeLabel = new Date(dt).toLocaleString('zh-CN', {
             month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
           });
-          const status = x.status || 'unknown';
-          const sourceLabel = x.sourceId ? String(x.sourceId).slice(0, 8) : 'unknown';
+          const lastRun = m.last_run || null;
+          const parts: string[] = [];
+          if (m.attendee_count) parts.push(`${m.attendee_count} 人`);
+          if (m.duration_min) parts.push(`${m.duration_min} 分钟`);
+          if (m.meeting_kind) parts.push(m.meeting_kind);
           return {
-            id: x.id ?? `history-${idx}`,
+            id: m.id ?? `meeting-${idx}`,
             t: timeLabel,
-            title: `导入 ${status} · source ${sourceLabel}`,
-            n: `${x.itemsImported ?? 0} 条导入 / ${x.itemsDiscovered ?? 0} 条发现`,
-            assetId: Array.isArray(x.assetIds) ? (x.assetIds[0] ?? null) : null,
+            title: m.title || '(未命名)',
+            n: parts.length > 0 ? parts.join(' · ') : '—',
+            assetId: m.id ?? null,
+            runState: lastRun?.state ?? null,
+            runFinishedAt: lastRun?.finished_at ?? null,
           };
         });
         setRecentItems(mapped);
@@ -466,27 +479,47 @@ function FlowUpload({ onNext, onUploaded }: {
           {!recentLoading && !recentError && recentItems.length === 0 && (
             <div style={{ padding: '22px 20px', fontSize: 12, color: 'var(--ink-3)' }}>暂无历史导入记录</div>
           )}
-          {!recentLoading && !recentError && recentItems.map((x, i) => (
-            <div
-              key={x.id}
-              onClick={() => {
-                setSelectedRecentId(x.id);
-                setSelectedAssetId(x.assetId);
-                onUploaded(x.assetId);
-                setUploadDone(Boolean(x.assetId));
-              }}
-              style={{
-              display: 'grid', gridTemplateColumns: '120px 1fr 200px 24px', gap: 14, alignItems: 'center',
-              padding: '14px 20px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
-              background: selectedRecentId === x.id ? 'var(--paper-2)' : 'transparent',
-              cursor: 'pointer',
-            }}>
-              <MonoMeta>{x.t}</MonoMeta>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500 }}>{x.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>{x.n}</div>
-              <Icon name="chevron" size={14} style={{ color: 'var(--ink-4)' }} />
-            </div>
-          ))}
+          {!recentLoading && !recentError && recentItems.map((x, i) => {
+            // 已生成 / 失败 / 未跑 状态徽章
+            const badge = x.runState === 'succeeded'
+              ? { label: '已生成', color: '#15803d', bg: '#dcfce7' }
+              : x.runState === 'failed'
+                ? { label: '失败', color: '#991b1b', bg: '#fee2e2' }
+                : x.runState === 'running' || x.runState === 'queued'
+                  ? { label: '跑中', color: '#1d4ed8', bg: '#dbeafe' }
+                  : x.runState === 'cancelled'
+                    ? { label: '取消', color: '#525252', bg: '#f5f5f5' }
+                    : null;  // 没跑过 → 不显示徽章
+            return (
+              <div
+                key={x.id}
+                onClick={() => {
+                  setSelectedRecentId(x.id);
+                  setSelectedAssetId(x.assetId);
+                  onUploaded(x.assetId);
+                  setUploadDone(Boolean(x.assetId));
+                }}
+                style={{
+                display: 'grid', gridTemplateColumns: '120px 1fr 78px 200px 24px', gap: 14, alignItems: 'center',
+                padding: '14px 20px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
+                background: selectedRecentId === x.id ? 'var(--paper-2)' : 'transparent',
+                cursor: 'pointer',
+              }}>
+                <MonoMeta>{x.t}</MonoMeta>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.title}</div>
+                <div>
+                  {badge && (
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', fontSize: 11, fontWeight: 500,
+                      borderRadius: 4, color: badge.color, background: badge.bg,
+                    }}>{badge.label}</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>{x.n}</div>
+                <Icon name="chevron" size={14} style={{ color: 'var(--ink-4)' }} />
+              </div>
+            );
+          })}
         </div>
       )}
 
