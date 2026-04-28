@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationBell } from './NotificationBell';
 import { ThemeSwitcher, ThemeSwitcherMini } from './ThemeSwitcher';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useTheme } from '../themes';
 import { mainNavItems, systemNavItems, isActivePath } from '../config/navigation';
 import './Layout.css';
@@ -49,8 +50,9 @@ export function Layout() {
       {/* 一级导航 */}
       <header className="sticky top-0 z-50 flex justify-between items-center w-full px-6 h-16 bg-white dark:bg-slate-900 shadow-sm dark:shadow-none border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between w-full mx-auto max-w-[1600px]">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50 tracking-tight font-headline" style={{ margin: 0 }}>Content Pipeline</h1>
+            <WorkspaceSwitcher />
           </div>
 
           <nav className="header-nav hidden md:flex gap-6 items-center">

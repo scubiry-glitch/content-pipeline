@@ -4,9 +4,14 @@ import { TasksProvider } from './contexts/TasksContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { ActivityProvider } from './contexts/ActivityContext';
+import { AuthProvider } from './contexts/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ApiErrorContainer } from './components/ApiErrorToast';
 import { Layout } from './components/Layout';
+import { RequireAuth } from './components/RequireAuth';
+import { Login } from './pages/Login';
+import { WorkspaceList } from './pages/settings/WorkspaceList';
+import { WorkspaceDetail } from './pages/settings/WorkspaceDetail';
 import { initTheme } from './themes';
 
 // 直接导入所有页面组件（不使用懒加载）
@@ -115,8 +120,13 @@ function App() {
           <ActivityProvider>
           <TasksProvider>
           <BrowserRouter>
+          <AuthProvider>
             <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<RequireAuth />}>
               <Route path="/" element={<Layout />}>
+              <Route path="settings/workspaces" element={<WorkspaceList />} />
+              <Route path="settings/workspaces/:id" element={<WorkspaceDetail />} />
               <Route index element={<Dashboard />} />
               <Route path="tasks" element={<Tasks />} />
               <Route path="tasks/:id" element={<TaskDetailLayout />}>
@@ -250,7 +260,9 @@ function App() {
               <Route path="b" element={<VariantWorkbench />} />
               <Route path="c" element={<VariantThreads />} />
             </Route>
-          </Routes>
+              </Route>
+            </Routes>
+          </AuthProvider>
         </BrowserRouter>
         <ApiErrorContainer />
       </TasksProvider>

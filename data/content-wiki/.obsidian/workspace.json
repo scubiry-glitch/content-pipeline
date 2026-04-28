@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
+                "file": "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "eff87d6c-1777385951"
+              "title": "_index"
             }
           }
         ]
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
+                "file": "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "eff87d6c-1777385951 的大纲"
+              "title": "_index 的大纲"
             }
           }
         ],
@@ -185,8 +185,8 @@
   },
   "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
-    "default/meeting-chats/d4833343-1777385717.md",
     "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
+    "default/meeting-chats/d4833343-1777385717.md",
     "default/sources/meeting/meeting-chats",
     "default/meeting-chats/eff87d6c-1777385719.md",
     "default/sources/meeting/axes/people-人物/承诺兑现.md",

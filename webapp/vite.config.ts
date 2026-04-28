@@ -6,14 +6,12 @@ import { parse } from 'dotenv'
 import { networkInterfaces } from 'os'
 import { execSync } from 'child_process'
 
-// 只读取 api/.env 里的 PORT / ADMIN_API_KEY 用于本地 dev server 代理
+// 只读取 api/.env 里的 PORT 用于本地 dev server 代理（X-API-Key 不再由代理注入）
 const apiEnvPath = resolve(__dirname, '../api/.env')
 let apiPort = process.env.PORT || '3006'
-let adminApiKey = 'dev-api-key'
 if (existsSync(apiEnvPath)) {
   const parsed = parse(readFileSync(apiEnvPath, 'utf-8'))
   if (parsed.PORT) apiPort = parsed.PORT
-  if (parsed.ADMIN_API_KEY) adminApiKey = parsed.ADMIN_API_KEY
 }
 
 // 在 macOS 上，Cursor / 其它 IDE 插件 host 偶尔会先抢占 127.0.0.1:<apiPort>，
@@ -75,9 +73,8 @@ export default defineConfig({
         target: API_URL,
         changeOrigin: true,
         secure: false,
-        headers: {
-          'x-api-key': adminApiKey
-        }
+        // 不再注入 x-api-key — 浏览器走 cookie session（Phase 1）。
+        // 后端仍保留 X-API-Key fallback 给直连脚本/CI 用。
       }
     }
   }

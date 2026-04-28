@@ -32,6 +32,10 @@ if (!envLoaded) {
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import cookie from '@fastify/cookie';
+import { authRoutes } from './routes/auth.js';
+import { workspaceRoutes } from './routes/workspaces.js';
+import { adminUserRoutes } from './routes/admin/users.js';
 import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
@@ -90,7 +94,7 @@ import { setupAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
-import { ensureDbPoolConnected, ensureRuntimePerformanceIndexes, initDatabase } from './db/connection.js';
+import { ensureDbPoolConnected, ensureRuntimePerformanceIndexes, initDatabase, setupAuthSchema } from './db/connection.js';
 import { printAPICheckReport, validateRequiredConfig } from './services/apiCheck.js';
 
 async function main() {
@@ -141,8 +145,18 @@ async function main() {
     }
   });
 
+  await fastify.register(cookie, {
+    secret: process.env.COOKIE_SECRET || process.env.ADMIN_API_KEY || 'dev-cookie-secret-change-in-production',
+    parseOptions: {},
+  });
+
   // Setup authentication
   setupAuth(fastify);
+
+  // 认证与 workspace 路由（公开 + 受保护混合，由各路由内部 preHandler 控制）
+  await fastify.register(authRoutes, { prefix: '/api/auth' });
+  await fastify.register(workspaceRoutes, { prefix: '/api/workspaces' });
+  await fastify.register(adminUserRoutes, { prefix: '/api/admin/users' });
 
   fastify.addHook('onRequest', async (request, _reply) => {
     const url = request.raw.url || '';
@@ -314,6 +328,12 @@ async function main() {
           console.log('[Server] DB auto-migrate disabled, only checking connectivity');
           await ensureDbPoolConnected();
           await ensureRuntimePerformanceIndexes();
+        }
+        // 账号体系基础表幂等建表 + 种子（与 DB_AUTO_MIGRATE 解耦：始终保证 auth 可用）
+        try {
+          await setupAuthSchema();
+        } catch (err) {
+          console.warn('[Server] setupAuthSchema warning:', (err as Error).message);
         }
         console.log('✓ Database connected');
 

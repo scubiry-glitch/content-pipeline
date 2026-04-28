@@ -3,16 +3,17 @@ import type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion, R
 export type { Task, Asset, AssetTheme, Expert, OutlineComment, OutlineVersion, ResearchAnnotation };
 
 // 优先使用环境变量，否则使用相对路径（通过 Vite proxy 转发到后端）
+// API_KEY 仅作为 fallback 凭证使用（首次未登录时调用 /auth/me 等场景）；登录后浏览器靠 cookie 维持身份。
 export const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
 export const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 const client = axios.create({
   baseURL: BASE_URL,
   headers: {
-    'X-API-Key': API_KEY,
     'Content-Type': 'application/json',
   },
   timeout: 120000, // 2 minutes for LLM operations
+  withCredentials: true,
 });
 
 // 请求拦截器
@@ -28,14 +29,43 @@ client.interceptors.request.use(
 );
 
 // 响应拦截器
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 client.interceptors.response.use(
   (response) => {
     return response.data;
   },
   (error) => {
+    const status = error.response?.status;
+    const url: string = error.config?.url || '';
+    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
+      onUnauthorized?.();
+    }
     console.error('[API] Response error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
+);
+
+// 用于 auth/workspace 等不在 /api/v1 前缀下的端点
+export const authClient = axios.create({
+  baseURL: import.meta.env.VITE_AUTH_BASE_URL || '/api',
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 30000,
+  withCredentials: true,
+});
+authClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    const status = error.response?.status;
+    const url: string = error.config?.url || '';
+    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
+      onUnauthorized?.();
+    }
+    return Promise.reject(error);
+  },
 );
 
 // 任务相关 API

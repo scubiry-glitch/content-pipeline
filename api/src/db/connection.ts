@@ -73,10 +73,10 @@ export async function getClient(): Promise<PoolClient> {
   return withConnectionRetry(() => pool!.connect(), 'pool.connect');
 }
 
-export async function query(
+export async function query<T extends Record<string, any> = any>(
   text: string,
   params?: any[]
-): Promise<QueryResult<any>> {
+): Promise<QueryResult<T>> {
   if (!pool) {
     createPool();
   }
@@ -1243,8 +1243,189 @@ async function setupMVPSchema(): Promise<void> {
   });
 
   await setupContentLibrarySchema();
+  await setupAuthSchema();
 
   console.log('[DB] MVP Schema initialized successfully');
+}
+
+/**
+ * 账号体系基础表（与 migrations/031-auth-foundation.sql 对齐）。
+ * 幂等：CREATE TABLE IF NOT EXISTS。运行时还会种入默认 admin + Default workspace。
+ * 即使 DB_AUTO_MIGRATE=false 也应被调用（轻量、幂等）。
+ */
+export async function setupAuthSchema(): Promise<void> {
+  await query('CREATE EXTENSION IF NOT EXISTS citext').catch(() => {
+    console.warn('[DB] citext extension may not be available, auth will fall back to TEXT email');
+  });
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email           CITEXT UNIQUE NOT NULL,
+      password_hash   TEXT,
+      name            TEXT NOT NULL,
+      avatar_url      TEXT,
+      status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+      is_super_admin  BOOLEAN NOT NULL DEFAULT FALSE,
+      must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+      last_login_at   TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).catch((e) => console.warn('[DB] users table skipped:', getErrorMessage(e)));
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_identities (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider          TEXT NOT NULL,
+      provider_user_id  TEXT NOT NULL,
+      email_at_provider CITEXT,
+      metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (provider, provider_user_id)
+    )
+  `).catch((e) => console.warn('[DB] user_identities table skipped:', getErrorMessage(e)));
+  await query(`CREATE INDEX IF NOT EXISTS idx_identity_user ON user_identities(user_id)`).catch(() => {});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        TEXT NOT NULL,
+      slug        TEXT UNIQUE NOT NULL,
+      owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).catch((e) => console.warn('[DB] workspaces table skipped:', getErrorMessage(e)));
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS workspace_members (
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      role         TEXT NOT NULL CHECK (role IN ('owner','admin','member')),
+      joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (workspace_id, user_id)
+    )
+  `).catch((e) => console.warn('[DB] workspace_members table skipped:', getErrorMessage(e)));
+  await query(`CREATE INDEX IF NOT EXISTS idx_wm_user ON workspace_members(user_id)`).catch(() => {});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash    TEXT NOT NULL UNIQUE,
+      user_agent    TEXT,
+      ip            INET,
+      current_workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
+      expires_at    TIMESTAMPTZ NOT NULL,
+      revoked_at    TIMESTAMPTZ,
+      last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).catch((e) => console.warn('[DB] auth_sessions table skipped:', getErrorMessage(e)));
+  await query(`CREATE INDEX IF NOT EXISTS idx_sess_user_active ON auth_sessions(user_id) WHERE revoked_at IS NULL`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_sess_token_hash ON auth_sessions(token_hash)`).catch(() => {});
+
+  // 种子：默认 admin + Default workspace + 至少一个 workspace 给已存在但落单的 admin
+  // 幂等：基于"是否存在 super_admin 用户"和"该 admin 是否有任何 workspace"两个条件
+  try {
+    const { default: bcrypt } = await import('bcrypt');
+    const adminRes = await query<{ id: string; email: string }>(
+      `SELECT id, email FROM users WHERE is_super_admin = TRUE ORDER BY created_at ASC LIMIT 1`
+    );
+    let adminId: string | null = adminRes.rows[0]?.id || null;
+    let adminEmail: string | null = adminRes.rows[0]?.email || null;
+
+    if (!adminId) {
+      const initialPassword = process.env.INITIAL_ADMIN_PASSWORD || 'admin123456';
+      const initialEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@local';
+      const initialName = process.env.INITIAL_ADMIN_NAME || 'Admin';
+      const passwordHash = await bcrypt.hash(initialPassword, 12);
+      const mustChange = !process.env.INITIAL_ADMIN_PASSWORD;
+
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        const userIns = await client.query(
+          `INSERT INTO users (email, password_hash, name, is_super_admin, must_change_password)
+           VALUES ($1, $2, $3, TRUE, $4) RETURNING id`,
+          [initialEmail, passwordHash, initialName, mustChange]
+        );
+        adminId = userIns.rows[0].id as string;
+        adminEmail = initialEmail;
+        await client.query(
+          `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider)
+           VALUES ($1::uuid, 'password', $1::uuid::text, $2)`,
+          [adminId, initialEmail]
+        );
+        await client.query('COMMIT');
+        console.log(`[DB] Seeded admin user '${initialEmail}'`);
+        if (mustChange) {
+          console.log('[DB] ⚠️  Using default admin password (admin123456). Set INITIAL_ADMIN_PASSWORD in .env for production.');
+        }
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+
+    // 确保该 admin 有 password identity 记录（OAuth 阶段会用）
+    if (adminId && adminEmail) {
+      const idCheck = await query(
+        `SELECT 1 FROM user_identities WHERE user_id = $1::uuid AND provider = 'password' LIMIT 1`,
+        [adminId]
+      );
+      if (idCheck.rows.length === 0) {
+        await query(
+          `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider)
+           VALUES ($1::uuid, 'password', $1::uuid::text, $2)`,
+          [adminId, adminEmail]
+        ).catch(() => {});
+      }
+    }
+
+    // 确保该 admin 至少有一个 Default workspace
+    if (adminId) {
+      const wsCheck = await query(
+        `SELECT 1 FROM workspace_members WHERE user_id = $1::uuid LIMIT 1`,
+        [adminId]
+      );
+      if (wsCheck.rows.length === 0) {
+        const client = await getClient();
+        try {
+          await client.query('BEGIN');
+          // slug 'default' 可能已被其他人占用；那就用 admin email 衍生
+          let slug = 'default';
+          const slugTaken = await client.query(`SELECT 1 FROM workspaces WHERE slug = $1`, [slug]);
+          if (slugTaken.rows.length > 0) {
+            slug = `default-${(adminEmail || 'admin').replace(/[^a-z0-9]+/g, '-').toLowerCase()}`;
+          }
+          const wsIns = await client.query(
+            `INSERT INTO workspaces (name, slug, owner_id) VALUES ($1, $2, $3::uuid) RETURNING id`,
+            ['Default', slug, adminId]
+          );
+          const wsId = wsIns.rows[0].id;
+          await client.query(
+            `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'owner')`,
+            [wsId, adminId]
+          );
+          await client.query('COMMIT');
+          console.log(`[DB] Seeded Default workspace for admin (slug=${slug})`);
+        } catch (e) {
+          await client.query('ROLLBACK');
+          throw e;
+        } finally {
+          client.release();
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[DB] auth seed skipped:', getErrorMessage(e));
+  }
 }
 
 /** v7.0 内容库表与索引（与 modules/content-library/migrations 对齐） */
