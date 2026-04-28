@@ -1,0 +1,8 @@
+{
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "folder",
+  "newFileFolderPath": "entities",
+  "attachmentFolderPath": ".attachments",
+  "useMarkdownLinks": false,
+  "showLineNumber": true
+}

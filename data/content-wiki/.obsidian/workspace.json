@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "全鑫.md",
+                "file": "default/sources/meeting/axes/people-人物/承诺兑现.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "全鑫"
+              "title": "承诺兑现"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "全鑫.md",
+                "file": "default/sources/meeting/axes/people-人物/承诺兑现.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "全鑫 的反向链接列表"
+              "title": "承诺兑现 的反向链接列表"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "全鑫.md",
+                "file": "default/sources/meeting/axes/people-人物/承诺兑现.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "全鑫 的出链列表"
+              "title": "承诺兑现 的出链列表"
             }
           },
           {
@@ -156,21 +156,21 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "全鑫.md",
+                "file": "default/sources/meeting/axes/people-人物/承诺兑现.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "全鑫 的大纲"
+              "title": "承诺兑现 的大纲"
             }
           }
-        ]
+        ],
+        "currentTab": 4
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -185,7 +185,41 @@
   },
   "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
-    "default/sources/2fcd4400-5fde-429d-8252-ea99a212bcb9.md",
-    "全鑫.md"
+    "default/sources/meeting/axes/people-人物/沉默信号.md",
+    "default/sources/document/tavily_y36tfn.md",
+    "default/sources/document/tavily_ndo30n.md",
+    "default/domains/E02-金融科技/_金融_房地产.md",
+    "default/entities/location/宁波市.md",
+    "default/entities/location/大中华区.md",
+    "default/entities/event/《1940投资顾问法案》.md",
+    "default/entities/event/中美战略与经济对话.md",
+    "default/domains/E09-文化传媒/_index.md",
+    "default/domains/E99-其他/_index.md",
+    "default/domains/E11-ESG可持续/_index.md",
+    "default/domains/E07-人工智能/_index.md",
+    "default/domains/E01-宏观经济/_index.md",
+    "default/domains/E05-消费零售/_index.md",
+    "default/domains/E02-金融科技/_index.md",
+    "default/domains/E08-房地产/_index.md",
+    "default/domains/E99-其他/E99.USER-用户自定义.md",
+    "default/concepts/mental-model/科创板.md",
+    "default/concepts/mental-model/注册制.md",
+    "default/concepts/mental-model/通道业务.md",
+    "default/concepts/mental-model/重资本业务.md",
+    "default/concepts/mental-model/自营业务.md",
+    "default/concepts/mental-model/经纪业务.md",
+    "default/concepts/mental-model/投行业务.md",
+    "default/concepts/mental-model/资管业务.md",
+    "default/concepts/mental-model/机构化.md",
+    "default/concepts/counterfactual",
+    "default/concepts/bias",
+    "default/concepts/judgment",
+    "default/entities/project",
+    "default/concepts/regulation",
+    "default/concepts/demographic",
+    "default/concepts/business-model",
+    "default/concepts/financial-instrument",
+    "default/concepts/technology",
+    "default/concepts/metric"
   ]
 }

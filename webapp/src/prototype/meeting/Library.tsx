@@ -943,7 +943,7 @@ export function Library() {
                   setGrepResults(null);
                 }
               }}
-              placeholder={'搜会议标题 / 类型 / 分组 — 回车跨会议全文搜索（如「张总」、「刘总」、「装修分期」…）'}
+              placeholder={'搜会议标题 / 类型 / 分组 — 回车跨会议全文搜索（如「上海」、「贝壳」、「装修分期」…）'}
               style={{
                 flex: 1, padding: '4px 6px', border: 0, background: 'transparent',
                 fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--sans)', outline: 'none',
