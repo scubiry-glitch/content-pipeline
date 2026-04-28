@@ -18,7 +18,7 @@ import { TAXONOMY, type TaxonomySeed } from '../../../config/taxonomyData.js';
 
 export interface WikiFrontmatter {
   // 类型层
-  type?: 'entity' | 'concept' | 'domain' | 'source' | 'index' | 'overview';
+  type?: 'entity' | 'concept' | 'domain' | 'source' | 'index' | 'overview' | 'axis' | 'scope';
   subtype?: string;
 
   // 身份层
@@ -33,7 +33,7 @@ export interface WikiFrontmatter {
 
   // ownership 层
   app?: 'meeting-notes' | 'knowledge-library' | 'manual';
-  generatedBy?: 'claude-cli' | 'wiki-generator' | 'manual-edit';
+  generatedBy?: 'claude-cli' | 'wiki-generator' | 'manual-edit' | 'meeting-axes-generator' | 'meeting-scope-generator';
   firstCreatedBy?: string;
   firstCreatedAt?: string;
   lastEditedBy?: string;
