@@ -137,7 +137,7 @@ export class DirectoryWatcherService {
             try {
               const stats = await stat(filePath);
               if (stats.isFile()) {
-                this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
+                this.enqueueImport(binding.id, async () => { await this.importFile(binding, filePath, stats); });
               }
             } catch {
               // File was removed
@@ -148,7 +148,7 @@ export class DirectoryWatcherService {
             try {
               const stats = await stat(filePath);
               if (stats.isFile()) {
-                this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
+                this.enqueueImport(binding.id, async () => { await this.importFile(binding, filePath, stats); });
               }
             } catch {
               // File no longer exists
@@ -181,7 +181,7 @@ export class DirectoryWatcherService {
         try {
           const stats = await stat(filePath);
           if (stats.isFile() && this.matchesPattern(filePath, binding.file_patterns)) {
-            await this.enqueueImport(binding.id, () => this.importFile(binding, filePath, stats));
+            await this.enqueueImport(binding.id, async () => { await this.importFile(binding, filePath, stats); });
           }
         } catch (error) {
           console.error(`[DirectoryWatcher] Error processing ${filePath}:`, error);
@@ -234,19 +234,19 @@ export class DirectoryWatcherService {
     });
   }
 
-  // Import a file to asset library
+  // Import a file to asset library; returns the imported asset id, or null if unchanged/failed
   private async importFile(
     binding: DirectoryBinding,
     filePath: string,
     stats: { size: number; mtime: Date }
-  ): Promise<void> {
+  ): Promise<string | null> {
     try {
       // Check if file is already tracked and unchanged
       const existing = await this.getTrackedFile(binding.id, filePath);
       const fileHash = await this.computeFileHash(filePath);
 
       if (existing && existing.file_hash === fileHash) {
-        return; // File unchanged
+        return null; // File unchanged
       }
 
       // Read file
@@ -279,8 +279,10 @@ export class DirectoryWatcherService {
       );
 
       console.log(`[DirectoryWatcher] Imported: ${filePath} -> ${asset.id}`);
+      return asset.id;
     } catch (error) {
       console.error(`[DirectoryWatcher] Failed to import ${filePath}:`, error);
+      return null;
     }
   }
 
@@ -355,7 +357,12 @@ export class DirectoryWatcherService {
   }
 
   // Manual trigger for scanning a binding
-  async triggerScan(bindingId: string): Promise<{
+  // options.sinceMtime — ISO date or 'last_scan' keyword; only files with mtime >= cutoff are processed
+  // options.dryRun — preview mode: count matches without importing
+  async triggerScan(
+    bindingId: string,
+    options: { sinceMtime?: string; dryRun?: boolean } = {}
+  ): Promise<{
     scanned: number;
     added: number;
     imported: number;
@@ -363,6 +370,9 @@ export class DirectoryWatcherService {
     filtered: number;
     unchanged: number;
     skipped: number;
+    addedAssetIds: string[];
+    dryRun: boolean;
+    sinceMtime?: string | null;
   }> {
     const result = await query(
       `SELECT * FROM asset_directory_bindings WHERE id = $1`,
@@ -373,7 +383,17 @@ export class DirectoryWatcherService {
       throw new Error('Binding not found');
     }
 
-    const binding: DirectoryBinding = result.rows[0];
+    const binding: DirectoryBinding & { last_scan_at?: Date | null } = result.rows[0];
+    const dryRun = options.dryRun === true;
+
+    // Resolve cutoff: 'last_scan' → binding.last_scan_at; otherwise parse ISO string
+    let cutoff: Date | null = null;
+    if (options.sinceMtime === 'last_scan') {
+      cutoff = binding.last_scan_at ? new Date(binding.last_scan_at) : null;
+    } else if (typeof options.sinceMtime === 'string' && options.sinceMtime.length > 0) {
+      const parsed = new Date(options.sinceMtime);
+      if (!Number.isNaN(parsed.getTime())) cutoff = parsed;
+    }
 
     // Reset counters for this scan
     let scanned = 0;
@@ -381,6 +401,7 @@ export class DirectoryWatcherService {
     let errors = 0;
     let filtered = 0;
     let unchanged = 0;
+    const addedAssetIds: string[] = [];
 
     try {
       const files = await this.getFilesInDirectory(binding.path, binding.include_subdirs);
@@ -389,18 +410,31 @@ export class DirectoryWatcherService {
       for (const filePath of files) {
         try {
           const stats = await stat(filePath);
-          if (stats.isFile() && this.matchesPattern(filePath, binding.file_patterns)) {
-            const existing = await this.getTrackedFile(binding.id, filePath);
-            const fileHash = await this.computeFileHash(filePath);
+          if (!stats.isFile() || !this.matchesPattern(filePath, binding.file_patterns)) {
+            filtered++;
+            continue;
+          }
+          // mtime filter: skip files older than cutoff
+          if (cutoff && stats.mtime < cutoff) {
+            filtered++;
+            continue;
+          }
 
-            if (!existing || existing.file_hash !== fileHash) {
-              await this.importFile(binding, filePath, stats);
-              imported++;
+          const existing = await this.getTrackedFile(binding.id, filePath);
+          const fileHash = await this.computeFileHash(filePath);
+
+          if (!existing || existing.file_hash !== fileHash) {
+            if (dryRun) {
+              imported++; // count what would be imported
             } else {
-              unchanged++;
+              const newId = await this.importFile(binding, filePath, stats);
+              if (newId) {
+                imported++;
+                addedAssetIds.push(newId);
+              }
             }
           } else {
-            filtered++;
+            unchanged++;
           }
         } catch (error) {
           errors++;
@@ -408,18 +442,31 @@ export class DirectoryWatcherService {
         }
       }
 
-      // Update last scan time
-      await query(
-        `UPDATE asset_directory_bindings SET last_scan_at = NOW() WHERE id = $1`,
-        [bindingId]
-      );
+      // Update last scan time only for real scans (not dryRun)
+      if (!dryRun) {
+        await query(
+          `UPDATE asset_directory_bindings SET last_scan_at = NOW() WHERE id = $1`,
+          [bindingId]
+        );
+      }
     } catch (error) {
       console.error(`[DirectoryWatcher] Failed to scan ${binding.path}:`, error);
       throw error;
     }
 
     const skipped = Math.max(scanned - imported - errors, 0);
-    return { scanned, added: imported, imported, errors, filtered, unchanged, skipped };
+    return {
+      scanned,
+      added: imported,
+      imported,
+      errors,
+      filtered,
+      unchanged,
+      skipped,
+      addedAssetIds,
+      dryRun,
+      sinceMtime: cutoff ? cutoff.toISOString() : null,
+    };
   }
 }
 

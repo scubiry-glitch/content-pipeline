@@ -247,10 +247,18 @@ export async function assetRoutes(fastify: FastifyInstance) {
 
   // Get all directory bindings
   fastify.get('/bindings', { preHandler: authenticate }, async () => {
+    // batch-ops Step 1 局部生成: 加 tracked_count 让前端能显示"已 import N 文件"
+    // 让用户一眼看出哪些 binding 有数据 / 哪些是空 (路径失效)
     const result = await query(
-      `SELECT b.*, t.name as theme_name, t.icon as theme_icon, t.color as theme_color
+      `SELECT b.*, t.name as theme_name, t.icon as theme_icon, t.color as theme_color,
+              COALESCE(tc.cnt, 0)::int AS tracked_count
        FROM asset_directory_bindings b
        LEFT JOIN asset_themes t ON b.theme_id = t.id
+       LEFT JOIN (
+         SELECT binding_id, COUNT(*) AS cnt
+           FROM asset_tracked_files
+          GROUP BY binding_id
+       ) tc ON tc.binding_id = b.id
        ORDER BY b.created_at DESC`
     );
     return result.rows;
@@ -384,20 +392,32 @@ export async function assetRoutes(fastify: FastifyInstance) {
   // Trigger manual scan
   fastify.post('/bindings/:bindingId/scan', { preHandler: authenticate }, async (request, reply) => {
     const { bindingId } = request.params as any;
+    // batch-ops Step 1 局部生成:
+    // - sinceMtime: ISO 时间戳 / 'last_scan' 关键字 → 只扫 mtime > since 的文件，避免大目录全量 stat
+    // - dryRun: 不真 import，只统计将命中的文件数（前端预估面板）
+    const body = (request.body ?? {}) as {
+      sinceMtime?: string;
+      dryRun?: boolean;
+    };
 
     try {
       const watcherService = getDirectoryWatcherService();
-      const result = await watcherService.triggerScan(bindingId);
+      const result = await watcherService.triggerScan(bindingId, {
+        sinceMtime: body.sinceMtime,
+        dryRun: body.dryRun === true,
+      });
 
       return {
-        message: '扫描完成',
+        message: result.dryRun ? '预估完成（未真扫描）' : '扫描完成',
         scanned: result.scanned,
         added: result.added,
         imported: result.imported,
         errors: result.errors,
         filtered: result.filtered,
         unchanged: result.unchanged,
-        skipped: result.skipped
+        skipped: result.skipped,
+        addedAssetIds: result.addedAssetIds ?? [],
+        dryRun: result.dryRun ?? false,
       };
     } catch (error: any) {
       reply.status(500);
