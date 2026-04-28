@@ -336,31 +336,66 @@ export function ContentLibraryWiki() {
           {activeWiki ? (
             <>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">文件</h3>
-              {(['root', 'entities', 'concepts', 'sources'] as const).map(cat => {
-                const items = filesByCategory[cat] || [];
+              {(['root', 'meeting-notes', 'entities', 'concepts', 'domains', 'sources', 'axes', 'scopes'] as const).map(cat => {
+                // Phase H+ · meeting-notes 是虚拟分组（meeting app 工作台）, 含 axes + scopes + sources/meeting
+                const items = cat === 'meeting-notes'
+                  ? [
+                      ...(filesByCategory['axes'] || []),
+                      ...(filesByCategory['scopes'] || []),
+                      ...((filesByCategory['sources'] || []).filter(f => f.path.startsWith('sources/meeting/'))),
+                    ]
+                  : cat === 'sources'
+                    ? (filesByCategory[cat] || []).filter(f => !f.path.startsWith('sources/meeting/'))
+                    : (filesByCategory[cat] || []);
                 if (items.length === 0) return null;
+                const labels: Record<string, string> = {
+                  root: '顶层',
+                  'meeting-notes': '会议纪要 · meeting app',
+                  entities: '实体 entities (具体)',
+                  concepts: '概念 concepts (抽象)',
+                  domains: '领域 domains (taxonomy)',
+                  sources: '来源 sources (非会议)',
+                  axes: '4 轴 axes (跨场)',
+                  scopes: 'scope (项目/客户/主题)',
+                };
+                // 二级分组 (按 path 第二段)
+                const grouped = items.reduce<Record<string, typeof items>>((acc, f) => {
+                  const segs = f.path.split('/');
+                  const key = segs.length >= 3 ? segs[1] : '_root';
+                  (acc[key] = acc[key] || []).push(f);
+                  return acc;
+                }, {});
                 return (
-                  <div key={cat} className="mb-3">
+                  <div key={cat} className="mb-4">
                     <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">
-                      {cat === 'root' ? '顶层' : cat}
+                      {labels[cat] ?? cat} <span className="text-gray-300">· {items.length}</span>
                     </div>
-                    <ul className="space-y-0.5">
-                      {items.slice(0, 100).map(f => (
-                        <li key={f.path}>
-                          <button
-                            onClick={() => openFile(activeWiki, f.path)}
-                            className={`w-full text-left px-2 py-1 text-xs rounded truncate ${
-                              activeFile === f.path
-                                ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700'
-                                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
-                            }`}
-                          >
-                            {f.path.replace(`${cat}/`, '')}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    {items.length > 100 && <p className="text-[10px] text-gray-400 mt-1">... 还有 {items.length - 100} 个</p>}
+                    {Object.entries(grouped).slice(0, 20).map(([sub, list]) => (
+                      <div key={sub} className="mb-2">
+                        {sub !== '_root' && (
+                          <div className="text-[10px] text-gray-500 dark:text-gray-500 font-medium mt-1.5 mb-0.5 pl-1">
+                            {sub} <span className="text-gray-400">· {list.length}</span>
+                          </div>
+                        )}
+                        <ul className="space-y-0.5 pl-1">
+                          {list.slice(0, 40).map(f => (
+                            <li key={f.path}>
+                              <button
+                                onClick={() => openFile(activeWiki, f.path)}
+                                className={`w-full text-left px-2 py-1 text-xs rounded truncate ${
+                                  activeFile === f.path
+                                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                }`}
+                              >
+                                {f.path.split('/').slice(sub === '_root' ? 1 : 2).join('/') || f.path}
+                              </button>
+                            </li>
+                          ))}
+                          {list.length > 40 && <li className="text-[10px] text-gray-400 pl-2">... +{list.length - 40}</li>}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
                 );
               })}

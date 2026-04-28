@@ -546,40 +546,20 @@ export class WikiGenerator {
   }
 
   /** 列出 wiki 目录下所有 markdown 文件 (Phase H · 递归到子目录) */
+  /** Phase H+ · 递归列出所有 .md (深度 ≤3 适配 sources/meeting/<id>/_index.md 结构) */
   async listFiles(wikiRoot: string): Promise<Array<{ path: string; category: string }>> {
     const out: Array<{ path: string; category: string }> = [];
 
-    // entities/ + concepts/ + domains/: 递归一级 (subtype 子目录)
-    for (const cat of ['entities', 'concepts', 'domains']) {
+    const TOP_CATS = ['entities', 'concepts', 'domains', 'sources', 'axes', 'scopes'];
+
+    for (const cat of TOP_CATS) {
       const catPath = path.join(wikiRoot, cat);
       try {
-        const items = await fs.readdir(catPath, { withFileTypes: true });
-        for (const it of items) {
-          if (it.isDirectory()) {
-            // 子目录: entities/person/<f>.md, domains/E07-人工智能/<f>.md 等
-            try {
-              const subFiles = await fs.readdir(path.join(catPath, it.name));
-              for (const f of subFiles.filter((x) => x.endsWith('.md'))) {
-                out.push({ path: `${cat}/${it.name}/${f}`, category: cat });
-              }
-            } catch { /* 子目录读不到 */ }
-          } else if (it.name.endsWith('.md')) {
-            // 平铺文件 (legacyFlatLayout 或 _index.md)
-            out.push({ path: `${cat}/${it.name}`, category: cat });
-          }
-        }
+        await this.recurseDir(catPath, cat, out, /* maxDepth */ 4);
       } catch { /* 目录不存在 */ }
     }
 
-    // sources/ 不分子目录
-    try {
-      const files = await fs.readdir(path.join(wikiRoot, 'sources'));
-      for (const f of files.filter((x) => x.endsWith('.md'))) {
-        out.push({ path: `sources/${f}`, category: 'sources' });
-      }
-    } catch { /* */ }
-
-    // 顶层
+    // 顶层 index/overview
     try {
       for (const f of ['index.md', 'overview.md']) {
         await fs.stat(path.join(wikiRoot, f));
@@ -587,6 +567,34 @@ export class WikiGenerator {
       }
     } catch { /* ignore */ }
     return out;
+  }
+
+  /** 递归收集 .md 文件 (相对 wikiRoot 的路径) */
+  private async recurseDir(
+    dir: string,
+    category: string,
+    out: Array<{ path: string; category: string }>,
+    maxDepth: number,
+  ): Promise<void> {
+    if (maxDepth <= 0) return;
+    let items;
+    try {
+      items = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const it of items) {
+      if (it.name.startsWith('.')) continue;  // 跳过 .obsidian 等
+      const sub = path.join(dir, it.name);
+      if (it.isDirectory()) {
+        await this.recurseDir(sub, category, out, maxDepth - 1);
+      } else if (it.name.endsWith('.md')) {
+        // 计算相对路径 (相对 category 之上的 wikiRoot)
+        // 简单做法: 反向找出 category 在 sub 里的位置
+        const rel = sub.split(`/${category}/`).slice(-1)[0];
+        out.push({ path: `${category}/${rel}`, category });
+      }
+    }
   }
 
   // =================================================================
