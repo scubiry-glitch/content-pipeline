@@ -300,6 +300,30 @@ export class RunEngine {
     const reqNorm: EnqueueRunRequest = { ...req, scope: scopeNorm };
     const triggeredBy = coerceRunTrigger(req.triggeredBy);
 
+    // F5 · scope+axis 级去重：同 scope+axis 已有 queued/running 时直接复用，
+    // 避免用户连点 / scheduler 反复触发把同一作业堆 30+ 条进队（实测 4-28 美租金融
+    // 一天堆 30 条全 cancelled）。命中已有 run 时返回它的 id 让前端能跟 SSE 进度，
+    // 而不是悄悄插一条新的让用户在生成中心看到一堆复制品。
+    try {
+      const dup = await this.deps.db.query(
+        `SELECT id::text FROM mn_runs
+          WHERE scope_kind = $1
+            AND COALESCE(scope_id::text,'') = COALESCE($2::text,'')
+            AND axis = $3
+            AND state IN ('queued','running')
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [scopeNorm.kind, scopeNorm.id ?? null, req.axis],
+      );
+      if (dup.rows.length > 0) {
+        const existingId = dup.rows[0].id as string;
+        return { ok: true, runId: existingId, reason: 'dedupe-existing' };
+      }
+    } catch (e) {
+      console.warn('[RunEngine] enqueue dedupe lookup failed:', (e as Error).message);
+      // 查重失败不阻塞，继续走正常 INSERT 路径
+    }
+
     // 1. 解析 strategy / preset
     //    优先级：req.strategy > meetingKind 映射的 default > preset 兜底默认
     //    最后这层兜底是关键：workshop / general 这种 kind 在 MEETING_KIND_STRATEGY 里
