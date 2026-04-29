@@ -133,12 +133,33 @@ copilot_sessions / copilot_messages / copilot_contexts / copilot_usage_stats —
 - 烟雾测试: INSERT draft_versions 不传 workspace_id → trigger 从 task_id 派生 ✅
 - 业务回归: production/assets/hot-topics/meetings/runs 5 个端点 200 ✅
 
+## ✅ 计划补丁包（2026-04-29）
+
+紧扣计划但实现细节需要补的事项, 已落地:
+
+| 项 | Commit | 说明 |
+|---|---|---|
+| **`POST /api/auth/refresh`** session 续期 | `729e10f` | 把 expires_at 推后 30 天; 前端登录后自动调一次, 防长时间不操作被踢 |
+| **403 `WORKSPACE_FORBIDDEN`** axios toast | `729e10f` | setOnWorkspaceForbidden 全局 handler → showApiError 弹"无权访问该工作区" |
+| **切 ws 后 SWR `mutate()`** 替代 reload | `729e10f` | mutateCache(()=>true) 全局刷新, 无白屏切换 |
+| **session 用户无 ws 权限溢出** 修复 | `6fc8f5b` | currentWorkspaceId 对 session-no-ws 返回 NO_WORKSPACE_SENTINEL impossible UUID |
+| **改密 / 创建账号 UX** | `0badf69` | 12 位 crypto 安全密码生成 + 临时密码弹窗 + 一键复制 + 强制改密提示 |
+| **`unauthorized()` 真正中断 handler** | `729e10f` | reply.code().send() 替代纯 return, 避免 401 路径仍跑到 handler 抛二次错 |
+
 ## 🟢 Phase 3 仍**有意延后**
 
 ### 15. 清理 X-API-Key fallback（**已具备开关，硬删除延后**）
 代码里已有 `AUTH_DISABLE_API_KEY=true` env 开关；想要严格只 cookie 时设这个即可。硬删除代码路径会断掉外部 cron / CI 脚本（如 RSS 抓取触发）。
 
 **触发条件**：所有 cron/CI 都走 cookie session 之后再删代码。
+
+### 22. 孤儿 mn_* 子表 workspace_id 派生
+4 张表（`mn_consensus_sides` / `mn_judgments` / `mn_people` / `mn_tension_moments`）schema 没有 meeting_id/scope_id 父键, trigger 037 派生不到, 仍依赖 DEFAULT 兜底.
+
+**当前现实风险很小**: 写入这些表的 INSERT 全在 mn_runs.execute 内部, 即使 workspace_id 泄漏到 default ws, leak 方向是 admin 自己 (default 全员可见), 不会跨真实用户. 等需要严格隔离时再改 INSERT callsite 显式传 workspaceId (`mn_runs.workspace_id`).
+
+### 23. session "记住我" 开关
+计划 30 天默认 ttl 已配合 `/auth/refresh` (每次进入应用自动续期), 实际效果 = "永远不掉线". 不需要再加复选框. 无问题.
 
 ---
 
