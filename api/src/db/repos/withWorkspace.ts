@@ -3,7 +3,8 @@
 // 该模块只提供一组小帮手，避免在每个路由里重复 if (!ws) reply.status(403)...
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { query } from '../connection.js';
+import type { PoolClient } from 'pg';
+import { query, getClient } from '../connection.js';
 
 /**
  * 从已认证请求里取当前 workspace id。
@@ -51,4 +52,46 @@ export async function assertRowInWorkspace(
   const sql = `SELECT 1 FROM "${table}" WHERE "${idColumn}" = $1 AND workspace_id = $2 LIMIT 1`;
   const r = await query(sql, [rowId, workspaceId]);
   return r.rows.length > 0;
+}
+
+/**
+ * RLS 兜底事务包装：在 BEGIN/COMMIT 内 SET LOCAL app.workspace_id, 让
+ * migrations/039 配置的 RLS policy 自动只放行当前 ws + is_shared ws 的行.
+ *
+ * 仅当应用切到非 SUPERUSER 角色 (见 docs/rls-setup.md) 时 RLS 才实际生效;
+ * 当前 SUPERUSER 路径下 RLS 被 bypass, 此函数行为退化为普通事务.
+ *
+ * 使用:
+ *   await withWorkspaceTx(req.auth.workspace.id, async (client) => {
+ *     const r = await client.query('SELECT * FROM tasks');
+ *     return r.rows;
+ *   });
+ *
+ * 注意:
+ *   - workspaceId 必须是 UUID 格式 (运行时校验); 防止 SET LOCAL 注入
+ *   - fn 抛错时自动 ROLLBACK; 所有连接变更随事务清理, 不污染连接池
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function withWorkspaceTx<T>(
+  workspaceId: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!UUID_RE.test(workspaceId)) {
+    throw new Error('withWorkspaceTx: workspaceId must be a UUID');
+  }
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    // SET LOCAL 只能用字面量, 不接 $1 占位符 (PG 限制); UUID 校验过, 拼接安全
+    await client.query(`SET LOCAL app.workspace_id = '${workspaceId}'`);
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
