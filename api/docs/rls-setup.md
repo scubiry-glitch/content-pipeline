@@ -1,5 +1,8 @@
 # RLS (Row-Level Security) 启用指南
 
+> **状态 (2026-04-29): 已完整启用**. 应用通过 `pipeline_app` 角色连接 DB,
+> RLS policy 实际生效. 真实拦截已验证.
+
 ## 现状
 
 migration 039 已落地以下策略到 51 张 P0 表:

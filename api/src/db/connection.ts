@@ -1254,79 +1254,107 @@ async function setupMVPSchema(): Promise<void> {
  * 即使 DB_AUTO_MIGRATE=false 也应被调用（轻量、幂等）。
  */
 export async function setupAuthSchema(): Promise<void> {
-  await query('CREATE EXTENSION IF NOT EXISTS citext').catch(() => {
-    console.warn('[DB] citext extension may not be available, auth will fall back to TEXT email');
-  });
+  // 表存在性预检: 应用角色 (pipeline_app) 没 DDL 权限, 表已建好的情况下
+  // CREATE TABLE IF NOT EXISTS 仍会先抛 "permission denied for schema public"
+  // 警告. 预先 SELECT 信息 schema 跳过, 避免假阳性 warning.
+  const authTableNames = [
+    'users', 'user_identities', 'workspaces', 'workspace_members', 'auth_sessions',
+  ];
+  const existingRes = await query<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables
+       WHERE table_schema='public' AND table_name = ANY($1::text[])`,
+    [authTableNames],
+  ).catch(() => ({ rows: [] as { table_name: string }[] }));
+  const existing = new Set(existingRes.rows.map((r) => r.table_name));
+  const allAuthTablesExist = authTableNames.every((t) => existing.has(t));
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      email           CITEXT UNIQUE NOT NULL,
-      password_hash   TEXT,
-      name            TEXT NOT NULL,
-      avatar_url      TEXT,
-      status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
-      is_super_admin  BOOLEAN NOT NULL DEFAULT FALSE,
-      must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
-      last_login_at   TIMESTAMPTZ,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `).catch((e) => console.warn('[DB] users table skipped:', getErrorMessage(e)));
+  if (allAuthTablesExist) {
+    // 全部都已建好 → 走 seed 路径; 完全跳过 CREATE / EXTENSION
+  } else {
+    await query('CREATE EXTENSION IF NOT EXISTS citext').catch(() => {
+      console.warn('[DB] citext extension may not be available, auth will fall back to TEXT email');
+    });
+  }
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS user_identities (
-      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      provider          TEXT NOT NULL,
-      provider_user_id  TEXT NOT NULL,
-      email_at_provider CITEXT,
-      metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (provider, provider_user_id)
-    )
-  `).catch((e) => console.warn('[DB] user_identities table skipped:', getErrorMessage(e)));
-  await query(`CREATE INDEX IF NOT EXISTS idx_identity_user ON user_identities(user_id)`).catch(() => {});
+  if (!existing.has('users')) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email           CITEXT UNIQUE NOT NULL,
+        password_hash   TEXT,
+        name            TEXT NOT NULL,
+        avatar_url      TEXT,
+        status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+        is_super_admin  BOOLEAN NOT NULL DEFAULT FALSE,
+        must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+        last_login_at   TIMESTAMPTZ,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => console.warn('[DB] users table skipped:', getErrorMessage(e)));
+  }
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name        TEXT NOT NULL,
-      slug        TEXT UNIQUE NOT NULL,
-      owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-      settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `).catch((e) => console.warn('[DB] workspaces table skipped:', getErrorMessage(e)));
+  if (!existing.has('user_identities')) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_identities (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider          TEXT NOT NULL,
+        provider_user_id  TEXT NOT NULL,
+        email_at_provider CITEXT,
+        metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (provider, provider_user_id)
+      )
+    `).catch((e) => console.warn('[DB] user_identities table skipped:', getErrorMessage(e)));
+    await query(`CREATE INDEX IF NOT EXISTS idx_identity_user ON user_identities(user_id)`).catch(() => {});
+  }
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS workspace_members (
-      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      user_id      UUID NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
-      role         TEXT NOT NULL CHECK (role IN ('owner','admin','member')),
-      joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (workspace_id, user_id)
-    )
-  `).catch((e) => console.warn('[DB] workspace_members table skipped:', getErrorMessage(e)));
-  await query(`CREATE INDEX IF NOT EXISTS idx_wm_user ON workspace_members(user_id)`).catch(() => {});
+  if (!existing.has('workspaces')) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name        TEXT NOT NULL,
+        slug        TEXT UNIQUE NOT NULL,
+        owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => console.warn('[DB] workspaces table skipped:', getErrorMessage(e)));
+  }
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS auth_sessions (
-      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      token_hash    TEXT NOT NULL UNIQUE,
-      user_agent    TEXT,
-      ip            INET,
-      current_workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
-      expires_at    TIMESTAMPTZ NOT NULL,
-      revoked_at    TIMESTAMPTZ,
-      last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `).catch((e) => console.warn('[DB] auth_sessions table skipped:', getErrorMessage(e)));
-  await query(`CREATE INDEX IF NOT EXISTS idx_sess_user_active ON auth_sessions(user_id) WHERE revoked_at IS NULL`).catch(() => {});
-  await query(`CREATE INDEX IF NOT EXISTS idx_sess_token_hash ON auth_sessions(token_hash)`).catch(() => {});
+  if (!existing.has('workspace_members')) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS workspace_members (
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        user_id      UUID NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+        role         TEXT NOT NULL CHECK (role IN ('owner','admin','member')),
+        joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (workspace_id, user_id)
+      )
+    `).catch((e) => console.warn('[DB] workspace_members table skipped:', getErrorMessage(e)));
+    await query(`CREATE INDEX IF NOT EXISTS idx_wm_user ON workspace_members(user_id)`).catch(() => {});
+  }
+
+  if (!existing.has('auth_sessions')) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash    TEXT NOT NULL UNIQUE,
+        user_agent    TEXT,
+        ip            INET,
+        current_workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
+        expires_at    TIMESTAMPTZ NOT NULL,
+        revoked_at    TIMESTAMPTZ,
+        last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => console.warn('[DB] auth_sessions table skipped:', getErrorMessage(e)));
+    await query(`CREATE INDEX IF NOT EXISTS idx_sess_user_active ON auth_sessions(user_id) WHERE revoked_at IS NULL`).catch(() => {});
+    await query(`CREATE INDEX IF NOT EXISTS idx_sess_token_hash ON auth_sessions(token_hash)`).catch(() => {});
+  }
 
   // 种子：默认 admin + Default workspace + 至少一个 workspace 给已存在但落单的 admin
   // 幂等：基于"是否存在 super_admin 用户"和"该 admin 是否有任何 workspace"两个条件

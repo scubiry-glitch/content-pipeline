@@ -119,11 +119,12 @@ copilot_sessions / copilot_messages / copilot_contexts / copilot_usage_stats —
 
 ## ✅ Phase 3 残留收尾（2026-04-29）
 
-### 14. PostgreSQL Row-Level Security
+### 14. PostgreSQL Row-Level Security ✅ **生效中**（2026-04-29）
 - migration 039 ✅: 51 张 P0 表 ENABLE + FORCE RLS, ws_isolation policy 默认放行 + SET 后限制 (current ws ∪ is_shared ws)
 - helper `withWorkspaceTx` ✅: BEGIN + SET LOCAL + COMMIT 模式, UUID 校验防注入
-- ⚠️ **结构性限制**: 现 DB 用户 `scubiry` 是 SUPERUSER, RLS 自动 bypass. 完整启用需创建非 SUPERUSER 角色 `pipeline_app` + 改 `api/.env` 的 `DB_USER`. 详见 `api/docs/rls-setup.md`.
-- 当前定位: "备用基础设施" — 策略已就位, 等切角色生效
+- 角色切换 ✅: `pipeline_app` (rolsuper=false rolbypassrls=false) 已建好, pg_hba.conf 已加条目, api 已切到此用户连接
+- 真实生效验证 ✅: 关掉 default is_shared + SET 不存在 ws → tasks count 从 24 → 0; 还原 is_shared 后 → 24
+- `setupAuthSchema` 在表已存在时静默跳过 CREATE (避免 pipeline_app 触发 "permission denied for schema public" 警告)
 
 ### 17. workspace_id DROP DEFAULT
 - migration 037 ✅: 32 张子表加 BEFORE INSERT trigger 从父表 (assets/mn_scopes/tasks/meeting_note_sources) 派生 workspace_id
