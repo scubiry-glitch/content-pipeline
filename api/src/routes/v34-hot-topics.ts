@@ -3,17 +3,36 @@ import { FastifyInstance } from 'fastify';
 import { hotTopicService } from '../services/hotTopicService.js';
 import { getTopicUnificationService } from '../services/topicUnification.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 
 const topicUnification = getTopicUnificationService();
 
 export async function v34HotTopicRoutes(fastify: FastifyInstance) {
+  // Workspace 守卫: :id 路径验证 hot_topic 属于当前 ws, 跨 ws 一律 404
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const id = params.id;
+    if (!id) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return;
+    const ok = await assertRowInWorkspace('hot_topics', 'id', id, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Hot topic not found' });
+    }
+  });
+
   // 获取热点列表
   fastify.get('/', { preHandler: authenticate }, async (request) => {
     const { trend, limit } = request.query as any;
 
     const hotTopics = await hotTopicService.getHotTopics({
       trend,
-      limit: limit ? parseInt(limit) : 20
+      limit: limit ? parseInt(limit) : 20,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
 
     return { items: hotTopics };
@@ -23,7 +42,8 @@ export async function v34HotTopicRoutes(fastify: FastifyInstance) {
   fastify.get('/from-rss', { preHandler: authenticate }, async (request) => {
     const { limit } = request.query as any;
     const hotTopics = await hotTopicService.getHotTopicsFromRss(
-      limit ? parseInt(limit) : 10
+      limit ? parseInt(limit) : 10,
+      currentWorkspaceId(request) ?? undefined,
     );
     return { items: hotTopics, total: hotTopics.length };
   });

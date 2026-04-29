@@ -19,12 +19,13 @@ export interface HotTopicFilters {
   trend?: 'up' | 'stable' | 'down';
   limit?: number;
   followedBy?: string;
+  workspaceId?: string;
 }
 
 export class HotTopicService {
   // 获取热点列表
   async getHotTopics(filters: HotTopicFilters = {}): Promise<HotTopic[]> {
-    const { trend, limit = 20, followedBy } = filters;
+    const { trend, limit = 20, followedBy, workspaceId } = filters;
 
     let sql = `
       SELECT ht.*,
@@ -34,6 +35,11 @@ export class HotTopicService {
     `;
     const params: any[] = [];
     const conditions: string[] = [];
+
+    if (workspaceId) {
+      params.push(workspaceId);
+      conditions.push(`ht.workspace_id = $${params.length}`);
+    }
 
     if (trend) {
       params.push(trend);
@@ -166,9 +172,11 @@ export class HotTopicService {
   }
 
   // 从 RSS 数据获取热点话题
-  async getHotTopicsFromRss(limit: number = 10): Promise<any[]> {
+  async getHotTopicsFromRss(limit: number = 10, workspaceId?: string): Promise<any[]> {
+    const wsClause = workspaceId ? ' AND workspace_id = $2' : '';
+    const params = workspaceId ? [limit, workspaceId] : [limit];
     const result = await query(
-      `SELECT 
+      `SELECT
         id,
         title,
         source_name as source,
@@ -182,10 +190,10 @@ export class HotTopicService {
         created_at
       FROM rss_items
       WHERE (is_deleted = false OR is_deleted IS NULL)
-        AND hot_score > 0
+        AND hot_score > 0${wsClause}
       ORDER BY hot_score DESC, published_at DESC
       LIMIT $1`,
-      [limit]
+      params
     );
 
     return result.rows.map(row => ({
