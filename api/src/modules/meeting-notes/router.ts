@@ -11,6 +11,7 @@ import { createMeetingChatRoutes } from './meetingChat.js';
 import { authenticate } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -78,6 +79,55 @@ function emptyAxes(meetingId: string) {
 
 export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
   return async function meetingNotesRouter(fastify: FastifyInstance) {
+    // Workspace 守卫: 按 URL 路径分派到对应表的 ws 校验, 跨 ws 一律 404
+    // 涵盖 /meetings/:id (assets), /scopes/:id (mn_scopes), /people/:id (mn_people),
+    //      /runs/:id (mn_runs), /schedules/:id (mn_schedules)
+    // api-key 路径无 workspace 跳过 (admin 全局视图)
+    fastify.addHook('preHandler', async (request, reply) => {
+      const params = (request.params as Record<string, string> | undefined) ?? {};
+      const id = params.id;
+      if (!id) return;
+
+      // Plugin 挂载在 /api/v1/meeting-notes 之下, 用 url 检测 collection 段
+      // request.url 包含 query string, 先剥掉
+      const fullUrl = (request.url || '').split('?')[0];
+      // 去掉挂载 prefix; 保险起见允许任意前缀, 用 indexOf 查找最后一个集合段
+      const seg = fullUrl.split('/').filter(Boolean); // [api, v1, meeting-notes, meetings, <id>, detail?]
+      const idxId = seg.indexOf(id);
+      if (idxId <= 0) return;
+      const collection = seg[idxId - 1];
+
+      let table: string | null = null;
+      const idCol = 'id';
+      switch (collection) {
+        case 'meetings':  table = 'assets'; break;
+        case 'scopes':    table = 'mn_scopes'; break;
+        case 'people':    table = 'mn_people'; break;
+        case 'runs':      table = 'mn_runs'; break;
+        case 'schedules': table = 'mn_schedules'; break;
+        default: return;
+      }
+
+      if (!request.auth) {
+        await authenticate(request, reply);
+        if (reply.sent) return;
+      }
+      const wsId = currentWorkspaceId(request);
+      if (!wsId) return;
+
+      // assets.id 是 varchar (e.g. UUID 或 'asset_xxx')；其它 mn_* 是 uuid
+      // assertRowInWorkspace 用 text 绑定 + Postgres 自动 cast
+      try {
+        const ok = await assertRowInWorkspace(table, idCol, id, wsId);
+        if (!ok) {
+          reply.code(404).send({ error: 'Not Found' });
+        }
+      } catch {
+        // UUID 格式错误等 — 当作不存在
+        reply.code(404).send({ error: 'Not Found' });
+      }
+    });
+
     // --------------------------------------------------------
     // Health & module info
     // --------------------------------------------------------
@@ -120,6 +170,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const limit = Math.min(100, parseInt(q.limit ?? '50', 10));
       // ?status=active（默认 · 排除归档）/ archived（仅归档）/ all（全部）
       const status = q.status === 'archived' || q.status === 'all' ? q.status : 'active';
+      const wsId = currentWorkspaceId(request);
       try {
         const r = await engine.deps.db.query(
           `SELECT
@@ -195,16 +246,19 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
              OR ($2::text = 'active'   AND COALESCE((a.metadata->>'archived')::boolean, false) = false)
              OR ($2::text = 'archived' AND COALESCE((a.metadata->>'archived')::boolean, false) = true)
            )
+           AND ($3::uuid IS NULL OR a.workspace_id = $3::uuid)
          ORDER BY a.created_at DESC
          LIMIT $1`,
-          [limit, status],
+          [limit, status, wsId],
         );
         // library-scoped runs (not attached to a specific meeting asset)
         const libR = await engine.deps.db.query(
           `SELECT id, scope_kind, axis, state, created_at, finished_at, error_message, metadata
-         FROM mn_runs WHERE scope_kind = 'library'
+         FROM mn_runs
+         WHERE scope_kind = 'library'
+           AND ($2::uuid IS NULL OR workspace_id = $2::uuid)
          ORDER BY created_at DESC LIMIT $1`,
-          [Math.min(limit, 20)],
+          [Math.min(limit, 20), wsId],
         );
 
         // Phase 16 · 库列表 mini-stat：count tension / consensus / divergence
@@ -277,12 +331,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.post('/meetings', { preHandler: authenticate }, async (request, reply) => {
       const body = request.body as { title?: string; meetingKind?: string; metadata?: Record<string, unknown> };
       const meta = { meeting_kind: body.meetingKind ?? 'general', ...(body.metadata ?? {}) };
-      const r = await engine.deps.db.query(
-        `INSERT INTO assets (id, type, title, content, content_type, metadata)
-         VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb)
-         RETURNING id, title, created_at, metadata`,
-        [body.title ?? 'New Meeting', JSON.stringify(meta)],
-      );
+      const wsId = currentWorkspaceId(request);
+      const r = wsId
+        ? await engine.deps.db.query(
+            `INSERT INTO assets (id, type, title, content, content_type, metadata, workspace_id)
+             VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb, $3)
+             RETURNING id, title, created_at, metadata`,
+            [body.title ?? 'New Meeting', JSON.stringify(meta), wsId],
+          )
+        : await engine.deps.db.query(
+            `INSERT INTO assets (id, type, title, content, content_type, metadata)
+             VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb)
+             RETURNING id, title, created_at, metadata`,
+            [body.title ?? 'New Meeting', JSON.stringify(meta)],
+          );
       reply.status(201);
       return r.rows[0];
     });
@@ -830,6 +892,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           items: await engine.scopes.list({
             kind: q.kind as any,
             status: q.status as any,
+            workspaceId: currentWorkspaceId(request) ?? undefined,
           }),
         };
       } catch (error) {
@@ -862,6 +925,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         stewardPersonIds: body.stewardPersonIds,
         description: body.description,
         metadata: body.metadata,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
       });
       reply.status(201);
       return created;

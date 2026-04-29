@@ -29,6 +29,7 @@ export interface CreateScopeInput {
   stewardPersonIds?: string[];
   description?: string;
   metadata?: Record<string, any>;
+  workspaceId?: string;
 }
 
 export interface UpdateScopeInput {
@@ -57,11 +58,12 @@ function mapScope(row: Record<string, any>): ScopeRow {
 export class ScopeService {
   constructor(private readonly deps: MeetingNotesDeps) {}
 
-  async list(filter: { kind?: ScopeKind; status?: ScopeStatus } = {}): Promise<ScopeRow[]> {
+  async list(filter: { kind?: ScopeKind; status?: ScopeStatus; workspaceId?: string } = {}): Promise<ScopeRow[]> {
     const where: string[] = [];
     const params: any[] = [];
-    if (filter.kind)   { params.push(filter.kind);   where.push(`kind = $${params.length}`); }
-    if (filter.status) { params.push(filter.status); where.push(`status = $${params.length}`); }
+    if (filter.workspaceId) { params.push(filter.workspaceId); where.push(`workspace_id = $${params.length}`); }
+    if (filter.kind)        { params.push(filter.kind);        where.push(`kind = $${params.length}`); }
+    if (filter.status)      { params.push(filter.status);      where.push(`status = $${params.length}`); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const r = await this.deps.db.query(
       `SELECT * FROM mn_scopes ${clause} ORDER BY created_at DESC`,
@@ -84,20 +86,36 @@ export class ScopeService {
   }
 
   async create(input: CreateScopeInput): Promise<ScopeRow> {
-    const r = await this.deps.db.query(
-      `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-       RETURNING *`,
-      [
-        input.kind,
-        input.slug,
-        input.name,
-        input.status ?? 'active',
-        input.stewardPersonIds ?? [],
-        input.description ?? null,
-        JSON.stringify(input.metadata ?? {}),
-      ],
-    );
+    const r = input.workspaceId
+      ? await this.deps.db.query(
+          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata, workspace_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+           RETURNING *`,
+          [
+            input.kind,
+            input.slug,
+            input.name,
+            input.status ?? 'active',
+            input.stewardPersonIds ?? [],
+            input.description ?? null,
+            JSON.stringify(input.metadata ?? {}),
+            input.workspaceId,
+          ],
+        )
+      : await this.deps.db.query(
+          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+           RETURNING *`,
+          [
+            input.kind,
+            input.slug,
+            input.name,
+            input.status ?? 'active',
+            input.stewardPersonIds ?? [],
+            input.description ?? null,
+            JSON.stringify(input.metadata ?? {}),
+          ],
+        );
     return mapScope(r.rows[0]);
   }
 
