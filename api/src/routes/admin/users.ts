@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../../db/connection.js';
 import { hashPassword } from '../../services/auth/passwords.js';
 import { requireSuperAdmin } from '../../middleware/auth.js';
+import { writeAuditEvent } from '../../services/auth/audit.js';
 
 export async function adminUserRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', requireSuperAdmin);
@@ -60,6 +61,13 @@ export async function adminUserRoutes(fastify: FastifyInstance) {
            VALUES ($1, 'password', $1::text, $2)`,
         [userId, email]
       );
+      await writeAuditEvent({
+        event: 'user.create',
+        userId: request.auth?.user?.id ?? null,
+        email: request.auth?.user?.email ?? null,
+        request,
+        metadata: { newUserId: userId, newUserEmail: email, isSuperAdmin: !!body.isSuperAdmin },
+      });
       reply.status(201);
       return {
         id: userId,
@@ -122,6 +130,22 @@ export async function adminUserRoutes(fastify: FastifyInstance) {
     // 禁用用户时吊销其所有 session
     if (body.status === 'disabled') {
       await query(`UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, [id]);
+      await writeAuditEvent({
+        event: 'user.disable',
+        userId: request.auth?.user?.id ?? null,
+        email: request.auth?.user?.email ?? null,
+        request,
+        metadata: { targetUserId: id },
+      });
+    }
+    if (body.password !== undefined) {
+      await writeAuditEvent({
+        event: 'password.reset',
+        userId: request.auth?.user?.id ?? null,
+        email: request.auth?.user?.email ?? null,
+        request,
+        metadata: { targetUserId: id },
+      });
     }
     return { ok: true };
   });

@@ -8,6 +8,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
+import { writeAuditEvent } from '../services/auth/audit.js';
 
 type Role = 'owner' | 'admin' | 'member';
 
@@ -242,6 +243,13 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
 
     // 防护 3: 删除会导致用户没任何 workspace? 简化处理: 不主动阻止, 让 UI 引导
     await query(`DELETE FROM workspaces WHERE id = $1`, [id]);
+    await writeAuditEvent({
+      event: 'workspace.delete',
+      userId: request.auth?.user?.id ?? null,
+      email: request.auth?.user?.email ?? null,
+      request,
+      metadata: { workspaceId: id, slug: wsRow.rows[0].slug },
+    });
     return { ok: true };
   });
 

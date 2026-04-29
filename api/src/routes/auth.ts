@@ -13,6 +13,11 @@ import {
   SESSION_TTL_DAYS,
 } from '../services/auth/sessions.js';
 import { authenticate } from '../middleware/auth.js';
+import {
+  writeAuditEvent,
+  checkEmailLock,
+  escalateLockIfNeeded,
+} from '../services/auth/audit.js';
 
 interface LoginBody {
   email?: string;
@@ -45,6 +50,19 @@ export async function authRoutes(fastify: FastifyInstance) {
       return { error: 'Bad Request', message: 'email and password required', code: 'INVALID_INPUT' };
     }
 
+    // 锁定检查: 15min 内 5 次失败 → 锁 30min
+    const lock = await checkEmailLock(email);
+    if (lock.locked) {
+      reply.status(423);
+      reply.header('Retry-After', String(lock.retryAfterSeconds ?? 1800));
+      return {
+        error: 'Locked',
+        message: `Too many failed attempts; account temporarily locked. Retry in ${lock.retryAfterSeconds}s.`,
+        code: 'ACCOUNT_LOCKED',
+        retryAfterSeconds: lock.retryAfterSeconds,
+      };
+    }
+
     const userRes = await query<{
       id: string;
       email: string;
@@ -60,13 +78,44 @@ export async function authRoutes(fastify: FastifyInstance) {
     );
     const user = userRes.rows[0];
     if (!user || user.status !== 'active') {
-      reply.status(401);
-      return { error: 'Unauthorized', message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' };
+      await writeAuditEvent({
+        event: 'login.failure',
+        email,
+        request,
+        metadata: { reason: !user ? 'no_such_user' : 'user_disabled' },
+      });
+      const escalation = await escalateLockIfNeeded(email, request);
+      reply.status(escalation.lockJustTriggered ? 423 : 401);
+      if (escalation.lockJustTriggered) {
+        reply.header('Retry-After', String(escalation.retryAfterSeconds));
+      }
+      return {
+        error: escalation.lockJustTriggered ? 'Locked' : 'Unauthorized',
+        message: 'Invalid credentials',
+        code: escalation.lockJustTriggered ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS',
+        ...(escalation.lockJustTriggered ? { retryAfterSeconds: escalation.retryAfterSeconds } : {}),
+      };
     }
     const ok = await verifyPassword(password, user.password_hash);
     if (!ok) {
-      reply.status(401);
-      return { error: 'Unauthorized', message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' };
+      await writeAuditEvent({
+        event: 'login.failure',
+        email,
+        userId: user.id,
+        request,
+        metadata: { reason: 'wrong_password' },
+      });
+      const escalation = await escalateLockIfNeeded(email, request);
+      reply.status(escalation.lockJustTriggered ? 423 : 401);
+      if (escalation.lockJustTriggered) {
+        reply.header('Retry-After', String(escalation.retryAfterSeconds));
+      }
+      return {
+        error: escalation.lockJustTriggered ? 'Locked' : 'Unauthorized',
+        message: 'Invalid credentials',
+        code: escalation.lockJustTriggered ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS',
+        ...(escalation.lockJustTriggered ? { retryAfterSeconds: escalation.retryAfterSeconds } : {}),
+      };
     }
 
     // 拿到该用户加入的 workspaces，挑第一个作为 current
@@ -90,6 +139,13 @@ export async function authRoutes(fastify: FastifyInstance) {
     await query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [user.id]);
     setSessionCookie(reply, token, expiresAt);
 
+    await writeAuditEvent({
+      event: 'login.success',
+      email: user.email,
+      userId: user.id,
+      request,
+    });
+
     const session = await resolveSession(token);
     return {
       user: session?.user,
@@ -104,6 +160,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       await revokeSession(request.auth.sessionId);
     }
     clearSessionCookie(reply);
+    await writeAuditEvent({
+      event: 'logout',
+      userId: request.auth?.user?.id ?? null,
+      email: request.auth?.user?.email ?? null,
+      request,
+    });
     return { ok: true };
   });
 
@@ -171,6 +233,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       `UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2`,
       [hash, auth.user.id]
     );
+    await writeAuditEvent({
+      event: 'password.change',
+      userId: auth.user.id,
+      email: auth.user.email,
+      request,
+    });
     return { ok: true };
   });
 
