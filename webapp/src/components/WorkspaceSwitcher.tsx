@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type AuthWorkspace } from '../contexts/AuthContext';
 import { authClient } from '../api/client';
+import { openWelcomeGuide } from './FirstLoginGuide';
 
 const roleLabel: Record<AuthWorkspace['role'], string> = {
   owner: '所有者',
@@ -207,6 +208,15 @@ export function WorkspaceSwitcher() {
             onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
             <span style={{ width: 14 }}>⚙</span> 管理工作区…
+          </button>
+
+          <button
+            onClick={() => { setOpen(false); openWelcomeGuide(); }}
+            style={menuItemStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <span style={{ width: 14 }}>👋</span> 查看入门引导
           </button>
 
           <div style={{ borderTop: '1px solid #e2e8f0', margin: '4px 0' }} />

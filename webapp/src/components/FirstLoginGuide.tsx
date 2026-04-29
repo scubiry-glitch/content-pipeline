@@ -3,17 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const STORAGE_KEY = 'cp.welcome.dismissed';
+const OPEN_EVENT = 'cp:open-welcome';
+
+/** 给其他组件 (例如顶栏下拉菜单) 用的: 唤起欢迎引导 */
+export function openWelcomeGuide() {
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
 
 /**
  * 首次登录引导:
  * - 用户改完初始密码 (mustChangePassword: false) 后, 在主界面 sticky 顶部显示一次
  * - 引导用户进 /settings/workspaces 验证默认 ws / 进 /admin/users 创建团队成员
- * - 关闭后写 localStorage, 不再弹出
+ * - 关闭后写 localStorage, 默认登录不再弹出
+ * - 用户随时可在 顶栏下拉菜单 → "查看入门引导" 重新唤起 (派发 cp:open-welcome 事件)
  */
 export function FirstLoginGuide() {
   const { user, currentWorkspace } = useAuth();
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(true); // 默认关 (避免闪现)
+  const [forceOpen, setForceOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -23,11 +31,23 @@ export function FirstLoginGuide() {
     setDismissed(localStorage.getItem(key) === '1');
   }, [user]);
 
-  if (!user || user.mustChangePassword || dismissed) return null;
+  // 监听菜单触发的"重新唤起"
+  useEffect(() => {
+    const handler = () => {
+      setForceOpen(true);
+      setDismissed(false);
+    };
+    window.addEventListener(OPEN_EVENT, handler);
+    return () => window.removeEventListener(OPEN_EVENT, handler);
+  }, []);
+
+  if (!user || user.mustChangePassword) return null;
+  if (!forceOpen && dismissed) return null;
 
   const dismiss = () => {
     localStorage.setItem(`${STORAGE_KEY}:${user.id}`, '1');
     setDismissed(true);
+    setForceOpen(false);
   };
 
   return (
