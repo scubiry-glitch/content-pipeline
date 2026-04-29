@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, type AuthWorkspace } from '../contexts/AuthContext';
 import { authClient } from '../api/client';
 import { openWelcomeGuide } from './FirstLoginGuide';
+import { mutateCache } from '../hooks/useSWRConfig';
 
 const roleLabel: Record<AuthWorkspace['role'], string> = {
   owner: '所有者',
@@ -42,8 +43,11 @@ export function WorkspaceSwitcher() {
       setBusy(true);
       await switchWorkspace(wsId);
       setOpen(false);
-      // 简单粗暴：刷新页面让所有 SWR/列表重新拉取（避免遗漏 cache 失效）
-      window.location.reload();
+      // 全局 SWR mutate (传 () => true 命中所有 cache key) 让数据无白屏刷新.
+      // 比 window.location.reload() 体验好, 但前提是所有列表都用 SWR — 若有
+      // 自管理 state 的页面 (e.g. useState 直接 setItems), 需要它们各自监听
+      // currentWorkspace 变化重拉.
+      await mutateCache(() => true);
     } finally {
       setBusy(false);
     }
@@ -60,7 +64,7 @@ export function WorkspaceSwitcher() {
       setNewName('');
       setCreating(false);
       setOpen(false);
-      window.location.reload();
+      await mutateCache(() => true);
     } catch (e: any) {
       alert(e?.response?.data?.message || '创建失败');
     } finally {

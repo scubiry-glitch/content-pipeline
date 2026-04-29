@@ -135,3 +135,21 @@ export async function revokeSession(sessionId: string): Promise<void> {
 export async function setSessionWorkspace(sessionId: string, workspaceId: string): Promise<void> {
   await query(`UPDATE auth_sessions SET current_workspace_id = $1 WHERE id = $2`, [workspaceId, sessionId]);
 }
+
+/**
+ * 续期 session: 把 expires_at 推后到 now + SESSION_TTL_DAYS.
+ * 调用方拿到新 expiresAt 用来更新 cookie 的 maxAge.
+ * 已 revoked / 已过期的 session 不续期, 返回 null.
+ */
+export async function refreshSession(sessionId: string): Promise<{ expiresAt: Date } | null> {
+  const newExpiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const r = await query<{ id: string }>(
+    `UPDATE auth_sessions
+        SET expires_at = $1, last_seen_at = NOW()
+      WHERE id = $2 AND revoked_at IS NULL AND expires_at > NOW()
+      RETURNING id`,
+    [newExpiresAt, sessionId],
+  );
+  if (r.rows.length === 0) return null;
+  return { expiresAt: newExpiresAt };
+}

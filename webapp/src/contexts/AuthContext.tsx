@@ -2,7 +2,8 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
   type ReactNode,
 } from 'react';
-import { authClient, setOnUnauthorized } from '../api/client';
+import { authClient, setOnUnauthorized, setOnWorkspaceForbidden } from '../api/client';
+import { showApiError } from '../components/ApiErrorToast';
 
 export interface AuthUser {
   id: string;
@@ -85,6 +86,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => setOnUnauthorized(null);
   }, []);
+
+  // Wire 403 WORKSPACE_FORBIDDEN — 弹专属 toast 而不是默默吞
+  useEffect(() => {
+    setOnWorkspaceForbidden((message) => {
+      showApiError('无权访问该工作区', message || '请切换到有权限的 workspace 后重试');
+    });
+    return () => setOnWorkspaceForbidden(null);
+  }, []);
+
+  // 已登录时主动调一次 /auth/refresh 把 30 天 expires_at 推后, 防止长时间不操作被踢
+  useEffect(() => {
+    if (!user || via !== 'session') return;
+    authClient.post('/auth/refresh').catch(() => { /* 静默 */ });
+  }, [user?.id, via]);
 
   const login = useCallback(async (email: string, password: string) => {
     await authClient.post('/auth/login', { email, password });

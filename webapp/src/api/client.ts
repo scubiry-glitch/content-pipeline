@@ -34,16 +34,30 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
+let onWorkspaceForbidden: ((message: string) => void) | null = null;
+export function setOnWorkspaceForbidden(handler: ((message: string) => void) | null) {
+  onWorkspaceForbidden = handler;
+}
+
+function handleAuthError(error: any) {
+  const status = error.response?.status;
+  const code = error.response?.data?.code;
+  const message: string = error.response?.data?.message || '';
+  const url: string = error.config?.url || '';
+  if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
+    onUnauthorized?.();
+  }
+  if (status === 403 && code === 'WORKSPACE_FORBIDDEN') {
+    onWorkspaceForbidden?.(message || '无权访问该工作区');
+  }
+}
+
 client.interceptors.response.use(
   (response) => {
     return response.data;
   },
   (error) => {
-    const status = error.response?.status;
-    const url: string = error.config?.url || '';
-    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
-      onUnauthorized?.();
-    }
+    handleAuthError(error);
     console.error('[API] Response error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
@@ -59,11 +73,7 @@ export const authClient = axios.create({
 authClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const status = error.response?.status;
-    const url: string = error.config?.url || '';
-    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
-      onUnauthorized?.();
-    }
+    handleAuthError(error);
     return Promise.reject(error);
   },
 );

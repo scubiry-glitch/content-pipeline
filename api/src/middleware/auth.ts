@@ -75,12 +75,13 @@ async function tryResolveAuth(request: FastifyRequest): Promise<RequestAuth | nu
 }
 
 function unauthorized(reply: FastifyReply, message = 'Authentication required') {
-  reply.status(401);
-  return {
+  // 必须 reply.send() 才会真的中断后续 handler; 单独 return 在某些场景仍会让
+  // handler 跑下去, 然后因 request.auth=undefined 抛 "Cannot read properties of undefined".
+  return reply.code(401).send({
     error: 'Unauthorized',
     message,
     code: 'UNAUTHORIZED',
-  };
+  });
 }
 
 /** 强制认证：未通过则 401。 */

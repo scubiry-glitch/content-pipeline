@@ -9,6 +9,7 @@ import {
   revokeSession,
   setSessionWorkspace,
   resolveSession,
+  refreshSession,
   SESSION_COOKIE_NAME,
   SESSION_TTL_DAYS,
 } from '../services/auth/sessions.js';
@@ -184,6 +185,24 @@ export async function authRoutes(fastify: FastifyInstance) {
       workspaces: request.auth?.workspaces,
       via: request.auth?.via,
     };
+  });
+
+  // POST /api/auth/refresh — 主动续期 session, 把 expires_at 推后到 now + 30d
+  // 前端在 401 之前 (例如 7 日内即将过期时) 调一次, 防止用户因长时间不操作被踢
+  fastify.post('/refresh', { preHandler: authenticate }, async (request, reply) => {
+    const auth = request.auth!;
+    if (auth.via !== 'session' || !auth.sessionId) {
+      reply.status(403);
+      return { error: 'Forbidden', message: 'Only session users can refresh', code: 'FORBIDDEN' };
+    }
+    const r = await refreshSession(auth.sessionId);
+    if (!r) {
+      reply.status(401);
+      return { error: 'Unauthorized', message: 'Session expired or revoked', code: 'SESSION_EXPIRED' };
+    }
+    // 重新设 cookie maxAge / expires
+    setSessionCookie(reply, request.cookies?.[SESSION_COOKIE_NAME] || '', r.expiresAt);
+    return { ok: true, expiresAt: r.expiresAt };
   });
 
   // POST /api/auth/switch-workspace { workspaceId }
