@@ -39,6 +39,7 @@ export interface MeetingNoteChannelDeps {
 export interface ListSourceFilters {
   kind?: MeetingNoteSourceKind;
   isActive?: boolean;
+  workspaceId?: string;
 }
 
 export interface CreateSourceInput {
@@ -48,6 +49,7 @@ export interface CreateSourceInput {
   isActive?: boolean;
   scheduleCron?: string | null;
   createdBy?: string | null;
+  workspaceId?: string;
 }
 
 export interface UpdateSourceInput {
@@ -125,6 +127,10 @@ export class MeetingNoteChannelService {
   async listSources(filter: ListSourceFilters = {}): Promise<MeetingNoteSource[]> {
     const where: string[] = [];
     const params: any[] = [];
+    if (filter.workspaceId) {
+      params.push(filter.workspaceId);
+      where.push(`workspace_id = $${params.length}`);
+    }
     if (filter.kind) {
       params.push(filter.kind);
       where.push(`kind = $${params.length}`);
@@ -153,20 +159,37 @@ export class MeetingNoteChannelService {
     if (!VALID_KINDS.includes(input.kind)) {
       throw new Error(`Unsupported source kind: ${input.kind}`);
     }
-    const result = await this.query(
-      `INSERT INTO meeting_note_sources
-         (name, kind, config, is_active, schedule_cron, created_by)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6)
-       RETURNING *`,
-      [
-        input.name,
-        input.kind,
-        JSON.stringify(input.config ?? {}),
-        input.isActive ?? true,
-        input.scheduleCron ?? null,
-        input.createdBy ?? null,
-      ],
-    );
+    // workspace_id 显式传入；不传时由表的 DEFAULT (default workspace) 兜底
+    const result = input.workspaceId
+      ? await this.query(
+          `INSERT INTO meeting_note_sources
+             (name, kind, config, is_active, schedule_cron, created_by, workspace_id)
+           VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            input.name,
+            input.kind,
+            JSON.stringify(input.config ?? {}),
+            input.isActive ?? true,
+            input.scheduleCron ?? null,
+            input.createdBy ?? null,
+            input.workspaceId,
+          ],
+        )
+      : await this.query(
+          `INSERT INTO meeting_note_sources
+             (name, kind, config, is_active, schedule_cron, created_by)
+           VALUES ($1, $2, $3::jsonb, $4, $5, $6)
+           RETURNING *`,
+          [
+            input.name,
+            input.kind,
+            JSON.stringify(input.config ?? {}),
+            input.isActive ?? true,
+            input.scheduleCron ?? null,
+            input.createdBy ?? null,
+          ],
+        );
     const created = mapSourceRow(result.rows[0]);
     await this.fireChanged();
     return created;

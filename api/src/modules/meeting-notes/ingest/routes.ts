@@ -17,6 +17,7 @@ import {
   type MeetingNoteChannelService as Service,
 } from './meetingNoteChannelService.js';
 import { authenticate } from '../../../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
 
 export interface MeetingNotesRouteOptions extends FastifyPluginOptions {
   service?: Service;
@@ -57,12 +58,30 @@ export async function meetingNotesRoutes(
   const svc: Service = opts.service ?? new MeetingNoteChannelService();
   const p = opts.pathPrefix ?? '/meeting-note-sources';
 
+  // Workspace 守卫: :id 路径验证 source 属于当前 workspace, 跨 ws 一律 404
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const id = params.id;
+    if (!id) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return;
+    const ok = await assertRowInWorkspace('meeting_note_sources', 'id', id, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Not Found', message: `Source ${id} not found` });
+    }
+  });
+
   // List sources
   fastify.get(p, { preHandler: authenticate }, async (request) => {
     const q = request.query as { kind?: string; active?: string };
-    const filter: { kind?: any; isActive?: boolean } = {};
+    const filter: { kind?: any; isActive?: boolean; workspaceId?: string } = {};
     if (q.kind) filter.kind = q.kind;
     if (q.active !== undefined) filter.isActive = q.active === 'true';
+    filter.workspaceId = currentWorkspaceId(request) ?? undefined;
     const items = await svc.listSources(filter);
     return { items };
   });
@@ -78,6 +97,7 @@ export async function meetingNotesRoutes(
         isActive: body.isActive,
         scheduleCron: body.scheduleCron,
         createdBy: body.createdBy,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
       });
       reply.status(201);
       return created;
