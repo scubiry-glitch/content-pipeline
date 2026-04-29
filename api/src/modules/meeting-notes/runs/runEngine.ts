@@ -18,6 +18,7 @@ import type {
 } from '../types.js';
 import { RunQueue } from './runQueue.js';
 import { VersionStore } from './versionStore.js';
+import { hostname as osHostname } from 'node:os';
 import { ALL_AXES, AXIS_SUBDIMS, runAxisAll } from '../axes/registry.js';
 import type { ComputeResult } from '../axes/_shared.js';
 import { llmUsageStorage, type LLMUsageCounter } from '../adapters/pipeline.js';
@@ -270,17 +271,27 @@ export class RunEngine {
     let killedAlive = 0;
     let markedDead = 0;
     const myPid = process.pid;
+    const myHost = osHostname();
     try {
+      // 跨机器场景下：不能去扫别的机器 spawn 的 claude（process.kill 只能查本机 pid）。
+      // 只扫"apiHost = 我.hostname AND apiPid != 我.pid"的行 —— 那一定是同机器上一辈进程留下的孤儿。
+      // 老 run（没 apiHost 字段，例如 metadata 里只有 cliPid 没 apiHost）也只在 apiHost 缺失时才扫，
+      // 假定它是本机老格式（向后兼容）。
       const r = await this.deps.db.query(
         `SELECT id,
                 (metadata->>'cliPid')::int  AS cli_pid,
                 (metadata->>'cliPgid')::int AS cli_pgid,
-                (metadata->>'apiPid')::int  AS api_pid
+                (metadata->>'apiPid')::int  AS api_pid,
+                metadata->>'apiHost'        AS api_host
            FROM mn_runs
           WHERE state = 'running'
             AND metadata ? 'cliPid'
-            AND (metadata->>'apiPid')::int IS DISTINCT FROM $1::int`,
-        [myPid],
+            AND (metadata->>'apiPid')::int IS DISTINCT FROM $1::int
+            AND (
+              metadata->>'apiHost' = $2::text       -- 同机器且 pid 不同 → 上一辈孤儿
+              OR NOT (metadata ? 'apiHost')         -- 老 run 缺字段，按"同机器"处理（向后兼容）
+            )`,
+        [myPid, myHost],
       );
       for (const row of r.rows) {
         const pid = Number(row.cli_pid);
@@ -1049,6 +1060,8 @@ export class RunEngine {
               participantsFromParse: (parseResult.participants ?? []).map((p) => ({ id: p.id, name: p.name })),
               resumeSessionId: meetingSessionId,
               promptKind: 'meeting',
+              scopeKind: payload.scope.kind,
+              scopeId: payload.scope.id ?? payload.meetingId,
             },
             {
               writeStep: async (key, ratio, msg) => {
@@ -1324,6 +1337,8 @@ export class RunEngine {
                   resumeSessionId: scopeRow.sessionId,
                   promptKind: 'scope',
                   prebuiltPrompt: scopePrompt,
+                  scopeKind: scopeRow.kind,
+                  scopeId: scopeRow.id,
                 },
                 {
                   writeStep: async () => {/* scope spawn 不动主进度 */},

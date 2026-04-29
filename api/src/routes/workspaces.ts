@@ -131,9 +131,9 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.auth!.user.id;
     const wsRes = await query<{
-      id: string; name: string; slug: string; owner_id: string; settings: any; created_at: Date; updated_at: Date;
+      id: string; name: string; slug: string; owner_id: string; is_shared: boolean; settings: any; created_at: Date; updated_at: Date;
     }>(
-      `SELECT id, name, slug, owner_id, settings, created_at, updated_at FROM workspaces WHERE id = $1`,
+      `SELECT id, name, slug, owner_id, is_shared, settings, created_at, updated_at FROM workspaces WHERE id = $1`,
       [id]
     );
     const ws = wsRes.rows[0];
@@ -143,7 +143,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
     const members = await loadMembers(id);
     return {
       id: ws.id, name: ws.name, slug: ws.slug,
-      ownerId: ws.owner_id, settings: ws.settings,
+      ownerId: ws.owner_id, isShared: ws.is_shared, settings: ws.settings,
       createdAt: ws.created_at, updatedAt: ws.updated_at,
       role, members,
     };
@@ -157,7 +157,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
     if (!role) return notFound(reply);
     if (role === 'member') return forbid(reply, 'owner/admin required');
 
-    const body = (request.body || {}) as { name?: string; slug?: string; settings?: Record<string, unknown> };
+    const body = (request.body || {}) as { name?: string; slug?: string; settings?: Record<string, unknown>; isShared?: boolean };
     const updates: string[] = [];
     const params: any[] = [];
     if (body.name !== undefined) { params.push(body.name); updates.push(`name = $${params.length}`); }
@@ -170,6 +170,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
       params.push(slug); updates.push(`slug = $${params.length}`);
     }
     if (body.settings !== undefined) { params.push(JSON.stringify(body.settings)); updates.push(`settings = $${params.length}::jsonb`); }
+    if (body.isShared !== undefined) { params.push(!!body.isShared); updates.push(`is_shared = $${params.length}`); }
     if (updates.length === 0) {
       return { ok: true };
     }

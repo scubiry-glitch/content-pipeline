@@ -20,6 +20,7 @@ interface WorkspaceDetail {
   name: string;
   slug: string;
   ownerId: string;
+  isShared: boolean;
   role: Role;
   members: Member[];
   createdAt: string;
@@ -134,6 +135,22 @@ export function WorkspaceDetail() {
     }
   };
 
+  const onToggleShared = async () => {
+    if (!ws) return;
+    const next = !ws.isShared;
+    const verb = next ? '开启' : '关闭';
+    const warn = next
+      ? `${verb}「全员可读」后，所有登录用户（包括非成员）都能看到本工作区的全部内容。确认？`
+      : `${verb}「全员可读」后，仅本工作区成员可见数据。其他用户立刻看不到这里的内容。确认？`;
+    if (!confirm(warn)) return;
+    try {
+      await authClient.patch(`/workspaces/${ws.id}`, { isShared: next });
+      await load();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || '更新失败');
+    }
+  };
+
   return (
     <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
       <Link to="/settings/workspaces" style={{ fontSize: 13, color: '#64748b', textDecoration: 'none' }}>
@@ -177,6 +194,38 @@ export function WorkspaceDetail() {
       </div>
 
       {error && <div style={errBox}>{error}</div>}
+
+      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', margin: '24px 0 12px' }}>
+        可见性
+      </h2>
+      <div style={{
+        background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
+        padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+            全员可读（is_shared）
+            <span style={{
+              padding: '1px 6px', fontSize: 11, fontWeight: 500, borderRadius: 4,
+              background: ws.isShared ? '#dcfce7' : '#f1f5f9',
+              color: ws.isShared ? '#166534' : '#475569',
+            }}>
+              {ws.isShared ? '开启' : '关闭'}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.6 }}>
+            开启后，<strong>所有登录用户</strong>都能读取本工作区的内容（无需是成员）。写权限仍只对成员开放。<br />
+            关闭后回到严格隔离 — 仅本工作区成员可见。
+          </div>
+        </div>
+        {canEdit ? (
+          <button onClick={onToggleShared} style={ws.isShared ? ghostBtn : primaryBtn}>
+            {ws.isShared ? '关闭共享' : '开启共享'}
+          </button>
+        ) : (
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>仅 owner / admin 可改</span>
+        )}
+      </div>
 
       <h2 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', margin: '24px 0 12px' }}>
         成员（{ws.members.length}）

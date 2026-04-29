@@ -16,8 +16,8 @@
 //   - zod 失败 → 同上 + reason='claude-cli-output-malformed'
 
 import { spawn } from 'node:child_process';
-import { writeFile, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile, unlink, mkdir } from 'node:fs/promises';
+import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
 import type { MeetingNotesDeps } from '../types.js';
 import type { ExpertSnapshot, ExpertRoleAssignment } from './expertProfileLoader.js';
@@ -43,6 +43,13 @@ export interface ClaudeCliRunnerCtx {
   promptKind?: 'meeting' | 'scope';
   /** scope-level run 用：上层注入的预拼好的 prompt（this runner 不参与构造） */
   prebuiltPrompt?: string;
+  /** scope 类型 ('meeting' | 'project' | 'client' | 'topic' | 'library')；
+   *  跟 ctx.promptKind 不同语义 —— scopeKind 是 run 的 scope 维度，promptKind 是 prompt 选哪套模板。
+   *  用来配合 MN_CLAUDE_CWD_BASE env 决定 spawn 时 cwd。 */
+  scopeKind?: string | null;
+  /** scope id (UUID)，meeting 类型下 = meetingId；project/client/topic 下 = scope row uuid。
+   *  跟 scopeKind 一起决定 cwd 路径。 */
+  scopeId?: string | null;
 }
 
 export interface ClaudeCliRunnerHooks {
@@ -275,6 +282,26 @@ export async function runClaudeCliMode(
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag} --output-format json --max-turns 1 < '${promptFile}'`;
+
+  // ─ 决定 cwd ─
+  // 默认（env 未配置）继承 worker 进程的 cwd（一般 = repo/api），保留旧行为。
+  // 配 MN_CLAUDE_CWD_BASE 后，落到 <base>/<scopeKind>/<scopeId>，让每条 run 跑在自己的目录下，
+  // 隔离 claude 的 .claude/ session、CLAUDE.md、相对路径产物（wiki .md 等）。
+  // 使用场景：远程 worker 上跑大量并发 run，需要工作目录隔离，避免互相覆盖。
+  let cwd: string | undefined;
+  const cwdBase = process.env.MN_CLAUDE_CWD_BASE;
+  if (cwdBase && ctx.scopeKind) {
+    const safeKind = ctx.scopeKind.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeId = (ctx.scopeId ?? '_').replace(/[^a-zA-Z0-9_-]/g, '_');
+    cwd = join(cwdBase, safeKind, safeId);
+    try {
+      await mkdir(cwd, { recursive: true });
+    } catch (e) {
+      console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] mkdir cwd ${cwd} failed: ${(e as Error).message}; falling back to inherited cwd`);
+      cwd = undefined;
+    }
+  }
+
   // detached:true → spawn 时调 setpgid(0,0)，sh + claude 落到一个新进程组（pgid = sh.pid）。
   // 超时时 process.kill(-proc.pid, SIGKILL) 才能整组通杀。
   // 之前默认 detached:false 时 proc.kill('SIGKILL') 只杀到 sh，孙子 claude 变孤儿，
@@ -283,6 +310,7 @@ export async function runClaudeCliMode(
   const proc = spawn('sh', ['-c', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
+    cwd,
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
@@ -299,9 +327,10 @@ export async function runClaudeCliMode(
            'cliPid', $2::int,
            'cliPgid', $2::int,
            'apiPid', $3::int,
+           'apiHost', $4::text,
            'cliStartedAt', NOW()::text
          ) WHERE id = $1`,
-        [payload.runId, proc.pid, process.pid],
+        [payload.runId, proc.pid, process.pid, hostname()],
       );
     } catch (e) {
       console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] persist cliPid failed: ${(e as Error).message}`);
@@ -353,7 +382,7 @@ export async function runClaudeCliMode(
   process.on('exit', onExit);
 
   // 收尾日志（Phase H+ debug · 加大量日志看卡哪）
-  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] spawn pid=${proc.pid} pgid=${proc.pid} cmd=${cmd.slice(0, 120)}...`);
+  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] spawn pid=${proc.pid} pgid=${proc.pid} cwd=${cwd ?? '(inherited)'} cmd=${cmd.slice(0, 120)}...`);
   proc.on('exit', (code, sig) => {
     console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc exit code=${code} sig=${sig}`);
   });
