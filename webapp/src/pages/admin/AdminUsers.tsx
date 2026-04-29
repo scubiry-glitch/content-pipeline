@@ -12,6 +12,14 @@ interface AdminUserRow {
   createdAt: string;
 }
 
+// 安全随机临时密码: 12 位, 含字母+数字+常用符号 (避开易混淆字符)
+function generateTempPassword(): string {
+  const charset = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%';
+  const arr = new Uint32Array(12);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((n) => charset[n % charset.length]).join('');
+}
+
 export function AdminUsers() {
   const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +32,9 @@ export function AdminUsers() {
   const [newPwd, setNewPwd] = useState('');
   const [newSuper, setNewSuper] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // 临时密码弹窗 (改密 / 创建后展示)
+  const [credModal, setCredModal] = useState<{ email: string; password: string; action: 'created' | 'reset' } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -42,15 +53,18 @@ export function AdminUsers() {
     e.preventDefault();
     setSubmitting(true);
     setErr(null);
+    const submittedEmail = newEmail.trim();
+    const submittedPwd = newPwd;
     try {
       await authClient.post('/admin/users', {
-        email: newEmail.trim(),
+        email: submittedEmail,
         name: newName.trim(),
-        password: newPwd,
+        password: submittedPwd,
         isSuperAdmin: newSuper,
       });
       setNewEmail(''); setNewName(''); setNewPwd(''); setNewSuper(false); setCreating(false);
       await load();
+      setCredModal({ email: submittedEmail, password: submittedPwd, action: 'created' });
     } catch (e: any) {
       setErr(e?.response?.data?.message || '创建失败');
     } finally {
@@ -70,14 +84,12 @@ export function AdminUsers() {
   };
 
   const onResetPassword = async (u: AdminUserRow) => {
-    const pwd = prompt(`为 ${u.email} 设置新密码 (≥8 位, 用户下次登录强制改密):`);
-    if (!pwd || pwd.length < 8) {
-      if (pwd !== null) alert('密码至少 8 位');
-      return;
-    }
+    if (!confirm(`为 ${u.email} 生成临时密码并重置? 用户下次登录会强制改密.`)) return;
+    const pwd = generateTempPassword();
     try {
       await authClient.patch(`/admin/users/${u.id}`, { password: pwd });
-      alert(`已重置. 把临时密码 "${pwd}" 发给 ${u.email}.`);
+      setCredModal({ email: u.email, password: pwd, action: 'reset' });
+      await load();
     } catch (e: any) {
       alert(e?.response?.data?.message || '重置失败');
     }
@@ -117,6 +129,10 @@ export function AdminUsers() {
               onChange={(e) => setNewName(e.target.value)} disabled={submitting} style={inputStyle} />
             <input type="text" placeholder="初始密码 (≥8)" required minLength={8} value={newPwd}
               onChange={(e) => setNewPwd(e.target.value)} disabled={submitting} style={inputStyle} />
+            <button type="button" onClick={() => setNewPwd(generateTempPassword())}
+              disabled={submitting} style={ghostBtn} title="生成 12 位安全临时密码">
+              🎲 生成
+            </button>
           </div>
           <label style={{ fontSize: 13, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type="checkbox" checked={newSuper} onChange={(e) => setNewSuper(e.target.checked)} disabled={submitting} />
@@ -186,9 +202,47 @@ export function AdminUsers() {
           </table>
         )}
       </div>
+
+      {credModal && (
+        <div style={modalOverlay} onClick={() => setCredModal(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+              {credModal.action === 'created' ? '账号已创建' : '密码已重置'}
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '8px 0 16px' }}>
+              请把以下临时密码通过私密渠道（IM 私聊 / 邮件）发给 <strong>{credModal.email}</strong>。
+              该用户首次登录会被强制改密。
+            </p>
+            <div style={credBox}>
+              <code style={{ flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: 14, color: '#0f172a', wordBreak: 'break-all' }}>
+                {credModal.password}
+              </code>
+              <button onClick={() => navigator.clipboard.writeText(credModal.password)} style={smallBtn}>
+                📋 复制
+              </button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => setCredModal(null)} style={primaryBtn}>知道了</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const modalOverlay: React.CSSProperties = {
+  position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+};
+const modalCard: React.CSSProperties = {
+  background: 'white', borderRadius: 12, padding: 24,
+  width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(15,23,42,0.25)',
+};
+const credBox: React.CSSProperties = {
+  display: 'flex', gap: 8, alignItems: 'center',
+  padding: 12, background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8,
+};
 
 const primaryBtn: React.CSSProperties = {
   padding: '8px 16px', background: '#3b82f6', color: 'white',
