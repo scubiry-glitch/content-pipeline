@@ -117,26 +117,27 @@ copilot_sessions / copilot_messages / copilot_contexts / copilot_usage_stats —
 | **19+21. 审计日志 + 登录失败锁定** | `ae42391` | migration 036 + audit service; login/logout/password.{change,reset}/user.{create,disable}/workspace.delete 全审计; 15min 内 5 次失败锁 30min (423 + Retry-After) ✅ |
 | **20. OAuth2 Google** | `da47ec1` | PKCE 流程 + find-or-create user_identities; env-gated 优雅 501; 前端按 /auth/oauth/status 动态激活按钮; setup 文档完整 ✅ |
 
-## 🟢 Phase 3 仍**有意延后**（技术原因明确）
+## ✅ Phase 3 残留收尾（2026-04-29）
 
-### 14. PostgreSQL Row-Level Security 兜底（**延后**）
-原计划：每次 `getClient()` 后 `SET LOCAL app.workspace_id`，CREATE POLICY 用 `current_setting()` filter。
+### 14. PostgreSQL Row-Level Security
+- migration 039 ✅: 51 张 P0 表 ENABLE + FORCE RLS, ws_isolation policy 默认放行 + SET 后限制 (current ws ∪ is_shared ws)
+- helper `withWorkspaceTx` ✅: BEGIN + SET LOCAL + COMMIT 模式, UUID 校验防注入
+- ⚠️ **结构性限制**: 现 DB 用户 `scubiry` 是 SUPERUSER, RLS 自动 bypass. 完整启用需创建非 SUPERUSER 角色 `pipeline_app` + 改 `api/.env` 的 `DB_USER`. 详见 `api/docs/rls-setup.md`.
+- 当前定位: "备用基础设施" — 策略已就位, 等切角色生效
 
-**为什么延后**：
-- 当前 db 层用 pg.Pool 直发 `query()`，连接被 pool 复用，`SET app.workspace_id` 会跨用户泄漏。RLS 需要重写为"每请求专用连接 + RESET"模式（4-6h 重构）。
-- 应用层 13 个 router + 2 个深度服务已显式 filter，跨 ws 100% 阻断（10+ 烟雾测试验证）。RLS 主要价值是"开发者忘记 filter"的 DB 兜底——**这个保护此刻边际收益已经很小**。
+### 17. workspace_id DROP DEFAULT
+- migration 037 ✅: 32 张子表加 BEFORE INSERT trigger 从父表 (assets/mn_scopes/tasks/meeting_note_sources) 派生 workspace_id
+- migration 038 ✅: 同 32 张子表 DROP DEFAULT
+- 51 → 19 张表保留 DEFAULT (独立表 + 5 张孤儿如 mn_judgments)
+- 烟雾测试: INSERT draft_versions 不传 workspace_id → trigger 从 task_id 派生 ✅
+- 业务回归: production/assets/hot-topics/meetings/runs 5 个端点 200 ✅
 
-**触发条件**：当代码库新加大量未走守卫的 SQL 时，再回头上 RLS。
+## 🟢 Phase 3 仍**有意延后**
 
 ### 15. 清理 X-API-Key fallback（**已具备开关，硬删除延后**）
 代码里已有 `AUTH_DISABLE_API_KEY=true` env 开关；想要严格只 cookie 时设这个即可。硬删除代码路径会断掉外部 cron / CI 脚本（如 RSS 抓取触发）。
 
 **触发条件**：所有 cron/CI 都走 cookie session 之后再删代码。
-
-### 17. workspace_id DROP DEFAULT（**与 P2 共享耦合，延后**）
-P2 共享数据 (expert-library / content-library) 仍依赖 `DEFAULT default-ws-uuid` 兜底。DROP DEFAULT 会让这两个模块写入路径全部 NOT NULL 报错。
-
-**触发条件**：当 expert-library 与 content-library 路由也接入 `is_shared` 模式（POST 写入显式传 workspace_id）时，再 DROP DEFAULT。
 
 ---
 
