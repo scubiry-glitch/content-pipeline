@@ -8,6 +8,7 @@ export interface RecommendationRequest {
   context?: string;
   userId?: string;
   limit?: number;
+  workspaceId?: string;
 }
 
 export interface RecommendationResult {
@@ -50,14 +51,15 @@ export interface ExpertRecommendation extends RecommendationResult {
 export async function getRecommendations(
   request: RecommendationRequest
 ): Promise<RecommendationResult[]> {
-  const { type, context, limit = 5 } = request;
+  const { type, context, limit = 5, workspaceId } = request;
 
   switch (type) {
     case 'topic':
-      return recommendTopics(context, limit);
+      return recommendTopics(context, limit, workspaceId);
     case 'material':
-      return recommendMaterials(context, limit);
+      return recommendMaterials(context, limit, workspaceId);
     case 'expert':
+      // 专家推荐基于 blue_team_reviews 历史评审统计 (无 workspace_id 列, 全局视图)
       return recommendExperts(context, limit);
     default:
       throw new Error(`Unknown recommendation type: ${type}`);
@@ -70,11 +72,14 @@ export async function getRecommendations(
  */
 async function recommendTopics(
   context?: string,
-  limit: number = 5
+  limit: number = 5,
+  workspaceId?: string,
 ): Promise<TopicRecommendation[]> {
   const recommendations: TopicRecommendation[] = [];
 
-  // 1. 基于 RSS 热点推荐
+  // 1. 基于 RSS 热点推荐 (按 ws 过滤)
+  const rssWsClause = workspaceId ? ' AND workspace_id = $2' : '';
+  const rssParams = workspaceId ? [limit * 2, workspaceId] : [limit * 2];
   const rssHotTopics = await query(
     `SELECT
       title,
@@ -83,11 +88,11 @@ async function recommendTopics(
       COUNT(*) as mention_count
     FROM rss_items
     WHERE published_at > NOW() - INTERVAL '7 days'
-      AND relevance_score >= 0.6
+      AND relevance_score >= 0.6${rssWsClause}
     GROUP BY title, tags, relevance_score
     ORDER BY mention_count DESC, relevance_score DESC
     LIMIT $1`,
-    [limit * 2]
+    rssParams
   );
 
   for (const row of rssHotTopics.rows) {
@@ -106,18 +111,20 @@ async function recommendTopics(
     });
   }
 
-  // 2. 基于历史任务主题推荐延伸话题
+  // 2. 基于历史任务主题推荐延伸话题 (按 ws 过滤)
   if (context) {
+    const taskWsClause = workspaceId ? ' AND workspace_id = $3' : '';
+    const taskParams = workspaceId ? [context, limit, workspaceId] : [context, limit];
     const relatedTasks = await query(
       `SELECT
         topic,
         tags,
         similarity(topic, $1) as sim
       FROM tasks
-      WHERE topic % $1
+      WHERE topic % $1${taskWsClause}
       ORDER BY similarity(topic, $1) DESC
       LIMIT $2`,
-      [context, limit]
+      taskParams
     );
 
     for (const row of relatedTasks.rows) {
@@ -137,8 +144,8 @@ async function recommendTopics(
     }
   }
 
-  // 3. 基于知识库空白推荐
-  const knowledgeGaps = await identifyKnowledgeGaps();
+  // 3. 基于知识库空白推荐 (按 ws 过滤)
+  const knowledgeGaps = await identifyKnowledgeGaps(workspaceId);
   for (const gap of knowledgeGaps.slice(0, limit)) {
     recommendations.push({
       id: `gap-${Buffer.from(gap).toString('base64').slice(0, 16)}`,
@@ -166,20 +173,23 @@ async function recommendTopics(
  */
 async function recommendMaterials(
   context?: string,
-  limit: number = 5
+  limit: number = 5,
+  workspaceId?: string,
 ): Promise<MaterialRecommendation[]> {
   const recommendations: MaterialRecommendation[] = [];
 
   if (!context) {
-    // 返回高质量素材
+    // 返回高质量素材 (按 ws 过滤)
+    const topWsClause = workspaceId ? ' WHERE workspace_id = $2' : '';
+    const topParams = workspaceId ? [limit, workspaceId] : [limit];
     const topMaterials = await query(
       `SELECT
         id, title, content_type, source, source_url,
         tags, quality_score, citation_count
-      FROM assets
+      FROM assets${topWsClause}
       ORDER BY quality_score DESC, citation_count DESC
       LIMIT $1`,
-      [limit]
+      topParams
     );
 
     return topMaterials.rows.map(row => ({
@@ -196,17 +206,19 @@ async function recommendMaterials(
     }));
   }
 
-  // 基于上下文搜索相关素材
+  // 基于上下文搜索相关素材 (按 ws 过滤)
+  const relWsClause = workspaceId ? ' AND workspace_id = $3' : '';
+  const relParams = workspaceId ? [context, limit * 2, workspaceId] : [context, limit * 2];
   const relatedAssets = await query(
     `SELECT
       id, title, content, content_type, source, source_url,
       tags, quality_score, citation_count,
       similarity(title, $1) as title_sim
     FROM assets
-    WHERE title % $1 OR content % $1
+    WHERE (title % $1 OR content % $1)${relWsClause}
     ORDER BY GREATEST(similarity(title, $1), similarity(content, $1)) DESC
     LIMIT $2`,
-    [context, limit * 2]
+    relParams
   );
 
   for (const row of relatedAssets.rows) {
@@ -225,9 +237,9 @@ async function recommendMaterials(
     });
   }
 
-  // 基于向量相似度搜索（如果启用 pgvector）
+  // 基于向量相似度搜索（如果启用 pgvector） (按 ws 过滤)
   try {
-    const vectorResults = await searchByVectorSimilarity(context, limit);
+    const vectorResults = await searchByVectorSimilarity(context, limit, workspaceId);
     recommendations.push(...vectorResults);
   } catch (error) {
     console.warn('[Recommendation] Vector search failed:', error);
@@ -312,18 +324,21 @@ async function recommendExperts(
  */
 async function searchByVectorSimilarity(
   context: string,
-  limit: number
+  limit: number,
+  workspaceId?: string,
 ): Promise<MaterialRecommendation[]> {
   // 简化实现：使用文本搜索代替向量搜索
+  const wsClause = workspaceId ? ' AND workspace_id = $3' : '';
+  const params = workspaceId ? [`%${context}%`, limit, workspaceId] : [`%${context}%`, limit];
   const results = await query(
     `SELECT
       id, title, content_type, source, source_url,
       tags, quality_score, citation_count
     FROM assets
-    WHERE content ILIKE $1 OR title ILIKE $1
+    WHERE (content ILIKE $1 OR title ILIKE $1)${wsClause}
     ORDER BY quality_score DESC
     LIMIT $2`,
-    [`%${context}%`, limit]
+    params
   );
 
   return results.rows.map(row => ({
@@ -343,10 +358,13 @@ async function searchByVectorSimilarity(
 /**
  * 识别知识库空白
  */
-async function identifyKnowledgeGaps(): Promise<string[]> {
-  // 检查哪些领域缺少覆盖
+async function identifyKnowledgeGaps(workspaceId?: string): Promise<string[]> {
+  // 检查哪些领域缺少覆盖 (按 ws 过滤)
+  const wsClause = workspaceId ? ' AND workspace_id = $1' : '';
+  const params = workspaceId ? [workspaceId] : [];
   const coveredTopics = await query(
-    `SELECT DISTINCT topic FROM tasks WHERE created_at > NOW() - INTERVAL '30 days'`
+    `SELECT DISTINCT topic FROM tasks WHERE created_at > NOW() - INTERVAL '30 days'${wsClause}`,
+    params,
   );
 
   const topics = coveredTopics.rows.map(r => r.topic.toLowerCase());

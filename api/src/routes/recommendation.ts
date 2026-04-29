@@ -9,9 +9,10 @@ import {
   RecommendationRequest,
 } from '../services/recommendation.js';
 import { authenticate } from '../middleware/auth.js';
+import { currentWorkspaceId } from '../db/repos/withWorkspace.js';
 
 export async function recommendationRoutes(fastify: FastifyInstance) {
-  // 获取智能推荐
+  // 获取智能推荐 (按当前 ws 过滤来源数据 — rss_items, tasks, assets)
   fastify.get('/', { preHandler: authenticate }, async (request) => {
     const { type, context, limit = '5' } = request.query as any;
 
@@ -25,6 +26,7 @@ export async function recommendationRoutes(fastify: FastifyInstance) {
       type,
       context,
       limit: parseInt(limit),
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     };
 
     const recommendations = await getRecommendations(req);
@@ -41,11 +43,12 @@ export async function recommendationRoutes(fastify: FastifyInstance) {
   fastify.get('/all', { preHandler: authenticate }, async (request) => {
     const { context, limit = '3' } = request.query as any;
     const limitPerType = parseInt(limit);
+    const wsId = currentWorkspaceId(request) ?? undefined;
 
     const [topics, materials, experts] = await Promise.all([
-      getRecommendations({ type: 'topic', context, limit: limitPerType }),
-      getRecommendations({ type: 'material', context, limit: limitPerType }),
-      getRecommendations({ type: 'expert', context, limit: 4 }),
+      getRecommendations({ type: 'topic', context, limit: limitPerType, workspaceId: wsId }),
+      getRecommendations({ type: 'material', context, limit: limitPerType, workspaceId: wsId }),
+      getRecommendations({ type: 'expert', context, limit: 4, workspaceId: wsId }),
     ]);
 
     return {
