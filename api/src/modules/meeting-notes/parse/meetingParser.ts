@@ -84,7 +84,7 @@ export async function parseMeeting(
 
   const persistedPeople: Array<{ id: string; name: string; role?: string }> = [];
   for (const p of merged) {
-    const id = await ensurePersonByName(deps, p.name, p.role);
+    const id = await ensurePersonByName(deps, p.name, p.role, undefined, assetId);
     if (id) persistedPeople.push({ id, name: p.name, role: p.role });
   }
   const participantCount = persistedPeople.length;

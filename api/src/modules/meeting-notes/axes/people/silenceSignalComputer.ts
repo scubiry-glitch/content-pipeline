@@ -53,7 +53,7 @@ export async function computeSilenceSignal(
 
   for (const item of items) {
     try {
-      const personId = await ensurePersonByName(deps, item.who);
+      const personId = await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
       if (!personId) { out.skipped += 1; continue; }
       await deps.db.query(
         // P0 数据源契约：UPSERT 守护 manual_import / human_edit

@@ -54,7 +54,7 @@ export async function computeDecisionProvenance(
   const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
-      const proposerId = item.proposer ? await ensurePersonByName(deps, item.proposer) : null;
+      const proposerId = item.proposer ? await ensurePersonByName(deps, item.proposer, undefined, undefined, args.meetingId) : null;
       const ins = await deps.db.query(
         `INSERT INTO mn_decisions
            (scope_id, meeting_id, title, proposer_person_id, confidence, is_current, rationale)

@@ -69,7 +69,7 @@ export async function computeTensions(
       const personIds: string[] = [];
       for (const name of item.between ?? []) {
         if (!name) continue;
-        const id = await ensurePersonByName(deps, name);
+        const id = await ensurePersonByName(deps, name, undefined, undefined, args.meetingId);
         if (id) personIds.push(id);
       }
       // 至少需要 1 个 person_id 才入库（避免空对立）

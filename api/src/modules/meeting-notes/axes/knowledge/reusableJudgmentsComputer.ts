@@ -46,7 +46,7 @@ export async function computeReusableJudgments(
 
   for (const item of items) {
     try {
-      const authorId = item.author ? await ensurePersonByName(deps, item.author) : null;
+      const authorId = item.author ? await ensurePersonByName(deps, item.author, undefined, undefined, args.meetingId) : null;
       // P0 数据源契约：只跟 LLM 自己的合并
       const existing = await deps.db.query(
         `SELECT id, reuse_count, linked_meeting_ids FROM mn_judgments

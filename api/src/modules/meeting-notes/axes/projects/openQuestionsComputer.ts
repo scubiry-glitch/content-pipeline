@@ -47,7 +47,7 @@ export async function computeOpenQuestions(
   const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
     try {
-      const ownerId = item.owner ? await ensurePersonByName(deps, item.owner) : null;
+      const ownerId = item.owner ? await ensurePersonByName(deps, item.owner, undefined, undefined, args.meetingId) : null;
       const normalized = normalizeText(item.text);
       // 同 scope 下相似问题累加；P0 数据源契约：只跟 LLM 自己产出的合并，不动 manual_import
       const existing = await deps.db.query(

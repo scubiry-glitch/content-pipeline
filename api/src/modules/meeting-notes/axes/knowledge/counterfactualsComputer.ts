@@ -51,7 +51,7 @@ export async function computeCounterfactuals(
 
   for (const item of items) {
     try {
-      const rejectedById = item.rejected_by ? await ensurePersonByName(deps, item.rejected_by) : null;
+      const rejectedById = item.rejected_by ? await ensurePersonByName(deps, item.rejected_by, undefined, undefined, args.meetingId) : null;
       const months = Math.max(1, Math.min(24, Number(item.months_later_check) || 6));
       const checkAt = new Date();
       checkAt.setMonth(checkAt.getMonth() + months);

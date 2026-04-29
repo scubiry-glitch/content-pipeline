@@ -51,7 +51,7 @@ export async function computeCognitiveBiases(
 
   for (const item of items) {
     try {
-      const byId = item.by ? await ensurePersonByName(deps, item.by) : null;
+      const byId = item.by ? await ensurePersonByName(deps, item.by, undefined, undefined, args.meetingId) : null;
       const severity = ['low', 'med', 'high'].includes(item.severity || '') ? item.severity! : 'med';
       await deps.db.query(
         `INSERT INTO mn_cognitive_biases

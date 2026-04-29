@@ -53,7 +53,7 @@ export async function computeMentalModels(
 
   for (const item of items) {
     try {
-      const byId = item.by ? await ensurePersonByName(deps, item.by) : null;
+      const byId = item.by ? await ensurePersonByName(deps, item.by, undefined, undefined, args.meetingId) : null;
       await deps.db.query(
         `INSERT INTO mn_mental_model_invocations
            (meeting_id, model_name, invoked_by_person_id, correctly_used, outcome, confidence)
