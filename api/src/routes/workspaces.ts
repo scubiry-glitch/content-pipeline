@@ -192,8 +192,55 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
     const userId = request.auth!.user.id;
     const role = userId === 'api-key' ? 'owner' : await getMembership(id, userId);
     if (role !== 'owner') return forbid(reply, 'owner only');
-    // 防止删除最后一个 workspace（避免用户登录后没 ws 可用）—— 但允许删除别人的 ws，所以只阻止当前用户的最后一个
-    // 简化：直接删；如果用户没 ws 了，下次登录会得到空列表。
+
+    // 防护 1: default workspace 不可删除
+    // 51 张 P0 表的 workspace_id 都 DEFAULT 到 default ws 的 UUID; 删了 default
+    // 之后所有未传 workspace_id 的 INSERT 会因 FK 引用孤儿 UUID 失败 → 业务停摆
+    const wsRow = await query<{ slug: string; is_shared: boolean }>(
+      `SELECT slug, is_shared FROM workspaces WHERE id = $1`,
+      [id],
+    );
+    if (wsRow.rows.length === 0) return notFound(reply);
+    if (wsRow.rows[0].slug === 'default') {
+      reply.status(409);
+      return {
+        error: 'Conflict',
+        message: 'default workspace cannot be deleted',
+        code: 'DEFAULT_WORKSPACE_PROTECTED',
+      };
+    }
+
+    // 防护 2: 非空 workspace 拒绝删除 (FK 约束兜底但错误不友好)
+    // 扫几张高频 P0 表; 任一存在数据就拒, 提示用户先迁移/清空
+    const tables = [
+      'tasks', 'assets', 'unified_topics', 'community_topics', 'hot_topics',
+      'meeting_note_sources', 'expert_profiles', 'rss_items', 'rss_sources',
+      'mn_scopes', 'mn_runs', 'mn_schedules', 'favorite_reports',
+    ];
+    const counts: Record<string, number> = {};
+    for (const t of tables) {
+      try {
+        const r = await query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM ${t} WHERE workspace_id = $1`,
+          [id],
+        );
+        const n = parseInt(r.rows[0]?.n || '0', 10);
+        if (n > 0) counts[t] = n;
+      } catch {
+        // 表不存在 (例如未部署的 copilot_*) — 忽略
+      }
+    }
+    if (Object.keys(counts).length > 0) {
+      reply.status(409);
+      return {
+        error: 'Conflict',
+        message: `workspace is not empty; remove referenced data first: ${Object.entries(counts).map(([t, n]) => `${t}=${n}`).join(', ')}`,
+        code: 'WORKSPACE_NOT_EMPTY',
+        counts,
+      };
+    }
+
+    // 防护 3: 删除会导致用户没任何 workspace? 简化处理: 不主动阻止, 让 UI 引导
     await query(`DELETE FROM workspaces WHERE id = $1`, [id]);
     return { ok: true };
   });
