@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { authClient } from '../api/client';
 
 export function Login() {
   const { login, user, loading } = useAuth();
@@ -12,6 +13,14 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // OAuth providers 可用性
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  useEffect(() => {
+    authClient.get('/auth/oauth/status')
+      .then((res: any) => setGoogleEnabled(!!res?.google?.enabled))
+      .catch(() => setGoogleEnabled(false));
+  }, []);
 
   // 已登录则直接跳走
   if (!loading && user) {
@@ -124,22 +133,44 @@ export function Login() {
           borderTop: '1px solid #e2e8f0',
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
-          <button
-            type="button"
-            disabled
-            title="OAuth 登录将在第 3 期开放"
-            style={{
-              padding: '8px 16px',
-              background: '#f1f5f9',
-              color: '#94a3b8',
-              border: '1px solid #e2e8f0',
-              borderRadius: 6,
-              fontSize: 13,
-              cursor: 'not-allowed',
-            }}
-          >
-            使用 Google 登录（即将开放）
-          </button>
+          {googleEnabled ? (
+            <a
+              href="/api/auth/oauth/google/start"
+              style={{
+                padding: '8px 16px',
+                background: 'white',
+                color: '#1f2937',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: 'pointer',
+                textAlign: 'center',
+                textDecoration: 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>G</span>
+              使用 Google 登录
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="后端未配置 GOOGLE_OAUTH_CLIENT_ID / SECRET; admin 配置后自动启用"
+              style={{
+                padding: '8px 16px',
+                background: '#f1f5f9',
+                color: '#94a3b8',
+                border: '1px solid #e2e8f0',
+                borderRadius: 6,
+                fontSize: 13,
+                cursor: 'not-allowed',
+              }}
+            >
+              使用 Google 登录（未配置）
+            </button>
+          )}
         </div>
       </div>
     </div>

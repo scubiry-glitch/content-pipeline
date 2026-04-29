@@ -18,6 +18,13 @@ import {
   checkEmailLock,
   escalateLockIfNeeded,
 } from '../services/auth/audit.js';
+import {
+  getGoogleOAuthConfig,
+  buildAuthorizeUrl,
+  generatePkce,
+  exchangeCodeForToken,
+  fetchUserInfo,
+} from '../services/auth/oauthGoogle.js';
 
 interface LoginBody {
   email?: string;
@@ -242,21 +249,171 @@ export async function authRoutes(fastify: FastifyInstance) {
     return { ok: true };
   });
 
-  // OAuth2 占位（第 3 期接入 Google/GitHub）
-  fastify.get('/oauth/:provider/start', async (_request, reply) => {
-    reply.status(501);
-    return {
-      error: 'Not Implemented',
-      message: 'OAuth provider integration is planned for phase 3',
-      code: 'NOT_IMPLEMENTED',
-    };
+  // OAuth2 Google · 当前实现; 其它 provider 仍 501
+  // GET /api/auth/oauth/google/start
+  // GET /api/auth/oauth/google/callback?code&state
+
+  // OAuth status 查询: 前端 Login 页判断要不要展示 Google 按钮
+  fastify.get('/oauth/status', async () => {
+    const google = getGoogleOAuthConfig();
+    return { google: google ? { enabled: true } : { enabled: false } };
   });
-  fastify.get('/oauth/:provider/callback', async (_request, reply) => {
-    reply.status(501);
-    return {
-      error: 'Not Implemented',
-      message: 'OAuth provider integration is planned for phase 3',
-      code: 'NOT_IMPLEMENTED',
-    };
+
+  fastify.get('/oauth/:provider/start', async (request, reply) => {
+    const { provider } = request.params as { provider: string };
+    if (provider !== 'google') {
+      reply.status(404);
+      return { error: 'Not Found', message: `provider ${provider} not supported`, code: 'PROVIDER_NOT_SUPPORTED' };
+    }
+    const cfg = getGoogleOAuthConfig();
+    if (!cfg) {
+      reply.status(501);
+      return {
+        error: 'Not Implemented',
+        message: 'Google OAuth not configured (set GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET / OAUTH_CALLBACK_BASE)',
+        code: 'OAUTH_NOT_CONFIGURED',
+      };
+    }
+    const { state, verifier, challenge } = generatePkce();
+    // 短期 signed cookie 储 state + verifier (5 min); SameSite=Lax 才能跨 Google 跳转回来时还在
+    reply.setCookie('oauth_google', JSON.stringify({ state, verifier }), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 300,
+      signed: true,
+    });
+    reply.redirect(buildAuthorizeUrl(cfg, state, challenge));
+  });
+
+  fastify.get('/oauth/:provider/callback', async (request, reply) => {
+    const { provider } = request.params as { provider: string };
+    if (provider !== 'google') {
+      reply.status(404);
+      return { error: 'Not Found', code: 'PROVIDER_NOT_SUPPORTED' };
+    }
+    const cfg = getGoogleOAuthConfig();
+    if (!cfg) {
+      reply.status(501);
+      return { error: 'Not Implemented', code: 'OAUTH_NOT_CONFIGURED' };
+    }
+    const q = (request.query || {}) as { code?: string; state?: string; error?: string };
+    if (q.error) {
+      reply.status(400);
+      return { error: 'Bad Request', message: `Google: ${q.error}`, code: 'OAUTH_USER_DENIED' };
+    }
+    if (!q.code || !q.state) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'code and state required', code: 'INVALID_INPUT' };
+    }
+
+    // 取并校验 cookie 里的 state + verifier
+    const cookieRaw = (request.cookies as Record<string, string | undefined>).oauth_google;
+    let stored: { state?: string; verifier?: string } | null = null;
+    if (cookieRaw) {
+      const unsigned = reply.unsignCookie(cookieRaw);
+      if (unsigned.valid && unsigned.value) {
+        try { stored = JSON.parse(unsigned.value); } catch { /* invalid */ }
+      }
+    }
+    reply.clearCookie('oauth_google', { path: '/' });
+    if (!stored?.state || !stored?.verifier || stored.state !== q.state) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'invalid OAuth state', code: 'OAUTH_STATE_MISMATCH' };
+    }
+
+    let info;
+    try {
+      const tokens = await exchangeCodeForToken(cfg, q.code, stored.verifier);
+      info = await fetchUserInfo(tokens.access_token);
+    } catch (err) {
+      reply.status(502);
+      return { error: 'Bad Gateway', message: (err as Error).message, code: 'OAUTH_EXCHANGE_FAILED' };
+    }
+
+    if (!info.email_verified) {
+      reply.status(403);
+      return { error: 'Forbidden', message: 'Google email not verified', code: 'EMAIL_UNVERIFIED' };
+    }
+
+    // find-or-create user_identities + users
+    // 1. 先看 (provider='google', sub) 是否已绑定
+    let userId: string | null = null;
+    const idRes = await query<{ user_id: string }>(
+      `SELECT user_id FROM user_identities WHERE provider = 'google' AND provider_user_id = $1`,
+      [info.sub],
+    );
+    if (idRes.rows.length > 0) {
+      userId = idRes.rows[0].user_id;
+    } else {
+      // 2. 没绑定 — 看是否有同 email 的本地账号
+      const userRes = await query<{ id: string; status: string }>(
+        `SELECT id, status FROM users WHERE email = $1`,
+        [info.email],
+      );
+      if (userRes.rows.length > 0) {
+        if (userRes.rows[0].status !== 'active') {
+          reply.status(403);
+          return { error: 'Forbidden', message: 'Account is disabled', code: 'USER_DISABLED' };
+        }
+        userId = userRes.rows[0].id;
+      } else {
+        // 3. 全新用户 — 创建 (无密码 hash, 不需要 must_change_password)
+        const ins = await query<{ id: string }>(
+          `INSERT INTO users (email, name, password_hash, must_change_password, avatar_url)
+           VALUES ($1, $2, NULL, FALSE, $3)
+           RETURNING id`,
+          [info.email, info.name || info.email, info.picture ?? null],
+        );
+        userId = ins.rows[0].id;
+      }
+      // 绑定 identity
+      await query(
+        `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider, metadata)
+         VALUES ($1, 'google', $2, $3, $4::jsonb)
+         ON CONFLICT (provider, provider_user_id) DO NOTHING`,
+        [
+          userId,
+          info.sub,
+          info.email,
+          JSON.stringify({ name: info.name, picture: info.picture ?? null }),
+        ],
+      );
+    }
+
+    if (!userId) {
+      reply.status(500);
+      return { error: 'Internal Error', code: 'OAUTH_NO_USER' };
+    }
+
+    // 拿 first ws + 创建 session
+    const wsRes = await query<{ id: string }>(
+      `SELECT w.id FROM workspace_members m
+         JOIN workspaces w ON w.id = m.workspace_id
+        WHERE m.user_id = $1 ORDER BY m.joined_at ASC LIMIT 1`,
+      [userId],
+    );
+    const firstWs = wsRes.rows[0]?.id || null;
+    const ip = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
+    const ua = request.headers['user-agent'] || '';
+    const { token, expiresAt } = await createSession({
+      userId,
+      userAgent: ua,
+      ip,
+      currentWorkspaceId: firstWs,
+    });
+    await query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [userId]);
+    setSessionCookie(reply, token, expiresAt);
+    await writeAuditEvent({
+      event: 'login.success',
+      userId,
+      email: info.email,
+      request,
+      metadata: { provider: 'google' },
+    });
+
+    // 跳前端
+    reply.redirect(cfg.frontendRedirect);
   });
 }
