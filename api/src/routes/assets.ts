@@ -5,6 +5,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AssetService } from '../services/asset.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 import { query } from '../db/connection.js';
 import { getDirectoryWatcherService } from '../services/directoryWatcher.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -44,6 +45,23 @@ const deduplicateSchema = z.object({
 export async function assetRoutes(fastify: FastifyInstance) {
   const assetService = new AssetService();
 
+  // Workspace 守卫: :assetId 路径验证 asset 属于当前 workspace, 跨 ws 一律 404
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const assetId = params.assetId;
+    if (!assetId) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return; // api-key 全局凭证
+    const ok = await assertRowInWorkspace('assets', 'id', assetId, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Asset not found', code: 'ASSET_NOT_FOUND' });
+    }
+  });
+
   // Upload asset
   fastify.post('/', { preHandler: authenticate }, async (request, reply) => {
     try {
@@ -82,7 +100,8 @@ export async function assetRoutes(fastify: FastifyInstance) {
         domain: fields.domain,
         taxonomy_code: fields.taxonomy_code,
         asset_type: fields.asset_type || fields.type,
-        theme_id: fields.theme_id
+        theme_id: fields.theme_id,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
       });
 
       reply.status(201);
@@ -105,7 +124,8 @@ export async function assetRoutes(fastify: FastifyInstance) {
       offset: parseInt(offset),
       domain: domain || undefined,
       taxonomy_code: taxonomy_code || undefined,
-      asset_type: asset_type || type || undefined
+      asset_type: asset_type || type || undefined,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
   });
 
@@ -119,7 +139,8 @@ export async function assetRoutes(fastify: FastifyInstance) {
       limit: parseInt(limit),
       domain: domain || undefined,
       taxonomy_code: taxonomy_code || undefined,
-      asset_type: asset_type || type || undefined
+      asset_type: asset_type || type || undefined,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
   });
 

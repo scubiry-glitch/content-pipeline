@@ -17,6 +17,7 @@ export interface UploadAssetInput {
   taxonomy_code?: string;
   asset_type?: string;
   theme_id?: string;
+  workspaceId?: string;
 }
 
 export interface UpdateAssetInput {
@@ -76,30 +77,59 @@ export class AssetService {
     // 计算质量评分
     const qualityScore = this.calculateQualityScore(content, input.source);
 
-    await query(
-      `INSERT INTO assets (
-        id, title, content, content_type, filename,
-        source, tags, auto_tags, quality_score, embedding,
-        type, domain, taxonomy_code, theme_id,
-        created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, $14, NOW(), NOW())`,
-      [
-        assetId,
-        input.title,
-        content,
-        this.getContentType(input.mimetype),
-        input.filename,
-        input.source || null,
-        JSON.stringify(input.tags),
-        JSON.stringify(autoTags),
-        qualityScore,
-        `[${embedding.join(',')}]`,
-        input.asset_type || 'file',
-        input.domain || null,
-        input.taxonomy_code || null,
-        input.theme_id || null
-      ]
-    );
+    // workspace_id 显式传入；不传时由表的 DEFAULT (default workspace) 兜底
+    if (input.workspaceId) {
+      await query(
+        `INSERT INTO assets (
+          id, title, content, content_type, filename,
+          source, tags, auto_tags, quality_score, embedding,
+          type, domain, taxonomy_code, theme_id, workspace_id,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, $14, $15, NOW(), NOW())`,
+        [
+          assetId,
+          input.title,
+          content,
+          this.getContentType(input.mimetype),
+          input.filename,
+          input.source || null,
+          JSON.stringify(input.tags),
+          JSON.stringify(autoTags),
+          qualityScore,
+          `[${embedding.join(',')}]`,
+          input.asset_type || 'file',
+          input.domain || null,
+          input.taxonomy_code || null,
+          input.theme_id || null,
+          input.workspaceId,
+        ]
+      );
+    } else {
+      await query(
+        `INSERT INTO assets (
+          id, title, content, content_type, filename,
+          source, tags, auto_tags, quality_score, embedding,
+          type, domain, taxonomy_code, theme_id,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13, $14, NOW(), NOW())`,
+        [
+          assetId,
+          input.title,
+          content,
+          this.getContentType(input.mimetype),
+          input.filename,
+          input.source || null,
+          JSON.stringify(input.tags),
+          JSON.stringify(autoTags),
+          qualityScore,
+          `[${embedding.join(',')}]`,
+          input.asset_type || 'file',
+          input.domain || null,
+          input.taxonomy_code || null,
+          input.theme_id || null,
+        ]
+      );
+    }
 
     return {
       id: assetId,
@@ -432,8 +462,8 @@ export class AssetService {
     };
   }
 
-  async search(options: { query?: string; tags?: string[]; limit: number; offset?: number; domain?: string; taxonomy_code?: string; asset_type?: string }) {
-    const { query: searchQuery, tags, limit, offset = 0, domain, taxonomy_code, asset_type } = options;
+  async search(options: { query?: string; tags?: string[]; limit: number; offset?: number; domain?: string; taxonomy_code?: string; asset_type?: string; workspaceId?: string }) {
+    const { query: searchQuery, tags, limit, offset = 0, domain, taxonomy_code, asset_type, workspaceId } = options;
     const visibility: VisibilityOptions = {
       includeDeleted: false,
       includeHidden: false
@@ -442,7 +472,7 @@ export class AssetService {
     // 如果有搜索词，使用向量相似度搜索
     if (searchQuery) {
       const queryEmbedding = await generateEmbedding(searchQuery);
-      return this.vectorSearch(queryEmbedding, tags, limit, offset, { domain, taxonomy_code, asset_type }, visibility);
+      return this.vectorSearch(queryEmbedding, tags, limit, offset, { domain, taxonomy_code, asset_type }, visibility, workspaceId);
     }
 
     // 否则使用普通标签搜索
@@ -463,6 +493,13 @@ export class AssetService {
     sql += visibilityWhere.where;
     countSql += visibilityWhere.where;
     params.push(...visibilityWhere.params);
+
+    // Workspace 隔离: 登录用户必传; api-key 路径 workspaceId=undefined 跳过 (admin 全局视图)
+    if (workspaceId) {
+      params.push(workspaceId);
+      sql += ` AND workspace_id = $${params.length}`;
+      countSql += ` AND workspace_id = $${params.length}`;
+    }
 
     if (tags && tags.length > 0) {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
@@ -528,7 +565,8 @@ export class AssetService {
     limit: number = 10,
     offset: number = 0,
     extra: { domain?: string; taxonomy_code?: string; asset_type?: string } = {},
-    visibility: VisibilityOptions = {}
+    visibility: VisibilityOptions = {},
+    workspaceId?: string,
   ) {
     const vectorStr = `[${queryEmbedding.join(',')}]`;
 
@@ -545,6 +583,12 @@ export class AssetService {
     const visibilityWhere = this.buildVisibilityWhere(visibility);
     sql += visibilityWhere.where;
     params.push(...visibilityWhere.params);
+
+    // Workspace 隔离
+    if (workspaceId) {
+      params.push(workspaceId);
+      sql += ` AND workspace_id = $${params.length}`;
+    }
 
     if (tags && tags.length > 0) {
       const tagPlaceholders = tags.map((_, i) => `$${params.length + i + 1}`).join(',');
