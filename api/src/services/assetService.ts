@@ -47,6 +47,7 @@ export interface CreateAssetDTO {
   qualityScore?: number;
   domain?: string;
   metadata?: Record<string, any>;
+  workspaceId?: string;
 }
 
 export interface AssetFilters {
@@ -56,6 +57,7 @@ export interface AssetFilters {
   search?: string;
   page?: number;
   limit?: number;
+  workspaceId?: string;
 }
 
 // v7.6 会议纪要采集渠道 (migration 028) ---------------------------------------
@@ -108,24 +110,44 @@ export class AssetService {
   // 创建素材
   async createAsset(data: CreateAssetDTO): Promise<Asset> {
     const id = uuidv4();
-    const result = await query(
-      `INSERT INTO assets (id, type, title, content, content_type, source, source_id, tags, quality_score, domain, metadata, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
-       RETURNING *`,
-      [
-        id,
-        data.type,
-        data.title,
-        data.content,
-        'txt',
-        data.source || null,
-        data.sourceId || null,
-        JSON.stringify(data.tags || []),
-        data.qualityScore || 0,
-        data.domain || null,
-        JSON.stringify(data.metadata || {})
-      ]
-    );
+    const result = data.workspaceId
+      ? await query(
+          `INSERT INTO assets (id, type, title, content, content_type, source, source_id, tags, quality_score, domain, metadata, workspace_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+           RETURNING *`,
+          [
+            id,
+            data.type,
+            data.title,
+            data.content,
+            'txt',
+            data.source || null,
+            data.sourceId || null,
+            JSON.stringify(data.tags || []),
+            data.qualityScore || 0,
+            data.domain || null,
+            JSON.stringify(data.metadata || {}),
+            data.workspaceId,
+          ]
+        )
+      : await query(
+          `INSERT INTO assets (id, type, title, content, content_type, source, source_id, tags, quality_score, domain, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+           RETURNING *`,
+          [
+            id,
+            data.type,
+            data.title,
+            data.content,
+            'txt',
+            data.source || null,
+            data.sourceId || null,
+            JSON.stringify(data.tags || []),
+            data.qualityScore || 0,
+            data.domain || null,
+            JSON.stringify(data.metadata || {}),
+          ]
+        );
 
     return this.formatAsset(result.rows[0]);
   }
@@ -169,11 +191,18 @@ export class AssetService {
 
   // 获取素材列表
   async getAssets(filters: AssetFilters = {}): Promise<{ items: Asset[]; total: number }> {
-    const { type, sourceId, domain, search, page = 1, limit = 20 } = filters;
+    const { type, sourceId, domain, search, page = 1, limit = 20, workspaceId } = filters;
 
     let sql = `SELECT * FROM assets WHERE 1=1`;
     let countSql = `SELECT COUNT(*) FROM assets WHERE 1=1`;
     const params: any[] = [];
+
+    // Workspace 隔离
+    if (workspaceId) {
+      params.push(workspaceId);
+      sql += ` AND workspace_id = $${params.length}`;
+      countSql += ` AND workspace_id = $${params.length}`;
+    }
 
     if (type) {
       params.push(type);

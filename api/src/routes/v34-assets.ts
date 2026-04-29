@@ -2,8 +2,26 @@
 import { FastifyInstance } from 'fastify';
 import { assetService } from '../services/assetService.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 
 export async function v34AssetRoutes(fastify: FastifyInstance) {
+  // Workspace 守卫 :id 跨 ws 一律 404
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const id = params.id;
+    if (!id) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return;
+    const ok = await assertRowInWorkspace('assets', 'id', id, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Asset not found' });
+    }
+  });
+
   // 获取素材列表
   fastify.get('/', { preHandler: authenticate }, async (request) => {
     const { type, sourceId, search, page, limit } = request.query as any;
@@ -13,7 +31,8 @@ export async function v34AssetRoutes(fastify: FastifyInstance) {
       sourceId,
       search,
       page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20
+      limit: limit ? parseInt(limit) : 20,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
 
     return result;
@@ -37,7 +56,10 @@ export async function v34AssetRoutes(fastify: FastifyInstance) {
     const createData = request.body as any;
 
     try {
-      const asset = await assetService.createAsset(createData);
+      const asset = await assetService.createAsset({
+        ...createData,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
+      });
       reply.status(201);
       return asset;
     } catch (error) {
