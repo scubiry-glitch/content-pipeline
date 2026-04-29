@@ -36,6 +36,7 @@ import cookie from '@fastify/cookie';
 import { authRoutes } from './routes/auth.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { adminUserRoutes } from './routes/admin/users.js';
+import { adminAuditRoutes } from './routes/admin/audit.js';
 import { productionRoutes } from './routes/production.js';
 import { assetRoutes } from './routes/assets.js';
 import { outputRoutes } from './routes/outputs.js';
@@ -157,6 +158,7 @@ async function main() {
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(workspaceRoutes, { prefix: '/api/workspaces' });
   await fastify.register(adminUserRoutes, { prefix: '/api/admin/users' });
+  await fastify.register(adminAuditRoutes, { prefix: '/api/admin/audit' });
 
   fastify.addHook('onRequest', async (request, _reply) => {
     const url = request.raw.url || '';
