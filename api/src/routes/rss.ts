@@ -15,11 +15,30 @@ import {
 } from '../services/rssCollector.js';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 
 // 内存存储RSS源（实际项目应使用数据库）
 let rssSources: any[] = [];
 
 export async function rssRoutes(fastify: FastifyInstance) {
+  // Workspace 守卫: :itemId 路径验证 rss_item 属于当前 workspace, 跨 ws 一律 404
+  // 注意: :id 段属于 rss-sources (config-based, 无 workspace 概念) — 这里仅过滤 :itemId
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const itemId = params.itemId;
+    if (!itemId) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return;
+    const ok = await assertRowInWorkspace('rss_items', 'id', itemId, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Item not found' });
+    }
+  });
+
   // ===== RSS 源管理 =====
 
   // 获取 RSS 源列表（适配前端格式）
@@ -240,18 +259,25 @@ export async function rssRoutes(fastify: FastifyInstance) {
     let sql = `
       SELECT
         id, source_name, title, link, summary,
-        published_at, author, tags, relevance_score, 
+        published_at, author, tags, relevance_score,
         hot_score, trend, sentiment, manual_score, is_deleted,
         created_at
       FROM rss_items
       WHERE 1=1
     `;
-    
+
     // 默认不显示已删除的
     if (showDeleted !== 'true') {
       sql += ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
     }
     const params: any[] = [];
+
+    // Workspace 隔离
+    const wsId = currentWorkspaceId(request);
+    if (wsId) {
+      params.push(wsId);
+      sql += ` AND workspace_id = $${params.length}`;
+    }
 
     if (sourceId) {
       sql += ` AND source_id = $${params.length + 1}`;
@@ -514,19 +540,23 @@ export async function rssRoutes(fastify: FastifyInstance) {
   // 获取已删除的文章列表
   fastify.get('/items/trash', { preHandler: authenticate }, async (request) => {
     const { limit = '20', offset = '0' } = request.query as any;
+    const wsId = currentWorkspaceId(request);
 
+    const wsClause = wsId ? ` AND workspace_id = $3` : '';
+    const wsParams = wsId ? [parseInt(limit), parseInt(offset), wsId] : [parseInt(limit), parseInt(offset)];
     const result = await query(
-      `SELECT id, source_name, title, link, summary, published_at, 
+      `SELECT id, source_name, title, link, summary, published_at,
               relevance_score, manual_score, deleted_at
        FROM rss_items
-       WHERE is_deleted = TRUE
+       WHERE is_deleted = TRUE${wsClause}
        ORDER BY deleted_at DESC
        LIMIT $1 OFFSET $2`,
-      [parseInt(limit), parseInt(offset)]
+      wsParams
     );
 
     const countResult = await query(
-      `SELECT COUNT(*) FROM rss_items WHERE is_deleted = TRUE`
+      `SELECT COUNT(*) FROM rss_items WHERE is_deleted = TRUE${wsId ? ' AND workspace_id = $1' : ''}`,
+      wsId ? [wsId] : []
     );
 
     return {
@@ -539,11 +569,12 @@ export async function rssRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // 清空回收站（永久删除所有已删除的文章）
-  fastify.post('/items/empty-trash', { preHandler: authenticate }, async () => {
-    const result = await query(
-      `DELETE FROM rss_items WHERE is_deleted = TRUE`
-    );
+  // 清空回收站（永久删除所有已删除的文章, 仅当前 workspace）
+  fastify.post('/items/empty-trash', { preHandler: authenticate }, async (request) => {
+    const wsId = currentWorkspaceId(request);
+    const result = wsId
+      ? await query(`DELETE FROM rss_items WHERE is_deleted = TRUE AND workspace_id = $1`, [wsId])
+      : await query(`DELETE FROM rss_items WHERE is_deleted = TRUE`);
 
     return {
       success: true,
@@ -559,6 +590,9 @@ export async function rssRoutes(fastify: FastifyInstance) {
     if (!q) {
       return { items: [] };
     }
+    const wsId = currentWorkspaceId(request);
+    const wsClause = wsId ? ' AND workspace_id = $3' : '';
+    const params = wsId ? [q, parseInt(limit), wsId] : [q, parseInt(limit)];
 
     const result = await query(
       `SELECT
@@ -567,10 +601,10 @@ export async function rssRoutes(fastify: FastifyInstance) {
         similarity(title, $1) as title_sim,
         similarity(summary, $1) as content_sim
       FROM rss_items
-      WHERE title % $1 OR summary % $1
+      WHERE (title % $1 OR summary % $1)${wsClause}
       ORDER BY GREATEST(similarity(title, $1), similarity(summary, $1)) DESC
       LIMIT $2`,
-      [q, parseInt(limit)]
+      params
     );
 
     return {
