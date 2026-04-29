@@ -1553,6 +1553,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const q = request.query as { scopeId?: string; scopeKind?: string; axis?: string };
       const conds: string[] = [];
       const args: unknown[] = [];
+      const wsId = currentWorkspaceId(request);
+      if (wsId) { args.push(wsId); conds.push(`workspace_id = $${args.length}`); }
       if (q.scopeKind) { args.push(q.scopeKind); conds.push(`scope_kind = $${args.length}`); }
       if (q.scopeId && UUID_RE.test(q.scopeId)) { args.push(q.scopeId); conds.push(`scope_id = $${args.length}`); }
       if (q.axis) { args.push(q.axis); conds.push(`axis = $${args.length}`); }
@@ -1578,20 +1580,37 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         return { error: 'Bad Request', message: 'name is required' };
       }
       const scopeId = body.scopeId && UUID_RE.test(body.scopeId) ? body.scopeId : null;
-      const r = await engine.deps.db.query(
-        `INSERT INTO mn_schedules (name, cron, on_state, scope_kind, scope_id, axis, preset)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id`,
-        [
-          body.name.trim(),
-          body.cron ?? null,
-          body.on !== false,
-          body.scopeKind ?? null,
-          scopeId,
-          body.axis ?? null,
-          body.preset ?? 'standard',
-        ],
-      );
+      const wsId = currentWorkspaceId(request);
+      const r = wsId
+        ? await engine.deps.db.query(
+            `INSERT INTO mn_schedules (name, cron, on_state, scope_kind, scope_id, axis, preset, workspace_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id`,
+            [
+              body.name.trim(),
+              body.cron ?? null,
+              body.on !== false,
+              body.scopeKind ?? null,
+              scopeId,
+              body.axis ?? null,
+              body.preset ?? 'standard',
+              wsId,
+            ],
+          )
+        : await engine.deps.db.query(
+            `INSERT INTO mn_schedules (name, cron, on_state, scope_kind, scope_id, axis, preset)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id`,
+            [
+              body.name.trim(),
+              body.cron ?? null,
+              body.on !== false,
+              body.scopeKind ?? null,
+              scopeId,
+              body.axis ?? null,
+              body.preset ?? 'standard',
+            ],
+          );
       return { id: r.rows[0].id, ok: true };
     });
 
@@ -1770,6 +1789,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         parentRunId: body.parentRunId,
         mode,
         expertRoles,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
       });
       if (!r.ok) reply.status(400);
       return r;
@@ -1787,6 +1807,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         axis: q.axis,
         state: q.state,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
+        workspaceId: currentWorkspaceId(request) ?? undefined,
       });
       return { items };
     });

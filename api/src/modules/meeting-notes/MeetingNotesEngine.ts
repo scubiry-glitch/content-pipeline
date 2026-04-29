@@ -451,6 +451,7 @@ export class MeetingNotesEngine {
     axis?: string;
     state?: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     limit?: number;
+    workspaceId?: string;
   }): Promise<RunRecord[]> {
     return this.runEngine.list(filter);
   }

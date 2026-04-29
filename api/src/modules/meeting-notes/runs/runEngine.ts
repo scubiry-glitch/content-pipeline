@@ -168,6 +168,11 @@ export class RunEngine {
     // - recoverQueuedRuns: state='queued' 的 run 全部重 enqueue 到 in-memory，让 worker 接管
     const zombieMin = opts.zombieTimeoutMin ?? 30;
     const initialReap = () => {
+      // 先按 cliPid 精确扫一遍：API 重启后立即收掉孤儿 claude 进程组 + 标 run failed，
+      // 不用等 15min heartbeat 超时；零误杀（pgid 验证）。
+      this.recoverOrphanCliRuns().catch((e) =>
+        console.warn('[RunEngine] orphan-cli recovery failed:', (e as Error).message),
+      );
       this.cleanupZombieRuns(zombieMin).catch((e) =>
         console.warn('[RunEngine] zombie cleanup failed:', (e as Error).message),
       );
@@ -231,6 +236,95 @@ export class RunEngine {
       console.warn('[RunEngine] recoverQueuedRuns failed:', (e as Error).message);
     }
     return { recovered };
+  }
+
+  /**
+   * pid-based 孤儿恢复：API 重启 / SIGKILL 后跑的清扫。
+   *
+   * claudeCliRunner spawn 后把 cliPid (= sh.pid = pgid，detached:true 让 sh 当组 leader)
+   * 和 apiPid (本 Node API 的 process.pid) 持久化到 metadata。这里只扫
+   * apiPid != 本进程 pid 的 run —— 即"上一辈 API 起的、现在没人管"的 —— 避免误伤当前 API
+   * 自己正在跑的活 run。
+   *
+   *   1) SELECT state='running' AND metadata.apiPid != 我.pid AND 有 cliPid
+   *   2) process.kill(-pgid, 0) 探活：组里还有人活着 = 孤儿 → 整组 SIGKILL；探不到 = 进程早死
+   *   3) 无论哪种，都把 run 标 failed（记 wasGroupAlive 区分场景）
+   *
+   * 比 heartbeat-based zombie 兜底（15min 阈值）快得多 —— 60s reaper 周期内必结。
+   */
+  async recoverOrphanCliRuns(): Promise<{ killedAlive: number; markedDead: number }> {
+    let killedAlive = 0;
+    let markedDead = 0;
+    const myPid = process.pid;
+    try {
+      const r = await this.deps.db.query(
+        `SELECT id,
+                (metadata->>'cliPid')::int  AS cli_pid,
+                (metadata->>'cliPgid')::int AS cli_pgid,
+                (metadata->>'apiPid')::int  AS api_pid
+           FROM mn_runs
+          WHERE state = 'running'
+            AND metadata ? 'cliPid'
+            AND (metadata->>'apiPid')::int IS DISTINCT FROM $1::int`,
+        [myPid],
+      );
+      for (const row of r.rows) {
+        const pid = Number(row.cli_pid);
+        const pgid = Number(row.cli_pgid ?? row.cli_pid);
+        if (!pid || !pgid) continue;
+
+        let groupAlive = false;
+        try {
+          // signal 0 = 仅探测；整组探测时只要有任何成员活就 OK
+          process.kill(-pgid, 0);
+          groupAlive = true;
+        } catch {
+          // ESRCH: 组里没人
+        }
+
+        if (groupAlive) {
+          try {
+            process.kill(-pgid, 'SIGKILL');
+            console.warn(`[RunEngine] orphan claude pgid=${pgid} (run ${row.id}, owner apiPid=${row.api_pid}) killed`);
+          } catch (e) {
+            console.warn(`[RunEngine] kill pgid=${pgid} failed:`, (e as Error).message);
+          }
+          killedAlive += 1;
+        } else {
+          markedDead += 1;
+        }
+
+        await this.deps.db.query(
+          `UPDATE mn_runs SET
+             state = 'failed', finished_at = NOW(),
+             error_message = COALESCE(error_message, $2),
+             metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+               'currentStep', '失败 · 进程恢复扫描'::text,
+               'currentStepKey', 'orphan-recovery',
+               'orphanRecoveredAt', NOW()::text,
+               'wasGroupAlive', $3::boolean,
+               'recoveredCliPid', $4::int,
+               'recoveredCliPgid', $5::int
+             )
+           WHERE id = $1 AND state = 'running'`,
+          [
+            row.id,
+            groupAlive
+              ? 'orphan-after-restart: claude process group killed during sweep'
+              : 'process-gone-after-restart: parent API died before claude finished',
+            groupAlive,
+            pid,
+            pgid,
+          ],
+        );
+      }
+      if (killedAlive + markedDead > 0) {
+        console.log(`[RunEngine] orphan-cli recovery: killed ${killedAlive} alive group(s), marked ${markedDead} dead`);
+      }
+    } catch (e) {
+      console.warn('[RunEngine] recoverOrphanCliRuns failed:', (e as Error).message);
+    }
+    return { killedAlive, markedDead };
   }
 
   /**
@@ -355,24 +449,45 @@ export class RunEngine {
     // mode：'multi-axis' 不写入（默认值）；'claude-cli' 才写到 metadata，供 execute() 分叉判断
     const runMode: 'multi-axis' | 'claude-cli' = req.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
     if (runMode === 'claude-cli') initialMeta.mode = 'claude-cli';
-    const ins = await this.deps.db.query(
-      `INSERT INTO mn_runs
-         (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
-          state, triggered_by, parent_run_id, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb)
-       RETURNING id`,
-      [
-        scopeNorm.kind,
-        scopeNorm.id ?? null,
-        req.axis,
-        subDims,
-        preset,
-        strategySpec,
-        triggeredBy,
-        req.parentRunId ?? null,
-        JSON.stringify(initialMeta),
-      ],
-    );
+    // workspace_id 显式注入；不传时由 mn_runs 的 DEFAULT (default ws) 兜底
+    const ins = req.workspaceId
+      ? await this.deps.db.query(
+          `INSERT INTO mn_runs
+             (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
+              state, triggered_by, parent_run_id, metadata, workspace_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb, $10)
+           RETURNING id`,
+          [
+            scopeNorm.kind,
+            scopeNorm.id ?? null,
+            req.axis,
+            subDims,
+            preset,
+            strategySpec,
+            triggeredBy,
+            req.parentRunId ?? null,
+            JSON.stringify(initialMeta),
+            req.workspaceId,
+          ],
+        )
+      : await this.deps.db.query(
+          `INSERT INTO mn_runs
+             (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
+              state, triggered_by, parent_run_id, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb)
+           RETURNING id`,
+          [
+            scopeNorm.kind,
+            scopeNorm.id ?? null,
+            req.axis,
+            subDims,
+            preset,
+            strategySpec,
+            triggeredBy,
+            req.parentRunId ?? null,
+            JSON.stringify(initialMeta),
+          ],
+        );
     const runId = ins.rows[0].id as string;
 
     // 4. 入队
@@ -549,9 +664,11 @@ export class RunEngine {
     axis?: string;
     state?: RunState;
     limit?: number;
+    workspaceId?: string;
   }): Promise<RunRecord[]> {
     const where: string[] = [];
     const params: any[] = [];
+    if (filter.workspaceId) { params.push(filter.workspaceId); where.push(`workspace_id = $${params.length}`); }
     if (filter.scopeKind) { params.push(filter.scopeKind); where.push(`scope_kind = $${params.length}`); }
     if (filter.scopeId !== undefined) {
       params.push(filter.scopeId ?? null);

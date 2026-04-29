@@ -182,6 +182,8 @@ export interface EnqueueRunRequest {
    *   两种模式都会走完 parseMeeting + 专家加载 + strategy 解析的共享上下文。
    */
   mode?: RunMode;
+  /** 当前请求所在 workspace；不传时由 mn_runs 表的 DEFAULT (default ws) 兜底 */
+  workspaceId?: string;
 }
 
 export interface RunRecord {
