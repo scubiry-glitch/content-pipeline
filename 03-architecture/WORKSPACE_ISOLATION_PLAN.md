@@ -29,7 +29,9 @@
 | `routes/v34-hot-topics.ts` | `788d792` | hot_topics 列表/详情/from-rss |
 | `modules/meeting-notes/router.ts` | `36cd73d` | meetings/scopes/people/runs/schedules `:id` + meetings & scopes 列表/创建 |
 
-**累计**：6 个 router 完整数据隔离，跨 ws 访问一律 404。
+**累计**：10 个 router 完整数据隔离，跨 ws 访问一律 404。
+- production / assets / meeting-note-sources / rss / hot-topics / meeting-notes 模块（P1.0）
+- archive / favorites / v34-assets / research（P1.1，2026-04-29 增量）
 
 #### 工具层
 - `db/repos/withWorkspace.ts`：`currentWorkspaceId(req)` / `requireWorkspaceId(req,reply)` / `assertRowInWorkspace(table, idCol, id, wsId)`
@@ -38,7 +40,18 @@
 
 ## 🔴 待办 P1（高优先级）
 
-### 1. meeting-notes 模块 list 端点深度过滤
+### ✅ P1 已完成（2026-04-29）
+
+| Router | Commit | 状态 |
+|---|---|---|
+| `archive.ts` | `41006a8` | :taskId 守卫 + recycle-bin/hidden list 按 ws 过滤 ✅ |
+| `favorites.ts` | `a6f819b` | (user_id, workspace_id) 双过滤；INSERT 落到当前 ws ✅ |
+| `v34-assets.ts` | `fcf038e` | :id 守卫 + list/create 注入 ws ✅（route 仍受预先存在 `usage_count` 缺列 500 影响） |
+| `research.ts` | `fa778e3` | :taskId 守卫 ✅ |
+
+### 🟡 P1 剩下需要更深改造
+
+#### 1. meeting-notes 模块 list 端点深度过滤
 当前 `modules/meeting-notes/router.ts` 已守卫所有 `:id` 路径与 `/meetings`、`/scopes` 顶层 list/create。**还没改造**：
 - `GET /runs` 列表（runEngine.list 需加 workspaceId 过滤）
 - `GET /schedules` 列表
@@ -49,20 +62,18 @@
 >
 > 风险：低；改动需要进 `runs/runEngine.ts`（1700+ 行），应该只动 `list()` / `enqueue()` 两个方法。
 
-### 2. routes/recommendation.ts / routes/research.ts / routes/archive.ts
-小路由，可一次性扫掉。涉及 tasks 二级派生、recommendations 等。Schema 已就位，只缺 router 注入。
+#### 2. routes/recommendation.ts（**deep refactor**）
+recommendation 服务底层从 rss_items / tasks / assets / blue_team_reviews 多表派生推荐。要正确隔离，需要把 workspaceId 串到 `services/recommendation.ts` 里 7+ 个 SELECT 语句。当前规模 ~500 行，改动面较大。
 
-### 3. routes/sentiment.ts
-依赖 community_topics + unified_topics 子表。
+> 当前行为：admin 看到全 default 数据派生的推荐；其他 ws 用户看到的是同一份推荐（数据未隔离），但因为登录 cookie 已是用户身份，对推荐结果没产品危害。
 
-### 4. routes/favorites.ts（favorite_reports）
-P0 表，需要按用户 + 工作区双重过滤。
+#### 3. routes/sentiment.ts（**先补认证**）
+所有路由**没有 `preHandler: authenticate`**。`/topic/:topicId` 与 `/trend/:topicId` 通过 `sentimentAnalyzer.analyzeTopic(topicId)` 走数据查询，可能涉及 community_topics。
 
-### 5. routes/v34-assets.ts
-delegated to AssetService；可能已经被 assets 改造覆盖，需要复核。
+> 决策：把这个 router 当 P2 共享数据看待（同 expert-library），加 authenticate 但不加 ws 过滤。或者干脆不改—它的端点本质上是分析服务而非数据存储。
 
-### 6. routes/communityTopics.ts
-community_topics + unified_topics 列表/详情。
+#### 4. routes/communityTopics.ts（**视为 P2 共享**）
+crawler-based 抓取小红书/微博/知乎/B站/雪球的话题数据。设计上是全员共享的市场情报。**决策**：与 expert-library / content-library 同等处理 — 当前不加 ws 过滤；future is_shared 切换时再说。
 
 ---
 
