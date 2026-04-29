@@ -61,7 +61,10 @@ export class ScopeService {
   async list(filter: { kind?: ScopeKind; status?: ScopeStatus; workspaceId?: string } = {}): Promise<ScopeRow[]> {
     const where: string[] = [];
     const params: any[] = [];
-    if (filter.workspaceId) { params.push(filter.workspaceId); where.push(`workspace_id = $${params.length}`); }
+    if (filter.workspaceId) {
+      params.push(filter.workspaceId);
+      where.push(`(workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
+    }
     if (filter.kind)        { params.push(filter.kind);        where.push(`kind = $${params.length}`); }
     if (filter.status)      { params.push(filter.status);      where.push(`status = $${params.length}`); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';

@@ -77,8 +77,10 @@ async function recommendTopics(
 ): Promise<TopicRecommendation[]> {
   const recommendations: TopicRecommendation[] = [];
 
-  // 1. 基于 RSS 热点推荐 (按 ws 过滤)
-  const rssWsClause = workspaceId ? ' AND workspace_id = $2' : '';
+  // 1. 基于 RSS 热点推荐 (read 模式: 包含 is_shared workspace 行)
+  const rssWsClause = workspaceId
+    ? ' AND (workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+    : '';
   const rssParams = workspaceId ? [limit * 2, workspaceId] : [limit * 2];
   const rssHotTopics = await query(
     `SELECT
@@ -111,9 +113,11 @@ async function recommendTopics(
     });
   }
 
-  // 2. 基于历史任务主题推荐延伸话题 (按 ws 过滤)
+  // 2. 基于历史任务主题推荐延伸话题 (read 模式: 包含 is_shared workspace 行)
   if (context) {
-    const taskWsClause = workspaceId ? ' AND workspace_id = $3' : '';
+    const taskWsClause = workspaceId
+      ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const taskParams = workspaceId ? [context, limit, workspaceId] : [context, limit];
     const relatedTasks = await query(
       `SELECT
@@ -179,8 +183,10 @@ async function recommendMaterials(
   const recommendations: MaterialRecommendation[] = [];
 
   if (!context) {
-    // 返回高质量素材 (按 ws 过滤)
-    const topWsClause = workspaceId ? ' WHERE workspace_id = $2' : '';
+    // 返回高质量素材 (read 模式: 包含 is_shared workspace 行)
+    const topWsClause = workspaceId
+      ? ' WHERE (workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const topParams = workspaceId ? [limit, workspaceId] : [limit];
     const topMaterials = await query(
       `SELECT
@@ -206,8 +212,10 @@ async function recommendMaterials(
     }));
   }
 
-  // 基于上下文搜索相关素材 (按 ws 过滤)
-  const relWsClause = workspaceId ? ' AND workspace_id = $3' : '';
+  // 基于上下文搜索相关素材 (read 模式: 包含 is_shared workspace 行)
+  const relWsClause = workspaceId
+    ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+    : '';
   const relParams = workspaceId ? [context, limit * 2, workspaceId] : [context, limit * 2];
   const relatedAssets = await query(
     `SELECT
@@ -327,8 +335,10 @@ async function searchByVectorSimilarity(
   limit: number,
   workspaceId?: string,
 ): Promise<MaterialRecommendation[]> {
-  // 简化实现：使用文本搜索代替向量搜索
-  const wsClause = workspaceId ? ' AND workspace_id = $3' : '';
+  // 简化实现：使用文本搜索代替向量搜索 (read 模式: 包含 is_shared workspace 行)
+  const wsClause = workspaceId
+    ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+    : '';
   const params = workspaceId ? [`%${context}%`, limit, workspaceId] : [`%${context}%`, limit];
   const results = await query(
     `SELECT
@@ -359,8 +369,10 @@ async function searchByVectorSimilarity(
  * 识别知识库空白
  */
 async function identifyKnowledgeGaps(workspaceId?: string): Promise<string[]> {
-  // 检查哪些领域缺少覆盖 (按 ws 过滤)
-  const wsClause = workspaceId ? ' AND workspace_id = $1' : '';
+  // 检查哪些领域缺少覆盖 (read 模式: 包含 is_shared workspace 行)
+  const wsClause = workspaceId
+    ? ' AND (workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+    : '';
   const params = workspaceId ? [workspaceId] : [];
   const coveredTopics = await query(
     `SELECT DISTINCT topic FROM tasks WHERE created_at > NOW() - INTERVAL '30 days'${wsClause}`,

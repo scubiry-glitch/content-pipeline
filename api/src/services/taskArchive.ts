@@ -287,7 +287,7 @@ export async function getRecycleBinTasks(options: {
   const params: any[] = [];
 
   if (workspaceId) {
-    sql += ` AND workspace_id = $${params.length + 1}`;
+    sql += ` AND (workspace_id = $${params.length + 1} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
     params.push(workspaceId);
   }
   if (userId) {
@@ -298,7 +298,7 @@ export async function getRecycleBinTasks(options: {
   // count 与 list 共用同一组 WHERE 条件（重建占位符）
   const countParams = [...params];
   const countConditions: string[] = [];
-  if (workspaceId) countConditions.push(`workspace_id = $${countConditions.length + 1}`);
+  if (workspaceId) countConditions.push(`(workspace_id = $${countConditions.length + 1} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
   if (userId) countConditions.push(`created_by = $${countConditions.length + 1}`);
   const countWhere = countConditions.length ? ' AND ' + countConditions.join(' AND ') : '';
   const countResult = await query(
@@ -342,7 +342,7 @@ export async function getHiddenTasks(options: {
   const params: any[] = [];
 
   if (workspaceId) {
-    sql += ` AND workspace_id = $${params.length + 1}`;
+    sql += ` AND (workspace_id = $${params.length + 1} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
     params.push(workspaceId);
   }
   if (userId) {
@@ -352,7 +352,7 @@ export async function getHiddenTasks(options: {
 
   const countParams = [...params];
   const countConditions: string[] = [];
-  if (workspaceId) countConditions.push(`workspace_id = $${countConditions.length + 1}`);
+  if (workspaceId) countConditions.push(`(workspace_id = $${countConditions.length + 1} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
   if (userId) countConditions.push(`created_by = $${countConditions.length + 1}`);
   const countWhere = countConditions.length ? ' AND ' + countConditions.join(' AND ') : '';
   const countResult = await query(

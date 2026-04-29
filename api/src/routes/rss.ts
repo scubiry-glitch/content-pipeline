@@ -272,11 +272,11 @@ export async function rssRoutes(fastify: FastifyInstance) {
     }
     const params: any[] = [];
 
-    // Workspace 隔离
+    // Workspace 隔离 (read 模式: 包含 is_shared workspace 行, 对齐 035/039 设计)
     const wsId = currentWorkspaceId(request);
     if (wsId) {
       params.push(wsId);
-      sql += ` AND workspace_id = $${params.length}`;
+      sql += ` AND (workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
     }
 
     if (sourceId) {
@@ -542,7 +542,9 @@ export async function rssRoutes(fastify: FastifyInstance) {
     const { limit = '20', offset = '0' } = request.query as any;
     const wsId = currentWorkspaceId(request);
 
-    const wsClause = wsId ? ` AND workspace_id = $3` : '';
+    const wsClause = wsId
+      ? ` AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`
+      : '';
     const wsParams = wsId ? [parseInt(limit), parseInt(offset), wsId] : [parseInt(limit), parseInt(offset)];
     const result = await query(
       `SELECT id, source_name, title, link, summary, published_at,
@@ -555,7 +557,9 @@ export async function rssRoutes(fastify: FastifyInstance) {
     );
 
     const countResult = await query(
-      `SELECT COUNT(*) FROM rss_items WHERE is_deleted = TRUE${wsId ? ' AND workspace_id = $1' : ''}`,
+      `SELECT COUNT(*) FROM rss_items WHERE is_deleted = TRUE${
+        wsId ? ' AND (workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))' : ''
+      }`,
       wsId ? [wsId] : []
     );
 
@@ -591,7 +595,9 @@ export async function rssRoutes(fastify: FastifyInstance) {
       return { items: [] };
     }
     const wsId = currentWorkspaceId(request);
-    const wsClause = wsId ? ' AND workspace_id = $3' : '';
+    const wsClause = wsId
+      ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const params = wsId ? [q, parseInt(limit), wsId] : [q, parseInt(limit)];
 
     const result = await query(

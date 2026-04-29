@@ -117,8 +117,10 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
       // assets.id 是 varchar (e.g. UUID 或 'asset_xxx')；其它 mn_* 是 uuid
       // assertRowInWorkspace 用 text 绑定 + Postgres 自动 cast
+      // GET → read 模式 (允许 is_shared workspace 的行); 其他方法 → write 模式 (严格当前 ws)
+      const mode = request.method === 'GET' ? 'read' : 'write';
       try {
-        const ok = await assertRowInWorkspace(table, idCol, id, wsId);
+        const ok = await assertRowInWorkspace(table, idCol, id, wsId, mode);
         if (!ok) {
           reply.code(404).send({ error: 'Not Found' });
         }
@@ -246,7 +248,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
              OR ($2::text = 'active'   AND COALESCE((a.metadata->>'archived')::boolean, false) = false)
              OR ($2::text = 'archived' AND COALESCE((a.metadata->>'archived')::boolean, false) = true)
            )
-           AND ($3::uuid IS NULL OR a.workspace_id = $3::uuid)
+           AND (
+             $3::uuid IS NULL
+             OR a.workspace_id = $3::uuid
+             OR a.workspace_id IN (SELECT id FROM workspaces WHERE is_shared)
+           )
          ORDER BY a.created_at DESC
          LIMIT $1`,
           [limit, status, wsId],
@@ -256,7 +262,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           `SELECT id, scope_kind, axis, state, created_at, finished_at, error_message, metadata
          FROM mn_runs
          WHERE scope_kind = 'library'
-           AND ($2::uuid IS NULL OR workspace_id = $2::uuid)
+           AND (
+             $2::uuid IS NULL
+             OR workspace_id = $2::uuid
+             OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared)
+           )
          ORDER BY created_at DESC LIMIT $1`,
           [Math.min(limit, 20), wsId],
         );
@@ -1554,7 +1564,10 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const conds: string[] = [];
       const args: unknown[] = [];
       const wsId = currentWorkspaceId(request);
-      if (wsId) { args.push(wsId); conds.push(`workspace_id = $${args.length}`); }
+      if (wsId) {
+        args.push(wsId);
+        conds.push(`(workspace_id = $${args.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
+      }
       if (q.scopeKind) { args.push(q.scopeKind); conds.push(`scope_kind = $${args.length}`); }
       if (q.scopeId && UUID_RE.test(q.scopeId)) { args.push(q.scopeId); conds.push(`scope_id = $${args.length}`); }
       if (q.axis) { args.push(q.axis); conds.push(`axis = $${args.length}`); }

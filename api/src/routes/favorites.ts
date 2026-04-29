@@ -12,7 +12,9 @@ export async function favoritesRoutes(fastify: FastifyInstance) {
     const userId = (request as any).user?.id || 'anonymous';
     const wsId = currentWorkspaceId(request);
 
-    const wsClause = wsId ? ' AND workspace_id = $2' : '';
+    const wsClause = wsId
+      ? ' AND (workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const params = wsId ? [userId, wsId] : [userId];
     const result = await query(
       `SELECT id, report_id as "reportId", topic_id as "topicId",
@@ -33,7 +35,9 @@ export async function favoritesRoutes(fastify: FastifyInstance) {
     const userId = (request as any).user?.id || 'anonymous';
     const wsId = currentWorkspaceId(request);
 
-    const wsClause = wsId ? ' AND workspace_id = $3' : '';
+    const wsClause = wsId
+      ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const params = wsId ? [userId, reportId, wsId] : [userId, reportId];
     const result = await query(
       `SELECT id FROM favorite_reports WHERE user_id = $1 AND report_id = $2${wsClause}`,
@@ -126,7 +130,9 @@ export async function favoritesRoutes(fastify: FastifyInstance) {
       return { favorites: {} };
     }
 
-    const wsClause = wsId ? ' AND workspace_id = $3' : '';
+    const wsClause = wsId
+      ? ' AND (workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const params = wsId ? [userId, reportIds, wsId] : [userId, reportIds];
     const result = await query(
       `SELECT report_id as "reportId" FROM favorite_reports

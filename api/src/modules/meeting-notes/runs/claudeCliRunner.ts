@@ -275,13 +275,38 @@ export async function runClaudeCliMode(
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag} --output-format json --max-turns 1 < '${promptFile}'`;
+  // detached:true → spawn 时调 setpgid(0,0)，sh + claude 落到一个新进程组（pgid = sh.pid）。
+  // 超时时 process.kill(-proc.pid, SIGKILL) 才能整组通杀。
+  // 之前默认 detached:false 时 proc.kill('SIGKILL') 只杀到 sh，孙子 claude 变孤儿，
+  // 仍持有 stdout/stderr 写端 → drainStream 永远收不到 EOF → Promise.all 永挂 →
+  // runEngine 永远不进 catch → state 永远停在 'running'。
   const proc = spawn('sh', ['-c', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     },
   });
+
+  // 持久化 cliPid/cliPgid/apiPid 到 mn_runs.metadata，让后续 API 进程在 recoverOrphanCliRuns
+  // 时能找到这条 run 对应的 sh 进程组并 SIGKILL（哪怕本 API 已经被 SIGKILL 了，下个 API 起来 60s 内
+  // 就能精确收尾，不用等 15min heartbeat 兜底）
+  if (proc.pid) {
+    try {
+      await deps.db.query(
+        `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+           'cliPid', $2::int,
+           'cliPgid', $2::int,
+           'apiPid', $3::int,
+           'cliStartedAt', NOW()::text
+         ) WHERE id = $1`,
+        [payload.runId, proc.pid, process.pid],
+      );
+    } catch (e) {
+      console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] persist cliPid failed: ${(e as Error).message}`);
+    }
+  }
 
   // 心跳：首次 stdout 字节翻到 streaming
   let firstByteSeen = false;
@@ -292,15 +317,43 @@ export async function runClaudeCliMode(
     }
   });
 
-  // 超时 SIGKILL（同时让 sh 子壳和 claude 一起死，detached=false 默认 SIGKILL 会传到子进程组）
-  const timer = setTimeout(() => {
-    try {
-      proc.kill('SIGKILL');
-    } catch {}
-  }, DEFAULT_TIMEOUT_MS);
+  // 杀整组（detached + 负 pid）；同时 destroy stdio，防御进程组死后管道仍被持有的极端情况
+  let killed = false;
+  let killReason = '';
+  const killGroup = (reason: string): void => {
+    if (killed) return;
+    killed = true;
+    killReason = reason;
+    console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] killing process group: ${reason}`);
+    if (proc.pid) {
+      try {
+        process.kill(-proc.pid, 'SIGKILL');
+      } catch (e) {
+        console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] kill -group failed (${(e as Error).message}); falling back to proc.kill`);
+        try { proc.kill('SIGKILL'); } catch {}
+      }
+    }
+    try { (proc.stdout as any)?.destroy?.(new Error(`killed: ${reason}`)); } catch {}
+    try { (proc.stderr as any)?.destroy?.(new Error(`killed: ${reason}`)); } catch {}
+  };
 
-  // 收尾 (Phase H+ debug · 加大量日志看卡哪)
-  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] spawn pid=${proc.pid} cmd=${cmd.slice(0, 120)}...`);
+  // 软超时：到时间杀整组
+  const softTimer = setTimeout(() => killGroup(`soft timeout ${DEFAULT_TIMEOUT_MS}ms`), DEFAULT_TIMEOUT_MS);
+  // 硬截止：软超时后再给 30s 缓冲让进程退；还没退就再杀一次 + 让 await 链路彻底放手
+  const HARD_GRACE_MS = 30_000;
+  const hardTimer = setTimeout(() => killGroup(`hard deadline ${DEFAULT_TIMEOUT_MS + HARD_GRACE_MS}ms`), DEFAULT_TIMEOUT_MS + HARD_GRACE_MS);
+
+  // best-effort：API 进程正常 exit 时顺手收掉孤儿（tsx watch 用 SIGKILL 重启 API 这条路救不了，
+  // 那种情况只能靠 startup 时的 zombie 兜底，不在本 runner 范围内）
+  const onExit = (): void => {
+    if (proc.pid && !killed && proc.exitCode === null) {
+      try { process.kill(-proc.pid, 'SIGKILL'); } catch {}
+    }
+  };
+  process.on('exit', onExit);
+
+  // 收尾日志（Phase H+ debug · 加大量日志看卡哪）
+  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] spawn pid=${proc.pid} pgid=${proc.pid} cmd=${cmd.slice(0, 120)}...`);
   proc.on('exit', (code, sig) => {
     console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc exit code=${code} sig=${sig}`);
   });
@@ -310,17 +363,43 @@ export async function runClaudeCliMode(
   proc.on('error', (err) => {
     console.warn(`[claudeCliRunner ${payload.runId.slice(0, 8)}] proc error ${(err as Error).message}`);
   });
+
   const t0 = Date.now();
-  const [stdout, stderr, exitCode] = await Promise.all([
-    drainStream(proc.stdout, 'stdout', payload.runId),
-    drainStream(proc.stderr, 'stderr', payload.runId),
-    new Promise<number>((res) => proc.on('close', (code) => res(code ?? -1))),
-  ]);
-  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] all done (${Date.now() - t0}ms) · exitCode=${exitCode} · stdout=${stdout.length}B stderr=${stderr.length}B`);
-  clearTimeout(timer);
+  // 终极兜底：硬截止 + 5s 后还没 resolve 就强 reject —— 防止 stdio 在内核层泄漏到无关进程时
+  // 'close' 事件永不到。能走到这一步说明系统已经处于不可恢复状态，throw 出去让 runEngine 写 failed。
+  const ABANDON_MS = DEFAULT_TIMEOUT_MS + HARD_GRACE_MS + 5_000;
+  let stdout = '', stderr = '', exitCode = -1;
+  try {
+    [stdout, stderr, exitCode] = await Promise.race([
+      Promise.all([
+        // 被 destroy 时 drainStream 会 reject —— 我们当成空串吞掉，外层 killed 标志统一处理失败
+        drainStream(proc.stdout, 'stdout', payload.runId).catch(() => ''),
+        drainStream(proc.stderr, 'stderr', payload.runId).catch(() => ''),
+        new Promise<number>((res) => proc.on('close', (code) => res(code ?? -1))),
+      ]) as Promise<[string, string, number]>,
+      new Promise<[string, string, number]>((_, rej) => {
+        const t = setTimeout(() => rej(new Error(
+          `claude CLI abandoned after ${ABANDON_MS}ms — process group killed but pipes still hung`,
+        )), ABANDON_MS);
+        t.unref();
+      }),
+    ]);
+  } finally {
+    clearTimeout(softTimer);
+    clearTimeout(hardTimer);
+    process.removeListener('exit', onExit);
+  }
+  console.log(`[claudeCliRunner ${payload.runId.slice(0, 8)}] all done (${Date.now() - t0}ms) · exitCode=${exitCode} · stdout=${stdout.length}B stderr=${stderr.length}B${killed ? ` · KILLED(${killReason})` : ''}`);
 
   // 清理 tmpfile（无论成败）
   await unlink(promptFile).catch(() => {/* swallow */});
+
+  if (killed) {
+    await hooks.recordCliRaw(truncate(stdout || stderr, 200_000));
+    throw new Error(
+      `claude CLI killed: ${killReason}${stderr ? ` · stderr: ${truncate(stderr, 500)}` : ''}`,
+    );
+  }
 
   if (exitCode !== 0) {
     await hooks.recordCliRaw(truncate(stdout || stderr, 200_000));

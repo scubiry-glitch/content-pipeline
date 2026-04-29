@@ -38,7 +38,7 @@ export class HotTopicService {
 
     if (workspaceId) {
       params.push(workspaceId);
-      conditions.push(`ht.workspace_id = $${params.length}`);
+      conditions.push(`(ht.workspace_id = $${params.length} OR ht.workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
     }
 
     if (trend) {
@@ -171,9 +171,11 @@ export class HotTopicService {
     return data;
   }
 
-  // 从 RSS 数据获取热点话题
+  // 从 RSS 数据获取热点话题 (read 模式: 包含 is_shared workspace 行)
   async getHotTopicsFromRss(limit: number = 10, workspaceId?: string): Promise<any[]> {
-    const wsClause = workspaceId ? ' AND workspace_id = $2' : '';
+    const wsClause = workspaceId
+      ? ' AND (workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))'
+      : '';
     const params = workspaceId ? [limit, workspaceId] : [limit];
     const result = await query(
       `SELECT

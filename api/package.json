@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:api-only": "MN_API_ONLY=true tsx watch src/server.ts",
+    "worker:mn": "MN_WORKER_ONLY=true tsx src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc",
     "demo": "tsx src/demo.ts",

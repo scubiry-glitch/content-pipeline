@@ -128,9 +128,10 @@ export class ProductionService {
     const baseConditions: string[] = [];
     const pageConditions: string[] = [];
 
-    // Workspace 隔离：登录用户必传；api-key 路径 workspaceId=undefined 时跳过过滤（admin 全局视图）
+    // Workspace 隔离 (read 模式: 包含 is_shared workspace 行)
+    // 登录用户必传；api-key 路径 workspaceId=undefined 时跳过过滤（admin 全局视图）
     if (workspaceId) {
-      const cond = `workspace_id = $${params.length + 1}`;
+      const cond = `(workspace_id = $${params.length + 1} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
       baseConditions.push(cond);
       pageConditions.push(cond);
       params.push(workspaceId);

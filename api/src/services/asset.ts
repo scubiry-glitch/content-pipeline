@@ -494,11 +494,13 @@ export class AssetService {
     countSql += visibilityWhere.where;
     params.push(...visibilityWhere.params);
 
-    // Workspace 隔离: 登录用户必传; api-key 路径 workspaceId=undefined 跳过 (admin 全局视图)
+    // Workspace 隔离 (read 模式: 包含 is_shared workspace 行)
+    // 登录用户必传; api-key 路径 workspaceId=undefined 跳过 (admin 全局视图)
     if (workspaceId) {
       params.push(workspaceId);
-      sql += ` AND workspace_id = $${params.length}`;
-      countSql += ` AND workspace_id = $${params.length}`;
+      const cond = ` AND (workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
+      sql += cond;
+      countSql += cond;
     }
 
     if (tags && tags.length > 0) {
@@ -584,10 +586,10 @@ export class AssetService {
     sql += visibilityWhere.where;
     params.push(...visibilityWhere.params);
 
-    // Workspace 隔离
+    // Workspace 隔离 (read 模式: 包含 is_shared workspace 行)
     if (workspaceId) {
       params.push(workspaceId);
-      sql += ` AND workspace_id = $${params.length}`;
+      sql += ` AND (workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
     }
 
     if (tags && tags.length > 0) {

@@ -197,11 +197,12 @@ export class AssetService {
     let countSql = `SELECT COUNT(*) FROM assets WHERE 1=1`;
     const params: any[] = [];
 
-    // Workspace 隔离
+    // Workspace 隔离 (read 模式: 包含 is_shared workspace 行)
     if (workspaceId) {
       params.push(workspaceId);
-      sql += ` AND workspace_id = $${params.length}`;
-      countSql += ` AND workspace_id = $${params.length}`;
+      const cond = ` AND (workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
+      sql += cond;
+      countSql += cond;
     }
 
     if (type) {

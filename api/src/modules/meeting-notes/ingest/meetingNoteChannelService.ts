@@ -129,7 +129,7 @@ export class MeetingNoteChannelService {
     const params: any[] = [];
     if (filter.workspaceId) {
       params.push(filter.workspaceId);
-      where.push(`workspace_id = $${params.length}`);
+      where.push(`(workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
     }
     if (filter.kind) {
       params.push(filter.kind);

@@ -152,6 +152,13 @@ export class RunEngine {
   /** F3 · heartbeat 间隔（ms）。zombie 检测用 5 min × 2 = 10 min 安全裕度。 */
   private static readonly HEARTBEAT_MS = 30_000;
 
+  /** API-only 模式：不执行 run（不消费内存队列、不从 DB 拉 queued）。
+   *  专门用来让 dev API 进程（tsx watch 容易抖动）不再持有 claude 子进程，
+   *  把执行权交给 worker 进程（npm run worker:mn）。
+   *  housekeeping（orphan-recovery + zombie cleanup）继续跑，无副作用。
+   */
+  private readonly executorDisabled: boolean = process.env.MN_API_ONLY === 'true';
+
   constructor(
     private readonly deps: MeetingNotesDeps,
     private readonly getMeetingAxes: (meetingId: string) => Promise<any>,
@@ -159,8 +166,12 @@ export class RunEngine {
   ) {
     this.queue = new RunQueue<QueuePayload>(opts.concurrency ?? 2);
     this.versionStore = new VersionStore(deps);
-    // P2 worker-pool：queue 自驱，不再用 drainSoon
-    this.queue.start((item) => this.execute(item.payload));
+    if (!this.executorDisabled) {
+      // P2 worker-pool：queue 自驱，不再用 drainSoon
+      this.queue.start((item) => this.execute(item.payload));
+    } else {
+      console.log('[RunEngine] MN_API_ONLY=true → executor disabled (worker process is responsible for executing runs)');
+    }
 
     // Opt-3 (O4) + P2 recovery：启动时清扫僵尸 + 把 DB 里残留的 queued runs 重新捡回内存队列
     // RunQueue 是 in-memory，进程重启 / 崩溃后 mn_runs.state='running'/'queued' 会丢失内存追踪。
@@ -176,9 +187,12 @@ export class RunEngine {
       this.cleanupZombieRuns(zombieMin).catch((e) =>
         console.warn('[RunEngine] zombie cleanup failed:', (e as Error).message),
       );
-      this.recoverQueuedRuns().catch((e) =>
-        console.warn('[RunEngine] queued run recovery failed:', (e as Error).message),
-      );
+      // executorDisabled 时不拉 queued —— worker 进程会拉
+      if (!this.executorDisabled) {
+        this.recoverQueuedRuns().catch((e) =>
+          console.warn('[RunEngine] queued run recovery failed:', (e as Error).message),
+        );
+      }
     };
     setImmediate(initialReap);
     // F4 · 周期 reaper：每 60 秒跑一次，让 zombie 检测 + 队列恢复持续生效
@@ -271,7 +285,24 @@ export class RunEngine {
       for (const row of r.rows) {
         const pid = Number(row.cli_pid);
         const pgid = Number(row.cli_pgid ?? row.cli_pid);
+        const ownerApiPid = Number(row.api_pid);
         if (!pid || !pgid) continue;
+
+        // 关键：探一下原来 spawn 这个 claude 的 API/worker 进程是否还活着。
+        // 如果活着 → 这条 run 不是孤儿，是兄弟进程在跑（split mode：API + Worker 同时跑）→ 跳过！
+        // 如果死了 → 真孤儿，按原逻辑收。
+        // 这一步必须有，否则 API + Worker 分离后两个进程会互相把对方的活 run 当孤儿杀。
+        if (ownerApiPid) {
+          let ownerAlive = false;
+          try {
+            process.kill(ownerApiPid, 0);
+            ownerAlive = true;
+          } catch { /* ESRCH = owner 已死 */ }
+          if (ownerAlive) {
+            // owner 还活着 → 它在管这条 run，别动
+            continue;
+          }
+        }
 
         let groupAlive = false;
         try {
@@ -491,6 +522,12 @@ export class RunEngine {
     const runId = ins.rows[0].id as string;
 
     // 4. 入队
+    // executorDisabled（API-only 进程）跳过 in-memory enqueue —— 否则会泄漏。
+    // worker 进程的周期 reaper（recoverQueuedRuns，60s）会从 DB 拉 state='queued' 的 run。
+    // 代价：API 起的 run 最多延迟 60s 才被 worker pickup；可接受（claude 自己 spawn + TTFB 也是这个量级）。
+    if (this.executorDisabled) {
+      return { ok: true, runId };
+    }
     this.queue.enqueue({
       id: runId,
       payload: {
@@ -668,7 +705,10 @@ export class RunEngine {
   }): Promise<RunRecord[]> {
     const where: string[] = [];
     const params: any[] = [];
-    if (filter.workspaceId) { params.push(filter.workspaceId); where.push(`workspace_id = $${params.length}`); }
+    if (filter.workspaceId) {
+      params.push(filter.workspaceId);
+      where.push(`(workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`);
+    }
     if (filter.scopeKind) { params.push(filter.scopeKind); where.push(`scope_kind = $${params.length}`); }
     if (filter.scopeId !== undefined) {
       params.push(filter.scopeId ?? null);

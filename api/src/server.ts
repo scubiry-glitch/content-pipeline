@@ -316,10 +316,19 @@ async function main() {
   const schedulerStaggerMs = Math.max(0, parseInt(process.env.STARTUP_TASK_STAGGER_MS || '15000', 10));
   const taxonomyBootstrap = process.env.TAXONOMY_BOOTSTRAP !== 'false';
 
+  // Worker-only 模式：把这个进程跑成 RunEngine 执行器，不开 HTTP server。
+  // 用法：MN_WORKER_ONLY=true npx tsx src/server.ts
+  // 配合 API 进程的 MN_API_ONLY=true，把 claude-cli 执行从 tsx watch 进程里剥离，
+  // dev 重启不再杀掉跑了一半的 run。
+  const workerOnly = process.env.MN_WORKER_ONLY === 'true';
   try {
-    await fastify.listen({ port: PORT, host: HOST });
-    console.log(`🚀 Content Pipeline API running at http://${HOST}:${PORT}`);
-    console.log(`📚 Health Check: http://${HOST}:${PORT}/health`);
+    if (!workerOnly) {
+      await fastify.listen({ port: PORT, host: HOST });
+      console.log(`🚀 Content Pipeline API running at http://${HOST}:${PORT}`);
+      console.log(`📚 Health Check: http://${HOST}:${PORT}/health`);
+    } else {
+      console.log(`👷 Meeting-notes worker process started (MN_WORKER_ONLY=true) — no HTTP server`);
+    }
 
     try {
       if (process.env.DATABASE_URL || process.env.DB_HOST) {

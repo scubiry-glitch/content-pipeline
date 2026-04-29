@@ -52,18 +52,27 @@ export function requireWorkspaceId(
 /**
  * 校验某行实体属于当前 workspace。
  * 跨 workspace 访问 / 不存在时返回 false（调用方应回 404；不暴露存在性）。
+ *
+ * mode='read'  : 允许 is_shared=true 的工作区行 (对齐 035 / 039 设计 — 历史 default 数据全员可读)
+ * mode='write' : 严格匹配当前 workspace (跨 ws 写入仍返回 false, 防越权改/删)
+ *
+ * 默认 'write' 是安全选择 — 误用比 'read' 更难造成越权.
  */
 export async function assertRowInWorkspace(
   table: string,
   idColumn: string,
   rowId: string,
   workspaceId: string,
+  mode: 'read' | 'write' = 'write',
 ): Promise<boolean> {
   // 只允许已知白名单表，防止 table 名注入
   if (!/^[a-z_][a-z0-9_]*$/i.test(table) || !/^[a-z_][a-z0-9_]*$/i.test(idColumn)) {
     throw new Error(`assertRowInWorkspace: invalid identifier ${table}.${idColumn}`);
   }
-  const sql = `SELECT 1 FROM "${table}" WHERE "${idColumn}" = $1 AND workspace_id = $2 LIMIT 1`;
+  const wsClause = mode === 'read'
+    ? `(workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`
+    : `workspace_id = $2`;
+  const sql = `SELECT 1 FROM "${table}" WHERE "${idColumn}" = $1 AND ${wsClause} LIMIT 1`;
   const r = await query(sql, [rowId, workspaceId]);
   return r.rows.length > 0;
 }
