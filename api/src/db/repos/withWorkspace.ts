@@ -7,12 +7,26 @@ import type { PoolClient } from 'pg';
 import { query, getClient } from '../connection.js';
 
 /**
- * 从已认证请求里取当前 workspace id。
- * - 普通登录用户必有 workspace（中间件 requireWorkspace 已保证）
- * - super_admin / api-key 没选 workspace 时返回 null（调用方按需决定 fallback）
+ * 一个永远不会匹配任何真实 workspace 的 UUID. 用于 session 用户没加入任何 ws 时
+ * (比如 admin 刚创建的新账号) — SQL `WHERE workspace_id = $1` 拿到 0 行,
+ * 防止他们因为 currentWorkspaceId() === null 而绕过过滤看到全库数据.
+ */
+export const NO_WORKSPACE_SENTINEL = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * 从已认证请求里取当前 workspace id, 三种返回:
+ *   - api-key 凭证 (admin 全局视图)              → null   (调用方"if (wsId) filter" 跳过过滤)
+ *   - session 用户已选 workspace                 → 实际 UUID
+ *   - session 用户**没加入任何 ws** / 没选 ws    → NO_WORKSPACE_SENTINEL
+ *     (impossible UUID, SQL 过滤为空, 不会泄漏 admin 数据)
+ *
+ * 注意: 之前版本对 api-key 与 session-no-ws 都返回 null, 导致新建用户看到全库. 已修.
  */
 export function currentWorkspaceId(request: FastifyRequest): string | null {
-  return request.auth?.workspace?.id ?? null;
+  const auth = request.auth;
+  if (!auth) return null;
+  if (auth.via === 'api-key') return null;
+  return auth.workspace?.id ?? NO_WORKSPACE_SENTINEL;
 }
 
 /**
