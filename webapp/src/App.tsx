@@ -105,6 +105,10 @@ import { LangGraphTasks } from './pages/LangGraphTasks';
 import { LGTaskDetailLayout } from './pages/LGTaskDetailLayout';
 import { LGOverviewTab, LGPlanningTab, LGResearchTab, LGWritingTab, LGReviewsTab, LGQualityTab, LGPortalTab } from './pages/lg-task-detail';
 import { AdminTaxonomy } from './pages/AdminTaxonomy';
+import { AdminGuard } from './components/AdminGuard';
+import { AdminUsers } from './pages/admin/AdminUsers';
+import { AdminAudit } from './pages/admin/AdminAudit';
+import { FirstLoginGuide } from './components/FirstLoginGuide';
 
 import './App.css';
 
@@ -223,6 +227,10 @@ function App() {
               <Route path="notifications" element={<Notifications />} />
               <Route path="ai-task-recommendations" element={<AITaskRecommendations />} />
               <Route path="admin/taxonomy" element={<AdminTaxonomy />} />
+              <Route path="admin" element={<AdminGuard />}>
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="audit" element={<AdminAudit />} />
+              </Route>
               {/* LangGraph 流水线独立页面 */}
               <Route path="lg-tasks" element={<LangGraphTasks />} />
               <Route path="lg-tasks/:threadId" element={<LGTaskDetailLayout />}>

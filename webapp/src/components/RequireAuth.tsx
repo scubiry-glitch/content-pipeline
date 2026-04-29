@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ChangePasswordGate } from './ChangePasswordGate';
+import { FirstLoginGuide } from './FirstLoginGuide';
 
 export function RequireAuth() {
   const { user, loading } = useAuth();
@@ -22,6 +23,7 @@ export function RequireAuth() {
   return (
     <>
       <ChangePasswordGate />
+      <FirstLoginGuide />
       <Outlet />
     </>
   );
