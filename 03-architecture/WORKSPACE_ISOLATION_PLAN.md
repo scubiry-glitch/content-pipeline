@@ -69,12 +69,21 @@ community_topics + unified_topics 列表/详情。
 ## 🟡 待办 P2（中优先级）
 
 ### 7. modules/expert-library/router.ts（1115 行）
-**产品决策需确认**：expert_profiles 是 SaaS 全局共享（默认所有 ws 看同一份 142 个专家），还是 per-ws 隔离？
-- 若全局共享：需移除 workspace_id NOT NULL 约束（特殊化），其他业务保持隔离
-- 若 per-ws：需把 142 个 default workspace 的专家"克隆"到每个新 ws，工作量较大
-- 现状：所有 expert-library 路由**多数没 `preHandler: authenticate`**，未登录可访问 → 暗示了"全局共享"的产品意图
+**产品决策已敲定（2026-04-29）**：当前阶段保持全局共享，未来可由 admin 切换到隔离。
 
-**建议**：保持当前"全局共享"行为，给 expert_profiles 列加注释说明这是有意为之。
+**实现机制**（migration **035** 已落地）：
+- `workspaces.is_shared BOOLEAN`：标记某 ws 内的数据对全员可读
+- default workspace 默认 `is_shared=true`（涵盖既有 142 个 expert / 全部 content-library facts）
+- 普通 ws 默认 `is_shared=false`（隔离）
+- 应用层选择：`SELECT WHERE workspace_id = $current OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared)`
+- 写仍由 `workspace_members` 控制（is_shared=true 不等于谁都能写）
+
+**未来切换路径**（无需数据迁移）：
+- admin 在 `/settings/workspaces/:id` 翻 is_shared 开关 → 该 ws 内数据对全员可见性立即变化
+- admin 想"个人空间"：创建新 ws，is_shared=false，写入新 expert/content → 仅成员可见
+- admin 想"再变共享"：翻回 is_shared=true → 全员立即可见
+
+**当前**（这一阶段）：expert-library / content-library router 保持现状（不加 ws 过滤），数据全在 default workspace 中，因 is_shared=true 而对全员可见。**不需要现在改 router**。
 
 ### 8. modules/content-library/router.ts
 同 expert-library —— 知识库设计上跨 ws 共享。建议同等处理。

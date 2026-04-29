@@ -14,8 +14,26 @@ import {
   cleanupExpiredTasks,
 } from '../services/taskArchive.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 
 export async function archiveRoutes(fastify: FastifyInstance) {
+  // Workspace 守卫: :taskId 路径验证 task 属于当前 ws, 跨 ws 一律 404
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const taskId = params.taskId;
+    if (!taskId) return;
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return;
+    const ok = await assertRowInWorkspace('tasks', 'id', taskId, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Task not found', code: 'TASK_NOT_FOUND' });
+    }
+  });
+
   // 软删除任务（移动到回收站）
   fastify.post('/:taskId/delete', { preHandler: authenticate }, async (request, reply) => {
     const { taskId } = request.params as any;
@@ -139,6 +157,7 @@ export async function archiveRoutes(fastify: FastifyInstance) {
       limit: parseInt(limit),
       offset: parseInt(offset),
       userId,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
 
     return result;
@@ -153,6 +172,7 @@ export async function archiveRoutes(fastify: FastifyInstance) {
       limit: parseInt(limit),
       offset: parseInt(offset),
       userId,
+      workspaceId: currentWorkspaceId(request) ?? undefined,
     });
 
     return result;

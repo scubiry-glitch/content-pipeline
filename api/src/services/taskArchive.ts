@@ -269,11 +269,12 @@ export async function getRecycleBinTasks(options: {
   limit?: number;
   offset?: number;
   userId?: string;
+  workspaceId?: string;
 }): Promise<{
   tasks: any[];
   total: number;
 }> {
-  const { limit = 20, offset = 0, userId } = options;
+  const { limit = 20, offset = 0, userId, workspaceId } = options;
 
   let sql = `
     SELECT
@@ -285,14 +286,24 @@ export async function getRecycleBinTasks(options: {
   `;
   const params: any[] = [];
 
+  if (workspaceId) {
+    sql += ` AND workspace_id = $${params.length + 1}`;
+    params.push(workspaceId);
+  }
   if (userId) {
     sql += ` AND created_by = $${params.length + 1}`;
     params.push(userId);
   }
 
+  // count 与 list 共用同一组 WHERE 条件（重建占位符）
+  const countParams = [...params];
+  const countConditions: string[] = [];
+  if (workspaceId) countConditions.push(`workspace_id = $${countConditions.length + 1}`);
+  if (userId) countConditions.push(`created_by = $${countConditions.length + 1}`);
+  const countWhere = countConditions.length ? ' AND ' + countConditions.join(' AND ') : '';
   const countResult = await query(
-    `SELECT COUNT(*) FROM tasks WHERE is_deleted = true`,
-    []
+    `SELECT COUNT(*) FROM tasks WHERE is_deleted = true${countWhere}`,
+    countParams,
   );
 
   sql += ` ORDER BY deleted_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -313,11 +324,12 @@ export async function getHiddenTasks(options: {
   limit?: number;
   offset?: number;
   userId?: string;
+  workspaceId?: string;
 }): Promise<{
   tasks: any[];
   total: number;
 }> {
-  const { limit = 20, offset = 0, userId } = options;
+  const { limit = 20, offset = 0, userId, workspaceId } = options;
 
   let sql = `
     SELECT
@@ -329,14 +341,23 @@ export async function getHiddenTasks(options: {
   `;
   const params: any[] = [];
 
+  if (workspaceId) {
+    sql += ` AND workspace_id = $${params.length + 1}`;
+    params.push(workspaceId);
+  }
   if (userId) {
     sql += ` AND created_by = $${params.length + 1}`;
     params.push(userId);
   }
 
+  const countParams = [...params];
+  const countConditions: string[] = [];
+  if (workspaceId) countConditions.push(`workspace_id = $${countConditions.length + 1}`);
+  if (userId) countConditions.push(`created_by = $${countConditions.length + 1}`);
+  const countWhere = countConditions.length ? ' AND ' + countConditions.join(' AND ') : '';
   const countResult = await query(
-    `SELECT COUNT(*) FROM tasks WHERE is_hidden = true AND is_deleted = false`,
-    []
+    `SELECT COUNT(*) FROM tasks WHERE is_hidden = true AND is_deleted = false${countWhere}`,
+    countParams,
   );
 
   sql += ` ORDER BY hidden_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
