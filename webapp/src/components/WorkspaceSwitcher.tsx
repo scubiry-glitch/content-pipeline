@@ -11,8 +11,19 @@ const roleLabel: Record<AuthWorkspace['role'], string> = {
   member: '成员',
 };
 
+function formatExpiry(expiresAt: Date | null): string | null {
+  if (!expiresAt) return null;
+  const ms = expiresAt.getTime() - Date.now();
+  if (ms < 0) return '已过期';
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days >= 2) return `${days} 天后过期`;
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  if (hours >= 2) return `${hours} 小时后过期`;
+  return '即将过期';
+}
+
 export function WorkspaceSwitcher() {
-  const { user, currentWorkspace, workspaces, switchWorkspace, refresh, logout } = useAuth();
+  const { user, currentWorkspace, workspaces, switchWorkspace, refresh, logout, sessionExpiresAt } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -228,6 +239,11 @@ export function WorkspaceSwitcher() {
           <div style={{ padding: '6px 12px', fontSize: 12, color: '#64748b' }}>
             <div style={{ fontWeight: 500, color: '#0f172a' }}>{user.name}</div>
             <div style={{ fontSize: 11 }}>{user.email}</div>
+            {sessionExpiresAt && (
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                会话: {formatExpiry(sessionExpiresAt)}
+              </div>
+            )}
           </div>
           <button
             onClick={async () => { await logout(); navigate('/login'); }}

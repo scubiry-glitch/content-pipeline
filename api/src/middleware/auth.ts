@@ -17,6 +17,8 @@ export interface RequestAuth {
   workspaces: ResolvedSession['workspaces'];
   sessionId: string | null;
   via: 'session' | 'api-key';
+  /** session 路径才有; api-key 凭证为 null */
+  expiresAt: Date | null;
 }
 
 declare module 'fastify' {
@@ -48,6 +50,7 @@ async function tryResolveAuth(request: FastifyRequest): Promise<RequestAuth | nu
         workspaces: session.workspaces,
         sessionId: session.sessionId,
         via: 'session',
+        expiresAt: session.expiresAt,
       };
     }
   }
@@ -67,6 +70,7 @@ async function tryResolveAuth(request: FastifyRequest): Promise<RequestAuth | nu
         workspaces: [],
         sessionId: null,
         via: 'api-key',
+        expiresAt: null,
       };
     }
   }

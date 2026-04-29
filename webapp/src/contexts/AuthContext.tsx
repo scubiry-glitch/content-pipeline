@@ -25,6 +25,7 @@ interface MeResponse {
   currentWorkspace: AuthWorkspace | null;
   workspaces: AuthWorkspace[];
   via?: 'session' | 'api-key';
+  sessionExpiresAt?: string | null;
 }
 
 interface AuthContextValue {
@@ -33,6 +34,7 @@ interface AuthContextValue {
   workspaces: AuthWorkspace[];
   loading: boolean;
   via: 'session' | 'api-key' | null;
+  sessionExpiresAt: Date | null;
   login(email: string, password: string): Promise<void>;
   logout(): Promise<void>;
   switchWorkspace(workspaceId: string): Promise<void>;
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentWorkspace, setCurrentWorkspace] = useState<AuthWorkspace | null>(null);
   const [workspaces, setWorkspaces] = useState<AuthWorkspace[]>([]);
   const [via, setVia] = useState<'session' | 'api-key' | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const initRanRef = useRef(false);
 
@@ -56,12 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCurrentWorkspace(res.currentWorkspace || null);
       setWorkspaces(res.workspaces || []);
       setVia((res.via as 'session' | 'api-key') || null);
+      setSessionExpiresAt(res.sessionExpiresAt ? new Date(res.sessionExpiresAt) : null);
     } catch (e: any) {
       if (e?.response?.status === 401) {
         setUser(null);
         setCurrentWorkspace(null);
         setWorkspaces([]);
         setVia(null);
+        setSessionExpiresAt(null);
       } else {
         console.error('[Auth] refresh failed:', e);
       }
@@ -95,10 +100,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setOnWorkspaceForbidden(null);
   }, []);
 
-  // 已登录时主动调一次 /auth/refresh 把 30 天 expires_at 推后, 防止长时间不操作被踢
+  // ─────────────────────────────────────────────────────────
+  // 自动续期: 多触发点 + 节流
+  //   - 首次登录 (user.id 变) → 立即调一次
+  //   - tab 重新可见 (visibilitychange visible) → 调一次
+  //   - 窗口 focus → 调一次
+  //   - 每 1h 定时 → 调一次 (app 长时间开着不动)
+  //   节流: 同一 5min 窗口内只发一次, 防多事件叠触发刷屏
+  //   后端是 smart refresh: 剩余 > 7d 不写 DB, 只更 last_seen.
+  // ─────────────────────────────────────────────────────────
+  const lastRefreshRef = useRef(0);
+  const THROTTLE_MS = 5 * 60 * 1000;
+
   useEffect(() => {
     if (!user || via !== 'session') return;
-    authClient.post('/auth/refresh').catch(() => { /* 静默 */ });
+
+    const tryRefresh = async (reason: string) => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < THROTTLE_MS) return;
+      lastRefreshRef.current = now;
+      try {
+        const r = (await authClient.post('/auth/refresh')) as { ok: boolean; expiresAt?: string; refreshed?: boolean };
+        if (r?.expiresAt) setSessionExpiresAt(new Date(r.expiresAt));
+        if (r?.refreshed) {
+          console.log(`[Auth] session refreshed (${reason}), new expiresAt: ${r.expiresAt}`);
+        }
+      } catch { /* 静默 */ }
+    };
+
+    // 立即一次
+    tryRefresh('mount/login');
+
+    // visibility / focus
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tryRefresh('visibility');
+    };
+    const onFocus = () => tryRefresh('focus');
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+
+    // 1h timer
+    const id = setInterval(() => tryRefresh('1h-timer'), 60 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      clearInterval(id);
+    };
   }, [user?.id, via]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -125,9 +173,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, currentWorkspace, workspaces, loading, via,
+    user, currentWorkspace, workspaces, loading, via, sessionExpiresAt,
     login, logout, switchWorkspace, refresh,
-  }), [user, currentWorkspace, workspaces, loading, via, login, logout, switchWorkspace, refresh]);
+  }), [user, currentWorkspace, workspaces, loading, via, sessionExpiresAt, login, logout, switchWorkspace, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

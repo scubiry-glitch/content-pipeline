@@ -184,11 +184,14 @@ export async function authRoutes(fastify: FastifyInstance) {
       currentWorkspace: request.auth?.workspace,
       workspaces: request.auth?.workspaces,
       via: request.auth?.via,
+      sessionExpiresAt: request.auth?.expiresAt ?? null,
     };
   });
 
-  // POST /api/auth/refresh — 主动续期 session, 把 expires_at 推后到 now + 30d
-  // 前端在 401 之前 (例如 7 日内即将过期时) 调一次, 防止用户因长时间不操作被踢
+  // POST /api/auth/refresh — 续期 session
+  // smart refresh: 剩余 > 7d 不写 DB, 只返回当前 expiresAt + refreshed=false;
+  // 剩余 ≤ 7d 才推后到 now + 30d, 返回 refreshed=true.
+  // 前端可以高频调 (visibility / focus / 1h timer) 不会造成 DB 热点.
   fastify.post('/refresh', { preHandler: authenticate }, async (request, reply) => {
     const auth = request.auth!;
     if (auth.via !== 'session' || !auth.sessionId) {
@@ -200,9 +203,11 @@ export async function authRoutes(fastify: FastifyInstance) {
       reply.status(401);
       return { error: 'Unauthorized', message: 'Session expired or revoked', code: 'SESSION_EXPIRED' };
     }
-    // 重新设 cookie maxAge / expires
-    setSessionCookie(reply, request.cookies?.[SESSION_COOKIE_NAME] || '', r.expiresAt);
-    return { ok: true, expiresAt: r.expiresAt };
+    // 仅在真正推后 expires_at 时重设 cookie maxAge (防止覆盖更长有效期的 cookie)
+    if (r.refreshed) {
+      setSessionCookie(reply, request.cookies?.[SESSION_COOKIE_NAME] || '', r.expiresAt);
+    }
+    return { ok: true, expiresAt: r.expiresAt, refreshed: r.refreshed };
   });
 
   // POST /api/auth/switch-workspace { workspaceId }

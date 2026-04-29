@@ -24,6 +24,7 @@ export interface ResolvedSession {
   user: SessionUser;
   currentWorkspace: SessionWorkspace | null;
   workspaces: SessionWorkspace[];
+  expiresAt: Date;
 }
 
 function sha256(input: string): string {
@@ -125,6 +126,7 @@ export async function resolveSession(token: string): Promise<ResolvedSession | n
     },
     currentWorkspace,
     workspaces,
+    expiresAt: new Date(sess.expires_at),
   };
 }
 
@@ -136,20 +138,40 @@ export async function setSessionWorkspace(sessionId: string, workspaceId: string
   await query(`UPDATE auth_sessions SET current_workspace_id = $1 WHERE id = $2`, [workspaceId, sessionId]);
 }
 
+// 剩余 < SESSION_REFRESH_THRESHOLD_MS 时才真正写 DB; 否则视为"已经够新", 只更 last_seen
+const SESSION_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+
 /**
- * 续期 session: 把 expires_at 推后到 now + SESSION_TTL_DAYS.
- * 调用方拿到新 expiresAt 用来更新 cookie 的 maxAge.
- * 已 revoked / 已过期的 session 不续期, 返回 null.
+ * 续期 session.
+ * - 已 revoked / 已过期 → null
+ * - 剩余 > 7 天 → 不写 expires_at (避免热点 UPDATE), 仅更 last_seen, 返回当前 expiresAt
+ * - 剩余 ≤ 7 天 → 把 expires_at 推后到 now + 30d
+ *
+ * 调用方拿到 expiresAt + refreshed 标记, refreshed=true 才需要重设 cookie maxAge.
  */
-export async function refreshSession(sessionId: string): Promise<{ expiresAt: Date } | null> {
+export async function refreshSession(
+  sessionId: string,
+): Promise<{ expiresAt: Date; refreshed: boolean } | null> {
+  const cur = await query<{ expires_at: Date; revoked_at: Date | null }>(
+    `SELECT expires_at, revoked_at FROM auth_sessions WHERE id = $1`,
+    [sessionId],
+  );
+  const row = cur.rows[0];
+  if (!row || row.revoked_at) return null;
+  const expiresAtMs = new Date(row.expires_at).getTime();
+  if (expiresAtMs <= Date.now()) return null;
+
+  const remainingMs = expiresAtMs - Date.now();
+  if (remainingMs > SESSION_REFRESH_THRESHOLD_MS) {
+    // 充足, 不写 expires_at, 只更 last_seen
+    await query(`UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1`, [sessionId]).catch(() => {});
+    return { expiresAt: new Date(row.expires_at), refreshed: false };
+  }
+  // 临近过期, 真正推后
   const newExpiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  const r = await query<{ id: string }>(
-    `UPDATE auth_sessions
-        SET expires_at = $1, last_seen_at = NOW()
-      WHERE id = $2 AND revoked_at IS NULL AND expires_at > NOW()
-      RETURNING id`,
+  await query(
+    `UPDATE auth_sessions SET expires_at = $1, last_seen_at = NOW() WHERE id = $2`,
     [newExpiresAt, sessionId],
   );
-  if (r.rows.length === 0) return null;
-  return { expiresAt: newExpiresAt };
+  return { expiresAt: newExpiresAt, refreshed: true };
 }
