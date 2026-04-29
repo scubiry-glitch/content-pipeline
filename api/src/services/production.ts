@@ -56,12 +56,13 @@ export class ProductionService {
 
   constructor() {}
 
-  async createTask(input: CreateTaskInput) {
+  async createTask(input: CreateTaskInput, workspaceId?: string) {
     // 使用 PipelineService 创建任务
     const result = await this.pipelineService.createTask({
       topic: input.topic,
       sourceMaterials: input.sourceMaterials,
-      targetFormats: input.targetFormats
+      targetFormats: input.targetFormats,
+      workspaceId,
     });
 
     // 不再自动处理，等待大纲确认
@@ -104,8 +105,8 @@ export class ProductionService {
     }
   }
 
-  async listTasks(options: { status?: string; limit: number; offset: number; includeHidden?: boolean; cursor?: string }) {
-    const { status, includeHidden = false } = options;
+  async listTasks(options: { status?: string; limit: number; offset: number; includeHidden?: boolean; cursor?: string; workspaceId?: string }) {
+    const { status, includeHidden = false, workspaceId } = options;
     const limit = Math.min(Math.max(options.limit || 10, 1), 100);
     const offset = Math.max(options.offset || 0, 0);
     const decodedCursor = decodeCursor(options.cursor);
@@ -126,6 +127,14 @@ export class ProductionService {
     const params: any[] = [];
     const baseConditions: string[] = [];
     const pageConditions: string[] = [];
+
+    // Workspace 隔离：登录用户必传；api-key 路径 workspaceId=undefined 时跳过过滤（admin 全局视图）
+    if (workspaceId) {
+      const cond = `workspace_id = $${params.length + 1}`;
+      baseConditions.push(cond);
+      pageConditions.push(cond);
+      params.push(workspaceId);
+    }
 
     // 默认不显示隐藏任务
     if (!includeHidden) {
@@ -160,12 +169,17 @@ export class ProductionService {
     try {
       const result = await query(sql, params);
 
-      // Get total count
+      // Get total count — 重建参数顺序以匹配 baseConditions 里的占位符 ($1, $2, ...)
       let countSql = 'SELECT COUNT(*) FROM tasks';
+      const countParams: any[] = [];
+      if (workspaceId) countParams.push(workspaceId);
+      if (status) countParams.push(status);
       if (baseConditions.length > 0) {
-        countSql += ' WHERE ' + baseConditions.join(' AND ');
+        // baseConditions 里的占位符是按 push 顺序生成的，重新编号到 1..N
+        let idx = 0;
+        const renumbered = baseConditions.map((c) => c.replace(/\$\d+/g, () => `$${++idx}`));
+        countSql += ' WHERE ' + renumbered.join(' AND ');
       }
-      const countParams = status ? [status] : [];
       const countResult = await query(countSql, countParams);
       const last = result.rows[result.rows.length - 1];
       const nextCursor =

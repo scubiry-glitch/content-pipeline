@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ProductionService } from '../services/production.js';
 import { evaluateTopic } from '../services/topicEvaluation.js';
 import { authenticate } from '../middleware/auth.js';
+import { assertRowInWorkspace, currentWorkspaceId } from '../db/repos/withWorkspace.js';
 import { query } from '../db/connection.js';
 import { withTimeout } from '../utils/timeout.js';
 
@@ -35,6 +36,29 @@ const outlineChatSchema = z.object({
 export async function productionRoutes(fastify: FastifyInstance) {
   const productionService = new ProductionService();
 
+  // Workspace 隔离守卫: 凡是带 :taskId 的路由先验证 task 属于当前 workspace
+  // 跨 workspace 访问 / 不存在: 一律 404 (不暴露存在性)
+  // api-key 路径 (无 workspace) 跳过 — 保留 admin 全局视图
+  fastify.addHook('preHandler', async (request, reply) => {
+    const params = (request.params as Record<string, string> | undefined) ?? {};
+    const taskId = params.taskId;
+    if (!taskId) return;
+
+    // request.auth 在 per-route authenticate 之前由这个 hook 触发时未必已设置，
+    // 这里手动跑一次 authenticate；幂等的，per-route 再跑也无副作用。
+    if (!request.auth) {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+    }
+    const wsId = currentWorkspaceId(request);
+    if (!wsId) return; // api-key 全局凭证
+
+    const ok = await assertRowInWorkspace('tasks', 'id', taskId, wsId);
+    if (!ok) {
+      reply.code(404).send({ error: 'Task not found', code: 'TASK_NOT_FOUND' });
+    }
+  });
+
   // Evaluate topic quality (FR-001 ~ FR-003)
   fastify.post('/evaluate-topic', { preHandler: authenticate }, async (request) => {
     const { topic, context } = request.body as any;
@@ -45,12 +69,16 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // Create production task
   fastify.post('/', { preHandler: authenticate }, async (request, reply) => {
     const body = createTaskSchema.parse(request.body);
+    const wsId = currentWorkspaceId(request) ?? undefined;
 
-    const task = await productionService.createTask({
-      topic: body.topic,
-      sourceMaterials: body.source_materials || [],
-      targetFormats: body.target_formats
-    });
+    const task = await productionService.createTask(
+      {
+        topic: body.topic,
+        sourceMaterials: body.source_materials || [],
+        targetFormats: body.target_formats,
+      },
+      wsId,
+    );
 
     reply.status(201);
     return task;
@@ -59,12 +87,14 @@ export async function productionRoutes(fastify: FastifyInstance) {
   // List tasks
   fastify.get('/', { preHandler: authenticate }, async (request) => {
     const { status, limit = '10', offset = '0', cursor } = request.query as any;
+    const wsId = currentWorkspaceId(request) ?? undefined;
 
     return await productionService.listTasks({
       status,
       limit: parseInt(limit),
       offset: parseInt(offset),
       cursor: typeof cursor === 'string' && cursor.trim().length > 0 ? cursor.trim() : undefined,
+      workspaceId: wsId,
     });
   });
 

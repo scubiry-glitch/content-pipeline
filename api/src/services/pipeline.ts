@@ -23,6 +23,7 @@ export interface CreateTaskInput {
     enableWebSearch?: boolean;
     searchQueries?: string[];
   };
+  workspaceId?: string;
 }
 
 export class PipelineService {
@@ -46,22 +47,43 @@ export class PipelineService {
     ]);
 
     // 创建任务 - 状态为 outline_pending，等待用户确认
-    await query(
-      `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, evaluation, competitor_analysis, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
-      [
-        taskId,
-        input.topic,
-        JSON.stringify(input.sourceMaterials || []),
-        JSON.stringify(input.targetFormats || ['markdown']),
-        'outline_pending', // 等待大纲确认
-        10,
-        JSON.stringify(outline),
-        JSON.stringify(input.searchConfig || { maxSearchUrls: 20, enableWebSearch: true }),
-        JSON.stringify(evaluation),
-        JSON.stringify(competitorAnalysis)
-      ]
-    );
+    // workspace_id 显式传入；不传时由表的 DEFAULT (default workspace) 兜底
+    if (input.workspaceId) {
+      await query(
+        `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, evaluation, competitor_analysis, workspace_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+        [
+          taskId,
+          input.topic,
+          JSON.stringify(input.sourceMaterials || []),
+          JSON.stringify(input.targetFormats || ['markdown']),
+          'outline_pending',
+          10,
+          JSON.stringify(outline),
+          JSON.stringify(input.searchConfig || { maxSearchUrls: 20, enableWebSearch: true }),
+          JSON.stringify(evaluation),
+          JSON.stringify(competitorAnalysis),
+          input.workspaceId,
+        ]
+      );
+    } else {
+      await query(
+        `INSERT INTO tasks (id, topic, source_materials, target_formats, status, progress, outline, search_config, evaluation, competitor_analysis, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+        [
+          taskId,
+          input.topic,
+          JSON.stringify(input.sourceMaterials || []),
+          JSON.stringify(input.targetFormats || ['markdown']),
+          'outline_pending',
+          10,
+          JSON.stringify(outline),
+          JSON.stringify(input.searchConfig || { maxSearchUrls: 20, enableWebSearch: true }),
+          JSON.stringify(evaluation),
+          JSON.stringify(competitorAnalysis),
+        ]
+      );
+    }
 
     return {
       id: taskId,
