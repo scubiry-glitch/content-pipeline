@@ -108,36 +108,35 @@ copilot_sessions / copilot_messages / copilot_contexts / copilot_usage_stats —
 
 ---
 
-## 🟢 待办 P3（低优先级 / 后续阶段）
+## ✅ Phase 3 已完成（2026-04-29）
 
-### 14. 启用 PostgreSQL Row-Level Security
-plan 原文档第 2 期里"DB 层兜底"。每次 `getClient()` 后 `SET LOCAL app.workspace_id`，CREATE POLICY filter。
-**风险**：RLS 可能与现有 super_admin 路径冲突；要先彻底改完应用层再上 RLS 才安全。
+| 项 | Commit | 状态 |
+|---|---|---|
+| **18. mustChangePassword UI** | `534760b` | ChangePasswordGate 全屏遮罩, RequireAuth 接入 ✅ |
+| **16. workspace 删除保护** | `07f7240` | default 不可删 (409); 非空 ws 拒绝并列出 counts ✅ |
+| **19+21. 审计日志 + 登录失败锁定** | `ae42391` | migration 036 + audit service; login/logout/password.{change,reset}/user.{create,disable}/workspace.delete 全审计; 15min 内 5 次失败锁 30min (423 + Retry-After) ✅ |
+| **20. OAuth2 Google** | `da47ec1` | PKCE 流程 + find-or-create user_identities; env-gated 优雅 501; 前端按 /auth/oauth/status 动态激活按钮; setup 文档完整 ✅ |
 
-### 15. 清理 X-API-Key fallback
-计划 1-2 版本兼容期保留。Phase 3 移除。
-- 中间件：`src/middleware/auth.ts` 删除 `tryResolveAuth` 里 api-key 分支
-- vite.config.ts 已不注入（Phase 1 修复）
+## 🟢 Phase 3 仍**有意延后**（技术原因明确）
 
-### 16. workspace 删除保护
-当前删除 default workspace 会让所有 INSERT DEFAULT 失败（FK 引用孤儿）。`routes/workspaces.ts` 的 DELETE handler 应：
-- 拒绝删除 slug='default'
-- 拒绝删除非空 workspace（参考引用 task/asset 等数）
+### 14. PostgreSQL Row-Level Security 兜底（**延后**）
+原计划：每次 `getClient()` 后 `SET LOCAL app.workspace_id`，CREATE POLICY 用 `current_setting()` filter。
 
-### 17. workspace_id NOT NULL DROP DEFAULT
-所有 router 改造完之后，可以 DROP DEFAULT 让"忘记传 workspace_id"成为编译/运行期错误（更安全）。Phase 2 收尾动作。
+**为什么延后**：
+- 当前 db 层用 pg.Pool 直发 `query()`，连接被 pool 复用，`SET app.workspace_id` 会跨用户泄漏。RLS 需要重写为"每请求专用连接 + RESET"模式（4-6h 重构）。
+- 应用层 13 个 router + 2 个深度服务已显式 filter，跨 ws 100% 阻断（10+ 烟雾测试验证）。RLS 主要价值是"开发者忘记 filter"的 DB 兜底——**这个保护此刻边际收益已经很小**。
 
-### 18. mustChangePassword 强制改密 UI
-后端已设 `mustChangePassword: true`，前端 Login 页未实现强制改密流程。Phase 1 遗留。
+**触发条件**：当代码库新加大量未走守卫的 SQL 时，再回头上 RLS。
 
-### 19. 登录失败计数 + 锁定
-plan Phase 3。每邮箱每 15 分钟 ≥5 次锁定 30 分钟。
+### 15. 清理 X-API-Key fallback（**已具备开关，硬删除延后**）
+代码里已有 `AUTH_DISABLE_API_KEY=true` env 开关；想要严格只 cookie 时设这个即可。硬删除代码路径会断掉外部 cron / CI 脚本（如 RSS 抓取触发）。
 
-### 20. OAuth2 Provider 接入
-plan Phase 3。`user_identities` 表已存在，待接 Google / GitHub。
+**触发条件**：所有 cron/CI 都走 cookie session 之后再删代码。
 
-### 21. 审计日志
-`auth_audit_log`：登录、登出、创建用户、workspace 变更等敏感操作。
+### 17. workspace_id DROP DEFAULT（**与 P2 共享耦合，延后**）
+P2 共享数据 (expert-library / content-library) 仍依赖 `DEFAULT default-ws-uuid` 兜底。DROP DEFAULT 会让这两个模块写入路径全部 NOT NULL 报错。
+
+**触发条件**：当 expert-library 与 content-library 路由也接入 `is_shared` 模式（POST 写入显式传 workspace_id）时，再 DROP DEFAULT。
 
 ---
 
