@@ -29,9 +29,10 @@
 | `routes/v34-hot-topics.ts` | `788d792` | hot_topics 列表/详情/from-rss |
 | `modules/meeting-notes/router.ts` | `36cd73d` | meetings/scopes/people/runs/schedules `:id` + meetings & scopes 列表/创建 |
 
-**累计**：10 个 router 完整数据隔离，跨 ws 访问一律 404。
+**累计**：10 个 router 完整数据隔离 + 2 个深度服务/引擎过滤，跨 ws 访问一律 404。
 - production / assets / meeting-note-sources / rss / hot-topics / meeting-notes 模块（P1.0）
 - archive / favorites / v34-assets / research（P1.1，2026-04-29 增量）
+- mn-runs / mn-schedules engine list 与写入；recommendation 服务 4 个表的 SELECT 按 ws 过滤（P1.2，深度改造）
 
 #### 工具层
 - `db/repos/withWorkspace.ts`：`currentWorkspaceId(req)` / `requireWorkspaceId(req,reply)` / `assertRowInWorkspace(table, idCol, id, wsId)`
@@ -49,25 +50,16 @@
 | `v34-assets.ts` | `fcf038e` | :id 守卫 + list/create 注入 ws ✅（route 仍受预先存在 `usage_count` 缺列 500 影响） |
 | `research.ts` | `fa778e3` | :taskId 守卫 ✅ |
 
-### 🟡 P1 剩下需要更深改造
+### ✅ P1 深度改造已完成（2026-04-29）
 
-#### 1. meeting-notes 模块 list 端点深度过滤
-当前 `modules/meeting-notes/router.ts` 已守卫所有 `:id` 路径与 `/meetings`、`/scopes` 顶层 list/create。**还没改造**：
-- `GET /runs` 列表（runEngine.list 需加 workspaceId 过滤）
-- `GET /schedules` 列表
-- `POST /runs` / `POST /schedules` 写入时显式传 workspace_id
-- 各种 axis sub-listing（可能依赖 mn_scope_members 等关联表的过滤）
+| 项 | Commit | 范围 |
+|---|---|---|
+| **mn_runs / mn_schedules** | `b6929f3` | runEngine.list/enqueue 接受 workspaceId; router /runs /schedules GET+POST 全部按 ws 过滤/写入 |
+| **recommendation deep refactor** | `150d832` | RecommendationRequest 透传 workspaceId; rss_items / tasks / assets 与 identifyKnowledgeGaps 全部按 ws 过滤; expert 推荐保持全局 (blue_team_reviews 无 workspace_id) |
 
-> 原因：mn_runs / mn_schedules 已有 workspace_id NOT NULL DEFAULT default-ws，schema 已就位，只是 router/engine 没显式 inject。当前行为：旧代码继续工作（落到 default ws），但跨 ws 切换看到的还是 default 的 runs。
->
-> 风险：低；改动需要进 `runs/runEngine.ts`（1700+ 行），应该只动 `list()` / `enqueue()` 两个方法。
+### 🟡 P1 剩下
 
-#### 2. routes/recommendation.ts（**deep refactor**）
-recommendation 服务底层从 rss_items / tasks / assets / blue_team_reviews 多表派生推荐。要正确隔离，需要把 workspaceId 串到 `services/recommendation.ts` 里 7+ 个 SELECT 语句。当前规模 ~500 行，改动面较大。
-
-> 当前行为：admin 看到全 default 数据派生的推荐；其他 ws 用户看到的是同一份推荐（数据未隔离），但因为登录 cookie 已是用户身份，对推荐结果没产品危害。
-
-#### 3. routes/sentiment.ts（**先补认证**）
+#### 1. routes/sentiment.ts（**先补认证**）
 所有路由**没有 `preHandler: authenticate`**。`/topic/:topicId` 与 `/trend/:topicId` 通过 `sentimentAnalyzer.analyzeTopic(topicId)` 走数据查询，可能涉及 community_topics。
 
 > 决策：把这个 router 当 P2 共享数据看待（同 expert-library），加 authenticate 但不加 ws 过滤。或者干脆不改—它的端点本质上是分析服务而非数据存储。
