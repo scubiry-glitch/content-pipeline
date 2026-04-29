@@ -28,35 +28,53 @@ PostgreSQL 文档明确:
 
 `FORCE ROW LEVEL SECURITY` 只对 table owner 生效, 对 superuser 仍 bypass.
 
-## 启用 RLS 的两步
+## 启用 RLS 的剩余 3 步
 
-### 第 1 步: 创建非 SUPERUSER 应用角色 (一次性, 需 SUPERUSER)
+### 第 1 步 ✅ 已完成: 角色 + 授权 (CREATE ROLE + GRANTs)
+
+`pipeline_app` 角色已通过 SUPERUSER 创建并授权 (本会话执行的 SQL 在 server log 里). 验证:
 
 ```sql
--- 替换 <RANDOM_PASSWORD> 为强密码, 写到 api/.env
-CREATE ROLE pipeline_app WITH LOGIN PASSWORD '<RANDOM_PASSWORD>';
-
--- 授全部表的 DML
-GRANT USAGE ON SCHEMA public TO pipeline_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO pipeline_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO pipeline_app;
-
--- 未来新建表自动继承 (为 owner 设置 default privileges)
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO pipeline_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO pipeline_app;
+-- 应输出: super=false bypassrls=false
+SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='pipeline_app';
 ```
 
-> ⚠️ pipeline_app 不要加 SUPERUSER / BYPASSRLS / CREATEDB / CREATEROLE.
+密码已保存到 `api/.env` 的 `PIPELINE_APP_DB_PASSWORD` (未 commit).
 
-### 第 2 步: 应用切到新角色
+### 第 2 步 ⚠️ 需要 DB server 端管理员操作: 添加 pg_hba.conf 条目
 
-`api/.env`:
+新角色默认无网络访问权 (`no pg_hba.conf entry`). 在 DB server 上 (124.156.192.230):
+
+```bash
+# 通常路径 (以你的 PG 安装为准):
+#   /etc/postgresql/15/main/pg_hba.conf
+#   或 /var/lib/pgsql/data/pg_hba.conf
+
+# 在 scubiry 那一行附近加:
+host    author      pipeline_app    0.0.0.0/0       scram-sha-256
+
+# 或限制到内网/堡垒机的具体 IP, e.g. 10.0.0.0/8
+```
+
+reload (无需 restart):
+
+```bash
+sudo systemctl reload postgresql
+# 或:  pg_ctl reload -D /var/lib/pgsql/data
+# 或:  SELECT pg_reload_conf();   (从 SUPERUSER psql)
+```
+
+### 第 3 步: 应用切到新角色
+
+修改 `api/.env`:
 ```
 DB_USER=pipeline_app
-DB_PASSWORD=<RANDOM_PASSWORD>
+DB_PASSWORD=${PIPELINE_APP_DB_PASSWORD}   # 引用 step 1 已存的值
 ```
+
+> 简便做法: `sed -i 's/^DB_USER=.*/DB_USER=pipeline_app/' api/.env`
+> 加一行: `DB_PASSWORD=$(grep ^PIPELINE_APP_DB_PASSWORD api/.env | cut -d= -f2)`
+> (确保 `DB_PASSWORD` 不与 `PIPELINE_APP_DB_PASSWORD` 同时存在两份不同值)
 
 重启 API → RLS 即生效.
 
