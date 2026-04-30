@@ -12,7 +12,9 @@
 //     const strategy = resolver(deliverable);
 //     await strategy.apply(ctx);
 //   }
-// internal_ops 返回 null，调用方应跳过专家分析。
+// internal_ops 走 lite preset 单专家轻量分析（evidence_anchored + calibrated_confidence
+// + signature_style + single），让常规纪要能拿到 16 维 schema 数据；
+// shouldSkipExpertAnalysis 改为按 strategy 是否 null 判断，以后再调整无需改两处。
 
 import type { ExpertStrategySpec } from './types.js';
 
@@ -34,7 +36,9 @@ export type MeetingKind =
  *   knowledgeGrounded (RAG 访谈资料); 不开 EMM / rubrics
  * - industry_research: 归纳式 → heuristic_trigger_first + evidenceAnchored +
  *   knowledgeGrounded; 不开 EMM（否决过早收窄）
- * - internal_ops: 不调用专家模型
+ * - internal_ops: lite 单专家 → evidenceAnchored + calibratedConfidence +
+ *   signatureStyle + single; 周会/站会场景不需要 debate / EMM / mental_model_rotation,
+ *   但需要决议附原文锚点 + 信心度 + 一致口吻
  */
 export const MEETING_KIND_STRATEGY: Record<MeetingKind, ExpertStrategySpec | null> = {
   strategy_roadshow: {
@@ -57,7 +61,10 @@ export const MEETING_KIND_STRATEGY: Record<MeetingKind, ExpertStrategySpec | nul
     default:
       'evidence_anchored|calibrated_confidence|knowledge_grounded|signature_style|heuristic_trigger_first',
   },
-  internal_ops: null,
+  internal_ops: {
+    preset: 'lite',
+    default: 'evidence_anchored|calibrated_confidence|signature_style|single',
+  },
 };
 
 export function resolveStrategyForMeeting(
@@ -67,7 +74,12 @@ export function resolveStrategyForMeeting(
   return (MEETING_KIND_STRATEGY as Record<string, ExpertStrategySpec | null>)[kind] ?? null;
 }
 
-/** 路由层决定是否跳过整个专家分析链路。 */
+/** 路由层决定是否跳过整个专家分析链路。
+ *  按 strategy 是否 null 判断，避免改了 MEETING_KIND_STRATEGY 但跳过逻辑不同步。
+ *  unknown kind (undefined/null/未注册) 默认不跳过 — 让分析走完，安全侧。
+ */
 export function shouldSkipExpertAnalysis(kind: MeetingKind | string | undefined | null): boolean {
-  return kind === 'internal_ops';
+  if (!kind) return false;
+  if (!(kind in MEETING_KIND_STRATEGY)) return false;
+  return resolveStrategyForMeeting(kind) === null;
 }

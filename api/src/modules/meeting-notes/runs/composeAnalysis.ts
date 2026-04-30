@@ -66,8 +66,29 @@ export interface AnalysisCrossView {
   responses: Array<{ who: string; stance: 'support' | 'partial' | 'against'; text: string }>;
 }
 
+export interface AnalysisSummaryScqa {
+  situation: string;
+  complication: string;
+  question: string;
+  answer: string;
+}
+
+export interface AnalysisSummaryMetrics {
+  topicsCount: number;
+  decisionsCount: number;
+  openQuestionsCount: number;
+  chronicCount: number;
+  necessityVerdict: 'async_ok' | 'partial' | 'needed' | null;
+}
+
 export interface AnalysisObject {
   summary: {
+    /** 金字塔顶层：≤50 字一句话核心结论。LLM 路径才有；fallback 路径为 null */
+    tldr?: string | null;
+    /** SCQA 四要素叙事段。LLM 路径才有；fallback 路径为 null */
+    scqa?: AnalysisSummaryScqa | null;
+    /** Amazon 6-pager 数字带。两条路径都填（LLM 直接给 / fallback 从 DB 反求） */
+    metrics?: AnalysisSummaryMetrics | null;
     decision: string;
     actionItems: AnalysisActionItem[];
     risks: string[];
@@ -155,6 +176,8 @@ export async function composeAnalysisFromAxes(
     assumptionsRows,
     openQuestionsRows,
     cognitiveBiasesRows,
+    necessityRows,
+    existingSummaryRows,
   ] = await Promise.all([
     db.query(
       `SELECT id, title, rationale FROM mn_decisions
@@ -248,6 +271,21 @@ export async function composeAnalysisFromAxes(
         WHERE meeting_id = $1
         ORDER BY severity DESC
         LIMIT 12`,
+      [meetingId],
+    ).catch(() => ({ rows: [] as any[] })),
+    // meeting_necessity：本次会议是否必要（async_ok / partial / needed），喂 metrics.necessityVerdict
+    db.query(
+      `SELECT verdict
+         FROM mn_meeting_necessity
+        WHERE meeting_id = $1
+        LIMIT 1`,
+      [meetingId],
+    ).catch(() => ({ rows: [] as any[] })),
+    // 现有 analysis：claude-cli 路径已写过的 tldr/scqa 要继承下来，避免被 compose-analysis 抹掉
+    db.query(
+      `SELECT metadata->'analysis'->'summary' AS summary
+         FROM assets
+        WHERE id = $1`,
       [meetingId],
     ).catch(() => ({ rows: [] as any[] })),
   ]);
@@ -484,8 +522,55 @@ export async function composeAnalysisFromAxes(
     }
   }
 
+  // ── summary.metrics ──（从 axes 反求；fallback 路径无 LLM, tldr/scqa 留 null）
+  const openQuestionsAll = (openQuestionsRows.rows ?? []) as any[];
+  const chronicCount = openQuestionsAll.filter((q) => String(q?.status ?? '') === 'chronic').length;
+  const necessityVerdictRaw = (necessityRows.rows ?? [])[0]?.verdict;
+  const necessityVerdict: AnalysisSummaryMetrics['necessityVerdict'] =
+    necessityVerdictRaw === 'async_ok' || necessityVerdictRaw === 'partial' || necessityVerdictRaw === 'needed'
+      ? necessityVerdictRaw
+      : null;
+  // topicsCount：focusMap 主题去重后总数（focusMap 已生成在前文）
+  const allThemes = new Set<string>();
+  for (const f of focusMap) (f.themes ?? []).forEach((t) => allThemes.add(t));
+  const metrics: AnalysisSummaryMetrics = {
+    topicsCount: allThemes.size || tensions.length,
+    decisionsCount: (decisionsRows.rows ?? []).length,
+    openQuestionsCount: openQuestionsAll.length,
+    chronicCount,
+    necessityVerdict,
+  };
+
+  // 继承现有 LLM 写入的 tldr/scqa（claude-cli 路径写过, compose-analysis 路径不能抹掉）
+  const existingSummary = (existingSummaryRows.rows ?? [])[0]?.summary;
+  const inheritedTldr: string | null =
+    existingSummary && typeof existingSummary === 'object' && typeof existingSummary.tldr === 'string'
+      ? existingSummary.tldr
+      : null;
+  const inheritedScqa: AnalysisSummaryScqa | null =
+    existingSummary && typeof existingSummary === 'object'
+      && existingSummary.scqa && typeof existingSummary.scqa === 'object'
+      && typeof existingSummary.scqa.situation === 'string'
+      && typeof existingSummary.scqa.complication === 'string'
+      && typeof existingSummary.scqa.question === 'string'
+      && typeof existingSummary.scqa.answer === 'string'
+      ? {
+          situation: existingSummary.scqa.situation,
+          complication: existingSummary.scqa.complication,
+          question: existingSummary.scqa.question,
+          answer: existingSummary.scqa.answer,
+        }
+      : null;
+
   return {
-    summary: { decision, actionItems, risks },
+    summary: {
+      tldr: inheritedTldr,
+      scqa: inheritedScqa,
+      metrics,
+      decision,
+      actionItems,
+      risks,
+    },
     tension: tensions,
     newCognition,
     focusMap,

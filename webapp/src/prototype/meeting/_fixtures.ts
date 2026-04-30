@@ -138,6 +138,20 @@ export const DIMENSIONS = [
 // ── Analysis (简化版 — 给 variants A/B/C 使用) ──
 export const ANALYSIS = {
   summary: {
+    tldr: '本次将 AI 基础设施投资方向从「加配」收紧为「精选加配」，单笔上限降至 6,000 万美元。',
+    scqa: {
+      situation: '基金组合在 AI 基础设施赛道已建仓 2 年，配置比重从 8% 升至 19%，覆盖训练层与推理层。',
+      complication: 'H-chip 进口配额 Q3 可能再收紧；训练层估值倍数从 18× 压到 12×，但毛利结构未改善。',
+      question: '是继续按原节奏加配，还是按子赛道精选并设单笔上限以保护组合集中度？',
+      answer: '调整为「精选加配」：优先中游推理效率层，单笔上限 6,000 万美元，控制组合集中度。',
+    },
+    metrics: {
+      topicsCount: 6,
+      decisionsCount: 3,
+      openQuestionsCount: 4,
+      chronicCount: 1,
+      necessityVerdict: 'needed' as const,
+    },
     decision: '对 AI 基础设施方向从「加配」调整为「精选加配」：单笔上限 6,000 万美元，优先布局中游推理效率层。',
     actionItems: [
       { id: 'A1', who: 'p2', what: '两周内提交推理层 3 家 candidate 尽调包', due: '2026-04-25' },

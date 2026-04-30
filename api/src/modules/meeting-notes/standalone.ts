@@ -80,10 +80,11 @@ function createStubExpertsAdapter(): ExpertsAdapter {
 }
 
 // 默认 expert-application：不懂 meetingKind 就返回 null（LLM 直接走 stub）
+// shouldSkipExpertAnalysis 的真实判断由调用方注入；standalone 默认不跳过
 function createDefaultExpertApplication(): ExpertApplicationAdapter {
   return {
     resolveForMeetingKind: () => null,
-    shouldSkipExpertAnalysis: (kind) => kind === 'internal_ops',
+    shouldSkipExpertAnalysis: () => false,
   };
 }
 

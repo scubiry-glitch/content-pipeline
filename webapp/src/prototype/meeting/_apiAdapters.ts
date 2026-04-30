@@ -31,8 +31,40 @@ export function adaptApiAnalysis(data: any): typeof ANALYSIS {
   const crossBody: any[] = Array.isArray(secAny('cross-view', 'cross_view')?.body)
     ? secAny('cross-view', 'cross_view').body : [];
 
+  // SCQA 四要素必须四段齐全才采用，缺任一段一律置 null（前端隐藏整块）
+  const rawScqa = minutesBody?.scqa;
+  const scqa = (rawScqa && typeof rawScqa === 'object'
+    && typeof rawScqa.situation === 'string' && rawScqa.situation.trim()
+    && typeof rawScqa.complication === 'string' && rawScqa.complication.trim()
+    && typeof rawScqa.question === 'string' && rawScqa.question.trim()
+    && typeof rawScqa.answer === 'string' && rawScqa.answer.trim())
+    ? {
+        situation: String(rawScqa.situation),
+        complication: String(rawScqa.complication),
+        question: String(rawScqa.question),
+        answer: String(rawScqa.answer),
+      }
+    : null;
+
+  // metrics 5 字段都是必填数字 + verdict 枚举；缺字段时整块置 null
+  const rawMetrics = minutesBody?.metrics;
+  const verdict = rawMetrics?.necessityVerdict;
+  const metrics = (rawMetrics && typeof rawMetrics === 'object'
+    && (verdict === 'async_ok' || verdict === 'partial' || verdict === 'needed' || verdict === null))
+    ? {
+        topicsCount: Number(rawMetrics.topicsCount ?? 0) || 0,
+        decisionsCount: Number(rawMetrics.decisionsCount ?? 0) || 0,
+        openQuestionsCount: Number(rawMetrics.openQuestionsCount ?? 0) || 0,
+        chronicCount: Number(rawMetrics.chronicCount ?? 0) || 0,
+        necessityVerdict: verdict as 'async_ok' | 'partial' | 'needed' | null,
+      }
+    : null;
+
   return {
     summary: {
+      tldr: typeof minutesBody?.tldr === 'string' && minutesBody.tldr.trim() ? minutesBody.tldr : null,
+      scqa,
+      metrics,
       decision: minutesBody?.decision ?? '',
       actionItems: Array.isArray(minutesBody?.actionItems) ? minutesBody.actionItems : [],
       risks: Array.isArray(minutesBody?.risks) ? minutesBody.risks : [],

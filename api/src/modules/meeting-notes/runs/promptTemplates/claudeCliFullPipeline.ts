@@ -204,9 +204,24 @@ function renderExpertContextByRole(snap: ExpertSnapshot, role: ExpertRoleId): st
 
 const ANALYSIS_SCHEMA_SPEC = `
 {
-  // —— summary 段 —— action items + decision + risks
+  // —— summary 段 —— TL;DR + SCQA + metrics + decision/actions/risks
+  // (金字塔原理 + Amazon 6-pager: 30 秒抓重点 + 因果链叙事 + 可量化数字)
   summary: {
-    decision: string,                                       // 1-2 句话, 主决议
+    tldr: string,                                           // ≤ 50 字, 1 句话核心结论, 必须含 主语 + 动词 + 时间锚 (e.g. "本季度 vs Q3"); 让没参会的人 30 秒抓住要点
+    scqa: {                                                 // 金字塔原理 SCQA 四要素, 每项 ≤ 80 字, 必须形成因果链
+      situation: string,                                    // 背景 — 这次会议在什么大背景下开
+      complication: string,                                 // 冲突 — 出现了什么变化/矛盾, 必须由 situation 推出
+      question: string,                                     // 问题 — 因此要回答什么核心问题, 必须由 complication 推出
+      answer: string                                        // 答案 — 本次会议的回答, 与 decision 字段呼应
+    },
+    metrics: {                                              // Amazon 6-pager 数字条, 全部从已有 axes 反求, 不可凭空生成
+      topicsCount: number,                                  // 议题/主题数 (与 focusMap 主题去重后的总数对齐)
+      decisionsCount: number,                               // 决议数 (与 axes.projects.decisionChain.length 对齐)
+      openQuestionsCount: number,                           // 未决问题数 (与 axes.projects.openQuestions.length 对齐)
+      chronicCount: number,                                 // 长期未决数 (axes.projects.openQuestions 中 status='chronic' 的数量)
+      necessityVerdict: 'async_ok' | 'partial' | 'needed'   // 本次会议必要性: async_ok=可异步, partial=部分必要, needed=确实需要; 与 axes.meta.meetingNecessity 对齐
+    },
+    decision: string,                                       // 1-2 句话, 主决议 (作为 SCQA.answer 的展开)
     actionItems: [{
       id: 'A1' | 'A2' | ...,                                // 局部 ID
       who: 'p1' | 'p2' | ...,                               // 必须用 participants 数组里的 localId
@@ -389,6 +404,20 @@ const FEW_SHOT_ANALYSIS = `
 // 一个真实输出的 analysis 半边样例（trim 后）:
 {
   "summary": {
+    "tldr": "上海汇聚 9 个月内把 AI 嵌入管理与一线作业, 2026 年定为「AI 元年」",
+    "scqa": {
+      "situation": "上海汇聚正处地产中介存量博弈期, 团队管理半径与一线产能瓶颈持续扩大",
+      "complication": "传统人盯人管理与销售型岗位强行程管控失效, 但 AI 工具已能秒级完成原本人工 1 小时的工作",
+      "question": "应该把 AI 用在哪些环节, 用什么节奏推进, 才能在合规边界内最大化收益",
+      "answer": "9 个月分阶段嵌入管理面 + 一线作业面, 优先低代码工具 + 末端可见性, 销售型岗位先观察"
+    },
+    "metrics": {
+      "topicsCount": 8,
+      "decisionsCount": 4,
+      "openQuestionsCount": 5,
+      "chronicCount": 1,
+      "necessityVerdict": "needed"
+    },
     "decision": "将 2026 年定位为「上海汇聚 AI 元年」: 9 个月内分阶段把 AI 嵌入管理与一线作业。",
     "actionItems": [
       { "id": "A1", "who": "p2", "what": "汇总本轮抛出的所有 AI 应用方向, 形成清单", "due": "2026-04-20" }
@@ -511,6 +540,9 @@ export function buildFullPrompt(ctx: ClaudeCliPromptCtx): string {
 4. 日期 ISO 8601 (YYYY-MM-DD 或带 T 时间); 未知用 "—"。
 
 5. 输出密度硬性最低 (除非会议明显短/平淡, 任何"内容不够"的偷懒都视为低质):
+   - summary.tldr: 必填, ≤50 字, 1 句话, 主语 + 动词 + 时间锚, 让没参会的人 30 秒抓住结论
+   - summary.scqa: 4 段必填, 每段 ≤80 字, 必须形成 S→C→Q→A 因果链 (S→C 是触发, C→Q 推问题, Q→A 是回答)
+   - summary.metrics: 5 个数字字段全部从已有 axes 反求, 严禁凭空生成或估算; necessityVerdict 必须与 axes.meta.meetingNecessity 一致
    - tension: ≥5 条; 每条 moments ≥4 句原话 (照抄不许意译); summary ≥250 字, 分段写出至少两方立场, 内嵌引语
    - newCognition: ≥6 条; before/after 必须形成强对比, trigger 必须含 'pX:「原话」'
    - consensus + divergence 合计 ≥10 条; 每条都要 supportedBy 至少 1 人

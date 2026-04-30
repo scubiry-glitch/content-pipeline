@@ -6,7 +6,7 @@ import { useParams } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
-import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, MockBadge, momentToText } from './_atoms';
+import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle } from './MeetingDetailShell';
@@ -30,26 +30,122 @@ function sectionHeader(num: string, title: string, sub: string) {
   );
 }
 
-// ── SecMinutes ──
+// ── SecMinutes 金字塔 4 层 ──
+// 1) TL;DR 横幅(serif 大字, accent 边框)
+// 2) Metrics 数字带(5 个 StatTile, 含 necessity 徽章)
+// 3) SCQA 叙事卡(situation→complication→question→answer 四段)
+// 4) 既有 决议 / 行动项 / 风险(证据层)
 function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
+  const summary: any = a.summary ?? {};
+  const tldr: string | null = typeof summary.tldr === 'string' && summary.tldr.trim() ? summary.tldr : null;
+  const scqa = summary.scqa && typeof summary.scqa === 'object' ? summary.scqa : null;
+  const metrics = summary.metrics && typeof summary.metrics === 'object' ? summary.metrics : null;
+
+  // 必要性 verdict 徽章配色
+  const verdictTone: Record<string, 'accent' | 'amber' | 'ghost'> = {
+    needed: 'accent',
+    partial: 'amber',
+    async_ok: 'ghost',
+  };
+  const verdictLabel: Record<string, string> = {
+    needed: '本次必要',
+    partial: '部分必要',
+    async_ok: '可异步处理',
+  };
+  const v = metrics?.necessityVerdict;
+  const verdictChip = v && v in verdictLabel ? (
+    <Chip tone={verdictTone[v] ?? 'ghost'}>{verdictLabel[v]}</Chip>
+  ) : null;
+
   return (
     <section>
       {sectionHeader('01', '常规会议纪要', '以事实与行动为主干的标准纪要，保留决议链条。')}
+
+      {/* ── L1 · TL;DR 横幅 ── */}
+      {tldr && (
+        <div style={{
+          background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+          borderLeft: '3px solid var(--accent)',
+          padding: '20px 26px', borderRadius: 4, maxWidth: 760, marginBottom: 22,
+        }}>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', letterSpacing: 0.3 }}>TL;DR</div>
+          <p style={{
+            fontFamily: 'var(--serif)', fontSize: 24, lineHeight: 1.4, fontWeight: 500,
+            letterSpacing: '-0.005em', margin: '8px 0 0', color: 'var(--ink)',
+          }}>{tldr}</p>
+        </div>
+      )}
+
+      {/* ── L2 · Metrics 数字带 ── */}
+      {metrics && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 760, marginBottom: 26 }}>
+          <StatTile label="议题" value={metrics.topicsCount ?? 0} />
+          <StatTile label="议定" value={metrics.decisionsCount ?? 0} tone="accent" />
+          <StatTile label="未决" value={metrics.openQuestionsCount ?? 0} tone="amber" />
+          {(metrics.chronicCount ?? 0) > 0 && (
+            <StatTile label="长期未决" value={metrics.chronicCount} tone="teal" sub="反复出现" />
+          )}
+          {verdictChip && (
+            <div style={{
+              display: 'flex', alignItems: 'center', padding: '0 4px',
+              fontSize: 11, color: 'var(--ink-3)',
+            }}>
+              <span style={{ marginRight: 8, fontFamily: 'var(--mono)', letterSpacing: 0.3 }}>必要性</span>
+              {verdictChip}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── L3 · SCQA 叙事 ── */}
+      {scqa && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+          maxWidth: 760, marginBottom: 32,
+        }}>
+          {[
+            { key: 'situation',    label: '背景', body: scqa.situation,    transition: '' },
+            { key: 'complication', label: '冲突', body: scqa.complication, transition: '于是 ——' },
+            { key: 'question',     label: '问题', body: scqa.question,     transition: '因此 ——' },
+            { key: 'answer',       label: '答案', body: scqa.answer,       transition: '本次回答 ——' },
+          ].map((seg) => (
+            <div key={seg.key} style={{
+              padding: '14px 16px', background: 'var(--paper-2)',
+              border: '1px solid var(--line-2)', borderRadius: 4,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                <MonoMeta>{seg.label.toUpperCase()}</MonoMeta>
+                {seg.transition && (
+                  <span style={{
+                    fontFamily: 'var(--serif)', fontStyle: 'italic',
+                    fontSize: 11.5, color: 'var(--ink-3)',
+                  }}>{seg.transition}</span>
+                )}
+              </div>
+              <div style={{
+                fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)',
+              }}>{seg.body}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── L4 · 既有决议（证据层）── */}
       <div style={{
         background: 'var(--paper-2)', border: '1px solid var(--line-2)',
         borderLeft: '2px solid var(--accent)',
-        padding: '18px 22px', borderRadius: 4, maxWidth: 720, marginBottom: 28,
+        padding: '18px 22px', borderRadius: 4, maxWidth: 760, marginBottom: 28,
       }}>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', letterSpacing: 0.3 }}>DECISION</div>
         <p style={{
           fontFamily: 'var(--serif)', fontSize: 18, lineHeight: 1.55, margin: '6px 0 0',
           color: 'var(--ink)',
-        }}>{a.summary?.decision ?? ''}</p>
+        }}>{summary.decision ?? ''}</p>
       </div>
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '0 0 14px' }}>Action Items</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 720 }}>
-        {(a.summary?.actionItems ?? []).map((it) => (
+      <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
+        {(summary.actionItems ?? []).map((it: any) => (
           <div key={it.id} style={{
             display: 'grid', gridTemplateColumns: '42px 100px 1fr 92px', alignItems: 'center',
             padding: '14px 0', borderTop: '1px solid var(--line-2)', gap: 16,
@@ -67,8 +163,8 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
       </div>
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '32px 0 14px' }}>Open Risks</h3>
-      <ul style={{ margin: 0, paddingLeft: 18, maxWidth: 720, color: 'var(--ink)', fontSize: 14, lineHeight: 1.75 }}>
-        {(a.summary?.risks ?? []).map((r, i) => <li key={i}>{r}</li>)}
+      <ul style={{ margin: 0, paddingLeft: 18, maxWidth: 760, color: 'var(--ink)', fontSize: 14, lineHeight: 1.75 }}>
+        {(summary.risks ?? []).map((r: string, i: number) => <li key={i}>{r}</li>)}
       </ul>
     </section>
   );

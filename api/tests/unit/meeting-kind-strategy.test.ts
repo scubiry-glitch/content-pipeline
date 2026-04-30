@@ -39,15 +39,25 @@ describe('meetingKindStrategyMap', () => {
     expect(spec?.default).not.toContain('emm_iterative');
   });
 
-  it('internal_ops returns null', () => {
-    expect(resolveStrategyForMeeting('internal_ops')).toBeNull();
-    expect(shouldSkipExpertAnalysis('internal_ops')).toBe(true);
+  it('internal_ops uses lite single-expert preset (evidence + confidence + signature)', () => {
+    const spec = resolveStrategyForMeeting('internal_ops');
+    expect(spec?.preset).toBe('lite');
+    expect(spec?.default).toContain('single');
+    expect(spec?.default).toContain('evidence_anchored');
+    expect(spec?.default).toContain('calibrated_confidence');
+    expect(spec?.default).toContain('signature_style');
+    expect(spec?.default).not.toContain('debate');
+    expect(spec?.default).not.toContain('emm_iterative');
+    expect(spec?.default).not.toContain('mental_model_rotation');
+    // 不再跳过专家分析 — 让 16 维 schema 数据被填充
+    expect(shouldSkipExpertAnalysis('internal_ops')).toBe(false);
   });
 
   it('unknown meetingKind returns null without throwing', () => {
     expect(resolveStrategyForMeeting('weekly_standup' as any)).toBeNull();
     expect(resolveStrategyForMeeting(undefined)).toBeNull();
     expect(shouldSkipExpertAnalysis(undefined)).toBe(false);
+    expect(shouldSkipExpertAnalysis('weekly_standup' as any)).toBe(false);
   });
 
   it('every active kind uses only registered decorator/base ids', () => {
