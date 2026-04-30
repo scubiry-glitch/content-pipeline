@@ -9,6 +9,7 @@ import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
+import { useMeetingDetail } from './MeetingDetailShell';
 
 type PFn = (id: string) => Participant;
 type ThreadEvent = { t: number; kind: string; label?: string; ref?: string };
@@ -644,6 +645,8 @@ export function VariantThreads() {
   const [focusMapMock, setFocusMapMock] = useState(true);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
+  // 复用 Shell 已经抓的 detail，避免重复 fetch
+  const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
   const P = useMemo<PFn>(() => {
     const map = new Map<string, Participant>();

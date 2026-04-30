@@ -9,7 +9,7 @@ import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
-import { useMeetingShellTitle } from './MeetingDetailShell';
+import { useMeetingShellTitle, useMeetingDetail } from './MeetingDetailShell';
 
 type PFn = (id: string) => Participant;
 
@@ -470,9 +470,11 @@ export function VariantEditorial() {
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
+  // Shell 已经统一拉了 detail —— 这里直接消费，避免重复 fetch（dev 下 StrictMode + 4 处 fetch 共 8 次）
+  const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
+  // 同步 Shell 的 detail 到本组件 state
   useEffect(() => {
-    // Reset to mock state when toggled back to mock mode
     if (forceMock) {
       setA(ANALYSIS);
       setApiMeta(null);
@@ -481,26 +483,22 @@ export function VariantEditorial() {
       setApiState('skipped');
       return;
     }
-    if (!id) { setApiState('skipped'); return; }
-    setApiState('loading');
-    meetingNotesApi.getMeetingDetail(id, 'A')
-      .then((data: any) => {
-        if (data?.analysis) {
-          setA(adaptApiAnalysis(data.analysis));
-          setApiMeta({
-            title: data.analysis.title ?? null,
-            date: data.analysis.date ?? null,
-            participants: Array.isArray(data.analysis.participants) ? data.analysis.participants : [],
-          });
-          setUsingMock(false);
-          setApiState('ok');
-        } else {
-          // analysis === null：后端无该会议数据 · 标记为 error 让 fixture 兜底显示
-          setApiState('error');
-        }
-      })
-      .catch(() => { setApiState('error'); });
-    // Phase 15.15 · C.1 · tension probe
+    if (shellDetailState === 'loading') { setApiState('loading'); return; }
+    if (shellDetailState === 'skipped') { setApiState('skipped'); return; }
+    if (shellDetailState === 'error' || !shellDetail?.analysis) { setApiState('error'); return; }
+    setA(adaptApiAnalysis(shellDetail.analysis));
+    setApiMeta({
+      title: shellDetail.analysis.title ?? null,
+      date: shellDetail.analysis.date ?? null,
+      participants: Array.isArray(shellDetail.analysis.participants) ? shellDetail.analysis.participants : [],
+    });
+    setUsingMock(false);
+    setApiState('ok');
+  }, [forceMock, shellDetail, shellDetailState]);
+
+  // Phase 15.15 · C.1 · tension probe（独立 endpoint，与 Shell 抓的 detail 互不重叠）
+  useEffect(() => {
+    if (forceMock || !id) return;
     meetingNotesApi.getMeetingTensions(id)
       .then((data) => {
         if (data?.items?.length) {

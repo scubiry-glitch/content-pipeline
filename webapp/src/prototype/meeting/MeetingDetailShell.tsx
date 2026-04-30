@@ -15,11 +15,21 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 export type MeetingShellContext = {
   /** Title being edited in the shell top bar. Children should prefer this over their own fetch. */
   shellTitle: string;
+  /** 完整 GET /meetings/:id/detail?view=A 响应；Variants 直接消费，不要再单独 fetch。 */
+  meetingDetail: any | null;
+  /** 'loading' = 还在抓; 'ok' = 已就绪; 'error' = 后端 404/异常; 'skipped' = forceMock 或非 UUID id */
+  detailState: 'loading' | 'ok' | 'error' | 'skipped';
 };
 
 export function useMeetingShellTitle(fallback?: string): string {
   const ctx = useOutletContext<MeetingShellContext | undefined>();
   return ctx?.shellTitle ?? fallback ?? '';
+}
+
+/** Variants 通过这个 hook 拿到 Shell 一次性 fetch 的 detail 响应 + 加载状态。 */
+export function useMeetingDetail(): { detail: any | null; state: 'loading' | 'ok' | 'error' | 'skipped' } {
+  const ctx = useOutletContext<MeetingShellContext | undefined>();
+  return { detail: ctx?.meetingDetail ?? null, state: ctx?.detailState ?? 'skipped' };
 }
 
 export function MeetingDetailShell() {
@@ -33,6 +43,8 @@ export function MeetingDetailShell() {
   const [apiDate, setApiDate] = useState<string | null>(null);
   const [apiResponded, setApiResponded] = useState(false);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
+  /** 缓存完整 detail 响应供 Variants 通过 Outlet context 复用 — 避免子组件重复 fetch */
+  const [apiDetail, setApiDetail] = useState<any | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
@@ -50,6 +62,7 @@ export function MeetingDetailShell() {
     if (forceMock || !id || !UUID_RE.test(id)) {
       setApiResponded(false);
       setApiState('skipped');
+      setApiDetail(null);
       setRunSource(null);
       setEditingTitle(false);
       return;
@@ -58,11 +71,11 @@ export function MeetingDetailShell() {
     setApiState('loading');
     setApiTitle(null);
     setApiDate(null);
+    setApiDetail(null);
     setRunSource(null);
     setEditingTitle(false);
     let cancelled = false;
-    // Prefer getMeetingDetail (returns title/date directly from assets table).
-    // Falls back gracefully if not available.
+    // 单一 fetch — 同时供 shell 顶栏与子 Variants 消费，Variants 通过 useMeetingDetail() 读取
     meetingNotesApi.getMeetingDetail(id, 'A')
       .then((r: any) => {
         if (cancelled) return;
@@ -71,12 +84,14 @@ export function MeetingDetailShell() {
         if (a.date) setApiDate(String(a.date).slice(0, 10));
         setClaudeSession(a.claudeSession ?? null);
         setRunSource(a.runSource ?? null);
+        setApiDetail(r ?? null);
         setApiResponded(true);
         setApiState('ok');
       })
       .catch(() => {
         if (cancelled) return;
         setRunSource(null);
+        setApiDetail(null);
         setApiResponded(true);
         setApiState('error');
       });
@@ -312,7 +327,11 @@ export function MeetingDetailShell() {
       </header>
 
       <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
-        <Outlet context={{ shellTitle: effectiveTitle } satisfies MeetingShellContext} />
+        <Outlet context={{
+          shellTitle: effectiveTitle,
+          meetingDetail: apiDetail,
+          detailState: apiState,
+        } satisfies MeetingShellContext} />
       </main>
       <MockToggleBar />
     </div>
