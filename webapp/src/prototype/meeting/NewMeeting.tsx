@@ -1,7 +1,7 @@
 // NewMeeting — 新建会议纪要向导（3 步）
 // 原型来源：/tmp/mn-proto/strategy-panel.jsx FlowUpload / FlowExperts / FlowProcessing
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { EXPERTS, ExpertMock } from './_fixtures';
@@ -75,6 +75,19 @@ function StepBar({ step }: { step: number }) {
 
 // ── Step 1: FlowUpload ────────────────────────────────────────────────────────
 
+interface JsonPreview {
+  title: string;
+  hasTldr: boolean;
+  hasScqa: boolean;
+  decisions: number;
+  actionItems: number;
+  risks: number;
+  tension: number;
+  newCognition: number;
+  consensus: number;
+  participants: number;
+}
+
 function FlowUpload({ onNext, onUploaded }: {
   onNext: () => void;
   onUploaded: (assetId: string | null) => void;
@@ -82,7 +95,7 @@ function FlowUpload({ onNext, onUploaded }: {
   const normalizePath = (p: string) =>
     p.trim().replace(/\\/g, '/').replace(/\/+$/, '');
   const forceMock = useForceMock();
-  const [mode, setMode] = useState<'files' | 'folder' | 'recent'>('files');
+  const [mode, setMode] = useState<'files' | 'folder' | 'recent' | 'json'>('files');
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -110,6 +123,76 @@ function FlowUpload({ onNext, onUploaded }: {
   const [folderPreviewItems, setFolderPreviewItems] = useState<string[]>([]);
   const [activeBindingId, setActiveBindingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const navigate = useNavigate();
+  const [jsonFile, setJsonFile] = useState<File | null>(null);
+  const [jsonText, setJsonText] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [jsonPreview, setJsonPreview] = useState<JsonPreview | null>(null);
+  const [jsonImporting, setJsonImporting] = useState(false);
+
+  const handleJsonFile = useCallback((f: File | null) => {
+    setJsonFile(f);
+    setJsonError(null);
+    setJsonPreview(null);
+    setJsonText('');
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onerror = () => setJsonError('读取文件失败');
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      setJsonText(text);
+      try {
+        const obj = JSON.parse(text);
+        const analysis = obj && typeof obj.analysis === 'object' && obj.analysis
+          ? obj.analysis
+          : (obj && typeof obj.summary === 'object' ? obj : null);
+        if (!analysis || typeof analysis.summary !== 'object') {
+          throw new Error('JSON 必须包含 analysis 对象（顶层或 .analysis 下），且其 summary 字段为对象');
+        }
+        const summary = analysis.summary ?? {};
+        const titleGuess = (typeof obj.title === 'string' && obj.title.trim())
+          || (typeof analysis.title === 'string' && analysis.title.trim())
+          || f.name.replace(/\.json$/i, '');
+        setJsonPreview({
+          title: String(titleGuess),
+          hasTldr: typeof summary.tldr === 'string' && summary.tldr.trim().length > 0,
+          hasScqa: !!(summary.scqa && typeof summary.scqa === 'object'
+            && summary.scqa.situation && summary.scqa.complication
+            && summary.scqa.question && summary.scqa.answer),
+          decisions: typeof summary.decision === 'string' && summary.decision.trim() ? 1 : 0,
+          actionItems: Array.isArray(summary.actionItems) ? summary.actionItems.length : 0,
+          risks: Array.isArray(summary.risks) ? summary.risks.length : 0,
+          tension: Array.isArray(analysis.tension) ? analysis.tension.length : 0,
+          newCognition: Array.isArray(analysis.newCognition) ? analysis.newCognition.length : 0,
+          consensus: Array.isArray(analysis.consensus) ? analysis.consensus.length : 0,
+          participants: Array.isArray(obj.participants)
+            ? obj.participants.length
+            : (Array.isArray(analysis.participants) ? analysis.participants.length : 0),
+        });
+      } catch (e: unknown) {
+        setJsonError(e instanceof Error ? e.message : String(e));
+      }
+    };
+    reader.readAsText(f);
+  }, []);
+
+  const importJson = useCallback(async () => {
+    if (!jsonText || !jsonPreview || jsonError) return;
+    setJsonImporting(true);
+    try {
+      const obj = JSON.parse(jsonText);
+      const body: Record<string, unknown> = { ...obj };
+      if (!body.title && jsonPreview.title) body.title = jsonPreview.title;
+      const r = await meetingNotesApi.importMeetingJson(body);
+      if (!r.ok || !r.id) throw new Error('import failed');
+      navigate(`/meeting-notes/${r.id}`, { state: { justImported: true } });
+    } catch (e: unknown) {
+      setJsonError(e instanceof Error ? e.message : String(e));
+      setJsonImporting(false);
+    }
+  }, [jsonText, jsonPreview, jsonError, navigate]);
+
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
     color: 'var(--paper)', borderRadius: 5, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--sans)',
@@ -335,7 +418,7 @@ function FlowUpload({ onNext, onUploaded }: {
       <StepBar step={1} />
 
       <div style={{ display: 'flex', gap: 3, border: '1px solid var(--line)', borderRadius: 6, padding: 3, alignSelf: 'flex-start', marginBottom: 18, background: 'var(--paper)' }}>
-        {[{ id: 'files' as const, label: '上传文件' }, { id: 'folder' as const, label: '绑定目录' }, { id: 'recent' as const, label: '从历史中选' }].map(x => (
+        {[{ id: 'files' as const, label: '上传文件' }, { id: 'folder' as const, label: '绑定目录' }, { id: 'recent' as const, label: '从历史中选' }, { id: 'json' as const, label: 'JSON 导入' }].map(x => (
           <button key={x.id} onClick={() => setMode(x.id)} style={{
             padding: '6px 14px', border: 0, borderRadius: 4, fontSize: 12.5,
             background: mode === x.id ? 'var(--ink)' : 'transparent',
@@ -523,6 +606,136 @@ function FlowUpload({ onNext, onUploaded }: {
         </div>
       )}
 
+      {mode === 'json' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, flex: 1 }}>
+          {/* 左侧 · 文件选择 */}
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleJsonFile(f);
+            }}
+            onClick={() => jsonInputRef.current?.click()}
+            style={{
+              border: '1.5px dashed var(--line)', borderRadius: 8, background: 'var(--paper)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 12, cursor: 'pointer', padding: '24px',
+            }}
+          >
+            <input
+              ref={jsonInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const picked = e.target.files?.[0] ?? null;
+                handleJsonFile(picked);
+                e.target.value = '';
+              }}
+            />
+            <div style={{
+              width: 56, height: 56, borderRadius: 10, background: 'var(--paper-2)',
+              border: '1px solid var(--line)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 20, fontFamily: 'var(--mono)',
+            }}>{'{ }'}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 500 }}>
+              拖拽 JSON 文件 · 或点击选择
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', lineHeight: 1.6 }}>
+              直接导入完整 ANALYSIS JSON · 跳过 LLM 流水线<br />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{'{ analysis: {...} }'} 或顶层带 summary 字段</span>
+            </div>
+            {jsonFile && (
+              <div style={{
+                marginTop: 8, padding: '6px 12px', background: 'var(--paper-2)',
+                border: '1px solid var(--line)', borderRadius: 4, fontSize: 12,
+                display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%',
+              }}>
+                <span>📄</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{jsonFile.name}</span>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink-3)', flexShrink: 0 }}>
+                  {(jsonFile.size / 1024).toFixed(jsonFile.size > 1024 * 1024 ? 0 : 1)}
+                  {jsonFile.size > 1024 * 1024 ? ' MB' : ' KB'}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleJsonFile(null); }}
+                  style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink-3)', marginLeft: 4 }}
+                  title="移除"
+                >×</button>
+              </div>
+            )}
+          </div>
+
+          {/* 右侧 · 预览 + 导入 */}
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8,
+            padding: 20, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 12 }}>JSON 预览</div>
+            {!jsonText && (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', lineHeight: 1.7 }}>
+                选择文件后将解析并显示统计预览。<br />
+                校验通过即可一键创建会议（不走 LLM 解析）。
+              </div>
+            )}
+            {jsonText && jsonError && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>解析失败</div>
+                <div style={{ fontSize: 11, color: '#ef4444', fontFamily: 'var(--mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{jsonError}</div>
+              </div>
+            )}
+            {jsonText && jsonPreview && !jsonError && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>TITLE</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--serif)' }}>{jsonPreview.title}</div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {[
+                    { label: '决议',    value: jsonPreview.decisions },
+                    { label: '行动项',  value: jsonPreview.actionItems },
+                    { label: '风险',    value: jsonPreview.risks },
+                    { label: '张力',    value: jsonPreview.tension },
+                    { label: '新认知',  value: jsonPreview.newCognition },
+                    { label: '共识/分歧', value: jsonPreview.consensus },
+                  ].map((s) => (
+                    <div key={s.label} style={{
+                      padding: '8px 10px', background: 'var(--paper-2)',
+                      border: '1px solid var(--line)', borderRadius: 4,
+                    }}>
+                      <div style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>{s.label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, marginTop: 2 }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {jsonPreview.hasTldr && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}>含 TL;DR</span>
+                  )}
+                  {jsonPreview.hasScqa && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>含 SCQA</span>
+                  )}
+                  {jsonPreview.participants > 0 && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: 'var(--paper-2)', color: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+                      参与者 {jsonPreview.participants} 人
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={importJson}
+                  disabled={jsonImporting}
+                  style={{ ...btnPrimary, marginTop: 'auto', opacity: jsonImporting ? 0.5 : 1, cursor: jsonImporting ? 'not-allowed' : 'pointer' }}
+                >
+                  {jsonImporting ? '导入中…' : '导入并打开 →'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {mode !== 'json' && (
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
         <button style={btnGhost}>稍后</button>
         <button
@@ -545,9 +758,10 @@ function FlowUpload({ onNext, onUploaded }: {
                 : '继续 · 选择专家'}
         </button>
       </div>
+      )}
       {mode === 'files' && uploadDone && !selectedAssetId && (
         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
-          {uploadIssue ?? '上传已完成但未拿到可解析资产 ID，请重传一次文件或切换到“从历史中选”。'}
+          {uploadIssue ?? '上传已完成但未拿到可解析资产 ID，请重传一次文件或切换到”从历史中选”。'}
         </div>
       )}
       {mode === 'recent' && selectedRecentId && !selectedAssetId && (
