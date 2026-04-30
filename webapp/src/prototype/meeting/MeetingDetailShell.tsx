@@ -38,11 +38,19 @@ export function MeetingDetailShell() {
   const [savingTitle, setSavingTitle] = useState(false);
   // claude-cli 模式标记 — 取自 assets.metadata.claudeSession
   const [claudeSession, setClaudeSession] = useState<{ sessionId?: string; lastResumedAt?: string; runCount?: number } | null>(null);
+  // 最近一次 run 来源（mode + model），用于 B 视图顶部展示模式标签 + hover 模型名
+  const [runSource, setRunSource] = useState<{
+    runId?: string;
+    state?: string;
+    mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
+    modelName?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (forceMock || !id || !UUID_RE.test(id)) {
       setApiResponded(false);
       setApiState('skipped');
+      setRunSource(null);
       setEditingTitle(false);
       return;
     }
@@ -50,6 +58,7 @@ export function MeetingDetailShell() {
     setApiState('loading');
     setApiTitle(null);
     setApiDate(null);
+    setRunSource(null);
     setEditingTitle(false);
     let cancelled = false;
     // Prefer getMeetingDetail (returns title/date directly from assets table).
@@ -61,11 +70,13 @@ export function MeetingDetailShell() {
         if (a.title) setApiTitle(String(a.title));
         if (a.date) setApiDate(String(a.date).slice(0, 10));
         setClaudeSession(a.claudeSession ?? null);
+        setRunSource(a.runSource ?? null);
         setApiResponded(true);
         setApiState('ok');
       })
       .catch(() => {
         if (cancelled) return;
+        setRunSource(null);
         setApiResponded(true);
         setApiState('error');
       });
@@ -222,6 +233,40 @@ export function MeetingDetailShell() {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {runSource?.mode === 'multi-axis' && (
+            <span
+              title={`Multi-axis run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px', borderRadius: 4,
+                background: 'oklch(0.93 0.04 160)',
+                color: 'oklch(0.31 0.10 160)',
+                border: '1px solid oklch(0.80 0.08 160)',
+                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                letterSpacing: 0.2,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.52 0.16 160)' }} />
+              Multi-axis
+            </span>
+          )}
+          {runSource?.mode === 'api-oneshot' && (
+            <span
+              title={`API Oneshot run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px', borderRadius: 4,
+                background: 'oklch(0.93 0.04 210)',
+                color: 'oklch(0.30 0.11 210)',
+                border: '1px solid oklch(0.80 0.08 210)',
+                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                letterSpacing: 0.2,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.50 0.16 210)' }} />
+              API Oneshot
+            </span>
+          )}
           {claudeSession?.sessionId && (
             <span
               title={`Claude CLI session ${claudeSession.sessionId}${claudeSession.runCount ? ` · ${claudeSession.runCount} runs` : ''}${claudeSession.lastResumedAt ? ` · last ${claudeSession.lastResumedAt}` : ''}`}

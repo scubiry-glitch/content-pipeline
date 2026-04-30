@@ -47,22 +47,49 @@ export class VersionStore {
 
     const diff = prev ? this.computeDiff(prev.snapshot, input.data) : { added: [], changed: [], removed: [] };
 
-    const ins = await this.deps.db.query(
-      `INSERT INTO mn_axis_versions
-         (run_id, scope_kind, scope_id, axis, version_label, snapshot, diff_vs_prev, prev_version_id)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
-       RETURNING id`,
-      [
-        input.runId,
-        input.scopeKind,
-        input.scopeId,
-        input.axis,
-        versionLabel,
-        JSON.stringify(input.data ?? {}),
-        JSON.stringify(diff),
-        prev?.id ?? null,
-      ],
-    );
+    const params = [
+      input.runId,
+      input.scopeKind,
+      input.scopeId,
+      input.axis,
+      versionLabel,
+      JSON.stringify(input.data ?? {}),
+      JSON.stringify(diff),
+      prev?.id ?? null,
+    ];
+
+    let ins;
+    try {
+      // 优先写 workspace_id，避免在启用多工作区约束（NOT NULL）时插入失败。
+      // workspace 来源优先级：
+      //   1) 该 run 对应的 mn_runs.workspace_id
+      //   2) 共享 workspace
+      //   3) 任意最早创建的 workspace（兜底）
+      ins = await this.deps.db.query(
+        `INSERT INTO mn_axis_versions
+           (run_id, scope_kind, scope_id, axis, version_label, snapshot, diff_vs_prev, prev_version_id, workspace_id)
+         SELECT
+           $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8,
+           COALESCE(
+             (SELECT workspace_id FROM mn_runs WHERE id = $1),
+             (SELECT id FROM workspaces WHERE is_shared = true ORDER BY created_at ASC LIMIT 1),
+             (SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1)
+           )
+         RETURNING id`,
+        params,
+      );
+    } catch (e) {
+      const msg = (e as Error)?.message ?? '';
+      // 兼容旧 schema（mn_axis_versions 尚无 workspace_id 列）
+      if (!msg.includes('workspace_id')) throw e;
+      ins = await this.deps.db.query(
+        `INSERT INTO mn_axis_versions
+           (run_id, scope_kind, scope_id, axis, version_label, snapshot, diff_vs_prev, prev_version_id)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
+         RETURNING id`,
+        params,
+      );
+    }
 
     return {
       id: ins.rows[0].id,

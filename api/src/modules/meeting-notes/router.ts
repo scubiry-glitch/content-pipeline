@@ -77,6 +77,21 @@ function emptyAxes(meetingId: string) {
   };
 }
 
+function getMeetingRunModelHint(mode: 'multi-axis' | 'claude-cli' | 'api-oneshot'): string {
+  // multi-axis / api-oneshot 都经由 meeting-notes deps.llm（taskType=expert_library）路由。
+  // 默认首选 volcano-engine/deepseek-v3-2-251201，失败回退 siliconflow/DeepSeek-V3.2。
+  if (mode === 'api-oneshot') {
+    if (process.env.MN_ONESHOT_MODEL && process.env.MN_ONESHOT_MODEL.trim()) {
+      return process.env.MN_ONESHOT_MODEL.trim();
+    }
+    return 'deepseek-v3-2-251201 (volcano-engine, fallback: Pro/deepseek-ai/DeepSeek-V3.2)';
+  }
+  if (mode === 'multi-axis') {
+    return 'deepseek-v3-2-251201 (volcano-engine, fallback: Pro/deepseek-ai/DeepSeek-V3.2)';
+  }
+  return 'Claude Code CLI session model';
+}
+
 export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
   return async function meetingNotesRouter(fastify: FastifyInstance) {
     // Workspace 守卫: 按 URL 路径分派到对应表的 ws 校验, 跨 ws 一律 404
@@ -867,6 +882,43 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         } catch (e) {
           request.log.warn({ id, err: e }, 'detail claudeSession lookup failed');
           payload = { ...payload, claudeSession: null };
+        }
+
+        // 最近一次 meeting run 来源（mode + model）：
+        // 供 /meeting/:id/b 顶栏展示模式标签，并在 hover 中显示模型名。
+        try {
+          const rr = await engine.deps.db.query(
+            `SELECT id::text AS id, state,
+                    COALESCE(metadata->>'mode', 'multi-axis') AS mode
+               FROM mn_runs
+              WHERE scope_kind = 'meeting'
+                AND scope_id::text = $1
+              ORDER BY COALESCE(started_at, created_at) DESC
+              LIMIT 1`,
+            [id],
+          );
+          const row = rr.rows[0];
+          if (!row) {
+            payload = { ...payload, runSource: null };
+          } else {
+            const rawMode = String(row.mode || 'multi-axis');
+            const mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+              rawMode === 'claude-cli' ? 'claude-cli'
+              : rawMode === 'api-oneshot' ? 'api-oneshot'
+              : 'multi-axis';
+            payload = {
+              ...payload,
+              runSource: {
+                runId: row.id,
+                state: row.state,
+                mode,
+                modelName: getMeetingRunModelHint(mode),
+              },
+            };
+          }
+        } catch (e) {
+          request.log.warn({ id, err: e }, 'detail runSource lookup failed');
+          payload = { ...payload, runSource: null };
         }
 
         // 包一层 { analysis } 让 VariantEditorial/Workbench/Threads 的
@@ -1710,6 +1762,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(400);
         return { error: 'Bad Request', message: `invalid scope kind: ${scope?.kind ?? 'unknown'}` };
       }
+      const normalizedScope: { kind: string; id?: string } = { kind: scope.kind, id: scope.id };
 
       // ============================================================
       // P1 前置闸门：拦下 silent-succeeded 空跑（详情见 docs/plans/P1-precheck-gates.md）
@@ -1741,7 +1794,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       }
 
       // Gate 2: 解析 scope 下的 meetings；project/client/topic 为 0 则拒
-      const meetingIds = await collectMeetingsInScope(engine.deps.db, scope);
+      const meetingIds = await collectMeetingsInScope(engine.deps.db, normalizedScope);
       if (meetingIds.length === 0 && scope.kind !== 'library') {
         reply.status(400);
         return {
@@ -2021,9 +2074,12 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       } catch (e) {
         request.log.error({ scopeKind, scopeId, axis, captureFailed }, 'snapshot capture failed');
         reply.status(500);
+        const failedDetail = captureFailed
+          ? ` (meeting ${captureFailed.meetingId.slice(0, 8)}: ${(captureFailed as { message: string }).message})`
+          : '';
         return {
           error: 'Internal Server Error',
-          message: `snapshot capture failed${captureFailed ? ` (meeting ${captureFailed.meetingId.slice(0, 8)}: ${captureFailed.message})` : ''}`,
+          message: `snapshot capture failed${failedDetail}`,
         };
       }
 

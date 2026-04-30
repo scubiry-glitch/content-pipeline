@@ -10,11 +10,13 @@ import { GenerationParams, GenerationResult } from '../types/index.js';
  * 默认 120s（覆盖 99% 的 LLM 慢响应）· 可通过环境变量 LLM_FETCH_TIMEOUT_MS
  * 覆盖（设 0 表示不限时，回到旧行为）。
  */
-export const LLM_FETCH_TIMEOUT_MS: number = (() => {
+export function getLlmFetchTimeoutMs(): number {
   const v = parseInt(process.env.LLM_FETCH_TIMEOUT_MS ?? '', 10);
   if (Number.isFinite(v) && v >= 0) return v;
   return 120_000;
-})();
+}
+// 向后兼容导出（注意：此常量仅反映模块加载时的值；运行时请优先用 getLlmFetchTimeoutMs）
+export const LLM_FETCH_TIMEOUT_MS: number = getLlmFetchTimeoutMs();
 
 /**
  * 是否禁用 LLM fetch 的 keep-alive 连接复用 · 治本 root cause。
@@ -52,8 +54,9 @@ export const LLM_FETCH_DISABLE_KEEPALIVE: boolean =
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
-  timeoutMs: number = LLM_FETCH_TIMEOUT_MS,
+  timeoutMs?: number,
 ): Promise<Response> {
+  const effectiveTimeoutMs = typeof timeoutMs === 'number' ? timeoutMs : getLlmFetchTimeoutMs();
   // 默认强制 Connection: close 避免连接池死连接 · 用户传入的同名 header 会被保留
   const headers = new Headers(init.headers);
   if (LLM_FETCH_DISABLE_KEEPALIVE && !headers.has('connection')) {
@@ -61,9 +64,9 @@ export async function fetchWithTimeout(
   }
   const finalInit: RequestInit = { ...init, headers };
 
-  if (!timeoutMs) return fetch(url, finalInit);
+  if (!effectiveTimeoutMs) return fetch(url, finalInit);
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(new Error(`fetch timeout after ${timeoutMs}ms`)), timeoutMs);
+  const timer = setTimeout(() => ctrl.abort(new Error(`fetch timeout after ${effectiveTimeoutMs}ms`)), effectiveTimeoutMs);
   try {
     return await fetch(url, { ...finalInit, signal: finalInit.signal ?? ctrl.signal });
   } finally {

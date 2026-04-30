@@ -1102,12 +1102,19 @@ export class RunEngine {
             const rawName = String(p?.name ?? '').trim();
             if (!localId || !rawName) continue;
             try {
-              const uuid = await ensurePersonByName(this.deps, rawName, p?.role);
+              const uuid = await ensurePersonByName(this.deps, rawName, p?.role, undefined, payload.meetingId);
               if (uuid) cliPersonMap[localId] = uuid;
             } catch (e) {
               console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
             }
           }
+          console.info(
+            '[runEngine] cliPersonMap mapped',
+            Object.keys(cliPersonMap).length,
+            '/',
+            claudeParticipants.length,
+            'participants',
+          );
 
           const stampedAnalysis = {
             ...(cliResult.analysis as any),
@@ -1515,12 +1522,19 @@ export class RunEngine {
             const rawName = String(p?.name ?? '').trim();
             if (!localId || !rawName) continue;
             try {
-              const uuid = await ensurePersonByName(this.deps, rawName, p?.role);
+              const uuid = await ensurePersonByName(this.deps, rawName, p?.role, undefined, payload.meetingId);
               if (uuid) cliPersonMap[localId] = uuid;
             } catch (e) {
               console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
             }
           }
+          console.info(
+            '[runEngine] oneshotPersonMap mapped',
+            Object.keys(cliPersonMap).length,
+            '/',
+            oneshotParticipants.length,
+            'participants',
+          );
 
           const stampedAnalysis = {
             ...(oneshotResult.analysis as any),

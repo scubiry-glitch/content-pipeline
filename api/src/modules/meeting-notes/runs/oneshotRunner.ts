@@ -94,9 +94,22 @@ export interface OneshotRunnerResult {
 
 const DEFAULT_TEMPERATURE = 0.2;
 const RETRY_TEMPERATURE = 0.4;
-const DEFAULT_MAX_TOKENS = Number(process.env.MN_ONESHOT_MAX_TOKENS ?? 16384);
-/** 不传则走 services/llm.ts provider 自身的默认（与 multi-axis 一致） */
-const ONESHOT_MODEL = process.env.MN_ONESHOT_MODEL ?? undefined;
+/**
+ * Oneshot 模型优先级：
+ * 1) MN_ONESHOT_MODEL（meeting-notes 专用显式覆盖）
+ * 2) SILICONFLOW_MODEL（兼容历史全局配置）
+ * 3) undefined（交给 LLMRouter taskType=expert_library 的默认路由/模型）
+ */
+function getOneshotModel(): string | undefined {
+  return process.env.MN_ONESHOT_MODEL?.trim()
+    || process.env.SILICONFLOW_MODEL?.trim()
+    || undefined;
+}
+
+function getOneshotMaxTokens(): number {
+  const v = Number(process.env.MN_ONESHOT_MAX_TOKENS ?? 16384);
+  return Number.isFinite(v) && v > 0 ? v : 16384;
+}
 
 // ============================================================
 // 工具
@@ -226,11 +239,12 @@ export async function runOneshotMode(
     await hooks.writeStep('streaming', 0.5, `等待 LLM 响应（temp=${temperature}）`);
     let raw = '';
     try {
+      const oneshotModel = getOneshotModel();
       raw = await deps.llm.completeWithSystem(prompt, '', {
         responseFormat: 'json',
         temperature,
-        maxTokens: DEFAULT_MAX_TOKENS,
-        ...(ONESHOT_MODEL ? { model: ONESHOT_MODEL } : {}),
+        maxTokens: getOneshotMaxTokens(),
+        ...(oneshotModel ? { model: oneshotModel } : {}),
       });
     } catch (e) {
       throw new Error(`oneshot LLM call failed: ${(e as Error).message}`);
