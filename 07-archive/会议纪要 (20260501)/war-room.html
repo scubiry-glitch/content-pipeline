@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>作战室 · 团队</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #0E0808;
+    --bg-mid:  #1A0E0E;
+    --bg-soft: #2A1818;
+    --steel:   #3C2828;
+    --red:     #D64545;
+    --red-dim: #8A2828;
+    --gold:    #C8A15C;
+    --ink:     #F5D9D9;
+    --ink-2:   rgba(245, 217, 217, 0.65);
+    --ink-3:   rgba(245, 217, 217, 0.4);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+
+  /* 噪点/纸纹 */
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(214,69,69,0.06), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(200,161,92,0.04), transparent 50%);
+    mix-blend-mode: overlay;
+  }
+  body::after {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+    opacity: 0.5;
+  }
+
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px;
+    border-bottom:1px solid var(--steel);
+    background:rgba(10,5,5,0.6);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:50%;
+    border:1.5px solid var(--red);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+    box-shadow: 0 0 20px rgba(214,69,69,0.3) inset, 0 0 12px rgba(214,69,69,0.15);
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--red); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--steel); border-radius:3px;
+    transition: all .25s;
+  }
+  .exit:hover { color:var(--gold); border-color:var(--gold); }
+
+  /* 主网格 */
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+
+  /* 区块通用 */
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--steel);
+    border-radius: 4px;
+    padding: 22px 24px;
+    position: relative;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--steel);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--gold); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 阵型图 — 大块,跨两行 */
+  .formation {
+    grid-row: span 2;
+    min-height: 560px;
+  }
+  .battle-table {
+    width:100%; height:520px;
+    background:
+      radial-gradient(ellipse at center, rgba(60,40,40,0.6) 0%, rgba(20,10,10,0.9) 70%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 38px, rgba(214,69,69,0.05) 38px, rgba(214,69,69,0.05) 39px),
+      repeating-linear-gradient(90deg, transparent 0, transparent 38px, rgba(214,69,69,0.05) 38px, rgba(214,69,69,0.05) 39px);
+    border:1px solid var(--red-dim);
+    border-radius:50%/3%;
+    position:relative;
+    box-shadow: inset 0 0 80px rgba(0,0,0,0.6), 0 0 30px rgba(214,69,69,0.15);
+  }
+  .battle-table svg { width:100%; height:100%; }
+  .formation-legend {
+    display:flex; gap:18px; margin-top:14px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:10px; color:var(--ink-2);
+  }
+  .legend-item { display:flex; align-items:center; gap:6px; }
+  .legend-line { width:24px; height:2px; }
+
+  .person-card-popup {
+    position:absolute; bottom:8px; left:8px; right:8px;
+    background:rgba(10,6,6,0.95); border:1px solid var(--gold);
+    padding:10px 14px; border-radius:3px;
+    font-size:12px; line-height:1.55;
+    color:var(--ink); display:none;
+  }
+  .person-card-popup.visible { display:block; }
+  .person-card-popup .name {
+    font-family:var(--serif); font-style:italic; font-size:14px; font-weight:600;
+    color:var(--gold); margin-bottom:4px;
+  }
+  .person-card-popup .role {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em;
+    color:var(--red); text-transform:uppercase; margin-bottom:6px;
+  }
+  .person-card-popup .desc {
+    font-size:11.5px; color:var(--ink-2);
+  }
+
+  /* ② 沙盘 */
+  .sandbox-list { display:flex; flex-direction:column; gap:10px; }
+  .sandbox-card {
+    border:1px solid var(--steel); border-radius:3px;
+    padding:12px 14px;
+    background:rgba(40,20,20,0.4);
+    cursor:pointer; transition: all .25s;
+  }
+  .sandbox-card:hover {
+    border-color: var(--red); background:rgba(60,30,30,0.5);
+    transform: translateX(2px);
+  }
+  .sandbox-card .topic {
+    font-family:var(--serif); font-style:italic; font-size:14px;
+    color:var(--ink); margin-bottom:6px;
+  }
+  .sandbox-card .progress {
+    display:flex; gap:10px; align-items:center;
+    font-family:var(--mono); font-size:10px; color:var(--ink-3); letter-spacing:0.1em;
+  }
+  .progress-bar {
+    flex:1; height:2px; background:var(--steel); border-radius:1px; overflow:hidden;
+  }
+  .progress-bar > div { height:100%; background:var(--red); }
+  .sandbox-card .branches { color:var(--gold); }
+
+  /* ③ 冲突温度计 */
+  .thermo-row {
+    display:grid; grid-template-columns: 80px 1fr; gap:18px; align-items:stretch;
+  }
+  .thermo {
+    width:60px; height:200px; position:relative; margin:0 auto;
+    background: linear-gradient(180deg,
+      rgba(214,69,69,0.4) 0%,
+      rgba(214,69,69,0.4) 28%,
+      rgba(200,161,92,0.4) 28%,
+      rgba(200,161,92,0.4) 70%,
+      rgba(123,167,196,0.4) 70%,
+      rgba(123,167,196,0.4) 100%);
+    border:1px solid var(--steel);
+    border-radius: 30px 30px 8px 8px;
+  }
+  .thermo-bulb {
+    width:50px; height:50px; border-radius:50%;
+    background:var(--gold);
+    position:absolute; bottom:-30px; left:50%; transform:translateX(-50%);
+    box-shadow: 0 0 24px rgba(200,161,92,0.5);
+  }
+  .thermo-marker {
+    position:absolute; left:-6px; right:-6px;
+    height:3px; background:var(--ink);
+    box-shadow: 0 0 10px rgba(245,217,217,0.6);
+  }
+  .thermo-marker::after {
+    content:'当前'; position:absolute; left:calc(100% + 8px);
+    font-family:var(--mono); font-size:9.5px; color:var(--ink); top:-5px;
+    letter-spacing:0.18em;
+  }
+  .thermo-info { font-size:12px; line-height:1.65; color:var(--ink-2); }
+  .thermo-info b { color:var(--gold); font-weight:600; }
+  .thermo-info .verdict {
+    margin-top:10px; padding:8px 12px;
+    background:rgba(74,222,128,0.08); border-left:2px solid #4ADE80;
+    color:#A8E6BC; font-family:var(--serif); font-style:italic; font-size:13px;
+  }
+  .spark-mini {
+    margin-top:14px; height:36px; width:100%;
+    border-top:1px solid var(--steel); padding-top:10px;
+  }
+
+  /* ④⑤ Tab 切换 */
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--steel);
+    margin: -8px -24px 14px;
+    padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition: all .2s;
+    display:flex; align-items:center; gap:6px;
+  }
+  .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+  .tab:hover:not(.active) { color:var(--ink-2); }
+
+  /* ④ 阵型缺口 */
+  .gaps { display:flex; flex-direction:column; gap:11px; }
+  .gap-card {
+    padding:13px 14px;
+    background: rgba(214,69,69,0.06);
+    border-left:2px solid var(--red);
+    border-radius:0 3px 3px 0;
+  }
+  .gap-card .text {
+    font-family:var(--serif); font-style:italic; font-size:14px;
+    color:var(--ink); line-height:1.55; margin-bottom:8px;
+  }
+  .gap-card .text b { color:var(--red); font-style:normal; font-weight:600; }
+  .gap-card .action {
+    display:inline-block; font-family:var(--mono); font-size:10px;
+    letter-spacing:0.15em; color:var(--gold); text-transform:uppercase;
+    cursor:pointer; padding-top:2px;
+  }
+  .gap-card .action:hover { text-decoration:underline; }
+
+  /* ⑤ 灵光一闪 */
+  .spark-head {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed var(--steel);
+  }
+  .spark-head .source {
+    font-family:var(--mono); font-size:9.5px; color:var(--ink-3);
+    letter-spacing:0.15em;
+  }
+  .reroll {
+    font-family:var(--serif); font-style:italic; font-size:12px;
+    color:var(--gold); cursor:pointer;
+    background:transparent; border:1px solid var(--gold); border-radius:20px;
+    padding:5px 12px;
+    display:flex; align-items:center; gap:6px;
+    transition: all .25s;
+  }
+  .reroll:hover { background:rgba(200,161,92,0.1); }
+  .reroll.rolling .die { animation: die-roll .6s ease infinite; }
+  @keyframes die-roll { 0%,100%{transform:rotate(0)}25%{transform:rotate(90deg)}75%{transform:rotate(-90deg)} }
+
+  .sparks { display:grid; grid-template-columns:1fr; gap:11px; }
+  .spark-card {
+    perspective: 800px; height: 168px; cursor:pointer;
+  }
+  .spark-inner {
+    position:relative; width:100%; height:100%; transition: transform .6s;
+    transform-style: preserve-3d;
+  }
+  .spark-card.flipped .spark-inner { transform: rotateY(180deg); }
+  .spark-face {
+    position:absolute; inset:0;
+    background: rgba(40,28,18,0.5);
+    border:1px solid var(--gold); border-left:3px solid var(--gold);
+    border-radius:3px;
+    padding:14px 16px;
+    backface-visibility: hidden;
+    display:flex; flex-direction:column;
+  }
+  .spark-back {
+    transform: rotateY(180deg);
+    background: rgba(20,14,10,0.95);
+    border-color: var(--gold); border-left-width:3px;
+  }
+  .spark-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em;
+    color:var(--gold); text-transform:uppercase; margin-bottom:6px;
+  }
+  .spark-headline {
+    font-family:var(--serif); font-style:italic; font-size:15.5px;
+    line-height:1.5; color:var(--ink); margin-bottom:10px;
+    flex:1;
+  }
+  .spark-headline b { color:var(--gold); font-style:normal; font-weight:600; }
+  .spark-evidence {
+    font-size:11px; color:var(--ink-2); line-height:1.55;
+    padding-top:8px; border-top:1px dashed var(--steel);
+  }
+  .spark-flip {
+    margin-top:auto; font-family:var(--mono); font-size:10px;
+    letter-spacing:0.15em; color:var(--gold); text-transform:uppercase;
+    align-self:flex-end; opacity:.7;
+  }
+  .spark-back .label {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em;
+    color:var(--ink-3); text-transform:uppercase; margin-bottom:5px;
+  }
+  .spark-back .evidence-list {
+    font-size:11.5px; color:var(--ink); line-height:1.6;
+    margin-bottom:10px;
+  }
+  .spark-back .evidence-list li {
+    margin-left:16px; margin-bottom:3px;
+  }
+  .spark-back .risk {
+    padding:6px 10px; background:rgba(214,69,69,0.1);
+    border-left:2px solid var(--red); font-size:11.5px;
+    color:#F0BBBB; margin-bottom:10px;
+  }
+  .spark-back .actions { display:flex; gap:8px; margin-top:auto; }
+  .spark-back .btn {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    text-transform:uppercase; padding:6px 11px;
+    border:1px solid var(--gold); color:var(--gold); border-radius:2px;
+    cursor:pointer; background:transparent;
+  }
+  .spark-back .btn.primary { background:var(--gold); color:var(--bg-deep); }
+  .spark-back .btn:hover { background:rgba(200,161,92,0.15); }
+  .spark-back .btn.primary:hover { background:#D9B373; }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .formation { grid-row: span 1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 顶部 -->
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">⚔️</div>
+    <div>
+      <h1>War Room</h1>
+      <div class="crest-tag">internal · 团队 · 作战室</div>
+    </div>
+  </div>
+  <div class="question">"团队健康吗 ? 有没有建设性冲突 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 阵型图 -->
+  <section class="block formation">
+    <div class="block-head">
+      <span class="block-num">① formation</span>
+      <span class="block-title">阵型图 · 作战桌俯视</span>
+      <span class="block-meta">悬停查看角色</span>
+    </div>
+    <div class="battle-table" id="battleTable">
+      <svg viewBox="0 0 600 500">
+        <!-- 同心圆刻度 -->
+        <circle cx="300" cy="250" r="40"  fill="none" stroke="rgba(214,69,69,0.18)" stroke-dasharray="2 4"/>
+        <circle cx="300" cy="250" r="120" fill="none" stroke="rgba(214,69,69,0.12)" stroke-dasharray="2 6"/>
+        <circle cx="300" cy="250" r="200" fill="none" stroke="rgba(214,69,69,0.08)" stroke-dasharray="2 8"/>
+
+        <!-- 连线先画(先后顺序决定层级) -->
+        <!-- 陈汀 ↔ 沈岚 实线 -->
+        <line x1="300" y1="250" x2="300" y2="130" stroke="#C8A15C" stroke-width="1.5"/>
+        <!-- 陈汀 ↔ 周劭然 实线 -->
+        <line x1="300" y1="250" x2="300" y2="370" stroke="#C8A15C" stroke-width="1.5"/>
+        <!-- 陈汀 ↔ Wei Tan 虚线 -->
+        <line x1="300" y1="250" x2="465" y2="180" stroke="rgba(245,217,217,0.4)" stroke-width="1.2" stroke-dasharray="4 4"/>
+        <!-- 陈汀 ↔ Omar 虚线 -->
+        <line x1="300" y1="250" x2="135" y2="180" stroke="rgba(245,217,217,0.4)" stroke-width="1.2" stroke-dasharray="4 4"/>
+        <!-- 陈汀 ↔ 林雾 灰线 -->
+        <line x1="300" y1="250" x2="500" y2="380" stroke="rgba(160,150,140,0.25)" stroke-width="1" stroke-dasharray="1 4"/>
+        <!-- 沈岚 ↔ 周劭然 红线 (张力) -->
+        <line x1="300" y1="130" x2="300" y2="370" stroke="#D64545" stroke-width="1" stroke-dasharray="6 3" opacity="0.5"/>
+        <!-- Wei Tan ↔ 林雾 没有连线 (从未交锋) -->
+
+        <!-- 节点 -->
+        <g class="node" data-id="chen" style="cursor:pointer">
+          <circle cx="300" cy="250" r="28" fill="#1A0E0E" stroke="#D64545" stroke-width="2"/>
+          <text x="300" y="256" text-anchor="middle" fill="#F5D9D9" font-size="13" font-family="var(--serif)" font-style="italic">陈</text>
+          <text x="300" y="295" text-anchor="middle" fill="#F5D9D9" font-size="10" font-family="var(--mono)">CEO</text>
+        </g>
+
+        <g class="node" data-id="shen" style="cursor:pointer">
+          <circle cx="300" cy="130" r="22" fill="#2A1818" stroke="#C8A15C" stroke-width="1.5"/>
+          <text x="300" y="135" text-anchor="middle" fill="#F5D9D9" font-size="11" font-family="var(--serif)" font-style="italic">沈</text>
+          <text x="300" y="105" text-anchor="middle" fill="rgba(245,217,217,0.7)" font-size="9.5" font-family="var(--mono)">主战 · IC</text>
+        </g>
+
+        <g class="node" data-id="zhou" style="cursor:pointer">
+          <circle cx="300" cy="370" r="20" fill="#2A1818" stroke="#C8A15C" stroke-width="1.5"/>
+          <text x="300" y="375" text-anchor="middle" fill="#F5D9D9" font-size="11" font-family="var(--serif)" font-style="italic">周</text>
+          <text x="300" y="402" text-anchor="middle" fill="rgba(245,217,217,0.7)" font-size="9.5" font-family="var(--mono)">侦察 · 纪要</text>
+        </g>
+
+        <g class="node" data-id="wei" style="cursor:pointer">
+          <circle cx="465" cy="180" r="20" fill="#2A1818" stroke="rgba(245,217,217,0.4)" stroke-width="1.2" stroke-dasharray="3 3"/>
+          <text x="465" y="185" text-anchor="middle" fill="#F5D9D9" font-size="11" font-family="var(--serif)" font-style="italic">Wei</text>
+          <text x="465" y="155" text-anchor="middle" fill="rgba(245,217,217,0.7)" font-size="9.5" font-family="var(--mono)">智囊 · 远</text>
+        </g>
+
+        <g class="node" data-id="omar" style="cursor:pointer">
+          <circle cx="135" cy="180" r="20" fill="#2A1818" stroke="rgba(245,217,217,0.4)" stroke-width="1.2" stroke-dasharray="3 3"/>
+          <text x="135" y="185" text-anchor="middle" fill="#F5D9D9" font-size="10" font-family="var(--serif)" font-style="italic">Omar</text>
+          <text x="135" y="155" text-anchor="middle" fill="rgba(245,217,217,0.7)" font-size="9.5" font-family="var(--mono)">外援 · 行业</text>
+        </g>
+
+        <g class="node" data-id="lin" style="cursor:pointer">
+          <circle cx="500" cy="380" r="18" fill="#1A0E0E" stroke="rgba(160,150,140,0.4)" stroke-width="1" stroke-dasharray="1 3"/>
+          <text x="500" y="385" text-anchor="middle" fill="rgba(245,217,217,0.6)" font-size="10" font-family="var(--serif)" font-style="italic">林</text>
+          <text x="500" y="408" text-anchor="middle" fill="rgba(245,217,217,0.5)" font-size="9.5" font-family="var(--mono)">LP · 边缘</text>
+        </g>
+      </svg>
+
+      <div class="person-card-popup" id="personPopup"></div>
+    </div>
+
+    <div class="formation-legend">
+      <div class="legend-item"><span class="legend-line" style="background:#C8A15C"></span> 共识/支持</div>
+      <div class="legend-item"><span class="legend-line" style="background:rgba(245,217,217,0.4); border-top:1px dashed #aaa"></span> 智囊/弱联结</div>
+      <div class="legend-item"><span class="legend-line" style="background:#D64545"></span> 张力/冲突</div>
+      <div class="legend-item"><span class="legend-line" style="background:rgba(160,150,140,0.4)"></span> 沉默/边缘</div>
+    </div>
+  </section>
+
+  <!-- ② 沙盘 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② sandbox</span>
+      <span class="block-title">兵棋推演入口</span>
+      <span class="block-meta">辅助决策 · 非预言</span>
+    </div>
+    <div class="sandbox-list">
+      <div class="sandbox-card">
+        <div class="topic">Q2 投资决策推演 · "AI 基础设施加配 $40M"</div>
+        <div class="progress">
+          <div class="progress-bar"><div style="width:62%"></div></div>
+          <span>62%</span>
+          <span class="branches">7 条分支</span>
+        </div>
+      </div>
+      <div class="sandbox-card">
+        <div class="topic">LP 沟通策略推演 · "如何向林雾解释暂缓"</div>
+        <div class="progress">
+          <div class="progress-bar"><div style="width:34%"></div></div>
+          <span>34%</span>
+          <span class="branches">4 条分支</span>
+        </div>
+      </div>
+      <div class="sandbox-card">
+        <div class="topic">头部项目暂缓的 6 月后果 · "Project Halycon"</div>
+        <div class="progress">
+          <div class="progress-bar"><div style="width:88%"></div></div>
+          <span>88%</span>
+          <span class="branches">12 条分支</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 冲突温度计 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">③ conflict temp</span>
+      <span class="block-title">冲突温度计</span>
+      <span class="block-meta">本月 · 4 周</span>
+    </div>
+    <div class="thermo-row">
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <div class="thermo">
+          <div class="thermo-marker" style="bottom: 56%"></div>
+        </div>
+        <div class="thermo-bulb"></div>
+      </div>
+      <div class="thermo-info">
+        本月发生 <b>9 次</b> 实质性分歧:
+        <ul style="margin-top:6px; margin-left:18px; line-height:1.85;">
+          <li><b>建设性</b> 7 次 (在议题上交锋,逻辑推进)</li>
+          <li>破坏性 2 次 (情绪化 / 离题 / 否决式)</li>
+          <li>沉默回避 1 次</li>
+        </ul>
+        <div class="verdict">健康 — 略偏冷,可再激发一次反方思考</div>
+        <svg class="spark-mini" viewBox="0 0 200 36">
+          <polyline points="0,28 25,22 50,18 75,24 100,16 125,12 150,18 175,14 200,10"
+                    fill="none" stroke="#C8A15C" stroke-width="1.5"/>
+          <polyline points="0,28 25,22 50,18 75,24 100,16 125,12 150,18 175,14 200,10"
+                    fill="none" stroke="#C8A15C" stroke-width="3" opacity="0.2"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④/⑤ Tabs · 阵型缺口 / 灵光一闪 -->
+  <section class="block" style="grid-column: 2 / 3;">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">④⑤ diagnose · spark</span>
+      <span class="block-title">阵型分析</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="gaps">⚠️ 阵型缺口 · 现状诊断</div>
+      <div class="tab" data-tab="spark">💡 灵光一闪 · 未来组合</div>
+    </div>
+
+    <!-- 阵型缺口 -->
+    <div class="tab-pane" id="pane-gaps">
+      <div class="gaps">
+        <div class="gap-card">
+          <div class="text">你的团队 <b>已经 4 周没人唱反调</b> 了 —— 该招个人,还是该让某人换角色?</div>
+          <a class="action" data-forge-ref="r-team-tension">→ 让 Wei Tan 主导一次反方推演</a>
+        </div>
+        <div class="gap-card">
+          <div class="text"><b>Wei Tan 与林雾</b> 至今从未在同一议题上交锋 —— 缺一种张力</div>
+          <a class="action" data-forge-ref="hypothesis-omar">→ 安排一次三方会议</a>
+        </div>
+        <div class="gap-card">
+          <div class="text"><b>沈岚承担了 67%</b> 的关键决策 —— 单点风险太高</div>
+          <a class="action" data-forge-ref="r-shen-attention">→ 把下一次评审的主持权给周劭然</a>
+        </div>
+        <div class="gap-card">
+          <div class="text">陈汀(你)在 <b>沈岚发言时沉默 2'14"</b> —— 本月最长一次,值得回放</div>
+          <a class="action" data-forge-ref="r-team-tension">→ 跳到张力流复盘</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 灵光一闪 -->
+    <div class="tab-pane" id="pane-spark" style="display:none;">
+      <div class="spark-head">
+        <span class="source">基于 12 位专家批注 · 87 场会议 · 34 个心智模型</span>
+        <button class="reroll" id="reroll"><span class="die">⚂</span> 再来一组</button>
+      </div>
+      <div class="sparks">
+        <!-- 卡片 1 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">🔮 跨项目人才嫁接</div>
+              <div class="spark-headline">让 <b>Wei Tan</b> 主导 LP 沟通方案 —— 也许他的二阶思考能给林雾一个交代</div>
+              <div class="spark-evidence">过去 6 场会议中,Wei 的 3 次反事实提问被 LP 提到 2 次</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>Wei 的 calibration 0.78,组内最高</li>
+                <li>历史上他在"未走的路"分析中命中率 62%</li>
+                <li>林雾最近 3 次提问都是反事实,Wei 风格契合</li>
+              </ul>
+              <div class="risk">⚠ 风险: 沈岚可能感觉被绕过 —— 提前 1v1 沟通</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 2 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">⚡ 张力配对</div>
+              <div class="spark-headline">把 <b>陈汀+沈岚</b> 送进同一个尽调会议 —— 让估值分歧变成尽调标准</div>
+              <div class="spark-evidence">两人在估值上的分歧 6 次中 5 次落在同一逻辑分支</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>分歧已稳定为"$60M vs $80M",不是情绪化</li>
+                <li>把内部冲突转化为外部尽调输出</li>
+                <li>Wei 之前提议过类似做法,得到 0.7 confidence</li>
+              </ul>
+              <div class="risk">⚠ 风险: 项目方会感觉被"双面夹击" —— 提前打招呼</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 3 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">🌱 沉默激活</div>
+              <div class="spark-headline">让 <b>Omar K.</b> 主持下次"未解问题"会议 —— 他的反事实没人接住,也许他自己能接</div>
+              <div class="spark-evidence">Omar 在 9 场会议中提出 14 次反事实,12 次未被回应</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>Omar 的"二阶+反事实"在专家库 rubric 中得分 0.81</li>
+                <li>主持位置可以放大他原本被忽视的视角</li>
+                <li>沉默信号矩阵显示他"高质量低发言"</li>
+              </ul>
+              <div class="risk">⚠ 风险: 内部人员可能不习惯外援主持</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 4 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">🔄 角色翻转</div>
+              <div class="spark-headline">让 <b>周劭然</b> 出一次决策提案 —— 听了 48 场会的人最知道盲区</div>
+              <div class="spark-evidence">他的会议纪要里包含 23 条"未被采纳但反复出现"的提问</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>纪要里他暗中标注了 23 次"重复未答的提问"</li>
+                <li>他的发言质量 (信息熵) 0.74,被低估</li>
+                <li>角色翻转能激活他的执行视角</li>
+              </ul>
+              <div class="risk">⚠ 风险: 改变他原本的"低存在感安全区"</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 5 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">🎭 反角植入</div>
+              <div class="spark-headline">下次评审让 <b>陈汀扮演看多派</b> —— 让他亲自反驳自己今天的看空</div>
+              <div class="spark-evidence">你在 4 周内对该项目立场漂移 +0.3,值得测试反向论证</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>红队/蓝队互换是经过验证的 debias 工具</li>
+                <li>你的信念漂移曲线显示存在隐性偏差</li>
+                <li>团队需要一次"高位反思"的示范</li>
+              </ul>
+              <div class="risk">⚠ 风险: 团队可能困惑你的真实立场 —— 事先声明这是演练</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 6 -->
+        <div class="spark-card">
+          <div class="spark-inner">
+            <div class="spark-face">
+              <div class="spark-tag">🪞 镜像复盘</div>
+              <div class="spark-headline">把上周 Q2 决策匿名化 —— 让 <b>Omar K.</b> 当不知情的第三方独立评估</div>
+              <div class="spark-evidence">看他能否独立得出和团队一样的结论 —— 测试决策的稳健性</div>
+              <div class="spark-flip">↻ 翻面看证据</div>
+            </div>
+            <div class="spark-face spark-back">
+              <div class="label">Why</div>
+              <ul class="evidence-list">
+                <li>匿名化能消除内部一致性偏差 (groupthink)</li>
+                <li>Omar 与团队的心智模型重叠度只有 0.42</li>
+                <li>过去 2 次类似镜像复盘命中盲点 1 次</li>
+              </ul>
+              <div class="risk">⚠ 风险: 准备匿名化材料需 1-2 小时</div>
+              <div class="actions">
+                <button class="btn primary">采纳并加入议程</button>
+                <button class="btn">换一个</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // 角色档案
+  const PROFILES = {
+    chen: {name:"陈汀", role:"CEO · 决策中心", desc:"决策者 · 估值偏看空 · 本月沉默时长 +28%"},
+    shen: {name:"沈岚", role:"主战 · IC", desc:"主战派 · 67% 关键决策 · 与陈汀分歧稳定在 $60M-$80M"},
+    zhou: {name:"周劭然", role:"侦察 · 纪要", desc:"低发言高信息熵 · 23 次重复未答的提问 · 被低估"},
+    wei:  {name:"Wei Tan", role:"智囊 · 远", desc:"硅谷顾问 · calibration 0.78 · 反事实命中率 62%"},
+    omar: {name:"Omar K.", role:"外援 · 行业", desc:"沉默信号:14 次反事实 12 次未回应 · 心智模型 0.42 重叠"},
+    lin:  {name:"林雾", role:"LP · 边缘", desc:"未表态 · 最近 3 次提问全部反事实 · 关注退出路径"},
+  };
+
+  // 节点 hover
+  const popup = document.getElementById('personPopup');
+  document.querySelectorAll('.node').forEach(n=>{
+    n.addEventListener('mouseenter', ()=>{
+      const id = n.dataset.id;
+      const p = PROFILES[id];
+      popup.innerHTML = `
+        <div class="name">${p.name}</div>
+        <div class="role">${p.role}</div>
+        <div class="desc">${p.desc}</div>
+      `;
+      popup.classList.add('visible');
+    });
+    n.addEventListener('mouseleave', ()=>popup.classList.remove('visible'));
+  });
+
+  // Tab 切换
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-gaps').style.display  = which==='gaps' ? '' : 'none';
+      document.getElementById('pane-spark').style.display = which==='spark' ? '' : 'none';
+    });
+  });
+
+  // 卡片翻面
+  document.querySelectorAll('.spark-card').forEach(c=>{
+    c.addEventListener('click', e=>{
+      // 不要在点击按钮时翻
+      if (e.target.closest('.btn')) return;
+      c.classList.toggle('flipped');
+    });
+  });
+
+  // 再来一组动效
+  const reroll = document.getElementById('reroll');
+  const dieFaces = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+  reroll.addEventListener('click', ()=>{
+    reroll.classList.add('rolling');
+    const die = reroll.querySelector('.die');
+    let i = 0;
+    const t = setInterval(()=>{
+      die.textContent = dieFaces[i++ % 6];
+    }, 80);
+    setTimeout(()=>{
+      clearInterval(t);
+      reroll.classList.remove('rolling');
+      die.textContent = '⚂';
+      // 演示效果: 让所有翻开的卡片合上
+      document.querySelectorAll('.spark-card.flipped').forEach(c=>c.classList.remove('flipped'));
+    }, 900);
+  });
+</script>
+
+<script src="forge-registry.js"></script>
+</body>
+</html>

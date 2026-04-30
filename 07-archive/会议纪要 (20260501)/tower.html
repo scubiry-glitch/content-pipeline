@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>瞭望塔 · Tower</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #1F2A2E;
+    --bg-mid:  #243036;
+    --bg-soft: #2C3940;
+    --line:    rgba(180, 200, 210, 0.14);
+    --line-2:  rgba(180, 200, 210, 0.28);
+    --steel:   #8C9BA2;
+    --teal:    #5FA39E;
+    --teal-soft:#7DBDB8;
+    --gold:    #C49B4D;
+    --crimson: #C46A50;
+    --green:   #82A86E;
+    --blue:    #6B92B0;
+    --ink:     #E8EFF2;
+    --ink-2:   rgba(232, 239, 242, 0.7);
+    --ink-3:   rgba(232, 239, 242, 0.42);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(95,163,158,0.08), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(196,155,77,0.05), transparent 60%);
+  }
+
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px;
+    border-bottom:1px solid var(--line);
+    background:rgba(31,42,46,0.85);
+    backdrop-filter: blur(8px);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:6px;
+    border:1.5px solid var(--teal);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:rgba(95,163,158,0.08);
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--teal); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--line-2); border-radius:3px;
+    transition: all .25s; background:rgba(232,239,242,0.04);
+  }
+  .exit:hover { color:var(--teal); border-color:var(--teal); }
+
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+    padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--teal); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 承诺看板 (Kanban) */
+  .kanban { grid-column: span 3; }
+  .kanban-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kan-col {
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 12px 11px;
+    min-height: 280px;
+  }
+  .kan-col-head {
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:10px; padding-bottom:8px;
+    border-bottom: 1px solid var(--line);
+    font-family:var(--mono); font-size:10px; letter-spacing:0.18em;
+    text-transform:uppercase;
+  }
+  .kan-col-name { color: var(--ink-2); }
+  .kan-col-count {
+    color: var(--teal); font-weight:600;
+  }
+  .kan-col.late .kan-col-name { color: var(--crimson); }
+  .kan-col.late .kan-col-count { color: var(--crimson); }
+  .promise {
+    padding: 9px 10px; margin-bottom:8px;
+    background: rgba(95,163,158,0.05);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal);
+    border-radius: 0 3px 3px 0;
+    cursor:pointer; transition: transform .18s;
+  }
+  .promise:hover { transform: translateX(2px); }
+  .promise.late { border-left-color: var(--crimson); background: rgba(196,106,80,0.06); }
+  .promise.warn { border-left-color: var(--gold); background: rgba(196,155,77,0.06); }
+  .promise.done { border-left-color: var(--green); background: rgba(130,168,110,0.05); opacity:0.65; }
+  .pro-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;
+    font-family:var(--mono); font-size:9px; letter-spacing:0.1em;
+    color: var(--ink-3);
+  }
+  .pro-from { color: var(--teal); }
+  .pro-late .pro-from, .late .pro-from { color: var(--crimson); }
+  .pro-text {
+    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    color: var(--ink); line-height:1.4;
+  }
+  .pro-due {
+    margin-top:5px; font-family:var(--mono); font-size:9px;
+    color: var(--ink-3); letter-spacing:0.1em;
+  }
+  .pro-due.alert { color: var(--crimson); }
+
+  /* ② 卡点雷达 */
+  .blocker-list { display:flex; flex-direction:column; gap:10px; }
+  .blocker {
+    padding: 11px 13px;
+    background: rgba(196,106,80,0.05);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--crimson);
+    border-radius: 0 3px 3px 0;
+  }
+  .blocker.warn { border-left-color: var(--gold); background: rgba(196,155,77,0.05); }
+  .blocker-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;
+  }
+  .blocker-name {
+    font-family:var(--serif); font-style:italic; font-size:13.5px; color: var(--ink);
+  }
+  .blocker-days {
+    font-family:var(--mono); font-size:10px; color: var(--crimson);
+    letter-spacing:0.1em; font-weight:600;
+  }
+  .warn .blocker-days { color: var(--gold); }
+  .blocker-text {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55;
+  }
+
+  /* ③ 会后10分钟卡 */
+  .meeting-wrap {
+    background: rgba(0,0,0,0.2); border-radius:3px;
+    padding: 14px;
+    border: 1px solid var(--line);
+  }
+  .meeting-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color: var(--ink-3); text-transform:uppercase;
+    padding-bottom:7px; border-bottom: 1px dashed var(--line);
+  }
+  .meeting-head b { color: var(--teal); font-weight:600; }
+  .open-list { display:flex; flex-direction:column; gap:7px; }
+  .open-item {
+    display:flex; align-items:flex-start; gap:8px;
+    padding: 6px 0;
+    font-size:12px; color:var(--ink-2); line-height:1.5;
+  }
+  .open-tick {
+    width:14px; height:14px; border-radius:2px;
+    border:1.5px solid var(--gold); flex-shrink:0; margin-top:2px;
+  }
+  .open-item.due .open-tick { border-color: var(--crimson); }
+  .open-item .who {
+    font-family:var(--mono); font-size:9.5px; color:var(--ink-3);
+    margin-left:6px; letter-spacing:0.08em;
+  }
+
+  /* ④ 节奏脉搏 */
+  .pulse-svg-wrap {
+    background: rgba(0,0,0,0.18); border-radius:3px;
+    padding: 14px 12px 8px; border: 1px solid var(--line);
+  }
+  .pulse-svg { width:100%; height:140px; }
+  .pulse-legend {
+    display:flex; gap:14px; font-family:var(--mono); font-size:9.5px;
+    color: var(--ink-3); letter-spacing:0.1em; margin-top:8px;
+  }
+  .pulse-legend span i {
+    display:inline-block; width:8px; height:2px; margin-right:4px;
+  }
+  .pulse-note {
+    margin-top:10px; padding: 8px 11px;
+    background: rgba(196,155,77,0.07);
+    border-left: 2px solid var(--gold);
+    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    color: var(--ink); line-height:1.5;
+  }
+
+  /* ⑤ 透支预警 */
+  .deficit-wrap {
+    display:grid; grid-template-columns: 110px 1fr; gap:14px; align-items:center;
+  }
+  .gauge-svg { width:110px; height:110px; }
+  .deficit-text {
+    font-size:12.5px; line-height:1.6; color:var(--ink-2);
+  }
+  .deficit-text b { color: var(--ink); font-weight:600; }
+  .deficit-warn {
+    margin-top:9px; padding: 8px 11px;
+    background: rgba(196,106,80,0.08);
+    border-left: 2px solid var(--crimson);
+    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    color: var(--ink); line-height:1.5;
+  }
+
+  /* ⑥ Tab */
+  .rhythms { grid-column: span 3; }
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--line);
+    margin: -8px -24px 14px; padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent; transition: all .2s;
+  }
+  .tab.active { color:var(--teal); border-bottom-color:var(--teal); }
+
+  /* 团队节奏 - 7x24 热图 */
+  .heatmap-wrap {
+    overflow-x: auto;
+    background: rgba(0,0,0,0.18); border-radius:3px;
+    padding: 14px; border: 1px solid var(--line);
+  }
+  .heatmap {
+    display:grid;
+    grid-template-columns: 60px repeat(24, 1fr);
+    gap:2px;
+    font-family:var(--mono); font-size:8.5px;
+    min-width: 700px;
+  }
+  .hm-axis { color: var(--ink-3); letter-spacing:0.08em; padding:3px 0; }
+  .hm-axis.day { text-align: right; padding-right: 8px; }
+  .hm-cell {
+    height: 22px; border-radius: 2px;
+    background: rgba(232,239,242,0.04);
+  }
+  .hm-cell.l1 { background: rgba(95,163,158,0.18); }
+  .hm-cell.l2 { background: rgba(95,163,158,0.38); }
+  .hm-cell.l3 { background: rgba(95,163,158,0.62); }
+  .hm-cell.l4 { background: rgba(95,163,158,0.85); }
+  .hm-cell.alert { background: rgba(196,106,80,0.6); }
+
+  /* 个人节奏 - 周折线 */
+  .personal-wrap { display:grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .personal-svg-wrap {
+    background: rgba(0,0,0,0.18); border-radius:3px;
+    padding: 14px; border: 1px solid var(--line);
+  }
+  .personal-svg { width:100%; height: 200px; }
+  .personal-stats {
+    display:flex; flex-direction:column; gap: 12px;
+    justify-content: center;
+  }
+  .stat-row {
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 10px 13px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+  }
+  .stat-row .k {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color: var(--ink-3); text-transform:uppercase;
+  }
+  .stat-row .v {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color: var(--teal);
+  }
+  .stat-row .v.warn { color: var(--gold); }
+  .stat-row .v.alert { color: var(--crimson); }
+  .stat-row .delta {
+    font-family:var(--mono); font-size:10px; color: var(--ink-3);
+    margin-left: 6px; letter-spacing:0.1em;
+  }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .kanban, .rhythms { grid-column: span 1; }
+    .kanban-grid { grid-template-columns: 1fr 1fr; }
+    .personal-wrap { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">🎯</div>
+    <div>
+      <h1>Tower</h1>
+      <div class="crest-tag">internal · 协调 · 瞭望塔</div>
+    </div>
+  </div>
+  <div class="question">"谁欠谁什么 ? 卡在哪 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 承诺看板 -->
+  <section class="block kanban">
+    <div class="block-head">
+      <span class="block-num">① commitment kanban</span>
+      <span class="block-title">承诺看板 · 谁欠谁什么</span>
+      <span class="block-meta">从会议自动抽取 · 21 项</span>
+    </div>
+    <div class="kanban-grid">
+
+      <div class="kan-col">
+        <div class="kan-col-head"><span class="kan-col-name">○ 提出</span><span class="kan-col-count">5</span></div>
+        <div class="promise">
+          <div class="pro-head"><span class="pro-from">林雾 → 陈汀</span><span>04-28</span></div>
+          <div class="pro-text">退出路径方案的书面回复</div>
+          <div class="pro-due">未排期</div>
+        </div>
+        <div class="promise">
+          <div class="pro-head"><span class="pro-from">陆景行 → Wei</span><span>04-26</span></div>
+          <div class="pro-text">Halycon 候选人 X 的同行尽调</div>
+          <div class="pro-due">5 月初</div>
+        </div>
+        <div class="promise">
+          <div class="pro-head"><span class="pro-from">陈汀 → Sara</span><span>04-25</span></div>
+          <div class="pro-text">Crucible 暂停的合规口径</div>
+          <div class="pro-due">本周</div>
+        </div>
+      </div>
+
+      <div class="kan-col">
+        <div class="kan-col-head"><span class="kan-col-name">◐ 进行中</span><span class="kan-col-count">7</span></div>
+        <div class="promise warn">
+          <div class="pro-head"><span class="pro-from">Wei 欠 陈汀</span><span>04-19</span></div>
+          <div class="pro-text">《估值锚定五条》起草</div>
+          <div class="pro-due">原 04-23 · 推迟</div>
+        </div>
+        <div class="promise">
+          <div class="pro-head"><span class="pro-from">陆景行 欠 董事会</span><span>04-12</span></div>
+          <div class="pro-text">Halycon 团队补员 3 人(1/3)</div>
+          <div class="pro-due">Q2 内</div>
+        </div>
+        <div class="promise">
+          <div class="pro-head"><span class="pro-from">Sara 欠 陈汀</span><span>04-10</span></div>
+          <div class="pro-text">Crucible 合规备案 80%</div>
+          <div class="pro-due">月底前</div>
+        </div>
+      </div>
+
+      <div class="kan-col late">
+        <div class="kan-col-head"><span class="kan-col-name">⊗ 逾期</span><span class="kan-col-count">4</span></div>
+        <div class="promise late">
+          <div class="pro-head"><span class="pro-from">陈汀 欠 林雾</span><span>03-28</span></div>
+          <div class="pro-text">LP 反馈闭环机制设计</div>
+          <div class="pro-due alert">逾期 28 天</div>
+        </div>
+        <div class="promise late">
+          <div class="pro-head"><span class="pro-from">陈汀 欠 董事会</span><span>04-05</span></div>
+          <div class="pro-text">退出路径年度路线图</div>
+          <div class="pro-due alert">逾期 21 天</div>
+        </div>
+        <div class="promise late">
+          <div class="pro-head"><span class="pro-from">Wei 欠 陈汀</span><span>04-09</span></div>
+          <div class="pro-text">Stellar 估值反复复盘报告</div>
+          <div class="pro-due alert">逾期 14 天</div>
+        </div>
+      </div>
+
+      <div class="kan-col">
+        <div class="kan-col-head"><span class="kan-col-name">✓ 完成</span><span class="kan-col-count">5</span></div>
+        <div class="promise done">
+          <div class="pro-head"><span class="pro-from">陈汀 → 董事会</span><span>04-22</span></div>
+          <div class="pro-text">Q1 季度报告</div>
+          <div class="pro-due">已交付</div>
+        </div>
+        <div class="promise done">
+          <div class="pro-head"><span class="pro-from">Omar → 陈汀</span><span>04-15</span></div>
+          <div class="pro-text">Beacon 退出策略评审</div>
+          <div class="pro-due">已盖章</div>
+        </div>
+        <div class="promise done">
+          <div class="pro-head"><span class="pro-from">陈汀 → Halycon</span><span>04-08</span></div>
+          <div class="pro-text">追加投资批准</div>
+          <div class="pro-due">已签</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ② 卡点雷达 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② blocker radar</span>
+      <span class="block-title">卡点雷达 · 超期/无人接</span>
+      <span class="block-meta">3 个红点</span>
+    </div>
+    <div class="blocker-list">
+      <div class="blocker">
+        <div class="blocker-head">
+          <span class="blocker-name">LP 反馈闭环 · 无人接</span>
+          <span class="blocker-days">28 天</span>
+        </div>
+        <div class="blocker-text">陈汀挂名,但实际负责人未指派。林雾已 3 次催促。</div>
+      </div>
+      <div class="blocker">
+        <div class="blocker-head">
+          <span class="blocker-name">Stellar 估值复盘 · 卡在 Wei</span>
+          <span class="blocker-days">14 天</span>
+        </div>
+        <div class="blocker-text">Wei 在等陈汀的尽调材料 — 而陈汀以为 Wei 主写。</div>
+      </div>
+      <div class="blocker warn">
+        <div class="blocker-head">
+          <span class="blocker-name">退出路径路线图 · 议程被挤</span>
+          <span class="blocker-days">21 天</span>
+        </div>
+        <div class="blocker-text">连续 3 次会议被 Crucible 救火挤掉。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 会后10分钟卡 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">③ post-meeting card</span>
+      <span class="block-title">会后 10 分钟卡 · 上次未关闭项</span>
+      <span class="block-meta">投委会 04-29</span>
+    </div>
+    <div class="meeting-wrap">
+      <div class="meeting-head">
+        <span><b>投委会 #34</b> · 04-29 · 90 min</span>
+        <span>5 项 / 3 未闭</span>
+      </div>
+      <div class="open-list">
+        <div class="open-item due">
+          <span class="open-tick"></span>
+          <div>Crucible 是否官方暂停 — 需投票表决<span class="who">RSP: 陈汀 · 本周</span></div>
+        </div>
+        <div class="open-item">
+          <span class="open-tick"></span>
+          <div>Stellar 估值方法书面化由谁主笔<span class="who">RSP: Wei · 待定</span></div>
+        </div>
+        <div class="open-item due">
+          <span class="open-tick"></span>
+          <div>林雾的退出路径问题排进下次议程<span class="who">RSP: 陈汀 · 必须</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 节奏脉搏 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">④ rhythm pulse</span>
+      <span class="block-title">节奏脉搏 · 这周对吗</span>
+      <span class="block-meta">滚动 8 周</span>
+    </div>
+    <div class="pulse-svg-wrap">
+      <svg class="pulse-svg" viewBox="0 0 360 140" preserveAspectRatio="none">
+        <g stroke="rgba(180,200,210,0.08)" stroke-width="0.6">
+          <line x1="0" y1="35" x2="360" y2="35"/>
+          <line x1="0" y1="70" x2="360" y2="70"/>
+          <line x1="0" y1="105" x2="360" y2="105"/>
+        </g>
+        <!-- 战略主线小时数 -->
+        <polyline fill="none" stroke="#5FA39E" stroke-width="2"
+          points="20,60 65,45 110,52 155,40 200,48 245,55 290,42 335,30"/>
+        <!-- 救火小时数 -->
+        <polyline fill="none" stroke="#C46A50" stroke-width="2" stroke-dasharray="4 3"
+          points="20,108 65,102 110,98 155,95 200,90 245,82 290,78 335,55"/>
+        <!-- 计划线 -->
+        <line x1="0" y1="50" x2="360" y2="50" stroke="rgba(196,155,77,0.5)" stroke-width="0.8" stroke-dasharray="2 3"/>
+        <text x="6" y="48" font-family="JetBrains Mono, Menlo, monospace" font-size="7"
+              fill="rgba(196,155,77,0.7)">PLAN 20h</text>
+        <!-- 数据点 -->
+        <g fill="#5FA39E"><circle cx="335" cy="30" r="3.5"/></g>
+        <g fill="#C46A50"><circle cx="335" cy="55" r="3.5"/></g>
+        <!-- 周轴 -->
+        <g font-family="JetBrains Mono, Menlo, monospace" font-size="7" fill="rgba(232,239,242,0.42)" letter-spacing="0.08em">
+          <text x="20"  y="135" text-anchor="middle">W-7</text>
+          <text x="155" y="135" text-anchor="middle">W-3</text>
+          <text x="335" y="135" text-anchor="middle">本周</text>
+        </g>
+      </svg>
+    </div>
+    <div class="pulse-legend">
+      <span><i style="background:#5FA39E"></i> 战略主线</span>
+      <span><i style="background:#C46A50"></i> 救火</span>
+      <span><i style="background:rgba(196,155,77,0.5); border-top:1px dashed #C49B4D"></i> 计划线</span>
+    </div>
+    <div class="pulse-note">
+      战略主线本周飙升,但救火也在升 — 总工时 +12h,精力账户在透支。
+    </div>
+  </section>
+
+  <!-- ⑤ 透支预警 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">⑤ deficit alert</span>
+      <span class="block-title">透支预警 · 个人精力预算</span>
+      <span class="block-meta">本周 · 实测</span>
+    </div>
+    <div class="deficit-wrap">
+      <svg class="gauge-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(180,200,210,0.1)" stroke-width="8"/>
+        <circle cx="50" cy="50" r="42" fill="none" stroke="#C46A50" stroke-width="8"
+                stroke-dasharray="241 264" stroke-dashoffset="0"
+                transform="rotate(-90 50 50)" stroke-linecap="round"/>
+        <text x="50" y="48" text-anchor="middle"
+              font-family="Source Han Serif SC, Georgia, serif" font-style="italic"
+              font-size="18" fill="#C46A50" font-weight="600">112%</text>
+        <text x="50" y="62" text-anchor="middle"
+              font-family="JetBrains Mono, Menlo, monospace" font-size="6"
+              fill="rgba(232,239,242,0.42)" letter-spacing="0.15em">透支</text>
+      </svg>
+      <div class="deficit-text">
+        本周工时 <b>56h</b>(预算 50h)<br/>
+        深度专注 <b>11h</b> / 目标 18h<br/>
+        睡眠 <b>5.8h</b> / 目标 7h
+        <div class="deficit-warn">
+          连续第 3 周超预算。该取消下周一会议腾出半天。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ Tab -->
+  <section class="block rhythms">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">⑥ rhythms</span>
+      <span class="block-title">节奏视图</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="team">👥 团队节奏</div>
+      <div class="tab" data-tab="self">👤 个人节奏</div>
+    </div>
+
+    <div class="tab-pane" id="pane-team">
+      <div class="heatmap-wrap">
+        <div class="heatmap" id="heatmap"></div>
+      </div>
+      <div class="pulse-legend" style="margin-top:10px;">
+        <span><i style="background:rgba(95,163,158,0.18); height:8px;"></i> 低</span>
+        <span><i style="background:rgba(95,163,158,0.62); height:8px;"></i> 中</span>
+        <span><i style="background:rgba(95,163,158,0.85); height:8px;"></i> 高</span>
+        <span><i style="background:rgba(196,106,80,0.6); height:8px;"></i> 过载</span>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-self" style="display:none;">
+      <div class="personal-wrap">
+        <div class="personal-svg-wrap">
+          <svg class="personal-svg" viewBox="0 0 360 200" preserveAspectRatio="none">
+            <g stroke="rgba(180,200,210,0.08)" stroke-width="0.6">
+              <line x1="0" y1="50"  x2="360" y2="50"/>
+              <line x1="0" y1="100" x2="360" y2="100"/>
+              <line x1="0" y1="150" x2="360" y2="150"/>
+            </g>
+            <!-- 深度专注 -->
+            <polyline fill="none" stroke="#5FA39E" stroke-width="2.2"
+              points="30,120 80,90 130,100 180,75 230,85 280,65 330,80"/>
+            <!-- 救火 -->
+            <polyline fill="none" stroke="#C46A50" stroke-width="2"
+              points="30,150 80,145 130,140 180,135 230,120 280,115 330,90"/>
+            <!-- 会议时长 -->
+            <polyline fill="none" stroke="#C49B4D" stroke-width="1.6" stroke-dasharray="4 3"
+              points="30,75 80,70 130,80 180,65 230,72 280,60 330,55"/>
+            <g font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="rgba(232,239,242,0.42)" letter-spacing="0.08em">
+              <text x="30"  y="190" text-anchor="middle">周一</text>
+              <text x="180" y="190" text-anchor="middle">周四</text>
+              <text x="330" y="190" text-anchor="middle">周日</text>
+            </g>
+          </svg>
+          <div class="pulse-legend" style="margin-top:8px;">
+            <span><i style="background:#5FA39E"></i>深度专注</span>
+            <span><i style="background:#C46A50"></i>救火</span>
+            <span><i style="background:#C49B4D"></i>会议</span>
+          </div>
+        </div>
+        <div class="personal-stats">
+          <div class="stat-row">
+            <span class="k">深度专注 / 周</span>
+            <span><span class="v warn">11h</span><span class="delta">目标 18h</span></span>
+          </div>
+          <div class="stat-row">
+            <span class="k">会议时长</span>
+            <span><span class="v alert">29h</span><span class="delta">+3h vs 上周</span></span>
+          </div>
+          <div class="stat-row">
+            <span class="k">救火</span>
+            <span><span class="v alert">9.5h</span><span class="delta">+5h ↑</span></span>
+          </div>
+          <div class="stat-row">
+            <span class="k">睡眠均值</span>
+            <span><span class="v warn">5.8h</span><span class="delta">−1.2h vs 目标</span></span>
+          </div>
+          <div class="stat-row">
+            <span class="k">"思考块" 次数</span>
+            <span><span class="v">3</span><span class="delta">目标 5</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // 生成 7×24 团队热图
+  (function(){
+    const grid = document.getElementById('heatmap');
+    const days = ['一','二','三','四','五','六','日'];
+    // 顶部小时轴
+    const hdr = document.createElement('div'); hdr.className='hm-axis'; hdr.textContent=''; grid.appendChild(hdr);
+    for (let h=0; h<24; h++) {
+      const a = document.createElement('div'); a.className='hm-axis';
+      a.textContent = (h%6===0) ? String(h).padStart(2,'0') : '';
+      a.style.textAlign='center';
+      grid.appendChild(a);
+    }
+    // 每天一行,带预设强度,模拟"工作日中段最忙,周三救火"
+    const pattern = [
+      // 0-7  8-12  13-17  18-21  22-23
+      [0,0,0,0,0,0,0,0, 1,2,3,3,3, 2,3,3,2,1, 1,1,0,0, 0,0],  // 一
+      [0,0,0,0,0,0,0,1, 2,3,4,4,3, 2,3,4,3,1, 1,1,1,0, 0,0],  // 二
+      [0,0,0,0,0,0,1,2, 3,4,4,'a','a', 3,'a',4,3,2, 1,1,1,0, 0,0],// 三 — 救火
+      [0,0,0,0,0,0,0,1, 2,3,3,3,2, 2,3,3,2,1, 1,1,0,0, 0,0],  // 四
+      [0,0,0,0,0,0,0,1, 2,3,3,2,2, 1,2,2,1,1, 0,0,0,0, 0,0],  // 五
+      [0,0,0,0,0,0,0,0, 0,1,1,1,1, 0,0,0,0,0, 0,0,0,0, 0,0],  // 六
+      [0,0,0,0,0,0,0,0, 0,0,0,1,0, 0,0,0,0,0, 0,0,0,0, 0,0],  // 日
+    ];
+    days.forEach((d,i)=>{
+      const ax = document.createElement('div'); ax.className='hm-axis day'; ax.textContent=d;
+      grid.appendChild(ax);
+      pattern[i].forEach(v=>{
+        const c = document.createElement('div'); c.className='hm-cell';
+        if (v==='a') c.classList.add('alert');
+        else if (v>0) c.classList.add('l'+v);
+        grid.appendChild(c);
+      });
+    });
+  })();
+
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-team').style.display = which==='team' ? '' : 'none';
+      document.getElementById('pane-self').style.display = which==='self' ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>项目阿特拉斯 · Project Atlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #0A0F14;
+    --bg-mid:  #0F1820;
+    --bg-soft: #18242E;
+    --steel:   #2A3A48;
+    --teal:    #4FB3A9;
+    --teal-dim:#2C6F6A;
+    --amber:   #E8A547;
+    --crimson: #D85A5A;
+    --green:   #6BCB7B;
+    --ink:     #E8EEF2;
+    --ink-2:   rgba(232, 238, 242, 0.65);
+    --ink-3:   rgba(232, 238, 242, 0.4);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin:0; padding:0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(79,179,169,0.05), transparent 50%),
+      radial-gradient(circle at 90% 90%, rgba(232,165,71,0.04), transparent 50%);
+  }
+
+  /* 顶部 */
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px;
+    border-bottom:1px solid var(--steel);
+    background:rgba(8,12,16,0.6);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:50%;
+    border:1.5px solid var(--teal);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+    box-shadow: 0 0 20px rgba(79,179,169,0.25) inset;
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--teal); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--steel); border-radius:3px;
+    transition: all .25s;
+  }
+  .exit:hover { color:var(--teal); border-color:var(--teal); }
+
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--steel);
+    border-radius: 4px;
+    padding: 22px 24px;
+    position: relative;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--steel);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--amber); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 项目星图 */
+  .starmap {
+    grid-row: span 2;
+    min-height: 580px;
+  }
+  .starmap-canvas {
+    width:100%; height:520px;
+    background:
+      radial-gradient(ellipse at center, rgba(40,60,80,0.4) 0%, rgba(8,12,16,0.95) 75%),
+      repeating-radial-gradient(circle at center, transparent 0, transparent 60px, rgba(79,179,169,0.04) 60px, rgba(79,179,169,0.04) 61px);
+    border:1px solid var(--teal-dim);
+    border-radius:4px;
+    position:relative;
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.5);
+    overflow:hidden;
+  }
+  .starmap-canvas svg { width:100%; height:100%; }
+
+  .star { cursor:pointer; transition: all .2s; }
+  .star:hover circle { filter: brightness(1.3); }
+
+  /* 项目侧栏 */
+  .star-panel {
+    position:absolute; top:8px; right:8px; bottom:8px; width:280px;
+    background:rgba(10,16,22,0.97);
+    border:1px solid var(--teal);
+    border-radius:3px;
+    padding:18px;
+    transform: translateX(110%);
+    transition: transform .35s cubic-bezier(.2,.7,.3,1);
+    overflow-y:auto;
+  }
+  .star-panel.visible { transform: translateX(0); }
+  .star-panel .close-x {
+    position:absolute; top:10px; right:12px;
+    font-family:var(--mono); font-size:14px; color:var(--ink-3); cursor:pointer;
+  }
+  .star-panel .name {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--teal); margin-bottom:4px;
+  }
+  .star-panel .codename {
+    font-family:var(--mono); font-size:9.5px; color:var(--ink-3);
+    letter-spacing:0.2em; text-transform:uppercase; margin-bottom:14px;
+  }
+  .stat-row {
+    display:flex; justify-content:space-between;
+    padding:7px 0; border-bottom:1px dashed var(--steel);
+    font-size:12px;
+  }
+  .stat-row .k { color:var(--ink-3); font-family:var(--mono); font-size:10px; letter-spacing:0.1em; }
+  .stat-row .v { color:var(--ink); font-weight:500; }
+  .stat-row .v.alert { color:var(--crimson); }
+  .stat-row .v.ok { color:var(--green); }
+
+  .axis-readings {
+    margin-top:14px;
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color:var(--amber); text-transform:uppercase;
+  }
+  .mini-axis {
+    margin-top:8px; padding:10px; background:rgba(40,60,80,0.3);
+    border-left:2px solid var(--amber); border-radius:0 3px 3px 0;
+    font-size:11px; line-height:1.55; color:var(--ink-2);
+  }
+  .mini-axis b { color:var(--ink); font-weight:500; }
+  .panel-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .panel-actions a {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.12em;
+    color:var(--teal); text-decoration:none; padding:5px 10px;
+    border:1px solid var(--teal-dim); border-radius:2px; cursor:pointer;
+    text-transform:uppercase;
+  }
+  .panel-actions a:hover { background:rgba(79,179,169,0.1); }
+
+  .starmap-legend {
+    display:flex; gap:20px; margin-top:14px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:10px; color:var(--ink-2);
+  }
+  .legend-dot {
+    width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px;
+  }
+
+  /* ② 濒危看板 */
+  .danger-list { display:flex; flex-direction:column; gap:11px; }
+  .danger-card {
+    border:1px solid var(--steel); border-radius:3px;
+    padding:13px 15px;
+    background:rgba(216,90,90,0.05);
+    border-left:3px solid var(--crimson);
+    cursor:pointer; transition: all .25s;
+    position:relative;
+  }
+  .danger-card:hover { background:rgba(216,90,90,0.1); transform: translateX(2px); }
+  .danger-card.warn { border-left-color: var(--amber); background:rgba(232,165,71,0.05); }
+  .danger-card.warn:hover { background:rgba(232,165,71,0.1); }
+  .danger-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;
+  }
+  .danger-name {
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--ink);
+  }
+  .danger-score {
+    font-family:var(--mono); font-size:11px; color:var(--crimson); font-weight:600;
+  }
+  .warn .danger-score { color:var(--amber); }
+  .danger-signals {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55;
+  }
+  .danger-signals b { color:var(--ink); font-weight:500; }
+  .signal-tag {
+    display:inline-block;
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.1em;
+    color:var(--amber); padding:1px 6px; margin-right:5px;
+    border:1px solid var(--amber); border-radius:2px;
+    text-transform:uppercase;
+  }
+  .signal-tag.crit { color:var(--crimson); border-color:var(--crimson); }
+
+  /* ③ 里程碑长河 */
+  .river-wrap { overflow-x:auto; }
+  .river {
+    min-width:680px;
+    display:grid;
+    grid-template-columns: 110px 1fr;
+    gap:10px;
+    font-family:var(--mono); font-size:11px;
+  }
+  .river-axis {
+    grid-column: 2;
+    display:grid; grid-template-columns: repeat(8, 1fr);
+    border-bottom:1px solid var(--steel);
+    padding-bottom:6px; margin-bottom:8px;
+  }
+  .river-axis div {
+    text-align:center; color:var(--ink-3); font-size:9.5px; letter-spacing:0.1em;
+  }
+  .river-row {
+    display:contents;
+  }
+  .river-label {
+    font-family:var(--serif); font-style:italic; font-size:13px;
+    color:var(--ink); padding:8px 0; align-self:center;
+  }
+  .river-track {
+    position:relative; height:38px;
+    background: repeating-linear-gradient(90deg,
+      transparent 0, transparent calc(12.5% - 1px),
+      rgba(79,179,169,0.1) calc(12.5% - 1px), rgba(79,179,169,0.1) 12.5%);
+    border-bottom:1px dashed var(--steel);
+  }
+  .river-bar {
+    position:absolute; top:8px; height:14px; border-radius:2px;
+    background: rgba(79,179,169,0.3);
+  }
+  .river-mark {
+    position:absolute; top:6px; width:18px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    font-size:13px;
+  }
+  .river-mark .dot {
+    width:9px; height:9px; border-radius:50%;
+    background:var(--teal);
+    box-shadow: 0 0 6px rgba(79,179,169,0.6);
+  }
+  .river-mark.delay .dot { background:var(--amber); box-shadow: 0 0 6px rgba(232,165,71,0.6); }
+  .river-mark.miss .dot  { background:var(--crimson); box-shadow: 0 0 6px rgba(216,90,90,0.6); }
+  .river-mark.meeting .dot {
+    background:var(--ink); width:6px; height:6px;
+    border:1.5px solid var(--teal);
+    box-shadow:none;
+  }
+  .river-mark .tip {
+    position:absolute; bottom:28px; left:50%; transform: translateX(-50%);
+    background: rgba(10,16,22,0.95); border:1px solid var(--teal);
+    padding:6px 10px; border-radius:3px;
+    font-size:10.5px; line-height:1.4; color:var(--ink);
+    white-space:nowrap; pointer-events:none;
+    opacity:0; transition:opacity .2s;
+    font-family:var(--sans);
+  }
+  .river-mark:hover .tip { opacity:1; }
+  .river-legend {
+    margin-top:14px; display:flex; gap:18px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:10px; color:var(--ink-2);
+  }
+
+  /* ④ 决策回声 */
+  .echo-list { display:flex; flex-direction:column; gap:14px; }
+  .echo-card {
+    padding:13px 15px;
+    background:rgba(40,60,80,0.3);
+    border:1px solid var(--steel);
+    border-radius:3px;
+  }
+  .echo-meta {
+    display:flex; justify-content:space-between; margin-bottom:8px;
+    font-family:var(--mono); font-size:10px; color:var(--ink-3); letter-spacing:0.1em;
+    text-transform:uppercase;
+  }
+  .echo-meta .ref { color:var(--teal); cursor:pointer; }
+  .echo-meta .ref:hover { text-decoration:underline; }
+  .echo-line {
+    display:grid; grid-template-columns: 60px 1fr; gap:10px;
+    align-items:start; padding:5px 0;
+    font-size:12.5px; line-height:1.5;
+  }
+  .echo-line .lbl {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.15em;
+    color:var(--ink-3); text-transform:uppercase; padding-top:2px;
+  }
+  .echo-line.said .text { color:var(--ink-2); font-style:italic; }
+  .echo-line.now .text { color:var(--ink); }
+  .echo-deviation {
+    margin-top:8px; padding-top:8px; border-top:1px dashed var(--steel);
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.1em;
+  }
+  .echo-deviation .delta { font-weight:600; }
+  .delta.bad  { color:var(--crimson); }
+  .delta.mid  { color:var(--amber); }
+  .delta.good { color:var(--green); }
+
+  /* ⑤ 项目间张力 */
+  .tension-grid {
+    display:grid; grid-template-columns: 100px repeat(4, 1fr); gap:6px;
+    font-family:var(--mono); font-size:10.5px;
+  }
+  .tension-grid .head {
+    font-size:9.5px; color:var(--ink-3); letter-spacing:0.15em;
+    text-transform:uppercase; padding:6px 4px; text-align:center;
+  }
+  .tension-grid .head.row {
+    text-align:right; padding-right:8px;
+  }
+  .tension-grid .name {
+    font-family:var(--serif); font-style:italic; font-size:12px; color:var(--ink);
+    text-align:right; padding-right:8px; align-self:center;
+  }
+  .tension-cell {
+    padding:7px 6px; text-align:center;
+    background:rgba(40,60,80,0.3); border-radius:2px;
+    color:var(--ink); font-weight:500;
+    position:relative;
+  }
+  .tension-cell.hot {
+    background:rgba(216,90,90,0.18); color:#F0AAAA;
+  }
+  .tension-cell.warm {
+    background:rgba(232,165,71,0.15); color:#F2CB85;
+  }
+  .tension-cell.cool { color:var(--ink-2); }
+  .tension-note {
+    margin-top:14px; padding:10px 12px;
+    background:rgba(216,90,90,0.06); border-left:2px solid var(--crimson);
+    font-family:var(--serif); font-style:italic; font-size:13px;
+    line-height:1.55; color:var(--ink);
+  }
+  .tension-note b { color:var(--crimson); font-style:normal; font-weight:600; }
+
+  /* ⑥ Tabs · 救活 / 安乐死 */
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--steel);
+    margin: -8px -24px 14px;
+    padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition: all .2s;
+  }
+  .tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+  .tab:hover:not(.active) { color:var(--ink-2); }
+
+  .verdict-list { display:flex; flex-direction:column; gap:11px; }
+  .verdict-card {
+    padding:13px 15px;
+    background:rgba(40,60,80,0.3);
+    border-left:3px solid var(--teal);
+    border-radius:0 3px 3px 0;
+  }
+  .verdict-card.kill { border-left-color: var(--crimson); background:rgba(216,90,90,0.05); }
+  .verdict-card .verdict-name {
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--ink);
+    margin-bottom:6px;
+  }
+  .verdict-card .verdict-name b { color:var(--teal); font-style:normal; font-weight:600; }
+  .kill .verdict-name b { color:var(--crimson); }
+  .verdict-card .reasons {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55;
+    margin-bottom:8px;
+  }
+  .verdict-evidence {
+    padding-top:8px; border-top:1px dashed var(--steel);
+    font-family:var(--mono); font-size:10px; letter-spacing:0.1em;
+    color:var(--ink-3); text-transform:uppercase;
+  }
+  .verdict-evidence a {
+    color:var(--teal); text-decoration:none; cursor:pointer; margin-right:10px;
+  }
+  .verdict-evidence a:hover { text-decoration:underline; }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .starmap { grid-row: span 1; }
+    .star-panel { width: 240px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">🗺️</div>
+    <div>
+      <h1>Project Atlas</h1>
+      <div class="crest-tag">internal · 项目 · 阿特拉斯</div>
+    </div>
+  </div>
+  <div class="question">"项目都还活着吗 ? 哪个最危险 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 项目星图 -->
+  <section class="block starmap">
+    <div class="block-head">
+      <span class="block-num">① starmap</span>
+      <span class="block-title">项目星图</span>
+      <span class="block-meta">大小=投入 · 颜色=健康 · 距中心=战略相关性</span>
+    </div>
+    <div class="starmap-canvas" id="starCanvas">
+      <svg viewBox="0 0 600 500">
+        <!-- 中心同心圆 -->
+        <circle cx="300" cy="250" r="50"  fill="none" stroke="rgba(79,179,169,0.2)" stroke-dasharray="2 4"/>
+        <circle cx="300" cy="250" r="130" fill="none" stroke="rgba(79,179,169,0.12)" stroke-dasharray="2 6"/>
+        <circle cx="300" cy="250" r="220" fill="none" stroke="rgba(79,179,169,0.08)" stroke-dasharray="2 8"/>
+        <text x="300" y="254" text-anchor="middle" fill="rgba(232,165,71,0.5)"
+              font-family="var(--mono)" font-size="8.5" letter-spacing="2">CORE STRATEGY</text>
+
+        <!-- 项目星 -->
+        <!-- Halycon - 大,中心,健康 -->
+        <g class="star" data-id="halycon">
+          <circle cx="340" cy="220" r="32" fill="rgba(79,179,169,0.35)" stroke="#4FB3A9" stroke-width="2"/>
+          <circle cx="340" cy="220" r="6" fill="#4FB3A9"/>
+          <text x="340" y="270" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="12">Halycon</text>
+        </g>
+        <!-- Stellar - 中,中近,警告 -->
+        <g class="star" data-id="stellar">
+          <circle cx="220" cy="280" r="22" fill="rgba(232,165,71,0.3)" stroke="#E8A547" stroke-width="1.5"/>
+          <circle cx="220" cy="280" r="4" fill="#E8A547"/>
+          <text x="220" y="320" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="11.5">Stellar</text>
+        </g>
+        <!-- Crucible - 中,中,危险 -->
+        <g class="star" data-id="crucible">
+          <circle cx="380" cy="320" r="20" fill="rgba(216,90,90,0.3)" stroke="#D85A5A" stroke-width="1.5"/>
+          <circle cx="380" cy="320" r="4" fill="#D85A5A"/>
+          <text x="380" y="360" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="11.5">Crucible</text>
+        </g>
+        <!-- Beacon - 小,中近,健康 -->
+        <g class="star" data-id="beacon">
+          <circle cx="260" cy="180" r="14" fill="rgba(79,179,169,0.3)" stroke="#4FB3A9" stroke-width="1.2"/>
+          <circle cx="260" cy="180" r="3" fill="#4FB3A9"/>
+          <text x="260" y="160" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="11">Beacon</text>
+        </g>
+        <!-- Drift - 小,远,警告 -->
+        <g class="star" data-id="drift">
+          <circle cx="135" cy="160" r="13" fill="rgba(232,165,71,0.25)" stroke="#E8A547" stroke-width="1.2" stroke-dasharray="3 2"/>
+          <circle cx="135" cy="160" r="3" fill="#E8A547"/>
+          <text x="135" y="140" text-anchor="middle" fill="rgba(232,238,242,0.7)" font-family="var(--serif)" font-style="italic" font-size="11">Drift</text>
+        </g>
+        <!-- Echo - 中,远,健康 -->
+        <g class="star" data-id="echo">
+          <circle cx="470" cy="150" r="16" fill="rgba(79,179,169,0.25)" stroke="#4FB3A9" stroke-width="1.2"/>
+          <circle cx="470" cy="150" r="3" fill="#4FB3A9"/>
+          <text x="470" y="130" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="11">Echo</text>
+        </g>
+        <!-- Marrow - 小,边缘,沉默 -->
+        <g class="star" data-id="marrow">
+          <circle cx="100" cy="380" r="11" fill="rgba(150,150,150,0.2)" stroke="rgba(180,180,180,0.4)" stroke-width="1" stroke-dasharray="1 3"/>
+          <circle cx="100" cy="380" r="2" fill="rgba(180,180,180,0.5)"/>
+          <text x="100" y="402" text-anchor="middle" fill="rgba(232,238,242,0.5)" font-family="var(--serif)" font-style="italic" font-size="10.5">Marrow</text>
+        </g>
+        <!-- Pyre - 中,边缘,危险 -->
+        <g class="star" data-id="pyre">
+          <circle cx="500" cy="380" r="17" fill="rgba(216,90,90,0.25)" stroke="#D85A5A" stroke-width="1.2" stroke-dasharray="3 2"/>
+          <circle cx="500" cy="380" r="3" fill="#D85A5A"/>
+          <text x="500" y="402" text-anchor="middle" fill="#E8EEF2" font-family="var(--serif)" font-style="italic" font-size="11">Pyre</text>
+        </g>
+      </svg>
+
+      <!-- 侧栏 -->
+      <aside class="star-panel" id="starPanel">
+        <div class="close-x" id="panelClose">✕</div>
+        <div class="name" id="pName">—</div>
+        <div class="codename" id="pCode">—</div>
+        <div id="pBody"></div>
+      </aside>
+    </div>
+    <div class="starmap-legend">
+      <div><span class="legend-dot" style="background:#4FB3A9"></span>健康</div>
+      <div><span class="legend-dot" style="background:#E8A547"></span>预警</div>
+      <div><span class="legend-dot" style="background:#D85A5A"></span>危险</div>
+      <div><span class="legend-dot" style="background:rgba(180,180,180,0.5)"></span>沉默/边缘</div>
+    </div>
+  </section>
+
+  <!-- ② 濒危看板 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② danger board</span>
+      <span class="block-title">濒危看板</span>
+      <span class="block-meta">按危险度排序</span>
+    </div>
+    <div class="danger-list">
+      <div class="danger-card">
+        <div class="danger-head">
+          <span class="danger-name">Crucible</span>
+          <span class="danger-score">RISK 0.84 ↑</span>
+        </div>
+        <div class="danger-signals">
+          <span class="signal-tag crit">承诺-行动差距</span><span class="signal-tag crit">信念背离</span>
+          连续 <b>3 周</b> "下周给方案" 未交付 · 创始人发言时长 ↓42%
+        </div>
+      </div>
+      <div class="danger-card">
+        <div class="danger-head">
+          <span class="danger-name">Pyre</span>
+          <span class="danger-score">RISK 0.78 ↑</span>
+        </div>
+        <div class="danger-signals">
+          <span class="signal-tag crit">沉默回避</span><span class="signal-tag">里程碑延期</span>
+          上次评审 <b>6/8 个问题</b> 未被回答 · Q1 关键节点延 21 天
+        </div>
+      </div>
+      <div class="danger-card warn">
+        <div class="danger-head">
+          <span class="danger-name">Stellar</span>
+          <span class="danger-score">RISK 0.52 →</span>
+        </div>
+        <div class="danger-signals">
+          <span class="signal-tag">信念一致性 ↓</span>
+          团队对该项目的预期回报方差 <b>+0.4</b> · 沈岚看好,Wei 看空
+        </div>
+      </div>
+      <div class="danger-card warn">
+        <div class="danger-head">
+          <span class="danger-name">Drift</span>
+          <span class="danger-score">RISK 0.47 →</span>
+        </div>
+        <div class="danger-signals">
+          <span class="signal-tag">注意力流失</span>
+          已连续 <b>5 周</b> 未在 IC 议程出现 · 距核心战略 0.71 (远)
+        </div>
+      </div>
+      <div class="danger-card warn">
+        <div class="danger-head">
+          <span class="danger-name">Marrow</span>
+          <span class="danger-score">RISK 0.39 →</span>
+        </div>
+        <div class="danger-signals">
+          <span class="signal-tag">长期沉默</span>
+          <b>无人发起讨论</b> 共 47 天 — 也许该归档,也许该重启
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 里程碑长河 -->
+  <section class="block" style="grid-column: 1 / -1;">
+    <div class="block-head">
+      <span class="block-num">③ milestone river</span>
+      <span class="block-title">里程碑长河 · 叠加会议事件</span>
+      <span class="block-meta">点击节点 → 跳到该会议纪要</span>
+    </div>
+    <div class="river-wrap">
+      <div class="river">
+        <!-- 顶部时间轴 -->
+        <div></div>
+        <div class="river-axis">
+          <div>Jan</div><div>Feb</div><div>Mar</div><div>Apr</div>
+          <div>May</div><div>Jun</div><div>Jul</div><div>Aug</div>
+        </div>
+
+        <!-- Halycon -->
+        <div class="river-row">
+          <div class="river-label">Halycon</div>
+          <div class="river-track">
+            <div class="river-bar" style="left:5%; width:80%;"></div>
+            <div class="river-mark" style="left:8%;"><div class="dot"></div><div class="tip">里程碑 · 立项<br/>2026-01-15</div></div>
+            <div class="river-mark meeting" style="left:18%;"><div class="dot"></div><div class="tip">IC 评审 #1<br/>2026-02-08</div></div>
+            <div class="river-mark" style="left:32%;"><div class="dot"></div><div class="tip">里程碑 · MVP<br/>2026-03-20 ✓</div></div>
+            <div class="river-mark meeting" style="left:42%;"><div class="dot"></div><div class="tip">复盘会<br/>2026-04-10</div></div>
+            <div class="river-mark" style="left:55%;"><div class="dot"></div><div class="tip">里程碑 · A 轮close<br/>2026-05-12 ✓</div></div>
+            <div class="river-mark meeting" style="left:68%;"><div class="dot"></div><div class="tip">月度评审<br/>2026-06-15</div></div>
+          </div>
+        </div>
+
+        <!-- Stellar -->
+        <div class="river-row">
+          <div class="river-label">Stellar</div>
+          <div class="river-track">
+            <div class="river-bar" style="left:12%; width:60%; background:rgba(232,165,71,0.3);"></div>
+            <div class="river-mark" style="left:14%;"><div class="dot"></div><div class="tip">里程碑 · Kickoff<br/>2026-02-01</div></div>
+            <div class="river-mark meeting" style="left:24%;"><div class="dot"></div><div class="tip">尽调启动会<br/>2026-02-25</div></div>
+            <div class="river-mark delay" style="left:38%;"><div class="dot"></div><div class="tip">⚠ Term Sheet<br/>原定 03-25 · 延 14d</div></div>
+            <div class="river-mark meeting" style="left:48%;"><div class="dot"></div><div class="tip">分歧澄清会<br/>2026-04-12</div></div>
+            <div class="river-mark delay" style="left:64%;"><div class="dot"></div><div class="tip">⚠ Close<br/>原定 05-15 · 延期</div></div>
+          </div>
+        </div>
+
+        <!-- Crucible -->
+        <div class="river-row">
+          <div class="river-label">Crucible</div>
+          <div class="river-track">
+            <div class="river-bar" style="left:18%; width:50%; background:rgba(216,90,90,0.25);"></div>
+            <div class="river-mark" style="left:20%;"><div class="dot"></div><div class="tip">里程碑 · 立项<br/>2026-02-18</div></div>
+            <div class="river-mark meeting" style="left:30%;"><div class="dot"></div><div class="tip">IC 评审<br/>2026-03-15</div></div>
+            <div class="river-mark miss" style="left:45%;"><div class="dot"></div><div class="tip">✗ 增长目标<br/>未达成</div></div>
+            <div class="river-mark meeting" style="left:55%;"><div class="dot"></div><div class="tip">紧急讨论会<br/>2026-04-22</div></div>
+            <div class="river-mark miss" style="left:66%;"><div class="dot"></div><div class="tip">✗ 创始人未交付方案<br/>3 周未回应</div></div>
+          </div>
+        </div>
+
+        <!-- Pyre -->
+        <div class="river-row">
+          <div class="river-label">Pyre</div>
+          <div class="river-track">
+            <div class="river-bar" style="left:5%; width:75%; background:rgba(216,90,90,0.2);"></div>
+            <div class="river-mark" style="left:7%;"><div class="dot"></div><div class="tip">里程碑 · 立项<br/>2026-01-08</div></div>
+            <div class="river-mark meeting" style="left:18%;"><div class="dot"></div><div class="tip">IC 评审 #1<br/>2026-02-10</div></div>
+            <div class="river-mark delay" style="left:30%;"><div class="dot"></div><div class="tip">⚠ MVP<br/>延 21 天</div></div>
+            <div class="river-mark meeting" style="left:48%;"><div class="dot"></div><div class="tip">救火会<br/>2026-04-18</div></div>
+            <div class="river-mark miss" style="left:62%;"><div class="dot"></div><div class="tip">✗ 6/8 问题未答<br/>2026-05</div></div>
+          </div>
+        </div>
+
+        <!-- Beacon -->
+        <div class="river-row">
+          <div class="river-label">Beacon</div>
+          <div class="river-track">
+            <div class="river-bar" style="left:30%; width:50%;"></div>
+            <div class="river-mark" style="left:32%;"><div class="dot"></div><div class="tip">立项<br/>2026-03-22</div></div>
+            <div class="river-mark meeting" style="left:48%;"><div class="dot"></div><div class="tip">IC 评审<br/>2026-04-15</div></div>
+            <div class="river-mark" style="left:64%;"><div class="dot"></div><div class="tip">✓ Term Sheet<br/>2026-05-28</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="river-legend">
+      <div><span class="legend-dot" style="background:#4FB3A9"></span>里程碑达成</div>
+      <div><span class="legend-dot" style="background:#E8A547"></span>延期</div>
+      <div><span class="legend-dot" style="background:#D85A5A"></span>未达成</div>
+      <div><span class="legend-dot" style="background:#E8EEF2; border:1.5px solid #4FB3A9; width:7px; height:7px;"></span>会议事件</div>
+    </div>
+  </section>
+
+  <!-- ④ 决策回声 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">④ decision echo</span>
+      <span class="block-title">决策回声 · 当时说的 vs 现在的</span>
+      <span class="block-meta">自动比对偏离度</span>
+    </div>
+    <div class="echo-list">
+      <div class="echo-card">
+        <div class="echo-meta">
+          <span>CRUCIBLE · 2026-03-15 IC 评审</span>
+          <span class="ref" data-forge-ref="m-2026-03-15-ic">→ 跳到纪要</span>
+        </div>
+        <div class="echo-line said">
+          <div class="lbl">说</div>
+          <div class="text">"创始人下周给详细增长方案 · 三周内决定加注或退出"</div>
+        </div>
+        <div class="echo-line now">
+          <div class="lbl">现在</div>
+          <div class="text">已过 <b>6 周</b> · 创始人无回应 · 决策悬置 · 原定预算 $8M 仍占用</div>
+        </div>
+        <div class="echo-deviation">
+          <span style="color:var(--ink-3)">承诺-行动 偏离度</span>
+          <span class="delta bad">+312% · 严重</span>
+        </div>
+      </div>
+
+      <div class="echo-card">
+        <div class="echo-meta">
+          <span>STELLAR · 2026-02-25 尽调启动</span>
+          <span class="ref" data-forge-ref="m-2026-02-25-dd">→ 跳到纪要</span>
+        </div>
+        <div class="echo-line said">
+          <div class="lbl">说</div>
+          <div class="text">"沈岚负责估值 / Wei 负责风险审计 / 4 周内出 TS"</div>
+        </div>
+        <div class="echo-line now">
+          <div class="lbl">现在</div>
+          <div class="text">沈岚 ✓ · Wei 的风险审计 <b>未启动</b> · TS 已延 14 天</div>
+        </div>
+        <div class="echo-deviation">
+          <span style="color:var(--ink-3)">分工执行 偏离度</span>
+          <span class="delta mid">+85% · 中度</span>
+        </div>
+      </div>
+
+      <div class="echo-card">
+        <div class="echo-meta">
+          <span>HALYCON · 2026-04-10 复盘会</span>
+          <span class="ref" data-forge-ref="m-2026-04-10-retro">→ 跳到纪要</span>
+        </div>
+        <div class="echo-line said">
+          <div class="lbl">说</div>
+          <div class="text">"5 月底前帮被投团队招到 CTO · 帮约 3 个客户访谈"</div>
+        </div>
+        <div class="echo-line now">
+          <div class="lbl">现在</div>
+          <div class="text">CTO 候选人 4 位 · 客户访谈 3/3 ✓ · 团队反馈正面</div>
+        </div>
+        <div class="echo-deviation">
+          <span style="color:var(--ink-3)">承诺执行 偏离度</span>
+          <span class="delta good">-5% · 兑现</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑤ 项目间张力 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">⑤ tensions</span>
+      <span class="block-title">项目间张力 · 谁在抢谁</span>
+      <span class="block-meta">基于发言时长聚合</span>
+    </div>
+    <div class="tension-grid">
+      <div class="head"></div>
+      <div class="head">沈岚</div>
+      <div class="head">Wei</div>
+      <div class="head">陈汀</div>
+      <div class="head">周劭然</div>
+
+      <div class="name">Halycon</div>
+      <div class="tension-cell warm">38%</div>
+      <div class="tension-cell cool">12%</div>
+      <div class="tension-cell warm">35%</div>
+      <div class="tension-cell cool">15%</div>
+
+      <div class="name">Stellar</div>
+      <div class="tension-cell hot">42%</div>
+      <div class="tension-cell warm">28%</div>
+      <div class="tension-cell warm">22%</div>
+      <div class="tension-cell cool">8%</div>
+
+      <div class="name">Crucible</div>
+      <div class="tension-cell cool">8%</div>
+      <div class="tension-cell hot">45%</div>
+      <div class="tension-cell warm">30%</div>
+      <div class="tension-cell cool">17%</div>
+
+      <div class="name">Pyre</div>
+      <div class="tension-cell cool">5%</div>
+      <div class="tension-cell cool">10%</div>
+      <div class="tension-cell warm">38%</div>
+      <div class="tension-cell warm">47%</div>
+    </div>
+    <div class="tension-note">
+      <b>注意:</b> Halycon 和 Stellar 在沈岚身上抢了 <b>80% 的注意力</b> —
+      Wei 在 Crucible 上独自承担(45%)却没人接应 — 这是阵型缺口。
+    </div>
+  </section>
+
+  <!-- ⑥ 救活 / 安乐死 -->
+  <section class="block" style="grid-column: 1 / -1;">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">⑥ verdict</span>
+      <span class="block-title">救活 vs 安乐死 · 建议清单</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="save">🌱 救活清单 · 值得加注</div>
+      <div class="tab" data-tab="kill">💀 该停的清单 · 该归档</div>
+    </div>
+
+    <div class="tab-pane" id="pane-save">
+      <div class="verdict-list">
+        <div class="verdict-card">
+          <div class="verdict-name">救 <b>Stellar</b> — 把分歧变成尽调标准</div>
+          <div class="reasons">
+            分歧稳定在估值($60M vs $80M),不是项目本身问题。
+            把陈汀和沈岚送进同一场尽调会议,让结构化的分歧把"延期"变成"更扎实的判断"。
+          </div>
+          <div class="verdict-evidence">
+            证据 ·
+            <a data-forge-ref="m-2026-02-25-dd">📄 02-25 尽调启动纪要</a>
+            <a data-forge-ref="r-stellar-bc">📊 信念一致性轴</a>
+            <a data-forge-ref="r-team-tension">⚔ 张力流回放</a>
+          </div>
+        </div>
+        <div class="verdict-card">
+          <div class="verdict-name">救 <b>Drift</b> — 重启或归档,二选一</div>
+          <div class="reasons">
+            5 周没人提起 ≠ 不重要。可能它在等一个外部窗口(LP 关注的赛道)。
+            建议: 让 Omar 用一次"反事实分析"来判断是机会还是僵尸。
+          </div>
+          <div class="verdict-evidence">
+            证据 ·
+            <a data-forge-ref="hypothesis-omar">📄 上次提及: 03-22 IC</a>
+            <a data-forge-ref="r-shen-attention">📊 注意力流失轴</a>
+            <a data-forge-ref="law-distance-cap">🌌 项目星图(边缘)</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-kill" style="display:none;">
+      <div class="verdict-list">
+        <div class="verdict-card kill">
+          <div class="verdict-name">停 <b>Crucible</b> — 创始人 6 周失联,继续等是沉没成本</div>
+          <div class="reasons">
+            决策回声显示偏离度 +312%。承诺-行动差距持续扩大。
+            团队对该项目的发言时长 ↓42%,客观上已经放弃讨论 — 这种"软死亡"该被官方承认。
+          </div>
+          <div class="verdict-evidence">
+            证据 ·
+            <a data-forge-ref="m-2026-03-15-ic">📄 03-15 IC 评审</a>
+            <a data-forge-ref="r-crucible-cag">📊 承诺-行动轴</a>
+            <a data-forge-ref="law-founder-silence">🔥 决策回声 +312%</a>
+          </div>
+        </div>
+        <div class="verdict-card kill">
+          <div class="verdict-name">停 <b>Marrow</b> — 47 天无人讨论,沉默已是答案</div>
+          <div class="reasons">
+            没有任何人主动提及。距离战略中心 0.85(最远)。归档不可惜,腾出注意力给 Beacon。
+          </div>
+          <div class="verdict-evidence">
+            证据 ·
+            <a data-forge-ref="r-pyre-sa">📄 上次提及: 03-08</a>
+            <a data-forge-ref="r-pyre-sa">📊 长期沉默轴</a>
+            <a data-forge-ref="law-distance-cap">🌌 边缘星体</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // 项目档案
+  const PROJECTS = {
+    halycon:  {name:"Halycon",  code:"flagship · A 轮已 close", health:"健康", invest:"$25M", strategic:0.92,
+      meetings:14, decisions:8, axes:[
+        {k:"信念一致性", v:"0.84", note:"团队对方向高度一致"},
+        {k:"承诺-行动", v:"-5%", note:"承诺基本兑现"},
+        {k:"注意力", v:"35%", note:"陈汀第一关注项"}
+      ]},
+    stellar:  {name:"Stellar",  code:"在尽调中 · 估值分歧", health:"预警", invest:"$12M (规划)", strategic:0.71,
+      meetings:9, decisions:3, axes:[
+        {k:"信念一致性", v:"0.41 ↓", note:"沈岚看多, Wei 看空"},
+        {k:"承诺-行动", v:"+85%", note:"Wei 风险审计未启动"},
+        {k:"注意力", v:"22%", note:""}
+      ]},
+    crucible: {name:"Crucible", code:"已投后 · 创始人失联", health:"危险", invest:"$8M (已部署)", strategic:0.65,
+      meetings:6, decisions:4, axes:[
+        {k:"承诺-行动", v:"+312% ↑↑", note:"严重偏离"},
+        {k:"沉默回避", v:"6/8", note:"未答问题数/总问题数"},
+        {k:"信念背离", v:"+0.4", note:"团队预期已修正向下"}
+      ]},
+    pyre:     {name:"Pyre",     code:"已投后 · 增长停滞", health:"危险", invest:"$15M (已部署)", strategic:0.42,
+      meetings:8, decisions:5, axes:[
+        {k:"里程碑", v:"延 21d", note:"MVP 节点"},
+        {k:"沉默回避", v:"6/8", note:"上次评审"},
+        {k:"注意力", v:"47% (周)", note:"周劭然在独自跟"}
+      ]},
+    beacon:   {name:"Beacon",   code:"新立项 · 尽调中", health:"健康", invest:"$5M (规划)", strategic:0.78,
+      meetings:4, decisions:2, axes:[
+        {k:"信念一致性", v:"0.79", note:"团队认可"},
+        {k:"承诺-行动", v:"0%", note:"按时推进"},
+        {k:"注意力", v:"18%", note:"上升中"}
+      ]},
+    drift:    {name:"Drift",    code:"未启动 · 战略远", health:"预警", invest:"$0 (未投)", strategic:0.25,
+      meetings:2, decisions:0, axes:[
+        {k:"注意力", v:"0% × 5周", note:"无人提及"},
+        {k:"距核心", v:"0.71", note:"远"}
+      ]},
+    echo:     {name:"Echo",     code:"已投后 · 平稳", health:"健康", invest:"$10M (已部署)", strategic:0.58,
+      meetings:5, decisions:3, axes:[
+        {k:"信念一致性", v:"0.72", note:"稳定"},
+        {k:"里程碑", v:"按时", note:"近 3 个节点全部达成"}
+      ]},
+    marrow:   {name:"Marrow",   code:"已投后 · 长期沉默", health:"沉默", invest:"$3M (已部署)", strategic:0.15,
+      meetings:1, decisions:0, axes:[
+        {k:"长期沉默", v:"47d", note:"无人发起讨论"},
+        {k:"距核心", v:"0.85", note:"最远"}
+      ]},
+    pyre:     {name:"Pyre",     code:"已投后 · 增长停滞", health:"危险", invest:"$15M", strategic:0.42,
+      meetings:8, decisions:5, axes:[
+        {k:"里程碑", v:"延 21d", note:"MVP 节点"},
+        {k:"沉默回避", v:"6/8", note:"上次评审"},
+        {k:"注意力", v:"47%", note:"周劭然独自跟"}
+      ]},
+  };
+
+  const panel = document.getElementById('starPanel');
+  const pName = document.getElementById('pName');
+  const pCode = document.getElementById('pCode');
+  const pBody = document.getElementById('pBody');
+  document.getElementById('panelClose').onclick = ()=>panel.classList.remove('visible');
+
+  document.querySelectorAll('.star').forEach(s=>{
+    s.addEventListener('click', ()=>{
+      const id = s.dataset.id;
+      const p = PROJECTS[id];
+      if (!p) return;
+      pName.textContent = p.name;
+      pCode.textContent = p.code;
+      const healthClass = p.health==='危险'?'alert':p.health==='预警'?'alert':p.health==='沉默'?'':'ok';
+      pBody.innerHTML = `
+        <div class="stat-row"><span class="k">健康</span><span class="v ${healthClass}">${p.health}</span></div>
+        <div class="stat-row"><span class="k">投入</span><span class="v">${p.invest}</span></div>
+        <div class="stat-row"><span class="k">战略相关性</span><span class="v">${(p.strategic*100).toFixed(0)}%</span></div>
+        <div class="stat-row"><span class="k">会议数</span><span class="v">${p.meetings}</span></div>
+        <div class="stat-row"><span class="k">决议数</span><span class="v">${p.decisions}</span></div>
+
+        <div class="axis-readings">↓ 轴上的读数</div>
+        ${p.axes.map(a=>`
+          <div class="mini-axis">
+            <b>${a.k}</b> · ${a.v}
+            ${a.note ? `<div style="margin-top:3px; color:var(--ink-3); font-size:10.5px;">${a.note}</div>`:''}
+          </div>
+        `).join('')}
+
+        <div class="panel-actions">
+          <a data-forge-ref="m-${id==='crucible'?'2026-03-15-ic':id==='stellar'?'2026-02-25-dd':id==='halycon'?'2026-04-10-retro':id==='pyre'?'2026-04-18-fire':id==='beacon'?'2026-04-15-ic':'2026-04-10-retro'}">📄 该项目所有纪要 (${p.meetings})</a>
+          <a data-forge-ref="r-${id}-cag">📊 看完整轴读数</a>
+          <a data-forge-ref="r-${id}-cag">⏱ 跳到里程碑长河</a>
+        </div>
+      `;
+      panel.classList.add('visible');
+    });
+  });
+
+  // tab 切换
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-save').style.display = which==='save' ? '' : 'none';
+      document.getElementById('pane-kill').style.display = which==='kill' ? '' : 'none';
+    });
+  });
+</script>
+
+<script src="forge-registry.js"></script>
+</body>
+</html>

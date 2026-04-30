@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>阳台时光 · 会议纪要</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --night-deep: #0A1220;
+    --night-mid:  #1A2438;
+    --night-soft: #2A3550;
+    --moon:       #E8DCC4;
+    --ember:      #D9B88E;
+    --leaf:       #8BA989;
+    --whisper:    rgba(232, 220, 196, 0.55);
+    --serif:      "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+    --mono:       "JetBrains Mono", "Menlo", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--night-deep);
+    color: var(--moon);
+    font-family: var(--serif);
+    overflow: hidden;
+    height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 夜空背景 — 渐变 + 星点 + 月亮 */
+  .sky {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 1200px 800px at 70% -10%, rgba(232,220,196,0.18), transparent 60%),
+      radial-gradient(ellipse 900px 600px at 20% 110%, rgba(139,169,137,0.08), transparent 60%),
+      linear-gradient(180deg, #0A1220 0%, #1A2438 60%, #2A3550 100%);
+    z-index: 0;
+  }
+  /* 星点 */
+  .star {
+    position: absolute; width: 2px; height: 2px;
+    background: var(--moon); border-radius: 50%;
+    opacity: 0; animation: twinkle 4s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.6; }
+  }
+
+  /* 月亮 */
+  .moon {
+    position: absolute; top: 8vh; right: 12vw;
+    width: 96px; height: 96px;
+    background: radial-gradient(circle at 35% 35%, #F5ECD6, #E8DCC4 60%, transparent 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 80px rgba(232, 220, 196, 0.35), 0 0 160px rgba(232, 220, 196, 0.15);
+    opacity: 0;
+    animation: moon-rise 3s ease-out 0.6s forwards;
+  }
+  @keyframes moon-rise {
+    0%   { opacity: 0; transform: translateY(40px); }
+    100% { opacity: 0.9; transform: translateY(0); }
+  }
+
+  /* 云 */
+  .cloud {
+    position: absolute; height: 50px; border-radius: 50px;
+    background: rgba(232, 220, 196, 0.06);
+    filter: blur(25px);
+    animation: drift 60s linear infinite;
+  }
+  .cloud-1 { top: 15vh; width: 380px; left: -400px; animation-duration: 80s; }
+  .cloud-2 { top: 32vh; width: 280px; left: -300px; animation-delay: -30s; animation-duration: 95s; }
+  .cloud-3 { top: 48vh; width: 420px; left: -440px; animation-delay: -55s; animation-duration: 110s; }
+  @keyframes drift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(100vw + 500px)); }
+  }
+
+  /* 远景:剪影 */
+  .horizon {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 12vh;
+    background: linear-gradient(180deg, transparent, rgba(10, 18, 32, 0.9) 70%);
+    z-index: 1;
+  }
+  .horizon::before {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 100%;
+    background:
+      linear-gradient(180deg, transparent 40%, var(--night-deep) 100%),
+      repeating-linear-gradient(90deg,
+        transparent 0, transparent 40px,
+        rgba(0,0,0,0.3) 40px, rgba(0,0,0,0.3) 42px,
+        transparent 42px, transparent 120px);
+    opacity: 0.6;
+  }
+
+  /* 顶部闪回栏 */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 20px 44px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10;
+    opacity: 0; animation: fade-in 1.6s ease-out 0.2s forwards;
+  }
+  @keyframes fade-in { to { opacity: 1; } }
+
+  .brand {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.24em;
+    color: var(--whisper); text-transform: uppercase;
+  }
+  .exit {
+    font-family: var(--serif); font-style: italic; font-size: 14px;
+    color: var(--whisper); text-decoration: none;
+    padding: 6px 14px; border: 1px solid rgba(232,220,196,0.2);
+    border-radius: 20px; transition: all 0.3s;
+  }
+  .exit:hover { color: var(--moon); border-color: rgba(232,220,196,0.4); }
+
+  /* 主容器 */
+  .balcony {
+    position: relative; z-index: 5;
+    min-height: 100vh; width: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 80px 40px 15vh;
+  }
+
+  /* 日期标记 */
+  .date-mark {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.28em;
+    color: var(--ember); text-transform: uppercase;
+    opacity: 0; animation: fade-in 1.8s ease-out 0.8s forwards;
+    margin-bottom: 12px;
+  }
+
+  /* 主标题 */
+  .title {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 44px; letter-spacing: -0.01em;
+    text-align: center;
+    color: var(--moon);
+    margin-bottom: 8px;
+    opacity: 0; transform: translateY(20px);
+    animation: rise-in 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) 1.0s forwards;
+  }
+  .title em { font-style: italic; color: var(--ember); }
+  @keyframes rise-in {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 副标题 */
+  .subtitle {
+    font-family: var(--serif); font-style: italic;
+    font-size: 17px; color: var(--whisper);
+    text-align: center; max-width: 520px; line-height: 1.7;
+    margin-bottom: 60px;
+    opacity: 0; animation: fade-in 2s ease-out 1.6s forwards;
+  }
+
+  /* 三个回顾卡片 */
+  .reflections {
+    display: flex; flex-direction: column; gap: 28px;
+    max-width: 640px; width: 100%;
+  }
+  .refl-card {
+    padding: 28px 32px;
+    background: rgba(232, 220, 196, 0.04);
+    border-left: 2px solid var(--ember);
+    border-radius: 3px;
+    opacity: 0; transform: translateX(-20px);
+    animation: slide-in 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+  .refl-card:nth-child(1) { animation-delay: 2.0s; }
+  .refl-card:nth-child(2) { animation-delay: 2.3s; border-left-color: var(--leaf); }
+  .refl-card:nth-child(3) { animation-delay: 2.6s; border-left-color: #A8A0D9; }
+  @keyframes slide-in {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .refl-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--whisper);
+    margin-bottom: 10px;
+  }
+  .refl-question {
+    font-family: var(--serif); font-style: italic;
+    font-size: 20px; color: var(--moon); line-height: 1.55;
+    margin-bottom: 14px;
+  }
+  .refl-prompt {
+    font-size: 13.5px; color: rgba(232,220,196,0.7); line-height: 1.7;
+  }
+  .refl-prompt b { color: var(--ember); font-weight: 500; }
+
+  /* 引语 · 底部 */
+  .quote {
+    position: fixed; bottom: 4vh; left: 0; right: 0;
+    text-align: center; z-index: 10;
+    opacity: 0; animation: fade-in 3s ease-out 3.2s forwards;
+  }
+  .quote-text {
+    font-family: var(--serif); font-style: italic;
+    font-size: 14.5px; color: var(--whisper); line-height: 1.8;
+    max-width: 620px; margin: 0 auto;
+  }
+  .quote-attr {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em;
+    color: rgba(232,220,196,0.4); text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  /* 静默按钮 · 更右更隐匿 */
+  .action-row {
+    margin-top: 50px; display: flex; gap: 12px; justify-content: center;
+    opacity: 0; animation: fade-in 2s ease-out 3.0s forwards;
+  }
+  .action-btn {
+    padding: 10px 22px; background: transparent;
+    border: 1px solid rgba(232,220,196,0.18);
+    color: var(--moon); font-family: var(--serif); font-style: italic;
+    font-size: 13.5px; border-radius: 22px;
+    cursor: pointer; transition: all 0.4s;
+  }
+  .action-btn:hover {
+    border-color: var(--ember); color: var(--ember);
+    background: rgba(217,184,142,0.06);
+  }
+
+  /* 夜风 · 细节飘动 */
+  @keyframes breeze {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+  }
+
+  /* ============================================== */
+  /* 抽屉式数据底 — Balcony 的"翻面"                 */
+  /* ============================================== */
+  .drawer-tab {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    z-index: 30;
+    padding: 9px 22px 11px;
+    background: rgba(20, 28, 44, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(232,220,196,0.18);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: var(--whisper);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.3em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    opacity: 0;
+    animation: fade-in 1.5s ease-out 3.4s forwards;
+  }
+  .drawer-tab:hover {
+    color: var(--ember); border-color: var(--ember);
+    transform: translateX(-50%) translateY(-3px);
+  }
+  .drawer-tab .arrow {
+    display:inline-block; margin-left: 8px;
+    transition: transform .3s;
+  }
+  .drawer-tab.open { color: var(--ember); border-color: var(--ember); }
+  .drawer-tab.open .arrow { transform: rotate(180deg); }
+
+  .drawer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 25;
+    background: linear-gradient(180deg, rgba(10,18,32,0.92) 0%, rgba(10,18,32,0.98) 100%);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(232,220,196,0.18);
+    transform: translateY(100%);
+    transition: transform .55s cubic-bezier(0.2, 0.8, 0.2, 1);
+    max-height: 78vh;
+    overflow-y: auto;
+    padding: 56px 36px 50px;
+  }
+  .drawer.open { transform: translateY(0); }
+
+  .drawer-quote {
+    text-align: center;
+    font-family: var(--serif); font-style: italic;
+    font-size: 12.5px; color: var(--whisper); line-height: 1.7;
+    margin-bottom: 24px;
+    max-width: 540px; margin-left:auto; margin-right:auto;
+  }
+  .drawer-quote em { color: var(--ember); }
+
+  .drawer-grid {
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 18px;
+    max-width: 1320px; margin: 0 auto;
+  }
+  .d-block {
+    background: rgba(232,220,196,0.04);
+    border: 1px solid rgba(232,220,196,0.12);
+    border-radius: 4px;
+    padding: 18px 20px;
+  }
+  .d-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 14px; padding-bottom: 9px;
+    border-bottom: 1px solid rgba(232,220,196,0.1);
+  }
+  .d-num {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.22em;
+    color: var(--ember); text-transform: uppercase;
+  }
+  .d-title {
+    font-family: var(--serif); font-style: italic; font-size: 16px;
+    color: var(--moon); flex: 1; margin-left: 12px;
+  }
+
+  /* ① 六棱镜指标 — 雷达 */
+  .prism-radar { width:100%; height: 180px; }
+
+  /* ② 时间 ROI */
+  .roi-row {
+    display: grid; grid-template-columns: 90px 1fr; gap:12px; align-items:center;
+  }
+  .roi-gauge { width: 90px; height: 90px; }
+  .roi-stat {
+    font-size: 12px; line-height: 1.6; color: var(--whisper);
+  }
+  .roi-stat b { color: var(--moon); font-weight:500; }
+  .roi-stat .pos { color: var(--leaf); }
+  .roi-stat .neg { color: #C46A50; }
+
+  /* ③ 阳台时光节奏 */
+  .balcony-rhythm {
+    display: flex; gap: 4px; align-items: flex-end; height: 70px;
+    margin-bottom: 8px;
+  }
+  .br-bar {
+    flex: 1; background: rgba(217,184,142,0.4);
+    border-radius: 2px 2px 0 0;
+    transition: all .3s;
+  }
+  .br-bar.miss { background: rgba(196,106,80,0.45); }
+  .br-bar.now  { background: var(--ember); box-shadow: 0 0 10px rgba(217,184,142,0.5); }
+  .br-axis {
+    display:flex; justify-content:space-between;
+    font-family: var(--mono); font-size: 8.5px;
+    color: rgba(232,220,196,0.4); letter-spacing: 0.1em;
+    padding-top: 5px; border-top: 1px dashed rgba(232,220,196,0.08);
+  }
+  .br-foot {
+    margin-top: 11px; font-size: 11.5px; color: var(--whisper); line-height:1.5;
+  }
+  .br-foot b { color: var(--moon); font-weight: 500; font-style: italic; font-family: var(--serif); }
+
+  /* ④ 沉默 vs 发言比 */
+  .silence-row {
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .silence-card {
+    padding: 9px 11px;
+    background: rgba(232,220,196,0.04);
+    border-left: 2px solid var(--leaf);
+    border-radius: 0 3px 3px 0;
+  }
+  .silence-card.long { border-left-color: var(--ember); }
+  .silence-head {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+  }
+  .silence-name {
+    font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--moon);
+  }
+  .silence-meta {
+    font-family: var(--mono); font-size: 9.5px; color: var(--ember); letter-spacing: 0.1em;
+  }
+  .silence-text {
+    font-size: 11px; color: var(--whisper); line-height: 1.5;
+  }
+
+  /* ⑤ 决策回声 */
+  .echo-list { display: flex; flex-direction: column; gap: 8px; }
+  .echo {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 7px 10px;
+    background: rgba(232,220,196,0.03);
+    border-radius: 3px;
+  }
+  .echo-when {
+    font-family: var(--mono); font-size: 9.5px; color: var(--ember);
+    letter-spacing: 0.1em; min-width: 50px;
+  }
+  .echo-text {
+    font-size: 11.5px; color: var(--whisper); line-height: 1.45;
+    font-family: var(--serif); font-style: italic;
+  }
+  .echo-text b { color: var(--moon); font-weight: 500; }
+  .echo .pos { color: var(--leaf); }
+  .echo .neg { color: #C46A50; }
+
+  /* ⑥ 自我承诺 vs 兑现 */
+  .promise-row {
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .self-promise {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px;
+    border-bottom: 1px dashed rgba(232,220,196,0.08);
+    font-size: 11.5px; color: var(--whisper); line-height:1.45;
+  }
+  .self-promise:last-child { border-bottom: none; }
+  .self-tick {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid rgba(232,220,196,0.3); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px;
+  }
+  .self-tick.kept   { border-color: var(--leaf); color: var(--leaf); background: rgba(139,169,137,0.1); }
+  .self-tick.broken { border-color: #C46A50; color: #C46A50; background: rgba(196,106,80,0.1); }
+  .self-tick.partial{ border-color: var(--ember); color: var(--ember); background: rgba(217,184,142,0.1); }
+  .self-text { flex: 1; font-family: var(--serif); font-style: italic; color: var(--moon); }
+  .self-text small {
+    display: block; font-family: var(--mono); font-size: 9.5px;
+    color: var(--whisper); font-style: normal; letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 1100px) {
+    .drawer-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 夜空 -->
+<div class="sky"></div>
+
+<!-- 月亮 -->
+<div class="moon"></div>
+
+<!-- 云 -->
+<div class="cloud cloud-1"></div>
+<div class="cloud cloud-2"></div>
+<div class="cloud cloud-3"></div>
+
+<!-- 地平线剪影 -->
+<div class="horizon"></div>
+
+<!-- 顶部栏 -->
+<div class="topbar">
+  <div class="brand">INTERNAL · 🧘 个人 · 阳台</div>
+  <a class="exit" href="index.html">← 回到工作</a>
+</div>
+
+<!-- 主阳台 -->
+<main class="balcony">
+  <div class="date-mark">周日 · 2026.04.26 · 21:47</div>
+  <h1 class="title">这一周,你 <em>走到了</em> 哪里?</h1>
+  <p class="subtitle">
+    从 12 场会议里抽出的三个问题<br/>
+    不必回答,只需坐下来和它们共处片刻
+  </p>
+
+  <div class="reflections">
+    <div class="refl-card">
+      <div class="refl-label">question 01 · 方向</div>
+      <div class="refl-question">你这周做的决定里,哪一个 <em>是在承诺而非选择</em>?</div>
+      <div class="refl-prompt">
+        周三董事会 · <b>AI 基础设施 Q2 加配决议</b> —— 你在会上说"同意",但从张力图看,
+        你在陈汀发言时沉默了 2 分 14 秒,这是本月最长的一次。那次沉默后,事情没变。
+      </div>
+    </div>
+
+    <div class="refl-card">
+      <div class="refl-label">question 02 · 团队</div>
+      <div class="refl-question">你有多久 <em>没和周劭然</em> 单独说过话了?</div>
+      <div class="refl-prompt">
+        本周他在 4 场会议里都在场,但只发言 3 次,共 47 秒。
+        他的「沉默时长 / 发言时长」比率从 <b>Q1 的 4.2</b> 涨到了 <b>Q2 的 11.8</b>。
+        也许这周末给他发一条消息。
+      </div>
+    </div>
+
+    <div class="refl-card">
+      <div class="refl-label">question 03 · 自己</div>
+      <div class="refl-question">这周有 <em>一件事</em>,你觉得再来一次会做得不一样吗?</div>
+      <div class="refl-prompt">
+        Copilot 注意到:周四和 Omar K. 的会议中,你三次用了"我们再看一下"
+        这样的措辞,都发生在他提出反对意见后 8 秒内。这不是结论,只是一个 <b>观察</b>。
+      </div>
+    </div>
+  </div>
+
+  <div class="action-row">
+    <button class="action-btn" onclick="this.innerText='已记下 · 晚安'; this.style.color='var(--leaf)'; this.style.borderColor='var(--leaf)';">记下一段</button>
+    <button class="action-btn" onclick="this.innerText='已跳过 · 晚安'; this.style.color='var(--whisper)';">先跳过</button>
+  </div>
+</main>
+
+<!-- 抽屉触发 tab -->
+<div class="drawer-tab" id="drawerTab">数据底 · 这一周的痕迹 <span class="arrow">▲</span></div>
+
+<!-- 抽屉式数据底 -->
+<aside class="drawer" id="drawer">
+  <div class="drawer-quote">月亮是 <em>正面</em>,数据是 <em>背面</em>。<br/>这周你走过的脚印,留在六处。</div>
+  <div class="drawer-grid">
+
+    <!-- ① 六棱镜指标 -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">① prism</span><span class="d-title">六棱镜指标</span></div>
+      <svg class="prism-radar" viewBox="0 0 240 200">
+        <g transform="translate(120 100)">
+          <circle r="80" fill="none" stroke="rgba(232,220,196,0.1)" stroke-width="0.6"/>
+          <circle r="55" fill="none" stroke="rgba(232,220,196,0.08)" stroke-width="0.6"/>
+          <circle r="30" fill="none" stroke="rgba(232,220,196,0.06)" stroke-width="0.6"/>
+          <g stroke="rgba(232,220,196,0.12)" stroke-width="0.6">
+            <line x1="0" y1="-80" x2="0" y2="80"/>
+            <line x1="-69" y1="-40" x2="69" y2="40"/>
+            <line x1="-69" y1="40" x2="69" y2="-40"/>
+          </g>
+          <polygon points="0,-65 56,-26 48,38 -8,72 -55,28 -52,-30"
+                   fill="rgba(217,184,142,0.2)" stroke="#D9B88E" stroke-width="1.4"/>
+          <g fill="#D9B88E">
+            <circle cx="0" cy="-65" r="3"/><circle cx="56" cy="-26" r="3"/>
+            <circle cx="48" cy="38" r="3"/><circle cx="-8" cy="72" r="3"/>
+            <circle cx="-55" cy="28" r="3"/><circle cx="-52" cy="-30" r="3"/>
+          </g>
+          <g font-family="JetBrains Mono, monospace" font-size="8.5"
+             fill="rgba(232,220,196,0.55)" letter-spacing="0.1em">
+            <text x="0" y="-88" text-anchor="middle">方向</text>
+            <text x="78" y="-32" text-anchor="start">董事会</text>
+            <text x="68" y="50" text-anchor="start">协调</text>
+            <text x="0" y="92" text-anchor="middle">团队</text>
+            <text x="-78" y="36" text-anchor="end">各方</text>
+            <text x="-72" y="-32" text-anchor="end">个人</text>
+          </g>
+        </g>
+      </svg>
+      <div class="br-foot" style="text-align:center;">最弱:<b>个人</b>(0.41) · 最强:<b>团队</b>(0.78)</div>
+    </div>
+
+    <!-- ② 时间 ROI -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">② time roi</span><span class="d-title">时间 ROI</span></div>
+      <div class="roi-row">
+        <svg class="roi-gauge" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(232,220,196,0.1)" stroke-width="7"/>
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#D9B88E" stroke-width="7"
+                  stroke-dasharray="151 251" transform="rotate(-90 50 50)" stroke-linecap="round"/>
+          <text x="50" y="48" text-anchor="middle" font-family="Source Han Serif SC, serif"
+                font-style="italic" font-size="17" fill="#E8DCC4" font-weight="600">0.60</text>
+          <text x="50" y="62" text-anchor="middle" font-family="JetBrains Mono, monospace"
+                font-size="6" fill="rgba(232,220,196,0.5)" letter-spacing="0.15em">ROI</text>
+        </svg>
+        <div class="roi-stat">
+          高 ROI 时段 <b>11h</b><br/>
+          会议消耗 <span class="neg">29h</span><br/>
+          深度专注 <b>11h</b> <span class="neg">↓ 目标 18h</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ 阳台时光节奏 -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">③ balcony rhythm</span><span class="d-title">阳台时光节奏</span></div>
+      <div class="balcony-rhythm">
+        <div class="br-bar" style="height:65%"></div>
+        <div class="br-bar miss" style="height:8%"></div>
+        <div class="br-bar" style="height:55%"></div>
+        <div class="br-bar" style="height:70%"></div>
+        <div class="br-bar miss" style="height:5%"></div>
+        <div class="br-bar" style="height:50%"></div>
+        <div class="br-bar miss" style="height:6%"></div>
+        <div class="br-bar" style="height:60%"></div>
+        <div class="br-bar" style="height:80%"></div>
+        <div class="br-bar miss" style="height:5%"></div>
+        <div class="br-bar" style="height:65%"></div>
+        <div class="br-bar now" style="height:90%"></div>
+      </div>
+      <div class="br-axis"><span>12 周前</span><span>本周</span></div>
+      <div class="br-foot">连续 <b>2 周</b>赴约 · 但近 12 周漏掉 <b>4 次</b></div>
+    </div>
+
+    <!-- ④ 沉默 vs 发言比 -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">④ silence ratio</span><span class="d-title">沉默 vs 发言</span></div>
+      <div class="silence-row">
+        <div class="silence-card long">
+          <div class="silence-head"><span class="silence-name">周三 董事会 · AI 加配决议</span><span class="silence-meta">沉默 2'14"</span></div>
+          <div class="silence-text">本月最长沉默 — 在陈汀发言后</div>
+        </div>
+        <div class="silence-card">
+          <div class="silence-head"><span class="silence-name">周劭然 沉默/发言</span><span class="silence-meta">11.8 ↑</span></div>
+          <div class="silence-text">从 Q1 4.2 涨到 Q2 11.8 — 有事</div>
+        </div>
+        <div class="silence-card">
+          <div class="silence-head"><span class="silence-name">你的"我们再看一下"</span><span class="silence-meta">3 次</span></div>
+          <div class="silence-text">都在 Omar 反对意见后 8 秒内</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ 决策回声 -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">⑤ echo</span><span class="d-title">决策回声轨迹</span></div>
+      <div class="echo-list">
+        <div class="echo"><span class="echo-when">04-22</span><div class="echo-text">Halycon 追加投资 · <span class="pos">回声正向</span> · ARR +47%</div></div>
+        <div class="echo"><span class="echo-when">04-15</span><div class="echo-text">Beacon 退出策略 · <span class="pos">已盖章</span> · 5 月签</div></div>
+        <div class="echo"><span class="echo-when">04-12</span><div class="echo-text">Stellar 估值锚 · <span class="neg">5 次反复</span> · 流程问题</div></div>
+        <div class="echo"><span class="echo-when">03-28</span><div class="echo-text">LP 反馈闭环 · <span class="neg">逾期 28 天</span></div></div>
+        <div class="echo"><span class="echo-when">03-15</span><div class="echo-text">Crucible 入场 · <span class="neg">即将宣判</span></div></div>
+      </div>
+    </div>
+
+    <!-- ⑥ 自我承诺 vs 兑现 -->
+    <div class="d-block">
+      <div class="d-head"><span class="d-num">⑥ self promises</span><span class="d-title">自我承诺 vs 兑现</span></div>
+      <div class="promise-row">
+        <div class="self-promise">
+          <span class="self-tick kept">✓</span>
+          <div class="self-text">每周写一段反思<small>已 4/4 周</small></div>
+        </div>
+        <div class="self-promise">
+          <span class="self-tick partial">~</span>
+          <div class="self-text">每周深度专注 18h<small>实测 11h · 第 3 周缺口</small></div>
+        </div>
+        <div class="self-promise">
+          <span class="self-tick broken">✗</span>
+          <div class="self-text">睡满 7h<small>5.8h · 连续透支</small></div>
+        </div>
+        <div class="self-promise">
+          <span class="self-tick kept">✓</span>
+          <div class="self-text">每月一次外脑深谈<small>Wei · 已发生</small></div>
+        </div>
+        <div class="self-promise">
+          <span class="self-tick broken">✗</span>
+          <div class="self-text">和周劭然 1:1<small>已 5 周未发生</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- 底部引语 -->
+<div class="quote">
+  <div class="quote-text">&ldquo;不被审视的生活不值得过。&rdquo;</div>
+  <div class="quote-attr">— Socrates · via Plato</div>
+</div>
+
+<script>
+  // 生成星点
+  const sky = document.querySelector('.sky');
+  for (let i = 0; i < 60; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 70 + '%';
+    s.style.animationDelay = (Math.random() * 4) + 's';
+    s.style.animationDuration = (3 + Math.random() * 3) + 's';
+    if (Math.random() > 0.85) { s.style.width = '3px'; s.style.height = '3px'; }
+    sky.appendChild(s);
+  }
+
+  // 抽屉开合
+  const tab = document.getElementById('drawerTab');
+  const drawer = document.getElementById('drawer');
+  tab.addEventListener('click', () => {
+    const open = drawer.classList.toggle('open');
+    tab.classList.toggle('open', open);
+    tab.firstChild.textContent = open ? '收起数据底 ' : '数据底 · 这一周的痕迹 ';
+  });
+  // Esc 关闭
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && drawer.classList.contains('open')) {
+      drawer.classList.remove('open');
+      tab.classList.remove('open');
+      tab.firstChild.textContent = '数据底 · 这一周的痕迹 ';
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方向罗盘 · Compass</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #F4F1EC;
+    --bg-mid:  #FAF7F0;
+    --bg-soft: #ECE6DC;
+    --line:    #D8CFBF;
+    --steel:   #C8BCA8;
+    --blue:    #3E6E8C;
+    --blue-soft:#7BA7C4;
+    --gold:    #B89348;
+    --teal:    #4A7A78;
+    --crimson: #B05A4A;
+    --green:   #6A9A5C;
+    --ink:     #1A2E3D;
+    --ink-2:   rgba(26, 46, 61, 0.62);
+    --ink-3:   rgba(26, 46, 61, 0.4);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(123,167,196,0.1), transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(184,147,72,0.06), transparent 50%);
+  }
+
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px;
+    border-bottom:1px solid var(--line);
+    background:rgba(250,247,240,0.7);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:50%;
+    border:1.5px solid var(--blue);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:#fff;
+    box-shadow: 0 0 18px rgba(62,110,140,0.15) inset;
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--blue); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--steel); border-radius:3px;
+    transition: all .25s; background:#fff;
+  }
+  .exit:hover { color:var(--blue); border-color:var(--blue); }
+
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+    padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--gold); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 战略星盘 */
+  .astrolabe {
+    grid-row: span 2;
+    min-height: 580px;
+  }
+  .astrolabe-canvas {
+    width:100%; height:520px;
+    background:
+      radial-gradient(circle at center, #fff 0%, var(--bg-soft) 80%);
+    border:1px solid var(--steel);
+    border-radius:50%/4%;
+    position:relative;
+    box-shadow: inset 0 0 50px rgba(62,110,140,0.08);
+  }
+  .astrolabe-canvas svg { width:100%; height:100%; }
+  .ring { fill:none; stroke:rgba(62,110,140,0.25); stroke-dasharray:2 4; }
+  .ring-label {
+    font-family:var(--mono); font-size:8.5px; letter-spacing:0.25em;
+    fill:var(--blue); text-transform:uppercase;
+  }
+  .main-line {
+    fill: rgba(62,110,140,0.45); stroke: var(--blue); stroke-width:1.8;
+  }
+  .branch-line {
+    fill: rgba(184,147,72,0.4); stroke: var(--gold); stroke-width:1.2;
+  }
+  .drift {
+    fill: rgba(176,90,74,0.25); stroke: var(--crimson); stroke-width:1.2;
+    stroke-dasharray: 3 3;
+  }
+  .pointer {
+    stroke: var(--blue); stroke-width:2.5; stroke-linecap:round;
+    transform-origin: 300px 250px;
+    animation: needle 8s ease-in-out infinite;
+  }
+  @keyframes needle {
+    0%,100% { transform: rotate(-8deg); }
+    50% { transform: rotate(6deg); }
+  }
+  .astro-legend {
+    display:flex; gap:18px; margin-top:14px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:10px; color:var(--ink-2);
+  }
+  .legend-dot {
+    width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px;
+  }
+
+  /* ② 时间分配饼 */
+  .pie-row { display:grid; grid-template-columns: 160px 1fr; gap:18px; align-items:center; }
+  .pie-svg { width:160px; height:160px; }
+  .pie-info { font-size:12.5px; line-height:1.65; color:var(--ink-2); }
+  .pie-info b { color:var(--ink); font-weight:600; }
+  .pie-warn {
+    margin-top:10px; padding:8px 12px;
+    background:rgba(176,90,74,0.08); border-left:2px solid var(--crimson);
+    font-family:var(--serif); font-style:italic; font-size:13px; color:var(--ink);
+  }
+
+  /* ③ 漂移雷达 */
+  .drift-list { display:flex; flex-direction:column; gap:10px; }
+  .drift-card {
+    padding:11px 13px;
+    background:rgba(176,90,74,0.05);
+    border:1px solid var(--line);
+    border-left:3px solid var(--crimson);
+    border-radius:0 3px 3px 0;
+  }
+  .drift-card.warn { border-left-color: var(--gold); background:rgba(184,147,72,0.05); }
+  .drift-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;
+  }
+  .drift-name {
+    font-family:var(--serif); font-style:italic; font-size:13.5px; color:var(--ink);
+  }
+  .drift-val {
+    font-family:var(--mono); font-size:11px; color:var(--crimson); font-weight:600;
+  }
+  .warn .drift-val { color:var(--gold); }
+  .drift-text {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55;
+  }
+
+  /* ④ Project Atlas 大入口卡 */
+  .atlas-card {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, rgba(62,110,140,0.08) 0%, rgba(184,147,72,0.05) 100%);
+    border: 1px solid var(--blue);
+    border-radius: 6px;
+    padding: 28px 32px;
+    display:grid;
+    grid-template-columns: 1fr auto;
+    gap: 30px;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: all .3s;
+  }
+  .atlas-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -8px rgba(62,110,140,0.3);
+    border-color: var(--gold);
+  }
+  .atlas-card::before {
+    content:''; position:absolute; right:-40px; top:-40px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(62,110,140,0.12), transparent 70%);
+    pointer-events:none;
+  }
+  .atlas-tag {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.3em;
+    color:var(--blue); text-transform:uppercase; margin-bottom:8px;
+  }
+  .atlas-title {
+    font-family:var(--serif); font-style:italic; font-size:28px; font-weight:600;
+    color:var(--ink); margin-bottom:10px;
+    letter-spacing:-0.01em;
+  }
+  .atlas-sub {
+    font-size:14px; color:var(--ink-2); line-height:1.6; max-width:560px;
+  }
+  .atlas-stats {
+    display:flex; gap:24px; margin-top:18px;
+    font-family:var(--mono); font-size:11px;
+  }
+  .atlas-stat .v {
+    font-family:var(--serif); font-style:italic; font-size:22px; font-weight:600;
+    color:var(--blue); display:block; margin-bottom:2px;
+  }
+  .atlas-stat .v.alert { color:var(--crimson); }
+  .atlas-stat .v.ok { color:var(--green); }
+  .atlas-stat .k { color:var(--ink-3); letter-spacing:0.15em; text-transform:uppercase; }
+  .atlas-arrow {
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    border: 1.5px solid var(--blue);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 36px; color: var(--blue);
+    background: rgba(255,255,255,0.5);
+    transition: all .3s;
+    position: relative;
+    z-index: 2;
+  }
+  .atlas-card:hover .atlas-arrow {
+    background: var(--blue); color:#fff;
+    transform: rotate(-12deg);
+  }
+
+  /* ⑤ 一页纸摘要 */
+  .summary-paper {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 18px 22px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    position: relative;
+  }
+  .summary-paper::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+    background: var(--blue);
+  }
+  .summary-meta {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color:var(--ink-3); text-transform:uppercase; margin-bottom:8px;
+  }
+  .summary-title {
+    font-family:var(--serif); font-style:italic; font-size:17px; font-weight:600;
+    color:var(--ink); margin-bottom:12px; line-height:1.4;
+  }
+  .summary-body {
+    font-size:12.5px; line-height:1.65; color:var(--ink-2);
+  }
+  .summary-body p { margin-bottom:8px; }
+  .summary-body b { color:var(--ink); font-weight:600; }
+  .summary-body .pos { color:var(--green); font-weight:600; }
+  .summary-body .neg { color:var(--crimson); font-weight:600; }
+  .summary-foot {
+    margin-top:14px; padding-top:10px; border-top:1px dashed var(--line);
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .summary-foot a {
+    color:var(--blue); text-decoration:none; cursor:pointer;
+  }
+  .summary-foot a:hover { text-decoration:underline; }
+
+  /* ⑥ Tab */
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--line);
+    margin: -8px -24px 14px;
+    padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition: all .2s;
+  }
+  .tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+  .archive-list { display:flex; flex-direction:column; gap:11px; }
+  .archive-card {
+    padding:12px 14px;
+    background:rgba(62,110,140,0.05);
+    border:1px solid var(--line);
+    border-left:3px solid var(--blue);
+    border-radius:0 3px 3px 0;
+  }
+  .archive-card.minor { border-left-color: var(--steel); }
+  .archive-name {
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--ink);
+    margin-bottom:5px;
+  }
+  .archive-meta {
+    display:flex; gap:14px; font-family:var(--mono); font-size:10px;
+    color:var(--ink-3); letter-spacing:0.1em; text-transform:uppercase;
+  }
+  .archive-meta .v { color:var(--blue); }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .astrolabe { grid-row: span 1; }
+    .atlas-card { grid-template-columns: 1fr; }
+    .atlas-arrow { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">🧭</div>
+    <div>
+      <h1>Compass</h1>
+      <div class="crest-tag">internal · 方向 · 罗盘</div>
+    </div>
+  </div>
+  <div class="question">"我把时间花在战略主线上了吗 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 战略星盘 -->
+  <section class="block astrolabe">
+    <div class="block-head">
+      <span class="block-num">① astrolabe</span>
+      <span class="block-title">战略星盘 · 主线 / 支线 / 漂移</span>
+      <span class="block-meta">指针 = 本周注意力实际朝向</span>
+    </div>
+    <div class="astrolabe-canvas">
+      <svg viewBox="0 0 600 500">
+        <!-- 同心圆刻度 -->
+        <circle class="ring" cx="300" cy="250" r="60"/>
+        <circle class="ring" cx="300" cy="250" r="140"/>
+        <circle class="ring" cx="300" cy="250" r="220"/>
+        <text x="300" y="36" text-anchor="middle" class="ring-label">N · 主线</text>
+        <text x="568" y="254" text-anchor="middle" class="ring-label">E</text>
+        <text x="300" y="475" text-anchor="middle" class="ring-label">S · 漂移</text>
+        <text x="32"  y="254" text-anchor="middle" class="ring-label">W</text>
+
+        <!-- 8 条放射线 -->
+        <g stroke="rgba(62,110,140,0.1)" stroke-width="0.8">
+          <line x1="300" y1="50"  x2="300" y2="450"/>
+          <line x1="100" y1="250" x2="500" y2="250"/>
+          <line x1="158" y1="108" x2="442" y2="392"/>
+          <line x1="442" y1="108" x2="158" y2="392"/>
+        </g>
+
+        <!-- 主线项目(中心带,大) -->
+        <g>
+          <circle class="main-line" cx="300" cy="160" r="22"/>
+          <text x="300" y="165" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="12" fill="#fff">Halycon</text>
+          <text x="300" y="195" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--blue)">主线 · 35%</text>
+        </g>
+        <g>
+          <circle class="main-line" cx="380" cy="220" r="18"/>
+          <text x="380" y="224" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="11" fill="#fff">Beacon</text>
+          <text x="380" y="252" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--blue)">主线 · 18%</text>
+        </g>
+
+        <!-- 支线 -->
+        <g>
+          <circle class="branch-line" cx="220" cy="220" r="16"/>
+          <text x="220" y="224" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="11" fill="#5a4520">Stellar</text>
+          <text x="220" y="252" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--gold)">支线 · 22%</text>
+        </g>
+        <g>
+          <circle class="branch-line" cx="440" cy="160" r="14"/>
+          <text x="440" y="164" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="10.5" fill="#5a4520">Echo</text>
+          <text x="440" y="190" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--gold)">支线 · 8%</text>
+        </g>
+
+        <!-- 漂移项目(南边,虚线) -->
+        <g>
+          <circle class="drift" cx="280" cy="370" r="14"/>
+          <text x="280" y="374" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="11" fill="var(--crimson)">Crucible</text>
+          <text x="280" y="400" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--crimson)">漂移 · 11%</text>
+        </g>
+        <g>
+          <circle class="drift" cx="380" cy="380" r="12"/>
+          <text x="380" y="384" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="10.5" fill="var(--crimson)">Pyre</text>
+          <text x="380" y="408" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--crimson)">漂移 · 6%</text>
+        </g>
+
+        <!-- 中心罗盘 + 指针 -->
+        <circle cx="300" cy="250" r="32" fill="#fff" stroke="var(--blue)" stroke-width="1.8"/>
+        <text x="300" y="247" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="var(--ink-3)" letter-spacing="2">YOU</text>
+        <text x="300" y="261" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="11" fill="var(--blue)">陈汀</text>
+        <line class="pointer" x1="300" y1="250" x2="300" y2="170"/>
+        <circle cx="300" cy="250" r="4" fill="var(--blue)"/>
+      </svg>
+    </div>
+    <div class="astro-legend">
+      <div><span class="legend-dot" style="background:var(--blue)"></span>主线项目(N 极)</div>
+      <div><span class="legend-dot" style="background:var(--gold)"></span>支线(E/W)</div>
+      <div><span class="legend-dot" style="background:var(--crimson); border:1px dashed var(--crimson)"></span>漂移(S 极)</div>
+    </div>
+  </section>
+
+  <!-- ② 时间分配饼 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② time pie</span>
+      <span class="block-title">时间分配 · 战略主线 vs 救火</span>
+      <span class="block-meta">本周 · 38h 实测</span>
+    </div>
+    <div class="pie-row">
+      <svg class="pie-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="42" fill="#fff" stroke="var(--line)" stroke-width="1"/>
+        <!-- 主线 53% -->
+        <path d="M 50 50 L 50 8 A 42 42 0 0 1 91.6 60.85 Z" fill="rgba(62,110,140,0.6)"/>
+        <!-- 支线 30% -->
+        <path d="M 50 50 L 91.6 60.85 A 42 42 0 0 1 38 90.5 Z" fill="rgba(184,147,72,0.55)"/>
+        <!-- 救火 17% -->
+        <path d="M 50 50 L 38 90.5 A 42 42 0 0 1 50 8 Z" fill="rgba(176,90,74,0.55)"/>
+        <circle cx="50" cy="50" r="22" fill="var(--bg-mid)"/>
+        <text x="50" y="48" text-anchor="middle" font-family="var(--serif)" font-style="italic" font-size="10" fill="var(--ink)">38h</text>
+        <text x="50" y="60" text-anchor="middle" font-family="var(--mono)" font-size="5" fill="var(--ink-3)" letter-spacing="1">本周</text>
+      </svg>
+      <div class="pie-info">
+        <b>主线 53%</b>(Halycon + Beacon)<br/>
+        <b>支线 30%</b>(Stellar 尽调)<br/>
+        <b style="color:var(--crimson);">救火 17%</b>(Crucible / Pyre)
+        <div class="pie-warn">
+          上周救火 <b>9%</b> → 本周 <b>17%</b>。Crucible 创始人失联拉走太多注意力 — 该按"3 周失联法则"处理。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 漂移雷达 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">③ drift radar</span>
+      <span class="block-title">本周漂移 · 偏离了哪些主线</span>
+      <span class="block-meta">基于 belief-drift 轴</span>
+    </div>
+    <div class="drift-list">
+      <div class="drift-card" data-forge-ref="r-crucible-cag">
+        <div class="drift-head">
+          <span class="drift-name">Crucible 救火</span>
+          <span class="drift-val">+8% ↑</span>
+        </div>
+        <div class="drift-text">原本只占 3% 注意力,本周冲到 11% — 主线被稀释</div>
+      </div>
+      <div class="drift-card warn" data-forge-ref="r-stellar-bc">
+        <div class="drift-head">
+          <span class="drift-name">Stellar 估值反复</span>
+          <span class="drift-val">+5% →</span>
+        </div>
+        <div class="drift-text">分歧未结晶,会议时长第三周连续上升</div>
+      </div>
+      <div class="drift-card warn">
+        <div class="drift-head">
+          <span class="drift-name">LP 沟通延迟</span>
+          <span class="drift-val">未出现 ⊘</span>
+        </div>
+        <div class="drift-text">林雾 3 次问退出路径,本周仍未排进议程</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ Project Atlas 大入口 -->
+  <a class="atlas-card" href="project-atlas.html">
+    <div>
+      <div class="atlas-tag">→ 项目侧切片 · sub-room</div>
+      <div class="atlas-title">进入 Project Atlas · 项目阿特拉斯</div>
+      <div class="atlas-sub">
+        从"方向"切到"项目":每个项目作为星体,看哪个最危险、哪个该停、哪个该加注。
+        星图 / 濒危看板 / 里程碑长河 / 决策回声 / 张力网格 / 救活 vs 安乐死。
+      </div>
+      <div class="atlas-stats">
+        <div class="atlas-stat">
+          <span class="v">8</span>
+          <span class="k">活跃项目</span>
+        </div>
+        <div class="atlas-stat">
+          <span class="v alert">2</span>
+          <span class="k">危险</span>
+        </div>
+        <div class="atlas-stat">
+          <span class="v" style="color:var(--gold)">3</span>
+          <span class="k">预警</span>
+        </div>
+        <div class="atlas-stat">
+          <span class="v ok">2</span>
+          <span class="k">健康</span>
+        </div>
+      </div>
+    </div>
+    <div class="atlas-arrow">→</div>
+  </a>
+
+  <!-- ⑤ 一页纸摘要 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">⑤ one-pager</span>
+      <span class="block-title">本周战略快照 · 一页纸</span>
+      <span class="block-meta">自动生成 · 可导出</span>
+    </div>
+    <div class="summary-paper">
+      <div class="summary-meta">2026-04-25 ~ 05-01 · 自动汇编自 6 场会议</div>
+      <div class="summary-title">主线整体在轨,但 Stellar 的尽调拖累了节奏,Crucible 该宣判</div>
+      <div class="summary-body">
+        <p><b>方向对齐度 0.72</b>(<span class="pos">+0.04</span>)— 主线占用 53% 时间,符合预期(目标 50–60%)。</p>
+        <p><b>三件该决定的事:</b> ① Crucible 是否官方暂停;② Stellar 估值分歧是否升级为尽调标准;③ 林雾的退出路径问题排进下次议程。</p>
+        <p><b>一句话警告:</b> <span class="neg">救火占比从 9% → 17%</span>,如果再不宣判 Crucible,下周可能突破 20% 阈值。</p>
+      </div>
+      <div class="summary-foot">
+        <span>SOURCES · 6 meetings · 12 readings · 2 laws applied</span>
+        <a>→ 导出 PDF</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ Tab · 主线档案 / 漂移记录 -->
+  <section class="block" style="grid-column: 1 / -1;">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">⑥ archives</span>
+      <span class="block-title">战略档案</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="main">📚 主线档案</div>
+      <div class="tab" data-tab="drift">📜 漂移记录</div>
+    </div>
+
+    <div class="tab-pane" id="pane-main">
+      <div class="archive-list">
+        <div class="archive-card">
+          <div class="archive-name">主线 A · "投资基础设施层(infra)"</div>
+          <div class="archive-meta">
+            <span>立 2024-08</span>
+            <span class="v">23 个项目相关</span>
+            <span>对齐度 0.84</span>
+          </div>
+        </div>
+        <div class="archive-card">
+          <div class="archive-name">主线 B · "亚洲 + 北美双核团队"</div>
+          <div class="archive-meta">
+            <span>立 2025-03</span>
+            <span class="v">12 个决策相关</span>
+            <span>对齐度 0.71</span>
+          </div>
+        </div>
+        <div class="archive-card minor">
+          <div class="archive-name">主线 C · "Q3 起建立 LP 反馈闭环"</div>
+          <div class="archive-meta">
+            <span>立 2026-01</span>
+            <span class="v">4 次提及</span>
+            <span style="color:var(--crimson);">对齐度 0.41 ↓</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-drift" style="display:none;">
+      <div class="archive-list">
+        <div class="archive-card" style="border-left-color: var(--crimson);">
+          <div class="archive-name">04-22 · Crucible 救火占用 73 分钟,挤掉原定 LP 议题</div>
+          <div class="archive-meta"><span>已记录</span><span>未补救</span></div>
+        </div>
+        <div class="archive-card" style="border-left-color: var(--gold);">
+          <div class="archive-name">04-12 · Stellar 估值分歧持续 49 分钟,未达成结论</div>
+          <div class="archive-meta"><span>已记录</span><span>已建议升级为尽调标准</span></div>
+        </div>
+        <div class="archive-card" style="border-left-color: var(--steel);">
+          <div class="archive-name">04-05 · 林雾的退出路径问题被推迟到下一次</div>
+          <div class="archive-meta"><span>已记录</span><span>已连续 3 周</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="forge-registry.js"></script>
+<script>
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-main').style.display  = which==='main'  ? '' : 'none';
+      document.getElementById('pane-drift').style.display = which==='drift' ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>
