@@ -440,28 +440,50 @@ function MeetingCard({ m, active, onClick, onOpen, groupName, draggable }: {
   draggable?: boolean;
 }) {
   const [isDragging, setIsDragging] = useState(false);
+  // 改用 div + role=button 包裹: 部分浏览器（含 Safari/某些 Chrome 配置）对
+  // <button draggable> 的 dragstart 事件触发不可靠, 用 div 最稳。
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
       onDoubleClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onClick();
+        else if (e.key === ' ') { e.preventDefault(); onClick(); }
+      }}
       draggable={draggable}
       onDragStart={draggable ? (e) => {
-        e.dataTransfer.effectAllowed = 'link';
+        e.dataTransfer.effectAllowed = 'linkMove';
         e.dataTransfer.setData('application/x-meeting-id', m.id);
         e.dataTransfer.setData('text/plain', m.id);
         setIsDragging(true);
       } : undefined}
       onDragEnd={draggable ? () => setIsDragging(false) : undefined}
-      title={draggable ? '单击预览 · 双击打开 · 拖到左侧分组节点可绑定' : '单击预览 · 双击打开 Editorial 视图'}
+      title={draggable ? '⋮⋮ 拖到左侧分组节点绑定 · 单击预览 · 双击打开' : '单击预览 · 双击打开 Editorial 视图'}
       style={{
-      textAlign: 'left', background: 'var(--paper)',
-      border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
-      borderRadius: 8, padding: '14px 16px', cursor: draggable ? 'grab' : 'pointer',
-      display: 'flex', flexDirection: 'column', gap: 10,
-      boxShadow: active ? '0 0 0 3px var(--accent-soft)' : 'none',
-      fontFamily: 'var(--sans)', color: 'var(--ink)',
-      opacity: isDragging ? 0.4 : 1,
-    }}>
+        position: 'relative',
+        textAlign: 'left', background: 'var(--paper)',
+        border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
+        borderRadius: 8, padding: '14px 16px', cursor: draggable ? 'grab' : 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 10,
+        boxShadow: active ? '0 0 0 3px var(--accent-soft)' : 'none',
+        fontFamily: 'var(--sans)', color: 'var(--ink)',
+        opacity: isDragging ? 0.4 : 1,
+        userSelect: draggable ? 'none' : 'auto',  // 拖拽时不闪烁选区
+      }}
+    >
+      {/* 显式拖拽手柄 — 让用户知道这张卡可以拖 */}
+      {draggable && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', top: 6, right: 6,
+            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)',
+            letterSpacing: -1, lineHeight: 1, userSelect: 'none', pointerEvents: 'none',
+          }}
+        >⋮⋮</div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <MonoMeta>{m.date}</MonoMeta>
         <Chip tone="ghost" style={{ fontSize: 10, padding: '1px 6px' }}>{m.preset}</Chip>
@@ -487,7 +509,7 @@ function MeetingCard({ m, active, onClick, onOpen, groupName, draggable }: {
         <MiniStat icon="git"   color="var(--teal)"          v={m.divergence} label="分歧" />
         {m.status === 'draft' && <Chip tone="amber" style={{ marginLeft: 'auto' }}>草稿</Chip>}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -516,6 +538,189 @@ function StatBox({ label, v, tone }: { label: string; v: number; tone: 'accent' 
 }
 
 type PreviewAction = 'view-a' | 'view-b' | 'view-c' | 'move' | 'export' | 'archive' | 'unarchive' | 'delete';
+
+// ── MoveToScopeModal ────────────────────────────────────────────────────────
+// 替代 window.prompt 的「移动到其他分组」UI
+function MoveToScopeModal({
+  meeting, tree, currentScopeId, groupKindLabel, busy,
+  onBind, onUnbind, onClose,
+}: {
+  meeting: Meeting;
+  tree: TreeNode[];
+  currentScopeId: string | null;
+  groupKindLabel: string;
+  busy: boolean;
+  onBind: (scopeId: string) => void;
+  onUnbind: () => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  // 把 tree 拍平成 [{node, depth}] 便于过滤显示
+  type FlatRow = { node: TreeNode; depth: number };
+  const flat = useMemo(() => {
+    const out: FlatRow[] = [];
+    const walk = (nodes: TreeNode[], depth: number) => {
+      for (const n of nodes) {
+        out.push({ node: n, depth });
+        if (n.children) walk(n.children, depth + 1);
+      }
+    };
+    walk(tree, 0);
+    return out;
+  }, [tree]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q.length === 0 ? flat : flat.filter((r) => r.node.name.toLowerCase().includes(q));
+
+  // ESC 关闭
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 80,
+        background: 'rgba(0,0,0,0.32)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24, fontFamily: 'var(--sans)',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 460, maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+          background: 'var(--paper)', border: '1px solid var(--line)',
+          borderRadius: 10, boxShadow: '0 16px 48px -12px rgba(0,0,0,0.32)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: '14px 18px 10px', borderBottom: '1px solid var(--line-2)' }}>
+          <SectionLabel>移动到 {groupKindLabel}</SectionLabel>
+          <div style={{
+            fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600,
+            color: 'var(--ink)', marginTop: 6, lineHeight: 1.35,
+            overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2,
+          }}>
+            {meeting.title}
+          </div>
+          {currentScopeId && (
+            <div style={{
+              marginTop: 8, padding: '6px 10px',
+              background: 'var(--accent-soft)', border: '1px solid oklch(0.85 0.07 40)',
+              borderRadius: 5, display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'oklch(0.32 0.1 40)',
+            }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 0.3 }}>当前</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {findNode(tree, currentScopeId)?.name ?? currentScopeId}
+              </span>
+              <button
+                onClick={onUnbind}
+                disabled={busy}
+                style={{
+                  border: '1px solid oklch(0.85 0.07 40)', background: 'var(--paper)',
+                  color: 'oklch(0.4 0.12 40)', padding: '2px 8px', borderRadius: 99,
+                  fontSize: 11, cursor: busy ? 'not-allowed' : 'pointer',
+                  opacity: busy ? 0.5 : 1, fontFamily: 'var(--sans)',
+                }}
+                title="解除当前 scope 绑定（不删除会议）"
+              >× 解除绑定</button>
+            </div>
+          )}
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-2)' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+            borderRadius: 6, padding: '6px 10px',
+          }}>
+            <Icon name="search" size={12} style={{ color: 'var(--ink-3)' }} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`搜索${groupKindLabel}…`}
+              style={{
+                flex: 1, border: 0, background: 'transparent',
+                fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--sans)', outline: 'none',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Scope list */}
+        <div style={{ overflowY: 'auto', padding: '8px 12px', flex: 1 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '16px 8px', textAlign: 'center', fontSize: 12, color: 'var(--ink-4)' }}>
+              {flat.length === 0 ? '暂无可用分组 · 请先在左栏新建' : '无匹配项'}
+            </div>
+          )}
+          {filtered.map(({ node, depth }) => {
+            const isCurrent = node.id === currentScopeId;
+            const disabled = busy || isCurrent;
+            return (
+              <button
+                key={node.id}
+                onClick={() => !disabled && onBind(node.id)}
+                disabled={disabled}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  padding: '7px 10px', paddingLeft: 10 + depth * 14,
+                  border: 0, borderRadius: 5,
+                  background: isCurrent ? 'var(--accent-soft)' : 'transparent',
+                  color: isCurrent ? 'oklch(0.4 0.1 40)' : 'var(--ink-2)',
+                  cursor: disabled ? 'default' : 'pointer',
+                  fontSize: 12.5, fontFamily: 'var(--sans)', textAlign: 'left',
+                  margin: '1px 0',
+                }}
+                onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--paper-2)'; }}
+                onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Dot color={dotColor[node.color ?? 'ghost']} size={6} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {node.name}
+                </span>
+                {isCurrent && (
+                  <MonoMeta style={{ fontSize: 9.5, color: 'oklch(0.4 0.1 40)' }}>当前</MonoMeta>
+                )}
+                {!isCurrent && (
+                  <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '10px 18px', borderTop: '1px solid var(--line-2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'var(--paper-2)',
+        }}>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+            💡 也可以把卡片拖到左侧分组节点
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              border: '1px solid var(--line)', background: 'var(--paper)',
+              padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
+              fontSize: 12, color: 'var(--ink-2)', fontFamily: 'var(--sans)',
+            }}
+          >取消</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PreviewPanel({ m, tree, groupBy, onAction, busy }: {
   m: Meeting; tree: TreeNode[]; groupBy: GroupKey;
@@ -821,6 +1026,8 @@ export function Library() {
   }
 
   const [busyAction, setBusyAction] = useState<PreviewAction | null>(null);
+  // 移动到分组的 modal: 非 null 时显示
+  const [moveModalMeeting, setMoveModalMeeting] = useState<Meeting | null>(null);
 
   // ── Scope CRUD ────────────────────────────────────────────────────────────
   const slugify = (s: string): string => {
@@ -850,12 +1057,28 @@ export function Library() {
       reloadScopes();
     } catch (e: any) { alert(`创建失败：${e?.message ?? e}`); }
   };
-  // 拖拽落到 scope 上 → bind meeting；已绑定时静默跳过
+  // 拖拽落到 scope 上 → bind meeting；已绑定时静默跳过；非 UUID 给明确提示
   const handleDropMeeting = async (meetingId: string, scopeId: string) => {
-    if (forceMock) return;
-    if (!UUID_RE.test(meetingId) || !UUID_RE.test(scopeId)) return;
+    if (forceMock) {
+      alert('Mock 模式不支持拖拽绑定 · 切到 API 模式（右下角开关）后重试');
+      return;
+    }
+    if (!UUID_RE.test(scopeId)) {
+      alert(
+        '这个分组节点是占位示例（数据库里没有真实记录），不能绑定。\n\n' +
+        '请先在左侧用「+」按钮新建一个真实分组，再把会议拖过去。',
+      );
+      return;
+    }
+    if (!UUID_RE.test(meetingId)) {
+      alert('这个会议是 mock 示例，不在数据库里，不支持拖拽绑定');
+      return;
+    }
     const meet = (apiMeetings ?? []).find((x) => x.id === meetingId);
-    if (meet && meet.groups[groupBy] === scopeId) return;
+    if (meet && meet.groups[groupBy] === scopeId) {
+      // 已绑定: 视觉上无操作即可
+      return;
+    }
     try {
       await meetingNotesApi.bindMeeting(scopeId, meetingId, '由 library 拖拽');
       const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
@@ -917,49 +1140,8 @@ export function Library() {
     }
     try {
       if (action === 'move') {
-        if (!apiScopes) {
-          alert('未拉到 mn_scopes 列表 · 重启 api 后重试');
-          return;
-        }
-        const list = apiScopes[groupBy] ?? [];
-        if (list.length === 0) {
-          alert(`当前 ${groupBy} 维度没有可选分组 · 先在左栏 + 新建一个`);
-          return;
-        }
-        const currentScopeId = m.groups[groupBy];
-        const optionsText = list
-          .map((s, i) => `${i + 1}. ${s.name}${s.id === currentScopeId ? '  (当前)' : ''}`)
-          .join('\n');
-        const ans = window.prompt(
-          `移动会议「${m.title}」到 ${groupBy} 分组：\n\n` +
-          `💡 也可以直接把卡片拖到左侧分组节点 (推荐)\n\n` +
-          `${optionsText}\n\n输入序号 1-${list.length}，输入 0 取消所有 ${groupBy} 绑定。`,
-        );
-        if (ans === null) return;
-        const trimmed = ans.trim();
-        if (trimmed === '0') {
-          if (currentScopeId && UUID_RE.test(currentScopeId)) {
-            setBusyAction('move');
-            await meetingNotesApi.unbindScope(currentScopeId, m.id);
-          }
-        } else {
-          const idx = parseInt(trimmed, 10) - 1;
-          if (Number.isNaN(idx) || idx < 0 || idx >= list.length) {
-            alert('序号无效');
-            return;
-          }
-          const target = list[idx];
-          if (target.id === currentScopeId) return;
-          setBusyAction('move');
-          if (currentScopeId && UUID_RE.test(currentScopeId)) {
-            // 后端目前没有「换绑」语义 · 先解再绑
-            try { await meetingNotesApi.unbindScope(currentScopeId, m.id); } catch { /* 旧绑定不存在也继续 */ }
-          }
-          await meetingNotesApi.bindMeeting(target.id, m.id, '由 library 手动移动');
-        }
-        // 重新拉 meetings 拿最新 scope_bindings
-        const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
-        setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
+        // 打开 modal — 替代 window.prompt UX；实际 bind/unbind 由 modal 回调里走
+        setMoveModalMeeting(m);
         return;
       }
       if (action === 'archive') {
@@ -982,6 +1164,51 @@ export function Library() {
       }
     } catch (e: any) {
       alert(`操作失败：${e?.message ?? e}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // MoveToScopeModal 回调：bind / unbind / 关闭 + 重拉 meetings
+  const reloadMeetings = async () => {
+    const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
+    setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
+  };
+  const handleModalBind = async (scopeId: string) => {
+    const meet = moveModalMeeting;
+    if (!meet) return;
+    const currentScopeId = meet.groups[groupBy];
+    if (scopeId === currentScopeId) { setMoveModalMeeting(null); return; }
+    try {
+      setBusyAction('move');
+      // 先解再绑（后端无原子换绑接口）
+      if (currentScopeId && UUID_RE.test(currentScopeId)) {
+        try { await meetingNotesApi.unbindScope(currentScopeId, meet.id); } catch { /* 旧绑可能不存在 */ }
+      }
+      await meetingNotesApi.bindMeeting(scopeId, meet.id, '由 library modal 移动');
+      await reloadMeetings();
+      setMoveModalMeeting(null);
+    } catch (e: any) {
+      alert(`绑定失败：${e?.message ?? e}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+  const handleModalUnbind = async () => {
+    const meet = moveModalMeeting;
+    if (!meet) return;
+    const currentScopeId = meet.groups[groupBy];
+    if (!currentScopeId || !UUID_RE.test(currentScopeId)) {
+      setMoveModalMeeting(null);
+      return;
+    }
+    try {
+      setBusyAction('move');
+      await meetingNotesApi.unbindScope(currentScopeId, meet.id);
+      await reloadMeetings();
+      setMoveModalMeeting(null);
+    } catch (e: any) {
+      alert(`解绑失败：${e?.message ?? e}`);
     } finally {
       setBusyAction(null);
     }
@@ -1301,6 +1528,22 @@ export function Library() {
           {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} busy={busyAction} />}
         </aside>
       </div>
+
+      {/* Move-to-scope modal — 替代 window.prompt */}
+      {moveModalMeeting && (
+        <MoveToScopeModal
+          meeting={moveModalMeeting}
+          tree={tree}
+          currentScopeId={moveModalMeeting.groups[groupBy] && UUID_RE.test(moveModalMeeting.groups[groupBy])
+            ? moveModalMeeting.groups[groupBy]
+            : null}
+          groupKindLabel={groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}
+          busy={busyAction === 'move'}
+          onBind={handleModalBind}
+          onUnbind={handleModalUnbind}
+          onClose={() => setMoveModalMeeting(null)}
+        />
+      )}
     </div>
   );
 }
