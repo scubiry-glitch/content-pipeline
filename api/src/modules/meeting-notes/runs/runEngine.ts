@@ -2139,6 +2139,73 @@ export class RunEngine {
             data: snapshot,
           });
         }
+
+        // Multi-meeting finalize（scope=library/project/client/topic + axis='all' 路径专属）
+        // schedule 月度跑的就是这条；之前只跑了 axis computers 写 mn_* 表，
+        // 但 metadata.analysis / wiki .md 文件都没更新 → 文档陈旧。
+        // 这里补：每场会议合成 ANALYSIS + 持久化；再调用 axes/scope wiki generator。
+        if (!payload.meetingId) {
+          let allMeetingIds: string[] = [];
+          try {
+            allMeetingIds = await this.collectMeetingIdsForScope(payload);
+          } catch (e) {
+            console.warn('[runEngine] multi-meeting finalize · collect ids failed:', (e as Error).message);
+          }
+          if (allMeetingIds.length > 0) {
+            await writeStep('render', 0.85, `多会议收尾 · 合成 ANALYSIS（${allMeetingIds.length} 场）…`);
+            let composeOk = 0;
+            let composeSkipped = 0;
+            let composeFailed = 0;
+            for (const mid of allMeetingIds) {
+              try {
+                const analysis = await composeAnalysisFromAxes(this.deps.db, mid, payload.runId);
+                const wrote = await persistAnalysisToAsset(this.deps.db, mid, analysis);
+                if (wrote === 'written') composeOk += 1;
+                else if (wrote === 'skipped-manual') composeSkipped += 1;
+                else composeFailed += 1;
+              } catch (e) {
+                composeFailed += 1;
+                console.warn(`[runEngine] multi-meeting compose failed · ${mid.slice(0,8)}:`, (e as Error).message);
+              }
+            }
+            console.log(`[runEngine] multi-meeting compose: ok=${composeOk} skipManual=${composeSkipped} fail=${composeFailed} (of ${allMeetingIds.length})`);
+
+            // Wiki .md 文件（与 claude-cli/oneshot 路径同款）— 全量重生 axes/* + scopes/*
+            await writeStep('render', 0.92, '触发 MeetingAxesGenerator (axes/* .md)');
+            try {
+              const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
+              const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+              const ag = new MeetingAxesGenerator(this.deps);
+              const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+              console.log(`[runEngine] multi-meeting MeetingAxesGenerator: ${r.filesWritten} files (${r.durationMs}ms)`);
+            } catch (e) {
+              console.warn('[runEngine] multi-meeting MeetingAxesGenerator failed:', (e as Error).message);
+            }
+
+            await writeStep('render', 0.96, '触发 MeetingScopeGenerator (scopes/* .md)');
+            try {
+              const { MeetingScopeGenerator } = await import('../wiki/meetingScopeGenerator.js');
+              const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+              const sg = new MeetingScopeGenerator(this.deps);
+              const wikiRoot = resolveWikiRoot();
+              // 拿当前 run 涉及的所有 scopes（任一会议属于哪些 scope 都重生一遍 _index.md）
+              const scopesR = await this.deps.db.query(
+                `SELECT DISTINCT scope_id::text AS scope_id
+                   FROM mn_scope_members
+                  WHERE meeting_id::text = ANY($1::text[])`,
+                [allMeetingIds],
+              );
+              let totalFiles = 0;
+              for (const row of scopesR.rows) {
+                const r = await sg.generate({ wikiRoot, scopeId: row.scope_id });
+                totalFiles += r.filesWritten;
+              }
+              console.log(`[runEngine] multi-meeting MeetingScopeGenerator: ${scopesR.rows.length} scopes / ${totalFiles} files`);
+            } catch (e) {
+              console.warn('[runEngine] multi-meeting MeetingScopeGenerator failed:', (e as Error).message);
+            }
+          }
+        }
       });
       });
       } // end of multi-axis else branch
