@@ -203,7 +203,10 @@ function folderRowStyle(active: boolean): CSSProperties {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onCommitRename, onDelete }: {
+function FolderNode({
+  node, active, onSelect, onRename, renaming, depth = 0, onCommitRename, onDelete,
+  onDropMeeting, onAddChild, addingChildId, onCommitAddChild, onCancelAddChild,
+}: {
   node: TreeNode;
   active: string | null;
   onSelect: (id: string) => void;
@@ -214,15 +217,46 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onC
   onCommitRename?: (id: string, newName: string) => void;
   /** 悬停时显示的删除按钮回调 */
   onDelete?: (node: TreeNode) => void;
+  /** 拖拽落点：把 meetingId 绑到 node.id 这个 scope 上 */
+  onDropMeeting?: (meetingId: string, scopeId: string) => void;
+  /** 在该 node 下新建子分组（hover 时显示「+ 子」按钮触发） */
+  onAddChild?: (parentId: string) => void;
+  /** 当前正在该 node 下显示创建子分组 inline 表单的 id */
+  addingChildId?: string | null;
+  /** 提交内联创建子分组（提供 newName） */
+  onCommitAddChild?: (parentId: string, newName: string) => void;
+  /** 取消内联创建 */
+  onCancelAddChild?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [hover, setHover] = useState(false);
+  const [dragHover, setDragHover] = useState(false);
   const isActive = active === node.id;
+  const isAddingHere = addingChildId === node.id;
+  const dropEnabled = !!onDropMeeting;
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <button onClick={() => onSelect(node.id)} style={{
-        ...folderRowStyle(isActive), paddingLeft: 8 + depth * 14,
-      }}>
+      <button
+        onClick={() => onSelect(node.id)}
+        onDragOver={dropEnabled ? (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'link';
+          setDragHover(true);
+        } : undefined}
+        onDragLeave={dropEnabled ? () => setDragHover(false) : undefined}
+        onDrop={dropEnabled ? (e) => {
+          e.preventDefault();
+          setDragHover(false);
+          const mid = e.dataTransfer.getData('application/x-meeting-id');
+          if (mid) onDropMeeting(mid, node.id);
+        } : undefined}
+        style={{
+          ...folderRowStyle(isActive), paddingLeft: 8 + depth * 14,
+          ...(dragHover ? {
+            outline: '2px solid var(--accent)', outlineOffset: -2,
+            background: 'var(--accent-soft)',
+          } : {}),
+        }}>
         {node.children ? (
           <span onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
             style={{ display: 'flex', cursor: 'pointer', color: 'var(--ink-3)' }}>
@@ -261,8 +295,21 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onC
             title="双击改名"
           >{node.name}</span>
         )}
-        {hover && (onCommitRename || onDelete) && renaming !== node.id ? (
+        {hover && (onCommitRename || onDelete || onAddChild) && renaming !== node.id ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {onAddChild && (
+              <span
+                role="button"
+                title={`在「${node.name}」下新建子分组`}
+                onClick={(e) => { e.stopPropagation(); setOpen(true); onAddChild(node.id); }}
+                style={{
+                  cursor: 'pointer', color: 'var(--ink-4)',
+                  padding: '0 4px', fontSize: 13, lineHeight: 1, fontFamily: 'var(--sans)',
+                }}
+              >
+                ＋
+              </span>
+            )}
             {onCommitRename && (
               <span
                 role="button"
@@ -291,15 +338,84 @@ function FolderNode({ node, active, onSelect, onRename, renaming, depth = 0, onC
           <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
         )}
       </button>
+      {/* 子分组创建内联表单（替代 window.prompt） */}
+      {isAddingHere && onCommitAddChild && (
+        <InlineCreateScope
+          parentName={node.name}
+          paddingLeft={28 + depth * 14}
+          onSubmit={(name) => onCommitAddChild(node.id, name)}
+          onCancel={() => onCancelAddChild?.()}
+        />
+      )}
       {node.children && open && (
         <div>
           {node.children.map(c => (
             <FolderNode key={c.id} node={c} active={active} onSelect={onSelect}
               onRename={onRename} renaming={renaming} depth={depth + 1}
-              onCommitRename={onCommitRename} onDelete={onDelete} />
+              onCommitRename={onCommitRename} onDelete={onDelete}
+              onDropMeeting={onDropMeeting}
+              onAddChild={onAddChild}
+              addingChildId={addingChildId}
+              onCommitAddChild={onCommitAddChild}
+              onCancelAddChild={onCancelAddChild}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// 内联创建分组（替代 window.prompt UX）— 顶层 / 子层共用
+function InlineCreateScope({
+  parentName, paddingLeft, onSubmit, onCancel,
+}: {
+  parentName?: string;
+  paddingLeft: number;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState('');
+  return (
+    <div style={{
+      paddingLeft, paddingRight: 6, paddingTop: 4, paddingBottom: 4,
+    }}>
+      {parentName && (
+        <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 3 }}>
+          在 <span style={{ color: 'var(--ink-3)' }}>{parentName}</span> 下
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <input
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { const v = val.trim(); if (v) onSubmit(v); }
+            if (e.key === 'Escape') onCancel();
+          }}
+          placeholder="子分组名称"
+          style={{
+            flex: 1, padding: '3px 6px', border: '1px solid var(--accent)', borderRadius: 3,
+            fontSize: 12, fontFamily: 'var(--sans)', outline: 'none', background: 'var(--paper)',
+          }}
+        />
+        <button
+          onClick={() => { const v = val.trim(); if (v) onSubmit(v); }}
+          disabled={!val.trim()}
+          style={{
+            padding: '3px 8px', fontSize: 11, border: '1px solid var(--ink)',
+            background: val.trim() ? 'var(--ink)' : 'var(--paper)',
+            color: val.trim() ? 'var(--paper)' : 'var(--ink-4)',
+            borderRadius: 3, cursor: val.trim() ? 'pointer' : 'not-allowed',
+          }}
+        >建</button>
+        <button
+          onClick={onCancel}
+          style={{ padding: '3px 4px', border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 11 }}
+          title="取消"
+        >×</button>
+      </div>
     </div>
   );
 }
@@ -318,17 +434,33 @@ function MiniStat({ icon, color, v, label }: { icon: IconName; color: string; v:
   );
 }
 
-function MeetingCard({ m, active, onClick, onOpen, groupName }: {
+function MeetingCard({ m, active, onClick, onOpen, groupName, draggable }: {
   m: Meeting; active: boolean; onClick: () => void; onOpen: () => void; groupName: string;
+  /** 是否允许拖拽到左侧分组节点（API 模式 + UUID id 才开启） */
+  draggable?: boolean;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   return (
-    <button onClick={onClick} onDoubleClick={onOpen} title="单击预览 · 双击打开 Editorial 视图" style={{
+    <button
+      onClick={onClick}
+      onDoubleClick={onOpen}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => {
+        e.dataTransfer.effectAllowed = 'link';
+        e.dataTransfer.setData('application/x-meeting-id', m.id);
+        e.dataTransfer.setData('text/plain', m.title);
+        setIsDragging(true);
+      } : undefined}
+      onDragEnd={draggable ? () => setIsDragging(false) : undefined}
+      title={draggable ? '单击预览 · 双击打开 · 拖到左侧分组节点可绑定' : '单击预览 · 双击打开 Editorial 视图'}
+      style={{
       textAlign: 'left', background: 'var(--paper)',
       border: active ? '1px solid var(--accent)' : '1px solid var(--line-2)',
-      borderRadius: 8, padding: '14px 16px', cursor: 'pointer',
+      borderRadius: 8, padding: '14px 16px', cursor: draggable ? 'grab' : 'pointer',
       display: 'flex', flexDirection: 'column', gap: 10,
       boxShadow: active ? '0 0 0 3px var(--accent-soft)' : 'none',
       fontFamily: 'var(--sans)', color: 'var(--ink)',
+      opacity: isDragging ? 0.4 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <MonoMeta>{m.date}</MonoMeta>
@@ -523,7 +655,13 @@ export function Library() {
   const [scopesOk, setScopesOk] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   // Scopes by kind · API 优先；空/失败 → fallback 到 GROUP_TREES fixture
-  type ApiScope = { id: string; kind: 'project' | 'client' | 'topic'; slug: string; name: string; status?: string };
+  // parentScopeId / parent_scope_id 兼容后端 camelCase + snake_case
+  type ApiScope = {
+    id: string; kind: 'project' | 'client' | 'topic'; slug: string; name: string;
+    status?: string;
+    parentScopeId?: string | null;
+    parent_scope_id?: string | null;
+  };
   const [apiScopes, setApiScopes] = useState<Record<GroupKey, ApiScope[]> | null>(null);
   const [scopeReloadTick, setScopeReloadTick] = useState(0);
   useEffect(() => {
@@ -569,8 +707,8 @@ export function Library() {
   const isMock = forceMock || apiState === 'error';
   const isLoading = !forceMock && apiState === 'loading';
 
-  // 树结构：API 模式由 mn_scopes 拼，节点 count 用 apiMeetings.scope_bindings 实时聚合；
-  // 否则回 GROUP_TREES fixture（mock / error / 接口空都走这）
+  // 树结构：API 模式按 parent_scope_id 拼成多级树（支持二级项目），
+  // 节点 count 用 apiMeetings.scope_bindings 实时聚合；否则回 GROUP_TREES fixture
   const tree: TreeNode[] = useMemo(() => {
     if (apiScopes && apiScopes[groupBy]?.length) {
       const counts = new Map<string, number>();
@@ -579,12 +717,38 @@ export function Library() {
         if (gid) counts.set(gid, (counts.get(gid) ?? 0) + 1);
       }
       const colorPool: ColorKey[] = ['accent', 'teal', 'amber', 'ghost'];
-      return apiScopes[groupBy].map((s, i) => ({
-        id: s.id,
-        name: s.name,
-        color: colorPool[i % colorPool.length],
-        count: counts.get(s.id) ?? counts.get(s.slug) ?? 0,
-      }));
+      // Pass 1: 建 id → 节点 map（带空 children）
+      const idMap = new Map<string, TreeNode & { _parent: string | null }>();
+      apiScopes[groupBy].forEach((s, i) => {
+        idMap.set(s.id, {
+          id: s.id,
+          name: s.name,
+          color: colorPool[i % colorPool.length],
+          count: counts.get(s.id) ?? counts.get(s.slug) ?? 0,
+          children: [],
+          _parent: s.parentScopeId ?? s.parent_scope_id ?? null,
+        });
+      });
+      // Pass 2: 把每个非根节点挂到父节点 children
+      const roots: TreeNode[] = [];
+      idMap.forEach((node) => {
+        const parentId = node._parent;
+        if (parentId && idMap.has(parentId)) {
+          idMap.get(parentId)!.children!.push(node);
+        } else {
+          roots.push(node);
+        }
+      });
+      // Pass 3: 节点按 name 中文排序；空 children 数组转 undefined（FolderNode 据此决定显示 caret）
+      const sortDeep = (nodes: TreeNode[]) => {
+        nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+        nodes.forEach((n) => {
+          if (n.children && n.children.length === 0) (n as any).children = undefined;
+          else if (n.children) sortDeep(n.children);
+        });
+      };
+      sortDeep(roots);
+      return roots;
     }
     return GROUP_TREES[groupBy];
   }, [apiScopes, groupBy, apiMeetings]);
@@ -599,9 +763,12 @@ export function Library() {
     if (!gid) return true;
     const mid = m.groups[groupBy];
     if (mid === gid) return true;
+    // 递归：选中父级时, 后代节点（任意深度）下绑定的会议也要显示
     const node = findNode(tree, gid);
-    if (node?.children) return node.children.some(c => c.id === mid);
-    return false;
+    if (!node?.children) return false;
+    const collectDescendants = (n: TreeNode): string[] =>
+      (n.children ?? []).flatMap((c) => [c.id, ...collectDescendants(c)]);
+    return collectDescendants(node).includes(mid);
   };
 
   // 搜索：本地过滤 (title / kind / scope_bindings) + enter 触发跨会议全文 grep
@@ -663,14 +830,39 @@ export function Library() {
     return ascii ? `${ascii}-${tail}` : `s-${tail}`;
   };
   const reloadScopes = () => setScopeReloadTick((t) => t + 1);
-  const handleAddScope = async () => {
+  // 顶层创建：内联表单 toggle（不再用 window.prompt）
+  const [addingRoot, setAddingRoot] = useState(false);
+  // 子层创建：当前正在某 scope 下显示创建表单的 scope.id
+  const [addingChildId, setAddingChildId] = useState<string | null>(null);
+  const handleAddScope = async (name: string, parentScopeId: string | null = null) => {
     if (forceMock) { alert('Mock 模式不支持创建分组 · 请先切到 API 模式'); return; }
-    const name = window.prompt(`新建${groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}`)?.trim();
-    if (!name) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
     try {
-      await meetingNotesApi.createScope({ kind: groupBy, slug: slugify(name), name });
+      await meetingNotesApi.createScope({
+        kind: groupBy,
+        slug: slugify(trimmed),
+        name: trimmed,
+        parentScopeId,
+      });
+      setAddingRoot(false);
+      setAddingChildId(null);
       reloadScopes();
     } catch (e: any) { alert(`创建失败：${e?.message ?? e}`); }
+  };
+  // 拖拽落到 scope 上 → bind meeting；已绑定时静默跳过
+  const handleDropMeeting = async (meetingId: string, scopeId: string) => {
+    if (forceMock) return;
+    if (!UUID_RE.test(meetingId) || !UUID_RE.test(scopeId)) return;
+    const meet = (apiMeetings ?? []).find((x) => x.id === meetingId);
+    if (meet && meet.groups[groupBy] === scopeId) return;
+    try {
+      await meetingNotesApi.bindMeeting(scopeId, meetingId, '由 library 拖拽');
+      const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
+      setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
+    } catch (e: any) {
+      alert(`绑定失败：${e?.message ?? e}`);
+    }
   };
   const handleRenameScope = async (id: string, newName: string) => {
     const name = newName.trim();
@@ -739,7 +931,9 @@ export function Library() {
           .map((s, i) => `${i + 1}. ${s.name}${s.id === currentScopeId ? '  (当前)' : ''}`)
           .join('\n');
         const ans = window.prompt(
-          `移动会议「${m.title}」到 ${groupBy} 分组：\n\n${optionsText}\n\n输入序号 1-${list.length}，输入 0 取消所有 ${groupBy} 绑定。`,
+          `移动会议「${m.title}」到 ${groupBy} 分组：\n\n` +
+          `💡 也可以直接把卡片拖到左侧分组节点 (推荐)\n\n` +
+          `${optionsText}\n\n输入序号 1-${list.length}，输入 0 取消所有 ${groupBy} 绑定。`,
         );
         if (ans === null) return;
         const trimmed = ans.trim();
@@ -878,15 +1072,32 @@ export function Library() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 4px' }}>
             <SectionLabel>{groupBy === 'project' ? '项目' : groupBy === 'client' ? '客户' : '主题'}</SectionLabel>
-            <button onClick={handleAddScope}
+            <button
+              onClick={() => {
+                if (forceMock) { alert('Mock 模式不支持创建分组 · 请先切到 API 模式'); return; }
+                setAddingRoot((v) => !v);
+              }}
               style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2, borderRadius: 3, display: 'flex' }}
-              title={forceMock ? 'Mock 模式不支持 · 切到 API 模式' : '新建分组'}
+              title={forceMock ? 'Mock 模式不支持 · 切到 API 模式' : '新建顶层分组'}
             >
               <Icon name="plus" size={13} />
             </button>
           </div>
 
-          <button onClick={() => setActiveGroup(null)} style={folderRowStyle(activeGroup === null)}>
+          {/* 顶层创建 inline 表单 */}
+          {addingRoot && (
+            <InlineCreateScope
+              paddingLeft={8}
+              onSubmit={(name) => handleAddScope(name, null)}
+              onCancel={() => setAddingRoot(false)}
+            />
+          )}
+
+          <button
+            onClick={() => setActiveGroup(null)}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; }}
+            style={folderRowStyle(activeGroup === null)}
+          >
             <Icon name="layers" size={13} />
             <span style={{ flex: 1, textAlign: 'left' }}>全部</span>
             <MonoMeta style={{ fontSize: 10 }}>{meetingsDisplay.length}</MonoMeta>
@@ -897,7 +1108,13 @@ export function Library() {
           {tree.map(node => (
             <FolderNode key={node.id} node={node} active={activeGroup}
               onSelect={setActiveGroup} onRename={setRenaming} renaming={renaming}
-              onCommitRename={handleRenameScope} onDelete={handleDeleteScope} />
+              onCommitRename={handleRenameScope} onDelete={handleDeleteScope}
+              onDropMeeting={!forceMock ? handleDropMeeting : undefined}
+              onAddChild={!forceMock ? (pid) => setAddingChildId(pid) : undefined}
+              addingChildId={addingChildId}
+              onCommitAddChild={(pid, n) => handleAddScope(n, pid)}
+              onCancelAddChild={() => setAddingChildId(null)}
+            />
           ))}
 
           <div style={{ height: 18 }} />
@@ -909,7 +1126,7 @@ export function Library() {
               <Icon name="folder" size={12} />
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>TIP</span>
             </div>
-            拖拽会议到分组，或右键批量移动。分组可叠加标签与权限。
+            把会议卡片拖到分组节点 → 自动绑定。Hover 节点 → ＋ 建子分组。
           </div>
         </aside>
 
@@ -1064,6 +1281,7 @@ export function Library() {
                 onClick={() => setSelectedId(m.id)}
                 onOpen={() => navigate(`/meeting/${m.id}/a`)}
                 groupName={findNode(tree, m.groups[groupBy])?.name ?? ''}
+                draggable={!forceMock && UUID_RE.test(m.id)}
               />
             ))}
             {visible.length === 0 && (
