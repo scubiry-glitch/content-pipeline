@@ -1090,18 +1090,31 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         reply.status(400);
         return { error: 'Bad Request', message: 'kind, slug, name are required' };
       }
-      const created = await engine.scopes.create({
-        kind: body.kind,
-        slug: body.slug,
-        name: body.name,
-        status: body.status,
-        stewardPersonIds: body.stewardPersonIds,
-        description: body.description,
-        metadata: body.metadata,
-        workspaceId: currentWorkspaceId(request) ?? undefined,
-      });
-      reply.status(201);
-      return created;
+      try {
+        const created = await engine.scopes.create({
+          kind: body.kind,
+          slug: body.slug,
+          name: body.name,
+          status: body.status,
+          stewardPersonIds: body.stewardPersonIds,
+          description: body.description,
+          metadata: body.metadata,
+          workspaceId: currentWorkspaceId(request) ?? undefined,
+          // 二级项目支持：parent_scope_id 必须 = 同 kind 的现有 scope id
+          parentScopeId: typeof body.parentScopeId === 'string' && body.parentScopeId
+            ? body.parentScopeId
+            : null,
+        });
+        reply.status(201);
+        return created;
+      } catch (e: any) {
+        // scope service 抛"parent scope kind mismatch"等业务校验错误
+        if (/parent scope/.test(e?.message ?? '')) {
+          reply.status(400);
+          return { error: 'Bad Request', message: e.message };
+        }
+        throw e;
+      }
     });
 
     fastify.put('/scopes/:id', { preHandler: authenticate }, async (request, reply) => {

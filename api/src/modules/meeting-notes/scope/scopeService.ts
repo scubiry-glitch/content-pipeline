@@ -17,6 +17,8 @@ export interface ScopeRow {
   stewardPersonIds: string[];
   description: string | null;
   metadata: Record<string, any>;
+  /** 二级项目支持：父 scope 的 id；NULL 表示顶层 scope */
+  parentScopeId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +32,8 @@ export interface CreateScopeInput {
   description?: string;
   metadata?: Record<string, any>;
   workspaceId?: string;
+  /** 父 scope id；必须与本 scope 同 kind；不指定则为顶层 */
+  parentScopeId?: string | null;
 }
 
 export interface UpdateScopeInput {
@@ -50,6 +54,7 @@ function mapScope(row: Record<string, any>): ScopeRow {
     stewardPersonIds: row.steward_person_ids ?? [],
     description: row.description,
     metadata: row.metadata ?? {},
+    parentScopeId: row.parent_scope_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -89,10 +94,20 @@ export class ScopeService {
   }
 
   async create(input: CreateScopeInput): Promise<ScopeRow> {
+    // 父 scope 校验：必须存在 + 同 kind + （工作区一致由数据库行级安全或上层保证）
+    if (input.parentScopeId) {
+      const parent = await this.getById(input.parentScopeId);
+      if (!parent) {
+        throw new Error(`parent scope not found: ${input.parentScopeId}`);
+      }
+      if (parent.kind !== input.kind) {
+        throw new Error(`parent scope kind mismatch: parent=${parent.kind} child=${input.kind}`);
+      }
+    }
     const r = input.workspaceId
       ? await this.deps.db.query(
-          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata, workspace_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata, workspace_id, parent_scope_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
            RETURNING *`,
           [
             input.kind,
@@ -103,11 +118,12 @@ export class ScopeService {
             input.description ?? null,
             JSON.stringify(input.metadata ?? {}),
             input.workspaceId,
+            input.parentScopeId ?? null,
           ],
         )
       : await this.deps.db.query(
-          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+          `INSERT INTO mn_scopes (kind, slug, name, status, steward_person_ids, description, metadata, parent_scope_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
            RETURNING *`,
           [
             input.kind,
@@ -117,6 +133,7 @@ export class ScopeService {
             input.stewardPersonIds ?? [],
             input.description ?? null,
             JSON.stringify(input.metadata ?? {}),
+            input.parentScopeId ?? null,
           ],
         );
     return mapScope(r.rows[0]);
