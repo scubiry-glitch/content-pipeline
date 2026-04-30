@@ -73,6 +73,62 @@ function StepBar({ step }: { step: number }) {
   );
 }
 
+// ── TypeScript analysis file parser ──────────────────────────────────────────
+// Strips TS-specific syntax from exported const analysis files and evaluates them,
+// then maps MEETING / PARTICIPANTS / ANALYSIS exports to the JSON import shape.
+
+function parseTsAnalysisFile(text: string): Record<string, unknown> {
+  let code = text;
+
+  // Remove single-line comments
+  code = code.replace(/\/\/[^\n]*/g, '');
+
+  // Remove interface blocks (single-level braces)
+  code = code.replace(/(?:export\s+)?interface\s+\w+(?:[^{]*)\{[^{}]*\}/g, '');
+
+  // Remove type alias declarations (may span multiple lines up to ;)
+  code = code.replace(/(?:export\s+)?type\s+\w+\s*=[^;]+;/gs, '');
+
+  // Remove variable declaration type annotations: "const X: Type =" → "const X ="
+  code = code.replace(/:\s*[A-Za-z_]\w*(?:<[^>]*>)?(?:\[\])?\s*(?==)/g, '');
+
+  // Remove return type annotations in arrow functions: "): Type =>" → ") =>"
+  code = code.replace(/\)\s*:\s*[A-Za-z_]\w*(?:<[^>]*>)?(?:\[\])?\s*(?==>)/g, ') ');
+
+  // Remove "as const" and generic "as TypeName" casts
+  code = code.replace(/\s+as\s+const\b/g, '');
+  code = code.replace(/\s+as\s+[A-Za-z_]\w*\b/g, '');
+
+  // Remove built-in type annotations in function params: "(x: string)" → "(x)"
+  code = code.replace(/(\w+)\s*:\s*(string|number|boolean|any|void|never|unknown)\b(?=\s*[,)])/g, '$1');
+
+  // Remove "export" from declarations, keep the declaration itself
+  code = code.replace(/\bexport\s+(const|let|var)\b/g, '$1');
+
+  // Remove "const P = ..." helper function (single-line arrow, ends with ;)
+  code = code.replace(/const\s+P\s*=[^;]+;/g, '');
+
+  const names = ['MEETING', 'PARTICIPANTS', 'ANALYSIS', 'EXTERNAL_COMPANY_BLUEPRINT', 'ORG_PUSH_PLAN', 'AI_TOOLS_DEMO', 'META'];
+  const ret = names.map(n => `${n}: (typeof ${n} !== 'undefined' ? ${n} : undefined)`).join(', ');
+
+  // eslint-disable-next-line no-new-func
+  const fn = new Function(`${code}\nreturn { ${ret} };`);
+  const raw = fn() as Record<string, unknown>;
+
+  // Map exported constants to the JSON import shape expected by the backend
+  const meeting = (raw.MEETING ?? {}) as Record<string, unknown>;
+  const participants = Array.isArray(raw.PARTICIPANTS) ? raw.PARTICIPANTS : [];
+  const analysis = (raw.ANALYSIS ?? {}) as Record<string, unknown>;
+
+  return {
+    title: typeof meeting.title === 'string' ? meeting.title : '',
+    date: typeof meeting.date === 'string' ? meeting.date : undefined,
+    meeting,
+    participants,
+    analysis,
+  };
+}
+
 // ── Step 1: FlowUpload ────────────────────────────────────────────────────────
 
 interface JsonPreview {
@@ -130,36 +186,49 @@ function FlowUpload({ onNext, onUploaded }: {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [jsonPreview, setJsonPreview] = useState<JsonPreview | null>(null);
   const [jsonImporting, setJsonImporting] = useState(false);
+  const [parsedData, setParsedData] = useState<Record<string, unknown> | null>(null);
 
   const handleJsonFile = useCallback((f: File | null) => {
     setJsonFile(f);
     setJsonError(null);
     setJsonPreview(null);
     setJsonText('');
+    setParsedData(null);
     if (!f) return;
+    const isTs = /\.(ts|tsx)$/i.test(f.name);
     const reader = new FileReader();
     reader.onerror = () => setJsonError('读取文件失败');
     reader.onload = () => {
       const text = String(reader.result ?? '');
       setJsonText(text);
       try {
-        const obj = JSON.parse(text);
+        let obj: Record<string, unknown>;
+        if (isTs) {
+          obj = parseTsAnalysisFile(text);
+        } else {
+          obj = JSON.parse(text);
+        }
         const analysis = obj && typeof obj.analysis === 'object' && obj.analysis
-          ? obj.analysis
+          ? obj.analysis as Record<string, unknown>
           : (obj && typeof obj.summary === 'object' ? obj : null);
         if (!analysis || typeof analysis.summary !== 'object') {
-          throw new Error('JSON 必须包含 analysis 对象（顶层或 .analysis 下），且其 summary 字段为对象');
+          throw new Error(isTs
+            ? 'TypeScript 文件须导出 ANALYSIS 常量（含 summary 字段的对象）'
+            : 'JSON 必须包含 analysis 对象（顶层或 .analysis 下），且其 summary 字段为对象');
         }
-        const summary = analysis.summary ?? {};
+        setParsedData(obj);
+        const summary = (analysis.summary ?? {}) as Record<string, unknown>;
         const titleGuess = (typeof obj.title === 'string' && obj.title.trim())
           || (typeof analysis.title === 'string' && analysis.title.trim())
-          || f.name.replace(/\.json$/i, '');
+          || f.name.replace(/\.(json|tsx?)$/i, '');
         setJsonPreview({
           title: String(titleGuess),
           hasTldr: typeof summary.tldr === 'string' && summary.tldr.trim().length > 0,
           hasScqa: !!(summary.scqa && typeof summary.scqa === 'object'
-            && summary.scqa.situation && summary.scqa.complication
-            && summary.scqa.question && summary.scqa.answer),
+            && (summary.scqa as Record<string, unknown>).situation
+            && (summary.scqa as Record<string, unknown>).complication
+            && (summary.scqa as Record<string, unknown>).question
+            && (summary.scqa as Record<string, unknown>).answer),
           decisions: typeof summary.decision === 'string' && summary.decision.trim() ? 1 : 0,
           actionItems: Array.isArray(summary.actionItems) ? summary.actionItems.length : 0,
           risks: Array.isArray(summary.risks) ? summary.risks.length : 0,
@@ -178,11 +247,10 @@ function FlowUpload({ onNext, onUploaded }: {
   }, []);
 
   const importJson = useCallback(async () => {
-    if (!jsonText || !jsonPreview || jsonError) return;
+    if (!parsedData || !jsonPreview || jsonError) return;
     setJsonImporting(true);
     try {
-      const obj = JSON.parse(jsonText);
-      const body: Record<string, unknown> = { ...obj };
+      const body: Record<string, unknown> = { ...parsedData };
       if (!body.title && jsonPreview.title) body.title = jsonPreview.title;
       const r = await meetingNotesApi.importMeetingJson(body);
       if (!r.ok || !r.id) throw new Error('import failed');
@@ -191,7 +259,7 @@ function FlowUpload({ onNext, onUploaded }: {
       setJsonError(e instanceof Error ? e.message : String(e));
       setJsonImporting(false);
     }
-  }, [jsonText, jsonPreview, jsonError, navigate]);
+  }, [parsedData, jsonPreview, jsonError, navigate]);
 
   const btnPrimary: React.CSSProperties = {
     padding: '9px 18px', border: '1px solid var(--ink)', background: 'var(--ink)',
@@ -418,7 +486,7 @@ function FlowUpload({ onNext, onUploaded }: {
       <StepBar step={1} />
 
       <div style={{ display: 'flex', gap: 3, border: '1px solid var(--line)', borderRadius: 6, padding: 3, alignSelf: 'flex-start', marginBottom: 18, background: 'var(--paper)' }}>
-        {[{ id: 'files' as const, label: '上传文件' }, { id: 'folder' as const, label: '绑定目录' }, { id: 'recent' as const, label: '从历史中选' }, { id: 'json' as const, label: 'JSON 导入' }].map(x => (
+        {[{ id: 'files' as const, label: '上传文件' }, { id: 'folder' as const, label: '绑定目录' }, { id: 'recent' as const, label: '从历史中选' }, { id: 'json' as const, label: 'JSON / TS 导入' }].map(x => (
           <button key={x.id} onClick={() => setMode(x.id)} style={{
             padding: '6px 14px', border: 0, borderRadius: 4, fontSize: 12.5,
             background: mode === x.id ? 'var(--ink)' : 'transparent',
@@ -626,7 +694,7 @@ function FlowUpload({ onNext, onUploaded }: {
             <input
               ref={jsonInputRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,application/json,.ts,.tsx"
               hidden
               onChange={(e) => {
                 const picked = e.target.files?.[0] ?? null;
@@ -640,11 +708,13 @@ function FlowUpload({ onNext, onUploaded }: {
               justifyContent: 'center', fontSize: 20, fontFamily: 'var(--mono)',
             }}>{'{ }'}</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 500 }}>
-              拖拽 JSON 文件 · 或点击选择
+              拖拽 JSON / TS 文件 · 或点击选择
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', lineHeight: 1.6 }}>
-              直接导入完整 ANALYSIS JSON · 跳过 LLM 流水线<br />
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{'{ analysis: {...} }'} 或顶层带 summary 字段</span>
+              直接导入完整 ANALYSIS · 跳过 LLM 流水线<br />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
+                .json {'{ analysis: {...} }'} · .ts {'export const ANALYSIS = {...}'}
+              </span>
             </div>
             {jsonFile && (
               <div style={{
@@ -672,10 +742,10 @@ function FlowUpload({ onNext, onUploaded }: {
             background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8,
             padding: 20, display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 12 }}>JSON 预览</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 12 }}>文件预览</div>
             {!jsonText && (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', lineHeight: 1.7 }}>
-                选择文件后将解析并显示统计预览。<br />
+                选择 .json 或 .ts 文件后将解析并显示统计预览。<br />
                 校验通过即可一键创建会议（不走 LLM 解析）。
               </div>
             )}
