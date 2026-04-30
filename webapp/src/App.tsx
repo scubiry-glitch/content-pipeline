@@ -63,7 +63,6 @@ import { MeetingShell } from './prototype/meeting/MeetingShell';
 import { MeetingDetailShell } from './prototype/meeting/MeetingDetailShell';
 import { MeetingToday } from './prototype/meeting/MeetingToday';
 import { Library as MeetingLibraryProto } from './prototype/meeting/Library';
-import { MeetingLibrary } from './pages/meeting-notes/MeetingLibrary';
 import { NewMeeting as NewMeetingProto } from './prototype/meeting/NewMeeting';
 import { LongitudinalView } from './prototype/meeting/LongitudinalView';
 import { ScopeExpertConfig } from './prototype/meeting/ScopeExpertConfig';
@@ -233,7 +232,6 @@ function App() {
               <Route path="today" element={<MeetingToday />} />
               <Route path="new" element={<NewMeetingProto />} />
               <Route path="library" element={<MeetingLibraryProto />} />
-              <Route path="library-v2" element={<MeetingLibrary />} />
               <Route path="generation-center" element={<GenerationCenterProto />} />
               <Route path="longitudinal" element={<LongitudinalView />} />
               <Route path="scopes" element={<ScopeExpertConfig />} />
