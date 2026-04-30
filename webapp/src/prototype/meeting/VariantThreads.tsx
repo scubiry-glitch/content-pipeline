@@ -3,7 +3,6 @@
 
 import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
-import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, PARTICIPANTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
@@ -709,6 +708,7 @@ export function VariantThreads() {
     return dict;
   }, [usingMock, a]);
 
+  // 同步 Shell 已抓取的 detail —— 不再单独 fetch（dev StrictMode 下省掉 4 次重复请求）
   useEffect(() => {
     if (forceMock) {
       setA(ANALYSIS);
@@ -719,53 +719,44 @@ export function VariantThreads() {
       setApiParticipants([]);
       return;
     }
-    if (!id) { setApiState('skipped'); return; }
-    setApiState('loading');
-    // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
-    // view 'C' returns { nodes, threads, influence } which doesn't match render structure.
-    meetingNotesApi.getMeetingDetail(id, 'A')
-      .then((data: any) => {
-        if (data?.analysis) {
-          setA(adaptApiAnalysis(data.analysis));
-          setUsingMock(false);
-          setApiState('ok');
-          if (Array.isArray(data.analysis.participants)) {
-            setApiParticipants(data.analysis.participants);
-          }
-          // analysis.consensus / analysis.focusMap 也是真实数据（即便 mn_* 表为空）·
-          // 不要被打上 MockBadge
-          const sectionAt = (id: string) => (data.analysis.sections ?? []).find((s: any) => s.id === id);
-          const cArr = Array.isArray(data.analysis.consensus) ? data.analysis.consensus : sectionAt('consensus')?.body;
-          if (Array.isArray(cArr) && cArr.length > 0) setConsensusMock(false);
-          const fArr = Array.isArray(data.analysis.focusMap) ? data.analysis.focusMap : sectionAt('focus-map')?.body;
-          if (Array.isArray(fArr) && fArr.length > 0) setFocusMapMock(false);
-        } else {
-          setApiState('error');
-        }
-        // Phase 15.15 · C.2 · consensus fork
-        if (Array.isArray(data?.consensus) && data.consensus.length > 0) {
-          const adapted = (data.consensus as any[]).map((c) => ({
-            id: c.id as string,
-            kind: c.kind as 'consensus' | 'divergence',
-            text: c.text as string,
-            supportedBy: (c.supported_by ?? []) as string[],
-            sides: ((c.sides ?? []) as any[]).map((s) => ({
-              stance: s.stance as string,
-              reason: (s.reason ?? '') as string,
-              by: (s.by_ids ?? s.by ?? []) as string[],
-            })),
-          }));
-          setA((prev) => ({ ...prev, consensus: adapted }));
-          setConsensusMock(false);
-        }
-        // Phase 15.15 · C.3 · focus nebula
-        if (Array.isArray(data?.focusMap) && data.focusMap.length > 0) {
-          setA((prev) => ({ ...prev, focusMap: data.focusMap }));
-          setFocusMapMock(false);
-        }
-      })
-      .catch(() => { setApiState('error'); });
-  }, [id, forceMock]);
+    if (shellDetailState === 'loading') { setApiState('loading'); return; }
+    if (shellDetailState === 'skipped') { setApiState('skipped'); return; }
+    const data = shellDetail;
+    if (shellDetailState === 'error' || !data?.analysis) { setApiState('error'); return; }
+    setA(adaptApiAnalysis(data.analysis));
+    setUsingMock(false);
+    setApiState('ok');
+    if (Array.isArray(data.analysis.participants)) {
+      setApiParticipants(data.analysis.participants);
+    }
+    // analysis.consensus / analysis.focusMap 也是真实数据（即便 mn_* 表为空）· 不要被打上 MockBadge
+    const sectionAt = (sid: string) => (data.analysis.sections ?? []).find((s: any) => s.id === sid);
+    const cArr = Array.isArray(data.analysis.consensus) ? data.analysis.consensus : sectionAt('consensus')?.body;
+    if (Array.isArray(cArr) && cArr.length > 0) setConsensusMock(false);
+    const fArr = Array.isArray(data.analysis.focusMap) ? data.analysis.focusMap : sectionAt('focus-map')?.body;
+    if (Array.isArray(fArr) && fArr.length > 0) setFocusMapMock(false);
+    // Phase 15.15 · C.2 · consensus fork（来自 detail 顶层 consensus 字段，与 Shell 同 endpoint，无额外请求）
+    if (Array.isArray(data?.consensus) && data.consensus.length > 0) {
+      const adapted = (data.consensus as any[]).map((c) => ({
+        id: c.id as string,
+        kind: c.kind as 'consensus' | 'divergence',
+        text: c.text as string,
+        supportedBy: (c.supported_by ?? []) as string[],
+        sides: ((c.sides ?? []) as any[]).map((s) => ({
+          stance: s.stance as string,
+          reason: (s.reason ?? '') as string,
+          by: (s.by_ids ?? s.by ?? []) as string[],
+        })),
+      }));
+      setA((prev) => ({ ...prev, consensus: adapted }));
+      setConsensusMock(false);
+    }
+    // Phase 15.15 · C.3 · focus nebula
+    if (Array.isArray(data?.focusMap) && data.focusMap.length > 0) {
+      setA((prev) => ({ ...prev, focusMap: data.focusMap }));
+      setFocusMapMock(false);
+    }
+  }, [forceMock, shellDetail, shellDetailState]);
 
   if (apiState === 'loading') {
     return (

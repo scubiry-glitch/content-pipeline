@@ -10,7 +10,7 @@ import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge, momentToText, mo
 import { CrossAxisLinkInline } from './_axisShared';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
-import { useMeetingShellTitle } from './MeetingDetailShell';
+import { useMeetingShellTitle, useMeetingDetail } from './MeetingDetailShell';
 import { MeetingChatDrawer } from './MeetingChatDrawer';
 
 type PFn = (id: string) => Participant;
@@ -560,6 +560,8 @@ export function VariantWorkbench() {
   }>>([]);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || MEETING.title;
+  // 复用 Shell 已经抓的 detail 响应 — 避免重复 fetch
+  const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
   // 「追问此会」抽屉：drawerTension=null 时为会议级（顶栏入口）；非空为张力级（详情按钮入口）
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
@@ -677,6 +679,7 @@ export function VariantWorkbench() {
     return out;
   }, [apiAxes, a]);
 
+  // 同步 Shell 已抓取的 detail —— 不再单独 fetch（dev StrictMode 下避免重复请求）
   useEffect(() => {
     if (forceMock) {
       setA(ANALYSIS);
@@ -684,41 +687,37 @@ export function VariantWorkbench() {
       setTensionMock(true);
       setApiState('skipped');
       setApiParticipants([]);
-      setApiAxes(null);
       return;
     }
-    if (!id) { setApiState('skipped'); return; }
-    setApiState('loading');
-    // 并行拉 axes（cognitive_biases / mental_models / affect_curve · 用于张力解读）·
-    // 失败静默 · 没有 axes 时解读面板会回退到「暂无解读」
+    if (shellDetailState === 'loading') { setApiState('loading'); return; }
+    if (shellDetailState === 'skipped') { setApiState('skipped'); return; }
+    const data = shellDetail;
+    if (shellDetailState === 'error' || !data?.analysis) { setApiState('error'); return; }
+    setA(adaptApiAnalysis(data.analysis));
+    setUsingMock(false);
+    setApiState('ok');
+    if (Array.isArray(data.analysis.participants)) {
+      setApiParticipants(data.analysis.participants);
+    }
+    if (Array.isArray(data.analysis.experts)) {
+      setApiExperts(data.analysis.experts);
+    }
+    const tensionsInAnalysis = Array.isArray(data.analysis.tension) && data.analysis.tension.length > 0;
+    const sectionTension = (data.analysis.sections ?? []).find((s: any) => s.id === 'tension');
+    const tensionsInSections = Array.isArray(sectionTension?.body) && sectionTension.body.length > 0;
+    if (tensionsInAnalysis || tensionsInSections) setTensionMock(false);
+  }, [forceMock, shellDetail, shellDetailState]);
+
+  // 独立 endpoint —— axes (cognitive_biases / mental_models / affect_curve · 用于张力解读)
+  // 与 Shell 抓的 detail 互不重叠，保持单独 fetch
+  useEffect(() => {
+    if (forceMock || !id) { setApiAxes(null); return; }
     meetingNotesApi.getMeetingAxes(id).then((axes) => setApiAxes(axes)).catch(() => {});
-    // Fetch view 'A' (sections-based) — adaptable to ANALYSIS shape;
-    // view 'B' returns { left, center, right } which doesn't match render structure.
-    meetingNotesApi.getMeetingDetail(id, 'A')
-      .then((data: any) => {
-        if (data?.analysis) {
-          setA(adaptApiAnalysis(data.analysis));
-          setUsingMock(false);
-          setApiState('ok');
-          if (Array.isArray(data.analysis.participants)) {
-            setApiParticipants(data.analysis.participants);
-          }
-          if (Array.isArray(data.analysis.experts)) {
-            setApiExperts(data.analysis.experts);
-          }
-          // analysis.tension 来自 metadata.analysis.tension（旧路径）·
-          // 即便 mn_tensions 表空，仍是真实数据，不要被打上 MockBadge
-          const tensionsInAnalysis = Array.isArray(data.analysis.tension) && data.analysis.tension.length > 0;
-          // sections 路径：sections[id=tension].body 是数组
-          const sectionTension = (data.analysis.sections ?? []).find((s: any) => s.id === 'tension');
-          const tensionsInSections = Array.isArray(sectionTension?.body) && sectionTension.body.length > 0;
-          if (tensionsInAnalysis || tensionsInSections) setTensionMock(false);
-        } else {
-          setApiState('error');
-        }
-      })
-      .catch(() => { setApiState('error'); });
-    // Phase 15.15 · C.1 · tension probe
+  }, [id, forceMock]);
+
+  // Phase 15.15 · C.1 · tension probe（独立 endpoint）
+  useEffect(() => {
+    if (forceMock || !id) return;
     meetingNotesApi.getMeetingTensions(id)
       .then((data) => {
         if (data?.items?.length) {
