@@ -1789,8 +1789,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         if (Object.keys(cleaned).length > 0) expertRoles = cleaned;
       }
 
-      // mode：默认 'multi-axis'；只接受 'multi-axis' / 'claude-cli'
-      const mode = body.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
+      // mode：默认 'multi-axis'；接受 'multi-axis' / 'claude-cli' / 'api-oneshot'
+      const mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+        body.mode === 'claude-cli' ? 'claude-cli'
+        : body.mode === 'api-oneshot' ? 'api-oneshot'
+        : 'multi-axis';
 
       const r = await engine.enqueueRun({
         scope: scope as any,

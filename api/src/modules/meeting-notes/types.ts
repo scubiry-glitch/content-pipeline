@@ -153,8 +153,12 @@ export interface ScopeRef {
   id?: string; // library 时为空
 }
 
-/** Run 生成模式：默认 multi-axis（按轴循环 LLM）；claude-cli = spawn 一次 claude -p */
-export type RunMode = 'multi-axis' | 'claude-cli';
+/** Run 生成模式：
+ *  - 'multi-axis'（默认）：按 16 轴循环 LLM
+ *  - 'claude-cli'：spawn 一次 claude -p（需装 claude 二进制 + 登录态）
+ *  - 'api-oneshot'：与 claude-cli 同拓扑（一次出 16 轴 JSON），但走 Node 进程内 SDK 直连 LLM API
+ *    （services/llm.ts 多 provider 路由：Claude / Kimi / OpenAI），无需 claude 二进制 */
+export type RunMode = 'multi-axis' | 'claude-cli' | 'api-oneshot';
 
 export interface EnqueueRunRequest {
   scope: ScopeRef;
@@ -178,8 +182,10 @@ export interface EnqueueRunRequest {
   /**
    * 生成模式：
    * - 'multi-axis'（默认）：按 16 轴循环 LLM，跑现有 dispatchPlan + decorator 栈
-   * - 'claude-cli'：把转写 + schema + 专家 personas + 装饰指令一次喂给 claude -p，单次生成
-   *   两种模式都会走完 parseMeeting + 专家加载 + strategy 解析的共享上下文。
+   * - 'claude-cli'：spawn 一次 claude -p，整段 prompt 喂进去单次生成
+   * - 'api-oneshot'：与 claude-cli 同拓扑（共用 buildFullPrompt + 同一份 16 轴 JSON schema），
+   *   通道换成 services/llm.ts 直连 API（多 provider）。不需要装 claude 二进制 / 没有 session 概念
+   *   三种模式都会走完 parseMeeting + 专家加载 + strategy 解析的共享上下文。
    */
   mode?: RunMode;
   /** 当前请求所在 workspace；不传时由 mn_runs 表的 DEFAULT (default ws) 兜底 */

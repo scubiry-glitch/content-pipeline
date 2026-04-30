@@ -166,8 +166,10 @@ export const meetingNotesApi = {
      * 生成模式：
      * - 'multi-axis'（默认）：原 16 轴 LLM 循环
      * - 'claude-cli'：spawn 一次 claude -p，prompt 里把转写 + schema + 专家 personas + 装饰指令一起喂进去
+     * - 'api-oneshot'：与 'claude-cli' 同拓扑（一次出 16 轴 JSON），但走 Node 进程内 SDK 直连 LLM API
+     *   （services/llm.ts 多 provider 路由），无需 claude 二进制 / 没有 session 概念
      */
-    mode?: 'multi-axis' | 'claude-cli';
+    mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
   }) => {
     // 后端 router L605 要求 scope.kind 全小写 ['library','project','client','topic','meeting']
     // 多个调用点历史上传 'MEETING'/'PROJECT' 会触发 400 · 这里统一 normalize

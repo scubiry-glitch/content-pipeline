@@ -595,7 +595,7 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
     presetId: string;
     expertIds: string[];
     expertRoles: Record<MnRoleId, string[]>;
-    mode: 'multi-axis' | 'claude-cli';
+    mode: 'multi-axis' | 'claude-cli' | 'api-oneshot';
   }) => Promise<boolean>;
 }) {
   const pageSize = 8;
@@ -612,7 +612,10 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
   const [presetId, setPresetId] = useState('standard');
   /** Claude CLI 一次性生成模式：开了之后 preset 仍然保留（作为 strategy 解析的 fallback），
       但生成路径不走 16 轴循环，spawn 一次 claude -p 完成全部。 */
-  const [useClaudeCli, setUseClaudeCli] = useState(false);
+  // 三态生成模式：'multi-axis'（默认 16 轴循环）/ 'claude-cli'（spawn claude 二进制）/ 'api-oneshot'（SDK 一次性 API 调用）
+  const [genMode, setGenMode] = useState<'multi-axis' | 'claude-cli' | 'api-oneshot'>('multi-axis');
+  // 旧 useClaudeCli 兼容：派生量，给下方 preset 卡片透明度等用
+  const useClaudeCli = genMode !== 'multi-axis';
   const [nameKeyword, setNameKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [slowHint, setSlowHint] = useState(false);
@@ -1067,23 +1070,36 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
                 );
               })}
 
-              {/* Claude Code · 一次性生成（实验模式 · plan §A.1） */}
-              <div
-                onClick={() => setUseClaudeCli((v) => !v)}
-                style={{
-                  padding: '10px 12px', borderRadius: 6, marginTop: 4,
-                  border: useClaudeCli ? '2px solid var(--accent)' : '1px dashed var(--line-2)',
-                  background: useClaudeCli ? 'var(--accent-soft)' : 'transparent',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, fontWeight: 600 }}>
-                  🤖 Claude Code · 一次性生成
+              {/* 一次性生成模式（三选一：multi-axis 默认 / claude-cli / api-oneshot） */}
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  一次性生成（实验）
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.4 }}>
-                  实验：把整段转写 + schema + 选中专家 + 当前 strategy 一次喂给 claude CLI。
-                  专家 persona / 策略链 / scope preset 仍然生效。
-                </div>
+                {[
+                  { id: 'claude-cli' as const, label: '🤖 Claude CLI · 一次性', desc: 'spawn claude 二进制，一次出全套；需装 claude + 登录态' },
+                  { id: 'api-oneshot' as const, label: '⚡ API Oneshot · 一次性', desc: '同拓扑但走 Node SDK 直连 API，无需 claude 二进制（多 provider）' },
+                ].map(opt => {
+                  const active = genMode === opt.id;
+                  return (
+                    <div
+                      key={opt.id}
+                      onClick={() => setGenMode(active ? 'multi-axis' : opt.id)}
+                      style={{
+                        padding: '10px 12px', borderRadius: 6,
+                        border: active ? '2px solid var(--accent)' : '1px dashed var(--line-2)',
+                        background: active ? 'var(--accent-soft)' : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, fontWeight: 600 }}>
+                        {opt.label}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.4 }}>
+                        {opt.desc}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1109,7 +1125,7 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
                   presetId,
                   expertIds: selectedIds,
                   expertRoles,
-                  mode: useClaudeCli ? 'claude-cli' : 'multi-axis',
+                  mode: genMode,
                 });
                 setEnqueueing(false);
                 if (ok) onNext();
@@ -1177,8 +1193,8 @@ function FlowProcessing({
   const [realLlmCalls, setRealLlmCalls] = useState<number | null>(null);
   const [realState, setRealState] = useState<string | null>(null);
   const [realErrorMessage, setRealErrorMessage] = useState<string | null>(null);
-  /** 'multi-axis' (默认) / 'claude-cli' — 从 mn_runs.metadata.mode 拉到，UI 用来显示对应 chip */
-  const [realMode, setRealMode] = useState<'multi-axis' | 'claude-cli' | null>(null);
+  /** 'multi-axis' (默认) / 'claude-cli' / 'api-oneshot' — 从 mn_runs.metadata.mode 拉到，UI 用来显示对应 chip */
+  const [realMode, setRealMode] = useState<'multi-axis' | 'claude-cli' | 'api-oneshot' | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
@@ -1230,7 +1246,7 @@ function FlowProcessing({
           currentStep?: string;
           currentStepKey?: string;
           llmCalls?: number;
-          metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number; mode?: 'multi-axis' | 'claude-cli' };
+          metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number; mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot' };
           surfaces?: { dispatchPlan?: any; decorators?: any; synthesis?: any; render?: any };
           errorMessage?: string;
         } = await meetingNotesApi.getRun(runId);
@@ -1256,7 +1272,7 @@ function FlowProcessing({
         const stepKey = r.currentStepKey ?? r.metadata?.currentStepKey ?? null;
         if (stepKey) setRealCurrentStepKey(stepKey);
         const md = r.metadata?.mode;
-        if (md === 'multi-axis' || md === 'claude-cli') setRealMode(md);
+        if (md === 'multi-axis' || md === 'claude-cli' || md === 'api-oneshot') setRealMode(md);
         if (r.surfaces) setRealSurfaces(r.surfaces);
         const llmCount = typeof r.llmCalls === 'number' ? r.llmCalls : (typeof r.metadata?.llmCalls === 'number' ? r.metadata.llmCalls : null);
         if (llmCount != null) setRealLlmCalls(llmCount);
@@ -1332,6 +1348,21 @@ function FlowProcessing({
         { id: 'dec',       label: '启动 Claude · spawn',                            sub: 'sh -c claude -p < tmpfile · 等待首字节' },
         { id: 'synth',     label: '解析 JSON · 校验 schema',                         sub: 'analysis + 17 axes + facts + wikiMarkdown' },
         { id: 'render',    label: '写入 metadata.analysis + mn_* + content_facts + wiki/.md', sub: '同时写 cliPersonMap → mn_people' },
+      ] as const
+    : realMode === 'api-oneshot'
+    ? [
+        { id: 'ingest',    label: '原始素材解析（API Oneshot）',                    sub: 'transcript / DOCX 清洗 + 参与者抽取' },
+        { id: 'segment',   label: '参与者归并 · mn_people 反查',                   sub: '' },
+        {
+          id: 'dispatch',
+          label: '解析专家上下文 + 策略链',
+          sub: decoratorAppliedList && decoratorAppliedList.length > 0
+            ? decoratorAppliedList.slice(0, 3).join(' → ')
+            : 'expert personas + decorator stack 烤入 system prompt',
+        },
+        { id: 'dec',       label: '调用 LLM API · oneshot',                          sub: '走 services/llm.ts 多 provider 路由（无 spawn）· 等待响应 10-30s' },
+        { id: 'synth',     label: '解析 JSON · 校验 schema',                         sub: '失败自动温度 0.2 → 0.4 重试 1 次' },
+        { id: 'render',    label: '写入 metadata.analysis + mn_* + content_facts + wiki/.md', sub: '同时写 oneshotPersonMap → mn_people' },
       ] as const
     : [
         { id: 'ingest',    label: '原始素材解析 · ASR + 文档清洗',              sub: '' },
@@ -1498,6 +1529,13 @@ function FlowProcessing({
                 background: 'oklch(0.93 0.08 280)', color: 'oklch(0.35 0.15 280)',
                 border: '1px solid oklch(0.80 0.10 280)', marginLeft: 4,
               }}>Claude CLI · 一次性生成</span>
+            )}
+            {realMode === 'api-oneshot' && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 3, fontFamily: 'var(--mono)',
+                background: 'oklch(0.93 0.08 200)', color: 'oklch(0.35 0.15 200)',
+                border: '1px solid oklch(0.80 0.10 200)', marginLeft: 4,
+              }}>API Oneshot · SDK 一次性</span>
             )}
             <div style={{ marginLeft: 'auto' }}>
               {!runId && (
@@ -1742,7 +1780,7 @@ export function NewMeeting() {
     presetId: string;
     expertIds: string[];
     expertRoles: Record<MnRoleId, string[]>;
-    mode: 'multi-axis' | 'claude-cli';
+    mode: 'multi-axis' | 'claude-cli' | 'api-oneshot';
   } | null>(null);
 
   // Persist runId → URL so refresh / back-button keep state.
@@ -1764,7 +1802,7 @@ export function NewMeeting() {
     presetId: string;
     expertIds: string[];
     expertRoles: Record<MnRoleId, string[]>;
-    mode: 'multi-axis' | 'claude-cli';
+    mode: 'multi-axis' | 'claude-cli' | 'api-oneshot';
   }): Promise<boolean> {
     setLastSubmitBody(body);
     if (forceMock) return true;

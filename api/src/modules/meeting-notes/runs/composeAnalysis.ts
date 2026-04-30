@@ -79,7 +79,7 @@ export interface AnalysisObject {
   crossView: AnalysisCrossView[];
   /** 元信息：标记 run 自动产出，区别于手工注入。runEngine 写入前用它做 manualOverride 守护 */
   _generated?: {
-    by: 'compose-analysis' | 'claude-cli';
+    by: 'compose-analysis' | 'claude-cli' | 'api-oneshot';
     runId?: string;
     at: string;
     phase: 1 | 2;

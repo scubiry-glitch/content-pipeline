@@ -47,8 +47,8 @@ interface QueuePayload {
   meetingId?: string;
   /** Step 2 用户为各角色指定的真实 expert id 列表（持久化在 mn_runs.metadata.expertRoles） */
   expertRoles?: ExpertRoleAssignment | null;
-  /** 生成模式：'multi-axis'（默认 16 轴循环）/ 'claude-cli'（一次性 spawn claude -p） */
-  mode?: 'multi-axis' | 'claude-cli';
+  /** 生成模式：'multi-axis'（默认 16 轴循环）/ 'claude-cli'（一次性 spawn claude -p）/ 'api-oneshot'（一次性 SDK 调用） */
+  mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
 }
 
 const RUN_TRIGGERS = new Set<RunTrigger>(['auto', 'manual', 'schedule', 'cascade']);
@@ -226,7 +226,10 @@ export class RunEngine {
       );
       for (const row of r.rows) {
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
-        const mode: 'multi-axis' | 'claude-cli' = meta.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
+        const mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+          meta.mode === 'claude-cli' ? 'claude-cli'
+          : meta.mode === 'api-oneshot' ? 'api-oneshot'
+          : 'multi-axis';
         this.queue.enqueue({
           id: row.id,
           payload: {
@@ -488,9 +491,12 @@ export class RunEngine {
     // 3. 落 mn_runs(queued)
     const initialMeta: Record<string, any> = { meetingKind };
     if (expertRoles) initialMeta.expertRoles = expertRoles;
-    // mode：'multi-axis' 不写入（默认值）；'claude-cli' 才写到 metadata，供 execute() 分叉判断
-    const runMode: 'multi-axis' | 'claude-cli' = req.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
-    if (runMode === 'claude-cli') initialMeta.mode = 'claude-cli';
+    // mode：'multi-axis' 不写入（默认值）；'claude-cli' / 'api-oneshot' 写到 metadata，供 execute() 分叉判断
+    const runMode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+      req.mode === 'claude-cli' ? 'claude-cli'
+      : req.mode === 'api-oneshot' ? 'api-oneshot'
+      : 'multi-axis';
+    if (runMode !== 'multi-axis') initialMeta.mode = runMode;
     // workspace_id 显式注入；不传时由 mn_runs 的 DEFAULT (default ws) 兜底
     const ins = req.workspaceId
       ? await this.deps.db.query(
@@ -777,8 +783,11 @@ export class RunEngine {
     );
     // 重新入队（从 metadata 还原 expertRoles + mode，保证 resume 沿用同一组专家与生成模式）
     const resumedExpertRoles = sanitizeExpertRoles((row.metadata as Record<string, unknown> | null)?.expertRoles);
-    const resumedMode: 'multi-axis' | 'claude-cli' =
-      (row.metadata as Record<string, unknown> | null)?.mode === 'claude-cli' ? 'claude-cli' : 'multi-axis';
+    const resumedMetaMode = (row.metadata as Record<string, unknown> | null)?.mode;
+    const resumedMode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+      resumedMetaMode === 'claude-cli' ? 'claude-cli'
+      : resumedMetaMode === 'api-oneshot' ? 'api-oneshot'
+      : 'multi-axis';
     this.queue.enqueue({
       id,
       payload: {
@@ -1409,6 +1418,351 @@ export class RunEngine {
         });
 
         await writeStep('render', 1.0, 'CLI 模式生成完成');
+        // 跳过 multi-axis 流程，fall-through 到下面的 success-finalize
+      } else if (payload.mode === 'api-oneshot' && payload.meetingId) {
+        // ─── api-oneshot 模式 ──────────────────────────────────
+        // 与 claude-cli 同拓扑（一次出 16 轴 JSON），通道换成 services/llm.ts 直连 API。
+        // 不依赖 claude 二进制 / 没有 session 概念。Wiki frontmatter 复用 'claude-cli' 标签
+        // （persistClaudeWiki 写死，不改）—— v2 再加 generator 参数区分。
+        const { runOneshotMode } = await import('./oneshotRunner.js');
+        const { persistClaudeAxes } = await import('./persistClaudeAxes.js');
+        const { persistClaudeFacts } = await import('./persistClaudeFacts.js');
+        const { persistClaudeWiki } = await import('./persistClaudeWiki.js');
+        const { buildScopePrompt, buildMeetingDigest } = await import('./promptTemplates/claudeCliScope.js');
+        const { ensurePersonByName } = await import('../parse/participantExtractor.js');
+
+        // 1) parseMeeting（与 CLI 同）
+        await writeStep('ingest', 0.1, '原始素材解析（API Oneshot 模式）');
+        const parseResult = await parseMeeting(this.deps, payload.meetingId);
+        if (!parseResult.ok) {
+          throw new Error(`parseMeeting failed: ${parseResult.reason ?? 'unknown'}`);
+        }
+        await writeStep('ingest', 1.0, `素材解析完成 · ${parseResult.segmentCount ?? 0} 段`);
+        await writeStep('segment', 1.0, `参与者归并完成 · ${parseResult.participantCount} 位`);
+
+        // 2) 装饰器栈
+        const decoratorChain = (payload.strategySpec ?? '').split('|').map((s) => s.trim()).filter(Boolean);
+
+        // 3) meeting title + meetingKind
+        let meetingTitle = '';
+        let meetingKind: string | null = null;
+        try {
+          const r = await this.deps.db.query(
+            `SELECT title, metadata->>'meeting_kind' AS meeting_kind
+               FROM assets WHERE id = $1`,
+            [payload.meetingId],
+          );
+          meetingTitle = String(r.rows[0]?.title ?? '');
+          meetingKind = (r.rows[0]?.meeting_kind as string | null) ?? null;
+        } catch {/* 缺 title 不阻塞 */}
+
+        // 4) scope row（仅 project/client/topic scope；oneshot 没有 session resume，仅取 name）
+        let scopeRow: { id: string; kind: string; name: string } | null = null;
+        if (payload.scope.kind === 'project' || payload.scope.kind === 'client' || payload.scope.kind === 'topic') {
+          if (payload.scope.id) {
+            try {
+              const sr = await this.deps.db.query(
+                `SELECT id::text AS id, kind, name FROM mn_scopes WHERE id = $1`,
+                [payload.scope.id],
+              );
+              if (sr.rows[0]) {
+                scopeRow = { id: sr.rows[0].id, kind: sr.rows[0].kind, name: sr.rows[0].name };
+              }
+            } catch {/* mn_scopes 不可用时降级 */}
+          }
+        }
+
+        // 5) 调 oneshot
+        await llmUsageStorage.run(counter, async () => {
+          const oneshotResult = await runOneshotMode(
+            this.deps,
+            { runId: payload.runId, meetingId: payload.meetingId!, assetId: payload.meetingId! },
+            {
+              expertRoles: payload.expertRoles ?? null,
+              expertSnapshots: expertSnapshotsForDispatch ?? new Map(),
+              preset: payload.preset,
+              decoratorChain,
+              scopeConfig: null,
+              meetingKind,
+              meetingTitle,
+              participantsFromParse: (parseResult.participants ?? []).map((p) => ({ id: p.id, name: p.name })),
+              promptKind: 'meeting',
+            },
+            {
+              writeStep: async (key, ratio, msg) => {
+                const stageMap = { spawn: 'dec', streaming: 'axes', parsing: 'synth', persisting: 'render' } as const;
+                await writeStep(stageMap[key] as Step3Key, ratio, msg ?? '');
+              },
+              recordOneshotRaw: async (raw) => {
+                try {
+                  await this.deps.db.query(
+                    `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('oneshotRaw', $2::text) WHERE id = $1`,
+                    [payload.runId, raw],
+                  );
+                } catch {/* swallow */}
+              },
+            },
+          );
+
+          // 6) 持久化（与 CLI 同链路）
+          await writeStep('render', 0.35, '写入 metadata.analysis + participants');
+
+          // 6a) 重建 cliPersonMap —— 用 LLM 输出的 participants 当权威，反查 / INSERT mn_people
+          const oneshotParticipants = Array.isArray(oneshotResult.participants) ? oneshotResult.participants : [];
+          const cliPersonMap: Record<string, string> = {};
+          for (const p of oneshotParticipants) {
+            const localId = String(p?.id ?? '').trim();
+            const rawName = String(p?.name ?? '').trim();
+            if (!localId || !rawName) continue;
+            try {
+              const uuid = await ensurePersonByName(this.deps, rawName, p?.role);
+              if (uuid) cliPersonMap[localId] = uuid;
+            } catch (e) {
+              console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
+            }
+          }
+
+          const stampedAnalysis = {
+            ...(oneshotResult.analysis as any),
+            _generated: {
+              by: 'api-oneshot' as const,
+              runId: payload.runId,
+              at: new Date().toISOString(),
+              phase: 1 as const,
+            },
+          };
+          await persistAnalysisToAsset(this.deps.db, payload.meetingId!, stampedAnalysis);
+
+          // 6b) 写 assets.metadata.participants
+          if (oneshotParticipants.length > 0) {
+            try {
+              await this.deps.db.query(
+                `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('participants', $2::jsonb) WHERE id = $1`,
+                [payload.meetingId, JSON.stringify(oneshotParticipants)],
+              );
+            } catch (e) {
+              console.warn('[runEngine] write metadata.participants failed:', (e as Error).message);
+            }
+          }
+
+          await writeStep('render', 0.55, '写入 mn_* 轴表');
+          await persistClaudeAxes(this.deps, payload.meetingId!, {
+            meeting: oneshotResult.meeting,
+            participants: oneshotResult.participants,
+            analysis: oneshotResult.analysis as any,
+            axes: oneshotResult.axes as any,
+          }, cliPersonMap);
+
+          await writeStep('render', 0.65, '写入 content_facts');
+          try {
+            await persistClaudeFacts(this.deps, payload.meetingId!, oneshotResult.facts ?? []);
+          } catch (e) {
+            console.warn('[runEngine] persistClaudeFacts failed:', (e as Error).message);
+          }
+
+          await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
+          try {
+            await persistClaudeWiki(
+              this.deps,
+              payload.meetingId!,
+              oneshotResult.wikiMarkdown ?? {},
+              undefined,
+              (oneshotResult as any)?.meeting?.title,
+            );
+          } catch (e) {
+            console.warn('[runEngine] persistClaudeWiki failed:', (e as Error).message);
+          }
+
+          // 6c) wikiGenerator 重生
+          await writeStep('render', 0.85, '触发 wikiGenerator 重生 entities/concepts/domains');
+          let wikiResultStats = {
+            entities: 0, domains: 0, domainIndexes: 0,
+            preservedFiles: 0, durationMs: 0,
+            axesFiles: 0, scopesFiles: 0, scopesCount: 0,
+          };
+          try {
+            const { WikiGenerator } = await import('../../content-library/wiki/wikiGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const wikiRoot = resolveWikiRoot();
+            const wg = new WikiGenerator(this.deps.db as any);
+            const result = await wg.generate({
+              wikiRoot,
+              maxEntities: 500,
+              skipSources: true,
+              preserveAppMeetingNotes: true,
+            });
+            wikiResultStats.entities = result.entities;
+            wikiResultStats.domains = result.domains;
+            wikiResultStats.domainIndexes = result.domainIndexes;
+            wikiResultStats.preservedFiles = result.preservedFiles;
+            wikiResultStats.durationMs = result.durationMs;
+            console.log(`[runEngine] wikiGenerator regen: ${result.entities} entities + ${result.domains} L2 + ${result.domainIndexes} L1 (${result.durationMs}ms)`);
+          } catch (e) {
+            console.warn('[runEngine] wikiGenerator regenerate failed:', (e as Error).message);
+          }
+
+          // 6d) MeetingAxesGenerator
+          await writeStep('render', 0.90, '触发 MeetingAxesGenerator');
+          try {
+            const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const ag = new MeetingAxesGenerator(this.deps);
+            const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+            wikiResultStats.axesFiles = r.filesWritten;
+          } catch (e) {
+            console.warn('[runEngine] MeetingAxesGenerator failed:', (e as Error).message);
+          }
+
+          // 6e) MeetingScopeGenerator
+          await writeStep('render', 0.95, '触发 MeetingScopeGenerator');
+          try {
+            const { MeetingScopeGenerator } = await import('../wiki/meetingScopeGenerator.js');
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
+            const sg = new MeetingScopeGenerator(this.deps);
+            const scopesR = await this.deps.db.query(
+              `SELECT scope_id::text AS scope_id FROM mn_scope_members WHERE meeting_id::text = $1`,
+              [payload.meetingId!],
+            );
+            const wikiRoot = resolveWikiRoot();
+            let totalFiles = 0;
+            for (const row of scopesR.rows) {
+              const r = await sg.generate({ wikiRoot, scopeId: row.scope_id });
+              totalFiles += r.filesWritten;
+            }
+            wikiResultStats.scopesFiles = totalFiles;
+            wikiResultStats.scopesCount = scopesR.rows.length;
+          } catch (e) {
+            console.warn('[runEngine] MeetingScopeGenerator failed:', (e as Error).message);
+          }
+
+          // 6f) 合并写 oneshotWikiResult 到 mn_runs.metadata
+          try {
+            await this.deps.db.query(
+              `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                 'oneshotWikiResult', jsonb_build_object(
+                   'entitiesGenerated', $2::int,
+                   'domainsGenerated',  $3::int,
+                   'domainIndexes',     $4::int,
+                   'preservedFiles',    $5::int,
+                   'wikiGenDurationMs', $6::int,
+                   'axesFiles',         $7::int,
+                   'scopesCount',       $8::int,
+                   'scopesFiles',       $9::int
+                 )
+               ) WHERE id = $1`,
+              [
+                payload.runId,
+                wikiResultStats.entities,
+                wikiResultStats.domains,
+                wikiResultStats.domainIndexes,
+                wikiResultStats.preservedFiles,
+                wikiResultStats.durationMs,
+                wikiResultStats.axesFiles,
+                wikiResultStats.scopesCount,
+                wikiResultStats.scopesFiles,
+              ],
+            );
+          } catch (e) {
+            console.warn('[runEngine] write oneshotWikiResult failed:', (e as Error).message);
+          }
+
+          // 7) 写 oneshotPersonMap + oneshotMeetingResult 到 mn_runs.metadata
+          try {
+            await this.deps.db.query(
+              `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                 'oneshotPersonMap', $2::jsonb,
+                 'oneshotMeetingResult', jsonb_build_object(
+                   'factsWritten', $3::int,
+                   'wikiSourceWritten', $4::boolean,
+                   'participantsResolved', $5::int
+                 )
+               ) WHERE id = $1`,
+              [
+                payload.runId,
+                JSON.stringify(cliPersonMap),
+                Array.isArray(oneshotResult.facts) ? oneshotResult.facts.length : 0,
+                Boolean((oneshotResult.wikiMarkdown as any)?.sourceEntry),
+                Object.keys(cliPersonMap).length,
+              ],
+            );
+          } catch (e) {
+            console.warn('[runEngine] write oneshotMeetingResult to mn_runs failed:', (e as Error).message);
+          }
+
+          // 8) scope-level oneshot（可选，仅 scope=project/client/topic 才跑）
+          // oneshot 没有 session resume，每次 fresh prompt（buildScopePrompt 已支持 isFreshSession=true）
+          if (scopeRow) {
+            await writeStep('render', 0.97, `scope oneshot · ${scopeRow.name}`);
+            const newMeetingDigest = buildMeetingDigest({
+              analysis: oneshotResult.analysis,
+              axes: oneshotResult.axes,
+            });
+            const scopePrompt = buildScopePrompt({
+              scope: {
+                kind: scopeRow.kind as 'project' | 'client' | 'topic',
+                id: scopeRow.id,
+                name: scopeRow.name,
+                config: null,
+              },
+              newMeeting: {
+                meetingId: payload.meetingId!,
+                title: meetingTitle,
+                date: stampedAnalysis?.summary?.date ?? null,
+                digest: newMeetingDigest,
+              },
+              isFreshSession: true,
+            });
+
+            try {
+              const scopeResult = await runOneshotMode(
+                this.deps,
+                { runId: payload.runId, meetingId: payload.meetingId!, assetId: payload.meetingId! },
+                {
+                  expertRoles: null,
+                  expertSnapshots: new Map(),
+                  preset: payload.preset,
+                  decoratorChain: [],
+                  scopeConfig: null,
+                  meetingKind: null,
+                  meetingTitle,
+                  participantsFromParse: [],
+                  promptKind: 'scope',
+                  prebuiltPrompt: scopePrompt,
+                },
+                {
+                  writeStep: async () => {/* scope 不动主进度 */},
+                  recordOneshotRaw: async (raw) => {
+                    try {
+                      await this.deps.db.query(
+                        `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('oneshotScopeRaw', $2::text) WHERE id = $1`,
+                        [payload.runId, raw],
+                      );
+                    } catch {/* swallow */}
+                  },
+                },
+              );
+              try {
+                await this.deps.db.query(
+                  `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                     'oneshotScopeResult', jsonb_build_object('scopeUpdates', $2::jsonb)
+                   ) WHERE id = $1`,
+                  [payload.runId, JSON.stringify(scopeResult.scopeUpdates ?? {})],
+                );
+              } catch {/* swallow */}
+            } catch (e) {
+              console.warn('[runEngine] scope oneshot failed:', (e as Error).message);
+              try {
+                await this.deps.db.query(
+                  `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('oneshotScopeError', $2::text) WHERE id = $1`,
+                  [payload.runId, (e as Error).message.slice(0, 500)],
+                );
+              } catch {/* swallow */}
+              // scope oneshot 失败不阻塞主流程
+            }
+          }
+        });
+
+        await writeStep('render', 1.0, 'API Oneshot 模式生成完成');
         // 跳过 multi-axis 流程，fall-through 到下面的 success-finalize
       } else {
       // ─── 默认 multi-axis 模式 ──────────────────────────────
