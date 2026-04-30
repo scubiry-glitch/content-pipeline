@@ -25,6 +25,7 @@ const FILES = [
   '015-runs-heartbeat.sql',
   '016-people-merge-fn.sql',
   '017-detail-perf-indexes.sql',
+  '018-library-list-perf.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
