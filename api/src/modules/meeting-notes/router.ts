@@ -374,6 +374,117 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return r.rows[0];
     });
 
+    /**
+     * POST /meetings/import-json
+     * 直接导入一份完整的 ANALYSIS JSON（跳过 LLM 流水线）。
+     *
+     * 入参 body:
+     *   {
+     *     title?: string,                // 缺省 'Imported meeting'
+     *     meetingKind?: string,          // 缺省 'general'
+     *     date?: string,                 // 'YYYY-MM-DD'，可选
+     *     participants?: Array<{id,name,role?,initials?,tone?,speakingPct?}>,
+     *     analysis: AnalysisObject       // 必填；或顶层就是 AnalysisObject 的 shape
+     *   }
+     * 兼容形态：若 body 顶层带 summary 字段（不带 analysis 包装），则把整个 body 当 analysis。
+     *
+     * 行为：
+     *   - 创建新 asset (type='meeting_note')
+     *   - 把 analysis 写到 metadata.analysis（带 _generated.by='json-import' + manualOverride=true，
+     *     防止后续 compose-analysis / recompose 覆盖）
+     *   - 写 metadata.participants（若有）/ meeting date / meeting_kind
+     *   - 返回 { id, title, created_at }
+     */
+    fastify.post('/meetings/import-json', { preHandler: authenticate }, async (request, reply) => {
+      const raw = (request.body ?? {}) as Record<string, unknown>;
+      // 兼容两种形态：{ analysis: {...} } 或 直接 { summary: {...}, tension: [...] }
+      const analysis: any = raw && typeof (raw as any).analysis === 'object' && (raw as any).analysis
+        ? (raw as any).analysis
+        : (raw && typeof (raw as any).summary === 'object' ? raw : null);
+      if (!analysis || typeof analysis !== 'object' || typeof (analysis as any).summary !== 'object') {
+        reply.status(400);
+        return {
+          ok: false,
+          error: 'Bad Request',
+          message: 'JSON must contain an analysis object with a summary field (either at top level or under .analysis)',
+        };
+      }
+      // 基本 shape 校验：summary 必须是对象；tension/newCognition/focusMap/consensus/crossView 若存在必须是数组
+      for (const k of ['tension', 'newCognition', 'focusMap', 'consensus', 'crossView']) {
+        if ((analysis as any)[k] !== undefined && !Array.isArray((analysis as any)[k])) {
+          reply.status(400);
+          return { ok: false, error: 'Bad Request', message: `analysis.${k} must be an array` };
+        }
+      }
+
+      const title = typeof (raw as any).title === 'string' && (raw as any).title.trim()
+        ? String((raw as any).title)
+        : (typeof (analysis as any).title === 'string' ? String((analysis as any).title) : 'Imported meeting');
+      const meetingKind = typeof (raw as any).meetingKind === 'string' && (raw as any).meetingKind.trim()
+        ? String((raw as any).meetingKind)
+        : 'general';
+      const date = typeof (raw as any).date === 'string' && (raw as any).date.trim()
+        ? String((raw as any).date)
+        : (typeof (analysis as any).date === 'string' ? String((analysis as any).date) : null);
+      const participants = Array.isArray((raw as any).participants)
+        ? (raw as any).participants
+        : (Array.isArray((analysis as any).participants) ? (analysis as any).participants : null);
+
+      // 标记导入来源，避免被后续 recompose 覆盖
+      const stampedAnalysis = {
+        ...analysis,
+        _generated: {
+          by: 'json-import' as const,
+          at: new Date().toISOString(),
+          phase: 1 as const,
+        },
+        manualOverride: true,
+      };
+
+      const meta: Record<string, unknown> = {
+        meeting_kind: meetingKind,
+        analysis: stampedAnalysis,
+      };
+      if (participants) meta.participants = participants;
+      if (date) meta.meeting_date = date;
+
+      try {
+        const wsId = currentWorkspaceId(request);
+        const r = wsId
+          ? await engine.deps.db.query(
+              `INSERT INTO assets (id, type, title, content, content_type, metadata, workspace_id)
+               VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb, $3)
+               RETURNING id, title, created_at`,
+              [title, JSON.stringify(meta), wsId],
+            )
+          : await engine.deps.db.query(
+              `INSERT INTO assets (id, type, title, content, content_type, metadata)
+               VALUES (gen_random_uuid(), 'meeting_note', $1, '', 'meeting_note', $2::jsonb)
+               RETURNING id, title, created_at`,
+              [title, JSON.stringify(meta)],
+            );
+        reply.status(201);
+        return {
+          ok: true,
+          id: r.rows[0].id as string,
+          title: r.rows[0].title as string,
+          created_at: r.rows[0].created_at as string,
+          imported: {
+            tension: Array.isArray(analysis.tension) ? analysis.tension.length : 0,
+            newCognition: Array.isArray(analysis.newCognition) ? analysis.newCognition.length : 0,
+            focusMap: Array.isArray(analysis.focusMap) ? analysis.focusMap.length : 0,
+            consensus: Array.isArray(analysis.consensus) ? analysis.consensus.length : 0,
+            crossView: Array.isArray(analysis.crossView) ? analysis.crossView.length : 0,
+            participants: participants ? participants.length : 0,
+          },
+        };
+      } catch (e) {
+        request.log.warn({ err: e }, 'meetings/import-json failed');
+        reply.status(500);
+        return { ok: false, error: 'Internal Error', message: (e as Error).message };
+      }
+    });
+
     fastify.put('/meetings/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) {

@@ -9,8 +9,21 @@ import { expertsApi } from '../../api/client';
 import type { Expert } from '../../types';
 
 type StepId = 'upload' | 'experts' | 'processing';
-type UploadMode = 'files' | 'folder' | 'recent';
+type UploadMode = 'files' | 'folder' | 'recent' | 'json';
 type PresetId = 'lite' | 'standard' | 'max';
+
+interface JsonPreview {
+  title: string;
+  hasTldr: boolean;
+  hasScqa: boolean;
+  decisions: number;
+  actionItems: number;
+  risks: number;
+  tension: number;
+  newCognition: number;
+  consensus: number;
+  participants: number;
+}
 
 interface ExpertCard {
   id: string;
@@ -107,6 +120,7 @@ function Stepper({ step }: { step: StepId }) {
 // ── Step 1: Upload ──────────────────────────────────────────────────
 function StepUpload({
   files, onFilesChange, mode, onModeChange, folderPath, onFolderPathChange,
+  jsonFile, jsonText, jsonPreview, jsonError, onJsonFile, onJsonImport, jsonImporting,
 }: {
   files: File[];
   onFilesChange: (f: File[]) => void;
@@ -114,8 +128,16 @@ function StepUpload({
   onModeChange: (m: UploadMode) => void;
   folderPath: string;
   onFolderPathChange: (p: string) => void;
+  jsonFile: File | null;
+  jsonText: string;
+  jsonPreview: JsonPreview | null;
+  jsonError: string | null;
+  onJsonFile: (f: File | null) => void;
+  onJsonImport: () => void;
+  jsonImporting: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const dropped = Array.from(e.dataTransfer.files);
@@ -139,6 +161,7 @@ function StepUpload({
           { id: 'files' as const,  label: '上传文件' },
           { id: 'folder' as const, label: '绑定目录' },
           { id: 'recent' as const, label: '从历史中选' },
+          { id: 'json' as const,   label: 'JSON 导入' },
         ].map((x) => (
           <button
             key={x.id}
@@ -240,6 +263,123 @@ function StepUpload({
             历史会议纪要列表（从已上传渠道拉取）<br />
             <span className="text-[11px]">—— 当前原型占位，未来接入 meetingNotesApi.listScopes()</span>
           </p>
+        </div>
+      )}
+
+      {mode === 'json' && (
+        <div className="grid grid-cols-2 gap-4">
+          {/* 左侧 · 文件选择 */}
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) onJsonFile(f);
+            }}
+            onClick={() => jsonInputRef.current?.click()}
+            className="border-[1.5px] border-dashed border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 min-h-[260px] flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 px-6"
+          >
+            <input
+              ref={jsonInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const picked = e.target.files?.[0] ?? null;
+                onJsonFile(picked);
+                e.target.value = '';
+              }}
+            />
+            <div className="w-16 h-16 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-2xl">
+              {'{ }'}
+            </div>
+            <div className="text-lg font-medium" style={{ fontFamily: 'Source Serif 4, Noto Serif SC, Georgia, serif' }}>
+              拖拽 JSON 文件 · 或点击选择
+            </div>
+            <div className="text-xs text-gray-500 text-center leading-relaxed">
+              直接导入完整 ANALYSIS JSON · 跳过 LLM 流水线<br />
+              <span className="font-mono text-[11px]">{'{ analysis: {...} }'} 或顶层带 summary 字段</span>
+            </div>
+            {jsonFile && (
+              <div className="mt-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-xs flex items-center gap-2 max-w-full">
+                <span>📄</span>
+                <span className="max-w-[260px] truncate">{jsonFile.name}</span>
+                <span className="font-mono text-gray-400">
+                  {(jsonFile.size / 1024).toFixed(jsonFile.size > 1024 * 1024 ? 0 : 1)}
+                  {jsonFile.size > 1024 * 1024 ? ' MB' : ' KB'}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onJsonFile(null); }}
+                  className="text-gray-400 hover:text-red-600 ml-1"
+                  title="移除"
+                >×</button>
+              </div>
+            )}
+          </div>
+
+          {/* 右侧 · 预览 + 导入 */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 flex flex-col">
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-3">JSON 预览</div>
+            {!jsonText && (
+              <p className="text-xs text-gray-400 flex-1 flex items-center justify-center text-center">
+                选择文件后将解析并显示统计预览。<br />
+                校验通过即可一键创建会议（不走 LLM 解析）。
+              </p>
+            )}
+            {jsonText && jsonError && (
+              <div className="flex-1 flex flex-col gap-3">
+                <div className="text-sm text-red-600 dark:text-red-400 font-medium">解析失败</div>
+                <div className="text-xs text-red-500 dark:text-red-300 font-mono whitespace-pre-wrap break-all">
+                  {jsonError}
+                </div>
+              </div>
+            )}
+            {jsonText && jsonPreview && !jsonError && (
+              <div className="flex-1 flex flex-col gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-400 font-mono">TITLE</div>
+                  <div className="text-sm font-medium mt-1" style={{ fontFamily: 'Source Serif 4, Noto Serif SC, Georgia, serif' }}>
+                    {jsonPreview.title}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {[
+                    { label: '决议',    value: jsonPreview.decisions },
+                    { label: '行动项',  value: jsonPreview.actionItems },
+                    { label: '风险',    value: jsonPreview.risks },
+                    { label: '张力',    value: jsonPreview.tension },
+                    { label: '新认知',  value: jsonPreview.newCognition },
+                    { label: '共识/分歧', value: jsonPreview.consensus },
+                  ].map((s) => (
+                    <div key={s.label} className="px-2 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
+                      <div className="text-[10px] text-gray-400 font-mono">{s.label}</div>
+                      <div className="text-sm font-semibold mt-0.5">{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {jsonPreview.hasTldr && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-700">含 TL;DR</span>
+                  )}
+                  {jsonPreview.hasScqa && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700">含 SCQA</span>
+                  )}
+                  {jsonPreview.participants > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                      参与者 {jsonPreview.participants} 人
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={onJsonImport}
+                  disabled={jsonImporting}
+                  className="mt-auto px-4 py-2 text-sm font-medium bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded disabled:opacity-40"
+                >
+                  {jsonImporting ? '导入中…' : '导入并打开 →'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -567,6 +707,13 @@ export function NewMeeting() {
   const [files, setFiles] = useState<File[]>([]);
   const [folderPath, setFolderPath] = useState('');
 
+  // step 1 · JSON 导入子状态
+  const [jsonFile, setJsonFile] = useState<File | null>(null);
+  const [jsonText, setJsonText] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [jsonPreview, setJsonPreview] = useState<JsonPreview | null>(null);
+  const [jsonImporting, setJsonImporting] = useState(false);
+
   // step 2 state
   const [experts, setExperts] = useState<ExpertCard[]>([]);
   const [expertsLoading, setExpertsLoading] = useState(true);
@@ -698,6 +845,72 @@ export function NewMeeting() {
     }
   }, [files, uploadMode, preset, meetingId]);
 
+  // JSON 文件 → 解析 → preview
+  const handleJsonFile = useCallback((f: File | null) => {
+    setJsonFile(f);
+    setJsonError(null);
+    setJsonPreview(null);
+    setJsonText('');
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onerror = () => setJsonError('读取文件失败');
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      setJsonText(text);
+      try {
+        const obj = JSON.parse(text);
+        // 兼容两种形态：{ analysis: {...} } 或顶层就是 AnalysisObject
+        const analysis = obj && typeof obj.analysis === 'object' && obj.analysis
+          ? obj.analysis
+          : (obj && typeof obj.summary === 'object' ? obj : null);
+        if (!analysis || typeof analysis.summary !== 'object') {
+          throw new Error('JSON 必须包含 analysis 对象（顶层或 .analysis 下），且其 summary 字段为对象');
+        }
+        const summary = analysis.summary ?? {};
+        const titleGuess = (typeof obj.title === 'string' && obj.title.trim())
+          || (typeof analysis.title === 'string' && analysis.title.trim())
+          || f.name.replace(/\.json$/i, '');
+        setJsonPreview({
+          title: String(titleGuess),
+          hasTldr: typeof summary.tldr === 'string' && summary.tldr.trim().length > 0,
+          hasScqa: !!(summary.scqa && typeof summary.scqa === 'object'
+            && summary.scqa.situation && summary.scqa.complication
+            && summary.scqa.question && summary.scqa.answer),
+          decisions: typeof summary.decision === 'string' && summary.decision.trim() ? 1 : 0,
+          actionItems: Array.isArray(summary.actionItems) ? summary.actionItems.length : 0,
+          risks: Array.isArray(summary.risks) ? summary.risks.length : 0,
+          tension: Array.isArray(analysis.tension) ? analysis.tension.length : 0,
+          newCognition: Array.isArray(analysis.newCognition) ? analysis.newCognition.length : 0,
+          consensus: Array.isArray(analysis.consensus) ? analysis.consensus.length : 0,
+          participants: Array.isArray(obj.participants)
+            ? obj.participants.length
+            : (Array.isArray(analysis.participants) ? analysis.participants.length : 0),
+        });
+      } catch (e: any) {
+        setJsonError(e?.message ?? String(e));
+      }
+    };
+    reader.readAsText(f);
+  }, []);
+
+  // JSON 一键导入 → 跳过 step 2/3 直接跳详情页
+  const importJson = useCallback(async () => {
+    if (!jsonText || !jsonPreview || jsonError) return;
+    setJsonImporting(true);
+    try {
+      const obj = JSON.parse(jsonText);
+      const body: Record<string, unknown> = { ...obj };
+      // 若顶层没有 title 字段但 preview 推断出 title，补上
+      if (!body.title && jsonPreview.title) body.title = jsonPreview.title;
+      const r = await meetingNotesApi.importMeetingJson(body);
+      if (!r.ok || !r.id) throw new Error('import failed');
+      navigate(`/meeting-notes/${r.id}`, { state: { justImported: true } });
+    } catch (e: any) {
+      setJsonError(e?.message ?? String(e));
+      setJsonImporting(false);
+    }
+  }, [jsonText, jsonPreview, jsonError, navigate]);
+
   // elapsed 计时
   useEffect(() => {
     if (step !== 'processing' || done || errored) return;
@@ -732,6 +945,7 @@ export function NewMeeting() {
     if (step === 'upload') {
       if (uploadMode === 'files') return files.length > 0;
       if (uploadMode === 'folder') return folderPath.trim().length > 0;
+      // JSON 模式有自己的"导入并打开"按钮，不走"继续 · 选择专家"流程
       return false;
     }
     if (step === 'experts') return selected.size > 0;
@@ -776,6 +990,13 @@ export function NewMeeting() {
             onModeChange={setUploadMode}
             folderPath={folderPath}
             onFolderPathChange={setFolderPath}
+            jsonFile={jsonFile}
+            jsonText={jsonText}
+            jsonPreview={jsonPreview}
+            jsonError={jsonError}
+            onJsonFile={handleJsonFile}
+            onJsonImport={importJson}
+            jsonImporting={jsonImporting}
           />
         )}
         {step === 'experts' && (
@@ -805,7 +1026,7 @@ export function NewMeeting() {
       </div>
 
       {/* 底部动作 */}
-      {step !== 'processing' && (
+      {step !== 'processing' && !(step === 'upload' && uploadMode === 'json') && (
         <div className="max-w-[1100px] mx-auto flex items-center justify-end gap-3 mt-8 pt-4 border-t border-gray-200 dark:border-gray-800">
           {step !== 'upload' ? (
             <button

@@ -346,6 +346,16 @@ export const meetingNotesApi = {
   },
   createMeeting: (body: { title?: string; meetingKind?: string }) =>
     jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
+  /** 直接导入完整 ANALYSIS JSON，跳过 LLM 流水线。
+   *  body 接受 { title?, meetingKind?, date?, participants?, analysis } 或顶层就是 AnalysisObject 形态。 */
+  importMeetingJson: (body: Record<string, unknown>) =>
+    jpost<{
+      ok: boolean;
+      id: string;
+      title: string;
+      created_at: string;
+      imported: { tension: number; newCognition: number; focusMap: number; consensus: number; crossView: number; participants: number };
+    }>('/meetings/import-json', body),
   updateMeeting: (id: string, body: { title: string }) =>
     jput<{ id: string; title: string; created_at: string; updated_at: string }>(`/meetings/${id}`, body),
   archiveMeeting: (id: string) =>
