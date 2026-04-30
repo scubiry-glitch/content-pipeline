@@ -143,18 +143,6 @@ export function MeetingShell() {
             ))}
           </div>
         </div>
-
-        <div style={{ borderTop: '1px solid var(--line-2)', paddingTop: 10, marginTop: 4 }}>
-          <a
-            href="/meeting-notes"
-            style={{
-              fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)',
-              textDecoration: 'none', letterSpacing: 0.3,
-            }}
-          >
-            ← 旧版 /meeting-notes
-          </a>
-        </div>
       </aside>
 
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>

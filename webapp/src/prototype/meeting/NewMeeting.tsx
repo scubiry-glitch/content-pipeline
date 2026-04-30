@@ -254,7 +254,7 @@ function FlowUpload({ onNext, onUploaded }: {
       if (!body.title && jsonPreview.title) body.title = jsonPreview.title;
       const r = await meetingNotesApi.importMeetingJson(body);
       if (!r.ok || !r.id) throw new Error('import failed');
-      navigate(`/meeting-notes/${r.id}`, { state: { justImported: true } });
+      navigate(`/meeting/${r.id}`, { state: { justImported: true } });
     } catch (e: unknown) {
       setJsonError(e instanceof Error ? e.message : String(e));
       setJsonImporting(false);
