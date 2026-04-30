@@ -243,11 +243,11 @@ function FolderNode({
           e.dataTransfer.dropEffect = 'link';
           setDragHover(true);
         } : undefined}
-        onDragLeave={dropEnabled ? () => setDragHover(false) : undefined}
+        onDragLeave={dropEnabled ? (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragHover(false); } : undefined}
         onDrop={dropEnabled ? (e) => {
           e.preventDefault();
           setDragHover(false);
-          const mid = e.dataTransfer.getData('application/x-meeting-id');
+          const mid = e.dataTransfer.getData('application/x-meeting-id') || e.dataTransfer.getData('text/plain');
           if (mid) onDropMeeting(mid, node.id);
         } : undefined}
         style={{
@@ -448,7 +448,7 @@ function MeetingCard({ m, active, onClick, onOpen, groupName, draggable }: {
       onDragStart={draggable ? (e) => {
         e.dataTransfer.effectAllowed = 'link';
         e.dataTransfer.setData('application/x-meeting-id', m.id);
-        e.dataTransfer.setData('text/plain', m.title);
+        e.dataTransfer.setData('text/plain', m.id);
         setIsDragging(true);
       } : undefined}
       onDragEnd={draggable ? () => setIsDragging(false) : undefined}
