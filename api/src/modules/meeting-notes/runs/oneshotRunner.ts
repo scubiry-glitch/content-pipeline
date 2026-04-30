@@ -111,6 +111,16 @@ function getOneshotMaxTokens(): number {
   return Number.isFinite(v) && v > 0 ? v : 16384;
 }
 
+function getOneshotTranscriptMaxChars(): number {
+  const v = Number(process.env.MN_ONESHOT_TRANSCRIPT_MAX_CHARS ?? 120_000);
+  return Number.isFinite(v) && v >= 20_000 ? v : 120_000;
+}
+
+function getOneshotChunkChars(): number {
+  const v = Number(process.env.MN_ONESHOT_TRANSCRIPT_CHUNK_CHARS ?? 12_000);
+  return Number.isFinite(v) && v >= 2_000 ? v : 12_000;
+}
+
 // ============================================================
 // 工具
 // ============================================================
@@ -140,6 +150,71 @@ function buildLocalIdMapping(
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
   return s.slice(0, n) + `\n…[truncated, total ${s.length}]`;
+}
+
+function splitByChars(text: string, chunkChars: number): string[] {
+  const lines = text.split(/\r?\n/);
+  const chunks: string[] = [];
+  let cur = '';
+  for (const line of lines) {
+    const next = cur ? `${cur}\n${line}` : line;
+    if (next.length <= chunkChars) {
+      cur = next;
+      continue;
+    }
+    if (cur) chunks.push(cur);
+    if (line.length <= chunkChars) {
+      cur = line;
+    } else {
+      // 单行超长时硬切，避免无限增长
+      for (let i = 0; i < line.length; i += chunkChars) {
+        chunks.push(line.slice(i, i + chunkChars));
+      }
+      cur = '';
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks.filter((c) => c.trim().length > 0);
+}
+
+function condenseTranscriptForOneshot(transcript: string): { text: string; compressed: boolean; originalChars: number; finalChars: number } {
+  const originalChars = transcript.length;
+  const maxChars = getOneshotTranscriptMaxChars();
+  if (originalChars <= maxChars) {
+    return { text: transcript, compressed: false, originalChars, finalChars: originalChars };
+  }
+
+  const chunkChars = getOneshotChunkChars();
+  const chunks = splitByChars(transcript, chunkChars);
+  const headChars = 900;
+  const tailChars = 380;
+
+  const sections = chunks.map((chunk, idx) => {
+    const clean = chunk.trim();
+    const head = clean.slice(0, Math.min(headChars, clean.length));
+    const tail = clean.length > headChars
+      ? clean.slice(Math.max(head.length, clean.length - tailChars))
+      : '';
+    return [
+      `## Chunk ${idx + 1}/${chunks.length} · ${clean.length} chars`,
+      head,
+      tail ? `... [middle omitted] ...\n${tail}` : '',
+    ].filter(Boolean).join('\n');
+  });
+
+  const condensed = [
+    `[Transcript compressed for oneshot stability]`,
+    `Original chars: ${originalChars}`,
+    `Chunks: ${chunks.length} (chunkChars=${chunkChars})`,
+    `Each chunk keeps head+tail excerpts; middle omitted.`,
+    '',
+    sections.join('\n\n'),
+  ].join('\n');
+
+  // 最终二次兜底，保证压缩后不会无限膨胀
+  const hardCap = Math.max(maxChars, 40_000);
+  const finalText = condensed.length > hardCap ? `${condensed.slice(0, hardCap)}\n\n...[condensed transcript hard-truncated]` : condensed;
+  return { text: finalText, compressed: true, originalChars, finalChars: finalText.length };
 }
 
 /** 解析 LLM 返回文本里的 JSON：先尝试直接 parse；失败则去 markdown 围栏；再失败找 { } 边界 */
@@ -212,6 +287,11 @@ export async function runOneshotMode(
     if (!transcript || transcript.trim().length < 50) {
       throw new Error('transcript too short or empty (assets.content)');
     }
+    const condensed = condenseTranscriptForOneshot(transcript);
+    if (condensed.compressed) {
+      await hooks.writeStep('spawn', 0.06, `转写分段压缩 ${condensed.originalChars} → ${condensed.finalChars} chars`);
+      console.log(`[oneshotRunner ${payload.runId.slice(0, 8)}] transcript condensed ${condensed.originalChars} -> ${condensed.finalChars}`);
+    }
     const mapping = buildLocalIdMapping(ctx.participantsFromParse);
     cliPersonMap = mapping.cliPersonMap;
     prompt = buildFullPrompt({
@@ -219,7 +299,7 @@ export async function runOneshotMode(
       meetingTitle: ctx.meetingTitle,
       meetingKind: ctx.meetingKind,
       participants: mapping.promptList,
-      transcript,
+      transcript: condensed.text,
       expertRoles: ctx.expertRoles,
       expertSnapshots: ctx.expertSnapshots,
       preset: ctx.preset,
