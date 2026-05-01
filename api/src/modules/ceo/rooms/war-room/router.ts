@@ -91,8 +91,10 @@ export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
       try {
         return await startSandboxRun(engine.deps, id);
       } catch (e) {
-        reply.code(404);
-        return { error: (e as Error).message };
+        const msg = (e as Error).message;
+        const notFound = /not found/i.test(msg);
+        reply.code(notFound ? 404 : 500);
+        return { error: msg };
       }
     });
   };
