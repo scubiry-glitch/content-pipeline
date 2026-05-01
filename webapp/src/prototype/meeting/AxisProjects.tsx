@@ -271,6 +271,45 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           下次重要决议前，回看这张图 2 分钟，比开半小时会更有价值。
         </CalloutCard>
       </div>
+
+      {/* R4 · 改动二：决策溯源 tab 内追加决策树视图（mn_decision_tree_snapshots） */}
+      <DecisionTreeSection scopeId={scopeId} />
+    </div>
+  );
+}
+
+function DecisionTreeSection({ scopeId }: { scopeId: string }) {
+  const [data, setData] = useState<{ rootId?: string; nodes?: any; computedAt?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    meetingNotesApi.getLongitudinal(scopeId, 'decision_tree')
+      .then((r: any) => { if (!cancelled) { setData(r); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setData(null); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  return (
+    <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
+        <SectionLabel>决策树</SectionLabel>
+        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+          mn_decision_tree_snapshots · 项目所有分岔点 + 未来待决
+        </span>
+      </div>
+      {loading ? (
+        <div style={{ color: 'var(--ink-3)', fontSize: 12 }}>加载中…</div>
+      ) : !data || !data.nodes ? (
+        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 20px', fontSize: 12, color: 'var(--ink-3)' }}>
+          本 scope 暂无决策树快照 · 跑生成中心 → longitudinal/decision_tree 触发
+        </div>
+      ) : (
+        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 18px', overflow: 'auto' }}>
+          <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
+            {JSON.stringify(data.nodes, null, 2).slice(0, 1500)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -627,6 +666,70 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
           每个孤儿风险背后都有一条快要崩掉的假设。
         </CalloutCard>
       </div>
+
+      {/* R4 · 改动二：风险 tab 内追加 收益 × 风险 散点图 */}
+      <RiskRewardScatter rows={rows} />
+    </div>
+  );
+}
+
+function RiskRewardScatter({ rows }: { rows: Array<{ id: string; text: string; severity: string; heat: number; trend: string }> }) {
+  const W = 720, H = 280, padL = 40, padB = 32, padT = 14, padR = 14;
+  const sevToRisk = (s: string) => s === 'high' ? 0.8 : s === 'med' ? 0.5 : s === 'low' ? 0.25 : 0.5;
+  const points = rows.slice(0, 12).map((r) => ({
+    id: r.id,
+    text: r.text || '',
+    risk: sevToRisk(r.severity) * 0.5 + Math.min(1, Math.max(0, r.heat ?? 0)) * 0.5,
+    // 收益维度：trend 'up' 当作正向期望（待人工标注前的占位）
+    reward: r.trend === 'up' ? 0.7 : r.trend === 'down' ? 0.25 : 0.5,
+  }));
+  const xFor = (v: number) => padL + v * (W - padL - padR);
+  const yFor = (v: number) => H - padB - v * (H - padB - padT);
+  return (
+    <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
+        <SectionLabel>风险 × 收益散点</SectionLabel>
+        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+          v1 lite · 收益维度暂从 trend 派生 (up=0.7 / down=0.25 / flat=0.5)
+        </span>
+      </div>
+      {points.length === 0 ? (
+        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 20px', fontSize: 12, color: 'var(--ink-3)' }}>
+          暂无风险数据
+        </div>
+      ) : (
+        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '12px 14px' }}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, height: 'auto' }}>
+            {/* 网格 */}
+            {[0.25, 0.5, 0.75].map((g) => (
+              <g key={g}>
+                <line x1={xFor(g)} y1={padT} x2={xFor(g)} y2={H - padB} stroke="var(--line-2)" strokeDasharray="2 4" />
+                <line x1={padL} y1={yFor(g)} x2={W - padR} y2={yFor(g)} stroke="var(--line-2)" strokeDasharray="2 4" />
+              </g>
+            ))}
+            {/* 坐标轴 */}
+            <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line)" />
+            <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="var(--line)" />
+            <text x={W - padR} y={H - padB + 18} textAnchor="end" fontFamily="var(--mono)" fontSize="10" fill="var(--ink-3)">风险 →</text>
+            <text x={padL - 6} y={padT + 4} textAnchor="end" fontFamily="var(--mono)" fontSize="10" fill="var(--ink-3)">↑ 收益</text>
+            {/* 散点 */}
+            {points.map((p) => {
+              const cx = xFor(p.risk), cy = yFor(p.reward);
+              const isStar = p.reward >= 0.6 && p.risk <= 0.4;
+              const isTrap = p.reward <= 0.4 && p.risk >= 0.6;
+              const fill = isStar ? 'oklch(0.55 0.16 160)' : isTrap ? 'oklch(0.55 0.18 25)' : 'oklch(0.50 0.12 75)';
+              return (
+                <g key={p.id}>
+                  <circle cx={cx} cy={cy} r={6} fill={fill} opacity={0.85}>
+                    <title>{p.text}</title>
+                  </circle>
+                  <text x={cx + 8} y={cy + 3} fontFamily="var(--mono)" fontSize="9" fill="var(--ink-3)">{p.id}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
@@ -651,25 +754,180 @@ export function AxisProjects() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+  // R4 · 改动二：4 → 6 tabs；决策溯源合并链+树；新增责任盘点 + 对外影响
   const tabs = [
-    { id: 'provenance',  label: '决策溯源链', sub: '如何一步步走到这里',         icon: 'git' as const },
-    { id: 'assumptions', label: '假设清单',   sub: '每个决策背后的未验证假设',   icon: 'layers' as const },
-    { id: 'questions',   label: '未解问题',   sub: '跨会议追踪',                 icon: 'search' as const },
-    { id: 'risks',       label: '风险热度',   sub: '被反复提及但没人处理的风险', icon: 'bolt' as const },
+    { id: 'provenance',     label: '决策溯源',     sub: '链 + 树 · 决策如何一步步走到这里', icon: 'git' as const },
+    { id: 'assumptions',    label: '假设清单',     sub: '每个决策背后的未验证假设',   icon: 'layers' as const },
+    { id: 'questions',      label: '未解问题',     sub: '跨会议追踪',                 icon: 'search' as const },
+    { id: 'risks',          label: '风险与收益',   sub: '风险热度 + 收益散点',         icon: 'bolt' as const },
+    // R4 · 跨模块下沉
+    { id: 'responsibility', label: '责任盘点',     sub: '承诺 × 清晰度 × 兑现率',     icon: 'check' as const },
+    { id: 'stakeholders',   label: '对外影响',     sub: '利益相关方热力图 · CEO Situation', icon: 'target' as const },
   ];
   return (
     <>
       <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
         <ProjectBanner />
-        {tab === 'provenance'  && <ProvenanceChain scopeId={scopeId} />}
-        {tab === 'assumptions' && <AssumptionLedger scopeId={scopeId} />}
-        {tab === 'questions'   && <OpenQuestions scopeId={scopeId} />}
-        {tab === 'risks'       && <RiskHeat scopeId={scopeId} />}
+        {tab === 'provenance'     && <ProvenanceChain scopeId={scopeId} />}
+        {tab === 'assumptions'    && <AssumptionLedger scopeId={scopeId} />}
+        {tab === 'questions'      && <OpenQuestions scopeId={scopeId} />}
+        {tab === 'risks'          && <RiskHeat scopeId={scopeId} />}
+        {/* R4 · 2 个新 tab */}
+        {tab === 'responsibility' && <ResponsibilityTab scopeId={scopeId} />}
+        {tab === 'stakeholders'   && <StakeholderInfluenceTab scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="projects" onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
+  );
+}
+
+// ── R4 · 跨模块 2 个新 tab 组件 ──────────────────────────────────
+
+/** 责任盘点：mn_commitments × ceo_attention_alloc 跨模块聚合 */
+function ResponsibilityTab({ scopeId }: { scopeId: string }) {
+  const [data, setData] = useState<{ items: any[]; computedAt: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    meetingNotesApi.getScopeResponsibility(scopeId)
+      .then((r) => { if (!cancelled) { setData(r); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>责任盘点</h2>
+        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+          mn_commitments × ceo_attention_alloc · 4 周窗口
+        </span>
+      </div>
+      {loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
+      {err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
+      {!loading && !err && data && (
+        data.items.length === 0 ? (
+          <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '20px 24px', fontSize: 12, color: 'var(--ink-3)' }}>
+            本 scope 暂无承诺数据 · 跑生成中心 → people/commitments 后回看
+          </div>
+        ) : (
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '12px 14px', overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>
+              <thead>
+                <tr style={{ color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                  <th style={{ textAlign: 'left',  padding: '6px 10px', fontWeight: 500 }}>person</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>承诺总数</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>已兑现</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>滑期</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>开放</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>兑现率</th>
+                  <th style={{ textAlign: 'right', padding: '6px 10px', fontWeight: 500 }}>4w 投入</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((it: any) => {
+                  const rate = it.fulfillRate;
+                  const rateColor = rate === null ? 'var(--ink-3)'
+                    : rate >= 0.7 ? 'oklch(0.40 0.10 160)'
+                    : rate >= 0.4 ? 'oklch(0.45 0.10 75)'
+                    : 'oklch(0.45 0.16 25)';
+                  return (
+                    <tr key={it.personId} style={{ borderTop: '1px solid var(--line-2)' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--ink-2)' }}>{it.personName || it.personId.slice(0, 8)}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{it.total}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'oklch(0.40 0.10 160)' }}>{it.done}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'oklch(0.45 0.16 25)' }}>{it.slipped}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>{it.open}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--serif)', fontWeight: 600, color: rateColor }}>
+                        {rate === null ? '—' : `${(rate * 100).toFixed(0)}%`}
+                      </td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+                        {it.attentionHours4w === null ? '—' : `${Number(it.attentionHours4w).toFixed(1)}h`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+/** 对外影响：直接调 CEO Situation 的 stakeholders endpoint（跨模块） */
+function StakeholderInfluenceTab({ scopeId }: { scopeId: string }) {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    const url = `/api/v1/ceo/situation/stakeholders${scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : ''}`;
+    fetch(url, { headers: { 'X-API-Key': (import.meta as any).env?.VITE_API_KEY ?? '' } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  const items: Array<any> = Array.isArray(data?.items) ? data.items : [];
+  // heat 排序 + 简单热力色阶
+  const sorted = [...items].sort((a, b) => Number(b.heat ?? 0) - Number(a.heat ?? 0));
+  const heatColor = (h: number) => h >= 0.7 ? 'oklch(0.55 0.18 25)' : h >= 0.4 ? 'oklch(0.65 0.16 75)' : 'oklch(0.55 0.10 160)';
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>对外影响 · 利益相关方热力图</h2>
+        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+          来源 GET /api/v1/ceo/situation/stakeholders · ceo_stakeholders
+        </span>
+      </div>
+      {loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
+      {err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
+      {!loading && !err && (
+        sorted.length === 0 ? (
+          <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '20px 24px', fontSize: 12, color: 'var(--ink-3)' }}>
+            本 scope 暂无利益相关方数据 · 在 /ceo/internal/ceo/situation 配置后回看
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {sorted.map((it: any) => (
+              <div key={it.id} style={{
+                background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
+                padding: '12px 14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
+                    {it.kind || 'stakeholder'}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600,
+                    color: heatColor(Number(it.heat ?? 0)),
+                  }}>
+                    {Number(it.heat ?? 0).toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600 }}>{it.name}</div>
+                {it.description && (
+                  <div style={{ marginTop: 4, fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+                    {it.description.slice(0, 80)}{it.description.length > 80 ? '…' : ''}
+                  </div>
+                )}
+                {it.last_signal_at && (
+                  <div style={{ marginTop: 6, fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                    last signal · {new Date(it.last_signal_at).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
   );
 }
 
