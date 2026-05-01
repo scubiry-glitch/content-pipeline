@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>董事会厅 · Boardroom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #2A2520;
+    --bg-mid:  #322B25;
+    --bg-soft: #3A332C;
+    --bg-paper:#F5EFE3;
+    --line:    rgba(218, 199, 162, 0.18);
+    --line-2:  rgba(218, 199, 162, 0.32);
+    --steel:   #8C8275;
+    --gold:    #D4A84B;
+    --gold-soft:#B89348;
+    --crimson: #C46A50;
+    --green:   #82A86E;
+    --teal:    #6FA29F;
+    --ink:     #F0E8D6;
+    --ink-2:   rgba(240, 232, 214, 0.7);
+    --ink-3:   rgba(240, 232, 214, 0.42);
+    --paper-ink: #2A2520;
+    --paper-ink-2: rgba(42, 37, 32, 0.65);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(212,168,75,0.06), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(196,106,80,0.04), transparent 60%),
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 3px);
+  }
+
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px;
+    border-bottom:1px solid var(--line);
+    background:rgba(42,37,32,0.85);
+    backdrop-filter: blur(8px);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:6px;
+    border:1.5px solid var(--gold);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:rgba(212,168,75,0.08);
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--gold); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--line-2); border-radius:3px;
+    transition: all .25s; background:rgba(240,232,214,0.04);
+  }
+  .exit:hover { color:var(--gold); border-color:var(--gold); }
+
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+    padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--gold); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 董事关切雷达 */
+  .radar { grid-column: span 2; }
+  .radar-row {
+    display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:start;
+  }
+  .radar-svg-wrap {
+    background: rgba(0,0,0,0.18); border-radius:4px;
+    padding: 14px; border: 1px solid var(--line);
+  }
+  .radar-svg { width:100%; height:280px; }
+  .radar-list { display:flex; flex-direction:column; gap:11px; }
+  .director-card {
+    padding:11px 13px;
+    background: rgba(212,168,75,0.05);
+    border:1px solid var(--line);
+    border-left:3px solid var(--gold);
+    border-radius:0 3px 3px 0;
+  }
+  .director-card.warn { border-left-color: var(--crimson); background:rgba(196,106,80,0.06); }
+  .director-card.calm { border-left-color: var(--steel); background:rgba(140,130,117,0.06); }
+  .director-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;
+  }
+  .director-name {
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--ink);
+  }
+  .director-name b { font-weight:600; color:var(--gold); }
+  .warn .director-name b { color: var(--crimson); }
+  .director-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+  .director-text {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55; font-style:italic;
+  }
+  .director-text::before { content:'"'; opacity:0.5; }
+  .director-text::after { content:'"'; opacity:0.5; }
+
+  /* ② 预读包草稿 */
+  .prebrief-paper {
+    background: var(--bg-paper); color: var(--paper-ink);
+    border-radius: 3px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+    position: relative;
+    border-left: 3px solid var(--gold);
+  }
+  .prebrief-meta {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.18em;
+    color:var(--paper-ink-2); text-transform:uppercase; margin-bottom:8px;
+  }
+  .prebrief-title {
+    font-family:var(--serif); font-style:italic; font-size:16px; font-weight:600;
+    margin-bottom:10px; line-height:1.4;
+  }
+  .prebrief-toc {
+    font-size:11.5px; line-height:1.85; color:var(--paper-ink);
+  }
+  .prebrief-toc .num {
+    font-family:var(--mono); color:var(--gold-soft); margin-right:6px;
+  }
+  .prebrief-toc .pages {
+    float:right; font-family:var(--mono); font-size:10px; color:var(--paper-ink-2);
+  }
+  .prebrief-foot {
+    margin-top:14px; padding-top:10px; border-top:1px dashed rgba(42,37,32,0.2);
+    font-family:var(--mono); font-size:10px; color:var(--paper-ink-2);
+    letter-spacing:0.1em;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .prebrief-foot a { color: var(--gold-soft); cursor:pointer; }
+
+  /* ③ 外脑批注 */
+  .annot-list { display:flex; flex-direction:column; gap:11px; }
+  .annot-card {
+    padding:11px 13px;
+    background: rgba(111,162,159,0.05);
+    border:1px solid var(--line);
+    border-left:3px solid var(--teal);
+    border-radius:0 3px 3px 0;
+  }
+  .annot-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;
+  }
+  .annot-from {
+    font-family:var(--serif); font-style:italic; font-size:13px; color:var(--ink);
+  }
+  .annot-from b { color: var(--teal); font-weight:600; }
+  .annot-tag {
+    font-family:var(--mono); font-size:9px; letter-spacing:0.15em;
+    color:var(--ink-3); text-transform:uppercase;
+  }
+  .annot-quote {
+    font-size:12px; color:var(--ink-2); line-height:1.6; font-style:italic;
+    padding-left:9px; border-left:1px solid var(--line-2);
+  }
+
+  /* ④ 承诺追踪 */
+  .promise-table { width:100%; border-collapse: collapse; font-size:12px; }
+  .promise-table th {
+    text-align:left; padding:8px 10px;
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color:var(--ink-3); text-transform:uppercase;
+    border-bottom:1px solid var(--line-2);
+  }
+  .promise-table td {
+    padding:10px 10px; border-bottom:1px solid var(--line); color:var(--ink-2);
+  }
+  .promise-table td.what {
+    color: var(--ink); font-family:var(--serif); font-style:italic; font-size:13px;
+  }
+  .status-pill {
+    display:inline-block; padding:2px 9px; border-radius:10px;
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.1em;
+    text-transform:uppercase;
+  }
+  .pill-done   { background: rgba(130,168,110,0.15); color: var(--green); border:1px solid rgba(130,168,110,0.4); }
+  .pill-prog   { background: rgba(212,168,75,0.12); color: var(--gold); border:1px solid rgba(212,168,75,0.35); }
+  .pill-late   { background: rgba(196,106,80,0.12); color: var(--crimson); border:1px solid rgba(196,106,80,0.4); }
+
+  /* ⑤ 反对论点演练 */
+  .rehearsal {
+    grid-column: span 3;
+    background: linear-gradient(135deg, rgba(196,106,80,0.04) 0%, rgba(212,168,75,0.03) 100%);
+    border-color: var(--crimson);
+  }
+  .rehearsal-head .block-num { color: var(--crimson); }
+  .reh-row { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:18px; }
+  .reh-card {
+    padding: 14px 16px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+  }
+  .reh-attacker {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--crimson); text-transform:uppercase; margin-bottom:4px;
+  }
+  .reh-attack {
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink); line-height:1.5; margin-bottom:11px;
+  }
+  .reh-attack::before { content:'"'; }
+  .reh-attack::after { content:'"'; }
+  .reh-defense-label {
+    font-family:var(--mono); font-size:9px; letter-spacing:0.18em;
+    color:var(--gold); text-transform:uppercase; margin-bottom:4px;
+  }
+  .reh-defense {
+    font-size:12px; color:var(--ink-2); line-height:1.6;
+    padding: 9px 11px;
+    background: rgba(212,168,75,0.06);
+    border-left: 2px solid var(--gold);
+    border-radius: 0 3px 3px 0;
+  }
+  .reh-strength {
+    margin-top:10px; display:flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:10px; color:var(--ink-3); letter-spacing:0.12em;
+  }
+  .reh-bar { flex:1; height:4px; background:rgba(0,0,0,0.3); border-radius:2px; overflow:hidden; }
+  .reh-bar i { display:block; height:100%; background: linear-gradient(90deg, var(--crimson), var(--gold)); }
+
+  /* ⑥ Tab */
+  .versions { grid-column: span 3; }
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--line);
+    margin: -8px -24px 14px; padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent; transition: all .2s;
+  }
+  .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+
+  .deck-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .deck-page {
+    aspect-ratio: 4/3;
+    background: var(--bg-paper); color: var(--paper-ink);
+    border-radius: 2px; padding: 10px 11px 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    display:flex; flex-direction:column;
+    cursor: pointer; transition: transform .2s;
+    border-top: 2px solid var(--gold);
+  }
+  .deck-page:hover { transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,0.4); }
+  .deck-num {
+    font-family:var(--mono); font-size:7.5px; color:var(--paper-ink-2);
+    letter-spacing:0.15em; margin-bottom:4px;
+  }
+  .deck-title {
+    font-family:var(--serif); font-style:italic; font-size:9.5px; font-weight:600;
+    line-height:1.3; flex:1;
+  }
+  .deck-foot {
+    font-family:var(--mono); font-size:6.5px; color:var(--paper-ink-2);
+    letter-spacing:0.1em; text-transform:uppercase;
+    margin-top:6px; padding-top:4px;
+    border-top:1px dashed rgba(42,37,32,0.2);
+  }
+
+  .onepager-paper {
+    background: var(--bg-paper); color: var(--paper-ink);
+    padding: 28px 32px; border-radius: 3px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.3);
+    border-top: 3px solid var(--gold);
+    max-width: 880px; margin: 0 auto;
+  }
+  .op-meta {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color:var(--paper-ink-2); text-transform:uppercase; margin-bottom:8px;
+  }
+  .op-h1 {
+    font-family:var(--serif); font-style:italic; font-size:24px; font-weight:600;
+    margin-bottom:18px; line-height:1.3;
+  }
+  .op-grid {
+    display:grid; grid-template-columns: 1fr 1fr; gap: 22px;
+    font-size: 12.5px; line-height: 1.65;
+  }
+  .op-section h3 {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--gold-soft); text-transform:uppercase;
+    margin-bottom:6px; font-weight:600;
+  }
+  .op-section ul { list-style:none; }
+  .op-section li {
+    padding: 5px 0; border-bottom: 1px dashed rgba(42,37,32,0.15);
+  }
+  .op-section li:last-child { border-bottom:none; }
+  .op-section li b { color: var(--paper-ink); font-weight:600; }
+  .op-foot {
+    margin-top:20px; padding-top:14px; border-top: 1px solid rgba(42,37,32,0.15);
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--mono); font-size:10px; color:var(--paper-ink-2);
+    letter-spacing:0.1em;
+  }
+  .op-foot a { color: var(--gold-soft); cursor:pointer; }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .radar, .rehearsal, .versions { grid-column: span 1; }
+    .reh-row { grid-template-columns: 1fr; }
+    .deck-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">🏛️</div>
+    <div>
+      <h1>Boardroom</h1>
+      <div class="crest-tag">internal · 董事会 · 厅</div>
+    </div>
+  </div>
+  <div class="question">"下次董事会我要带什么 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 董事关切雷达 -->
+  <section class="block radar">
+    <div class="block-head">
+      <span class="block-num">① concerns radar</span>
+      <span class="block-title">董事关切雷达 · 每位董事最近 3 次提的问题</span>
+      <span class="block-meta">5 位董事 · 滚动 90 天</span>
+    </div>
+    <div class="radar-row">
+      <div class="radar-svg-wrap">
+        <svg class="radar-svg" viewBox="0 0 320 280">
+          <g transform="translate(160 140)">
+            <circle r="100" fill="none" stroke="rgba(212,168,75,0.15)" stroke-width="0.8"/>
+            <circle r="70"  fill="none" stroke="rgba(212,168,75,0.12)" stroke-width="0.8"/>
+            <circle r="40"  fill="none" stroke="rgba(212,168,75,0.1)"  stroke-width="0.8"/>
+            <g stroke="rgba(212,168,75,0.18)" stroke-width="0.8">
+              <line x1="0" y1="0" x2="0"   y2="-100"/>
+              <line x1="0" y1="0" x2="95"  y2="-31"/>
+              <line x1="0" y1="0" x2="59"  y2="81"/>
+              <line x1="0" y1="0" x2="-59" y2="81"/>
+              <line x1="0" y1="0" x2="-95" y2="-31"/>
+            </g>
+            <polygon
+              points="0,-90 76,-25 35,48 -47,65 -85,-28"
+              fill="rgba(212,168,75,0.18)"
+              stroke="#D4A84B" stroke-width="1.5"/>
+            <g fill="#D4A84B">
+              <circle cx="0"   cy="-90" r="3.5"/>
+              <circle cx="76"  cy="-25" r="3.5"/>
+              <circle cx="35"  cy="48"  r="3.5"/>
+              <circle cx="-47" cy="65"  r="3.5"/>
+              <circle cx="-85" cy="-28" r="3.5"/>
+            </g>
+            <polygon
+              points="0,-65 60,-20 30,42 -38,52 -65,-22"
+              fill="none" stroke="rgba(140,130,117,0.6)"
+              stroke-width="1" stroke-dasharray="3 3"/>
+            <g font-family="JetBrains Mono, Menlo, monospace" font-size="9" fill="rgba(240,232,214,0.7)" letter-spacing="0.1em">
+              <text x="0"    y="-110" text-anchor="middle">退出路径</text>
+              <text x="105"  y="-30"  text-anchor="start">基金节奏</text>
+              <text x="42"   y="68"   text-anchor="start">人才流失</text>
+              <text x="-50"  y="82"   text-anchor="end">合规风险</text>
+              <text x="-105" y="-30"  text-anchor="end">LP 关系</text>
+            </g>
+            <circle r="2" fill="#D4A84B"/>
+          </g>
+          <g font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="rgba(240,232,214,0.42)" letter-spacing="0.1em">
+            <line x1="20"  y1="265" x2="40" y2="265" stroke="#D4A84B" stroke-width="1.5"/>
+            <text x="46" y="268">本季</text>
+            <line x1="100" y1="265" x2="120" y2="265" stroke="rgba(140,130,117,0.6)" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="126" y="268">上季</text>
+          </g>
+        </svg>
+      </div>
+      <div class="radar-list">
+        <div class="director-card warn">
+          <div class="director-head">
+            <span class="director-name"><b>林雾</b> · LP 代表</span>
+            <span class="director-meta">3 次 · 未回应</span>
+          </div>
+          <div class="director-text">退出路径再不明确,Q3 LP 大会怎么开 ?</div>
+        </div>
+        <div class="director-card">
+          <div class="director-head">
+            <span class="director-name"><b>Wei Zhao</b> · 独立董事</span>
+            <span class="director-meta">2 次</span>
+          </div>
+          <div class="director-text">Stellar 估值反复 5 次,你们的尽调标准到底是什么 ?</div>
+        </div>
+        <div class="director-card">
+          <div class="director-head">
+            <span class="director-name"><b>Omar K.</b> · 独立董事</span>
+            <span class="director-meta">2 次</span>
+          </div>
+          <div class="director-text">基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了 ?</div>
+        </div>
+        <div class="director-card calm">
+          <div class="director-head">
+            <span class="director-name"><b>陆景行</b> · 创始合伙人</span>
+            <span class="director-meta">1 次 · 平稳</span>
+          </div>
+          <div class="director-text">下个新人储备得抓紧 — Halycon 团队该补人了。</div>
+        </div>
+        <div class="director-card calm">
+          <div class="director-head">
+            <span class="director-name"><b>Sara M.</b> · 法务顾问</span>
+            <span class="director-meta">1 次 · 平稳</span>
+          </div>
+          <div class="director-text">Crucible 的合规备案需在月内完成。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② 预读包草稿 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② pre-brief draft</span>
+      <span class="block-title">预读包草稿</span>
+      <span class="block-meta">自 4 周 readings</span>
+    </div>
+    <div class="prebrief-paper">
+      <div class="prebrief-meta">2026 Q2 · BOARD #14 · DRAFT v0.3</div>
+      <div class="prebrief-title">下次董事会预读包 · 自动汇编自近 4 周 12 份 readings</div>
+      <div class="prebrief-toc">
+        <div><span class="num">01</span>基金部署节奏 vs 部署计划<span class="pages">p.2-4</span></div>
+        <div><span class="num">02</span>Halycon 进展 + 团队补员<span class="pages">p.5-7</span></div>
+        <div><span class="num">03</span>Stellar 尽调结论 / 估值分歧<span class="pages">p.8-10</span></div>
+        <div><span class="num">04</span>Crucible 处置建议<span class="pages">p.11-12</span></div>
+        <div><span class="num">05</span><b>退出路径回应(林雾)</b><span class="pages">p.13-15</span></div>
+        <div><span class="num">06</span>风险与合规附录<span class="pages">p.16</span></div>
+      </div>
+      <div class="prebrief-foot">
+        <span>16 PAGES · 12 READINGS · 6 LAWS</span>
+        <a>→ 编辑预读包</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 外脑批注 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">③ external annotations</span>
+      <span class="block-title">外脑批注摘要</span>
+      <span class="block-meta">3 条新批注</span>
+    </div>
+    <div class="annot-list">
+      <div class="annot-card">
+        <div class="annot-head">
+          <span class="annot-from"><b>Wei Zhao</b> 对 Stellar 备忘录</span>
+          <span class="annot-tag">04-23 · rubric 7.2</span>
+        </div>
+        <div class="annot-quote">估值不应反复;反复 3 次以上 = 尽调流程出问题,而不是项目本身。</div>
+      </div>
+      <div class="annot-card">
+        <div class="annot-head">
+          <span class="annot-from"><b>Omar K.</b> 对部署节奏</span>
+          <span class="annot-tag">04-19 · rubric 6.8</span>
+        </div>
+        <div class="annot-quote">放慢部署节奏不是错,但要明示这是策略选择,不是市场逼迫。</div>
+      </div>
+      <div class="annot-card">
+        <div class="annot-head">
+          <span class="annot-from"><b>Sara M.</b> 对 Crucible 合规</span>
+          <span class="annot-tag">04-12 · rubric 8.5</span>
+        </div>
+        <div class="annot-quote">3 周失联法则若已生效,合规备案须同步更新 — 别等到月底。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 承诺追踪 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">④ promise tracking</span>
+      <span class="block-title">上次董事会承诺 · 追踪</span>
+      <span class="block-meta">BOARD #13 · 6 项</span>
+    </div>
+    <table class="promise-table">
+      <thead>
+        <tr><th>承诺</th><th>责任人</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="what">建立 LP 反馈闭环机制</td>
+          <td>陈汀</td>
+          <td><span class="status-pill pill-late">逾期 28 天</span></td>
+        </tr>
+        <tr>
+          <td class="what">Halycon 团队补员 3 人</td>
+          <td>陆景行</td>
+          <td><span class="status-pill pill-prog">1/3 进行中</span></td>
+        </tr>
+        <tr>
+          <td class="what">Stellar 估值锚定方法书面化</td>
+          <td>Wei + 陈汀</td>
+          <td><span class="status-pill pill-late">逾期 14 天</span></td>
+        </tr>
+        <tr>
+          <td class="what">Crucible 合规备案</td>
+          <td>Sara M.</td>
+          <td><span class="status-pill pill-prog">80%</span></td>
+        </tr>
+        <tr>
+          <td class="what">Q1 季度报告交付</td>
+          <td>陈汀</td>
+          <td><span class="status-pill pill-done">已完成</span></td>
+        </tr>
+        <tr>
+          <td class="what">Beacon 退出策略评审</td>
+          <td>Omar K.</td>
+          <td><span class="status-pill pill-done">已完成</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ⑤ 反对论点演练 -->
+  <section class="block rehearsal">
+    <div class="block-head rehearsal-head">
+      <span class="block-num">⑤ rebuttal rehearsal</span>
+      <span class="block-title">反对论点演练 · 三个最尖锐的攻击</span>
+      <span class="block-meta">基于关切雷达 + 棱镜推演</span>
+    </div>
+    <div class="reh-row">
+      <div class="reh-card">
+        <div class="reh-attacker">→ 林雾(LP代表)</div>
+        <div class="reh-attack">退出路径都讲不清楚,凭什么相信你们的部署节奏 ?</div>
+        <div class="reh-defense-label">↳ 你的回防</div>
+        <div class="reh-defense">
+          承认这是过去 3 季的盲点。给出具体补救:Q3 起每月报告增加"3 个有效退出窗口预测",并由 Omar 独立验证。
+        </div>
+        <div class="reh-strength">
+          回防强度
+          <div class="reh-bar"><i style="width:62%"></i></div>
+          <span>0.62</span>
+        </div>
+      </div>
+
+      <div class="reh-card">
+        <div class="reh-attacker">→ Wei Zhao(独立董事)</div>
+        <div class="reh-attack">Stellar 估值反复 5 次 — 这不是项目问题,是你们的尽调流程问题。</div>
+        <div class="reh-defense-label">↳ 你的回防</div>
+        <div class="reh-defense">
+          同意。已起草《估值锚定五条》(沿用 Wei 的 rubric),下次会议前书面化、签字、归档。承诺一年内复用 ≥10 次。
+        </div>
+        <div class="reh-strength">
+          回防强度
+          <div class="reh-bar"><i style="width:78%"></i></div>
+          <span>0.78</span>
+        </div>
+      </div>
+
+      <div class="reh-card">
+        <div class="reh-attacker">→ Omar K.(独立董事)</div>
+        <div class="reh-attack">部署节奏放慢 18 个月 — 是策略,还是判断失准 ?</div>
+        <div class="reh-defense-label">↳ 你的回防</div>
+        <div class="reh-defense">
+          策略。明示前提:估值未充分回调,而 IRR 目标 25%+ 不可妥协。给出 IF/THEN 触发条件:若市场指标跌穿 X,则恢复正常节奏。
+        </div>
+        <div class="reh-strength">
+          回防强度
+          <div class="reh-bar"><i style="width:54%"></i></div>
+          <span>0.54</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ Tab · 一页纸 / 完整套版 -->
+  <section class="block versions">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">⑥ versions</span>
+      <span class="block-title">两个版本</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="onepager">📄 一页纸版</div>
+      <div class="tab" data-tab="deck">📚 完整套版(16 页)</div>
+    </div>
+
+    <div class="tab-pane" id="pane-onepager">
+      <div class="onepager-paper">
+        <div class="op-meta">2026 Q2 · BOARD #14 · 一页纸版</div>
+        <div class="op-h1">本季要董事会盖章的事:三件 — 节奏、退出、Stellar</div>
+        <div class="op-grid">
+          <div class="op-section">
+            <h3>① 主要进展</h3>
+            <ul>
+              <li><b>Halycon</b> · 推进顺利,补员 1/3</li>
+              <li><b>Beacon</b> · 退出路径已书面化</li>
+              <li>Q1 IRR <b>+18.4%</b>,在轨</li>
+            </ul>
+          </div>
+          <div class="op-section">
+            <h3>② 风险</h3>
+            <ul>
+              <li><b>Crucible</b> 创始人失联 · 建议官方暂停</li>
+              <li><b>Stellar</b> 估值反复 · 流程将书面化</li>
+              <li>LP 反馈闭环 · 逾期 28 天</li>
+            </ul>
+          </div>
+          <div class="op-section">
+            <h3>③ 求决议</h3>
+            <ul>
+              <li>批准 Crucible 暂停决议</li>
+              <li>批准《估值锚定五条》入运营手册</li>
+              <li>批准 Q3 LP 大会议程框架</li>
+            </ul>
+          </div>
+          <div class="op-section">
+            <h3>④ 不要求决议(知情)</h3>
+            <ul>
+              <li>部署节奏放慢 18 个月 · <b>策略选择</b></li>
+              <li>团队亚洲+北美双核结构 · 推进中</li>
+            </ul>
+          </div>
+        </div>
+        <div class="op-foot">
+          <span>1 PAGE · DERIVED FROM 16-PAGE DECK</span>
+          <a>→ 导出 PDF</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-deck" style="display:none;">
+      <div class="deck-grid">
+        <div class="deck-page"><div class="deck-num">P. 01</div><div class="deck-title">封面 · 2026 Q2 BOARD #14</div><div class="deck-foot">cover</div></div>
+        <div class="deck-page"><div class="deck-num">P. 02</div><div class="deck-title">议程 · 三件该决议</div><div class="deck-foot">agenda</div></div>
+        <div class="deck-page"><div class="deck-num">P. 03</div><div class="deck-title">基金部署节奏 vs 计划</div><div class="deck-foot">capital</div></div>
+        <div class="deck-page"><div class="deck-num">P. 04</div><div class="deck-title">节奏放慢的策略说明</div><div class="deck-foot">capital</div></div>
+        <div class="deck-page"><div class="deck-num">P. 05</div><div class="deck-title">Halycon 进展</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 06</div><div class="deck-title">Halycon 补员计划</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 07</div><div class="deck-title">Beacon 退出策略 · 已盖章</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 08</div><div class="deck-title">Stellar 估值反复 · 复盘</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 09</div><div class="deck-title">《估值锚定五条》草案</div><div class="deck-foot">process</div></div>
+        <div class="deck-page"><div class="deck-num">P. 10</div><div class="deck-title">Stellar 尽调结论</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 11</div><div class="deck-title">Crucible 处置建议</div><div class="deck-foot">portfolio</div></div>
+        <div class="deck-page"><div class="deck-num">P. 12</div><div class="deck-title">3 周失联法则 · 应用记录</div><div class="deck-foot">law</div></div>
+        <div class="deck-page"><div class="deck-num">P. 13</div><div class="deck-title">退出路径回应 · 林雾</div><div class="deck-foot">LP</div></div>
+        <div class="deck-page"><div class="deck-num">P. 14</div><div class="deck-title">Q3 LP 大会议程框架</div><div class="deck-foot">LP</div></div>
+        <div class="deck-page"><div class="deck-num">P. 15</div><div class="deck-title">LP 反馈闭环机制</div><div class="deck-foot">LP</div></div>
+        <div class="deck-page"><div class="deck-num">P. 16</div><div class="deck-title">附录 · 风险与合规</div><div class="deck-foot">appx</div></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-onepager').style.display = which==='onepager' ? '' : 'none';
+      document.getElementById('pane-deck').style.display     = which==='deck'     ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>

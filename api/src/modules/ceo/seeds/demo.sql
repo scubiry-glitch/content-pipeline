@@ -43,14 +43,14 @@ WHERE NOT EXISTS (
 -- ─────────────────────────────────────────────────────────
 
 INSERT INTO ceo_strategic_lines (name, kind, alignment_score, status, description)
-SELECT n, k, a, 'active', desc FROM (VALUES
+SELECT n, k, a, 'active', descr FROM (VALUES
   ('Halycon',  'main',   0.82::numeric, 'AI 基础设施战略主线 — Q1 ARR +47%'),
   ('Beacon',   'main',   0.76::numeric, '退出协议主体条款达成 — 5 月签'),
   ('Stellar',  'branch', 0.62::numeric, '尽调反复 5 次的支线 — 估值锚定中'),
   ('Echo',     'branch', 0.58::numeric, '探索期支线 — 等待估值回调'),
   ('Crucible', 'drift',  0.28::numeric, '原 3% 注意力升至 11% — 创始人失联'),
   ('Pyre',     'drift',  0.22::numeric, '业内传言"动向不明"')
-) AS s(n, k, a, desc)
+) AS s(n, k, a, descr)
 WHERE NOT EXISTS (SELECT 1 FROM ceo_strategic_lines WHERE name = s.n);
 
 INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate)

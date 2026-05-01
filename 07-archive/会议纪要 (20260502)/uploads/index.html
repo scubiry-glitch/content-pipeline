@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美租UE管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ke: { 50:'#eef9f3', 100:'#d5f0e3', 200:'#addfc8', 300:'#79c8a5', 400:'#4baf82', 500:'#2f9668', 600:'#1d7a52', 700:'#166243', 800:'#144e37', 900:'#11402e' },
+                        dark: { 800:'#1e1e2d', 900:'#151521', 700:'#2d2d3f', 600:'#3f3f56' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen">
+    <!-- Top Navigation -->
+    <nav class="bg-dark-900 text-white shadow-2xl sticky top-0 z-50">
+        <div class="max-w-[1920px] mx-auto px-4">
+            <div class="flex items-center justify-between h-14">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-ke-400 to-ke-600 rounded-lg flex items-center justify-center font-bold text-sm">美</div>
+                    <span class="text-lg font-bold tracking-tight">美租UE管理系统</span>
+                    <span class="text-xs bg-ke-600/30 text-ke-400 px-2 py-0.5 rounded-full ml-1">v6.0</span>
+                </div>
+                <div class="flex items-center gap-1" id="nav-tabs">
+                    <button class="nav-tab active" data-tab="governance"><i class="fas fa-landmark mr-1"></i>治理架构</button>
+                    <span class="text-[9px] text-gray-600 px-1">L1</span>
+                    <button class="nav-tab" data-tab="dashboard"><i class="fas fa-chart-pie mr-1"></i>仪表盘</button>
+                    <button class="nav-tab" data-tab="marketopportunity"><i class="fas fa-chart-line mr-1"></i>市场机会</button>
+                    <button class="nav-tab" data-tab="baseline"><i class="fas fa-cubes mr-1"></i>基准UE</button>
+                    <button class="nav-tab" data-tab="financial"><i class="fas fa-file-invoice-dollar mr-1"></i>财务报表</button>
+                    <button class="nav-tab" data-tab="crossanalysis"><i class="fas fa-atom mr-1"></i>U×E支点</button>
+                    <span class="text-[9px] text-gray-600 px-1">L2</span>
+                    <button class="nav-tab" data-tab="assumptions"><i class="fas fa-columns mr-1"></i>战略主题</button>
+                    <button class="nav-tab" data-tab="alignment"><i class="fas fa-bullseye mr-1"></i>对齐</button>
+                    <button class="nav-tab" data-tab="scenarios"><i class="fas fa-code-branch mr-1"></i>推演</button>
+                    <button class="nav-tab" data-tab="strategy"><i class="fas fa-flask mr-1"></i>实践验证</button>
+                    <span class="text-[9px] text-gray-600 px-1">L3</span>
+                    <button class="nav-tab" data-tab="udimension"><i class="fas fa-microscope mr-1"></i>U维度</button>
+                    <button class="nav-tab" data-tab="eanalysis"><i class="fas fa-balance-scale mr-1"></i>E杠杆</button>
+                    <button class="nav-tab" data-tab="l1tools"><i class="fas fa-toolbox mr-1"></i>AI工具</button>
+                    <span class="text-[9px] text-gray-600 px-1">·</span>
+                    <button class="nav-tab" data-tab="flywheel"><i class="fas fa-cog mr-1"></i>飞轮</button>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-gray-400">
+                    <span><i class="fas fa-calendar mr-1"></i>2026年03月</span>
+                    <span class="w-7 h-7 rounded-full bg-ke-600/40 flex items-center justify-center text-ke-300 text-xs font-semibold">赵</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-[1920px] mx-auto">
+        <!-- Governance Architecture -->
+        <section id="tab-governance" class="tab-content active">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">🏛 三层治理架构</h2>
+                        <p class="text-sm text-gray-500 mt-1"><strong>L1 战略层</strong>损益倒推UE · <strong>L2 假设验证层</strong>盯住UE只采集关键变量 · <strong>L3 执行层</strong>核心UE不变工具随便搞</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value;renderGovernancePage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="governance-content"></div>
+            </div>
+        </section>
+
+        <!-- Dashboard (3V) -->
+        <section id="tab-dashboard" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">📊 经营仪表盘</h2>
+                        <p class="text-sm text-gray-500 mt-1">三视角全景：<strong>贝壳P&L</strong>(默认) · <strong>业主投资回报</strong> · <strong>供应商成本结构</strong></p>
+                    </div>
+                </div>
+                <div id="dashboard-3v-content">
+                    <!-- Rendered by perspectives.js → renderDashboard3V() -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Market Opportunity Analysis -->
+        <section id="tab-marketopportunity" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">🎯 市场机会分析</h2>
+                        <p class="text-sm text-gray-500 mt-1"><strong>供需双向规模盘点</strong> · TAM→SAM→SOM漏斗测算 · 三大战略路径 · 聚焦盘画像</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value;renderMarketOpportunityPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="market-opportunity-content">
+                    <!-- Rendered by market-opportunity.js → renderMarketOpportunityPage() -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Baseline UE Model (3V) -->
+        <section id="tab-baseline" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">基准UE模型</h2>
+                        <p class="text-sm text-gray-500 mt-1">三视角UE拆解：<strong>贝壳P&L</strong> · <strong>业主投资回报</strong> · <strong>供应商成本结构</strong> | 支持城市×产品线切换</p>
+                    </div>
+                </div>
+                <div id="baseline-3v-content">
+                    <!-- Rendered by perspectives.js → renderBaseline3V() -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Strategic Assumptions (Original) -->
+        <section id="tab-assumptions" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">战略主题管理</h2>
+                        <p class="text-sm text-gray-500 mt-1"><strong>获客 · 产品 · 转化 · 交付</strong> 四大战略主题 × 14个实验假设，Kanban看板管理</p>
+                    </div>
+                </div>
+                <!-- Assumption Cards Grid -->
+                <div class="grid grid-cols-1 gap-4" id="assumptions-container">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Scenario UE Projection (Original) -->
+        <section id="tab-scenarios" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">假设UE推演对比</h2>
+                        <p class="text-sm text-gray-500 mt-1">选择多个战略假设，对比不同情境下的UE模型和财务推演</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn-secondary" onclick="selectAllAssumptions()"><i class="fas fa-check-double mr-1"></i>全选</button>
+                        <button class="btn-primary" onclick="runScenarioComparison()"><i class="fas fa-play mr-1"></i>运行推演</button>
+                    </div>
+                </div>
+                <!-- Scenario Selector -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h3><i class="fas fa-filter mr-2 text-ke-500"></i>选择推演假设</h3>
+                    </div>
+                    <div class="p-4 flex flex-wrap gap-3" id="scenario-selector">
+                        <!-- Generated by JS -->
+                    </div>
+                </div>
+                <!-- Comparison Charts -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-chart-bar mr-2 text-blue-500"></i>UE参数对比</h3></div>
+                        <div id="chart-scenario-params" style="height:400px;"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-chart-area mr-2 text-purple-500"></i>财务指标推演</h3></div>
+                        <div id="chart-scenario-financial" style="height:400px;"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-th mr-2 text-amber-500"></i>推演对比明细表</h3></div>
+                    <div class="overflow-auto">
+                        <table class="w-full text-sm" id="scenario-comparison-table">
+                            <thead class="bg-gray-50 sticky top-0"><tr id="scenario-table-head"></tr></thead>
+                            <tbody id="scenario-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Strategy Hypothesis & BLM Experiments (Extended - Optional Advanced View) -->
+        <section id="tab-strategy" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">🧪 实践验证+BLM验证（高级视图）</h2>
+                        <p class="text-sm text-gray-500 mt-1"><strong>Build(假设) → Measure(三场景推演) → Learn(BLM实验)</strong> | 每个假设自带保守/目标/乐观三场景</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value;renderStrategyHypothesisPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                        <button class="btn-primary" onclick="createNewExperiment()"><i class="fas fa-flask mr-1"></i>新建实验</button>
+                    </div>
+                </div>
+                <div id="strategy-hypothesis-content">
+                    <!-- Rendered by strategy-hypothesis.js -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Financial Statements (3V) -->
+        <section id="tab-financial" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">财务报表</h2>
+                        <p class="text-sm text-gray-500 mt-1">三视角财务分析：<strong>贝壳P&L损益</strong> · <strong>业主投资回报曲线</strong> · <strong>供应商成本优化</strong></p>
+                    </div>
+                </div>
+                <div id="financial-3v-content">
+                    <!-- Rendered by perspectives.js → renderFinancial3V() -->
+                </div>
+            </div>
+        </section>
+        <!-- U Dimension Analysis -->
+        <section id="tab-udimension" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">U维度洞察 — 找出最好的"U"</h2>
+                        <p class="text-sm text-gray-500 mt-1">从<strong>房(套)、漏斗(单)、业主(客)、美租顾问(人)</strong>四个维度拆解单位经济，AI识别最优U维度</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value==='shanghai'?'shanghai':'beijing';renderUDimensionPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- U Scoreboard -->
+                <div class="grid grid-cols-4 gap-4 mb-6" id="u-scoreboard"></div>
+                <!-- Charts Row -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-radar mr-2 text-indigo-500"></i>U维度能力雷达图</h3></div>
+                        <div id="chart-u-radar" style="height:380px;"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-th mr-2 text-ke-500"></i>U维度×指标热力图</h3></div>
+                        <div id="chart-u-heatmap" style="height:380px;"></div>
+                    </div>
+                </div>
+                <!-- Ranking Panel + Detail Cards -->
+                <div class="grid grid-cols-12 gap-4">
+                    <div class="col-span-4">
+                        <div class="card" id="u-ranking-panel">
+                            <div class="card-header"><h3><i class="fas fa-trophy mr-2 text-yellow-500"></i>U维度排名</h3></div>
+                        </div>
+                    </div>
+                    <div class="col-span-8">
+                        <div class="space-y-4" id="u-detail-cards"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- E Analysis (3V) -->
+        <section id="tab-eanalysis" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">E杠杆分析 — 三视角弹性引擎</h2>
+                        <p class="text-sm text-gray-500 mt-1">分析每个视角下<strong>每个E指标的利润/回报弹性</strong>，找出最有效的杠杆组合</p>
+                    </div>
+                </div>
+                <div id="e-3v-content">
+                    <!-- Rendered by e-analysis.js → renderEAnalysis3V() -->
+                </div>
+            </div>
+        </section>
+
+        <!-- U×E Cross Analysis -->
+        <section id="tab-crossanalysis" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">U×E 交叉分析 — 阿基米德支点</h2>
+                        <p class="text-sm text-gray-500 mt-1">交叉计算<strong>每个U维度</strong>对<strong>每个E杠杆</strong>的弹性，找到利润撬动力最大的组合</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value==='shanghai'?'shanghai':'beijing';renderCrossAnalysisPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                        <button class="btn-primary" onclick="saveCurrentState()"><i class="fas fa-cloud-upload-alt mr-1"></i>保存状态</button>
+                    </div>
+                </div>
+
+                <!-- Archimedes Hero -->
+                <div id="cross-archimedes-hero"></div>
+
+                <!-- U→E 权重联动面板 -->
+                <div id="cross-ue-weighted-panel" class="mb-6"></div>
+
+                <!-- Heatmap + Strategic Scatter -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-fire mr-2 text-orange-500"></i>U×E 弹性热力矩阵</h3>
+                            <span class="text-[10px] text-gray-400">颜色越深 = 该U对该E的利润撬动力越强</span>
+                        </div>
+                        <div id="chart-cross-heatmap" style="height:420px;"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-project-diagram mr-2 text-indigo-500"></i>战略路线图（弹性 × 月度影响）</h3>
+                            <span class="text-[10px] text-gray-400">右上角 = 高弹性 + 高影响 = 最优先投入</span>
+                        </div>
+                        <div id="chart-cross-strategic" style="height:420px;"></div>
+                    </div>
+                </div>
+
+                <!-- Top5 + Best Lever per U -->
+                <div class="grid grid-cols-12 gap-4 mb-6">
+                    <div class="col-span-5">
+                        <div class="card" id="cross-top5"></div>
+                    </div>
+                    <div class="col-span-7">
+                        <div class="card" id="cross-best-lever-per-u"></div>
+                    </div>
+                </div>
+
+                <!-- Best U per E + Cross Radar -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="card" id="cross-best-u-per-e"></div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-spider mr-2 text-purple-500"></i>U维度×杠杆类型弹性雷达</h3>
+                            <span class="text-[10px] text-gray-400">哪个U在哪类杠杆上最敏感</span>
+                        </div>
+                        <div id="chart-cross-radar" style="height:380px;"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Strategic Alignment (Attention Layer) -->
+        <section id="tab-alignment" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">战略对齐 — Attention Layer</h2>
+                        <p class="text-sm text-gray-500 mt-1"><strong>战略选择 × 组织对齐</strong>：哪个战略假设应该"注意"哪个UE参数？大胆假设，快速验证，不争论，只评价。</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value==='shanghai'?'shanghai':'beijing';renderAlignmentPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                        <button class="btn-primary" onclick="createNewExperiment()"><i class="fas fa-flask mr-1"></i>新建实验</button>
+                    </div>
+                </div>
+
+                <!-- BLM Philosophy Bar -->
+                <div class="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-5 mb-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="text-3xl">🧠</div>
+                            <div>
+                                <div class="text-xs font-bold uppercase tracking-widest text-gray-400">BLM · Build → Measure → Learn</div>
+                                <div class="text-lg font-bold mt-0.5">CNN(UE) → RNN(P&L) → <span class="text-yellow-400">Attention(战略对齐)</span></div>
+                            </div>
+                        </div>
+                        <div class="flex gap-6 text-center text-xs">
+                            <div><div class="text-2xl mb-1">🔬</div><div class="text-gray-300">科学分析</div><div class="text-white font-bold">UE精算</div></div>
+                            <div class="text-gray-600 text-xl self-center">→</div>
+                            <div><div class="text-2xl mb-1">🎯</div><div class="text-gray-300">目标一致</div><div class="text-white font-bold">对齐参数</div></div>
+                            <div class="text-gray-600 text-xl self-center">→</div>
+                            <div><div class="text-2xl mb-1">⚡</div><div class="text-gray-300">强执行</div><div class="text-white font-bold">快速验证</div></div>
+                            <div class="text-gray-600 text-xl self-center">→</div>
+                            <div><div class="text-2xl mb-1">📊</div><div class="text-gray-300">不争论</div><div class="text-white font-bold">只评价</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attention Weight Matrix -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-brain mr-2 text-purple-500"></i>Attention权重矩阵</h3>
+                            <span class="text-[10px] text-gray-400">战略假设 → UE参数的注意力分配</span>
+                        </div>
+                        <div id="chart-attention-heatmap" style="height:420px;"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-project-diagram mr-2 text-indigo-500"></i>战略→UE信息流</h3>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] text-gray-400">Sankey图：战略资源应流向哪些UE参数</span>
+                            </div>
+                        </div>
+                        <div id="sankey-toolbar" class="px-4 pt-2 flex items-center gap-2 flex-wrap"></div>
+                        <div id="chart-attention-sankey" style="height:420px;"></div>
+                    </div>
+                </div>
+
+                <!-- Alignment Score + Experiment Panel -->
+                <div class="grid grid-cols-12 gap-4 mb-6">
+                    <div class="col-span-4">
+                        <div class="card" id="alignment-score-panel"></div>
+                    </div>
+                    <div class="col-span-8">
+                        <div class="card" id="experiment-panel"></div>
+                    </div>
+                </div>
+
+                <!-- Experiment History -->
+                <div class="card" id="experiment-history-panel"></div>
+            </div>
+        </section>
+
+        <!-- Flywheel Mechanisms v5.0 -->
+        <section id="tab-flywheel" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">⚙️ v5.0 飞轮机制 — 从测算推演到日常操作系统</h2>
+                        <p class="text-sm text-gray-500 mt-1">熔断红线 · 数据溯源 · 对撞复盘 · 摩擦系数 · 实验舱 — <strong>五大闭环机制</strong></p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value;renderFlywheelPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="flywheel-content"></div>
+            </div>
+        </section>
+
+        <!-- L1 AI Tools -->
+        <section id="tab-l1tools" class="tab-content">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">🛠 L3 AI 赋能工具库</h2>
+                        <p class="text-sm text-gray-500 mt-1">核心 UE 不变 · 底层数据不变 · <strong>工具路径随便搞</strong> · 前线自主决策，系统只提供建议</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="input-field text-sm w-32" onchange="AppState.currentCity=this.value;renderL1ToolsPage()">
+                            <option value="beijing">北京</option>
+                            <option value="shanghai">上海</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="l1-tools-content"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header" id="modal-header">
+                <h3 id="modal-title">新增战略假设</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast-container" class="fixed top-20 right-4 z-[100] space-y-2"></div>
+
+    <script src="data/report_0922.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/baseline.js"></script>
+    <script src="js/assumptions.js"></script>
+    <script src="js/scenarios.js"></script>
+    <script src="js/strategy-hypothesis.js"></script>
+    <script src="js/financial.js"></script>
+    <script src="js/perspectives.js"></script>
+    <script src="js/market-opportunity.js"></script>
+    <script src="js/u-dimension.js"></script>
+    <script src="js/e-analysis.js"></script>
+    <script src="js/cross-analysis.js"></script>
+    <script src="js/alignment.js"></script>
+    <script src="js/governance.js"></script>
+    <script src="js/flywheel.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
