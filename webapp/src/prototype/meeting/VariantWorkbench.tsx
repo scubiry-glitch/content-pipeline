@@ -309,7 +309,7 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp, onA
 }
 
 // ── WBMinutes ──
-function WBMinutes({ a }: { a: typeof ANALYSIS }) {
+function WBMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ padding: '16px 20px', background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 6 }}>
@@ -962,7 +962,7 @@ export function VariantWorkbench() {
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px' }}>
             {dim === 'tension'       && <WBTension       a={a} selected={selectedT} setSelected={setSelectedT} isMock={tensionMock} P={P} interp={tensionInterp} onAskAboutTension={openChatDrawer} />}
-            {dim === 'minutes'       && <WBMinutes        a={a} />}
+            {dim === 'minutes'       && <WBMinutes        a={a} P={P} />}
             {dim === 'new_cognition' && <WBNewCognition   a={a} P={P} />}
             {dim === 'focus_map'     && <WBFocusMap       a={a} P={P} />}
             {dim === 'consensus'     && <WBConsensus      a={a} P={P} />}
