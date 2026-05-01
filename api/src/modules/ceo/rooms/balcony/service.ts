@@ -130,6 +130,8 @@ export async function getTimeRoi(
   };
 }
 
+const MOOD_ENUM = ['clear', 'cloudy', 'conflicted', 'grateful', 'spent'] as const;
+
 export async function getBalconyDashboard(
   deps: CeoEngineDeps,
   userId?: string,
@@ -140,6 +142,7 @@ export async function getBalconyDashboard(
   prismScores: Record<PrismKind, number>;
   weakest: { prism: PrismKind; score: number };
   strongest: { prism: PrismKind; score: number };
+  moodEnum: readonly string[];
 }> {
   const weeklyRoi = await computeWeeklyRoi(deps, userId);
   const prismScores = await computePrismScores(deps);
@@ -159,5 +162,247 @@ export async function getBalconyDashboard(
     prismScores,
     weakest,
     strongest,
+    moodEnum: MOOD_ENUM,
+  };
+}
+
+// ─── samples-s 对齐：5 个新 endpoint ────────────────────────────
+
+/**
+ * GET /balcony/roi-trend?weeks=8 — 8 周 weekly_roi 时序 + 当周 metrics
+ */
+export async function getRoiTrend(
+  deps: CeoEngineDeps,
+  filter: { userId?: string; weeks?: number },
+): Promise<{
+  weekStart: string;
+  metrics: {
+    weekly_roi: { value: number; delta: string };
+    deep_focus_hours: { value: number; target: number; delta: string };
+    meeting_hours: { value: number; vs_last_week: number };
+    high_roi_block_h: { value: number };
+  };
+  trend_8w: Array<{ weekStart: string; weekly_roi: number }>;
+}> {
+  const userId = filter.userId ?? 'system';
+  const weeks = filter.weeks ?? 8;
+  const r = await deps.db.query(
+    `SELECT week_start::text AS week_start, weekly_roi, deep_focus_hours,
+            meeting_hours, target_focus_hours
+       FROM ceo_time_roi
+      WHERE user_id = $1
+      ORDER BY week_start DESC
+      LIMIT $2`,
+    [userId, weeks],
+  );
+  const rows = r.rows.reverse(); // 旧 → 新
+  const cur = rows[rows.length - 1];
+  const prev = rows[rows.length - 2];
+
+  const weekStart = cur?.week_start ? String(cur.week_start).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const curRoi = Number(cur?.weekly_roi ?? 0);
+  const prevRoi = prev?.weekly_roi != null ? Number(prev.weekly_roi) : null;
+  const roiDelta = prevRoi != null ? `${curRoi - prevRoi >= 0 ? '+' : ''}${(curRoi - prevRoi).toFixed(2)}` : '—';
+
+  const deep = Number(cur?.deep_focus_hours ?? 0);
+  const target = Number(cur?.target_focus_hours ?? 18);
+  const meet = Number(cur?.meeting_hours ?? 0);
+  const meetPrev = Number(prev?.meeting_hours ?? 0);
+
+  return {
+    weekStart,
+    metrics: {
+      weekly_roi: { value: Number(curRoi.toFixed(3)), delta: roiDelta },
+      deep_focus_hours: {
+        value: deep,
+        target,
+        delta: deep < target ? `差 ${(target - deep).toFixed(1)}h` : `+${(deep - target).toFixed(1)}h`,
+      },
+      meeting_hours: { value: meet, vs_last_week: Number((meet - meetPrev).toFixed(1)) },
+      high_roi_block_h: { value: deep },
+    },
+    trend_8w: rows.map((row) => ({
+      weekStart: String(row.week_start).slice(0, 10),
+      weekly_roi: Number(row.weekly_roi ?? 0),
+    })),
+  };
+}
+
+/**
+ * GET /balcony/reflections-history?weeks=12 — 反思赴约率
+ */
+export async function getReflectionsHistory(
+  deps: CeoEngineDeps,
+  filter: { userId?: string; weeks?: number },
+): Promise<{
+  items: Array<{ weekStart: string; total: number; answered: number; rate: number }>;
+  summary: { total_weeks: number; answered_weeks: number; avg_rate: number };
+}> {
+  const userId = filter.userId ?? 'system';
+  const weeks = filter.weeks ?? 12;
+  const r = await deps.db.query(
+    `SELECT week_start::text AS week_start,
+            COUNT(*)::int AS total,
+            SUM(CASE WHEN user_answer IS NOT NULL THEN 1 ELSE 0 END)::int AS answered
+       FROM ceo_balcony_reflections
+      WHERE user_id = $1
+        AND week_start > (NOW()::date - ($2::int * 7) * INTERVAL '1 day')
+      GROUP BY week_start
+      ORDER BY week_start`,
+    [userId, weeks],
+  );
+  const items = r.rows.map((row) => {
+    const total = Number(row.total);
+    const answered = Number(row.answered);
+    const rate = total > 0 ? Number((answered / total).toFixed(2)) : 0;
+    return { weekStart: String(row.week_start).slice(0, 10), total, answered, rate };
+  });
+  const total_weeks = items.length;
+  const answered_weeks = items.filter((x) => x.answered > 0).length;
+  const avg_rate =
+    total_weeks > 0
+      ? Number((items.reduce((s, x) => s + x.rate, 0) / total_weeks).toFixed(2))
+      : 0;
+  return { items, summary: { total_weeks, answered_weeks, avg_rate } };
+}
+
+/**
+ * GET /balcony/silence-signals?days=30 — mn_silence_signals
+ */
+export async function getSilenceSignals(
+  deps: CeoEngineDeps,
+  filter: { days?: number },
+): Promise<{ items: any[] }> {
+  const days = filter.days ?? 30;
+  try {
+    const r = await deps.db.query(
+      `SELECT s.id::text, s.meeting_id::text, s.person_id::text,
+              s.topic_id, s.state, s.anomaly_score, s.computed_at,
+              p.canonical_name AS person_name
+         FROM mn_silence_signals s
+         LEFT JOIN mn_people p ON p.id = s.person_id
+        WHERE s.state = 'abnormal_silence'
+          AND s.computed_at > NOW() - ($1::int * INTERVAL '1 day')
+        ORDER BY s.anomaly_score DESC
+        LIMIT 5`,
+      [days],
+    );
+    return {
+      items: r.rows.map((row) => ({
+        id: String(row.id),
+        date: row.computed_at ? String(row.computed_at).slice(0, 10) : null,
+        person_name: row.person_name ?? '匿名',
+        person_id: row.person_id ?? null,
+        duration_sec: 0,
+        context: `主题 ${row.topic_id ?? '—'} · anomaly=${Number(row.anomaly_score ?? 0).toFixed(2)}`,
+        is_long: Number(row.anomaly_score ?? 0) >= 0.8,
+        tag: '异常沉默',
+        linked_meeting_id: row.meeting_id ?? null,
+      })),
+    };
+  } catch {
+    return { items: [] };
+  }
+}
+
+/**
+ * GET /balcony/echos?weeks=6 — 决策回声轨迹
+ */
+export async function getEchos(
+  deps: CeoEngineDeps,
+  filter: { weeks?: number },
+): Promise<{ items: any[] }> {
+  const weeks = filter.weeks ?? 6;
+  try {
+    const r = await deps.db.query(
+      `SELECT e.id::text, e.line_id::text, e.hypothesis_text, e.fact_text, e.fate,
+              e.updated_at, l.name AS line_name
+         FROM ceo_strategic_echos e
+         LEFT JOIN ceo_strategic_lines l ON l.id = e.line_id
+        WHERE e.updated_at > NOW() - ($1::int * 7) * INTERVAL '1 day'
+        ORDER BY e.updated_at DESC
+        LIMIT 8`,
+      [weeks],
+    );
+    return {
+      items: r.rows.map((row) => {
+        const polarity =
+          row.fate === 'confirm' ? 'positive' : row.fate === 'refute' ? 'negative' : 'neutral_warn';
+        return {
+          decision_date: row.updated_at ? String(row.updated_at).slice(0, 10) : null,
+          decision: row.line_name ?? '未命名战略线',
+          assumption_at_decision: row.hypothesis_text ?? '',
+          fact_now: row.fact_text ?? '',
+          echo_polarity: polarity,
+          echo_label: row.fate === 'confirm' ? '回声正向' : row.fate === 'refute' ? '反方回响' : '待验证',
+          linked_compass_echo_id: String(row.id),
+        };
+      }),
+    };
+  } catch {
+    return { items: [] };
+  }
+}
+
+/**
+ * GET /balcony/self-promises — 自我承诺 vs 兑现
+ * 把 ceo_balcony_reflections 含 user_answer 的记录按 keep/partial/broken 分类
+ */
+export async function getSelfPromises(
+  deps: CeoEngineDeps,
+  filter: { userId?: string },
+): Promise<{
+  items: Array<{
+    id: string;
+    type: '已兑现' | '自批评' | '未兑现';
+    tick: 'kept' | 'partial' | 'broken';
+    what: string;
+    evidence: string;
+    linked_reflection_ids: string[];
+  }>;
+  summary: { kept_count: number; partial_count: number; broken_count: number; kept_rate: number };
+}> {
+  const userId = filter.userId ?? 'system';
+  const r = await deps.db.query(
+    `SELECT id::text, prism_id, mood, user_answer, week_start::text AS week_start
+       FROM ceo_balcony_reflections
+      WHERE user_id = $1 AND user_answer IS NOT NULL
+      ORDER BY week_start DESC
+      LIMIT 30`,
+    [userId],
+  );
+  // 简化分类: mood='clear'→kept, 'grateful'→kept, 'tense'/'tired'/'restless'→broken, 其他→partial
+  const items = r.rows.map((row) => {
+    const mood = String(row.mood ?? '');
+    let tick: 'kept' | 'partial' | 'broken' = 'partial';
+    let type: '已兑现' | '自批评' | '未兑现' = '自批评';
+    if (mood === 'clear' || mood === 'grateful' || mood === 'focused') {
+      tick = 'kept';
+      type = '已兑现';
+    } else if (mood === 'tense' || mood === 'tired' || mood === 'restless') {
+      tick = 'broken';
+      type = '未兑现';
+    }
+    return {
+      id: `sp-${row.id}`,
+      type,
+      tick,
+      what: String(row.user_answer ?? '').slice(0, 80),
+      evidence: `${row.week_start} · prism=${row.prism_id ?? '—'}`,
+      linked_reflection_ids: [String(row.id)],
+    };
+  });
+  const kept_count = items.filter((x) => x.tick === 'kept').length;
+  const partial_count = items.filter((x) => x.tick === 'partial').length;
+  const broken_count = items.filter((x) => x.tick === 'broken').length;
+  const total = items.length || 1;
+  return {
+    items,
+    summary: {
+      kept_count,
+      partial_count,
+      broken_count,
+      kept_rate: Number((kept_count / total).toFixed(2)),
+    },
   };
 }

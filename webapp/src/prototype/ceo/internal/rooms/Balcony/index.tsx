@@ -1,5 +1,6 @@
 // Balcony 房间 · 个人 主壳
 // hero (云月远山动画) + 3 reflection cards + 抽屉 (六棱镜+时间ROI+节奏+沉默+回声+承诺)
+// R3 cutover: 6 个 d-block 改为 fetch /balcony/{roi-trend,reflections-history,silence-signals,echos,self-promises}
 // 来源: 07-archive/会议纪要 (20260501)/balcony.html
 
 import { useEffect, useState } from 'react';
@@ -21,6 +22,25 @@ interface DashboardData {
   weeklyRoi?: number;
   weakest?: { prism?: string; score?: number };
   strongest?: { prism?: string; score?: number };
+  prismScores?: Record<string, number>;
+}
+
+interface DrawerApiData {
+  prismScores?: Record<string, number>;
+  roiTrend?: {
+    metrics?: {
+      weekly_roi?: { value: number };
+      deep_focus_hours?: { value: number; target: number };
+      meeting_hours?: { value: number };
+      high_roi_block_h?: { value: number };
+    };
+  };
+  rhythm?: { items?: Array<{ rate: number; answered: number }>; summary?: { avg_rate: number } };
+  silence?: { items?: Array<{ id: string; date: string; person_name: string; context: string; tag: string; is_long: boolean }> };
+  echos?: { items?: Array<{ decision_date: string | null; decision: string; assumption_at_decision: string; fact_now: string; echo_polarity: string; echo_label: string }> };
+  selfPromises?: {
+    items?: Array<{ id: string; tick: 'kept' | 'partial' | 'broken'; what: string; evidence: string }>;
+  };
 }
 
 const PRISM_LABEL_ZH: Record<string, string> = {
@@ -36,6 +56,7 @@ export function Balcony() {
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const [drawer, setDrawer] = useState<DrawerApiData>({});
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
@@ -50,6 +71,31 @@ export function Balcony() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey]);
+
+  // 抽屉打开时再拉 5 个 d-block 数据 (lazy)
+  useEffect(() => {
+    if (!drawerOpen) return;
+    let cancelled = false;
+    Promise.all([
+      fetch('/api/v1/ceo/balcony/roi-trend?weeks=8').then((r) => r.json()).catch(() => null),
+      fetch('/api/v1/ceo/balcony/reflections-history?weeks=12').then((r) => r.json()).catch(() => null),
+      fetch('/api/v1/ceo/balcony/silence-signals?days=30').then((r) => r.json()).catch(() => null),
+      fetch('/api/v1/ceo/balcony/echos?weeks=6').then((r) => r.json()).catch(() => null),
+      fetch('/api/v1/ceo/balcony/self-promises').then((r) => r.json()).catch(() => null),
+    ]).then(([roiTrend, rhythm, silence, echos, selfPromises]) => {
+      if (cancelled) return;
+      setDrawer({
+        prismScores: dash?.prismScores,
+        roiTrend: roiTrend ?? undefined,
+        rhythm: rhythm ?? undefined,
+        silence: silence ?? undefined,
+        echos: echos ?? undefined,
+        selfPromises: selfPromises ?? undefined,
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerOpen, dash?.prismScores]);
 
   return (
     <div
@@ -339,22 +385,22 @@ export function Balcony() {
             }}
           >
             <DBlock num="① prism" title="六棱镜指标">
-              <PrismRadar />
+              <PrismRadar prismScores={drawer.prismScores ?? dash?.prismScores} />
             </DBlock>
             <DBlock num="② time roi" title="时间 ROI">
-              <RoiGauge />
+              <RoiGauge roiTrend={drawer.roiTrend} />
             </DBlock>
             <DBlock num="③ balcony rhythm" title="阳台时光节奏">
-              <BalconyRhythm />
+              <BalconyRhythm rhythm={drawer.rhythm} />
             </DBlock>
             <DBlock num="④ silence ratio" title="沉默 vs 发言">
-              <SilenceRow />
+              <SilenceRow silence={drawer.silence} />
             </DBlock>
             <DBlock num="⑤ echo" title="决策回声轨迹">
-              <EchoList />
+              <EchoList echos={drawer.echos} />
             </DBlock>
             <DBlock num="⑥ self promises" title="自我承诺 vs 兑现">
-              <SelfPromiseList />
+              <SelfPromiseList selfPromises={drawer.selfPromises} />
             </DBlock>
           </div>
         </aside>
@@ -411,10 +457,14 @@ function DBlock({ num, title, children }: { num: string; title: string; children
   );
 }
 
-function PrismRadar() {
-  const polyPoints = PRISM_POINTS.map((p) => `${p.cx},${p.cy}`).join(' ');
-  const weakest = [...PRISM_POINTS].sort((a, b) => a.score - b.score)[0];
-  const strongest = [...PRISM_POINTS].sort((a, b) => b.score - a.score)[0];
+function PrismRadar({ prismScores }: { prismScores?: Record<string, number> }) {
+  // 用 API 的 prismScores (来自 /balcony/dashboard) 覆盖 fixture 的 score
+  const points = prismScores
+    ? PRISM_POINTS.map((p) => ({ ...p, score: prismScores[p.prism] ?? p.score }))
+    : PRISM_POINTS;
+  const polyPoints = points.map((p) => `${p.cx},${p.cy}`).join(' ');
+  const weakest = [...points].sort((a, b) => a.score - b.score)[0];
+  const strongest = [...points].sort((a, b) => b.score - a.score)[0];
   return (
     <div>
       <svg viewBox="0 0 240 200" style={{ width: '100%', height: 180 }}>
@@ -458,8 +508,14 @@ function PrismRadar() {
   );
 }
 
-function RoiGauge() {
-  const dashLen = Math.round(2 * Math.PI * 40 * TIME_ROI.roi);
+function RoiGauge({ roiTrend }: { roiTrend?: DrawerApiData['roiTrend'] }) {
+  const m = roiTrend?.metrics;
+  const roi = m?.weekly_roi?.value ?? TIME_ROI.roi;
+  const high = m?.high_roi_block_h?.value ?? TIME_ROI.highRoi;
+  const meet = m?.meeting_hours?.value ?? TIME_ROI.meetingH;
+  const deep = m?.deep_focus_hours?.value ?? TIME_ROI.deepH;
+  const target = m?.deep_focus_hours?.target ?? TIME_ROI.targetDeep;
+  const dashLen = Math.round(2 * Math.PI * 40 * roi);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
       <svg viewBox="0 0 100 100" style={{ width: 100, height: 100, flexShrink: 0 }}>
@@ -485,7 +541,7 @@ function RoiGauge() {
           fill="#E8DCC4"
           fontWeight="600"
         >
-          {TIME_ROI.roi.toFixed(2)}
+          {roi.toFixed(2)}
         </text>
         <text
           x="50"
@@ -500,22 +556,33 @@ function RoiGauge() {
         </text>
       </svg>
       <div style={{ fontSize: 11.5, lineHeight: 1.7, color: 'rgba(232,220,196,0.85)' }}>
-        高 ROI 时段 <b>{TIME_ROI.highRoi}h</b>
+        高 ROI 时段 <b>{high}h</b>
         <br />
-        会议消耗 <span style={{ color: '#FFB89A' }}>{TIME_ROI.meetingH}h</span>
+        会议消耗 <span style={{ color: '#FFB89A' }}>{meet}h</span>
         <br />
-        深度专注 <b>{TIME_ROI.deepH}h</b>{' '}
-        <span style={{ color: '#FFB89A' }}>↓ 目标 {TIME_ROI.targetDeep}h</span>
+        深度专注 <b>{deep}h</b>{' '}
+        <span style={{ color: '#FFB89A' }}>↓ 目标 {target}h</span>
       </div>
     </div>
   );
 }
 
-function BalconyRhythm() {
+function BalconyRhythm({ rhythm }: { rhythm?: DrawerApiData['rhythm'] }) {
+  // API 形态: items[{rate (0..1), answered}] → 转 fixture 的 {h, miss, now}
+  const bars =
+    rhythm?.items && rhythm.items.length > 0
+      ? rhythm.items.map((it, i) => ({
+          h: Math.max(5, Math.round(it.rate * 90)),
+          miss: it.answered === 0,
+          now: i === rhythm.items!.length - 1,
+        }))
+      : BALCONY_RHYTHM;
+  const avgRate = rhythm?.summary?.avg_rate;
+  const missCount = rhythm?.items?.filter((x) => x.answered === 0).length ?? 4;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
-        {BALCONY_RHYTHM.map((b, i) => (
+        {bars.map((b, i) => (
           <div
             key={i}
             style={{
@@ -542,20 +609,30 @@ function BalconyRhythm() {
           letterSpacing: 0.2,
         }}
       >
-        <span>12 周前</span>
+        <span>{bars.length} 周前</span>
         <span>本周</span>
       </div>
       <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(232,220,196,0.65)', marginTop: 6 }}>
-        连续 <b style={{ color: '#A6CC9A' }}>2 周</b>赴约 · 但近 12 周漏掉 <b style={{ color: '#FFB89A' }}>4 次</b>
+        平均赴约 <b style={{ color: '#A6CC9A' }}>{avgRate != null ? `${Math.round(avgRate * 100)}%` : '—'}</b> · 漏掉{' '}
+        <b style={{ color: '#FFB89A' }}>{missCount} 次</b>
       </div>
     </div>
   );
 }
 
-function SilenceRow() {
+function SilenceRow({ silence }: { silence?: DrawerApiData['silence'] }) {
+  const cards =
+    silence?.items && silence.items.length > 0
+      ? silence.items.map((it) => ({
+          name: it.person_name,
+          meta: it.tag,
+          text: it.context,
+          long: it.is_long,
+        }))
+      : SILENCE_CARDS;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {SILENCE_CARDS.map((s, i) => (
+      {cards.map((s, i) => (
         <div
           key={i}
           style={{
@@ -579,10 +656,23 @@ function SilenceRow() {
   );
 }
 
-function EchoList() {
+function EchoList({ echos }: { echos?: DrawerApiData['echos'] }) {
+  const items =
+    echos?.items && echos.items.length > 0
+      ? echos.items.map((it) => {
+          const positive = it.echo_polarity === 'positive';
+          return {
+            when: (it.decision_date ?? '').slice(5),
+            text: it.decision,
+            pos: positive ? it.echo_label : undefined,
+            neg: !positive ? it.echo_label : undefined,
+            detail: it.fact_now?.slice(0, 24) ?? '',
+          };
+        })
+      : ECHOS;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {ECHOS.map((e, i) => (
+      {items.map((e, i) => (
         <div
           key={i}
           style={{
@@ -591,7 +681,7 @@ function EchoList() {
             padding: '5px 0',
             fontSize: 11,
             color: 'rgba(232,220,196,0.85)',
-            borderBottom: i < ECHOS.length - 1 ? '1px dotted rgba(217,184,142,0.15)' : 'none',
+            borderBottom: i < items.length - 1 ? '1px dotted rgba(217,184,142,0.15)' : 'none',
           }}
         >
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(232,220,196,0.5)', flexShrink: 0 }}>
@@ -612,10 +702,18 @@ function EchoList() {
   );
 }
 
-function SelfPromiseList() {
+function SelfPromiseList({ selfPromises }: { selfPromises?: DrawerApiData['selfPromises'] }) {
+  const items =
+    selfPromises?.items && selfPromises.items.length > 0
+      ? selfPromises.items.map((it) => ({
+          kept: it.tick === 'kept',
+          text: it.what,
+          sub: it.evidence,
+        }))
+      : SELF_PROMISES;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {SELF_PROMISES.map((p, i) => (
+      {items.map((p, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11 }}>
           <span
             style={{

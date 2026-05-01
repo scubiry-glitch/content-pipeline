@@ -3,7 +3,18 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
-import { listStrategicLines, listStrategicEchos, getAttentionAlloc, getCompassDashboard, recomputeAlignment } from './service.js';
+import {
+  listStrategicLines,
+  listStrategicEchos,
+  getAttentionAlloc,
+  getCompassDashboard,
+  recomputeAlignment,
+  getAstrolabe,
+  getTimePie,
+  getDriftRadar,
+  getOnePager,
+  getArchives,
+} from './service.js';
 import { getProjectAtlas } from './atlas.js';
 
 export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
@@ -37,6 +48,38 @@ export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/atlas', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getProjectAtlas(engine.deps, scopeId);
+    });
+
+    // ─── samples-s 对齐：5 个新 GET endpoint ───────────────────
+    fastify.get('/astrolabe', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return getAstrolabe(engine.deps, scopeId);
+    });
+
+    fastify.get('/time-pie', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return getTimePie(engine.deps, scopeId);
+    });
+
+    fastify.get('/drift-radar', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return getDriftRadar(engine.deps, scopeId);
+    });
+
+    fastify.get('/one-pager', async (request, reply) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      const data = await getOnePager(engine.deps, scopeId);
+      if (!data) {
+        reply.code(404);
+        return { error: 'no-brief-available' };
+      }
+      return data;
+    });
+
+    fastify.get('/archives', async (request) => {
+      const { scopeId, tab } = (request.query ?? {}) as { scopeId?: string; tab?: string };
+      const t = tab === 'drift' ? 'drift' : 'main';
+      return getArchives(engine.deps, t, scopeId);
     });
   };
 }

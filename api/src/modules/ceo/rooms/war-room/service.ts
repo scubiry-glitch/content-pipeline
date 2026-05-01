@@ -69,6 +69,8 @@ export async function getWarRoomDashboard(
   conflictKinds: { build: number; destructive: number; silent: number; total: number };
   conflictTemp: number;
   verdict: string;
+  sandboxStats: { draft: number; running: number; completed: number; total: number };
+  sparkSeedCount: number;
 }> {
   const formationHealth = await computeFormationHealth(deps, scopeId);
   const conflictKinds = await classifyConflicts(deps, scopeId);
@@ -85,6 +87,33 @@ export async function getWarRoomDashboard(
     else verdict = '警告 — 团队回避真问题';
   }
 
+  // Sandbox 统计
+  const sandboxStats = { draft: 0, running: 0, completed: 0, total: 0 };
+  try {
+    const r = await deps.db.query(
+      `SELECT status, COUNT(*)::int AS n FROM ceo_sandbox_runs GROUP BY status`,
+    );
+    for (const row of r.rows) {
+      const s = String(row.status);
+      const n = Number(row.n);
+      sandboxStats.total += n;
+      if (s === 'draft') sandboxStats.draft += n;
+      else if (s === 'running') sandboxStats.running += n;
+      else if (s === 'completed') sandboxStats.completed += n;
+    }
+  } catch {
+    /* table missing — keep zeros */
+  }
+
+  // Spark 种子数
+  let sparkSeedCount = 0;
+  try {
+    const r = await deps.db.query(`SELECT COUNT(*)::int AS n FROM ceo_war_room_sparks`);
+    sparkSeedCount = Number(r.rows[0]?.n ?? 0);
+  } catch {
+    /* ignore */
+  }
+
   return {
     question: '团队健康吗? 有建设性冲突吗?',
     metric: {
@@ -96,5 +125,7 @@ export async function getWarRoomDashboard(
     conflictKinds,
     conflictTemp,
     verdict,
+    sandboxStats,
+    sparkSeedCount,
   };
 }
