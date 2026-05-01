@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { PROMISES } from './_boardroomFixtures';
 import { useSelectedScopes } from '../../../shared/ScopePicker';
+import { PersonChip } from '../../../shared/PersonChip';
 
 interface ApiPromise {
   id: string;
@@ -178,9 +179,16 @@ export function PromiseTable() {
                     borderBottom: '1px solid rgba(212,168,75,0.08)',
                   }}
                 >
-                  {p.owner}
-                  {p.person_role && (
-                    <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>· {p.person_role}</span>
+                  {p.owner === '—' ? (
+                    <span>—</span>
+                  ) : (
+                    <PersonChip
+                      personId={p.person_id ?? null}
+                      name={p.owner}
+                      role={p.person_role ?? null}
+                      tone="#D4A84B"
+                      size="sm"
+                    />
                   )}
                 </td>
                 <td

@@ -2,6 +2,18 @@
 // 来源: 07-archive/会议纪要 (20260501)/tower.html .kanban-grid
 
 import { KANBAN } from './_towerFixtures';
+import { PersonChip } from '../../../shared/PersonChip';
+
+/** 把 "林雾 → 陈汀" / "陈汀 欠 董事会" 拆出两个名字 */
+function splitOwnerLine(text: string): { from: string; sep: string; to: string } | null {
+  for (const sep of [' → ', ' 欠 ', ' -> ']) {
+    if (text.includes(sep)) {
+      const [from, to] = text.split(sep);
+      return { from: from.trim(), sep, to: to.trim() };
+    }
+  }
+  return null;
+}
 
 export function CommitmentKanban() {
   return (
@@ -88,7 +100,19 @@ export function CommitmentKanban() {
                   color: 'rgba(232,239,242,0.55)',
                 }}
               >
-                <span>{c.from}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  {(() => {
+                    const split = splitOwnerLine(c.from);
+                    if (!split) return <span>{c.from}</span>;
+                    return (
+                      <>
+                        <PersonChip name={split.from} tone="#5FA39E" size="sm" />
+                        <span style={{ opacity: 0.5 }}>{split.sep.trim()}</span>
+                        <PersonChip name={split.to} tone="#5FA39E" size="sm" />
+                      </>
+                    );
+                  })()}
+                </span>
                 <span>{c.date}</span>
               </div>
               <div

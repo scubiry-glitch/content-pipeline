@@ -4,6 +4,8 @@
 
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import './_tokens.css';
+import { PersonDrawerProvider } from './shared/PersonDrawerProvider';
+import { PersonDrawer } from './shared/PersonDrawer';
 
 type Mode = 'external' | 'internal';
 type ExtTab = 'meetings' | 'library';
@@ -37,6 +39,8 @@ export function WorldShell() {
   };
 
   return (
+    <PersonDrawerProvider>
+    <PersonDrawer />
     <div
       className={`ceo-proto ${isExternal ? '' : 'ceo-proto-internal'}`}
       style={{
@@ -88,6 +92,7 @@ export function WorldShell() {
         </>
       )}
     </div>
+    </PersonDrawerProvider>
   );
 }
 

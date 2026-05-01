@@ -1255,6 +1255,60 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return r.rows[0];
     });
 
+    /** GET /people/:id/commitments · 列该人物所有承诺 (供 CEO PersonDrawer 用) */
+    fastify.get('/people/:id/commitments', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const q = (request.query ?? {}) as { state?: string; limit?: string };
+      const limit = Math.max(1, Math.min(Number(q.limit ?? 30), 100));
+      const where: string[] = ['person_id = $1'];
+      const params: any[] = [id];
+      if (q.state) {
+        params.push(q.state);
+        where.push(`state = $${params.length}`);
+      }
+      const r = await engine.deps.db.query(
+        `SELECT id::text, person_id::text, meeting_id::text, scope_id::text,
+                text, due_at, state, progress, source_turn, created_at
+           FROM mn_commitments
+          WHERE ${where.join(' AND ')}
+          ORDER BY due_at NULLS LAST, created_at DESC
+          LIMIT ${limit}`,
+        params,
+      );
+      return { items: r.rows };
+    });
+
+    /** GET /people/:id/speech-summary · 该人物近 N 周的发言质量 / 沉默信号汇总 */
+    fastify.get('/people/:id/speech-summary', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const speech = await engine.deps.db.query(
+        `SELECT AVG(entropy_pct)::numeric(5,2) AS avg_entropy,
+                SUM(followed_up_count)::int AS total_followed_up,
+                COUNT(*)::int AS meeting_count
+           FROM mn_speech_quality
+          WHERE person_id = $1
+            AND created_at > NOW() - INTERVAL '90 days'`,
+        [id],
+      ).catch(() => ({ rows: [{ avg_entropy: null, total_followed_up: 0, meeting_count: 0 }] }));
+      const silence = await engine.deps.db.query(
+        `SELECT
+            SUM(CASE WHEN state = 'spoke' THEN 1 ELSE 0 END)::int AS spoke,
+            SUM(CASE WHEN state = 'normal_silence' THEN 1 ELSE 0 END)::int AS normal_silence,
+            SUM(CASE WHEN state = 'abnormal_silence' THEN 1 ELSE 0 END)::int AS abnormal_silence,
+            SUM(CASE WHEN state = 'absent' THEN 1 ELSE 0 END)::int AS absent
+           FROM mn_silence_signals
+          WHERE person_id = $1
+            AND created_at > NOW() - INTERVAL '90 days'`,
+        [id],
+      ).catch(() => ({ rows: [{ spoke: 0, normal_silence: 0, abnormal_silence: 0, absent: 0 }] }));
+      return {
+        speech: speech.rows[0] ?? null,
+        silence: silence.rows[0] ?? null,
+      };
+    });
+
     /**
      * POST /people/:id/merge · 合并两个人物（F11.1）
      * Body: { fromId, dryRun? }
