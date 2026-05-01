@@ -1,36 +1,58 @@
 // Boardroom · 董事会房间 service
 // 关切雷达 / 预读包 / 承诺追踪 / 反方演练 读取 + 聚合
+//
+// scope 多选: 所有 list 函数接受 scopeIds: string[] (可选)
+//   undefined / [] → 不过滤
+//   非空 → SQL `WHERE scope_id = ANY($1::uuid[])`
+//
+// 承诺源 union (R2-1 B):
+//   listPromises 同时拉 ceo_board_promises (CEO 自填) + mn_commitments (来自人物轴)
+//   返回 source 字段区分
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeForwardPct } from './aggregator.js';
 
+interface ScopeFilter {
+  scopeIds?: string[];
+}
+
+function scopeIdsParam(ids?: string[]): string[] | null {
+  return ids && ids.length > 0 ? ids : null;
+}
+
 export async function listDirectors(
   deps: CeoEngineDeps,
-  filter: { scopeId?: string },
+  filter: ScopeFilter,
 ): Promise<{ items: any[] }> {
+  const ids = scopeIdsParam(filter.scopeIds);
   const r = await deps.db.query(
     `SELECT id::text, name, role, weight, scope_id::text
        FROM ceo_directors
-      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+      WHERE ($1::uuid[] IS NULL OR scope_id = ANY($1::uuid[]))
       ORDER BY weight DESC, name`,
-    [filter.scopeId ?? null],
+    [ids],
   );
   return { items: r.rows };
 }
 
 export async function listConcerns(
   deps: CeoEngineDeps,
-  filter: { directorId?: string; status?: string },
+  filter: { directorId?: string; status?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
   const params: any[] = [];
   if (filter.directorId) {
     params.push(filter.directorId);
-    where.push(`director_id = $${params.length}`);
+    where.push(`c.director_id = $${params.length}`);
   }
   if (filter.status) {
     params.push(filter.status);
-    where.push(`status = $${params.length}`);
+    where.push(`c.status = $${params.length}`);
+  }
+  const ids = scopeIdsParam(filter.scopeIds);
+  if (ids) {
+    params.push(ids);
+    where.push(`d.scope_id = ANY($${params.length}::uuid[])`);
   }
   const r = await deps.db.query(
     `SELECT c.id::text, c.director_id::text, c.topic, c.status,
@@ -49,13 +71,14 @@ export async function listConcerns(
 
 export async function listBriefs(
   deps: CeoEngineDeps,
-  filter: { scopeId?: string; session?: string },
+  filter: { scopeIds?: string[]; session?: string },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
   const params: any[] = [];
-  if (filter.scopeId) {
-    params.push(filter.scopeId);
-    where.push(`scope_id = $${params.length}`);
+  const ids = scopeIdsParam(filter.scopeIds);
+  if (ids) {
+    params.push(ids);
+    where.push(`scope_id = ANY($${params.length}::uuid[])`);
   }
   if (filter.session) {
     params.push(filter.session);
@@ -73,33 +96,90 @@ export async function listBriefs(
   return { items: r.rows };
 }
 
+/**
+ * 承诺 union: ceo_board_promises (CEO 自填) + mn_commitments (人物轴抽取)
+ * - briefId 给定 → 优先 ceo 源
+ * - briefId 不给 → 默认拉 mn_commitments union ceo_board_promises (按 scope/scopeIds 过滤)
+ * 每行加 source: 'mn' | 'ceo'，前端区分配色
+ */
 export async function listPromises(
   deps: CeoEngineDeps,
-  filter: { briefId?: string },
+  filter: { briefId?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
-  if (!filter.briefId) return { items: [] };
-  const r = await deps.db.query(
-    `SELECT id::text, brief_id::text, what, owner, due_at, status, source_decision_id
-       FROM ceo_board_promises
-      WHERE brief_id = $1::uuid
-      ORDER BY status, due_at NULLS LAST`,
-    [filter.briefId],
-  );
-  return { items: r.rows };
+  const ids = scopeIdsParam(filter.scopeIds);
+
+  if (filter.briefId) {
+    // 单 brief 模式：只看 ceo 源
+    const r = await deps.db.query(
+      `SELECT id::text, brief_id::text, what, owner, due_at, status,
+              source_decision_id, 'ceo' AS source, NULL::text AS person_id, NULL::text AS person_role
+         FROM ceo_board_promises
+        WHERE brief_id = $1::uuid
+        ORDER BY status, due_at NULLS LAST`,
+      [filter.briefId],
+    );
+    return { items: r.rows };
+  }
+
+  // 全局模式: union mn_commitments + ceo_board_promises
+  const items: any[] = [];
+
+  // mn 源
+  try {
+    const mn = await deps.db.query(
+      `SELECT c.id::text, c.text AS what, p.canonical_name AS owner,
+              c.due_at, c.state AS status, c.progress,
+              c.meeting_id::text AS source_decision_id,
+              'mn' AS source,
+              p.id::text AS person_id, p.role AS person_role
+         FROM mn_commitments c
+         JOIN mn_people p ON c.person_id = p.id
+        WHERE ($1::uuid[] IS NULL OR c.scope_id = ANY($1::uuid[]))
+        ORDER BY c.due_at NULLS LAST
+        LIMIT 50`,
+      [ids],
+    );
+    items.push(...mn.rows);
+  } catch {
+    /* mn schema 不可用时跳过 */
+  }
+
+  // ceo 源
+  try {
+    const ceo = await deps.db.query(
+      `SELECT p.id::text, p.brief_id::text, p.what, p.owner, p.due_at, p.status,
+              p.source_decision_id, 'ceo' AS source,
+              NULL::text AS person_id, NULL::text AS person_role
+         FROM ceo_board_promises p
+         LEFT JOIN ceo_briefs b ON b.id = p.brief_id
+        WHERE ($1::uuid[] IS NULL OR b.scope_id = ANY($1::uuid[]))
+        ORDER BY p.status, p.due_at NULLS LAST
+        LIMIT 30`,
+      [ids],
+    );
+    items.push(...ceo.rows);
+  } catch {
+    /* ignore */
+  }
+
+  return { items };
 }
 
 export async function listRebuttals(
   deps: CeoEngineDeps,
-  filter: { briefId?: string; scopeId?: string },
+  filter: { briefId?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
   const params: any[] = [];
   if (filter.briefId) {
     params.push(filter.briefId);
     where.push(`brief_id = $${params.length}::uuid`);
-  } else if (filter.scopeId) {
-    params.push(filter.scopeId);
-    where.push(`scope_id = $${params.length}::uuid`);
+  } else {
+    const ids = scopeIdsParam(filter.scopeIds);
+    if (ids) {
+      params.push(ids);
+      where.push(`scope_id = ANY($${params.length}::uuid[])`);
+    }
   }
   const r = await deps.db.query(
     `SELECT id::text, brief_id::text, scope_id::text, attacker, attack_text,
@@ -116,7 +196,7 @@ export async function listRebuttals(
 /** Boardroom dashboard: 关切雷达 + 最新预读包 + 承诺状态 + forward_pct */
 export async function getBoardroomDashboard(
   deps: CeoEngineDeps,
-  scopeId?: string,
+  scopeIds?: string[],
 ): Promise<{
   question: string;
   metric: { label: string; value: string; delta: string };
@@ -125,13 +205,15 @@ export async function getBoardroomDashboard(
   forwardPct: number;
   promiseStats: { total: number; done: number; in_progress: number; late: number };
 }> {
+  const ids = scopeIdsParam(scopeIds);
+
   const cs = await deps.db.query(
     `SELECT c.status, COUNT(*)::int AS n
        FROM ceo_director_concerns c
        LEFT JOIN ceo_directors d ON d.id = c.director_id
-      WHERE ($1::uuid IS NULL OR d.scope_id = $1::uuid)
+      WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
       GROUP BY c.status`,
-    [scopeId ?? null],
+    [ids],
   );
   const concernsByStatus = { pending: 0, answered: 0, superseded: 0 };
   for (const r of cs.rows) {
@@ -144,11 +226,11 @@ export async function getBoardroomDashboard(
        FROM ceo_director_concerns c
        LEFT JOIN ceo_directors d ON d.id = c.director_id
       WHERE c.status = 'pending'
-        AND ($1::uuid IS NULL OR d.scope_id = $1::uuid)
+        AND ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
       GROUP BY d.name, d.role
       ORDER BY cnt DESC, last_raised DESC NULLS LAST
       LIMIT 5`,
-    [scopeId ?? null],
+    [ids],
   );
   const topConcerns = top.rows.map((r) => ({
     name: r.name ?? '匿名董事',
@@ -157,20 +239,35 @@ export async function getBoardroomDashboard(
     warn: r.cnt >= 3,
   }));
 
-  const forwardPct = await computeForwardPct(deps, scopeId);
+  // forwardPct 当前用 brief.toc 算，scope 多选时取并集 (单 scope 兼容: 用 ids[0])
+  const forwardPct = await computeForwardPct(deps, ids?.[0]);
 
-  const ps = await deps.db.query(
+  // promiseStats: union mn + ceo (映射 mn.state → in_progress/done/late/proposed)
+  const mnPs = await deps.db.query(
+    `SELECT c.state AS status, COUNT(*)::int AS n
+       FROM mn_commitments c
+      WHERE ($1::uuid[] IS NULL OR c.scope_id = ANY($1::uuid[]))
+      GROUP BY c.state`,
+    [ids],
+  ).catch(() => ({ rows: [] as any[] }));
+  const ceoPs = await deps.db.query(
     `SELECT p.status, COUNT(*)::int AS n
        FROM ceo_board_promises p
        LEFT JOIN ceo_briefs b ON b.id = p.brief_id
-      WHERE ($1::uuid IS NULL OR b.scope_id = $1::uuid)
+      WHERE ($1::uuid[] IS NULL OR b.scope_id = ANY($1::uuid[]))
       GROUP BY p.status`,
-    [scopeId ?? null],
-  );
+    [ids],
+  ).catch(() => ({ rows: [] as any[] }));
+
   const promiseStats = { total: 0, done: 0, in_progress: 0, late: 0 };
-  for (const r of ps.rows) {
-    if (r.status in promiseStats) (promiseStats as any)[r.status] = r.n;
-    promiseStats.total += Number(r.n);
+  for (const r of [...mnPs.rows, ...ceoPs.rows]) {
+    const status = String(r.status);
+    const n = Number(r.n);
+    promiseStats.total += n;
+    // mn.state: 'on_track'|'at_risk'|'done'|'slipped'
+    if (status === 'done' || status === 'completed') promiseStats.done += n;
+    else if (status === 'late' || status === 'slipped') promiseStats.late += n;
+    else if (status === 'in_progress' || status === 'on_track' || status === 'at_risk') promiseStats.in_progress += n;
   }
 
   return {

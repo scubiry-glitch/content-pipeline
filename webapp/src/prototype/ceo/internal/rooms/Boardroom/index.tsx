@@ -9,6 +9,7 @@ import { AnnotationsList } from './AnnotationsList';
 import { PromiseTable } from './PromiseTable';
 import { VersionsTabs } from './VersionsTabs';
 import { RebuttalRehearsal } from './RebuttalRehearsal';
+import { ScopePicker, useSelectedScopes } from '../../../shared/ScopePicker';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -18,10 +19,12 @@ interface DashboardData {
 export function Boardroom() {
   const navigate = useNavigate();
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const scopeIds = useSelectedScopes();
+  const scopesQuery = scopeIds.length > 0 ? `?scopes=${scopeIds.join(',')}` : '';
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/v1/ceo/boardroom/dashboard')
+    fetch(`/api/v1/ceo/boardroom/dashboard${scopesQuery}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setDash(d);
@@ -30,7 +33,7 @@ export function Boardroom() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scopesQuery]);
 
   return (
     <div
@@ -159,6 +162,15 @@ export function Boardroom() {
           margin: '0 auto',
         }}
       >
+        <Block
+          num="◐ scope filter"
+          title="勾选 scope · 项目 / 客户 / 主题"
+          meta="多选 intersection · URL 持久化"
+          spanFull
+        >
+          <ScopePicker />
+        </Block>
+
         <Block num="① concerns radar" title="董事关切雷达 · 每位董事最近 3 次提的问题" meta="5 位董事 · 滚动 90 天" tall>
           <ConcernsRadar />
         </Block>
