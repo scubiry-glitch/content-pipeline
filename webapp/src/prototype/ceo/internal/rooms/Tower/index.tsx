@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { CommitmentKanban } from './CommitmentKanban';
 import { RhythmPulse } from './RhythmPulse';
 import { DeficitAlert } from './DeficitAlert';
-import { RhythmsArchive } from './RhythmsArchive';
+import { RhythmsTabs } from './RhythmsTabs';
 import { BLOCKERS, POST_MEETING } from './_towerFixtures';
 
 interface DashboardData {
@@ -180,8 +180,8 @@ export function Tower() {
           <DeficitAlert />
         </Block>
 
-        <Block num="⑥ rhythms" title="周节律档案" meta="滚动 12 周 · 按月切片" spanFull>
-          <RhythmsArchive />
+        <Block num="⑥ rhythms" title="节奏视图" meta="团队 / 个人 双 tab" spanFull>
+          <RhythmsTabs />
         </Block>
       </main>
     </div>

@@ -8,7 +8,7 @@
     "③ post-meeting card": "实装 — 上次会议未关闭项",
     "④ rhythm pulse":      "实装 — 8 周双折线 (战略主线 vs 救火) + plan 20h 基线",
     "⑤ deficit alert":     "实装 — 个人精力 gauge (实测 vs 预算)",
-    "⑥ rhythms":           "实装 — RhythmsArchive.tsx 12 周按月切片 (主线时长/救火比例/透支周/平均 ROI)"
+    "⑥ rhythms":           "实装 (R2-7 重做) — RhythmsTabs (团队节奏 7×24 heatmap / 个人节奏 折线 + 5 行 stat 双 tab)"
   },
   "endpoints": {
     "GET /api/v1/ceo/tower/dashboard": {
