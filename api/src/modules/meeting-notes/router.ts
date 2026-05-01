@@ -223,7 +223,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                   ELSE NULL END,
              NULLIF(
                (SELECT COUNT(DISTINCT person_id)::int FROM mn_speech_quality
-                 WHERE meeting_id = a.id),
+                WHERE meeting_id::text = a.id::text),
                0
              )
            ) AS attendee_count,
@@ -237,14 +237,14 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
              (
                SELECT FLOOR(((samples->-1->>'t_sec')::numeric) / 60)::int
                FROM mn_affect_curve
-               WHERE meeting_id = a.id
+               WHERE meeting_id::text = a.id::text
                  AND jsonb_typeof(samples) = 'array'
                  AND jsonb_array_length(samples) > 0
              )
            ) AS duration_min,
            (SELECT row_to_json(rr) FROM (
              SELECT id, state, axis, finished_at, error_message
-             FROM mn_runs WHERE scope_kind='meeting' AND scope_id = a.id
+             FROM mn_runs WHERE scope_kind='meeting' AND scope_id::text = a.id::text
              ORDER BY created_at DESC LIMIT 1
            ) rr) AS last_run,
            COALESCE(
@@ -252,8 +252,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                'scopeId', s.id, 'kind', s.kind, 'name', s.name, 'slug', s.slug
              ) ORDER BY sm.bound_at)
              FROM mn_scope_members sm
-             JOIN mn_scopes s ON s.id = sm.scope_id
-             WHERE sm.meeting_id = a.id),
+            JOIN mn_scopes s ON s.id::text = sm.scope_id::text
+             WHERE sm.meeting_id::text = a.id::text),
              '[]'::json
            ) AS scope_bindings
          FROM assets a

@@ -298,17 +298,24 @@ function FolderNode({
         {hover && (onCommitRename || onDelete || onAddChild) && renaming !== node.id ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {onAddChild && (
-              <span
-                role="button"
+              <button
+                type="button"
                 title={`在「${node.name}」下新建子分组`}
                 onClick={(e) => { e.stopPropagation(); setOpen(true); onAddChild(node.id); }}
                 style={{
-                  cursor: 'pointer', color: 'var(--ink-4)',
-                  padding: '0 4px', fontSize: 13, lineHeight: 1, fontFamily: 'var(--sans)',
+                  cursor: 'pointer',
+                  color: 'var(--ink-3)',
+                  border: '1px solid var(--line-2)',
+                  background: 'var(--paper)',
+                  borderRadius: 4,
+                  padding: '1px 5px',
+                  fontSize: 10,
+                  lineHeight: 1.2,
+                  fontFamily: 'var(--sans)',
                 }}
               >
-                ＋
-              </span>
+                +子
+              </button>
             )}
             {onCommitRename && (
               <span
@@ -1337,7 +1344,13 @@ export function Library() {
               onSelect={setActiveGroup} onRename={setRenaming} renaming={renaming}
               onCommitRename={handleRenameScope} onDelete={handleDeleteScope}
               onDropMeeting={!forceMock ? handleDropMeeting : undefined}
-              onAddChild={!forceMock ? (pid) => setAddingChildId(pid) : undefined}
+              onAddChild={(pid) => {
+                if (forceMock) {
+                  alert('Mock 模式不支持创建子分组 · 请先切到 API 模式');
+                  return;
+                }
+                setAddingChildId(pid);
+              }}
               addingChildId={addingChildId}
               onCommitAddChild={(pid, n) => handleAddScope(n, pid)}
               onCancelAddChild={() => setAddingChildId(null)}
