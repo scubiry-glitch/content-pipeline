@@ -1,78 +1,378 @@
 {
-  "$comment": "War Room · 团队房间样例 — 阵型快照 + 冲突分类 (复用 mn_silence_signals/judgments)",
+  "$comment": "War Room · 团队房间样例 — 阵型 + 沙盘 + 冲突温度计 + 阵型缺口 + 灵光一闪 5 块完整 fixture",
   "$page": "/ceo/internal/ceo/war-room",
+  "$sub_pages": [
+    "/ceo/internal/ceo/war-room/sandbox/:id (R3-3 SandboxDetail 子页 — 决策树 + 评估)"
+  ],
   "$prototype": "07-archive/会议纪要 (20260501)/war-room.html",
+  "$blocks_status": {
+    "① formation":         "实装 (FormationMap.tsx) — circular SVG 红黑作战桌, hover 弹角色档案",
+    "② sandbox":           "实装 (SandboxList.tsx + SandboxDetail.tsx) — 列出 ceo_sandbox_runs + 决策树详情",
+    "③ conflict thermo":   "实装 (ConflictThermo.tsx) — build/destructive/silent + 4 周 sparkline",
+    "④ formation gaps":    "实装 (FormationAnalysis.tsx Tab1) — fixture, R2-5 PR12 LLM 接入后由 g3 写表",
+    "⑤ spark sparks":      "实装 (FormationAnalysis.tsx Tab2 + SparkCardComponent.tsx) — 4 张 reroll, 真数据 ceo_war_room_sparks"
+  },
   "endpoints": {
     "GET /api/v1/ceo/war-room/dashboard": {
+      "$comment": "顶部指标卡 + 5 块概览",
       "question": "团队健康吗? 有建设性冲突吗?",
       "metric": { "label": "阵型健康", "value": "72", "delta": "本月" },
       "formationHealth": 0.72,
       "conflictKinds": { "build": 7, "destructive": 2, "silent": 1, "total": 10 },
       "conflictTemp": 0.7,
-      "verdict": "健康 — 偏热，建设性冲突充分"
+      "verdict": "健康 — 偏热,建设性冲突充分",
+      "sandboxStats": { "completed": 2, "pending": 1, "running": 0, "total": 3 },
+      "sparkSeedCount": 3
     },
     "GET /api/v1/ceo/war-room/formation": {
       "snapshot": {
-        "id": "77777777-...",
+        "id": "77777777-1111-1111-1111-777777777701",
         "scope_id": null,
         "week_start": "2026-04-27",
         "formation_data": {
           "nodes": [
-            { "id": "chen", "name": "陈", "role": "CEO",        "variant": "self",    "cx": 300, "cy": 250, "r": 28 },
-            { "id": "shen", "name": "沈", "role": "主战 · IC",   "variant": "ally",    "cx": 300, "cy": 130, "r": 22 },
-            { "id": "zhou", "name": "周", "role": "侦察 · 纪要", "variant": "ally",    "cx": 300, "cy": 370, "r": 20 },
-            { "id": "wei",  "name": "Wei", "role": "智囊 · 远",  "variant": "advisor", "cx": 465, "cy": 180, "r": 20 },
-            { "id": "omar", "name": "Omar","role": "外援 · 行业", "variant": "advisor", "cx": 135, "cy": 180, "r": 20 },
-            { "id": "lin",  "name": "林", "role": "LP · 边缘",   "variant": "edge",    "cx": 500, "cy": 380, "r": 18 }
+            { "id": "chen", "name": "陈",   "role": "CEO",        "variant": "self",    "cx": 300, "cy": 250, "r": 28, "profile": "决策者 · 估值偏看空 · 本月沉默时长 +28%" },
+            { "id": "shen", "name": "沈",   "role": "主战 · IC",   "variant": "ally",    "cx": 300, "cy": 130, "r": 22, "profile": "主战派 · 67% 关键决策 · 与陈汀分歧稳定在 $60M-$80M" },
+            { "id": "zhou", "name": "周",   "role": "侦察 · 纪要", "variant": "ally",    "cx": 300, "cy": 370, "r": 20, "profile": "低发言高信息熵 · 23 次重复未答的提问 · 被低估" },
+            { "id": "wei",  "name": "Wei",  "role": "智囊 · 远",   "variant": "advisor", "cx": 465, "cy": 180, "r": 20, "profile": "硅谷顾问 · calibration 0.78 · 反事实命中率 62%" },
+            { "id": "omar", "name": "Omar", "role": "外援 · 行业", "variant": "advisor", "cx": 135, "cy": 180, "r": 20, "profile": "沉默信号:14 次反事实 12 次未回应 · 心智模型 0.42 重叠" },
+            { "id": "lin",  "name": "林",   "role": "LP · 边缘",   "variant": "edge",    "cx": 500, "cy": 380, "r": 18, "profile": "未表态 · 最近 3 次提问全部反事实 · 关注退出路径" }
           ],
           "links": [
-            { "from": "chen", "to": "shen", "kind": "support" },
-            { "from": "chen", "to": "zhou", "kind": "support" },
-            { "from": "chen", "to": "wei",  "kind": "advisor" },
-            { "from": "chen", "to": "omar", "kind": "advisor" },
-            { "from": "chen", "to": "lin",  "kind": "silent"  },
-            { "from": "shen", "to": "zhou", "kind": "tension" }
+            { "from": "chen", "to": "shen", "kind": "support", "$desc": "金线 — 共识/支持 (47 次会议同向投票占 71%)" },
+            { "from": "chen", "to": "zhou", "kind": "support", "$desc": "金线 — 纪要采纳率 92%" },
+            { "from": "chen", "to": "wei",  "kind": "advisor", "$desc": "虚线 — 智囊关系, Wei 月均 1v1 2 次" },
+            { "from": "chen", "to": "omar", "kind": "advisor", "$desc": "虚线 — 智囊关系, Omar 反事实未回应率 86%" },
+            { "from": "chen", "to": "lin",  "kind": "silent",  "$desc": "灰虚线 — 沉默/边缘, 林雾 3 次提问未排议程" },
+            { "from": "shen", "to": "zhou", "kind": "tension", "$desc": "红虚线 — 张力 (沉岚发言时陈沉默 2分14秒, 本月最长)" }
           ]
         },
         "conflict_temp": 0.7,
         "computed_at": "2026-04-27T20:00:00Z"
       },
-      "computedAt": "2026-04-27T20:00:00Z"
+      "computedAt": "2026-04-27T20:00:00Z",
+      "$ui_behavior": "节点 hover → person-card popup 显示 profile 字段; 链路 stroke 颜色由 kind 决定 (support=#C8A15C, advisor=灰虚线, tension=#D64545, silent=灰浅虚线)"
     },
     "GET /api/v1/ceo/war-room/gaps": {
+      "$comment": "④ 阵型缺口 4 张诊断卡 — 当前 fixture, PR12 g3 LLM 接入后由跨会矛盾识别自动产出",
       "items": [
-        { "text": "团队连续 4 周缺少建设性反对意见",   "action": "安排一次反方推演",       "severity": "warn" },
-        { "text": "关键决策由单人主导比例 67%",         "action": "把下一次评审主持权交叉", "severity": "warn" },
-        { "text": "本月最长沉默 2分14秒，值得回放",     "action": "跳到张力流复盘",         "severity": "info" }
+        {
+          "text": "你的团队 已经 4 周没人唱反调 了 —— 该招个人,还是该让某人换角色?",
+          "action": "→ 让 Wei Tan 主导一次反方推演",
+          "severity": "warn",
+          "evidence": "近 4 周 mn_judgments.kind='disagreement' 计数 = 0",
+          "forge_ref": "r-team-tension"
+        },
+        {
+          "text": "Wei Tan 与林雾 至今从未在同一议题上交锋 —— 缺一种张力",
+          "action": "→ 安排一次三方会议",
+          "severity": "warn",
+          "evidence": "47 场会议中两人共同出席 0 场",
+          "forge_ref": "hypothesis-omar"
+        },
+        {
+          "text": "沈岚承担了 67% 的关键决策 —— 单点风险太高",
+          "action": "→ 把下一次评审的主持权给周劭然",
+          "severity": "warn",
+          "evidence": "近 30 天 mn_decisions.owner='shen' 比例 14/21",
+          "forge_ref": "r-shen-attention"
+        },
+        {
+          "text": "陈汀(你)在 沈岚发言时沉默 2'14\" —— 本月最长一次,值得回放",
+          "action": "→ 跳到张力流复盘",
+          "severity": "info",
+          "evidence": "mn_silence_signals.duration_ms=134000 · 2026-04-22 IC 第 47 分钟",
+          "forge_ref": "r-team-tension"
+        }
       ]
+    },
+    "GET /api/v1/ceo/war-room/sparks?seed=0&limit=4": {
+      "$comment": "⑤ 灵光一闪 — 默认 seed=0 拿 group 0 的 4 张; 再来一组 → seed=1/2 切换",
+      "seed": 0,
+      "items": [
+        {
+          "id": "spk-0-1",
+          "tag": "🔮 跨项目人才嫁接",
+          "headline": "让 Wei Tan 主导 LP 沟通方案 —— 也许他的二阶思考能给林雾一个交代",
+          "evidence_short": "过去 6 场会议中,Wei 的 3 次反事实提问被 LP 提到 2 次",
+          "why_evidence": [
+            "Wei 的 calibration 0.78,组内最高",
+            "历史上他在'未走的路'分析中命中率 62%",
+            "林雾最近 3 次提问都是反事实,Wei 风格契合"
+          ],
+          "risk_text": "⚠ 沈岚可能感觉被绕过 — 提前 1v1 沟通",
+          "seed_group": 0
+        },
+        {
+          "id": "spk-0-2",
+          "tag": "⚡ 张力配对",
+          "headline": "把 陈汀+沈岚 送进同一个尽调会议 —— 让估值分歧变成尽调标准",
+          "evidence_short": "两人在估值上的分歧 6 次中 5 次落在同一逻辑分支",
+          "why_evidence": [
+            "分歧已稳定为 '$60M vs $80M',不是情绪化",
+            "把内部冲突转化为外部尽调输出",
+            "Wei 之前提议过类似做法,得到 0.7 confidence"
+          ],
+          "risk_text": "⚠ 项目方会感觉被'双面夹击' — 提前打招呼",
+          "seed_group": 0
+        },
+        {
+          "id": "spk-0-3",
+          "tag": "🌱 沉默激活",
+          "headline": "让 Omar K. 主持下次'未解问题'会议 —— 他的反事实没人接住,也许他自己能接",
+          "evidence_short": "Omar 在 9 场会议中提出 14 次反事实,12 次未被回应",
+          "why_evidence": [
+            "Omar 的'二阶+反事实'在专家库 rubric 中得分 0.81",
+            "主持位置可以放大他原本被忽视的视角",
+            "沉默信号矩阵显示他'高质量低发言'"
+          ],
+          "risk_text": "⚠ 内部人员可能不习惯外援主持",
+          "seed_group": 0
+        },
+        {
+          "id": "spk-0-4",
+          "tag": "🔄 角色翻转",
+          "headline": "让 周劭然 出一次决策提案 —— 听了 48 场会的人最知道盲区",
+          "evidence_short": "他的会议纪要里包含 23 条'未被采纳但反复出现'的提问",
+          "why_evidence": [
+            "纪要里他暗中标注了 23 次'重复未答的提问'",
+            "他的发言质量 (信息熵) 0.74,被低估",
+            "角色翻转能激活他的执行视角"
+          ],
+          "risk_text": "⚠ 改变他原本的'低存在感安全区'",
+          "seed_group": 0
+        }
+      ],
+      "$reroll_hint": "前端 reroll → 调 ?seed=1 (镜像演练/三角验证/注水试验/退出复盘) 或 ?seed=2 (跨基金对话/静默 24h/重新调权/烧毁备忘)"
+    },
+    "GET /api/v1/ceo/war-room/sandbox": {
+      "$comment": "② 沙盘列表 — 复用 ceo_sandbox_runs 三条 seeded fixture",
+      "items": [
+        {
+          "id": "sbx-q2-invest",
+          "topic_text": "Q2 投资决策推演 · AI 基础设施加配 $40M",
+          "status": "completed",
+          "branchCount": 7,
+          "progress_pct": 100,
+          "evaluation_recommended_label": "分批加配 + 第一批捆绑 KPI gate",
+          "completed_at": "2026-04-28T15:00:00Z",
+          "created_at": "2026-04-28T11:30:00Z"
+        },
+        {
+          "id": "sbx-lp-comm",
+          "topic_text": "LP 沟通策略推演 · 如何向林雾解释 Stellar 暂缓",
+          "status": "completed",
+          "branchCount": 4,
+          "progress_pct": 100,
+          "evaluation_recommended_label": "主动 1v1 + Sequoia/Lightspeed 行业对照",
+          "completed_at": "2026-04-24T10:00:00Z",
+          "created_at": "2026-04-23T18:20:00Z"
+        },
+        {
+          "id": "sbx-halycon-pause",
+          "topic_text": "头部项目暂缓的 6 月后果 · Project Halycon",
+          "status": "pending",
+          "branchCount": 4,
+          "progress_pct": 0,
+          "evaluation_recommended_label": null,
+          "created_at": "2026-04-30T09:00:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/war-room/sandbox/:id (sbx-q2-invest)": {
+      "$comment": "示例 1 完整 fixture — 含决策树 + 评估 summaryMd",
+      "id": "sbx-q2-invest",
+      "topic_text": "Q2 投资决策推演 · AI 基础设施加配 $40M",
+      "status": "completed",
+      "branches": [
+        {
+          "id": "r0",
+          "label": "加配 $40M AI 基础设施 (Halycon 扩张)",
+          "options": [
+            {
+              "id": "r0-a", "label": "全额加配 $40M", "confidence": 0.62,
+              "expected": "Q3 ARR 预计 +28%, 但消耗 LP 沟通信用",
+              "children": [
+                { "id": "r0-a-1", "label": "绑定 governance 改革 (LP 席位扩 2)", "confidence": 0.71, "expected": "换得 LP 沟通空间, 风险被分担" },
+                { "id": "r0-a-2", "label": "不附加条件", "confidence": 0.42, "expected": "短期资金到位, Q3 LP 大会硬碰硬" }
+              ]
+            },
+            {
+              "id": "r0-b", "label": "分批加配 ($15M + $25M, 2 季度)", "confidence": 0.78,
+              "expected": "风险可控, 但错过 Halycon 关键 Q2 招聘窗口",
+              "children": [
+                { "id": "r0-b-1", "label": "第一批捆绑 KPI gate", "confidence": 0.85, "expected": "最优解 — LP 信任 + 团队压力可控" },
+                { "id": "r0-b-2", "label": "无条件分批", "confidence": 0.55, "expected": "折衷方案, 双方都不满意" }
+              ]
+            },
+            {
+              "id": "r0-c", "label": "暂缓 (维持 $20M 现状)", "confidence": 0.34,
+              "expected": "Halycon 团队士气崩盘, 下季度 churn 风险 +12%",
+              "children": []
+            }
+          ]
+        }
+      ],
+      "evaluation": {
+        "recommendedPath": "r0 → r0-b → r0-b-1",
+        "recommendedLabel": "分批加配 + 第一批捆绑 KPI gate",
+        "riskScore": 0.32,
+        "expectedReversibility": "medium",
+        "summaryMd": "### 推演结论\n\n**最优路径**: 分批加配 ($15M Q2 + $25M Q3), 第一批绑定 6 个 KPI gate (招聘 / ARR / churn / governance 等)。\n\n**为何这条路**:\n- 信心 0.85 (3 条路径中最高)\n- 可逆性 medium — 第一批后可叫停\n- LP 沟通成本最低 (有 KPI 数据撑腰)\n\n**风险**:\n- KPI 设计若过松等同于全额加配\n- Halycon 团队需感知 Q3 续投不是默认\n\n**下一步行动**:\n1. 与陆景行确认 KPI 6 项指标\n2. 林雾 1v1 沟通\n3. Wei Tan 起草 governance 备忘"
+      },
+      "created_at": "2026-04-28T11:30:00Z",
+      "completed_at": "2026-04-28T15:00:00Z"
+    },
+    "GET /api/v1/ceo/war-room/sandbox/:id (sbx-lp-comm)": {
+      "$comment": "示例 2 — LP 沟通策略, 决策树更扁但评估更精炼",
+      "id": "sbx-lp-comm",
+      "topic_text": "LP 沟通策略推演 · 如何向林雾解释 Stellar 暂缓",
+      "status": "completed",
+      "branches": [
+        {
+          "id": "r0",
+          "label": "如何向林雾解释 Stellar 暂缓决策",
+          "options": [
+            {
+              "id": "r0-a", "label": "主动 1v1 + 完整数据包", "confidence": 0.81,
+              "expected": "高信任度路径, 但可能引来追问",
+              "children": [
+                { "id": "r0-a-1", "label": "附 Sequoia/Lightspeed 同案对照", "confidence": 0.88, "expected": "最强叙事 — 行业共识背书" },
+                { "id": "r0-a-2", "label": "只给内部数据", "confidence": 0.62, "expected": "会被追问 '其他基金怎么看'" }
+              ]
+            },
+            { "id": "r0-b", "label": "在 Q3 LP 大会上集中说明", "confidence": 0.42, "expected": "延后但风险高 — 林雾会感到被'最后才知道'", "children": [] },
+            { "id": "r0-c", "label": "通过陆景行间接传达",       "confidence": 0.51, "expected": "省力但模糊责任, 林雾未来追问会更难处理", "children": [] }
+          ]
+        }
+      ],
+      "evaluation": {
+        "recommendedPath": "r0 → r0-a → r0-a-1",
+        "recommendedLabel": "主动 1v1 + Sequoia/Lightspeed 行业对照",
+        "riskScore": 0.18,
+        "expectedReversibility": "high",
+        "summaryMd": "### 推演结论\n\n**最优路径**: 本周内主动约林雾 1v1, 携带 Sequoia/Lightspeed 在 Stellar 同期决策的对照数据 (Wei Tan 已有内部备忘)。\n\n**为何**:\n- 信心 0.88, 风险 0.18 — 各路径中最优\n- 行业对照将'暂缓'从'你们的判断'重新框为'行业共识'\n- 可逆性高, 谈坏了还有 Q3 LP 大会兜底\n\n**剧本要点**:\n1. 开场 30s 表态'我知道这次的反复让你压力很大'\n2. 前 5 分钟数据, 后 25 分钟听他\n3. 不承诺 Q3 决策, 只承诺'下次见面前给你数据'"
+      }
+    },
+    "GET /api/v1/ceo/war-room/sandbox/:id (sbx-halycon-pause)": {
+      "$comment": "示例 3 — pending, 决策树仅 4 个待推演分支占位",
+      "id": "sbx-halycon-pause",
+      "topic_text": "头部项目暂缓的 6 月后果 · Project Halycon",
+      "status": "pending",
+      "branches": [
+        {
+          "id": "r0",
+          "label": "如果 Halycon 暂缓 6 个月, 哪些是不可逆后果?",
+          "options": [
+            { "id": "r0-a", "label": "团队层面 (招聘 / 留存 / 士气)",         "confidence": 0.0, "expected": "待推演", "children": [] },
+            { "id": "r0-b", "label": "财务层面 (ARR / runway / 估值)",        "confidence": 0.0, "expected": "待推演", "children": [] },
+            { "id": "r0-c", "label": "竞争层面 (Sequoia / 字节 / 微软)",       "confidence": 0.0, "expected": "待推演", "children": [] },
+            { "id": "r0-d", "label": "LP 层面 (信任 / Q3 大会 / 续投)",        "confidence": 0.0, "expected": "待推演", "children": [] }
+          ]
+        }
+      ],
+      "evaluation": null
+    },
+    "POST /api/v1/ceo/war-room/sandbox": {
+      "$request_body": {
+        "topicText": "如果年底前必须裁员 15%, 哪几个动作能让冲击降到最低?",
+        "scopeId": null,
+        "sourceSparkId": null,
+        "seedBranches": null
+      },
+      "$response": {
+        "id": "sbx-new-uuid",
+        "topic_text": "如果年底前必须裁员 15%, 哪几个动作能让冲击降到最低?",
+        "status": "pending",
+        "branches": [],
+        "created_at": "2026-05-01T10:00:00Z"
+      }
+    },
+    "POST /api/v1/ceo/war-room/sandbox/:id/run": {
+      "$comment": "触发 g3 处理器 (LLM 生成决策树 + 评估), 落 mn_runs 记录",
+      "$response": {
+        "ok": true,
+        "runId": "ceo-run-uuid-g3",
+        "status": "running",
+        "estimatedSeconds": 18
+      }
     }
   },
   "tables": {
     "ceo_formation_snapshots": [
       {
+        "id": "77777777-1111-1111-1111-777777777701",
         "scope_id": null,
         "week_start": "2026-04-27",
-        "formation_data": "{nodes: [...], links: [...]}",
-        "conflict_temp": 0.7
+        "formation_data": "{nodes: [6 人], links: [6 关系]}",
+        "conflict_temp": 0.7,
+        "computed_at": "2026-04-27T20:00:00Z"
       }
-    ]
+    ],
+    "ceo_war_room_sparks": {
+      "$schema": "id, scope_id, tag, headline, evidence_short, why_evidence (jsonb), risk_text, seed_group (int), created_at",
+      "$comment": "12 张 (3 seed_group × 4 张), 见 demo.sql L227-309",
+      "$sample_rows": [
+        { "tag": "🔮 跨项目人才嫁接", "seed_group": 0, "headline": "让 Wei Tan 主导 LP 沟通方案 ..." },
+        { "tag": "🪞 镜像演练",       "seed_group": 1, "headline": "让 Sara M. 模拟'如果你是被投公司 CEO' ..." },
+        { "tag": "🧭 跨基金对话",     "seed_group": 2, "headline": "主动约 Sequoia Q3 早午餐 ..." }
+      ]
+    },
+    "ceo_sandbox_runs": {
+      "$schema": "id, scope_id, topic_text, source_spark_id, status (pending/running/completed/failed/archived), branches (jsonb), evaluation (jsonb), generated_run_id, created_by, created_at, completed_at",
+      "$comment": "3 条 seed (Q2 投资 completed / LP 沟通 completed / Halycon 6 月 pending), 见 demo.sql L316-414"
+    }
   },
   "tables_consumed": {
     "mn_judgments": [
-      { "$comment": "kind ∈ disagreement/build → build 计数",       "kind": "build",         "created_at": "<近 30 天>" },
-      { "$comment": "kind ∈ emotional/dismissive/off_topic → 破坏性", "kind": "destructive",   "created_at": "<近 30 天>" }
+      { "$comment": "kind ∈ {disagreement, build} → build 计数, 近 30 天 7 次", "kind": "build" },
+      { "$comment": "kind ∈ {emotional, dismissive, off_topic} → destructive 2 次", "kind": "destructive" }
     ],
     "mn_silence_signals": [
-      { "$comment": "state=abnormal_silence → silent 计数", "state": "abnormal_silence", "created_at": "<近 30 天>" }
+      { "$comment": "state=abnormal_silence → silent 计数 1; duration_ms 最长 134000 (2'14\")", "state": "abnormal_silence" }
     ]
   },
   "$aggregator": {
-    "formation_health": "build_conflict / total (Edmondson 心理安全分代理)",
-    "calc": "build=7, total=10 → 0.70",
-    "verdict_thresholds": ["≥0.7 健康偏热", "≥0.55 健康略冷", "≥0.4 注意破坏性偏高", "<0.4 警告回避"]
+    "formation_health": "build_conflict / total_conflict (Edmondson 心理安全分代理)",
+    "calc": "build=7, destructive=2, silent=1, total=10 → 7/10 = 0.70",
+    "verdict_thresholds": [
+      "≥0.7 健康偏热 — 当前 0.72 命中此档",
+      "≥0.55 健康略冷 — 建议激发反方推演",
+      "≥0.4 注意破坏性偏高 — 上 1v1 化解情绪",
+      "<0.4 警告回避 — 团队回避冲突, 心理安全危险"
+    ],
+    "conflict_examples": {
+      "build": [
+        "陈汀质疑 Stellar 估值 → Wei 提供反例 → IC 决议向 Sequoia 学习 (2026-04-22)",
+        "沈岚 vs 陈汀 估值分歧稳定在 $60M-$80M, 6 次中 5 次落在同一逻辑分支 (建设性张力)",
+        "Omar 提反事实 14 次 (虽 12 次未回应, 但提问质量 0.81)"
+      ],
+      "destructive": [
+        "2026-04-15 IC: 陈汀对 Crucible 议题情绪化中断 (off_topic 2 次)",
+        "2026-04-09 周会: 陆景行用'这事别人也这么干'回避新人储备质询 (dismissive)"
+      ],
+      "silent": [
+        "陈汀在沈岚发言时沉默 2'14\" (本月最长, mn_silence_signals)"
+      ]
+    }
+  },
+  "$ui_behavior": {
+    "formation_map_hover": "节点 hover → person-card popup; popup 内容来自 nodes[].profile",
+    "sandbox_card_click":  "点击 → /ceo/internal/ceo/war-room/sandbox/:id 子页 (R3-3 SandboxDetail)",
+    "spark_card_flip":     "点 spark-card 主体 → 翻面展示 why_evidence + risk_text + 采纳 / 换一个 按钮",
+    "reroll_button":       "再来一组 → seed = (currentSeed + 1) % 3 重新拉 4 张",
+    "thermo_marker":       "marker 位置 = (1 - formation_health) × 100% 反向 (健康越高 marker 越低 = 越凉)",
+    "thermo_sparkline":    "近 4 周 conflict_temp 值，本周 0.7"
+  },
+  "$verdict_logic": {
+    "$comment": "③ 冲突温度计 verdict 文案",
+    "≥0.7":  "🟢 健康 — 偏热,建设性冲突充分",
+    "≥0.55": "🟢 健康 — 略偏冷,可再激发一次反方思考",
+    "≥0.4":  "🟡 注意 — 破坏性占比偏高, 1v1 优先",
+    "<0.4":  "🔴 警告 — 团队回避冲突, 心理安全危险"
   },
   "$stub_notes": [
-    "sandbox 推演 (cards Q2 投资 / LP 沟通 / Halycon 6 月后果) 当前是 fixture，PR12 LLM 接入后由 g3 自动生成",
-    "FormationAnalysis ⑤ 灵光一闪 (跨项目人才嫁接 / 角色对换实验 / 沉默激活) 同上"
+    "PR12 LLM 接入后, sparks/gaps 由 g3 处理器自动产出",
+    "PR13 后, sandbox 决策树由 g3 LLM 生成 (POST /sandbox/:id/run 触发)"
   ]
 }

@@ -1,73 +1,456 @@
 {
-  "$comment": "Situation · 各方房间样例 — 6 利益相关方 + 8 信号 + 5×6 Rubric",
+  "$comment": "Situation · 各方房间样例 — 8 利益相关方 + 8 信号 + 5×6 Rubric (30 单元) + 4 盲点 + 反方观察者 + 3 时段视野",
   "$page": "/ceo/internal/ceo/situation",
   "$prototype": "07-archive/会议纪要 (20260501)/situation.html",
+  "$question": "外部世界怎么看我?",
   "endpoints": {
     "GET /api/v1/ceo/situation/dashboard": {
-      "question": "外部世界怎么看我?",
-      "metric": { "label": "覆盖度", "value": "5/5", "delta": "齐" },
-      "coverage": { "covered": 5, "total": 5, "missing": [] },
+      "$desc": "顶部一行 — 覆盖度 + 6 大热度榜 + 信号墙摘要",
+      "metric": { "label": "覆盖度", "value": "5/5", "delta": "齐", "trend": "→ 4 周稳定" },
+      "coverage": {
+        "covered": 5,
+        "total": 5,
+        "missing": [],
+        "$kind_required": ["customer", "regulator", "investor", "press", "partner"],
+        "$kind_actual":   ["investor", "investor", "partner", "employee", "regulator", "press", "customer", "customer"],
+        "$note": "employee 不在 5 必备但 demo 含 8 类 stakeholder, 让数据更丰富 (ceo_stakeholders 8 行)"
+      },
       "topHeat": [
-        { "name": "LP",     "kind": "investor",  "heat": 0.92 },
-        { "name": "董事会", "kind": "investor",  "heat": 0.78 },
-        { "name": "同行",   "kind": "partner",   "heat": 0.62 },
-        { "name": "团队",   "kind": "employee",  "heat": 0.55 },
-        { "name": "监管",   "kind": "regulator", "heat": 0.45 },
-        { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+        { "name": "LP",     "kind": "investor",  "heat": 0.92, "trend": "↑↑↑" },
+        { "name": "董事会", "kind": "investor",  "heat": 0.78, "trend": "↑↑" },
+        { "name": "Halycon 客户", "kind": "customer", "heat": 0.68, "trend": "↗" },
+        { "name": "同行",   "kind": "partner",   "heat": 0.62, "trend": "↑" },
+        { "name": "团队",   "kind": "employee",  "heat": 0.55, "trend": "↗" },
+        { "name": "监管",   "kind": "regulator", "heat": 0.45, "trend": "→" },
+        { "name": "Beacon 客户", "kind": "customer", "heat": 0.40, "trend": "→" },
+        { "name": "媒体",   "kind": "press",     "heat": 0.30, "trend": "→" }
       ],
-      "signalCount": 8
+      "signalCount": 8,
+      "horizon": { "near_7d": 4, "mid_30d": 8, "far_90d": 17 }
     },
+
     "GET /api/v1/ceo/situation/stakeholders": {
+      "$desc": "① StakeholderHeatmap · 6 类 (+ 2 客户子类) 同心圆地图 + 升级路径",
       "items": [
-        { "id": "88888888-...", "name": "LP",     "kind": "investor",  "heat": 0.92, "last_signal_at": "2026-05-01T08:00:00Z", "description": "林雾 + 3 位机构 — Q3 大会前需要退出方案" },
-        { "id": "88888888-...", "name": "董事会", "kind": "investor",  "heat": 0.78, "last_signal_at": "2026-04-30T15:00:00Z", "description": "Wei + Omar 主导 — 流程层关切升级" },
-        { "id": "88888888-...", "name": "同行",   "kind": "partner",   "heat": 0.62, "last_signal_at": "2026-04-28T11:00:00Z", "description": "Sequoia + Lightspeed 扫描 Stellar" },
-        { "id": "88888888-...", "name": "团队",   "kind": "employee",  "heat": 0.55, "last_signal_at": "2026-05-01T09:00:00Z", "description": "陆景行连续 2 周加班，需关注" },
-        { "id": "88888888-...", "name": "监管",   "kind": "regulator", "heat": 0.45, "last_signal_at": "2026-04-26T10:00:00Z", "description": "港 SFC + 美 SEC — 季度报告改革跟进" },
-        { "id": "88888888-...", "name": "媒体",   "kind": "press",     "heat": 0.30, "last_signal_at": "2026-04-24T14:00:00Z", "description": "财经口 — 本季无 inbound" }
+        {
+          "id": "88888888-0001-0000-0000-000000000001",
+          "name": "LP", "kind": "investor", "heat": 0.92,
+          "last_signal_at": "2026-05-01T08:00:00Z",
+          "description": "林雾 + 3 位机构 — Q3 大会前需要退出方案",
+          "signals_30d_count": 7,
+          "last_signal_summary": "亚洲 PE 估值 H1 普跌 12% — Stellar 估值锚再次受压",
+          "escalation_path": { "owner": "CEO", "deputy": "陆景行", "due": "2026-05-12 BOARD #14", "status": "in_progress · Wei Tan 起草五条草案" }
+        },
+        {
+          "id": "88888888-0001-0000-0000-000000000002",
+          "name": "董事会", "kind": "investor", "heat": 0.78,
+          "last_signal_at": "2026-04-30T15:00:00Z",
+          "description": "Wei + Omar 主导 — 流程层关切升级",
+          "signals_30d_count": 5,
+          "last_signal_summary": "Wei 对 Stellar 备忘录给出 rubric 7.2 — 流程严谨缺一档",
+          "escalation_path": { "owner": "CEO", "deputy": "Wei Zhao", "due": "2026-05-12 BOARD #14", "status": "scheduled · 预读包 v3 已生成" }
+        },
+        {
+          "id": "88888888-0002-0000-0000-000000000001",
+          "name": "同行", "kind": "partner", "heat": 0.62,
+          "last_signal_at": "2026-04-28T11:00:00Z",
+          "description": "Sequoia + Lightspeed 扫描 Stellar",
+          "signals_30d_count": 4,
+          "last_signal_summary": "Sequoia 完成第 IV 期亚洲基金募集 — 抢人压力 +1",
+          "escalation_path": { "owner": "陆景行", "deputy": "Wei Tan", "due": "2026-06-08 同行扫描季报", "status": "monitoring" }
+        },
+        {
+          "id": "88888888-0003-0000-0000-000000000001",
+          "name": "团队", "kind": "employee", "heat": 0.55,
+          "last_signal_at": "2026-05-01T09:00:00Z",
+          "description": "陆景行连续 2 周加班，需关注",
+          "signals_30d_count": 6,
+          "last_signal_summary": "陆 1:1 推迟 3 次 — 节奏复盘窗口缩短",
+          "escalation_path": { "owner": "CEO", "deputy": "—", "due": "2026-05-07 1:1", "status": "blocked · 等待 calendar" }
+        },
+        {
+          "id": "88888888-0004-0000-0000-000000000001",
+          "name": "监管", "kind": "regulator", "heat": 0.45,
+          "last_signal_at": "2026-04-26T10:00:00Z",
+          "description": "港 SFC + 美 SEC — 季度报告改革跟进",
+          "signals_30d_count": 2,
+          "last_signal_summary": "SFC 拟将 PE 报告周期由半年改季度",
+          "escalation_path": { "owner": "Sara M.", "deputy": "CEO", "due": "2026-05-30 反馈截止", "status": "in_progress · 主笔意见函" }
+        },
+        {
+          "id": "88888888-0005-0000-0000-000000000001",
+          "name": "媒体", "kind": "press", "heat": 0.30,
+          "last_signal_at": "2026-04-24T14:00:00Z",
+          "description": "财经口 — 本季无 inbound",
+          "signals_30d_count": 1,
+          "last_signal_summary": "Crucible 业内自媒体「动向不明」 — 转载 0",
+          "escalation_path": { "owner": "陆景行", "deputy": "—", "due": "—", "status": "watching" }
+        },
+        {
+          "id": "88888888-0006-0000-0000-000000000001",
+          "name": "Halycon 客户", "kind": "customer", "heat": 0.68,
+          "last_signal_at": "2026-04-29T10:00:00Z",
+          "description": "被投 Halycon 的核心客户群 — Q1 ARR +47% 来源",
+          "signals_30d_count": 3,
+          "last_signal_summary": "Halycon 创始人通报 Q1 ARR +47%, 新签 2 单战略客户",
+          "escalation_path": { "owner": "陆景行", "deputy": "投资分析师", "due": "2026-05-08 Halycon 月报", "status": "ok" }
+        },
+        {
+          "id": "88888888-0006-0000-0000-000000000002",
+          "name": "Beacon 客户", "kind": "customer", "heat": 0.40,
+          "last_signal_at": "2026-04-24T09:00:00Z",
+          "description": "Beacon 退出后将转为新东家关系",
+          "signals_30d_count": 2,
+          "last_signal_summary": "退出协议主体条款达成 — 5 月签",
+          "escalation_path": { "owner": "陆景行", "deputy": "Sara M.", "due": "2026-05-22 协议盖章", "status": "ok" }
+        }
       ]
     },
+
     "GET /api/v1/ceo/situation/signals?days=7": {
+      "$desc": "② SignalWall · 7 天 8 条 · 每条带 category + LLM 一句话回应草稿 + 资产联动",
       "items": [
-        { "stakeholder_name": "LP",     "stakeholder_kind": "investor",  "signal_text": "亚洲 PE 估值 H1 普跌 12%, IRR 中位数下滑",       "source_url": "https://www.bloomberg.com/...", "sentiment": -0.65, "captured_at": "2026-05-01T07:00:00Z" },
-        { "stakeholder_name": "监管",   "stakeholder_kind": "regulator", "signal_text": "SFC 拟将 PE 报告周期由半年改季度",                "source_url": "https://www.ft.com/...",        "sentiment": -0.40, "captured_at": "2026-04-30T12:00:00Z" },
-        { "stakeholder_name": "团队",   "stakeholder_kind": "employee",  "signal_text": "Halycon 创始人通报 Q1 ARR +47%, 新签 2 单战略客户", "source_url": null,                            "sentiment":  0.85, "captured_at": "2026-04-29T10:00:00Z" },
-        { "stakeholder_name": "同行",   "stakeholder_kind": "partner",   "signal_text": "Stellar 估值反复传至 3 家同行",                    "source_url": null,                            "sentiment": -0.55, "captured_at": "2026-04-28T08:00:00Z" },
-        { "stakeholder_name": "同行",   "stakeholder_kind": "partner",   "signal_text": "Sequoia 完成第 IV 期亚洲基金募集",                "source_url": "https://www.reuters.com/...",   "sentiment": -0.10, "captured_at": "2026-04-26T14:00:00Z" },
-        { "stakeholder_name": "LP",     "stakeholder_kind": "investor",  "signal_text": "林雾私聊 'Q3 大会前我需要看到方案'",               "source_url": null,                            "sentiment":  0.20, "captured_at": "2026-04-25T18:30:00Z" },
-        { "stakeholder_name": "董事会", "stakeholder_kind": "investor",  "signal_text": "Wei 对 Stellar 备忘录 rubric 7.2 评分",            "source_url": null,                            "sentiment": -0.30, "captured_at": "2026-04-23T14:00:00Z" },
-        { "stakeholder_name": "媒体",   "stakeholder_kind": "press",     "signal_text": "Crucible 业内自媒体 '动向不明'",                    "source_url": null,                            "sentiment": -0.50, "captured_at": "2026-04-23T11:00:00Z" }
+        {
+          "stakeholder_name": "LP", "stakeholder_kind": "investor",
+          "signal_text": "亚洲 PE 估值 H1 普跌 12%, IRR 中位数下滑",
+          "source_url": "https://www.bloomberg.com/news/asia-pe-h1-2026-valuation-correction",
+          "sentiment": -0.65, "category": "negative", "captured_at": "2026-05-01T07:00:00Z",
+          "auto_response_suggested": "在本周 LP 月度通讯加注一段「我们的估值锚定五条已先行收紧 12%」 — 提前对冲。",
+          "linked_assets": ["asset:估值锚定五条 v0.3", "asset:Stellar 备忘录 v7", "report:亚洲 PE 季度扫描"],
+          "blast_radius": "Stellar / Echo 估值锚 + 后续 6 月 LP 通讯 narrative"
+        },
+        {
+          "stakeholder_name": "监管", "stakeholder_kind": "regulator",
+          "signal_text": "SFC 拟将 PE 报告周期由半年改季度",
+          "source_url": "https://www.ft.com/content/sfc-pe-quarterly-report-consultation",
+          "sentiment": -0.40, "category": "negative", "captured_at": "2026-04-30T12:00:00Z",
+          "auto_response_suggested": "Sara 主笔反馈意见 (5/30 截止) + Tower 把月度 IC 节奏提前到月初, 保 5 个工作日报告窗口。",
+          "linked_assets": ["asset:SFC 意见函草稿 v1", "asset:Tower IC 节奏方案 v2"],
+          "blast_radius": "Tower 节奏 + Compass 主线主导 + 财务季报排程"
+        },
+        {
+          "stakeholder_name": "团队", "stakeholder_kind": "employee",
+          "signal_text": "Halycon 创始人通报 Q1 ARR +47%, 新签 2 单战略客户",
+          "source_url": null,
+          "sentiment": 0.85, "category": "positive", "captured_at": "2026-04-29T10:00:00Z",
+          "auto_response_suggested": "在 BOARD #14 预读包顶部放 Halycon ARR 折线 — 给 LP 看「主线在跑」。",
+          "linked_assets": ["report:Halycon 月报 04", "asset:BOARD #14 预读包 v3"],
+          "blast_radius": "Boardroom forward_pct + LP 退出叙事 + Compass Halycon alignment 0.82"
+        },
+        {
+          "stakeholder_name": "同行", "stakeholder_kind": "partner",
+          "signal_text": "Stellar 估值反复传至 3 家同行",
+          "source_url": null,
+          "sentiment": -0.55, "category": "negative", "captured_at": "2026-04-28T08:00:00Z",
+          "auto_response_suggested": "本周内由陆景行向 Sequoia/Lightspeed 各 1 通电话, 主动给「估值锚五条」一句话 framing — 不要等他们传话。",
+          "linked_assets": ["asset:估值锚定五条 v0.3", "sandbox:LP 沟通策略推演"],
+          "blast_radius": "声誉 · 流程层风险 · LP 二次质询"
+        },
+        {
+          "stakeholder_name": "同行", "stakeholder_kind": "partner",
+          "signal_text": "Sequoia 完成第 IV 期亚洲基金募集",
+          "source_url": "https://www.reuters.com/markets/funds/sequoia-asia-iv-final-close",
+          "sentiment": -0.10, "category": "neutral", "captured_at": "2026-04-26T14:00:00Z",
+          "auto_response_suggested": "把 Sequoia 募资文档归入同行扫描季报 — 6 月 8 日交付时引用一次, 让 LP 看到「我们没掉队」。",
+          "linked_assets": ["report:同行扫描季报 Q2"],
+          "blast_radius": "招聘竞争 + Q3 LP 大会 narrative"
+        },
+        {
+          "stakeholder_name": "LP", "stakeholder_kind": "investor",
+          "signal_text": "林雾私聊「Q3 大会前我需要看到方案」",
+          "source_url": null,
+          "sentiment": 0.20, "category": "neutral", "captured_at": "2026-04-25T18:30:00Z",
+          "auto_response_suggested": "本周内主动 1v1 + 携 Sequoia/Lightspeed 同案对照 (Sandbox r0-a-1, confidence 0.88)。",
+          "linked_assets": ["sandbox:LP 沟通策略推演", "asset:估值锚定五条 v0.3"],
+          "blast_radius": "若 5/12 BOARD 仍无方案, LP 大会议程被迫单议题化"
+        },
+        {
+          "stakeholder_name": "董事会", "stakeholder_kind": "investor",
+          "signal_text": "Wei 对 Stellar 备忘录给出 rubric 7.2 评分",
+          "source_url": null,
+          "sentiment": -0.30, "category": "negative", "captured_at": "2026-04-23T14:00:00Z",
+          "auto_response_suggested": "把 Wei 的 rubric 框架升级为 IC 标准 — 让流程严谨这一维从 0.78 拉到 0.85+。",
+          "linked_assets": ["asset:IC rubric v2", "asset:Stellar 备忘录 v7"],
+          "blast_radius": "下次 Stellar 备忘录直接用同 rubric → 流程严谨可视化"
+        },
+        {
+          "stakeholder_name": "媒体", "stakeholder_kind": "press",
+          "signal_text": "Crucible 业内自媒体「动向不明」",
+          "source_url": null,
+          "sentiment": -0.50, "category": "negative", "captured_at": "2026-04-23T11:00:00Z",
+          "auto_response_suggested": "陆景行起草 Crucible 季度更新 (300 字) — 不主动外发, 但在被问起时有现成话术。",
+          "linked_assets": ["asset:Crucible 季度更新 草稿"],
+          "blast_radius": "若 5/8 同行扫描简报再次被传, 升级为流程问题"
+        }
       ]
     },
+
     "GET /api/v1/ceo/situation/rubric": {
-      "dimensions": ["战略清晰", "节奏匹配", "沟通透明", "流程严谨", "回应速度"],
+      "$desc": "③ RubricMatrix · 5 维 × 6 利益方 = 30 单元 · 每个单元有证据 run 链接 + 趋势",
+      "dimensions_def": [
+        {
+          "key": "战略清晰", "label": "战略清晰",
+          "definition": "对方能否在 2 句话内复述你的主线/支线划分 + 为何这样分",
+          "scoring_method": "LLM 抽样对方 5 条最近沟通片段, 自动判别清晰度 + 人工抽检 20%",
+          "thresholds": { "high": 0.80, "mid": 0.60, "low": 0.50 }
+        },
+        {
+          "key": "节奏匹配", "label": "节奏匹配",
+          "definition": "对方期待的更新频率 vs 实际频率的吻合度 (信号缺失天数 / 标称周期)",
+          "scoring_method": "ceo_external_signals 时间间隔 + ceo_director_concerns 提出/回应 lag",
+          "thresholds": { "high": 0.75, "mid": 0.55, "low": 0.45 }
+        },
+        {
+          "key": "沟通透明", "label": "沟通透明",
+          "definition": "对方是否能拿到决策依据 (数据 + 框架 + 备选)",
+          "scoring_method": "对方在 1v1 中追问次数 / 总沟通次数, 反向归一",
+          "thresholds": { "high": 0.80, "mid": 0.65, "low": 0.55 }
+        },
+        {
+          "key": "流程严谨", "label": "流程严谨",
+          "definition": "决议过程是否可追溯 + 反复次数 + 证据闭环度",
+          "scoring_method": "ceo_strategic_echos fate=refute/pending 占比 + 备忘录版本反复",
+          "thresholds": { "high": 0.80, "mid": 0.65, "low": 0.55 }
+        },
+        {
+          "key": "回应速度", "label": "回应速度",
+          "definition": "对方关切提出到正式回应的中位数小时数",
+          "scoring_method": "ceo_director_concerns + ceo_external_signals 配对 lag → exp(-lag/72h)",
+          "thresholds": { "high": 0.75, "mid": 0.60, "low": 0.50 }
+        }
+      ],
       "rows": [
-        { "stakeholderId": "88888888-...", "stakeholderName": "LP",     "scores": { "战略清晰": 0.65, "节奏匹配": 0.42, "沟通透明": 0.50, "流程严谨": 0.70, "回应速度": 0.38 }, "avg": 0.53 },
-        { "stakeholderId": "88888888-...", "stakeholderName": "董事会", "scores": { "战略清晰": 0.82, "节奏匹配": 0.68, "沟通透明": 0.75, "流程严谨": 0.80, "回应速度": 0.72 }, "avg": 0.75 },
-        { "stakeholderId": "88888888-...", "stakeholderName": "同行",   "scores": { "战略清晰": 0.75, "节奏匹配": 0.65, "沟通透明": 0.60, "流程严谨": 0.78, "回应速度": 0.62 }, "avg": 0.68 },
-        { "stakeholderId": "88888888-...", "stakeholderName": "团队",   "scores": { "战略清晰": 0.78, "节奏匹配": 0.65, "沟通透明": 0.70, "流程严谨": 0.75, "回应速度": 0.70 }, "avg": 0.72 },
-        { "stakeholderId": "88888888-...", "stakeholderName": "监管",   "scores": { "战略清晰": 0.70, "节奏匹配": 0.75, "沟通透明": 0.70, "流程严谨": 0.85, "回应速度": 0.72 }, "avg": 0.74 },
-        { "stakeholderId": "88888888-...", "stakeholderName": "媒体",   "scores": { "战略清晰": 0.68, "节奏匹配": 0.55, "沟通透明": 0.65, "流程严谨": 0.68, "回应速度": 0.60 }, "avg": 0.63 }
+        {
+          "stakeholderId": "88888888-0001-0000-0000-000000000001",
+          "stakeholderName": "LP",
+          "scores": {
+            "战略清晰": { "value": 0.65, "evidence_run_id": "g4-rubric-2026w17-001", "evidence_text": "退出路径未明 → 战略叙事打折",  "last_updated_at": "2026-04-30T22:00:00Z", "trend": "→" },
+            "节奏匹配": { "value": 0.42, "evidence_run_id": "g4-rubric-2026w17-002", "evidence_text": "部署慢 18 月 — LP 节奏期待错配", "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↓" },
+            "沟通透明": { "value": 0.50, "evidence_run_id": "g4-rubric-2026w17-003", "evidence_text": "林雾 3 次关切未排进议程",         "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↓" },
+            "流程严谨": { "value": 0.70, "evidence_run_id": "g4-rubric-2026w17-004", "evidence_text": "IC 流程已书面化",                 "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↑" },
+            "回应速度": { "value": 0.38, "evidence_run_id": "g4-rubric-2026w17-005", "evidence_text": "LP 反馈闭环逾期 28 天",            "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↓" }
+          },
+          "avg": 0.53
+        },
+        {
+          "stakeholderId": "88888888-0001-0000-0000-000000000002",
+          "stakeholderName": "董事会",
+          "scores": {
+            "战略清晰": { "value": 0.82, "evidence_run_id": "g4-rubric-2026w17-006", "evidence_text": "主线项目数据强 (Halycon/Beacon)",     "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↑" },
+            "节奏匹配": { "value": 0.68, "evidence_run_id": "g4-rubric-2026w17-007", "evidence_text": "部署慢但理由可解释",                   "last_updated_at": "2026-04-30T22:00:00Z", "trend": "→" },
+            "沟通透明": { "value": 0.75, "evidence_run_id": "g4-rubric-2026w17-008", "evidence_text": "预读包按月按版本归档",                 "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↑" },
+            "流程严谨": { "value": 0.80, "evidence_run_id": "g4-rubric-2026w17-009", "evidence_text": "尽调五条草稿已起",                     "last_updated_at": "2026-04-30T22:00:00Z", "trend": "↑" },
+            "回应速度": { "value": 0.72, "evidence_run_id": "g4-rubric-2026w17-010", "evidence_text": "关切平均 2 周内回应",                    "last_updated_at": "2026-04-30T22:00:00Z", "trend": "→" }
+          },
+          "avg": 0.75
+        },
+        {
+          "stakeholderId": "88888888-0002-0000-0000-000000000001",
+          "stakeholderName": "同行",
+          "scores": {
+            "战略清晰": { "value": 0.75, "evidence_run_id": "g4-rubric-2026w17-011", "evidence_text": "同行匿名打分 — Sequoia/Lightspeed 各 1 票", "last_updated_at": "2026-04-28T22:00:00Z", "trend": "→" },
+            "节奏匹配": { "value": 0.65, "evidence_run_id": "g4-rubric-2026w17-012", "evidence_text": "同行匿名打分",                                "last_updated_at": "2026-04-28T22:00:00Z", "trend": "→" },
+            "沟通透明": { "value": 0.60, "evidence_run_id": "g4-rubric-2026w17-013", "evidence_text": "同行匿名打分 — 估值反复看在眼里",            "last_updated_at": "2026-04-28T22:00:00Z", "trend": "↓" },
+            "流程严谨": { "value": 0.78, "evidence_run_id": "g4-rubric-2026w17-014", "evidence_text": "同行匿名打分",                                "last_updated_at": "2026-04-28T22:00:00Z", "trend": "→" },
+            "回应速度": { "value": 0.62, "evidence_run_id": "g4-rubric-2026w17-015", "evidence_text": "同行匿名打分",                                "last_updated_at": "2026-04-28T22:00:00Z", "trend": "→" }
+          },
+          "avg": 0.68
+        },
+        {
+          "stakeholderId": "88888888-0003-0000-0000-000000000001",
+          "stakeholderName": "团队",
+          "scores": {
+            "战略清晰": { "value": 0.78, "evidence_run_id": "g4-rubric-2026w17-016", "evidence_text": "内部 14 人调研 (匿名)",         "last_updated_at": "2026-04-29T22:00:00Z", "trend": "→" },
+            "节奏匹配": { "value": 0.65, "evidence_run_id": "g4-rubric-2026w17-017", "evidence_text": "内部 14 人调研 — 加班反馈强",   "last_updated_at": "2026-04-29T22:00:00Z", "trend": "↓" },
+            "沟通透明": { "value": 0.70, "evidence_run_id": "g4-rubric-2026w17-018", "evidence_text": "内部 14 人调研",                  "last_updated_at": "2026-04-29T22:00:00Z", "trend": "→" },
+            "流程严谨": { "value": 0.75, "evidence_run_id": "g4-rubric-2026w17-019", "evidence_text": "内部 14 人调研",                  "last_updated_at": "2026-04-29T22:00:00Z", "trend": "→" },
+            "回应速度": { "value": 0.70, "evidence_run_id": "g4-rubric-2026w17-020", "evidence_text": "内部 14 人调研",                  "last_updated_at": "2026-04-29T22:00:00Z", "trend": "→" }
+          },
+          "avg": 0.72
+        },
+        {
+          "stakeholderId": "88888888-0004-0000-0000-000000000001",
+          "stakeholderName": "监管",
+          "scores": {
+            "战略清晰": { "value": 0.70, "evidence_run_id": "g4-rubric-2026w17-021", "evidence_text": "Sara 合规自评",                    "last_updated_at": "2026-04-26T22:00:00Z", "trend": "→" },
+            "节奏匹配": { "value": 0.75, "evidence_run_id": "g4-rubric-2026w17-022", "evidence_text": "Sara 合规自评",                    "last_updated_at": "2026-04-26T22:00:00Z", "trend": "↑" },
+            "沟通透明": { "value": 0.70, "evidence_run_id": "g4-rubric-2026w17-023", "evidence_text": "Sara 合规自评",                    "last_updated_at": "2026-04-26T22:00:00Z", "trend": "→" },
+            "流程严谨": { "value": 0.85, "evidence_run_id": "g4-rubric-2026w17-024", "evidence_text": "Sara 合规自评 — 备案完备",         "last_updated_at": "2026-04-26T22:00:00Z", "trend": "↑" },
+            "回应速度": { "value": 0.72, "evidence_run_id": "g4-rubric-2026w17-025", "evidence_text": "Sara 合规自评",                    "last_updated_at": "2026-04-26T22:00:00Z", "trend": "→" }
+          },
+          "avg": 0.74
+        },
+        {
+          "stakeholderId": "88888888-0005-0000-0000-000000000001",
+          "stakeholderName": "媒体",
+          "scores": {
+            "战略清晰": { "value": 0.68, "evidence_run_id": "g4-rubric-2026w17-026", "evidence_text": "舆情评分 — 财经口 8 篇内容统计",  "last_updated_at": "2026-04-24T22:00:00Z", "trend": "→" },
+            "节奏匹配": { "value": 0.55, "evidence_run_id": "g4-rubric-2026w17-027", "evidence_text": "舆情评分",                          "last_updated_at": "2026-04-24T22:00:00Z", "trend": "↓" },
+            "沟通透明": { "value": 0.65, "evidence_run_id": "g4-rubric-2026w17-028", "evidence_text": "舆情评分",                          "last_updated_at": "2026-04-24T22:00:00Z", "trend": "→" },
+            "流程严谨": { "value": 0.68, "evidence_run_id": "g4-rubric-2026w17-029", "evidence_text": "舆情评分",                          "last_updated_at": "2026-04-24T22:00:00Z", "trend": "→" },
+            "回应速度": { "value": 0.60, "evidence_run_id": "g4-rubric-2026w17-030", "evidence_text": "舆情评分",                          "last_updated_at": "2026-04-24T22:00:00Z", "trend": "→" }
+          },
+          "avg": 0.63
+        }
       ]
+    },
+
+    "GET /api/v1/ceo/situation/blindspots": {
+      "$desc": "④ BlindspotAlarms · LLM 推断 + 规则触发 — 没人提但应该提的",
+      "items": [
+        {
+          "id": "blind-001",
+          "name": "未覆盖的 stakeholder kind: customer 已升温但未在 IC 议程",
+          "severity": "high",
+          "trigger_rule": "DISTINCT(kind) ∩ {customer} 已存在 (Halycon/Beacon, 各 0.68/0.40), 但近 30 天 ceo_director_concerns 中 customer 提及次数 = 0",
+          "narrative": "Halycon 客户 ARR +47% 是主线最强 narrative, 但董事会从未把客户视角列入议程 — 只有「项目方说」, 没有「客户说」。",
+          "suggested_action": "BOARD #14 预读包加一节 voice-of-customer (Halycon 3 个核心客户引语 + 1 张满意度趋势)",
+          "owner": "陆景行", "due": "2026-05-10"
+        },
+        {
+          "id": "blind-002",
+          "name": "Rubric「回应速度」LP 维度跌穿 0.5 阈值 — 持续 14 天",
+          "severity": "high",
+          "trigger_rule": "rubric.LP.回应速度 < 0.50 持续 days >= 14, 当前 0.38",
+          "narrative": "LP 反馈闭环逾期 28 天 — 你以为「准备好再回」, 但每延迟 1 周, 林雾的 trust 减扣。",
+          "suggested_action": "本周 1v1 + 不全的方案也要给 — 给 70% 草稿胜过给 100% 沉默。",
+          "owner": "CEO", "due": "2026-05-04"
+        },
+        {
+          "id": "blind-003",
+          "name": "信号长尾 sentiment < -0.2 持续 14 天 — 同行扫描信号未触发响应",
+          "severity": "medium",
+          "trigger_rule": "AVG(ceo_external_signals.sentiment WHERE kind=partner LAST 14 days) = -0.33",
+          "narrative": "Stellar 估值反复 + Sequoia 募资 — 两条同行信号叠加, 但 Tower 议程从未单列「同行视角」。",
+          "suggested_action": "Compass 战略回响加一条 hypothesis: 同行如何看我们 → 6 月 8 日季报作为 fact 验证",
+          "owner": "Wei Tan", "due": "2026-05-15"
+        },
+        {
+          "id": "blind-004",
+          "name": "陆景行加班 14 天 — 关键人风险但无人提",
+          "severity": "high",
+          "trigger_rule": "团队 stakeholder 信号 sentiment 持续 ≥ 0.5 但 last_signal_summary 含「加班/疲劳」关键词",
+          "narrative": "陆景行连 2 周加班 + Halycon 补员仅 1/3 — 这是「双核结构」主线的执行风险, 但被反复列入「内部事务」抽屉。",
+          "suggested_action": "WeeklyReflection 加一条 prism=team 反思 + 5/7 1:1 不可推迟",
+          "owner": "CEO", "due": "2026-05-07"
+        }
+      ]
+    },
+
+    "GET /api/v1/ceo/situation/observers": {
+      "$desc": "⑤ OutsideObserver · 反方观察者 — Wei/Omar 最近批注 + LP 假想视角",
+      "items": [
+        {
+          "id": "obs-wei",
+          "observer": "Wei Zhao",
+          "role": "独立董事",
+          "rubric_score_given": 7.2,
+          "captured_at": "2026-04-23T14:00:00Z",
+          "quote": "你们在战略上很清楚, 但战术执行的「反复」会侵蚀外部信任 — 这是流程问题, 不是判断问题。",
+          "reference_assets": ["Halycon 决议 v3", "Stellar 反复时间线", "估值锚定五条草稿"],
+          "tone": "warm-critical"
+        },
+        {
+          "id": "obs-omar",
+          "observer": "Omar K.",
+          "role": "独立董事",
+          "rubric_score_given": 6.8,
+          "captured_at": "2026-04-19T14:00:00Z",
+          "quote": "放慢节奏没问题, 但你需要让 LP 看见「放慢是策略」, 不是被动 — 否则他们会觉得你在等市场。",
+          "reference_assets": ["部署节奏 12 周折线", "林雾 3 次问询时序"],
+          "tone": "cold-critical"
+        },
+        {
+          "id": "obs-lp-imagined",
+          "observer": "假想 LP 视角 (LLM 角色扮演)",
+          "role": "外脑视角",
+          "rubric_score_given": null,
+          "captured_at": "2026-05-01T10:00:00Z",
+          "quote": "如果我是林雾, 看到 Stellar 估值反复 5 次, 我会问三个问题: (1) 你们的尽调 SOP 是什么 — 给我 3 页就够; (2) 你们对市场判断错过几次, 怎么补的; (3) 我下次见你, 你能给我一个比这次更安心的故事吗?",
+          "reference_assets": ["sandbox:LP 沟通策略推演", "估值锚定五条 v0.3"],
+          "tone": "neutral-investigative",
+          "$llm_persona": "Claude · system prompt = 「你是亚洲机构 LP, 风格沉稳, 30 年经验, 提问而非批评」"
+        }
+      ]
+    },
+
+    "GET /api/v1/ceo/situation/horizon?range=near|mid|far": {
+      "$desc": "⑥ HorizonTabs · 近 7 天 / 中 30 天 / 远 90 天 信号摘要切片",
+      "near_7d": {
+        "$range": "2026-05-04 ~ 2026-05-10",
+        "events": [
+          { "date": "2026-05-04", "kind": "warn", "title": "投委会 #35 · 议程含 Crucible 表决" },
+          { "date": "2026-05-04", "kind": "neg",  "title": "林雾私下追问 LP 闭环" },
+          { "date": "2026-05-05", "kind": "pos",  "title": "Beacon 退出协议主体签字" },
+          { "date": "2026-05-05", "kind": "info", "title": "Stellar 估值锚定五条内审" },
+          { "date": "2026-05-06", "kind": "warn", "title": "SFC 新规咨询会 (Sara 出席)" },
+          { "date": "2026-05-06", "kind": "info", "title": "Halycon 候选人 X 第二轮" },
+          { "date": "2026-05-07", "kind": "info", "title": "陆景行 1:1 · 节奏复盘" },
+          { "date": "2026-05-08", "kind": "neg",  "title": "同行扫描简报 (Sequoia 动向)" },
+          { "date": "2026-05-08", "kind": "info", "title": "Halycon 月报" },
+          { "date": "2026-05-10", "kind": "info", "title": "Boardroom 准备 (BOARD #14)" }
+        ]
+      },
+      "mid_30d": {
+        "$range": "2026-05-01 ~ 2026-05-30",
+        "events": [
+          { "date": "2026-05-12", "kind": "milestone", "title": "BOARD #14 · 退出路径 + 估值五条 + Crucible 三项决议" },
+          { "date": "2026-05-22", "kind": "pos",       "title": "Beacon 退出 · 协议盖章" },
+          { "date": "2026-05-30", "kind": "warn",      "title": "SFC 新规意见反馈截止 · Sara 主笔" }
+        ]
+      },
+      "far_90d": {
+        "$range": "2026-05-01 ~ 2026-07-30",
+        "events": [
+          { "date": "2026-06-08", "kind": "info",      "title": "同行扫描季报 · 友基新基金动向" },
+          { "date": "2026-06-15", "kind": "milestone", "title": "LP 月度通讯 (含退出路径首次正式回应)" },
+          { "date": "2026-06-25", "kind": "info",      "title": "Halycon 团队补员全部到位 (目标)" },
+          { "date": "2026-06-30", "kind": "warn",      "title": "Q2 风险盘点 · Sara + Wei 联合" },
+          { "date": "2026-07-08", "kind": "milestone", "title": "Q3 LP 大会 · 林雾主理 · 退出路径成核心议题" },
+          { "date": "2026-07-20", "kind": "pos",       "title": "Q2 报告分发 LP" },
+          { "date": "2026-07-28", "kind": "milestone", "title": "Stellar 投决会 · 估值锚定五条首次复用" }
+        ]
+      }
+    },
+
+    "GET /api/v1/ceo/situation/dashboard?scopes=halycon-id,beacon-id": {
+      "$desc": "R2-1 ScopePicker 多 scope 交集示例 — 仅返回 Halycon ∩ Beacon 两条主线相关的 stakeholders/signals/rubric",
+      "$query_semantics": "scopes=A,B → URL searchParams.get('scopes').split(',') → AND 过滤 ceo_external_signals.linked_scope_id ∈ {A,B}",
+      "metric": { "label": "覆盖度 (scoped)", "value": "3/5", "delta": "缺 regulator + press" },
+      "coverage": { "covered": 3, "total": 5, "missing": ["regulator", "press"] },
+      "topHeat": [
+        { "name": "LP",            "kind": "investor", "heat": 0.92 },
+        { "name": "Halycon 客户",  "kind": "customer", "heat": 0.68 },
+        { "name": "Beacon 客户",   "kind": "customer", "heat": 0.40 }
+      ],
+      "signalCount": 3,
+      "$note": "scope 交集后 signal 从 8 条降到 3 条 (LP/Halycon-portfolio/Beacon-portfolio 标签)"
     }
   },
+
   "tables": {
-    "ceo_stakeholders": [
-      { "name": "LP",            "kind": "investor",  "heat": 0.92 },
-      { "name": "董事会",        "kind": "investor",  "heat": 0.78 },
-      { "name": "同行",          "kind": "partner",   "heat": 0.62 },
-      { "name": "Halycon 客户",  "kind": "customer",  "heat": 0.68 },
-      { "name": "Beacon 客户",   "kind": "customer",  "heat": 0.40 },
-      { "name": "团队",          "kind": "employee",  "heat": 0.55 },
-      { "name": "监管",          "kind": "regulator", "heat": 0.45 },
-      { "name": "媒体",          "kind": "press",     "heat": 0.30 }
-    ],
-    "ceo_external_signals": "见 endpoints['GET /signals'] 节，共 8 条",
-    "ceo_rubric_scores": "见 endpoints['GET /rubric'] 节，共 30 行 (5 维 × 6 利益方)"
+    "ceo_stakeholders": "8 行 (见 demo.sql · 6 类 + 2 客户子类)",
+    "ceo_external_signals": "8 行 (见 endpoints['GET /signals'])",
+    "ceo_rubric_scores": "30 行 (5 维 × 6 利益方)",
+    "ceo_blindspots": "$ad-hoc — LLM 推断, 无独立表, 走 mn_runs(module='ceo', axis='g3', metadata.kind='blindspot')",
+    "ceo_observers": "$ad-hoc — 复用 ceo_director_concerns + 假想 LLM 角色扮演"
   },
+
+  "$ui_signal_lifecycle": {
+    "$desc": "外部信号 life-cycle — 抓取 → 评分 → 归档",
+    "steps": [
+      { "step": 1, "name": "抓取", "trigger": "cron · 每 6 小时", "source": "RSS feeds + 邮件转发箱 + 手动 paste", "writes": "ceo_external_signals.signal_text + source_url + captured_at" },
+      { "step": 2, "name": "归类", "trigger": "LLM g3 · 信号入库即触发", "rule": "Claude 提取 stakeholder_kind + sentiment ∈ [-1, 1] + category ∈ {pos/neu/neg}", "writes": "ceo_external_signals.sentiment + 写入 mn_runs(module='ceo', axis='g3', metadata.kind='signal-classify')" },
+      { "step": 3, "name": "回应草稿", "trigger": "LLM g3 · sentiment < -0.4 OR LP/board kind", "rule": "Claude 生成 1 句话回应建议 + 关联 asset/sandbox", "writes": "auto_response_suggested (内存 / 临时缓存)" },
+      { "step": 4, "name": "盲点检测", "trigger": "cron · 每日 03:00", "rule": "规则引擎 + LLM 双轨 — 检查 4 条盲点规则", "writes": "blindspots view 即时返回, 不持久化" },
+      { "step": 5, "name": "归档", "trigger": "cron · 每月 1 日", "rule": "captured_at > 90d AND sentiment 已被引用 AND 无新信号", "writes": "ceo_external_signals.archived_at" }
+    ]
+  },
+
   "$aggregator": {
     "coverage": "已覆盖 stakeholder kind / 5 必备 (customer/regulator/investor/press/partner)",
-    "calc": "DISTINCT(kind) = {investor, partner, employee, regulator, press} → 缺 customer? 不在 5 必备 → 5/5",
-    "$note": "employee 不在 REQUIRED_KINDS 列表中, 但 demo 中有 6 类 stakeholders 让数据更丰富"
+    "calc": "DISTINCT(kind) ⊇ REQUIRED_KINDS → 5/5",
+    "rubric_avg": "AVG(scores[d].value) for d in dimensions, exclude N/A",
+    "$note": "employee 不在 REQUIRED_KINDS 但 demo 含 8 类 stakeholders 让数据更丰富 (demo.sql 行 84-95)"
   }
 }

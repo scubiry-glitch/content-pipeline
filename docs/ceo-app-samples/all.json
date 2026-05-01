@@ -1,14 +1,15 @@
 {
-  "$comment": "CEO 应用全部页面样例数据合集 — 8 页 + 跨页元信息",
+  "$comment": "CEO 应用全部页面样例数据合集 — 8 页 + 跨页元信息 + R2/R3 新增 (sandbox/sparks/sankey/heatmap/person-drawer)",
   "$generated_from": "docs/ceo-app-samples/{compass,boardroom,tower,war-room,situation,balcony,panorama,brain}.json",
   "$rooms_meta": [
-    { "id": "direction", "slug": "compass",   "icon": "🧭", "label": "方向",   "tone": "#7BA7C4", "question": "我把时间花在战略主线上了吗?",        "metric_label": "战略对齐度",   "metric_value": "0.72" },
-    { "id": "board",     "slug": "boardroom", "icon": "🏛️", "label": "董事会", "tone": "#C8A15C", "question": "下次董事会我要带什么?",              "metric_label": "前瞻占比",     "metric_value": "58%" },
-    { "id": "coord",     "slug": "tower",     "icon": "🎯", "label": "协调",   "tone": "#7FD6A0", "question": "谁欠谁什么? 卡在哪?",                "metric_label": "责任清晰度",   "metric_value": "78%" },
-    { "id": "team",      "slug": "war-room",  "icon": "⚔️", "label": "团队",   "tone": "#E6A6A6", "question": "团队健康吗? 有建设性冲突吗?",        "metric_label": "阵型健康",     "metric_value": "72" },
-    { "id": "ext",       "slug": "situation", "icon": "🌐", "label": "各方",   "tone": "#A8A0D9", "question": "外部世界怎么看我?",                  "metric_label": "覆盖度",       "metric_value": "5/5" },
-    { "id": "self",      "slug": "balcony",   "icon": "🧘", "label": "个人",   "tone": "#D9B88E", "question": "我还是我想成为的那个 CEO 吗?",       "metric_label": "本周 ROI",     "metric_value": "0.61" }
+    { "id": "direction", "slug": "compass",   "icon": "🧭", "label": "方向",   "tone": "#7BA7C4", "question": "我把时间花在战略主线上了吗?",        "metric_label": "战略对齐度", "metric_value": "0.72" },
+    { "id": "board",     "slug": "boardroom", "icon": "🏛️", "label": "董事会", "tone": "#C8A15C", "question": "下次董事会我要带什么?",              "metric_label": "前瞻占比",   "metric_value": "58%" },
+    { "id": "coord",     "slug": "tower",     "icon": "🎯", "label": "协调",   "tone": "#7FD6A0", "question": "谁欠谁什么? 卡在哪?",                "metric_label": "责任清晰度", "metric_value": "78%" },
+    { "id": "team",      "slug": "war-room",  "icon": "⚔️", "label": "团队",   "tone": "#E6A6A6", "question": "团队健康吗? 有建设性冲突吗?",        "metric_label": "阵型健康",   "metric_value": "72" },
+    { "id": "ext",       "slug": "situation", "icon": "🌐", "label": "各方",   "tone": "#A8A0D9", "question": "外部世界怎么看我?",                  "metric_label": "覆盖度",     "metric_value": "5/5" },
+    { "id": "self",      "slug": "balcony",   "icon": "🧘", "label": "个人",   "tone": "#D9B88E", "question": "我还是我想成为的那个 CEO 吗?",       "metric_label": "本周 ROI",   "metric_value": "0.61" }
   ],
+
   "compass": {
     "page": "/ceo/internal/ceo/compass",
     "sub_page": "/ceo/internal/ceo/compass/atlas",
@@ -17,7 +18,11 @@
       "metric": { "label": "战略对齐度", "value": "0.72", "delta": "本周" },
       "lines": { "main": 2, "branch": 2, "drift": 2 },
       "attention": { "main": 20.14, "branch": 11.4, "firefighting": 6.46, "total": 38.0 },
-      "alignmentScore": 0.72
+      "alignmentScore": 0.72,
+      "driftAlerts": [
+        { "name": "Crucible", "delta": "28%", "text": "5 周未上 IC, 创始人失联", "severity": "danger" },
+        { "name": "Pyre",     "delta": "22%", "text": "动向不明", "severity": "danger" }
+      ]
     },
     "lines": [
       { "name": "Halycon",  "kind": "main",   "alignment_score": 0.82 },
@@ -27,48 +32,164 @@
       { "name": "Crucible", "kind": "drift",  "alignment_score": 0.28 },
       { "name": "Pyre",     "kind": "drift",  "alignment_score": 0.22 }
     ],
-    "atlas_meta": { "total": 6, "healthy": 2, "warn": 2, "danger": 2, "silent": 0 }
+    "echos_sankey": {
+      "$comment": "R2-3 重做 — StrategicEchoSankey.tsx 拉 5 echos × 三列流",
+      "echo_count": 5,
+      "by_fate": { "confirm": 2, "refute": 2, "pending": 1 },
+      "review_lines": ["Stellar", "Crucible"],
+      "healthy_lines": ["Halycon", "Beacon"],
+      "narrative": "主线 Halycon、Beacon 整体在轨。主线 Stellar、Crucible 多条假设已被反驳 — 需要重审而非延续。"
+    },
+    "one_pager": {
+      "title": "本周战略快照 · 主线整体在轨,但 Stellar 的尽调拖累了节奏,Crucible 该宣判",
+      "alignmentScore": 0.72,
+      "alignmentDelta": "+0.04",
+      "mainSharePct": 0.53,
+      "firefightSharePct": 0.17,
+      "decisions_pending": [
+        "Crucible 是否官方暂停",
+        "Stellar 估值分歧是否升级为尽调标准",
+        "林雾的退出路径问题排进下次议程"
+      ],
+      "warning": "救火占比从 9% → 17%, 如果再不宣判 Crucible, 下周可能突破 20% 阈值"
+    },
+    "atlas_meta": { "total": 6, "healthy": 2, "warn": 2, "danger": 2, "silent": 0 },
+    "archives": {
+      "main_count": 6,
+      "drift_count": 5
+    }
   },
+
   "boardroom": {
     "page": "/ceo/internal/ceo/boardroom",
     "dashboard": {
       "question": "下次董事会我要带什么?",
       "metric": { "label": "前瞻占比", "value": "58%", "delta": "本季" },
       "concernsByStatus": { "pending": 9, "answered": 5, "superseded": 1 },
-      "promiseStats": { "total": 6, "done": 2, "in_progress": 2, "late": 2 }
+      "promiseStats": { "total": 6, "done": 2, "in_progress": 2, "late": 2 },
+      "forwardPct": 0.58
     },
     "directors": ["林雾", "Wei Zhao", "Omar K.", "陆景行", "Sara M."],
     "concerns_top_pending": [
-      "退出路径再不明确,Q3 LP 大会怎么开?",
-      "Stellar 估值反复 5 次,你们的尽调标准到底是什么?",
-      "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?"
-    ]
+      { "director": "林雾",    "topic": "退出路径再不明确,Q3 LP 大会怎么开?",                        "raised_count": 3 },
+      { "director": "Wei Zhao", "topic": "Stellar 估值反复 5 次,你们的尽调标准到底是什么?",          "raised_count": 2 },
+      { "director": "Omar K.",  "topic": "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?",   "raised_count": 2 }
+    ],
+    "rebuttals_count": 3,
+    "$multi_scope": {
+      "$comment": "R2-1 multi-scope 支持 — concerns/briefs 按 scope_id 聚合",
+      "scopes": ["全局 (scope_id=null)", "Halycon (scope_id=...)", "Beacon (scope_id=...)"],
+      "default_scope": "all"
+    }
   },
+
   "tower": {
     "page": "/ceo/internal/ceo/tower",
     "dashboard": {
       "question": "谁欠谁什么? 卡在哪?",
       "metric": { "label": "责任清晰度", "value": "78%", "delta": "本周" },
       "commitmentStats": { "proposed": 5, "in_progress": 7, "overdue": 4, "done": 5, "total": 21 },
+      "responsibilityClarity": 0.78,
       "topBlockers": [
-        { "name": "LP 反馈闭环 · 无人接", "days": 28 },
-        { "name": "退出路径年度路线图",   "days": 21 },
-        { "name": "Stellar 估值锚 · 卡在 Wei", "days": 14 }
+        { "name": "LP 反馈闭环 · 无人接", "days": 28, "owner_chain": "陈汀 → 林雾" },
+        { "name": "退出路径年度路线图",   "days": 21, "owner_chain": "陈汀 → 董事会" },
+        { "name": "Stellar 估值锚 · 卡在 Wei", "days": 14, "owner_chain": "Wei → 陈汀" }
+      ]
+    },
+    "pulse_8_weeks": {
+      "$comment": "Tower ⑥ Rhythms 真数据形状 — 8 周 main vs firefighting",
+      "weeks": [
+        { "weekStart": "2026-03-09", "mainHours": 16.0, "firefightingHours": 2.0 },
+        { "weekStart": "2026-03-16", "mainHours": 18.5, "firefightingHours": 2.5 },
+        { "weekStart": "2026-03-23", "mainHours": 17.0, "firefightingHours": 3.0 },
+        { "weekStart": "2026-03-30", "mainHours": 19.5, "firefightingHours": 3.5 },
+        { "weekStart": "2026-04-06", "mainHours": 18.0, "firefightingHours": 4.5 },
+        { "weekStart": "2026-04-13", "mainHours": 16.0, "firefightingHours": 5.5 },
+        { "weekStart": "2026-04-20", "mainHours": 19.0, "firefightingHours": 6.0 },
+        { "weekStart": "2026-04-27", "mainHours": 20.14, "firefightingHours": 6.46 }
+      ],
+      "planLine": 20
+    },
+    "$rhythms_heatmap": {
+      "$comment": "R3-1 RhythmsTabs Tab1 团队节奏 7×24 heatmap 真数据形状",
+      "shape": "RhythmHeatmapCell[] — { weekday (0-6), hour (0-23), value (会议密度), label }",
+      "sample_cells": [
+        { "weekday": 1, "hour":  9, "value": 0.85, "label": "Mon 09:00 · 周会高峰 (4.2h)" },
+        { "weekday": 3, "hour": 14, "value": 0.92, "label": "Wed 14:00 · IC 决策时段 (4.5h)" },
+        { "weekday": 5, "hour": 18, "value": 0.34, "label": "Fri 18:00 · 收尾稀疏" },
+        { "weekday": 0, "hour":  9, "value": 0.05, "label": "Sun 09:00 · 安静" }
+      ],
+      "rows": 7,
+      "cols": 24
+    },
+    "rhythms_archive_summary": {
+      "monthSlices": [
+        { "monthLabel": "2026-02", "weekCount": 4, "totalMainHours": 71,   "firefightingPct": 0.20, "deficitWeeks": 1, "avgWeeklyRoi": 0.65 },
+        { "monthLabel": "2026-03", "weekCount": 4, "totalMainHours": 73.5, "firefightingPct": 0.22, "deficitWeeks": 2, "avgWeeklyRoi": 0.62 },
+        { "monthLabel": "2026-04", "weekCount": 4, "totalMainHours": 73,   "firefightingPct": 0.31, "deficitWeeks": 3, "avgWeeklyRoi": 0.55 }
       ]
     }
   },
+
   "war_room": {
     "page": "/ceo/internal/ceo/war-room",
+    "sub_page": "/ceo/internal/ceo/war-room/sandbox/:id",
     "dashboard": {
       "question": "团队健康吗? 有建设性冲突吗?",
       "metric": { "label": "阵型健康", "value": "72", "delta": "本月" },
       "formationHealth": 0.72,
       "conflictKinds": { "build": 7, "destructive": 2, "silent": 1, "total": 10 },
-      "verdict": "健康 — 偏热，建设性冲突充分"
+      "verdict": "健康 — 偏热,建设性冲突充分",
+      "sandboxStats": { "completed": 2, "pending": 1, "running": 0, "total": 3 }
     },
-    "formation_nodes_count": 6,
-    "formation_links_count": 6
+    "formation": {
+      "nodes_count": 6,
+      "links_count": 6,
+      "key_nodes": ["陈汀 (CEO)", "沈岚 (主战)", "周劭然 (侦察)", "Wei Tan (智囊)", "Omar K. (外援)", "林雾 (LP 边缘)"],
+      "key_tensions": [
+        "陈 ↔ 沈 张力红虚线 — 沈岚发言时陈沉默 2'14\" (本月最长)",
+        "陈 ↔ 林 沉默灰虚线 — 3 次反事实未排议程",
+        "Wei × 林雾 至今未交锋 — 缺一种张力"
+      ]
+    },
+    "conflict_examples": {
+      "build": [
+        "陈汀质疑 Stellar 估值 → Wei 提供反例 → IC 决议向 Sequoia 学习 (2026-04-22)",
+        "沈岚 vs 陈汀 估值分歧稳定在 $60M-$80M, 6 次中 5 次同一逻辑分支",
+        "Omar 提反事实 14 次 (质量 0.81)"
+      ],
+      "destructive": [
+        "2026-04-15 IC: 陈汀对 Crucible 议题情绪化中断",
+        "2026-04-09 周会: 陆景行用'这事别人也这么干'回避新人储备质询"
+      ],
+      "silent": [
+        "陈汀在沈岚发言时沉默 2'14\" — 本月最长"
+      ]
+    },
+    "sparks": {
+      "$comment": "R2-5 灵光一闪 — 12 张 (3 seed_group × 4 张)",
+      "seed_groups": 3,
+      "default_seed_0_tags": ["🔮 跨项目人才嫁接", "⚡ 张力配对", "🌱 沉默激活", "🔄 角色翻转"],
+      "seed_1_tags": ["🪞 镜像演练", "🎲 三角验证", "💧 注水试验", "🌊 退出复盘"],
+      "seed_2_tags": ["🧭 跨基金对话", "🦉 静默 24h", "⚖ 重新调权", "🔥 烧毁备忘"]
+    },
+    "sandbox_runs": [
+      { "id": "sbx-q2-invest",     "topic": "Q2 投资决策推演 · AI 基础设施加配 $40M",     "status": "completed", "branchCount": 7,  "recommendedLabel": "分批加配 + 第一批捆绑 KPI gate" },
+      { "id": "sbx-lp-comm",       "topic": "LP 沟通策略推演 · 如何向林雾解释 Stellar 暂缓", "status": "completed", "branchCount": 4,  "recommendedLabel": "主动 1v1 + Sequoia/Lightspeed 行业对照" },
+      { "id": "sbx-halycon-pause", "topic": "头部项目暂缓的 6 月后果 · Project Halycon",   "status": "pending",   "branchCount": 4,  "recommendedLabel": null }
+    ],
+    "$endpoints": [
+      "GET  /api/v1/ceo/war-room/dashboard",
+      "GET  /api/v1/ceo/war-room/formation",
+      "GET  /api/v1/ceo/war-room/gaps",
+      "GET  /api/v1/ceo/war-room/sparks?seed=N&limit=4",
+      "GET  /api/v1/ceo/war-room/sandbox",
+      "GET  /api/v1/ceo/war-room/sandbox/:id",
+      "POST /api/v1/ceo/war-room/sandbox",
+      "POST /api/v1/ceo/war-room/sandbox/:id/run"
+    ]
   },
+
   "situation": {
     "page": "/ceo/internal/ceo/situation",
     "dashboard": {
@@ -78,18 +199,32 @@
       "signalCount": 8
     },
     "stakeholders": [
-      { "name": "LP",     "kind": "investor",  "heat": 0.92 },
-      { "name": "董事会", "kind": "investor",  "heat": 0.78 },
-      { "name": "同行",   "kind": "partner",   "heat": 0.62 },
-      { "name": "团队",   "kind": "employee",  "heat": 0.55 },
-      { "name": "监管",   "kind": "regulator", "heat": 0.45 },
-      { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+      { "name": "LP",            "kind": "investor",  "heat": 0.92 },
+      { "name": "董事会",        "kind": "investor",  "heat": 0.78 },
+      { "name": "Halycon 客户",  "kind": "customer",  "heat": 0.68 },
+      { "name": "同行",          "kind": "partner",   "heat": 0.62 },
+      { "name": "团队",          "kind": "employee",  "heat": 0.55 },
+      { "name": "监管",          "kind": "regulator", "heat": 0.45 },
+      { "name": "Beacon 客户",   "kind": "customer",  "heat": 0.40 },
+      { "name": "媒体",          "kind": "press",     "heat": 0.30 }
     ],
     "rubric_dimensions": ["战略清晰", "节奏匹配", "沟通透明", "流程严谨", "回应速度"],
     "rubric_avg_by_stakeholder": {
       "LP": 0.53, "董事会": 0.75, "同行": 0.68, "团队": 0.72, "监管": 0.74, "媒体": 0.63
+    },
+    "top_negative_signal": {
+      "stakeholder": "LP",
+      "signal_text": "亚洲 PE 估值 H1 普跌 12%, IRR 中位数下滑",
+      "sentiment": -0.65,
+      "captured_at": "2026-05-01T07:00:00Z"
+    },
+    "top_positive_signal": {
+      "stakeholder": "团队",
+      "signal_text": "Halycon 创始人通报 Q1 ARR +47%, 新签 2 单战略客户",
+      "sentiment": 0.85
     }
   },
+
   "balcony": {
     "page": "/ceo/internal/ceo/balcony",
     "dashboard": {
@@ -101,19 +236,42 @@
       "strongest": { "prism": "team", "score": 0.78 }
     },
     "reflections_this_week": [
-      { "prism": "direction", "question": "你这周做的决定里,哪一个 是在承诺而非选择?" },
-      { "prism": "team",      "question": "你有多久 没和周劭然 单独说过话了?" },
-      { "prism": "self",      "question": "这周有 一件事,你觉得再来一次会做得不一样吗?" }
+      { "prism": "direction", "question": "你这周做的决定里,哪一个 是在承诺而非选择?",        "trigger": "周三董事会 · 你在陈汀发言时沉默了 2 分 14 秒" },
+      { "prism": "team",      "question": "你有多久 没和周劭然 单独说过话了?",                  "trigger": "本周他在 4 场会议里都在场,但只发言 3 次,共 47 秒" },
+      { "prism": "self",      "question": "这周有 一件事,你觉得再来一次会做得不一样吗?",      "trigger": "你三次用了'我们再看一下',都在 Omar 提反对意见后 8 秒内" }
     ],
-    "time_roi": { "total_hours": 56.0, "deep_focus_hours": 11.0, "meeting_hours": 29.0, "target_focus_hours": 18.0, "weekly_roi": 0.611 }
+    "time_roi": { "total_hours": 56.0, "deep_focus_hours": 11.0, "meeting_hours": 29.0, "target_focus_hours": 18.0, "weekly_roi": 0.611 },
+    "$person_drawer": {
+      "$comment": "R2-2 PersonDrawer 真数据形状 — 点 reflections.team 卡跳出周劭然抽屉",
+      "exemplar_person": {
+        "name": "周劭然",
+        "role": "侦察 · 纪要",
+        "stats": {
+          "this_week_meetings": 4,
+          "this_week_speaking_seconds": 47,
+          "silence_speaking_ratio_q1": 4.2,
+          "silence_speaking_ratio_q2": 11.8,
+          "info_entropy": 0.74,
+          "unanswered_questions_count": 23
+        },
+        "narrative": "他的会议纪要里包含 23 条'未被采纳但反复出现'的提问 — 高信息熵 (0.74), 但近期沉默/发言比飙升至 11.8"
+      }
+    }
   },
+
   "panorama": {
     "page": "/ceo/internal/ceo/panorama",
     "views": ["furnace", "timeline", "iceberg"],
     "stepGroups_runCount": { "g1": 0, "g2": 0, "g3": 0, "g4": 0, "g5": 1 },
     "outputs_count": 12,
-    "sources_count": 4
+    "sources_count": 4,
+    "outputs_list": [
+      "转写", "承诺清单", "张力清单", "Rubric 矩阵", "信念轨迹",
+      "心智模型命中", "盲区档案", "互补专家组", "rehash 指数",
+      "外脑批注", "六棱镜指标", "一页纸摘要"
+    ]
   },
+
   "brain": {
     "pages": [
       { "slug": "tasks",           "label": "任务队列",   "data_source": "mn_runs WHERE module IN ('mn','ceo')" },
@@ -123,16 +281,36 @@
       { "slug": "hot-topics",      "label": "热议题",     "data_source": "深链跳 /hot-topics/* 现有页" }
     ],
     "overview": {
-      "byModule": { "mn":  { "queued": 0, "running": 1, "succeeded": 28, "failed": 2 }, "ceo": { "queued": 0, "running": 0, "succeeded": 1, "failed": 0 } },
+      "byModule": {
+        "mn":  { "queued": 0, "running": 1, "succeeded": 28, "failed": 2 },
+        "ceo": { "queued": 0, "running": 0, "succeeded": 1,  "failed": 0 }
+      },
       "recentLlmCalls": 47
+    },
+    "$sandbox_endpoints_visibility": {
+      "$comment": "R3-3 sandbox runs 在 brain 任务队列中以 ceo 模块 axis=g3 出现",
+      "expected_axis": "g3",
+      "expected_state_flow": "queued → running → succeeded (or failed)"
     }
   },
+
   "$cross_page_pipeline": {
-    "$comment": "5 组加工步骤跨页面贡献关系",
-    "g1_asr_entities": "→ mn_meetings.transcript / mn_commitments / entities (Tower/Boardroom 消费)",
-    "g2_rubric_belief": "→ ceo_rubric_scores (Situation) + mn_judgments (Balcony 沉默 ratio)",
-    "g3_contradiction_expert": "→ ceo_rebuttal_rehearsals (Boardroom ⑤) + War Room ④⑤ 阵型分析 LLM 部分",
-    "g4_cross_meeting_rehash": "→ ceo_strategic_echos (Compass ⑤) + ceo_director_concerns 自动入流 (Boardroom ①)",
-    "g5_prism_aggregate": "→ ceo_prisms (Balcony 抽屉 ① 雷达 + Panorama metric 总览)"
+    "$comment": "5 组加工步骤跨页面贡献关系 + R2/R3 新增贡献",
+    "g1_asr_entities":          "→ mn_meetings.transcript / mn_commitments / entities (Tower/Boardroom 消费)",
+    "g2_rubric_belief":         "→ ceo_rubric_scores (Situation) + mn_judgments (Balcony 沉默 ratio)",
+    "g3_contradiction_expert":  "→ ceo_rebuttal_rehearsals (Boardroom ⑤) + War Room ④⑤ 阵型分析 LLM 部分 + ceo_sandbox_runs.branches/evaluation 自动生成 (R3-3)",
+    "g4_cross_meeting_rehash":  "→ ceo_strategic_echos (Compass ⑤ Sankey 5 echos 来源) + ceo_director_concerns 自动入流 (Boardroom ①)",
+    "g5_prism_aggregate":       "→ ceo_prisms (Balcony 抽屉 ① 雷达 + Panorama metric 总览)"
+  },
+
+  "$r_release_notes": {
+    "$comment": "R2/R3 阶段交付增量",
+    "R2-1": "Boardroom 多 scope 支持 (concerns/briefs/promises 按 scope_id 聚合)",
+    "R2-2": "Balcony reflections 卡片点击 → PersonDrawer 抽屉 (exemplar 周劭然)",
+    "R2-3": "Compass ⑤ 战略回声 重做为 3 列 SVG Sankey + EnqueueRunButton (axis=g4)",
+    "R2-5": "War Room ⑤ 灵光一闪 — sparks 真表 + 12 张 reroll 3 组",
+    "R2-7": "Tower ⑥ Rhythms — 团队 7×24 heatmap / 个人 双折线 stat 双 tab",
+    "R3-1": "Tower ⑥ heatmap 真数据接入 (RhythmHeatmapCell[] 形状)",
+    "R3-3": "War Room ② 沙盘 — SandboxList + SandboxDetail 子页 + 4 endpoints"
   }
 }

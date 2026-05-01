@@ -1,76 +1,310 @@
 {
-  "$comment": "Panorama · 全景画板样例 — 单端点聚合 6 房间 + 5 步骤组 + 4 源 + 12 产出",
+  "$comment": "Panorama · 全景画板样例 — 单端点聚合 6 棱镜 + 5 步骤组 + 4 源 + 12 产出 · 三视图共享一份数据",
   "$page": "/ceo/internal/ceo/panorama",
   "$prototype": "07-archive/会议纪要 (20260501)/panorama.jsx",
+  "$question": "一份会议, 如何变成 6 个房间 / 一年的积累?",
+
   "endpoints": {
     "GET /api/v1/ceo/panorama": {
+      "$desc": "三视图共享数据源 · /panorama 一次拉, FurnaceView/TimelineView/IcebergView 各自渲染",
+
       "prisms": [
         {
-          "id": "direction", "icon": "🧭", "label": "方向",   "color": "#7BA7C4", "room": "Compass",
-          "metric": { "label": "战略对齐度", "value": "0.72" },
-          "sector": { "source": "历史纪要", "step": "跨会联动",     "output": "一页纸摘要",   "app": "战略对齐度 / 破坏浣熊" }
+          "id": "direction", "icon": "🧭", "label": "方向", "color": "#7BA7C4", "tint": "rgba(123,167,196,0.07)", "room": "Compass",
+          "metric": {
+            "label": "战略对齐度", "value": "0.72",
+            "delta_vs_last_week": "+0.04",
+            "target": 0.80,
+            "tooltip_explanation": "对齐度 = AVG(ceo_strategic_lines.alignment_score WHERE status='active') · 当前 6 主线均值 0.72, 距 0.80 目标 0.08"
+          },
+          "sector": { "source": "历史纪要", "step": "跨会联动", "output": "一页纸摘要", "app": "战略对齐度 / 破坏浣熊" }
         },
         {
-          "id": "board",     "icon": "🏛️", "label": "董事会", "color": "#C8A15C", "room": "Boardroom",
-          "metric": { "label": "前瞻占比",   "value": "58%" },
-          "sector": { "source": "专家库",   "step": "外脑批注",     "output": "外脑批注资产", "app": "董事关切雷达 / 预读包" }
+          "id": "board", "icon": "🏛️", "label": "董事会", "color": "#C8A15C", "tint": "rgba(200,161,92,0.07)", "room": "Boardroom",
+          "metric": {
+            "label": "前瞻占比", "value": "58%",
+            "delta_vs_last_week": "+3pp",
+            "target": "60%",
+            "tooltip_explanation": "前瞻占比 = (前瞻议题 / 全部议题) — 5 位董事 12 项关切中 7 项 forward-looking"
+          },
+          "sector": { "source": "专家库", "step": "外脑批注", "output": "外脑批注资产", "app": "董事关切雷达 / 预读包" }
         },
         {
-          "id": "coord",     "icon": "🎯", "label": "协调",   "color": "#7FD6A0", "room": "Tower",
-          "metric": { "label": "责任清晰度", "value": "78%" },
-          "sector": { "source": "会议原材料", "step": "实体 & 承诺抽取", "output": "承诺清单",   "app": "责任盘点 / 会后 10 分钟卡" }
+          "id": "coord", "icon": "🎯", "label": "协调", "color": "#7FD6A0", "tint": "rgba(127,214,160,0.07)", "room": "Tower",
+          "metric": {
+            "label": "责任清晰度", "value": "78%",
+            "delta_vs_last_week": "-2pp",
+            "target": "85%",
+            "tooltip_explanation": "责任清晰度 = (有明确 owner+due+criteria 的承诺 / 全部承诺) — 47 条 mn_commitments 中 37 条三要素齐"
+          },
+          "sector": { "source": "会议原材料", "step": "实体 & 承诺抽取", "output": "承诺清单", "app": "责任盘点 / 会后 10 分钟卡" }
         },
         {
-          "id": "team",      "icon": "⚔️", "label": "团队",   "color": "#E6A6A6", "room": "War Room",
-          "metric": { "label": "阵型健康",   "value": "72" },
-          "sector": { "source": "会议原材料", "step": "矛盾识别",     "output": "盲区档案",     "app": "阵型 / 兵棋推演" }
+          "id": "team", "icon": "⚔️", "label": "团队", "color": "#E6A6A6", "tint": "rgba(230,166,166,0.07)", "room": "War Room",
+          "metric": {
+            "label": "阵型健康", "value": "72",
+            "delta_vs_last_week": "-4",
+            "target": 80,
+            "tooltip_explanation": "阵型健康 = 100 - W·sum(silence_signals) - W·sum(judgment_dissent) — 本周陆景行沉默 + Wei/Omar 评分分歧导致 -4"
+          },
+          "sector": { "source": "会议原材料", "step": "矛盾识别", "output": "盲区档案", "app": "阵型 / 兵棋推演" }
         },
         {
-          "id": "ext",       "icon": "🌐", "label": "各方",   "color": "#A8A0D9", "room": "Situation",
-          "metric": { "label": "覆盖度",     "value": "5/5" },
+          "id": "ext", "icon": "🌐", "label": "各方", "color": "#A8A0D9", "tint": "rgba(168,160,217,0.07)", "room": "Situation",
+          "metric": {
+            "label": "覆盖度", "value": "5/5",
+            "delta_vs_last_week": "→",
+            "target": "5/5",
+            "tooltip_explanation": "覆盖度 = DISTINCT(stakeholder.kind) ⊇ {customer/regulator/investor/press/partner} · 6 类全覆盖"
+          },
           "sector": { "source": "内容库 assets", "step": "Rubric 评分", "output": "Rubric 矩阵", "app": "利益相关方热力图" }
         },
         {
-          "id": "self",      "icon": "🧘", "label": "个人",   "color": "#D9B88E", "room": "Balcony",
-          "metric": { "label": "本周 ROI",   "value": "0.61" },
-          "sector": { "source": "历史纪要", "step": "棱镜聚合",     "output": "六棱镜指标",   "app": "时间 ROI / 阳台时光" }
+          "id": "self", "icon": "🧘", "label": "个人", "color": "#D9B88E", "tint": "rgba(217,184,142,0.07)", "room": "Balcony",
+          "metric": {
+            "label": "本周 ROI", "value": "0.61",
+            "delta_vs_last_week": "-0.07",
+            "target": 0.75,
+            "tooltip_explanation": "ROI = deep_focus_hours / target_focus_hours · 本周 11 / 18 = 0.61, 低于目标"
+          },
+          "sector": { "source": "历史纪要", "step": "棱镜聚合", "output": "六棱镜指标", "app": "时间 ROI / 阳台时光" }
         }
       ],
+
       "stepGroups": [
-        { "id": "g1", "label": "ASR & 实体",  "sub": "转写 · diarize · 承诺抽取",    "members": "01·02",     "runCount": 0 },
-        { "id": "g2", "label": "评分 & 信念", "sub": "Rubric · 信念提取",            "members": "03·04·05",  "runCount": 0 },
-        { "id": "g3", "label": "矛盾 & 专家", "sub": "自认/外识 · 互补专家匹配",     "members": "06·07·08",  "runCount": 0 },
-        { "id": "g4", "label": "跨会 & 批注", "sub": "rehash · 外脑批注生成",         "members": "09·10",     "runCount": 0 },
-        { "id": "g5", "label": "棱镜聚合",   "sub": "六面指标合成",                  "members": "11",        "runCount": 1 }
+        { "id": "g1", "label": "ASR & 实体",  "sub": "转写 · diarize · 承诺抽取",  "members": "01·02",    "runCount": 47, "$desc": "30 天窗口" },
+        { "id": "g2", "label": "评分 & 信念", "sub": "Rubric · 信念提取",          "members": "03·04·05", "runCount": 12 },
+        { "id": "g3", "label": "矛盾 & 专家", "sub": "自认/外识 · 互补专家匹配",  "members": "06·07·08", "runCount": 8,  "$sub_kinds": { "g3-rebuttal": 5, "g3-sandbox": 3 } },
+        { "id": "g4", "label": "跨会 & 批注", "sub": "rehash · 外脑批注生成",      "members": "09·10",    "runCount": 3 },
+        { "id": "g5", "label": "棱镜聚合",   "sub": "六面指标合成",                "members": "11",       "runCount": 2 }
       ],
+
       "sources": [
         { "id": "src-rec",  "label": "会议原材料",   "sub": "录音 / 录像 / 文档" },
         { "id": "src-lib",  "label": "内容库 assets", "sub": "RSS · 手动 · 深度分析" },
         { "id": "src-exp",  "label": "专家库",       "sub": "S 级 · 心智模型" },
         { "id": "src-hist", "label": "历史纪要",     "sub": "信念 · 决策链" }
       ],
+
       "outputs": [
         "转写", "承诺清单", "张力清单", "Rubric 矩阵", "信念轨迹",
         "心智模型命中", "盲区档案", "互补专家组", "rehash 指数",
         "外脑批注", "六棱镜指标", "一页纸摘要"
       ],
+
       "meta": { "sourceCount": 4, "stepGroupCount": 5, "outputCount": 12, "prismCount": 6 }
     }
   },
-  "tables_consumed": {
-    "$comment": "Panorama 不写表，并行调 6 房间 aggregator 后聚合 + 查 mn_runs 计数",
-    "ceo_prisms": "用最新一周快照展示 prismScores",
-    "ceo_attention_alloc": "Compass alignment_score 用",
-    "ceo_briefs": "Boardroom forward_pct 用",
-    "mn_commitments": "Tower responsibility_clarity 用",
-    "mn_silence_signals + mn_judgments": "War Room formation_health 用",
-    "ceo_stakeholders": "Situation coverage 用",
-    "ceo_time_roi": "Balcony weekly_roi 用",
-    "mn_runs WHERE module='ceo'": "stepGroups[N].runCount 来自 axis 分组 COUNT"
-  },
+
   "$views": {
-    "furnace": "六棱镜切扇区，4 同心圆环 = 核心/加工/产出/应用，扇区可点跳房间",
-    "timeline": "4 行栅格：源 → 步骤组 → 产出 → 应用",
-    "iceberg": "水面之上 6 房间高亮，水线，水下 3 层 (产出 12 / 加工 5 / 源 4)"
+    "$comment": "三视图同一份数据 — Furnace/Timeline/Iceberg",
+
+    "furnace": {
+      "$desc": "六棱镜切扇区 · 4 同心圆环 = 应用 / 产出 / 加工 / 数据源 · CEO 居中",
+      "$layout": {
+        "canvas": { "width": 800, "height": 600, "cx": 400, "cy": 300 },
+        "rings": [
+          { "key": "core",   "innerR":   0, "outerR":  60, "label": "核心 · CEO",  "z": 5, "fill": "rgba(217,184,142,0.12)", "stroke": "#D9B88E" },
+          { "key": "app",    "innerR":  60, "outerR": 110, "label": "应用 · APP",  "z": 4, "ringFill": "rgba(217,184,142,0.04)" },
+          { "key": "output", "innerR": 110, "outerR": 165, "label": "产出 · OUTPUT","z": 3, "ringFill": "rgba(127,214,160,0.05)" },
+          { "key": "step",   "innerR": 165, "outerR": 220, "label": "加工 · STEP",  "z": 2, "ringFill": "rgba(168,160,217,0.05)" },
+          { "key": "source", "innerR": 220, "outerR": 270, "label": "源 · SOURCE",  "z": 1, "ringFill": "rgba(123,167,196,0.05)" }
+        ],
+        "$sector_angle_deg": 60,
+        "$sector_geometry_per_prism": [
+          { "prismId": "direction", "startAngle": -90, "endAngle":  -30, "$note": "顶部 12 点位起, 顺时针" },
+          { "prismId": "board",     "startAngle": -30, "endAngle":   30 },
+          { "prismId": "coord",     "startAngle":  30, "endAngle":   90 },
+          { "prismId": "team",      "startAngle":  90, "endAngle":  150 },
+          { "prismId": "ext",       "startAngle": 150, "endAngle":  210 },
+          { "prismId": "self",      "startAngle": 210, "endAngle":  270 }
+        ],
+        "$path_formula": "sectorPath(cx, cy, innerR, outerR, startAngle, endAngle) → SVG path 'M ... A ... L ... A ... Z'",
+        "$click_target": "扇区点击 → useNavigate(`/ceo/internal/ceo/${room.toLowerCase().replace(' ', '-')}`)",
+        "$ring_label_font": { "family": "var(--mono)", "size": 9.5, "letterSpacing": "0.2em", "color": "rgba(232,227,216,0.4)" },
+        "$prism_outer_label_font": { "family": "var(--serif)", "italic": true, "size": 13, "weight": 600 },
+        "$source_text": "扇区 × 环 = 6 × 4 = 24 个文字 cell, 每 cell 显示 sector[ring.field] (取自 prisms[i].sector.{source/step/output/app})"
+      },
+      "$animation": { "enter_duration_ms": 700, "stagger_ms_per_ring": 180, "stagger_ms_per_sector": 30 }
+    },
+
+    "timeline": {
+      "$desc": "4 行 × 4 列 时间网格 — T+0 瞬间 / T+20min 解析 / T+1 周 阅读 / T+1 年 积累",
+      "$layout": {
+        "rows": 4, "cols": 4,
+        "row_axis":  ["数据源", "加工", "产出", "应用"],
+        "col_axis":  ["T+0 · 瞬间", "T+20min · 解析", "T+1 周 · 阅读", "T+1 年 · 积累"],
+        "$col_color": ["#7BA7C4", "#D9B88E", "#C8E1D2", "#E6A6A6"],
+        "river_gradient": "linear-gradient(90deg, #7BA7C4, #D9B88E 33%, #C8E1D2 66%, #E6A6A6)"
+      },
+      "grid_4x4": [
+        {
+          "row": "数据源",
+          "row_color": "#7BA7C4",
+          "cells": [
+            { "col": "T+0 · 瞬间",        "items": ["会议原材料", "内容库 assets", "专家库", "历史纪要"] },
+            { "col": "T+20min · 解析",    "items": null },
+            { "col": "T+1 周 · 阅读",     "items": null },
+            { "col": "T+1 年 · 积累",     "items": null }
+          ]
+        },
+        {
+          "row": "加工",
+          "row_color": "#D9B88E",
+          "cells": [
+            { "col": "T+0 · 瞬间",        "items": null },
+            { "col": "T+20min · 解析",    "items": ["g1 ASR & 实体", "g2 评分 & 信念", "g3 矛盾 & 专家"] },
+            { "col": "T+1 周 · 阅读",     "items": ["g4 跨会 & 批注", "g5 棱镜聚合"] },
+            { "col": "T+1 年 · 积累",     "items": null }
+          ]
+        },
+        {
+          "row": "产出",
+          "row_color": "#C8E1D2",
+          "cells": [
+            { "col": "T+0 · 瞬间",        "items": null },
+            { "col": "T+20min · 解析",    "items": ["转写", "承诺清单", "张力清单", "Rubric 矩阵", "信念轨迹"] },
+            { "col": "T+1 周 · 阅读",     "items": ["心智模型命中", "盲区档案", "互补专家组", "rehash 指数"] },
+            { "col": "T+1 年 · 积累",     "items": ["外脑批注", "六棱镜指标", "一页纸摘要"] }
+          ]
+        },
+        {
+          "row": "应用",
+          "row_color": "#E6A6A6",
+          "cells": [
+            { "col": "T+0 · 瞬间",        "items": null },
+            { "col": "T+20min · 解析",    "items": null },
+            { "col": "T+1 周 · 阅读",     "items": null },
+            { "col": "T+1 年 · 积累",     "items": ["🧭 方向 · Compass", "🏛️ 董事会 · Boardroom", "🎯 协调 · Tower", "⚔️ 团队 · War Room", "🌐 各方 · Situation", "🧘 个人 · Balcony"] }
+          ]
+        }
+      ],
+      "$arrows_dataflow": [
+        { "from": { "row": "数据源", "col": "T+0 · 瞬间" },     "to": { "row": "加工",  "col": "T+20min · 解析" }, "label": "g1+g2+g3 处理 (≤ 20min)" },
+        { "from": { "row": "加工",  "col": "T+20min · 解析" }, "to": { "row": "产出",  "col": "T+20min · 解析" }, "label": "立即产出 5 物" },
+        { "from": { "row": "加工",  "col": "T+1 周 · 阅读" },   "to": { "row": "产出",  "col": "T+1 周 · 阅读" },   "label": "跨会 rehash 后产出 4 物" },
+        { "from": { "row": "产出",  "col": "T+1 周 · 阅读" },   "to": { "row": "产出",  "col": "T+1 年 · 积累" },   "label": "g5 聚合 + 一页纸归档" },
+        { "from": { "row": "产出",  "col": "T+1 年 · 积累" },   "to": { "row": "应用",  "col": "T+1 年 · 积累" },   "label": "永久资产 → 6 棱镜房间" }
+      ],
+      "$animation": { "river_flow_dur": "10s linear infinite", "row_stagger_ms": 150 }
+    },
+
+    "iceberg": {
+      "$desc": "水面之上 6 房间 + 水线 + 水下 3 层 (产出 / 加工 / 源)",
+      "$layout": {
+        "above_waterline": {
+          "y_top": 0, "y_bottom": 140,
+          "rooms": [
+            { "prismId": "direction", "x": 0,   "label": "🧭 方向 · Compass",   "metric_label": "战略对齐度", "metric_value": "0.72" },
+            { "prismId": "board",     "x": 167, "label": "🏛️ 董事会 · Boardroom", "metric_label": "前瞻占比",   "metric_value": "58%" },
+            { "prismId": "coord",     "x": 333, "label": "🎯 协调 · Tower",      "metric_label": "责任清晰度", "metric_value": "78%" },
+            { "prismId": "team",      "x": 500, "label": "⚔️ 团队 · War Room",  "metric_label": "阵型健康",   "metric_value": "72" },
+            { "prismId": "ext",       "x": 667, "label": "🌐 各方 · Situation", "metric_label": "覆盖度",     "metric_value": "5/5" },
+            { "prismId": "self",      "x": 833, "label": "🧘 个人 · Balcony",   "metric_label": "本周 ROI",   "metric_value": "0.61" }
+          ]
+        },
+        "waterline": {
+          "y": 150,
+          "gradient": "linear-gradient(90deg, transparent 0%, rgba(123,167,196,0.6) 50%, transparent 100%)",
+          "label": "── 水线 · WATERLINE ──"
+        },
+        "below_waterline": [
+          {
+            "layer": "产出层",
+            "y_top": 170, "y_bottom": 250, "depth_factor": 0.75,
+            "color": "#C8E1D2",
+            "items": ["转写", "承诺清单", "张力清单", "Rubric 矩阵", "信念轨迹", "心智模型命中", "盲区档案", "互补专家组", "rehash 指数", "外脑批注", "六棱镜指标", "一页纸摘要"]
+          },
+          {
+            "layer": "加工层",
+            "y_top": 270, "y_bottom": 360, "depth_factor": 0.55,
+            "color": "#D9B88E",
+            "items": ["01·02 ASR & 实体", "03·04·05 评分 & 信念", "06·07·08 矛盾 & 专家", "09·10 跨会 & 批注", "11 棱镜聚合"]
+          },
+          {
+            "layer": "源层",
+            "y_top": 380, "y_bottom": 460, "depth_factor": 0.35,
+            "color": "#7BA7C4",
+            "items": ["会议原材料 · 录音/录像/文档", "内容库 assets · RSS/手动/深度分析", "专家库 · S 级/心智模型", "历史纪要 · 信念/决策链"]
+          }
+        ]
+      },
+      "$connection_lines": [
+        { "from": "源层 · 会议原材料",   "to": "加工层 · 01·02 ASR & 实体",       "stroke": "rgba(123,167,196,0.4)" },
+        { "from": "加工层 · 01·02",      "to": "产出层 · 转写",                   "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "加工层 · 01·02",      "to": "产出层 · 承诺清单",               "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "加工层 · 03·04·05",   "to": "产出层 · Rubric 矩阵",            "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "加工层 · 06·07·08",   "to": "产出层 · 互补专家组",             "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "加工层 · 09·10",      "to": "产出层 · 外脑批注",               "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "加工层 · 11 棱镜聚合", "to": "产出层 · 六棱镜指标",             "stroke": "rgba(127,214,160,0.4)" },
+        { "from": "产出层 · 六棱镜指标",  "to": "水面 · Compass 房间",             "stroke": "rgba(217,184,142,0.6)", "$kind": "surface-up" },
+        { "from": "产出层 · Rubric 矩阵", "to": "水面 · Situation 房间",           "stroke": "rgba(217,184,142,0.6)", "$kind": "surface-up" }
+      ]
+    }
+  },
+
+  "$aggregator": {
+    "$desc": "Panorama 单端点并行调 6 房间 aggregator + mn_runs 计数",
+    "parallel_calls": [
+      { "fn": "computeAlignmentScore",      "from": "rooms/compass/aggregator",   "writes_to": "metricByPrism.direction.value" },
+      { "fn": "computeForwardPct",          "from": "rooms/boardroom/aggregator", "writes_to": "metricByPrism.board.value" },
+      { "fn": "computeResponsibilityClarity","from": "rooms/tower/aggregator",     "writes_to": "metricByPrism.coord.value" },
+      { "fn": "computeFormationHealth",     "from": "rooms/war-room/aggregator",  "writes_to": "metricByPrism.team.value" },
+      { "fn": "computeCoverage",            "from": "rooms/situation/aggregator", "writes_to": "metricByPrism.ext.value" },
+      { "fn": "computeWeeklyRoi",           "from": "rooms/balcony/aggregator",   "writes_to": "metricByPrism.self.value" }
+    ],
+    "concurrency_strategy": "Promise.all 同时 fire 6 个 aggregator + 1 个 stepGroups COUNT GROUP BY axis 查询",
+    "performance_target": "P50 < 200ms, P99 < 500ms — 6 房间 aggregator 各自有索引 + 14 天窗口",
+    "fallback": "单个 aggregator 失败 → 该 prism.metric.value = 'n/a', 不阻塞其他 5 个; stepGroups COUNT 失败 → 全部 runCount=0",
+    "step_groups_query": "SELECT axis, COUNT(*)::int FROM mn_runs WHERE module='ceo' AND axis IN ('g1','g2','g3','g4','g5') AND created_at > NOW() - INTERVAL '30 days' GROUP BY axis"
+  },
+
+  "$cross_view_consistency": {
+    "$desc": "三视图共享同一份 /panorama 响应 — 同一份 data 由 FurnaceView / TimelineView / IcebergView 各自渲染",
+    "guarantees": [
+      "同一 prism.metric.value 在 3 个视图里数字必须相同 (例如 direction=0.72)",
+      "stepGroups[i].runCount 在 Furnace 扇区角标 / Timeline 加工行 / Iceberg 加工层 都用同一数",
+      "prism color 一致 (HEX) — 不允许某视图自己 override 颜色",
+      "切换视图时不重新 fetch — 数据从 Panorama 父组件 prop 下传"
+    ],
+    "$test_strategy": "Cypress: 切换 3 视图后 textContent 抽样比对; backend integration test: GET /panorama 返回 stable schema"
+  },
+
+  "$drilldown_links": {
+    "$desc": "Panorama 各点击目标 → 目标路由 (与 PrismRegistry 一致)",
+    "from_furnace": {
+      "扇区 direction": "/ceo/internal/ceo/compass",
+      "扇区 board":     "/ceo/internal/ceo/boardroom",
+      "扇区 coord":     "/ceo/internal/ceo/tower",
+      "扇区 team":      "/ceo/internal/ceo/war-room",
+      "扇区 ext":       "/ceo/internal/ceo/situation",
+      "扇区 self":      "/ceo/internal/ceo/balcony",
+      "中心 CEO 圆":    "/ceo/internal/ceo (CEO Home Pane)"
+    },
+    "from_timeline": {
+      "加工层 g1..g5 标签": "/ceo/internal/brain/tasks?module=ceo&axis=gN",
+      "数据源标签":        "/ceo/internal/brain/{content-library|expert-library|assets}",
+      "产出层 标签":        "/ceo/internal/brain/assets (近 30 天该类型 asset 列表)",
+      "应用层 6 房间":      "同 furnace 扇区点击"
+    },
+    "from_iceberg": {
+      "水面之上 6 房间卡片": "同 furnace 扇区点击",
+      "水下 加工层 5 组":    "/ceo/internal/brain/tasks?module=ceo&axis=gN",
+      "水下 产出层 12 项":    "/ceo/internal/brain/assets?type=<output-name>",
+      "水下 源层 4 类":       "/ceo/internal/brain/{content-library|expert-library|assets|history}"
+    }
+  },
+
+  "tables_consumed": {
+    "$comment": "Panorama 不写表, 并行调 6 房间 aggregator 后聚合 + 查 mn_runs 计数",
+    "ceo_prisms":             "用最新一周快照展示 prismScores (ceoResult.scores)",
+    "ceo_attention_alloc":    "Compass alignment_score 用",
+    "ceo_briefs":             "Boardroom forward_pct 用",
+    "mn_commitments":         "Tower responsibility_clarity 用",
+    "mn_silence_signals":     "War Room formation_health 用 (+ mn_judgments)",
+    "mn_judgments":           "War Room formation_health 用",
+    "ceo_stakeholders":       "Situation coverage 用",
+    "ceo_time_roi":           "Balcony weekly_roi 用",
+    "mn_runs WHERE module='ceo'": "stepGroups[N].runCount 来自 axis 分组 COUNT (30 天窗口)"
   }
 }

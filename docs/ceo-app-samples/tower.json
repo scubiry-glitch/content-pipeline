@@ -1,14 +1,14 @@
 {
-  "$comment": "Tower · 协调房间样例 — 主要复用 mn_commitments，不写 ceo_* 表",
+  "$comment": "Tower · 协调房间样例 — 主要复用 mn_commitments + ceo_attention_alloc + ceo_time_roi。R3-1 三源加权热图 + R2-7 RhythmsTabs + R2-2 PersonChip 全链路。",
   "$page": "/ceo/internal/ceo/tower",
   "$prototype": "07-archive/会议纪要 (20260501)/tower.html",
   "$blocks_status": {
-    "① commitment kanban": "实装 — 4 列看板 (复用 mn_commitments)",
-    "② blocker radar":     "实装 — 14 天超期承诺自动检测",
-    "③ post-meeting card": "实装 — 上次会议未关闭项",
+    "① commitment kanban": "实装 — 4 列看板 (复用 mn_commitments) + R2-2 PersonChip wiring",
+    "② blocker radar":     "实装 — 14 天超期承诺自动检测 + 5 条具体阻塞 + 升级建议",
+    "③ post-meeting card": "实装 — 上次会议未关闭项 + quick-resolve 动作",
     "④ rhythm pulse":      "实装 — 8 周双折线 (战略主线 vs 救火) + plan 20h 基线",
     "⑤ deficit alert":     "实装 — 个人精力 gauge (实测 vs 预算)",
-    "⑥ rhythms":           "实装 (R2-7 重做) — RhythmsTabs (团队节奏 7×24 heatmap / 个人节奏 折线 + 5 行 stat 双 tab)"
+    "⑥ rhythms":           "实装 (R2-7) — RhythmsTabs (团队节奏 7×24 heatmap / 个人节奏 折线 + 5 行 stat 双 tab)"
   },
   "endpoints": {
     "GET /api/v1/ceo/tower/dashboard": {
@@ -17,27 +17,199 @@
       "responsibilityClarity": 0.78,
       "commitmentStats": { "proposed": 5, "in_progress": 7, "overdue": 4, "done": 5, "total": 21 },
       "topBlockers": [
-        { "name": "LP 反馈闭环 · 无人接",        "days": 28, "text": "陈汀 → 林雾", "warn": false },
-        { "name": "退出路径年度路线图",          "days": 21, "text": "陈汀 → 董事会", "warn": false },
-        { "name": "Stellar 估值锚 · 卡在 Wei",   "days": 14, "text": "Wei → 陈汀", "warn": false }
+        { "name": "LP 反馈闭环 · 无人接",        "days": 28, "text": "陈汀 → 林雾",   "ownerPersonId": "33333333-1f01-4001-8000-000000000001", "warn": true },
+        { "name": "退出路径年度路线图",          "days": 21, "text": "陈汀 → 董事会", "ownerPersonId": "33333333-1f01-4001-8000-000000000001", "warn": true },
+        { "name": "Stellar 估值锚 · 卡在 Wei",   "days": 14, "text": "Wei → 陈汀",     "ownerPersonId": "33333333-1f01-4001-8000-000000000004", "warn": false }
       ]
     },
     "GET /api/v1/ceo/tower/commitments?status=in_progress": {
+      "$comment": "① CommitmentKanban — items 已带 personId / personRole 供 PersonChip 使用 (R2-2)",
       "items": [
-        { "id": "...mn-uuid...", "owner_name": "Wei",     "beneficiary_name": "陈汀",     "what": "《估值锚定五条》起草",   "due_at": "2026-04-23T00:00:00Z", "status": "in_progress" },
-        { "id": "...",           "owner_name": "陆景行",  "beneficiary_name": "董事会",   "what": "Halycon 团队补员 3 人(1/3)", "due_at": "2026-06-30T00:00:00Z", "status": "in_progress" },
-        { "id": "...",           "owner_name": "Sara",    "beneficiary_name": "陈汀",     "what": "Crucible 合规备案 80%",     "due_at": "2026-04-30T00:00:00Z", "status": "in_progress" }
+        {
+          "id": "mn-cmt-uuid-001",
+          "owner_name": "Wei",
+          "owner_personId": "33333333-1f01-4001-8000-000000000004",
+          "owner_personRole": "独立董事",
+          "beneficiary_name": "陈汀",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000001",
+          "beneficiary_personRole": "CEO",
+          "what": "《估值锚定五条》起草",
+          "due_at": "2026-04-23T00:00:00Z",
+          "days_overdue": 8,
+          "status": "in_progress",
+          "source_meeting_id": "mn-meeting-2026-03-22",
+          "source_meeting_title": "Stellar 估值评审 #3"
+        },
+        {
+          "id": "mn-cmt-uuid-002",
+          "owner_name": "陆景行",
+          "owner_personId": "33333333-1f01-4001-8000-000000000006",
+          "owner_personRole": "创始合伙人",
+          "beneficiary_name": "董事会",
+          "beneficiary_personId": null,
+          "beneficiary_personRole": null,
+          "what": "Halycon 团队补员 3 人(1/3)",
+          "due_at": "2026-06-30T00:00:00Z",
+          "days_overdue": 0,
+          "status": "in_progress",
+          "source_meeting_id": "mn-meeting-2026-02-12",
+          "source_meeting_title": "BOARD #13 · LP 关系专题"
+        },
+        {
+          "id": "mn-cmt-uuid-003",
+          "owner_name": "Sara",
+          "owner_personId": "33333333-1f01-4001-8000-000000000007",
+          "owner_personRole": "法务顾问",
+          "beneficiary_name": "陈汀",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000001",
+          "beneficiary_personRole": "CEO",
+          "what": "Crucible 合规备案 80%",
+          "due_at": "2026-04-30T00:00:00Z",
+          "days_overdue": 1,
+          "status": "in_progress",
+          "source_meeting_id": "mn-meeting-2026-04-12"
+        },
+        {
+          "id": "mn-cmt-uuid-004",
+          "owner_name": "周劭然",
+          "owner_personId": "33333333-1f01-4001-8000-000000000008",
+          "owner_personRole": "投资经理",
+          "beneficiary_name": "陈汀",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000001",
+          "what": "Halycon Q2 KPI 月报",
+          "due_at": "2026-05-05T00:00:00Z",
+          "days_overdue": 0,
+          "status": "in_progress",
+          "source_meeting_id": "mn-meeting-2026-04-15"
+        },
+        {
+          "id": "mn-cmt-uuid-005",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "owner_personRole": "CEO",
+          "beneficiary_name": "Omar K.",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000005",
+          "what": "退出窗口预测 v1（3 个标的）",
+          "due_at": "2026-05-15T00:00:00Z",
+          "days_overdue": 0,
+          "status": "in_progress",
+          "source_meeting_id": "mn-meeting-2026-04-28"
+        }
       ],
       "source": "mn"
     },
     "GET /api/v1/ceo/tower/blockers": {
+      "$comment": "② BlockerRadar — 5 条具体阻塞，含名字 + 卡了多少天 + 卡在哪一步 + 升级建议",
       "items": [
-        { "name": "LP 反馈闭环 · 无人接",        "days": 28, "text": "陈汀 → 林雾", "warn": false },
-        { "name": "退出路径年度路线图",          "days": 21, "text": "陈汀 → 董事会", "warn": false },
-        { "name": "Stellar 估值锚 · 卡在 Wei",   "days": 14, "text": "Wei → 陈汀", "warn": false }
+        {
+          "id": "blk-001",
+          "name": "LP 反馈闭环 · 无人接",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "days": 34,
+          "text": "陈汀 → 林雾",
+          "stuck_at": "未指定 owner — 1 月底立项后无人推进",
+          "escalation_suggestion": "本周内拍板 owner（建议 周劭然），否则 5 月底 LP 大会前必爆雷。",
+          "warn": true,
+          "linked_commitment_id": "mn-cmt-uuid-001"
+        },
+        {
+          "id": "blk-002",
+          "name": "退出路径年度路线图",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "days": 21,
+          "text": "陈汀 → 董事会",
+          "stuck_at": "等 Omar 验证退出窗口预测格式，已停 9 天",
+          "escalation_suggestion": "异步发草案给 Omar 而非约会议，48h 截止。",
+          "warn": true
+        },
+        {
+          "id": "blk-003",
+          "name": "Stellar 估值锚 · 卡在 Wei",
+          "owner_name": "Wei Zhao",
+          "owner_personId": "33333333-1f01-4001-8000-000000000004",
+          "days": 14,
+          "text": "Wei → 陈汀",
+          "stuck_at": "Wei 反复要求改 rubric 措辞（第 3 轮）",
+          "escalation_suggestion": "线下面对面 30min 收口，附录里留'未来可改'声明。",
+          "warn": false
+        },
+        {
+          "id": "blk-004",
+          "name": "Halycon 工程总监 offer",
+          "owner_name": "陆景行",
+          "owner_personId": "33333333-1f01-4001-8000-000000000006",
+          "days": 17,
+          "text": "陆景行 → 候选人 K.S.",
+          "stuck_at": "candidate 在等竞品反 offer，已沉默 11 天",
+          "escalation_suggestion": "本周给到 deadline + signing bonus 替代方案；同时启动 backup 候选人面试。",
+          "warn": false
+        },
+        {
+          "id": "blk-005",
+          "name": "Crucible 合规备案 LP 披露",
+          "owner_name": "Sara M.",
+          "owner_personId": "33333333-1f01-4001-8000-000000000007",
+          "days": 23,
+          "text": "Sara → LP 联络组",
+          "stuck_at": "披露文案已写好，等陈汀签字 7 天",
+          "escalation_suggestion": "陈汀今日内签字（30 秒），此项立刻关闭。",
+          "warn": true
+        }
+      ]
+    },
+    "GET /api/v1/ceo/tower/post-meeting": {
+      "$comment": "③ PostMeetingCard — 上次会议（mn-meeting-2026-04-28 LP 关切应对会）未关闭的 3 项 + quick-resolve actions",
+      "last_meeting": {
+        "id": "mn-meeting-2026-04-28",
+        "title": "LP 关切应对会",
+        "date": "2026-04-28",
+        "duration_min": 75
+      },
+      "unresolved_items": [
+        {
+          "id": "pm-001",
+          "what": "Q3 LP 大会议程 — 是否纳入'退出咨询委员会'议题",
+          "raised_by": "林雾",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "since_days": 3,
+          "quick_actions": [
+            { "label": "✓ 同意纳入",  "action": "POST /api/v1/ceo/tower/post-meeting/pm-001/resolve", "body": { "decision": "agree" } },
+            { "label": "✗ 拒绝纳入",  "action": "POST /api/v1/ceo/tower/post-meeting/pm-001/resolve", "body": { "decision": "reject" } },
+            { "label": "→ 转承诺",    "action": "POST /api/v1/ceo/tower/commitments", "body": { "fromUnresolved": "pm-001" } }
+          ]
+        },
+        {
+          "id": "pm-002",
+          "what": "退出窗口预测 — 是否需要 Omar 第三方背书",
+          "raised_by": "陈汀",
+          "owner_name": "Omar K.",
+          "owner_personId": "33333333-1f01-4001-8000-000000000005",
+          "since_days": 3,
+          "quick_actions": [
+            { "label": "✓ 接受", "action": "POST /api/v1/ceo/tower/post-meeting/pm-002/resolve", "body": { "decision": "agree" } },
+            { "label": "→ 异步问 Omar", "action": "POST /api/v1/ceo/people/33333333-1f01-4001-8000-000000000005/invoke", "body": { "question": "你愿意在 Q3 LP 大会前签字背书 3 个退出窗口预测吗？" } }
+          ]
+        },
+        {
+          "id": "pm-003",
+          "what": "Crucible 暂停决议 — 何时正式宣告 LP",
+          "raised_by": "Sara M.",
+          "owner_name": "Sara M.",
+          "owner_personId": "33333333-1f01-4001-8000-000000000007",
+          "since_days": 3,
+          "quick_actions": [
+            { "label": "本周",        "action": "POST /api/v1/ceo/tower/post-meeting/pm-003/resolve", "body": { "decision": "this_week" } },
+            { "label": "5 月中",      "action": "POST /api/v1/ceo/tower/post-meeting/pm-003/resolve", "body": { "decision": "mid_may" } },
+            { "label": "等董事会",    "action": "POST /api/v1/ceo/tower/post-meeting/pm-003/resolve", "body": { "decision": "wait_board" } }
+          ]
+        }
       ]
     },
     "GET /api/v1/ceo/tower/pulse?weeks=8": {
+      "$comment": "④ RhythmPulse — 8 周双折线: 战略主线时数 vs 救火时数, plan_line=20h 基线",
       "weeks": [
         { "weekStart": "2026-03-09", "mainHours": 16.0, "firefightingHours": 2.0 },
         { "weekStart": "2026-03-16", "mainHours": 18.5, "firefightingHours": 2.5 },
@@ -50,11 +222,95 @@
       ],
       "planLine": 20
     },
+    "GET /api/v1/ceo/tower/deficit?userId=system": {
+      "$comment": "⑤ DeficitAlert — 个人精力 gauge: 实测 vs 预算 数值",
+      "weekStart": "2026-04-27",
+      "energyGauge": {
+        "$comment": "0..1 综合精力分（深度专注/睡眠/会议过载 三项加权）",
+        "value": 0.42,
+        "label": "精力赤字",
+        "color": "#C46A50"
+      },
+      "metrics": [
+        { "key": "本周工时", "actual": 56.0, "budget": 50.0, "unit": "h", "status": "over_budget", "delta": "+6h" },
+        { "key": "深度专注", "actual": 11.0, "budget": 18.0, "unit": "h", "status": "under_budget", "delta": "-7h" },
+        { "key": "睡眠均值", "actual": 5.8,  "budget": 7.0,  "unit": "h", "status": "under_budget", "delta": "-1.2h" },
+        { "key": "救火比例", "actual": 0.31, "budget": 0.20, "unit": "%", "status": "over_budget", "delta": "+11pp" }
+      ],
+      "warning_text": "连续第 3 周超预算。该取消下周一会议腾出半天。",
+      "consecutive_over_weeks": 3,
+      "suggested_action": {
+        "label": "取消下周一 9-12 段",
+        "command": "POST /api/v1/ceo/tower/cancel-block",
+        "body": { "weekStart": "2026-05-04", "day": 0, "hours": [9, 10, 11] }
+      }
+    },
+    "GET /api/v1/ceo/tower/heatmap?weeks=8": {
+      "$comment": "⑥-A TeamHeatmap (R3-1) — 7×24 cells 由三源加权: 会议×1.0 + 承诺截止×0.6 + ceo runs×0.3。返回 168 cells (7 days × 24 hours)。",
+      "weekStart": "2026-04-27",
+      "source": "mixed",
+      "$source_semantics": {
+        "real":     "信号 ≥30 — 全部用真数据归一",
+        "mixed":    "信号 5-29 — 真数据 50% + fallback pattern 50% 混合",
+        "fallback": "信号 <5 — 全部用 FALLBACK_PATTERN（工作日 9-12/14-18 高活，周三 19-21 救火）"
+      },
+      "counts": {
+        "meetings":    47,
+        "commitments": 28,
+        "$comment_runs": "ceo runs 不计入 counts（只是轻信号），但参与加权"
+      },
+      "$cells_full_count": 168,
+      "$cells_sample_first_6": [
+        { "day": 0, "hour": 0, "intensity": 0.05 },
+        { "day": 0, "hour": 1, "intensity": 0.05 },
+        { "day": 0, "hour": 2, "intensity": 0.05 },
+        { "day": 0, "hour": 3, "intensity": 0.05 },
+        { "day": 0, "hour": 8, "intensity": 0.40 },
+        { "day": 0, "hour": 9, "intensity": 0.85 }
+      ],
+      "$peaks": [
+        { "day": 2, "hour": 19, "intensity": 0.95, "label": "周三 19:00 救火高峰（连续 3 周）" },
+        { "day": 4, "hour": 20, "intensity": 0.95, "label": "周五 20:00 加班高峰" },
+        { "day": 1, "hour": 10, "intensity": 0.92, "label": "周二 10:00 会议密集" },
+        { "day": 3, "hour": 15, "intensity": 0.92, "label": "周四 15:00 会议密集" }
+      ],
+      "$signal_attribution": {
+        "meetings_x1.0":    "assets WHERE type='meeting_minutes' AND created_at > NOW() - 8w (47 条)",
+        "commitments_x0.6": "mn_commitments WHERE due_at > NOW() - 8w (28 条 due_at)",
+        "ceo_runs_x0.3":    "mn_runs WHERE module='ceo' AND created_at > NOW() - 8w (~120 条)"
+      }
+    },
+    "GET /api/v1/ceo/tower/personal-rhythm?userId=system&weekStart=2026-04-27": {
+      "$comment": "⑥-B PersonalRhythm (R2-7) — 7 天 deepFocus/fire/meeting 折线 + 5 行 stat 对比上周。源自 ceo_time_roi 当周 + 上周 vs。",
+      "weekStart": "2026-04-27",
+      "days": [
+        { "name": "周一", "dayIndex": 0, "deepFocus": 1.65, "fire": 1.55, "meeting": 4.35 },
+        { "name": "周二", "dayIndex": 1, "deepFocus": 1.65, "fire": 1.55, "meeting": 4.35 },
+        { "name": "周三", "dayIndex": 2, "deepFocus": 1.50, "fire": 2.10, "meeting": 5.10, "$annotation": "AI 加配决议日 — 救火 +35%" },
+        { "name": "周四", "dayIndex": 3, "deepFocus": 1.65, "fire": 1.55, "meeting": 4.35 },
+        { "name": "周五", "dayIndex": 4, "deepFocus": 1.65, "fire": 1.55, "meeting": 4.35 },
+        { "name": "周六", "dayIndex": 5, "deepFocus": 1.40, "fire": 1.10, "meeting": 3.65 },
+        { "name": "周日", "dayIndex": 6, "deepFocus": 1.40, "fire": 1.10, "meeting": 3.65 }
+      ],
+      "stats": {
+        "deepFocus":   { "value": 11.0, "target": 18.0, "delta": "差 7.0h",   "$display": "11h 警告色（< target）", "vs_last_week": -2.5 },
+        "meetings":    { "value": 29.0, "vsLastWeek": 3.0, "$display": "29h 红色 (+3h vs 上周)" },
+        "fire":        { "value": 10.5, "delta": "过高",   "$display": "10.5h 红色（+5h vs 上周）", "vs_last_week": 5.0 },
+        "sleep":       { "value": 5.8,  "vsTarget": -1.2,  "$display": "5.8h 警告色（−1.2h vs 7h 目标）" },
+        "thinkBlocks": { "value": 3,    "target": 5,       "$display": "3 块（目标 5）" }
+      },
+      "$source_query": {
+        "this_week": "SELECT total_hours, deep_focus_hours, meeting_hours, target_focus_hours FROM ceo_time_roi WHERE user_id=$1 AND week_start=$2",
+        "last_week": "SELECT total_hours, deep_focus_hours, meeting_hours FROM ceo_time_roi WHERE user_id=$1 AND week_start<$2 ORDER BY week_start DESC LIMIT 1",
+        "day_distribution": "本周总数 × 工作日 0.15 + 周末 0.125（共 1.0），fire = total - deep - meeting"
+      }
+    },
     "$rhythms_archive_data_flow": {
-      "$comment": "Tower ⑥ rhythms 客户端聚合 — 不新建后端端点",
+      "$comment": "Tower ⑥ rhythms 客户端聚合 (rhythms_archive 模式) — 不新建后端端点，复用 R2-7 个人节奏 + R3-1 团队热图",
       "step_1": "GET /api/v1/ceo/tower/pulse?weeks=12 (拿 12 周 main/firefighting 时数)",
       "step_2": "并行 12 次 GET /api/v1/ceo/balcony/roi?userId=system&weekStart=YYYY-MM-DD (拿每周 deep_focus/total/roi)",
-      "step_3": "客户端 aggregateByMonth: 按 weekStart 月份聚合 → MonthSlice {monthLabel, totalMainHours, firefightingPct, deficitWeeks (total>50h 周数), avgWeeklyRoi}"
+      "step_3": "客户端 aggregateByMonth: 按 weekStart 月份聚合 → MonthSlice {monthLabel, totalMainHours, firefightingPct, deficitWeeks (total>50h 周数), avgWeeklyRoi}",
+      "$see_also": "R2-7 RhythmsTabs 的双 tab 切换：当 ?archive=true 时切到归档面板"
     },
     "$rhythms_archive_sample": {
       "$comment": "RhythmsArchive 渲染示例数据 (滚动 12 周, 按月切片 ~3 个月)",
@@ -72,18 +328,35 @@
     }
   },
   "tables_consumed": {
-    "$comment": "Tower 不写 ceo_* 表，主要消费 mn_commitments + ceo_attention_alloc",
+    "$comment": "Tower 不写 ceo_* 表，主要消费 mn_commitments + ceo_attention_alloc + ceo_time_roi",
     "mn_commitments": [
       { "$shape": "复用现有 schema", "owner_name": "Wei", "beneficiary_name": "陈汀", "what": "《估值锚定五条》起草", "status": "in_progress", "due_at": "2026-04-23" }
     ],
     "ceo_attention_alloc": [
       { "$see": "compass.json", "$comment": "8 周折线由本周 + 历史周 union 组成" }
+    ],
+    "ceo_time_roi": [
+      { "$see": "balcony.json", "$comment": "personal-rhythm 端点同时拉本周 + 上周 ROI" }
+    ],
+    "assets": [
+      { "$shape": "type='meeting_minutes'", "$comment": "R3-1 heatmap 的主信号 (×1.0 权重)，按 created_at 的 day-of-week + hour 聚合" }
     ]
   },
   "$aggregator": {
     "responsibility_clarity": "1 - 无主承诺数/总承诺数 (从 mn_commitments)",
     "calc": "无主 0 / 21 = 0 → 1 - 0 = 1.00 (但 demo 显示 0.78 — 实际项目中 owner_name 缺失更多)",
     "blocker_definition": "in_progress 或 open 状态 + due_at < NOW - 14 天",
+    "heatmap_aggregator": {
+      "$comment": "R3-1 三源加权热图算子",
+      "sources": {
+        "meetings":    { "table": "assets",         "filter": "type='meeting_minutes'",  "weight": 1.0 },
+        "commitments": { "table": "mn_commitments", "filter": "due_at IS NOT NULL",       "weight": 0.6 },
+        "ceo_runs":    { "table": "mn_runs",        "filter": "module='ceo'",             "weight": 0.3 }
+      },
+      "bin_key": "(EXTRACT(DOW FROM ts)+6)%7 AS day, EXTRACT(HOUR FROM ts) AS hour",
+      "normalize": "intensity = grid[day-hour] / max(grid)",
+      "real_threshold": "totalSignals (meetings+commitments) ≥ 30 → 'real'; 5-29 → 'mixed' (50/50 blend); <5 → 'fallback' (合成)"
+    },
     "rhythms_aggregator": {
       "$comment": "RhythmsArchive 客户端按月聚合算子",
       "firefightingPct": "totalFirefightingHours / (totalMainHours + totalFirefightingHours)",
