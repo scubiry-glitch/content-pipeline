@@ -1310,6 +1310,125 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     /**
+     * R4 · 改动一（人物轴 7th tab "盲区档案"）：聚合 cognitive_biases + 自认矛盾
+     * - cognitive_biases：mn_cognitive_biases WHERE by_person_id = :id（认知偏差）
+     * - 自认矛盾：mn_belief_drift_series 同 person 同 topic 上 points 出现 +→- 翻转的轨迹
+     */
+    fastify.get('/people/:id/blind-spots', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const db = engine.deps.db;
+      const [biasesR, driftR] = await Promise.all([
+        db.query(
+          `SELECT b.id, b.bias_type, b.where_excerpt, b.severity, b.mitigated, b.mitigation_strategy,
+                  b.created_at, b.meeting_id
+             FROM mn_cognitive_biases b
+            WHERE b.by_person_id = $1
+            ORDER BY CASE b.severity WHEN 'high' THEN 3 WHEN 'med' THEN 2 ELSE 1 END DESC,
+                     b.created_at DESC
+            LIMIT 50`,
+          [id],
+        ).catch(() => ({ rows: [] })),
+        db.query(
+          `SELECT id, topic_id, points, updated_at
+             FROM mn_belief_drift_series
+            WHERE person_id = $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 30`,
+          [id],
+        ).catch(() => ({ rows: [] })),
+      ]);
+      // 自认矛盾派生：points 数组里有 v 翻号（>=0.3 → <=-0.3 或反向）的 series
+      const flips: Array<{ id: string; topic_id: string; from: number; to: number; updated_at: string }> = [];
+      for (const row of driftR.rows) {
+        const points = Array.isArray(row.points) ? (row.points as Array<{ v?: number; value?: number }>) : [];
+        for (let i = 1; i < points.length; i++) {
+          const a = Number(points[i - 1].v ?? points[i - 1].value ?? 0);
+          const b = Number(points[i].v ?? points[i].value ?? 0);
+          if (Math.sign(a) !== Math.sign(b) && Math.abs(a) >= 0.3 && Math.abs(b) >= 0.3) {
+            flips.push({ id: row.id, topic_id: row.topic_id, from: a, to: b, updated_at: row.updated_at });
+            break;
+          }
+        }
+      }
+      return {
+        biases: biasesR.rows,
+        selfContradictions: flips,
+      };
+    });
+
+    /**
+     * R4 · 改动二（项目轴 5th tab "责任盘点"）：跨模块聚合
+     * - mn_commitments 按 owner_person_id GROUP BY，得 (人 × 兑现率)
+     * - ceo_attention_alloc 按 user_id GROUP BY 周，得每人本周注意力分配
+     * 两者按 person_id / user_id JOIN（user_id 与 person_id 都是 text/uuid 互兼容）
+     */
+    fastify.get('/scopes/:id/responsibility', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const db = engine.deps.db;
+      // 兼容 library scope（id 不是 UUID 时，commit 不按 scope 过滤）
+      const isUuid = UUID_RE.test(id);
+      const commitR = await db.query(
+        isUuid
+          ? `SELECT c.person_id, mp.canonical_name AS person_name,
+                    COUNT(*)::int AS total,
+                    SUM(CASE WHEN c.state = 'done' THEN 1 ELSE 0 END)::int AS done,
+                    SUM(CASE WHEN c.state = 'slipped' THEN 1 ELSE 0 END)::int AS slipped,
+                    SUM(CASE WHEN c.state IN ('on_track','at_risk') THEN 1 ELSE 0 END)::int AS open
+               FROM mn_commitments c
+               LEFT JOIN mn_people mp ON mp.id = c.person_id
+               LEFT JOIN mn_scope_members msm ON msm.meeting_id = c.meeting_id
+              WHERE msm.scope_id = $1::uuid AND c.person_id IS NOT NULL
+              GROUP BY c.person_id, mp.canonical_name
+              ORDER BY total DESC LIMIT 50`
+          : `SELECT c.person_id, mp.canonical_name AS person_name,
+                    COUNT(*)::int AS total,
+                    SUM(CASE WHEN c.state = 'done' THEN 1 ELSE 0 END)::int AS done,
+                    SUM(CASE WHEN c.state = 'slipped' THEN 1 ELSE 0 END)::int AS slipped,
+                    SUM(CASE WHEN c.state IN ('on_track','at_risk') THEN 1 ELSE 0 END)::int AS open
+               FROM mn_commitments c
+               LEFT JOIN mn_people mp ON mp.id = c.person_id
+              WHERE c.person_id IS NOT NULL
+              GROUP BY c.person_id, mp.canonical_name
+              ORDER BY total DESC LIMIT 50`,
+        isUuid ? [id] : [],
+      ).catch(() => ({ rows: [] }));
+      const attentionR = await db.query(
+        isUuid
+          ? `SELECT user_id, SUM(hours)::numeric(8,2) AS hours_4w
+               FROM ceo_attention_alloc
+              WHERE scope_id = $1::uuid
+                AND week_start >= CURRENT_DATE - INTERVAL '28 days'
+              GROUP BY user_id
+              ORDER BY hours_4w DESC LIMIT 50`
+          : `SELECT user_id, SUM(hours)::numeric(8,2) AS hours_4w
+               FROM ceo_attention_alloc
+              WHERE week_start >= CURRENT_DATE - INTERVAL '28 days'
+              GROUP BY user_id
+              ORDER BY hours_4w DESC LIMIT 50`,
+        isUuid ? [id] : [],
+      ).catch(() => ({ rows: [] }));
+
+      const items = commitR.rows.map((c: any) => {
+        const total = Number(c.total) || 0;
+        const done = Number(c.done) || 0;
+        const fulfillRate = total === 0 ? null : Number((done / total).toFixed(3));
+        const att = attentionR.rows.find((a: any) => String(a.user_id) === String(c.person_id));
+        return {
+          personId: c.person_id,
+          personName: c.person_name,
+          total,
+          done,
+          slipped: Number(c.slipped) || 0,
+          open: Number(c.open) || 0,
+          fulfillRate,
+          attentionHours4w: att ? Number(att.hours_4w) : null,
+        };
+      });
+      return { items, computedAt: new Date().toISOString() };
+    });
+
+    /**
      * POST /people/:id/merge · 合并两个人物（F11.1）
      * Body: { fromId, dryRun? }
      *

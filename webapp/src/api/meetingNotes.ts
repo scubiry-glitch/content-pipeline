@@ -396,6 +396,33 @@ export const meetingNotesApi = {
       `/meetings/${meetingId}/necessity-audit`,
     ),
 
+  // R4 · 人物轴 7th tab "盲区档案"：cognitive_biases + 自认矛盾派生
+  getPersonBlindSpots: (personId: string) =>
+    jget<{
+      biases: Array<{
+        id: string; bias_type: string; where_excerpt?: string; severity?: 'low' | 'med' | 'high';
+        mitigated?: boolean; mitigation_strategy?: string; created_at: string; meeting_id?: string;
+      }>;
+      selfContradictions: Array<{
+        id: string; topic_id: string; from: number; to: number; updated_at: string;
+      }>;
+    } | null>(
+      `/people/${personId}/blind-spots`,
+    ),
+
+  // R4 · 项目轴 5th tab "责任盘点"：mn_commitments × ceo_attention_alloc 跨模块聚合
+  getScopeResponsibility: (scopeId: string) =>
+    jget<{
+      items: Array<{
+        personId: string; personName?: string;
+        total: number; done: number; slipped: number; open: number;
+        fulfillRate: number | null; attentionHours4w: number | null;
+      }>;
+      computedAt: string;
+    } | null>(
+      `/scopes/${encodeURIComponent(scopeId)}/responsibility`,
+    ),
+
   // R3-A · 改动一：单场会议体征聚合（quality + necessity + affect + tension 四合一）
   getMeetingHealth: (meetingId: string) =>
     jget<{
