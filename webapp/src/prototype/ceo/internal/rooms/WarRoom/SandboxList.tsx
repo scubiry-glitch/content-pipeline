@@ -63,6 +63,14 @@ export function SandboxList() {
         </div>
       ))}
       <div
+        onClick={() => {
+          const t = document.createElement('div');
+          t.textContent = '📐 兵棋推演子页 · 待原型补齐 (见 docs/ceo-app-deferred.md)';
+          t.style.cssText =
+            'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#1A0E0E;color:#F5D9D9;border:1px solid #D64545;padding:10px 18px;border-radius:4px;font-family:var(--serif);font-style:italic;font-size:13px;z-index:9999;cursor:pointer';
+          document.body.appendChild(t);
+          setTimeout(() => t.remove(), 3000);
+        }}
         style={{
           marginTop: 4,
           padding: '10px 14px',
@@ -74,9 +82,10 @@ export function SandboxList() {
           fontSize: 11.5,
           color: 'rgba(245,217,217,0.55)',
           textAlign: 'center',
+          cursor: 'pointer',
         }}
       >
-        + 启动新推演 (待 PR12 LLM 接入)
+        + 启动新推演 (子页待原型补齐 · 详见 docs/ceo-app-deferred.md)
       </div>
     </div>
   );
