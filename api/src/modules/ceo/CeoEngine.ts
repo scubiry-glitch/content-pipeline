@@ -1,24 +1,28 @@
 // CeoEngine — 决策驾驶舱核心 engine
-// PR3 阶段仅含基础健康检查 + scheduler stub；
-// PR4-PR9 各房间的 service/aggregator 在子目录补齐；
-// PR12 接生成中心。
+// PR3 健康检查 + scheduler stub
+// PR4-PR9 各房间的 service/aggregator 在子目录补齐
+// PR12 接生成中心 — runQueue 轮询 mn_runs(module='ceo') + 调度器入队 g5
 
 import type { CeoEngineDeps } from './types.js';
+import { CeoRunQueue, enqueueCeoRun } from './pipelines/runQueue.js';
+import { CeoScheduler } from './pipelines/scheduler.js';
 
 export interface CeoEngineOptions {
-  /** 是否启动内置 cron 调度器（A/B/C/D 规则流） */
+  /** 是否启动内置 cron 调度器（PR12 起：g5 棱镜聚合 + g3/g4 LLM 任务入队） */
   enableScheduler?: boolean;
 }
 
 export class CeoEngine {
   private schedulerInterval: NodeJS.Timeout | null = null;
+  private runQueue: CeoRunQueue | null = null;
+  private cronScheduler: CeoScheduler | null = null;
 
   constructor(
     public readonly deps: CeoEngineDeps,
     private readonly options: CeoEngineOptions = {},
   ) {}
 
-  /** 健康检查 — PR3 阶段：检查 db 连通 */
+  /** 健康检查 */
   async health(): Promise<{
     ok: boolean;
     module: 'ceo';
@@ -44,29 +48,31 @@ export class CeoEngine {
   }
 
   /**
-   * 启动调度器 — PR3 仅占位，每 30 分钟空跑一次心跳日志；
-   * PR4 起 aggregator/promotion/anomaly/scoring 各流接入。
+   * 启动调度器 — PR12 实装：
+   *   1. CeoRunQueue: 每 15s 轮询 mn_runs WHERE module='ceo' AND state='queued'，
+   *      跑 g3/g4/g5 处理器，写回 succeeded/failed。
+   *   2. CeoScheduler: 启动 30s 后入队一次 g5；每周日 21:00 自动跑 g5 棱镜聚合。
    */
   startScheduler(): void {
-    if (this.schedulerInterval) return;
     if (this.options.enableScheduler === false) return;
+    if (this.runQueue) return;
 
+    this.runQueue = new CeoRunQueue(this.deps);
+    this.runQueue.start();
+
+    this.cronScheduler = new CeoScheduler(this.deps);
+    this.cronScheduler.start();
+
+    // 心跳日志（保留 schedulerRunning 状态指示）
     const tick = () => {
-      // PR4-PR9 在这里依次接入：
-      //   - g5 棱镜聚合
-      //   - 房间 metric 重算
-      //   - 关注清单晋升 / 异常检测
-      console.log('[CeoEngine] scheduler tick (placeholder, see pipelines/scheduler.ts in PR4+)');
+      console.log('[CeoEngine] scheduler heartbeat (runQueue + cron 已托管 g3/g4/g5)');
     };
-
-    // 每 30 分钟（开发期可降低）；首次 60s 后跑
     const intervalMs = Number(process.env.CEO_SCHEDULER_INTERVAL_MS ?? 30 * 60 * 1000);
-    setTimeout(tick, 60_000);
     this.schedulerInterval = setInterval(tick, intervalMs);
     if (typeof this.schedulerInterval.unref === 'function') {
       this.schedulerInterval.unref();
     }
-    console.log(`[CeoEngine] scheduler started (interval=${intervalMs}ms)`);
+    console.log(`[CeoEngine] scheduler started (runQueue+cron, heartbeat ${intervalMs}ms)`);
   }
 
   stopScheduler(): void {
@@ -74,20 +80,34 @@ export class CeoEngine {
       clearInterval(this.schedulerInterval);
       this.schedulerInterval = null;
     }
+    if (this.runQueue) {
+      this.runQueue.stop();
+      this.runQueue = null;
+    }
+    if (this.cronScheduler) {
+      this.cronScheduler.stop();
+      this.cronScheduler = null;
+    }
   }
 
-  // ============================================================
-  // 占位方法 — 后续 PR 替换为真实业务逻辑
-  // ============================================================
+  /** 手动入队一个 CEO 加工任务 (g1..g5)；返回 mn_runs.id */
+  async enqueueRun(input: {
+    axis: 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+    scopeKind?: string;
+    scopeId?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ ok: boolean; runId?: string }> {
+    return enqueueCeoRun(this.deps, input);
+  }
 
-  /** 看板主聚合（PR4 起填充） */
+  /** 看板主聚合（PR4 起填充；当前以 panorama service 替代） */
   async buildDashboard(_scopeId?: string): Promise<{
     rooms: Array<{ id: string; metric: { label: string; value: string; delta: string } }>;
     note: string;
   }> {
     return {
       rooms: [],
-      note: 'PR3 阶段：dashboard 聚合占位，PR4-PR9 房间逐步接入',
+      note: '请使用 /api/v1/ceo/panorama 获取完整聚合，或 /api/v1/ceo/{compass,boardroom,...}/dashboard 获取分房间详情',
     };
   }
 }
