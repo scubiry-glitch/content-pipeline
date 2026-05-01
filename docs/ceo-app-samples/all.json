@@ -1,0 +1,136 @@
+{
+  "$comment": "CEO 应用全部页面样例数据合集 — 8 页 + 跨页元信息",
+  "$generated_from": "docs/ceo-app-samples/{compass,boardroom,tower,war-room,situation,balcony,panorama,brain}.json",
+  "$rooms_meta": [
+    { "id": "direction", "slug": "compass",   "icon": "🧭", "label": "方向",   "tone": "#7BA7C4", "question": "我把时间花在战略主线上了吗?",        "metric_label": "战略对齐度",   "metric_value": "0.72" },
+    { "id": "board",     "slug": "boardroom", "icon": "🏛️", "label": "董事会", "tone": "#C8A15C", "question": "下次董事会我要带什么?",              "metric_label": "前瞻占比",     "metric_value": "58%" },
+    { "id": "coord",     "slug": "tower",     "icon": "🎯", "label": "协调",   "tone": "#7FD6A0", "question": "谁欠谁什么? 卡在哪?",                "metric_label": "责任清晰度",   "metric_value": "78%" },
+    { "id": "team",      "slug": "war-room",  "icon": "⚔️", "label": "团队",   "tone": "#E6A6A6", "question": "团队健康吗? 有建设性冲突吗?",        "metric_label": "阵型健康",     "metric_value": "72" },
+    { "id": "ext",       "slug": "situation", "icon": "🌐", "label": "各方",   "tone": "#A8A0D9", "question": "外部世界怎么看我?",                  "metric_label": "覆盖度",       "metric_value": "5/5" },
+    { "id": "self",      "slug": "balcony",   "icon": "🧘", "label": "个人",   "tone": "#D9B88E", "question": "我还是我想成为的那个 CEO 吗?",       "metric_label": "本周 ROI",     "metric_value": "0.61" }
+  ],
+  "compass": {
+    "page": "/ceo/internal/ceo/compass",
+    "dashboard": {
+      "question": "我把时间花在战略主线上了吗?",
+      "metric": { "label": "战略对齐度", "value": "0.72", "delta": "本周" },
+      "lines": { "main": 2, "branch": 2, "drift": 2 },
+      "attention": { "main": 20.14, "branch": 11.4, "firefighting": 6.46, "total": 38.0 },
+      "alignmentScore": 0.72
+    },
+    "lines": [
+      { "name": "Halycon",  "kind": "main",   "alignment_score": 0.82 },
+      { "name": "Beacon",   "kind": "main",   "alignment_score": 0.76 },
+      { "name": "Stellar",  "kind": "branch", "alignment_score": 0.62 },
+      { "name": "Echo",     "kind": "branch", "alignment_score": 0.58 },
+      { "name": "Crucible", "kind": "drift",  "alignment_score": 0.28 },
+      { "name": "Pyre",     "kind": "drift",  "alignment_score": 0.22 }
+    ]
+  },
+  "boardroom": {
+    "page": "/ceo/internal/ceo/boardroom",
+    "dashboard": {
+      "question": "下次董事会我要带什么?",
+      "metric": { "label": "前瞻占比", "value": "58%", "delta": "本季" },
+      "concernsByStatus": { "pending": 9, "answered": 5, "superseded": 1 },
+      "promiseStats": { "total": 6, "done": 2, "in_progress": 2, "late": 2 }
+    },
+    "directors": ["林雾", "Wei Zhao", "Omar K.", "陆景行", "Sara M."],
+    "concerns_top_pending": [
+      "退出路径再不明确,Q3 LP 大会怎么开?",
+      "Stellar 估值反复 5 次,你们的尽调标准到底是什么?",
+      "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?"
+    ]
+  },
+  "tower": {
+    "page": "/ceo/internal/ceo/tower",
+    "dashboard": {
+      "question": "谁欠谁什么? 卡在哪?",
+      "metric": { "label": "责任清晰度", "value": "78%", "delta": "本周" },
+      "commitmentStats": { "proposed": 5, "in_progress": 7, "overdue": 4, "done": 5, "total": 21 },
+      "topBlockers": [
+        { "name": "LP 反馈闭环 · 无人接", "days": 28 },
+        { "name": "退出路径年度路线图",   "days": 21 },
+        { "name": "Stellar 估值锚 · 卡在 Wei", "days": 14 }
+      ]
+    }
+  },
+  "war_room": {
+    "page": "/ceo/internal/ceo/war-room",
+    "dashboard": {
+      "question": "团队健康吗? 有建设性冲突吗?",
+      "metric": { "label": "阵型健康", "value": "72", "delta": "本月" },
+      "formationHealth": 0.72,
+      "conflictKinds": { "build": 7, "destructive": 2, "silent": 1, "total": 10 },
+      "verdict": "健康 — 偏热，建设性冲突充分"
+    },
+    "formation_nodes_count": 6,
+    "formation_links_count": 6
+  },
+  "situation": {
+    "page": "/ceo/internal/ceo/situation",
+    "dashboard": {
+      "question": "外部世界怎么看我?",
+      "metric": { "label": "覆盖度", "value": "5/5", "delta": "齐" },
+      "coverage": { "covered": 5, "total": 5, "missing": [] },
+      "signalCount": 8
+    },
+    "stakeholders": [
+      { "name": "LP",     "kind": "investor",  "heat": 0.92 },
+      { "name": "董事会", "kind": "investor",  "heat": 0.78 },
+      { "name": "同行",   "kind": "partner",   "heat": 0.62 },
+      { "name": "团队",   "kind": "employee",  "heat": 0.55 },
+      { "name": "监管",   "kind": "regulator", "heat": 0.45 },
+      { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+    ],
+    "rubric_dimensions": ["战略清晰", "节奏匹配", "沟通透明", "流程严谨", "回应速度"],
+    "rubric_avg_by_stakeholder": {
+      "LP": 0.53, "董事会": 0.75, "同行": 0.68, "团队": 0.72, "监管": 0.74, "媒体": 0.63
+    }
+  },
+  "balcony": {
+    "page": "/ceo/internal/ceo/balcony",
+    "dashboard": {
+      "question": "我还是我想成为的那个 CEO 吗?",
+      "metric": { "label": "本周 ROI", "value": "0.61", "delta": "本周" },
+      "weeklyRoi": 0.611,
+      "prismScores": { "direction": 0.72, "board": 0.58, "coord": 0.78, "team": 0.78, "ext": 0.6, "self": 0.41 },
+      "weakest":   { "prism": "self", "score": 0.41 },
+      "strongest": { "prism": "team", "score": 0.78 }
+    },
+    "reflections_this_week": [
+      { "prism": "direction", "question": "你这周做的决定里,哪一个 是在承诺而非选择?" },
+      { "prism": "team",      "question": "你有多久 没和周劭然 单独说过话了?" },
+      { "prism": "self",      "question": "这周有 一件事,你觉得再来一次会做得不一样吗?" }
+    ],
+    "time_roi": { "total_hours": 56.0, "deep_focus_hours": 11.0, "meeting_hours": 29.0, "target_focus_hours": 18.0, "weekly_roi": 0.611 }
+  },
+  "panorama": {
+    "page": "/ceo/internal/ceo/panorama",
+    "views": ["furnace", "timeline", "iceberg"],
+    "stepGroups_runCount": { "g1": 0, "g2": 0, "g3": 0, "g4": 0, "g5": 1 },
+    "outputs_count": 12,
+    "sources_count": 4
+  },
+  "brain": {
+    "pages": [
+      { "slug": "tasks",           "label": "任务队列",   "data_source": "mn_runs WHERE module IN ('mn','ceo')" },
+      { "slug": "content-library", "label": "内容库视图", "data_source": "深链跳 /content-library/* 现有页" },
+      { "slug": "expert-library",  "label": "专家库视图", "data_source": "深链跳 /expert-* 现有页" },
+      { "slug": "assets",          "label": "素材市集",   "data_source": "深链跳 /assets/* 现有页" },
+      { "slug": "hot-topics",      "label": "热议题",     "data_source": "深链跳 /hot-topics/* 现有页" }
+    ],
+    "overview": {
+      "byModule": { "mn":  { "queued": 0, "running": 1, "succeeded": 28, "failed": 2 }, "ceo": { "queued": 0, "running": 0, "succeeded": 1, "failed": 0 } },
+      "recentLlmCalls": 47
+    }
+  },
+  "$cross_page_pipeline": {
+    "$comment": "5 组加工步骤跨页面贡献关系",
+    "g1_asr_entities": "→ mn_meetings.transcript / mn_commitments / entities (Tower/Boardroom 消费)",
+    "g2_rubric_belief": "→ ceo_rubric_scores (Situation) + mn_judgments (Balcony 沉默 ratio)",
+    "g3_contradiction_expert": "→ ceo_rebuttal_rehearsals (Boardroom ⑤) + War Room ④⑤ 阵型分析 LLM 部分",
+    "g4_cross_meeting_rehash": "→ ceo_strategic_echos (Compass ⑤) + ceo_director_concerns 自动入流 (Boardroom ①)",
+    "g5_prism_aggregate": "→ ceo_prisms (Balcony 抽屉 ① 雷达 + Panorama metric 总览)"
+  }
+}

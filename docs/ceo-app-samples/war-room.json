@@ -1,0 +1,78 @@
+{
+  "$comment": "War Room · 团队房间样例 — 阵型快照 + 冲突分类 (复用 mn_silence_signals/judgments)",
+  "$page": "/ceo/internal/ceo/war-room",
+  "$prototype": "07-archive/会议纪要 (20260501)/war-room.html",
+  "endpoints": {
+    "GET /api/v1/ceo/war-room/dashboard": {
+      "question": "团队健康吗? 有建设性冲突吗?",
+      "metric": { "label": "阵型健康", "value": "72", "delta": "本月" },
+      "formationHealth": 0.72,
+      "conflictKinds": { "build": 7, "destructive": 2, "silent": 1, "total": 10 },
+      "conflictTemp": 0.7,
+      "verdict": "健康 — 偏热，建设性冲突充分"
+    },
+    "GET /api/v1/ceo/war-room/formation": {
+      "snapshot": {
+        "id": "77777777-...",
+        "scope_id": null,
+        "week_start": "2026-04-27",
+        "formation_data": {
+          "nodes": [
+            { "id": "chen", "name": "陈", "role": "CEO",        "variant": "self",    "cx": 300, "cy": 250, "r": 28 },
+            { "id": "shen", "name": "沈", "role": "主战 · IC",   "variant": "ally",    "cx": 300, "cy": 130, "r": 22 },
+            { "id": "zhou", "name": "周", "role": "侦察 · 纪要", "variant": "ally",    "cx": 300, "cy": 370, "r": 20 },
+            { "id": "wei",  "name": "Wei", "role": "智囊 · 远",  "variant": "advisor", "cx": 465, "cy": 180, "r": 20 },
+            { "id": "omar", "name": "Omar","role": "外援 · 行业", "variant": "advisor", "cx": 135, "cy": 180, "r": 20 },
+            { "id": "lin",  "name": "林", "role": "LP · 边缘",   "variant": "edge",    "cx": 500, "cy": 380, "r": 18 }
+          ],
+          "links": [
+            { "from": "chen", "to": "shen", "kind": "support" },
+            { "from": "chen", "to": "zhou", "kind": "support" },
+            { "from": "chen", "to": "wei",  "kind": "advisor" },
+            { "from": "chen", "to": "omar", "kind": "advisor" },
+            { "from": "chen", "to": "lin",  "kind": "silent"  },
+            { "from": "shen", "to": "zhou", "kind": "tension" }
+          ]
+        },
+        "conflict_temp": 0.7,
+        "computed_at": "2026-04-27T20:00:00Z"
+      },
+      "computedAt": "2026-04-27T20:00:00Z"
+    },
+    "GET /api/v1/ceo/war-room/gaps": {
+      "items": [
+        { "text": "团队连续 4 周缺少建设性反对意见",   "action": "安排一次反方推演",       "severity": "warn" },
+        { "text": "关键决策由单人主导比例 67%",         "action": "把下一次评审主持权交叉", "severity": "warn" },
+        { "text": "本月最长沉默 2分14秒，值得回放",     "action": "跳到张力流复盘",         "severity": "info" }
+      ]
+    }
+  },
+  "tables": {
+    "ceo_formation_snapshots": [
+      {
+        "scope_id": null,
+        "week_start": "2026-04-27",
+        "formation_data": "{nodes: [...], links: [...]}",
+        "conflict_temp": 0.7
+      }
+    ]
+  },
+  "tables_consumed": {
+    "mn_judgments": [
+      { "$comment": "kind ∈ disagreement/build → build 计数",       "kind": "build",         "created_at": "<近 30 天>" },
+      { "$comment": "kind ∈ emotional/dismissive/off_topic → 破坏性", "kind": "destructive",   "created_at": "<近 30 天>" }
+    ],
+    "mn_silence_signals": [
+      { "$comment": "state=abnormal_silence → silent 计数", "state": "abnormal_silence", "created_at": "<近 30 天>" }
+    ]
+  },
+  "$aggregator": {
+    "formation_health": "build_conflict / total (Edmondson 心理安全分代理)",
+    "calc": "build=7, total=10 → 0.70",
+    "verdict_thresholds": ["≥0.7 健康偏热", "≥0.55 健康略冷", "≥0.4 注意破坏性偏高", "<0.4 警告回避"]
+  },
+  "$stub_notes": [
+    "sandbox 推演 (cards Q2 投资 / LP 沟通 / Halycon 6 月后果) 当前是 fixture，PR12 LLM 接入后由 g3 自动生成",
+    "FormationAnalysis ⑤ 灵光一闪 (跨项目人才嫁接 / 角色对换实验 / 沉默激活) 同上"
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "$comment": "Boardroom · 董事会房间样例 — 5 董事 / 5 关切 / 预读包 / 6 承诺 / 3 反方演练",
+  "$page": "/ceo/internal/ceo/boardroom",
+  "$prototype": "07-archive/会议纪要 (20260501)/boardroom.html",
+  "endpoints": {
+    "GET /api/v1/ceo/boardroom/dashboard": {
+      "question": "下次董事会我要带什么?",
+      "metric": { "label": "前瞻占比", "value": "58%", "delta": "本季" },
+      "concernsByStatus": { "pending": 9, "answered": 5, "superseded": 1 },
+      "topConcerns": [
+        { "name": "林雾",    "meta": "3 次 · LP 代表",     "text": "待回应", "warn": true },
+        { "name": "Wei Zhao", "meta": "2 次 · 独立董事",   "text": "待回应", "warn": false },
+        { "name": "Omar K.",  "meta": "2 次 · 独立董事",   "text": "待回应", "warn": false }
+      ],
+      "forwardPct": 0.58,
+      "promiseStats": { "total": 6, "done": 2, "in_progress": 2, "late": 2 }
+    },
+    "GET /api/v1/ceo/boardroom/directors": {
+      "items": [
+        { "id": "33333333-...", "name": "林雾",    "role": "LP 代表",     "weight": 1.5, "scope_id": null },
+        { "id": "33333333-...", "name": "Wei Zhao", "role": "独立董事",   "weight": 1.2, "scope_id": null },
+        { "id": "33333333-...", "name": "Omar K.",  "role": "独立董事",   "weight": 1.2, "scope_id": null },
+        { "id": "33333333-...", "name": "陆景行",   "role": "创始合伙人", "weight": 1.0, "scope_id": null },
+        { "id": "33333333-...", "name": "Sara M.",  "role": "法务顾问",   "weight": 0.8, "scope_id": null }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/concerns?status=pending": {
+      "items": [
+        {
+          "id": "44444444-...",
+          "director_id": "33333333-...",
+          "director_name": "林雾",
+          "director_role": "LP 代表",
+          "topic": "退出路径再不明确,Q3 LP 大会怎么开?",
+          "status": "pending",
+          "raised_count": 3,
+          "raised_at": "2026-04-28T14:00:00Z"
+        },
+        {
+          "id": "44444444-...",
+          "director_id": "33333333-...",
+          "director_name": "Wei Zhao",
+          "director_role": "独立董事",
+          "topic": "Stellar 估值反复 5 次,你们的尽调标准到底是什么?",
+          "status": "pending",
+          "raised_count": 2,
+          "raised_at": "2026-04-26T10:00:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/briefs": {
+      "items": [
+        {
+          "id": "55555555-...",
+          "scope_id": null,
+          "board_session": "2026 Q2 · BOARD #14",
+          "version": 3,
+          "toc": [
+            { "num": "01", "title": "基金部署节奏 vs 部署计划", "page_range": "p.2-4",   "future_tagged": false },
+            { "num": "02", "title": "Halycon 进展 + 团队补员",   "page_range": "p.5-7",   "future_tagged": false },
+            { "num": "03", "title": "Stellar 尽调结论 / 估值分歧", "page_range": "p.8-10",  "future_tagged": false },
+            { "num": "04", "title": "Crucible 处置建议",          "page_range": "p.11-12", "future_tagged": true },
+            { "num": "05", "title": "退出路径回应(林雾)",         "page_range": "p.13-15", "future_tagged": true },
+            { "num": "06", "title": "风险与合规附录",             "page_range": "p.16",    "future_tagged": false }
+          ],
+          "page_count": 16,
+          "status": "draft",
+          "generated_run_id": null,
+          "generated_at": null,
+          "read_at": null,
+          "updated_at": "2026-04-29T20:00:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/promises?briefId=...": {
+      "items": [
+        { "what": "建立 LP 反馈闭环机制",        "owner": "陈汀",       "status": "late",        "due_at": "2026-03-28T00:00:00Z" },
+        { "what": "Halycon 团队补员 3 人",        "owner": "陆景行",     "status": "in_progress", "due_at": "2026-06-30T00:00:00Z" },
+        { "what": "Stellar 估值锚定方法书面化",   "owner": "Wei + 陈汀", "status": "late",        "due_at": "2026-04-15T00:00:00Z" },
+        { "what": "Crucible 合规备案",            "owner": "Sara M.",    "status": "in_progress", "due_at": "2026-04-30T00:00:00Z" },
+        { "what": "Q1 季度报告交付",              "owner": "陈汀",       "status": "done",        "due_at": "2026-04-22T00:00:00Z" },
+        { "what": "Beacon 退出策略评审",          "owner": "Omar K.",    "status": "done",        "due_at": "2026-04-15T00:00:00Z" }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/rebuttals": {
+      "items": [
+        {
+          "id": "66666666-...",
+          "brief_id": "55555555-...",
+          "attacker": "林雾(LP代表)",
+          "attack_text": "退出路径都讲不清楚,凭什么相信你们的部署节奏?",
+          "defense_text": "承认这是过去 3 季的盲点。给出具体补救:Q3 起每月报告增加'3 个有效退出窗口预测',并由 Omar 独立验证。",
+          "strength_score": 0.62,
+          "generated_run_id": "<mn_runs.id 当 g3 LLM 任务跑过>",
+          "created_at": "2026-04-29T22:00:00Z"
+        },
+        {
+          "attacker": "Wei Zhao(独立董事)",
+          "attack_text": "Stellar 估值反复 5 次 — 这不是项目问题,是你们的尽调流程问题。",
+          "defense_text": "同意。已起草《估值锚定五条》(沿用 Wei 的 rubric),下次会议前书面化、签字、归档。承诺一年内复用 ≥10 次。",
+          "strength_score": 0.78
+        },
+        {
+          "attacker": "Omar K.(独立董事)",
+          "attack_text": "部署节奏放慢 18 个月 — 是策略,还是判断失准?",
+          "defense_text": "策略。明示前提:估值未充分回调,而 IRR 目标 25%+ 不可妥协。给出 IF/THEN 触发条件:若市场指标跌穿 X,则恢复正常节奏。",
+          "strength_score": 0.54
+        }
+      ]
+    }
+  },
+  "tables": {
+    "ceo_directors": [
+      { "name": "林雾",    "role": "LP 代表",     "weight": 1.5 },
+      { "name": "Wei Zhao", "role": "独立董事",   "weight": 1.2 },
+      { "name": "Omar K.",  "role": "独立董事",   "weight": 1.2 },
+      { "name": "陆景行",   "role": "创始合伙人", "weight": 1.0 },
+      { "name": "Sara M.",  "role": "法务顾问",   "weight": 0.8 }
+    ],
+    "ceo_director_concerns": [
+      { "director_name": "林雾",    "topic": "退出路径再不明确,Q3 LP 大会怎么开?",                "status": "pending", "raised_count": 3 },
+      { "director_name": "Wei Zhao", "topic": "Stellar 估值反复 5 次,你们的尽调标准到底是什么?",  "status": "pending", "raised_count": 2 },
+      { "director_name": "Omar K.",  "topic": "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?", "status": "pending", "raised_count": 2 },
+      { "director_name": "陆景行",   "topic": "下个新人储备得抓紧 — Halycon 团队该补人了。",       "status": "pending", "raised_count": 1 },
+      { "director_name": "Sara M.",  "topic": "Crucible 的合规备案需在月内完成。",                "status": "pending", "raised_count": 1 }
+    ],
+    "ceo_briefs": [
+      {
+        "board_session": "2026 Q2 · BOARD #14",
+        "version": 3,
+        "page_count": 16,
+        "status": "draft",
+        "future_chapters": ["Crucible 处置建议", "退出路径回应(林雾)"],
+        "future_chapter_pages": 5,
+        "total_pages_via_toc": 16,
+        "forward_pct": 0.31
+      }
+    ]
+  },
+  "$aggregator": {
+    "forward_pct": "toc 中 future_tagged 章节字数 / 总字数 (用 page_range 估算)",
+    "calc": "Crucible 处置 (p.11-12 → 2 页) + 退出路径回应 (p.13-15 → 3 页) = 5 页 future / 16 总页 = 31%",
+    "note": "demo 数据中显示 58% 是 prototype 给定的故事值，与上面 31% 不一致 — 真实生产以聚合算子为准"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$comment": "Situation · 各方房间样例 — 6 利益相关方 + 8 信号 + 5×6 Rubric",
+  "$page": "/ceo/internal/ceo/situation",
+  "$prototype": "07-archive/会议纪要 (20260501)/situation.html",
+  "endpoints": {
+    "GET /api/v1/ceo/situation/dashboard": {
+      "question": "外部世界怎么看我?",
+      "metric": { "label": "覆盖度", "value": "5/5", "delta": "齐" },
+      "coverage": { "covered": 5, "total": 5, "missing": [] },
+      "topHeat": [
+        { "name": "LP",     "kind": "investor",  "heat": 0.92 },
+        { "name": "董事会", "kind": "investor",  "heat": 0.78 },
+        { "name": "同行",   "kind": "partner",   "heat": 0.62 },
+        { "name": "团队",   "kind": "employee",  "heat": 0.55 },
+        { "name": "监管",   "kind": "regulator", "heat": 0.45 },
+        { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+      ],
+      "signalCount": 8
+    },
+    "GET /api/v1/ceo/situation/stakeholders": {
+      "items": [
+        { "id": "88888888-...", "name": "LP",     "kind": "investor",  "heat": 0.92, "last_signal_at": "2026-05-01T08:00:00Z", "description": "林雾 + 3 位机构 — Q3 大会前需要退出方案" },
+        { "id": "88888888-...", "name": "董事会", "kind": "investor",  "heat": 0.78, "last_signal_at": "2026-04-30T15:00:00Z", "description": "Wei + Omar 主导 — 流程层关切升级" },
+        { "id": "88888888-...", "name": "同行",   "kind": "partner",   "heat": 0.62, "last_signal_at": "2026-04-28T11:00:00Z", "description": "Sequoia + Lightspeed 扫描 Stellar" },
+        { "id": "88888888-...", "name": "团队",   "kind": "employee",  "heat": 0.55, "last_signal_at": "2026-05-01T09:00:00Z", "description": "陆景行连续 2 周加班，需关注" },
+        { "id": "88888888-...", "name": "监管",   "kind": "regulator", "heat": 0.45, "last_signal_at": "2026-04-26T10:00:00Z", "description": "港 SFC + 美 SEC — 季度报告改革跟进" },
+        { "id": "88888888-...", "name": "媒体",   "kind": "press",     "heat": 0.30, "last_signal_at": "2026-04-24T14:00:00Z", "description": "财经口 — 本季无 inbound" }
+      ]
+    },
+    "GET /api/v1/ceo/situation/signals?days=7": {
+      "items": [
+        { "stakeholder_name": "LP",     "stakeholder_kind": "investor",  "signal_text": "亚洲 PE 估值 H1 普跌 12%, IRR 中位数下滑",       "source_url": "https://www.bloomberg.com/...", "sentiment": -0.65, "captured_at": "2026-05-01T07:00:00Z" },
+        { "stakeholder_name": "监管",   "stakeholder_kind": "regulator", "signal_text": "SFC 拟将 PE 报告周期由半年改季度",                "source_url": "https://www.ft.com/...",        "sentiment": -0.40, "captured_at": "2026-04-30T12:00:00Z" },
+        { "stakeholder_name": "团队",   "stakeholder_kind": "employee",  "signal_text": "Halycon 创始人通报 Q1 ARR +47%, 新签 2 单战略客户", "source_url": null,                            "sentiment":  0.85, "captured_at": "2026-04-29T10:00:00Z" },
+        { "stakeholder_name": "同行",   "stakeholder_kind": "partner",   "signal_text": "Stellar 估值反复传至 3 家同行",                    "source_url": null,                            "sentiment": -0.55, "captured_at": "2026-04-28T08:00:00Z" },
+        { "stakeholder_name": "同行",   "stakeholder_kind": "partner",   "signal_text": "Sequoia 完成第 IV 期亚洲基金募集",                "source_url": "https://www.reuters.com/...",   "sentiment": -0.10, "captured_at": "2026-04-26T14:00:00Z" },
+        { "stakeholder_name": "LP",     "stakeholder_kind": "investor",  "signal_text": "林雾私聊 'Q3 大会前我需要看到方案'",               "source_url": null,                            "sentiment":  0.20, "captured_at": "2026-04-25T18:30:00Z" },
+        { "stakeholder_name": "董事会", "stakeholder_kind": "investor",  "signal_text": "Wei 对 Stellar 备忘录 rubric 7.2 评分",            "source_url": null,                            "sentiment": -0.30, "captured_at": "2026-04-23T14:00:00Z" },
+        { "stakeholder_name": "媒体",   "stakeholder_kind": "press",     "signal_text": "Crucible 业内自媒体 '动向不明'",                    "source_url": null,                            "sentiment": -0.50, "captured_at": "2026-04-23T11:00:00Z" }
+      ]
+    },
+    "GET /api/v1/ceo/situation/rubric": {
+      "dimensions": ["战略清晰", "节奏匹配", "沟通透明", "流程严谨", "回应速度"],
+      "rows": [
+        { "stakeholderId": "88888888-...", "stakeholderName": "LP",     "scores": { "战略清晰": 0.65, "节奏匹配": 0.42, "沟通透明": 0.50, "流程严谨": 0.70, "回应速度": 0.38 }, "avg": 0.53 },
+        { "stakeholderId": "88888888-...", "stakeholderName": "董事会", "scores": { "战略清晰": 0.82, "节奏匹配": 0.68, "沟通透明": 0.75, "流程严谨": 0.80, "回应速度": 0.72 }, "avg": 0.75 },
+        { "stakeholderId": "88888888-...", "stakeholderName": "同行",   "scores": { "战略清晰": 0.75, "节奏匹配": 0.65, "沟通透明": 0.60, "流程严谨": 0.78, "回应速度": 0.62 }, "avg": 0.68 },
+        { "stakeholderId": "88888888-...", "stakeholderName": "团队",   "scores": { "战略清晰": 0.78, "节奏匹配": 0.65, "沟通透明": 0.70, "流程严谨": 0.75, "回应速度": 0.70 }, "avg": 0.72 },
+        { "stakeholderId": "88888888-...", "stakeholderName": "监管",   "scores": { "战略清晰": 0.70, "节奏匹配": 0.75, "沟通透明": 0.70, "流程严谨": 0.85, "回应速度": 0.72 }, "avg": 0.74 },
+        { "stakeholderId": "88888888-...", "stakeholderName": "媒体",   "scores": { "战略清晰": 0.68, "节奏匹配": 0.55, "沟通透明": 0.65, "流程严谨": 0.68, "回应速度": 0.60 }, "avg": 0.63 }
+      ]
+    }
+  },
+  "tables": {
+    "ceo_stakeholders": [
+      { "name": "LP",     "kind": "investor",  "heat": 0.92 },
+      { "name": "董事会", "kind": "investor",  "heat": 0.78 },
+      { "name": "同行",   "kind": "partner",   "heat": 0.62 },
+      { "name": "团队",   "kind": "employee",  "heat": 0.55 },
+      { "name": "监管",   "kind": "regulator", "heat": 0.45 },
+      { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+    ],
+    "ceo_external_signals": "见 endpoints['GET /signals'] 节，共 8 条",
+    "ceo_rubric_scores": "见 endpoints['GET /rubric'] 节，共 30 行 (5 维 × 6 利益方)"
+  },
+  "$aggregator": {
+    "coverage": "已覆盖 stakeholder kind / 5 必备 (customer/regulator/investor/press/partner)",
+    "calc": "DISTINCT(kind) = {investor, partner, employee, regulator, press} → 缺 customer? 不在 5 必备 → 5/5",
+    "$note": "employee 不在 REQUIRED_KINDS 列表中, 但 demo 中有 6 类 stakeholders 让数据更丰富"
+  }
+}

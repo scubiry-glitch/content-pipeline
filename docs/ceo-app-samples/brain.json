@@ -1,0 +1,87 @@
+{
+  "$comment": "Brain · 外脑图书馆样例 — 跨模块任务队列 + 4 摘要页深链",
+  "$page": "/ceo/internal/brain/{tasks,content-library,expert-library,assets,hot-topics}",
+  "$prototype": "07-archive/会议纪要 (20260501)/brain-rooms.jsx",
+  "endpoints": {
+    "GET /api/v1/ceo/brain/overview": {
+      "byModule": {
+        "mn":  { "queued": 0, "running": 1, "succeeded": 28, "failed": 2 },
+        "ceo": { "queued": 0, "running": 0, "succeeded": 1,  "failed": 0 }
+      },
+      "recentLlmCalls": 47
+    },
+    "GET /api/v1/ceo/brain/tasks?module=ceo&limit=10": {
+      "items": [
+        {
+          "id": "bbbbbbbb-...",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": null,
+          "axis": "g5",
+          "state": "succeeded",
+          "triggered_by": "manual",
+          "preset": "lite",
+          "progress_pct": 100,
+          "started_at": "2026-05-01T03:00:30Z",
+          "finished_at": "2026-05-01T03:00:32Z",
+          "created_at": "2026-05-01T03:00:30Z",
+          "error_message": null,
+          "metadata": {
+            "source": "boot-tick",
+            "ceoRunStartedAt": "2026-05-01T03:00:30Z",
+            "ceoResult": {
+              "prismId": "...",
+              "weekStart": "2026-04-27",
+              "scores": { "direction": 0.72, "board": 0.58, "coord": 0.78, "team": 0.78, "ext": 0.6, "self": 0.41 }
+            }
+          }
+        }
+      ]
+    },
+    "GET /api/v1/ceo/brain/tasks?module=mn&state=running&limit=5": {
+      "items": [
+        {
+          "id": "cccccccc-...",
+          "module": "mn",
+          "scope_kind": "meeting",
+          "scope_id": "<meeting uuid>",
+          "axis": "people",
+          "state": "running",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 47,
+          "started_at": "2026-05-01T03:01:00Z",
+          "metadata": {
+            "currentStep": "people · commitmentComputer",
+            "currentStepKey": "people-commitments",
+            "llmCalls": 3,
+            "inputTokens": 12400,
+            "outputTokens": 1820
+          }
+        }
+      ]
+    }
+  },
+  "tables_consumed": {
+    "mn_runs": {
+      "$comment": "全部 module='mn' 或 module='ceo' 的 run，按 created_at DESC",
+      "$schema": "id, module, scope_kind, scope_id, axis, state, triggered_by, preset, progress_pct, cost_tokens, cost_ms, error_message, started_at, finished_at, created_at, metadata",
+      "module_distribution": {
+        "mn":  "复用现有 axis 重算 (people/projects/knowledge/meta/all)",
+        "ceo": "g1..g5 加工步骤，由 PR12 CeoRunQueue 拉取执行"
+      }
+    }
+  },
+  "$summary_pages": {
+    "$comment": "4 摘要页 (content-library/expert-library/assets/hot-topics) 不调 backend，只渲染前端配置卡片，深链跳现有 /content-library /expert-* /assets /hot-topics 等页。配置见 webapp/src/prototype/ceo/brain/_brainConfigs.ts",
+    "content-library": ["事实+实体", "认知综合+共识", "争议+信念演化", "保鲜度+增量"],
+    "expert-library":  ["专家全景图", "辩论/对比", "心智模型/知识图谱", "调度+对话"],
+    "assets":          ["研报库", "热门资产", "RSS 订阅"],
+    "hot-topics":      ["热点列表", "洞察分析"]
+  },
+  "$ui_behavior": {
+    "tasks_room_polling": "TasksRoom 每 8 秒重新调 fetchBrainTasks + fetchBrainOverview",
+    "module_filter":      "all / mn / ceo 三 tab，前端拼 query string 给 /tasks endpoint",
+    "state_color_pill":   ["queued (灰)", "running (金)", "succeeded (绿)", "failed (红)", "cancelled (淡灰)"]
+  }
+}

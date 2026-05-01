@@ -1,0 +1,119 @@
+{
+  "$comment": "Balcony · 个人房间样例 — 周日反思 + 时间 ROI + 棱镜雷达",
+  "$page": "/ceo/internal/ceo/balcony",
+  "$prototype": "07-archive/会议纪要 (20260501)/balcony.html",
+  "endpoints": {
+    "GET /api/v1/ceo/balcony/dashboard?userId=system": {
+      "question": "我还是我想成为的那个 CEO 吗?",
+      "metric": { "label": "本周 ROI", "value": "0.61", "delta": "本周" },
+      "weeklyRoi": 0.611,
+      "prismScores": {
+        "direction": 0.72,
+        "board": 0.58,
+        "coord": 0.78,
+        "team": 0.78,
+        "ext": 0.6,
+        "self": 0.41
+      },
+      "weakest":   { "prism": "self", "score": 0.41 },
+      "strongest": { "prism": "team", "score": 0.78 }
+    },
+    "GET /api/v1/ceo/balcony/reflections?userId=system&weekStart=2026-04-27": {
+      "weekStart": "2026-04-27",
+      "items": [
+        {
+          "id": "99999999-...",
+          "user_id": "system",
+          "week_start": "2026-04-27",
+          "prism_id": "direction",
+          "question": "你这周做的决定里,哪一个 是在承诺而非选择?",
+          "prompt": "周三董事会 · AI 基础设施 Q2 加配决议 — 你在会上说'同意',但从张力图看,你在陈汀发言时沉默了 2 分 14 秒。",
+          "user_answer": null,
+          "mood": null,
+          "answered_at": null
+        },
+        {
+          "id": "99999999-...",
+          "user_id": "system",
+          "week_start": "2026-04-27",
+          "prism_id": "team",
+          "question": "你有多久 没和周劭然 单独说过话了?",
+          "prompt": "本周他在 4 场会议里都在场,但只发言 3 次,共 47 秒。沉默/发言比从 Q1 4.2 涨到 Q2 11.8。",
+          "user_answer": null,
+          "mood": null,
+          "answered_at": null
+        },
+        {
+          "id": "99999999-...",
+          "user_id": "system",
+          "week_start": "2026-04-27",
+          "prism_id": "self",
+          "question": "这周有 一件事,你觉得再来一次会做得不一样吗?",
+          "prompt": "Copilot 注意到:周四和 Omar K. 的会议中,你三次用了'我们再看一下',都在他提反对意见后 8 秒内。",
+          "user_answer": null,
+          "mood": null,
+          "answered_at": null
+        }
+      ]
+    },
+    "POST /api/v1/ceo/balcony/reflections": {
+      "$request_body": {
+        "userId": "system",
+        "weekStart": "2026-04-27",
+        "prismId": "direction",
+        "userAnswer": "想清楚了 — Q3 起每月报告增加退出窗口预测",
+        "mood": "clear"
+      },
+      "$response": { "ok": true, "id": "99999999-..." }
+    },
+    "GET /api/v1/ceo/balcony/roi?userId=system": {
+      "id": "aaaaaaaa-...",
+      "user_id": "system",
+      "week_start": "2026-04-27",
+      "total_hours": 56.0,
+      "deep_focus_hours": 11.0,
+      "meeting_hours": 29.0,
+      "target_focus_hours": 18.0,
+      "weekly_roi": 0.611
+    }
+  },
+  "tables": {
+    "ceo_balcony_reflections": [
+      { "user_id": "system", "week_start": "2026-04-27", "prism_id": "direction", "question": "你这周做的决定里,哪一个 是在承诺而非选择?" },
+      { "user_id": "system", "week_start": "2026-04-27", "prism_id": "team",      "question": "你有多久 没和周劭然 单独说过话了?" },
+      { "user_id": "system", "week_start": "2026-04-27", "prism_id": "self",      "question": "这周有 一件事,你觉得再来一次会做得不一样吗?" }
+    ],
+    "ceo_time_roi": [
+      { "user_id": "system", "week_start": "2026-04-27", "total_hours": 56.0, "deep_focus_hours": 11.0, "meeting_hours": 29.0, "target_focus_hours": 18.0, "weekly_roi": 0.611 }
+    ],
+    "ceo_prisms": [
+      {
+        "scope_id": null,
+        "week_start": "2026-04-27",
+        "alignment":   0.72,
+        "board_score": 0.58,
+        "coord":       0.78,
+        "team":        0.78,
+        "ext":         0.60,
+        "self":        0.41,
+        "computed_at": "2026-04-27T22:00:00Z",
+        "metadata": { "ranBy": "g5-prism-aggregator" }
+      }
+    ]
+  },
+  "$aggregator": {
+    "weekly_roi": "deep_focus_hours / target_focus_hours",
+    "calc": "11 / 18 = 0.611",
+    "prism_source": "ceo_prisms 最新行 — 由 g5 加工任务并行调 6 房间 aggregator 写入",
+    "weakest_strongest": "对 prismScores 排序，最低 → weakest，最高 → strongest"
+  },
+  "$ui_drawer": {
+    "$comment": "抽屉的 6 个 d-block 数据来源",
+    "① prism radar": "ceo_prisms 最新行",
+    "② time roi": "ceo_time_roi 最新行",
+    "③ balcony rhythm": "ceo_balcony_reflections 12 周历史 (按 week_start GROUP BY)，answered_at 不空 → 赴约",
+    "④ silence ratio": "复用 mn_silence_signals 最近 1 月条目，按时长排序",
+    "⑤ echo list": "复用 mn_decisions + ceo_strategic_echos 最近 6 周",
+    "⑥ self promises": "ceo_balcony_reflections 中含 user_answer 的记录归类为已兑现承诺"
+  }
+}

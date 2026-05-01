@@ -1,0 +1,60 @@
+{
+  "$comment": "Tower · 协调房间样例 — 主要复用 mn_commitments，不写 ceo_* 表",
+  "$page": "/ceo/internal/ceo/tower",
+  "$prototype": "07-archive/会议纪要 (20260501)/tower.html",
+  "endpoints": {
+    "GET /api/v1/ceo/tower/dashboard": {
+      "question": "谁欠谁什么? 卡在哪?",
+      "metric": { "label": "责任清晰度", "value": "78%", "delta": "本周" },
+      "responsibilityClarity": 0.78,
+      "commitmentStats": { "proposed": 5, "in_progress": 7, "overdue": 4, "done": 5, "total": 21 },
+      "topBlockers": [
+        { "name": "LP 反馈闭环 · 无人接",        "days": 28, "text": "陈汀 → 林雾", "warn": false },
+        { "name": "退出路径年度路线图",          "days": 21, "text": "陈汀 → 董事会", "warn": false },
+        { "name": "Stellar 估值锚 · 卡在 Wei",   "days": 14, "text": "Wei → 陈汀", "warn": false }
+      ]
+    },
+    "GET /api/v1/ceo/tower/commitments?status=in_progress": {
+      "items": [
+        { "id": "...mn-uuid...", "owner_name": "Wei",     "beneficiary_name": "陈汀",     "what": "《估值锚定五条》起草",   "due_at": "2026-04-23T00:00:00Z", "status": "in_progress" },
+        { "id": "...",           "owner_name": "陆景行",  "beneficiary_name": "董事会",   "what": "Halycon 团队补员 3 人(1/3)", "due_at": "2026-06-30T00:00:00Z", "status": "in_progress" },
+        { "id": "...",           "owner_name": "Sara",    "beneficiary_name": "陈汀",     "what": "Crucible 合规备案 80%",     "due_at": "2026-04-30T00:00:00Z", "status": "in_progress" }
+      ],
+      "source": "mn"
+    },
+    "GET /api/v1/ceo/tower/blockers": {
+      "items": [
+        { "name": "LP 反馈闭环 · 无人接",        "days": 28, "text": "陈汀 → 林雾", "warn": false },
+        { "name": "退出路径年度路线图",          "days": 21, "text": "陈汀 → 董事会", "warn": false },
+        { "name": "Stellar 估值锚 · 卡在 Wei",   "days": 14, "text": "Wei → 陈汀", "warn": false }
+      ]
+    },
+    "GET /api/v1/ceo/tower/pulse?weeks=8": {
+      "weeks": [
+        { "weekStart": "2026-03-09", "mainHours": 16.0, "firefightingHours": 2.0 },
+        { "weekStart": "2026-03-16", "mainHours": 18.5, "firefightingHours": 2.5 },
+        { "weekStart": "2026-03-23", "mainHours": 17.0, "firefightingHours": 3.0 },
+        { "weekStart": "2026-03-30", "mainHours": 19.5, "firefightingHours": 3.5 },
+        { "weekStart": "2026-04-06", "mainHours": 18.0, "firefightingHours": 4.5 },
+        { "weekStart": "2026-04-13", "mainHours": 16.0, "firefightingHours": 5.5 },
+        { "weekStart": "2026-04-20", "mainHours": 19.0, "firefightingHours": 6.0 },
+        { "weekStart": "2026-04-27", "mainHours": 20.14, "firefightingHours": 6.46 }
+      ],
+      "planLine": 20
+    }
+  },
+  "tables_consumed": {
+    "$comment": "Tower 不写 ceo_* 表，主要消费 mn_commitments + ceo_attention_alloc",
+    "mn_commitments": [
+      { "$shape": "复用现有 schema", "owner_name": "Wei", "beneficiary_name": "陈汀", "what": "《估值锚定五条》起草", "status": "in_progress", "due_at": "2026-04-23" }
+    ],
+    "ceo_attention_alloc": [
+      { "$see": "compass.json", "$comment": "8 周折线由本周 + 历史周 union 组成" }
+    ]
+  },
+  "$aggregator": {
+    "responsibility_clarity": "1 - 无主承诺数/总承诺数 (从 mn_commitments)",
+    "calc": "无主 0 / 21 = 0 → 1 - 0 = 1.00 (但 demo 显示 0.78 — 实际项目中 owner_name 缺失更多)",
+    "blocker_definition": "in_progress 或 open 状态 + due_at < NOW - 14 天"
+  }
+}

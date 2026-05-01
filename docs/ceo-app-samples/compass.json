@@ -1,0 +1,95 @@
+{
+  "$comment": "Compass · 方向房间样例数据 — 含 4 端点响应 + 3 表代表性行",
+  "$page": "/ceo/internal/ceo/compass",
+  "$prototype": "07-archive/会议纪要 (20260501)/compass.html",
+  "endpoints": {
+    "GET /api/v1/ceo/compass/dashboard": {
+      "question": "我把时间花在战略主线上了吗?",
+      "metric": { "label": "战略对齐度", "value": "0.72", "delta": "本周" },
+      "lines": { "main": 2, "branch": 2, "drift": 2 },
+      "attention": { "main": 20.14, "branch": 11.4, "firefighting": 6.46, "total": 38.0 },
+      "driftAlerts": [
+        { "name": "Crucible", "delta": "28%", "text": "偏离主线" },
+        { "name": "Pyre", "delta": "22%", "text": "偏离主线" }
+      ],
+      "alignmentScore": 0.72
+    },
+    "GET /api/v1/ceo/compass/lines?kind=main": {
+      "items": [
+        {
+          "id": "11111111-1111-1111-1111-111111111101",
+          "scope_id": null,
+          "name": "Halycon",
+          "kind": "main",
+          "alignment_score": 0.82,
+          "status": "active",
+          "description": "AI 基础设施战略主线 — Q1 ARR +47%"
+        },
+        {
+          "id": "11111111-1111-1111-1111-111111111102",
+          "scope_id": null,
+          "name": "Beacon",
+          "kind": "main",
+          "alignment_score": 0.76,
+          "status": "active",
+          "description": "退出协议主体条款达成 — 5 月签"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/compass/echos?lineId=...111101": {
+      "items": [
+        {
+          "id": "22222222-1111-1111-1111-222222222201",
+          "line_id": "11111111-1111-1111-1111-111111111101",
+          "hypothesis_text": "加配 $40M AI 基础设施会推高 ARR",
+          "fact_text": "Q1 ARR +47%, 新签 2 单战略客户",
+          "fate": "confirm",
+          "evidence_run_ids": [],
+          "source_meeting_id": null,
+          "updated_at": "2026-04-22T10:30:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/compass/attention?weekStart=2026-04-27": {
+      "weekStart": "2026-04-27",
+      "items": [
+        { "id": "...", "week_start": "2026-04-27", "project_id": null, "hours": 20.14, "kind": "main" },
+        { "id": "...", "week_start": "2026-04-27", "project_id": null, "hours": 11.4,  "kind": "branch" },
+        { "id": "...", "week_start": "2026-04-27", "project_id": null, "hours": 6.46,  "kind": "firefighting" }
+      ],
+      "total": 38.0
+    },
+    "POST /api/v1/ceo/compass/recompute": {
+      "scopeId": null,
+      "alignmentScore": 0.72
+    }
+  },
+  "tables": {
+    "ceo_strategic_lines": [
+      { "name": "Halycon",  "kind": "main",   "alignment_score": 0.82, "status": "active" },
+      { "name": "Beacon",   "kind": "main",   "alignment_score": 0.76, "status": "active" },
+      { "name": "Stellar",  "kind": "branch", "alignment_score": 0.62, "status": "active" },
+      { "name": "Echo",     "kind": "branch", "alignment_score": 0.58, "status": "active" },
+      { "name": "Crucible", "kind": "drift",  "alignment_score": 0.28, "status": "active" },
+      { "name": "Pyre",     "kind": "drift",  "alignment_score": 0.22, "status": "active" }
+    ],
+    "ceo_strategic_echos": [
+      { "line_name": "Halycon",  "hypothesis_text": "加配 $40M AI 基础设施会推高 ARR",        "fact_text": "Q1 ARR +47%, 新签 2 单战略客户",                "fate": "confirm" },
+      { "line_name": "Beacon",   "hypothesis_text": "主体条款 H1 内可签",                       "fact_text": "5 月签字会议已排期",                            "fate": "confirm" },
+      { "line_name": "Stellar",  "hypothesis_text": "估值反复 3 次以内可控",                    "fact_text": "已反复 5 次, Sequoia/Lightspeed 同时扫描中",     "fate": "refute" },
+      { "line_name": "Crucible", "hypothesis_text": "创始人沟通中断 2 周内会恢复",              "fact_text": "已 4 周失联, 业内自媒体提及'动向不明'",          "fate": "refute" },
+      { "line_name": "Pyre",     "hypothesis_text": "Q2 部署节奏可拉回正常",                    "fact_text": "尚未恢复 — 等待市场指标",                       "fate": "pending" }
+    ],
+    "ceo_attention_alloc": [
+      { "week_start": "2026-04-27", "kind": "main",         "hours": 20.14 },
+      { "week_start": "2026-04-27", "kind": "branch",       "hours": 11.40 },
+      { "week_start": "2026-04-27", "kind": "firefighting", "hours": 6.46 }
+    ]
+  },
+  "$aggregator": {
+    "alignment_score": "0.6 × main_share + 0.4 × (1 - drift_count/total)",
+    "main_share": "20.14 / 38.0 ≈ 0.530",
+    "drift_share": "2 / 6 ≈ 0.333 → non_drift = 0.667",
+    "alignment_score_calc": "0.6 × 0.530 + 0.4 × 0.667 = 0.318 + 0.267 = 0.585 (~0.72 在 seed 中由 alignment_score 字段直接给出，未走聚合)"
+  }
+}
