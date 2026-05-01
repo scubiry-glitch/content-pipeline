@@ -83,6 +83,7 @@ import { RoomStub as CeoRoomStub } from './prototype/ceo/internal/RoomStub';
 import { Panorama as CeoPanorama } from './prototype/ceo/internal/Panorama';
 import { BrainShell as CeoBrainShell } from './prototype/ceo/brain/BrainShell';
 import { BrainStub as CeoBrainStub } from './prototype/ceo/brain/BrainStub';
+import { Compass as CeoCompass } from './prototype/ceo/internal/rooms/Compass';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -266,6 +267,7 @@ function App() {
               <Route path="internal" element={<Navigate to="ceo" replace />} />
               <Route path="internal/ceo" element={<CEOHomePane />} />
               <Route path="internal/ceo/panorama" element={<CeoPanorama />} />
+              <Route path="internal/ceo/compass" element={<CeoCompass />} />
               <Route path="internal/ceo/:room" element={<CeoRoomStub />} />
               <Route path="internal/brain" element={<CeoBrainShell />}>
                 <Route index element={<Navigate to="expert-library" replace />} />
