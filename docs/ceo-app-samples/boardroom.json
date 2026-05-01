@@ -1,7 +1,15 @@
 {
-  "$comment": "Boardroom · 董事会房间样例 — 5 董事 / 5 关切 / 预读包 / 6 承诺 / 3 反方演练",
+  "$comment": "Boardroom · 董事会房间样例 — 5 董事 / 5 关切 / 预读包 / 6 承诺 / 3 反方演练 / 版本切换",
   "$page": "/ceo/internal/ceo/boardroom",
   "$prototype": "07-archive/会议纪要 (20260501)/boardroom.html",
+  "$blocks_status": {
+    "① concerns radar":     "实装",
+    "② pre-brief draft":    "实装",
+    "③ external annotations": "实装 (fixture, PR12 LLM 接入)",
+    "④ promise tracking":   "实装",
+    "⑤ rebuttal rehearsal": "实装 (fixture, PR12 LLM g3 任务接入)",
+    "⑥ versions":           "实装 — VersionsTabs.tsx 拉 ceo_briefs 真数据，一页纸 / 完整套版 Tab 切换"
+  },
   "endpoints": {
     "GET /api/v1/ceo/boardroom/dashboard": {
       "question": "下次董事会我要带什么?",

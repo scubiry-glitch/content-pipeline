@@ -13,7 +13,7 @@
 
 | 页面 | 文件 | 主要 endpoint |
 |---|---|---|
-| 方向 · Compass | [compass.json](compass.json) | `/api/v1/ceo/compass/*` |
+| 方向 · Compass | [compass.json](compass.json) | `/api/v1/ceo/compass/*` (含 `/atlas` 子房间) |
 | 董事会 · Boardroom | [boardroom.json](boardroom.json) | `/api/v1/ceo/boardroom/*` |
 | 协调 · Tower | [tower.json](tower.json) | `/api/v1/ceo/tower/*` |
 | 团队 · War Room | [war-room.json](war-room.json) | `/api/v1/ceo/war-room/*` |

@@ -1,7 +1,17 @@
 {
-  "$comment": "Compass · 方向房间样例数据 — 含 4 端点响应 + 3 表代表性行",
+  "$comment": "Compass · 方向房间样例数据 — 含 5 端点响应 + 3 表 + Project Atlas 子房间",
   "$page": "/ceo/internal/ceo/compass",
-  "$prototype": "07-archive/会议纪要 (20260501)/compass.html",
+  "$sub_page": "/ceo/internal/ceo/compass/atlas",
+  "$prototype": "07-archive/会议纪要 (20260501)/compass.html + project-atlas.html",
+  "$blocks_status": {
+    "① astrolabe": "实装 (Astrolabe.tsx)",
+    "② time pie": "实装 (TimePie.tsx)",
+    "③ drift radar": "实装 (DriftRadar.tsx)",
+    "④ project atlas": "实装入口卡 — 点击跳 /ceo/internal/ceo/compass/atlas (子房间)",
+    "⑤ strategic echo": "实装 — StrategicEchoSankey.tsx 拉 ceo_strategic_echos 真数据",
+    "⑥ one-pager": "实装 — OnePagerPaper.tsx 拉 ceo_briefs 最新一份",
+    "⑦ archives": "实装 — ArchivesTabs.tsx 按 board_session 分组"
+  },
   "endpoints": {
     "GET /api/v1/ceo/compass/dashboard": {
       "question": "我把时间花在战略主线上了吗?",
@@ -62,6 +72,31 @@
     "POST /api/v1/ceo/compass/recompute": {
       "scopeId": null,
       "alignmentScore": 0.72
+    },
+    "GET /api/v1/ceo/compass/atlas": {
+      "$comment": "Project Atlas 子房间 — 复用 ceo_strategic_lines 作为项目数据源，自动布局 + 健康分类 + 风险榜",
+      "stars": [
+        { "id": "...", "name": "Halycon",  "kind": "main",   "alignmentScore": 0.82, "health": "healthy", "cx": 364, "cy": 186, "r": 26, "risk": 0.18 },
+        { "id": "...", "name": "Beacon",   "kind": "main",   "alignmentScore": 0.76, "health": "healthy", "cx": 236, "cy": 186, "r": 26, "risk": 0.24 },
+        { "id": "...", "name": "Stellar",  "kind": "branch", "alignmentScore": 0.62, "health": "warn",    "cx": 138, "cy": 308, "r": 18, "risk": 0.38 },
+        { "id": "...", "name": "Echo",     "kind": "branch", "alignmentScore": 0.58, "health": "warn",    "cx": 462, "cy": 308, "r": 18, "risk": 0.42 },
+        { "id": "...", "name": "Crucible", "kind": "drift",  "alignmentScore": 0.28, "health": "danger",  "cx": 462, "cy": 134, "r": 14, "risk": 0.72 },
+        { "id": "...", "name": "Pyre",     "kind": "drift",  "alignmentScore": 0.22, "health": "danger",  "cx": 138, "cy": 134, "r": 14, "risk": 0.78 }
+      ],
+      "legend": [
+        { "label": "健康",       "color": "#4FB3A9" },
+        { "label": "预警",       "color": "#E8A547" },
+        { "label": "危险",       "color": "#D85A5A" },
+        { "label": "沉默/边缘",  "color": "rgba(180,180,180,0.5)" }
+      ],
+      "dangerBoard": [
+        { "name": "Pyre",     "riskScore": 0.78, "trend": "up",   "signals": [{ "tag": "注意力流失", "severity": "warn" }, { "tag": "承诺-行动差距", "severity": "crit" }, { "tag": "信念背离", "severity": "crit" }], "text": "风险值持续偏高 — 评估处置 (止损 / 重组 / 安乐死)" },
+        { "name": "Crucible", "riskScore": 0.72, "trend": "up",   "signals": [{ "tag": "注意力流失", "severity": "warn" }, { "tag": "承诺-行动差距", "severity": "crit" }, { "tag": "信念背离", "severity": "crit" }], "text": "已连续 5 周未在 IC 议程出现 · 距核心战略 0.72" },
+        { "name": "Echo",     "riskScore": 0.42, "trend": "flat", "signals": [{ "tag": "信念一致性 ↓", "severity": "warn" }], "text": "风险监控中" },
+        { "name": "Stellar",  "riskScore": 0.38, "trend": "flat", "signals": [{ "tag": "信念一致性 ↓", "severity": "warn" }], "text": "风险监控中" },
+        { "name": "Beacon",   "riskScore": 0.24, "trend": "flat", "signals": [], "text": "风险监控中" }
+      ],
+      "meta": { "total": 6, "healthy": 2, "warn": 2, "danger": 2, "silent": 0 }
     }
   },
   "tables": {
@@ -90,6 +125,25 @@
     "alignment_score": "0.6 × main_share + 0.4 × (1 - drift_count/total)",
     "main_share": "20.14 / 38.0 ≈ 0.530",
     "drift_share": "2 / 6 ≈ 0.333 → non_drift = 0.667",
-    "alignment_score_calc": "0.6 × 0.530 + 0.4 × 0.667 = 0.318 + 0.267 = 0.585 (~0.72 在 seed 中由 alignment_score 字段直接给出，未走聚合)"
+    "alignment_score_calc": "0.6 × 0.530 + 0.4 × 0.667 = 0.318 + 0.267 = 0.585 (~0.72 在 seed 中由 alignment_score 字段直接给出，未走聚合)",
+    "atlas_layout": {
+      "main": "中环 r=90 半径 26",
+      "branch": "中外环 r=165 半径 18",
+      "drift": "外环 r=230 半径 14",
+      "angle": "同 kind 等距 90° 扇区"
+    },
+    "atlas_health": {
+      ">=0.7": "healthy",
+      ">=0.4": "warn",
+      "else": "danger",
+      "status_paused_or_retired": "silent"
+    },
+    "atlas_risk": "1 - alignment_score (限 [0,1]; null → 0.4 中性)"
+  },
+  "$verdict_logic": {
+    "$comment": "Project Atlas ⑥ 救活 vs 安乐死 — 按 risk 自动归类",
+    ">=0.75": "Sunset (安乐死, 红) — 止损发布会前关停",
+    ">=0.6":  "Halt (止损, 黄) — 冻结新增承诺，3 周二选一",
+    "else":   "Watch (观察, 绿) — 月底重评"
   }
 }

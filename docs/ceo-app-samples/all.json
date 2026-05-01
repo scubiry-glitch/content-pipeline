@@ -11,6 +11,7 @@
   ],
   "compass": {
     "page": "/ceo/internal/ceo/compass",
+    "sub_page": "/ceo/internal/ceo/compass/atlas",
     "dashboard": {
       "question": "我把时间花在战略主线上了吗?",
       "metric": { "label": "战略对齐度", "value": "0.72", "delta": "本周" },
@@ -25,7 +26,8 @@
       { "name": "Echo",     "kind": "branch", "alignment_score": 0.58 },
       { "name": "Crucible", "kind": "drift",  "alignment_score": 0.28 },
       { "name": "Pyre",     "kind": "drift",  "alignment_score": 0.22 }
-    ]
+    ],
+    "atlas_meta": { "total": 6, "healthy": 2, "warn": 2, "danger": 2, "silent": 0 }
   },
   "boardroom": {
     "page": "/ceo/internal/ceo/boardroom",
