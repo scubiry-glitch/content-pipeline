@@ -11,6 +11,7 @@ import { createSituationRouter } from './rooms/situation/router.js';
 import { createBalconyRouter } from './rooms/balcony/router.js';
 import { createPanoramaRouter } from './panorama/router.js';
 import { createBrainRouter } from './brain/router.js';
+import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -30,6 +31,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
     await fastify.register(createPanoramaRouter(engine), { prefix: '/panorama' });
     await fastify.register(createBrainRouter(engine), { prefix: '/brain' });
+    await fastify.register(createPeopleAgentsRouter(engine), { prefix: '/people' });
 
     // PR12 — 5 组加工接生成中心：手动入队接口
     fastify.post('/runs/enqueue', async (request) => {

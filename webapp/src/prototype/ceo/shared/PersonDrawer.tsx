@@ -308,25 +308,299 @@ export function PersonDrawer() {
               </div>
             )}
 
-            <div
-              style={{
-                marginTop: 24,
-                padding: '14px 16px',
-                background: 'rgba(217,184,142,0.05)',
-                border: '1px dashed rgba(217,184,142,0.25)',
-                borderRadius: 4,
-                color: 'rgba(232,227,216,0.55)',
-                fontStyle: 'italic',
-                fontSize: 12,
-                lineHeight: 1.6,
-              }}
-            >
-              🤖 调用为 agent · 待 R2-3 接入 ceo_person_agent_links + expert-library /invoke
-            </div>
+            <PersonAgentSection personId={person.id} />
           </>
         )}
       </aside>
     </>
+  );
+}
+
+interface AgentLink {
+  id: string;
+  expert_id: string;
+  default_task_type: 'analysis' | 'evaluation' | 'generation';
+  invoke_count: number;
+  last_invoked_at: string | null;
+}
+
+interface ExpertOption {
+  expert_id: string;
+  name?: string;
+  domain?: string[];
+}
+
+function PersonAgentSection({ personId }: { personId: string }) {
+  const [link, setLink] = useState<AgentLink | null>(null);
+  const [experts, setExperts] = useState<ExpertOption[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [chosenExpertId, setChosenExpertId] = useState<string>('');
+  const [question, setQuestion] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/v1/ceo/people/${personId}/expert`)
+      .then((r) => (r.status === 404 ? null : r.json()))
+      .then((d) => {
+        if (!cancelled) setLink(d as AgentLink | null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [personId]);
+
+  useEffect(() => {
+    if (!pickerOpen || experts.length > 0) return;
+    fetch('/api/v1/expert-library/experts')
+      .then((r) => (r.ok ? r.json() : { experts: [] }))
+      .then((d: { experts?: ExpertOption[] }) => setExperts(d.experts ?? []))
+      .catch(() => {});
+  }, [pickerOpen, experts.length]);
+
+  const bind = async () => {
+    if (!chosenExpertId) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/v1/ceo/people/${personId}/bind-expert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expertId: chosenExpertId }),
+      });
+      if (res.ok) {
+        const newLink = (await res.json()) as AgentLink;
+        setLink(newLink);
+        setPickerOpen(false);
+        setChosenExpertId('');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error ?? '绑定失败');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ask = async () => {
+    if (!question.trim() || !link) return;
+    setBusy(true);
+    setAnswer(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/ceo/people/${personId}/invoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, taskType: link.default_task_type }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { output?: { sections?: Array<{ title?: string; content?: string }> } };
+        const text =
+          data.output?.sections
+            ?.map((s) => `### ${s.title ?? ''}\n${s.content ?? ''}`)
+            .join('\n\n') ?? JSON.stringify(data, null, 2);
+        setAnswer(text);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error ?? '调用失败');
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 24,
+        padding: '14px 16px',
+        background: 'rgba(217,184,142,0.05)',
+        border: '1px solid rgba(217,184,142,0.25)',
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: 'var(--mono)',
+          fontSize: 10,
+          color: '#D9B88E',
+          letterSpacing: '0.2em',
+          textTransform: 'uppercase',
+          marginBottom: 10,
+        }}
+      >
+        🤖 调用为 agent · ceo_person_agent_links + expert-library
+      </div>
+
+      {!link && !pickerOpen && (
+        <button
+          onClick={() => setPickerOpen(true)}
+          style={{
+            padding: '6px 12px',
+            background: 'rgba(217,184,142,0.1)',
+            border: '1px solid #D9B88E',
+            color: '#D9B88E',
+            borderRadius: 4,
+            fontFamily: 'var(--mono)',
+            fontSize: 11,
+            cursor: 'pointer',
+          }}
+        >
+          + 绑定专家
+        </button>
+      )}
+
+      {pickerOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <select
+            value={chosenExpertId}
+            onChange={(e) => setChosenExpertId(e.target.value)}
+            style={{
+              padding: '6px 8px',
+              background: '#1A1822',
+              color: '#F3ECDD',
+              border: '1px solid rgba(217,184,142,0.3)',
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 11.5,
+            }}
+          >
+            <option value="">— 选择专家 ({experts.length} 可用) —</option>
+            {experts.map((e) => (
+              <option key={e.expert_id} value={e.expert_id}>
+                {e.expert_id}
+                {e.name && ` · ${e.name}`}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={bind}
+              disabled={busy || !chosenExpertId}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                background: chosenExpertId ? '#D9B88E' : 'rgba(217,184,142,0.15)',
+                color: chosenExpertId ? '#0F0E15' : 'rgba(232,227,216,0.5)',
+                border: 0,
+                borderRadius: 4,
+                fontFamily: 'var(--mono)',
+                fontSize: 11,
+                cursor: chosenExpertId ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {busy ? '绑定中…' : '✓ 绑定'}
+            </button>
+            <button
+              onClick={() => {
+                setPickerOpen(false);
+                setChosenExpertId('');
+              }}
+              style={{
+                padding: '6px 10px',
+                background: 'transparent',
+                color: 'rgba(232,227,216,0.6)',
+                border: '1px solid rgba(232,227,216,0.2)',
+                borderRadius: 4,
+                fontFamily: 'var(--mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      {link && (
+        <>
+          <div
+            style={{
+              fontSize: 12,
+              color: 'rgba(232,227,216,0.85)',
+              marginBottom: 10,
+            }}
+          >
+            已绑定: <b style={{ color: '#D9B88E' }}>{link.expert_id}</b>
+            <span style={{ opacity: 0.55, marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 10 }}>
+              {link.default_task_type} · 已调用 {link.invoke_count} 次
+            </span>
+          </div>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="向该 agent 提问 (会自动注入 person 上下文 + 近 5 条承诺)"
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              background: '#1A1822',
+              color: '#F3ECDD',
+              border: '1px solid rgba(217,184,142,0.25)',
+              borderRadius: 4,
+              fontFamily: 'var(--sans)',
+              fontSize: 12.5,
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+          <button
+            onClick={ask}
+            disabled={busy || !question.trim()}
+            style={{
+              marginTop: 8,
+              padding: '7px 14px',
+              background: question.trim() && !busy ? '#D9B88E' : 'rgba(217,184,142,0.15)',
+              color: question.trim() && !busy ? '#0F0E15' : 'rgba(232,227,216,0.5)',
+              border: 0,
+              borderRadius: 4,
+              fontFamily: 'var(--mono)',
+              fontSize: 11,
+              cursor: question.trim() && !busy ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {busy ? '调用中…' : '提问'}
+          </button>
+          {answer && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
+                background: 'rgba(95,163,158,0.1)',
+                border: '1px solid rgba(95,163,158,0.3)',
+                borderLeft: '3px solid #5FA39E',
+                borderRadius: '0 4px 4px 0',
+                fontSize: 12,
+                color: '#E8EFF2',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                maxHeight: 240,
+                overflowY: 'auto',
+              }}
+            >
+              {answer}
+            </div>
+          )}
+          {error && (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 11,
+                color: '#FFB89A',
+                fontFamily: 'var(--mono)',
+              }}
+            >
+              ⚠ {error}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
