@@ -52,9 +52,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const initRanRef = useRef(false);
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   const refresh = useCallback(async () => {
+    const fetchMe = async () => (await authClient.get('/auth/me')) as MeResponse;
     try {
-      const res = (await authClient.get('/auth/me')) as MeResponse;
+      let res: MeResponse;
+      try {
+        res = await fetchMe();
+      } catch (e: any) {
+        const isTimeout = e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT';
+        // 后端偶发慢查询会让 /auth/me 超过 30s；这里做一次轻量重试，避免误判未登录。
+        if (!isTimeout) throw e;
+        await sleep(500);
+        res = await fetchMe();
+      }
       setUser(res.user || null);
       setCurrentWorkspace(res.currentWorkspace || null);
       setWorkspaces(res.workspaces || []);

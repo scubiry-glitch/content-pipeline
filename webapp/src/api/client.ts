@@ -67,7 +67,7 @@ client.interceptors.response.use(
 export const authClient = axios.create({
   baseURL: import.meta.env.VITE_AUTH_BASE_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  timeout: 45000,
   withCredentials: true,
 });
 authClient.interceptors.response.use(
