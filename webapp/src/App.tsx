@@ -75,6 +75,14 @@ import { AxisMeta as AxisMetaProto } from './prototype/meeting/AxisMeta';
 import { VariantEditorial } from './prototype/meeting/VariantEditorial';
 import { VariantWorkbench } from './prototype/meeting/VariantWorkbench';
 import { VariantThreads } from './prototype/meeting/VariantThreads';
+import { WorldShell as CeoWorldShell } from './prototype/ceo/WorldShell';
+import { ExternalMeetingsPane as CeoExternalMeetingsPane } from './prototype/ceo/external/ExternalMeetingsPane';
+import { ExternalLibraryPane as CeoExternalLibraryPane } from './prototype/ceo/external/ExternalLibraryPane';
+import { CEOHomePane } from './prototype/ceo/internal/CEOHomePane';
+import { RoomStub as CeoRoomStub } from './prototype/ceo/internal/RoomStub';
+import { Panorama as CeoPanorama } from './prototype/ceo/internal/Panorama';
+import { BrainShell as CeoBrainShell } from './prototype/ceo/brain/BrainShell';
+import { BrainStub as CeoBrainStub } from './prototype/ceo/brain/BrainStub';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -247,6 +255,22 @@ function App() {
               <Route path="a" element={<VariantEditorial />} />
               <Route path="b" element={<VariantWorkbench />} />
               <Route path="c" element={<VariantThreads />} />
+            </Route>
+
+            {/* CEO 应用 —— 双模主壳，独立于主站 Layout */}
+            <Route path="/ceo" element={<CeoWorldShell />}>
+              <Route index element={<Navigate to="internal/ceo" replace />} />
+              <Route path="external" element={<Navigate to="meetings" replace />} />
+              <Route path="external/meetings" element={<CeoExternalMeetingsPane />} />
+              <Route path="external/library" element={<CeoExternalLibraryPane />} />
+              <Route path="internal" element={<Navigate to="ceo" replace />} />
+              <Route path="internal/ceo" element={<CEOHomePane />} />
+              <Route path="internal/ceo/panorama" element={<CeoPanorama />} />
+              <Route path="internal/ceo/:room" element={<CeoRoomStub />} />
+              <Route path="internal/brain" element={<CeoBrainShell />}>
+                <Route index element={<Navigate to="expert-library" replace />} />
+                <Route path=":sub" element={<CeoBrainStub />} />
+              </Route>
             </Route>
               </Route>
             </Routes>

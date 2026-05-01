@@ -74,4 +74,31 @@ export const ROUTES = {
   admin: {
     taxonomy: '/admin/taxonomy',
   },
+
+  // CEO 应用 — 双模主壳 (外部世界 / 内部世界) + 六房间 + Panorama + 外脑图书馆
+  ceo: {
+    shell: '/ceo',
+    external: {
+      meetings: '/ceo/external/meetings',
+      library: '/ceo/external/library',
+    },
+    internal: {
+      home: '/ceo/internal/ceo',
+      panorama: '/ceo/internal/ceo/panorama',
+      compass: '/ceo/internal/ceo/compass',
+      boardroom: '/ceo/internal/ceo/boardroom',
+      tower: '/ceo/internal/ceo/tower',
+      warRoom: '/ceo/internal/ceo/war-room',
+      situation: '/ceo/internal/ceo/situation',
+      balcony: '/ceo/internal/ceo/balcony',
+    },
+    brain: {
+      home: '/ceo/internal/brain',
+      tasks: '/ceo/internal/brain/tasks',
+      contentLibrary: '/ceo/internal/brain/content-library',
+      expertLibrary: '/ceo/internal/brain/expert-library',
+      assets: '/ceo/internal/brain/assets',
+      hotTopics: '/ceo/internal/brain/hot-topics',
+    },
+  },
 } as const;

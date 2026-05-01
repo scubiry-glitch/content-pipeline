@@ -1,0 +1,57 @@
+/* CEO 应用原型色板 + 字体栈
+   来源: 07-archive/会议纪要 (20260501)/world-shell.jsx
+   作用域: .ceo-proto（所有原型页面外层根加这个类） */
+
+.ceo-proto {
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Noto Sans SC", sans-serif;
+  --serif: "Source Serif 4", "Noto Serif SC", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* 外部世界 - 亮色 */
+  --ext-paper: #FAF7F0;
+  --ext-paper-2: #F0E9DC;
+  --ext-ink: #1F1B16;
+  --ext-ink-2: #5A5146;
+  --ext-ink-3: #7A6E5E;
+  --ext-ink-4: #8A7C6A;
+  --ext-line: rgba(0,0,0,0.08);
+  --ext-line-2: rgba(0,0,0,0.06);
+  --ext-accent: #D64545;
+
+  /* 内部世界 - 暗色 */
+  --int-paper: #0F0E15;
+  --int-paper-2: #1A1420;
+  --int-ink: #F3ECDD;
+  --int-ink-2: #E8E3D8;
+  --int-ink-3: rgba(232,227,216,0.55);
+  --int-ink-4: rgba(232,227,216,0.4);
+  --int-line: rgba(217,184,142,0.15);
+  --int-line-2: rgba(217,184,142,0.1);
+  --int-accent: #D9B88E;
+
+  font-family: var(--sans);
+  min-height: 100vh;
+  background: var(--ext-paper);
+  color: var(--ext-ink);
+}
+
+.ceo-proto.ceo-proto-internal {
+  background: var(--int-paper);
+  color: var(--int-ink);
+}
+
+.ceo-proto *,
+.ceo-proto *::before,
+.ceo-proto *::after {
+  box-sizing: border-box;
+}
+
+.ceo-proto h1,
+.ceo-proto h2,
+.ceo-proto h3,
+.ceo-proto h4 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}

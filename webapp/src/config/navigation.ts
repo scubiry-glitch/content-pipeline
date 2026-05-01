@@ -12,6 +12,26 @@ export interface NavItem {
 }
 
 export const mainNavItems: NavItem[] = [
+  {
+    to: ROUTES.ceo.internal.home,
+    label: 'CEO 应用',
+    icon: '👤',
+    matchPrefixes: ['/ceo'],
+    children: [
+      { to: ROUTES.ceo.internal.home,        label: '六棱镜主页',     icon: '🪞' },
+      { to: ROUTES.ceo.internal.panorama,    label: '全景画板',       icon: '🌐' },
+      { to: ROUTES.ceo.internal.compass,     label: '方向 · Compass',   icon: '🧭' },
+      { to: ROUTES.ceo.internal.boardroom,   label: '董事会 · Boardroom', icon: '🏛️' },
+      { to: ROUTES.ceo.internal.tower,       label: '协调 · Tower',     icon: '🎯' },
+      { to: ROUTES.ceo.internal.warRoom,     label: '团队 · War Room',  icon: '⚔️' },
+      { to: ROUTES.ceo.internal.situation,   label: '各方 · Situation', icon: '🌍' },
+      { to: ROUTES.ceo.internal.balcony,     label: '个人 · Balcony',   icon: '🧘' },
+      { to: ROUTES.ceo.brain.expertLibrary,  label: '外脑 · 专家库',    icon: '🧠' },
+      { to: ROUTES.ceo.brain.tasks,          label: '外脑 · 任务',      icon: '📋' },
+      { to: ROUTES.ceo.external.meetings,    label: '外部 · 会议',      icon: '📅' },
+      { to: ROUTES.ceo.external.library,     label: '外部 · 库',        icon: '📚' },
+    ],
+  },
   { to: ROUTES.dashboard, label: '仪表盘', icon: '📊' },
   {
     to: ROUTES.tasks.list,
