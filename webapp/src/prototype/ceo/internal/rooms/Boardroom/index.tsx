@@ -124,7 +124,7 @@ export function Boardroom() {
                 color: '#D4A84B',
               }}
             >
-              {dash.metric.label} {dash.metric.value}
+              {dash.metric?.label ?? ''} {dash.metric?.value ?? ''}
             </span>
           )}
         </div>

@@ -15,11 +15,20 @@ import {
 } from './_balconyFixtures';
 
 interface DashboardData {
-  metric: { label: string; value: string; delta: string };
-  weeklyRoi: number;
-  weakest: { prism: string; score: number };
-  strongest: { prism: string; score: number };
+  metric?: { label?: string; value?: string; delta?: string };
+  weeklyRoi?: number;
+  weakest?: { prism?: string; score?: number };
+  strongest?: { prism?: string; score?: number };
 }
+
+const PRISM_LABEL_ZH: Record<string, string> = {
+  direction: '方向',
+  board: '董事会',
+  coord: '协调',
+  team: '团队',
+  ext: '各方',
+  self: '个人',
+};
 
 export function Balcony() {
   const navigate = useNavigate();
@@ -166,7 +175,9 @@ export function Balcony() {
               marginBottom: 32,
             }}
           >
-            {dash.metric.label} {dash.metric.value} · 最弱 {dash.weakest.prism} · 最强 {dash.strongest.prism}
+            {dash.metric?.label ?? '本周 ROI'} {dash.metric?.value ?? '—'}
+            {dash.weakest?.prism && ` · 最弱 ${PRISM_LABEL_ZH[dash.weakest.prism] ?? dash.weakest.prism}`}
+            {dash.strongest?.prism && ` · 最强 ${PRISM_LABEL_ZH[dash.strongest.prism] ?? dash.strongest.prism}`}
           </div>
         )}
 

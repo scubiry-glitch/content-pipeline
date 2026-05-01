@@ -126,7 +126,7 @@ export function WarRoom() {
                 color: '#FFB89A',
               }}
             >
-              {dash.metric.label} {dash.metric.value}
+              {dash.metric?.label ?? ''} {dash.metric?.value ?? ''}
             </span>
           )}
         </div>

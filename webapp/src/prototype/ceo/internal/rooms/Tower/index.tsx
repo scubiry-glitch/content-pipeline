@@ -125,7 +125,7 @@ export function Tower() {
                 color: '#5FA39E',
               }}
             >
-              {dash.metric.label} {dash.metric.value}
+              {dash.metric?.label ?? ''} {dash.metric?.value ?? ''}
             </span>
           )}
         </div>

@@ -124,8 +124,8 @@ export function Situation() {
                 color: '#FFC857',
               }}
             >
-              {dash.metric.label} {dash.metric.value}
-              {dash.metric.delta && dash.metric.delta !== '齐' && ` · ${dash.metric.delta}`}
+              {dash.metric?.label ?? ''} {dash.metric?.value ?? ''}
+              {dash.metric?.delta && dash.metric.delta !== '齐' && ` · ${dash.metric.delta}`}
             </span>
           )}
         </div>
