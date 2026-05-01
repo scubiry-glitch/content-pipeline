@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Chip, MonoMeta, Icon, MockBadge } from './_atoms';
+import { Avatar, Chip, MonoMeta, Icon, MockBadge, SectionLabel } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING, pickPerson } from './_fixtures';
