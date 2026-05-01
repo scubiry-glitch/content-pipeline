@@ -9,13 +9,8 @@ import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 
 // ── Mock data ────────────────────────────────────────────────────────────────
-
-const AXIS_SUB: Record<string, { label: string; color: string; subs: { id: string; label: string }[] }> = {
-  people:    { label: '人物轴', color: 'var(--accent)',           subs: [{ id: 'commit', label: '承诺兑现' }, { id: 'role', label: '角色演化' }, { id: 'voice', label: '发言质量' }, { id: 'silence', label: '沉默信号' }] },
-  projects:  { label: '项目轴', color: 'var(--teal)',             subs: [{ id: 'decision', label: '决议溯源' }, { id: 'hypo', label: '假设清单' }, { id: 'open', label: '开放问题' }, { id: 'risk', label: '风险热度' }] },
-  knowledge: { label: '知识轴', color: 'oklch(0.55 0.08 280)',   subs: [{ id: 'judgement', label: '可复用判断' }, { id: 'mmodel', label: '心智模型命中率' }, { id: 'bias', label: '认知偏误' }, { id: 'counter', label: '反事实' }] },
-  meta:      { label: '会议本身', color: 'var(--amber)',          subs: [{ id: 'quality', label: '质量分' }, { id: 'need', label: '必要性评估' }, { id: 'heat', label: '情绪热力图' }] },
-};
+// R3-A · 改动五：AXIS_SUB 改为从 _axisRegistry 共享，避免与 NewMeeting / Panorama 双写
+import { AXIS_SUB } from './_axisRegistry';
 
 interface MockRun {
   id: string;
@@ -33,15 +28,24 @@ interface MockRun {
   triggeredBy: string;
   cost: string;
   version?: string;
+  // R3-B · DAG 字段（后端 mn_runs 新增列）；老 run 取 NULL
+  stage?: 'L1_meeting' | 'L2_aggregate' | null;
+  dependsOn?: string[];
+  triggerMeetingId?: string;
 }
 
 const MOCK_RUNS: MockRun[] = [
-  { id: 'run-237', state: 'running', axis: 'knowledge', subs: ['mmodel','bias'],         preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:41:22', eta: '预计 1m 40s',             pct: 48,  triggeredBy: 'auto · 新增 1 场会议', cost: '~16k tok' },
-  { id: 'run-236', state: 'queued',  axis: 'people',    subs: ['commit','silence'],       preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:42:11', eta: '排队中 · 前面 1 个',        pct: 0,   triggeredBy: 'auto',                 cost: '~10k tok' },
-  { id: 'run-235', state: 'done',    axis: 'people',    subs: ['commit','role','voice'],  preset: 'standard', scope: 'library', scopeLabel: '全库 48 meetings',  started: '08:03:14', eta: '用时 4m 18s',               pct: 100, triggeredBy: 'manual · 陈汀',        cost: '42k tok',  version: 'v14' },
-  { id: 'run-234', state: 'done',    axis: 'knowledge', subs: ['mmodel'],                 preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 22:11',eta: '用时 11m 04s',              pct: 100, triggeredBy: 'schedule · 月度',      cost: '88k tok',  version: 'v8'  },
-  { id: 'run-233', state: 'failed',  axis: 'projects',  subs: ['decision'],               preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 21:02',eta: '失败 · evidence_anchored 未命中', pct: 34, triggeredBy: 'manual',            cost: '12k tok' },
-  { id: 'run-232', state: 'done',    axis: 'knowledge', subs: ['mmodel','bias','counter'],preset: 'standard', scope: 'project', scopeLabel: '消费硬件 · H1',     started: '2 天前',    eta: '用时 2m 50s',               pct: 100, triggeredBy: 'auto',                 cost: '21k tok',  version: 'v12' },
+  // R3-B · 新 mock：体现 L1 → L2 链路
+  { id: 'run-241', state: 'running', axis: 'meta',      subs: ['decision_quality','meeting_necessity','affect_curve'], preset: 'standard', scope: 'meeting', scopeLabel: 'M-2026-04-11', started: '09:38:00', eta: '预计 1m 20s', pct: 64, triggeredBy: 'auto · 新会议入库', cost: '~6k tok',  stage: 'L1_meeting',   triggerMeetingId: 'M-2026-04-11' },
+  { id: 'run-240', state: 'queued',  axis: 'people',    subs: ['commitments','role_trajectory'],                       preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2', started: '09:38:01', eta: '等待 L1 (run-241)', pct: 0, triggeredBy: 'cascade',          cost: '~10k tok', stage: 'L2_aggregate', dependsOn: ['run-241'], triggerMeetingId: 'M-2026-04-11' },
+  { id: 'run-239', state: 'queued',  axis: 'knowledge', subs: ['mental_models','model_hitrate'],                       preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2', started: '09:38:02', eta: '等待 L1 (run-241)', pct: 0, triggeredBy: 'cascade',          cost: '~12k tok', stage: 'L2_aggregate', dependsOn: ['run-241'], triggerMeetingId: 'M-2026-04-11' },
+  // 老 mock 保留（stage=NULL 的兼容路径）
+  { id: 'run-237', state: 'running', axis: 'knowledge', subs: ['mental_models','cognitive_biases'],         preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:41:22', eta: '预计 1m 40s',             pct: 48,  triggeredBy: 'auto · 新增 1 场会议', cost: '~16k tok' },
+  { id: 'run-236', state: 'queued',  axis: 'people',    subs: ['commitments','silence_signal'],            preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:42:11', eta: '排队中 · 前面 1 个',        pct: 0,   triggeredBy: 'auto',                 cost: '~10k tok' },
+  { id: 'run-235', state: 'done',    axis: 'people',    subs: ['commitments','role_trajectory','speech_quality'],  preset: 'standard', scope: 'library', scopeLabel: '全库 48 meetings',  started: '08:03:14', eta: '用时 4m 18s',               pct: 100, triggeredBy: 'manual · 陈汀',        cost: '42k tok',  version: 'v14' },
+  { id: 'run-234', state: 'done',    axis: 'knowledge', subs: ['mental_models'],                            preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 22:11',eta: '用时 11m 04s',              pct: 100, triggeredBy: 'schedule · 月度',      cost: '88k tok',  version: 'v8'  },
+  { id: 'run-233', state: 'failed',  axis: 'projects',  subs: ['decision_provenance'],                      preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 21:02',eta: '失败 · evidence_anchored 未命中', pct: 34, triggeredBy: 'manual',            cost: '12k tok' },
+  { id: 'run-232', state: 'done',    axis: 'knowledge', subs: ['mental_models','cognitive_biases','counterfactuals'],preset: 'standard', scope: 'project', scopeLabel: '消费硬件 · H1',     started: '2 天前',    eta: '用时 2m 50s',               pct: 100, triggeredBy: 'auto',                 cost: '21k tok',  version: 'v12' },
 ];
 
 const MOCK_VERSIONS = [
@@ -52,10 +56,11 @@ const MOCK_VERSIONS = [
 ];
 
 const MOCK_SCHEDULES = [
-  { id: 's1', name: '每次会议上传后',       target: 'project · 所有轴 · standard', next: 'auto · trigger', on: true  },
-  { id: 's2', name: '每周一 09:00',          target: 'project · 知识轴 · max',      next: '下周一 09:00',   on: true  },
-  { id: 's3', name: '每月 1 号 02:00',       target: 'library · 全轴 · standard',   next: '05-01 02:00',    on: true  },
-  { id: 's4', name: '每季度 · 团队能力盘点', target: 'library · 知识轴 · max',      next: '2026-07-01',     on: false },
+  // R3-B · 用 DAG 词汇刷新文案：体现 L1 体征 + L2 聚合 的两层调度
+  { id: 's1', name: '每次会议上传后',       target: 'meeting · L1 体征(meta+tension) → L2 三轴(people/projects/knowledge) · standard', next: 'auto · DAG trigger', on: true  },
+  { id: 's2', name: '每周一 09:00',          target: 'project · L2 知识轴 · max',      next: '下周一 09:00',   on: true  },
+  { id: 's3', name: '每月 1 号 02:00',       target: 'library · L2 全轴 · standard',   next: '05-01 02:00',    on: true  },
+  { id: 's4', name: '每季度 · 团队能力盘点', target: 'library · L2 知识轴 · max',      next: '2026-07-01',     on: false },
 ];
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -93,6 +98,10 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     triggeredBy: String(it.triggeredBy ?? ''),
     cost: costStr,
     version: (it.version as string | undefined),
+    // R3-B · DAG 字段透传（后端 mn_runs.stage / depends_on / trigger_meeting_id）
+    stage: (it.stage === 'L1_meeting' || it.stage === 'L2_aggregate') ? it.stage : null,
+    dependsOn: Array.isArray(it.dependsOn) ? (it.dependsOn as string[]) : (Array.isArray(it.depends_on) ? (it.depends_on as string[]) : []),
+    triggerMeetingId: typeof it.triggerMeetingId === 'string' ? it.triggerMeetingId : (typeof it.trigger_meeting_id === 'string' ? it.trigger_meeting_id : undefined),
   };
 }
 
@@ -103,6 +112,8 @@ function QueueView() {
   const [isMock, setIsMock] = useState(true);
   /** F5 · scope filter: 让 meeting 队列单独可看 */
   const [scopeFilter, setScopeFilter] = useState<string>('');
+  /** R3-B · stage filter: '' = 全部 / 'L1_meeting' / 'L2_aggregate' / 'null' = 老兼容路径 */
+  const [stageFilter, setStageFilter] = useState<string>('');
   /** F5 · meetingId → title 反查表，让 meeting-scope 的 row 显示真名 */
   const [meetingTitles, setMeetingTitles] = useState<Record<string, string>>({});
 
@@ -192,28 +203,51 @@ function QueueView() {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <SectionLabel>所有任务 · 近 48 小时</SectionLabel>
-        {/* F5 · scope filter — 选 meeting 单独看会议级队列 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-          <span style={{ color: 'var(--ink-3)' }}>scope</span>
-          <select
-            value={scopeFilter}
-            onChange={(e) => setScopeFilter(e.target.value)}
-            style={{
-              border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
-              padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
-            }}
-          >
-            <option value="">全部</option>
-            <option value="meeting">📄 meeting</option>
-            <option value="project">📁 project</option>
-            <option value="topic">🏷 topic</option>
-            <option value="client">🏢 client</option>
-            <option value="library">📚 library</option>
-          </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11.5 }}>
+          {/* F5 · scope filter — 选 meeting 单独看会议级队列 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--ink-3)' }}>scope</span>
+            <select
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value)}
+              style={{
+                border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
+              }}
+            >
+              <option value="">全部</option>
+              <option value="meeting">📄 meeting</option>
+              <option value="project">📁 project</option>
+              <option value="topic">🏷 topic</option>
+              <option value="client">🏢 client</option>
+              <option value="library">📚 library</option>
+            </select>
+          </div>
+          {/* R3-B · stage filter — DAG L1/L2 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--ink-3)' }}>stage</span>
+            <select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+              style={{
+                border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
+              }}
+            >
+              <option value="">全部</option>
+              <option value="L1_meeting">🔵 L1 体征</option>
+              <option value="L2_aggregate">🟡 L2 聚合</option>
+              <option value="null">⚪ 单条（老兼容路径）</option>
+            </select>
+          </div>
         </div>
       </div>
       <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
-        {runs.map((r, i) => {
+        {runs.filter((r) => {
+          if (!stageFilter) return true;
+          if (stageFilter === 'null') return !r.stage;
+          return r.stage === stageFilter;
+        }).map((r, i) => {
           // F5 · 'succeeded' 跟 'done' 同色（绿）；'cancelled' 跟 'failed' 同色（红）
           const color = r.state === 'running'
             ? 'var(--teal)'
@@ -237,7 +271,22 @@ function QueueView() {
                 <MonoMeta>{r.state}</MonoMeta>
               </div>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* R3-B · DAG stage 徽章：L1 蓝 / L2 琥珀；老 run 不显示 */}
+                  {r.stage === 'L1_meeting' && (
+                    <span title="L1 · per-meeting 体征" style={{
+                      padding: '1px 6px', borderRadius: 3, fontFamily: 'var(--mono)', fontSize: 9.5, fontWeight: 700,
+                      background: 'oklch(0.94 0.04 240)', color: 'oklch(0.32 0.12 240)',
+                      border: '1px solid oklch(0.82 0.08 240)', letterSpacing: '0.08em',
+                    }}>L1</span>
+                  )}
+                  {r.stage === 'L2_aggregate' && (
+                    <span title="L2 · 跨会聚合" style={{
+                      padding: '1px 6px', borderRadius: 3, fontFamily: 'var(--mono)', fontSize: 9.5, fontWeight: 700,
+                      background: 'oklch(0.95 0.04 75)', color: 'oklch(0.40 0.10 75)',
+                      border: '1px solid oklch(0.82 0.08 75)', letterSpacing: '0.08em',
+                    }}>L2</span>
+                  )}
                   <span style={{ width: 8, height: 8, borderRadius: 99, background: axisMeta.color }} />
                   <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600 }}>{axisMeta.label}</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
@@ -248,6 +297,14 @@ function QueueView() {
                   <MonoMeta>{r.id}</MonoMeta>
                   <span>·</span>
                   <span>{r.triggeredBy}</span>
+                  {r.dependsOn && r.dependsOn.length > 0 && (
+                    <>
+                      <span>·</span>
+                      <span title="depends_on" style={{ fontFamily: 'var(--mono)' }}>
+                        ↑ {r.dependsOn.map((d) => d.slice(0, 8)).join(', ')}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               <div>

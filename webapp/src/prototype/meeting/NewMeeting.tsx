@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
-import { EXPERTS, ExpertMock } from './_fixtures';
+import { EXPERTS, ExpertMock, AXIS_TOTAL_COUNT } from './_fixtures';
 import { meetingNotesApi, streamRunProgress } from '../../api/meetingNotes';
 import { bindingsApi, expertLibraryApi } from '../../api/client';
 import { EXPERT_API_KEYS } from '../../hooks/useExpertApi';
@@ -895,8 +895,13 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
   const [roleMap, setRoleMap] = useState<Record<string, MnRoleId>>({});
   const [presetId, setPresetId] = useState('standard');
   /** Claude CLI 一次性生成模式：开了之后 preset 仍然保留（作为 strategy 解析的 fallback），
-      但生成路径不走 16 轴循环，spawn 一次 claude -p 完成全部。 */
-  // 三态生成模式：'multi-axis'（默认 16 轴循环）/ 'claude-cli'（spawn claude 二进制）/ 'api-oneshot'（SDK 一次性 API 调用）
+      但生成路径不走 22 子维度循环，spawn 一次 claude -p 完成全部。
+      R3-A：subdim 总数从 _axisRegistry 派生（AXIS_TOTAL_COUNT），不再硬写 16。 */
+  // 三态生成模式：
+  //  - 'multi-axis'（默认）：按 22 子维度循环（L1 体征 4 + L2 人 4 + 项 4 + 知识 9 + 张力 1）
+  //    R3-B：multi-axis 模式入队时拆 L1 + L2 两条 run，由调度器 DAG gate 串行
+  //  - 'claude-cli'：spawn claude 二进制，stage=NULL 一次性跑全部
+  //  - 'api-oneshot'：SDK 一次性 API 调用，stage=NULL 一次性跑全部
   const [genMode, setGenMode] = useState<'multi-axis' | 'claude-cli' | 'api-oneshot'>('multi-axis');
   // 旧 useClaudeCli 兼容：派生量，给下方 preset 卡片透明度等用
   const useClaudeCli = genMode !== 'multi-axis';
@@ -1387,6 +1392,9 @@ function FlowExperts({ onNext, onBack, onSubmit }: {
               </div>
             </div>
           </div>
+
+          {/* R3-A · 改动五：DAG 预览卡 — 让用户提交前一眼看到将触发的 run 拓扑 */}
+          <DagPreviewCard mode={genMode} />
 
           <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
             <button onClick={onBack} style={{
@@ -2196,6 +2204,54 @@ export function NewMeeting() {
             return handleSubmit(lastSubmitBody);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// R3-A · 改动五：DAG 预览卡
+// 在提交按钮上方告诉用户：根据 mode 不同，将创建几条什么 stage 的 run
+//
+// - multi-axis：1 L1(meta+tension) + 3 L2(people/projects/knowledge)，DAG 串行（gate 校验）
+// - claude-cli / api-oneshot：单条 stage=NULL 的 run，一次跑完全部 22 子维度
+function DagPreviewCard({ mode }: { mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' }) {
+  const isDag = mode === 'multi-axis';
+  const total = AXIS_TOTAL_COUNT;
+  return (
+    <div style={{
+      marginTop: 14, padding: '12px 14px',
+      background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
+      fontSize: 12, lineHeight: 1.6, color: 'var(--ink-2)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+          将触发
+        </span>
+        <span style={{
+          padding: '1px 6px', borderRadius: 3, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
+          background: isDag ? 'oklch(0.94 0.04 240)' : 'var(--paper)',
+          color: isDag ? 'oklch(0.32 0.12 240)' : 'var(--ink-3)',
+          border: `1px solid ${isDag ? 'oklch(0.82 0.08 240)' : 'var(--line-2)'}`,
+        }}>
+          {isDag ? 'DAG' : '单条'}
+        </span>
+      </div>
+      {isDag ? (
+        <div>
+          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'oklch(0.32 0.12 240)' }}>1 L1</span>
+          <span style={{ color: 'var(--ink-3)' }}> 体征 (meta + tension · 4 子维度) </span>
+          <span style={{ fontFamily: 'var(--mono)' }}>→</span>
+          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'oklch(0.40 0.10 75)', marginLeft: 6 }}>3 L2</span>
+          <span style={{ color: 'var(--ink-3)' }}> 聚合 (people + projects + knowledge · {total - 5} 子维度)</span>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
+            L2 由 scheduler 在 L1 succeeded 后自动放行（depends_on gate）
+          </div>
+        </div>
+      ) : (
+        <div>
+          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>1 条</span>
+          <span style={{ color: 'var(--ink-3)' }}> {mode === 'claude-cli' ? 'claude-cli spawn' : 'api-oneshot LLM'} · 一次跑完 {total} 个子维度（不参与 DAG）</span>
+        </div>
       )}
     </div>
   );
