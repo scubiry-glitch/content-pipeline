@@ -4,7 +4,8 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ceoApi } from '../../../_apiAdapters';
+import { ceoApi, buildScopeQuery } from '../../../_apiAdapters';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
 import { Astrolabe } from './Astrolabe';
 import { TimePie } from './TimePie';
 import { DriftRadar } from './DriftRadar';
@@ -17,14 +18,17 @@ export function Compass() {
   const navigate = useNavigate();
   const [alignment, setAlignment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
     let cancelled = false;
-    ceoApi.compass
-      .dashboard()
+    // 多 scope 时直接 fetch (ceoApi.compass.dashboard 当前只支持单 scope)
+    fetch(`/api/v1/ceo/compass/dashboard${buildScopeQuery(scopeIds)}`)
+      .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
-          setAlignment(d.alignmentScore);
+          setAlignment(d.alignmentScore ?? null);
           setLoading(false);
         }
       })
@@ -34,7 +38,8 @@ export function Compass() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   return (
     <div

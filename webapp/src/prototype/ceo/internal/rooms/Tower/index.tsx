@@ -9,6 +9,8 @@ import { RhythmPulse } from './RhythmPulse';
 import { DeficitAlert } from './DeficitAlert';
 import { RhythmsTabs } from './RhythmsTabs';
 import { BLOCKERS, POST_MEETING } from './_towerFixtures';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -19,10 +21,12 @@ interface DashboardData {
 export function Tower() {
   const navigate = useNavigate();
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/v1/ceo/tower/dashboard')
+    fetch(`/api/v1/ceo/tower/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setDash(d);
@@ -31,7 +35,8 @@ export function Tower() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   return (
     <div

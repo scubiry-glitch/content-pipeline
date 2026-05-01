@@ -13,6 +13,8 @@ import {
   SELF_PROMISES,
   TIME_ROI,
 } from './_balconyFixtures';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
   metric?: { label?: string; value?: string; delta?: string };
@@ -34,17 +36,20 @@ export function Balcony() {
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/v1/ceo/balcony/dashboard')
+    fetch(`/api/v1/ceo/balcony/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
       .then((d) => !cancelled && setDash(d))
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   return (
     <div

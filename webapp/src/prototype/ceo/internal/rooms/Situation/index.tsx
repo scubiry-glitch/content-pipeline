@@ -7,6 +7,8 @@ import { StakeholderHeatmap } from './StakeholderHeatmap';
 import { SignalWall } from './SignalWall';
 import { RubricMatrix } from './RubricMatrix';
 import { BLINDSPOTS, HORIZON_TABS } from './_situationFixtures';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -18,10 +20,12 @@ export function Situation() {
   const navigate = useNavigate();
   const [dash, setDash] = useState<DashboardData | null>(null);
   const [horizon, setHorizon] = useState<string>(HORIZON_TABS[0].id);
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/v1/ceo/situation/dashboard')
+    fetch(`/api/v1/ceo/situation/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setDash(d);
@@ -30,7 +34,8 @@ export function Situation() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   return (
     <div

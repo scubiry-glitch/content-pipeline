@@ -15,6 +15,18 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * R3-7: 把全局 scope 过滤拼成 query string.
+ *   - scopeIds 为空 → 返回 ''
+ *   - 1 个 → ?scopeId=xxx (legacy 兼容)
+ *   - 多个 → ?scopes=id1,id2,...
+ */
+export function buildScopeQuery(scopeIds: string[] | undefined): string {
+  if (!scopeIds || scopeIds.length === 0) return '';
+  if (scopeIds.length === 1) return `?scopeId=${encodeURIComponent(scopeIds[0])}`;
+  return `?scopes=${scopeIds.map(encodeURIComponent).join(',')}`;
+}
+
 export const ceoApi = {
   health: () => jsonFetch<{ ok: boolean; module: string; db: string; schedulerRunning: boolean }>('/health'),
   dashboard: (scopeId?: string) =>
