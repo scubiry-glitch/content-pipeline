@@ -120,8 +120,8 @@ const COST_TABLE = {
 // ── sub_dim → 主驱动 tab（用于"重算后会刷哪些 tab"提示） ───────────────────
 // 当 sub_dim 与 tab 不在同一 axis 时（如 cognitive_biases 在 people/盲区档案），
 // 跨轴透明化展示给用户，避免"勾这个 sub 怎么没刷新这个轴"的困惑。
-type AffectedTab = { axis: string; tabLabel: string; note?: string };
-const SUB_AFFECTS: Record<string, AffectedTab[]> = {
+export type AffectedTab = { axis: string; tabLabel: string; note?: string };
+export const SUB_AFFECTS: Record<string, AffectedTab[]> = {
   // people
   commitments:         [
     { axis: 'people',   tabLabel: '承诺与兑现' },
@@ -170,7 +170,7 @@ const CROSS_MODULE_TABS: Array<{ axisLabel: string; tabLabel: string; source: st
   { axisLabel: '项目', tabLabel: '对外影响', source: 'CEO Situation' },
 ];
 
-const AXIS_SHORT_LABEL: Record<string, string> = {
+export const AXIS_SHORT_LABEL: Record<string, string> = {
   people: '人物', projects: '项目', knowledge: '知识', meta: 'meta', tension: '张力',
   a: 'A 视图', b: 'B 视图', c: 'C 视图',
 };

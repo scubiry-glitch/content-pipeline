@@ -11,6 +11,8 @@ import { useMeetingScope } from './_scopeContext';
 // ── Mock data ────────────────────────────────────────────────────────────────
 // R3-A · 改动五：AXIS_SUB 改为从 _axisRegistry 共享，避免与 NewMeeting / Panorama 双写
 import { AXIS_SUB } from './_axisRegistry';
+// R5 · 粒度 1：sub_dim → 主驱动 tab 反向表（panel 已建好，复用避免双写）
+import { SUB_AFFECTS, AXIS_SHORT_LABEL } from './AxisRegeneratePanel';
 
 interface MockRun {
   id: string;
@@ -32,6 +34,21 @@ interface MockRun {
   stage?: 'L1_meeting' | 'L2_aggregate' | null;
   dependsOn?: string[];
   triggerMeetingId?: string;
+  // R5 · 粒度 1：per-axis 聚合统计（含 subDimStats per-sub_dim 计数）
+  axisStats?: Record<string, {
+    durationMs?: number;
+    subDimCount?: number;
+    created?: number;
+    updated?: number;
+    skipped?: number;
+    errors?: number;
+    parseFailures?: number;
+    subDimStats?: Record<string, {
+      created: number; updated: number; skipped: number; errors: number;
+      parseFailures: number;
+      errorSamples?: Array<{ kind: string; message: string; excerpt?: string }>;
+    }>;
+  }>;
 }
 
 const MOCK_RUNS: MockRun[] = [
@@ -42,10 +59,31 @@ const MOCK_RUNS: MockRun[] = [
   // 老 mock 保留（stage=NULL 的兼容路径）
   { id: 'run-237', state: 'running', axis: 'knowledge', subs: ['mental_models','cognitive_biases'],         preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:41:22', eta: '预计 1m 40s',             pct: 48,  triggeredBy: 'auto · 新增 1 场会议', cost: '~16k tok' },
   { id: 'run-236', state: 'queued',  axis: 'people',    subs: ['commitments','silence_signal'],            preset: 'standard', scope: 'project', scopeLabel: 'AI 基础设施 · Q2',   started: '09:42:11', eta: '排队中 · 前面 1 个',        pct: 0,   triggeredBy: 'auto',                 cost: '~10k tok' },
-  { id: 'run-235', state: 'done',    axis: 'people',    subs: ['commitments','role_trajectory','speech_quality'],  preset: 'standard', scope: 'library', scopeLabel: '全库 48 meetings',  started: '08:03:14', eta: '用时 4m 18s',               pct: 100, triggeredBy: 'manual · 陈汀',        cost: '42k tok',  version: 'v14' },
-  { id: 'run-234', state: 'done',    axis: 'knowledge', subs: ['mental_models'],                            preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 22:11',eta: '用时 11m 04s',              pct: 100, triggeredBy: 'schedule · 月度',      cost: '88k tok',  version: 'v8'  },
-  { id: 'run-233', state: 'failed',  axis: 'projects',  subs: ['decision_provenance'],                      preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 21:02',eta: '失败 · evidence_anchored 未命中', pct: 34, triggeredBy: 'manual',            cost: '12k tok' },
-  { id: 'run-232', state: 'done',    axis: 'knowledge', subs: ['mental_models','cognitive_biases','counterfactuals'],preset: 'standard', scope: 'project', scopeLabel: '消费硬件 · H1',     started: '2 天前',    eta: '用时 2m 50s',               pct: 100, triggeredBy: 'auto',                 cost: '21k tok',  version: 'v12' },
+  { id: 'run-235', state: 'done',    axis: 'people',    subs: ['commitments','role_trajectory','speech_quality'],  preset: 'standard', scope: 'library', scopeLabel: '全库 48 meetings',  started: '08:03:14', eta: '用时 4m 18s',               pct: 100, triggeredBy: 'manual · 陈汀',        cost: '42k tok',  version: 'v14',
+    axisStats: { people: { subDimStats: {
+      commitments:     { created: 18, updated: 3, skipped: 0, errors: 0, parseFailures: 0 },
+      role_trajectory: { created:  9, updated: 2, skipped: 0, errors: 0, parseFailures: 0 },
+      speech_quality:  { created: 11, updated: 0, skipped: 1, errors: 0, parseFailures: 0 },
+    } } },
+  },
+  { id: 'run-234', state: 'done',    axis: 'knowledge', subs: ['mental_models'],                            preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 22:11',eta: '用时 11m 04s',              pct: 100, triggeredBy: 'schedule · 月度',      cost: '88k tok',  version: 'v8',
+    axisStats: { knowledge: { subDimStats: {
+      mental_models: { created: 24, updated: 5, skipped: 0, errors: 0, parseFailures: 1 },
+    } } },
+  },
+  { id: 'run-233', state: 'failed',  axis: 'projects',  subs: ['decision_provenance'],                      preset: 'max',      scope: 'library', scopeLabel: '全库 48 meetings',  started: '昨天 21:02',eta: '失败 · evidence_anchored 未命中', pct: 34, triggeredBy: 'manual',            cost: '12k tok',
+    axisStats: { projects: { subDimStats: {
+      decision_provenance: { created: 0, updated: 0, skipped: 0, errors: 1, parseFailures: 0,
+        errorSamples: [{ kind: 'parse', message: 'evidence_anchored decorator 未命中：scope 下没有 mn_evidence_grades 数据；先跑 evidence_grading 再重试' }] },
+    } } },
+  },
+  { id: 'run-232', state: 'done',    axis: 'knowledge', subs: ['mental_models','cognitive_biases','counterfactuals'],preset: 'standard', scope: 'project', scopeLabel: '消费硬件 · H1',     started: '2 天前',    eta: '用时 2m 50s',               pct: 100, triggeredBy: 'auto',                 cost: '21k tok',  version: 'v12',
+    axisStats: { knowledge: { subDimStats: {
+      mental_models:    { created: 6, updated: 2, skipped: 0, errors: 0, parseFailures: 0 },
+      cognitive_biases: { created: 4, updated: 0, skipped: 0, errors: 0, parseFailures: 0 },
+      counterfactuals:  { created: 3, updated: 1, skipped: 0, errors: 0, parseFailures: 0 },
+    } } },
+  },
 ];
 
 const MOCK_VERSIONS = [
@@ -102,6 +140,8 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     stage: (it.stage === 'L1_meeting' || it.stage === 'L2_aggregate') ? it.stage : null,
     dependsOn: Array.isArray(it.dependsOn) ? (it.dependsOn as string[]) : (Array.isArray(it.depends_on) ? (it.depends_on as string[]) : []),
     triggerMeetingId: typeof it.triggerMeetingId === 'string' ? it.triggerMeetingId : (typeof it.trigger_meeting_id === 'string' ? it.trigger_meeting_id : undefined),
+    // R5 · 粒度 1：从 surfaces.axisStats 透出 per-sub_dim 计数（后端 mapRun 已写）
+    axisStats: (it.surfaces?.axisStats ?? it.metadata?.axisStats ?? undefined) as MockRun['axisStats'],
   };
 }
 
@@ -116,6 +156,8 @@ function QueueView() {
   const [stageFilter, setStageFilter] = useState<string>('');
   /** F5 · meetingId → title 反查表，让 meeting-scope 的 row 显示真名 */
   const [meetingTitles, setMeetingTitles] = useState<Record<string, string>>({});
+  /** R5 · 粒度 1：展开哪一行查看 per-sub_dim 计数；null 全部折叠 */
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   const refetch = () => {
     if (forceMock) { setRuns(MOCK_RUNS); setIsMock(true); return; }
@@ -257,8 +299,16 @@ function QueueView() {
                 ? 'oklch(0.55 0.16 25)'
                 : 'var(--amber)';
           const axisMeta = AXIS_SUB[r.axis] ?? { label: r.axis, color: 'var(--ink-3)', subs: [] };
+          const isExpanded = expandedRunId === r.id;
+          // R5 · 粒度 1：拿这个 run 的 per-sub_dim 计数（仅展开时用）
+          const subDimEntries: Array<[string, NonNullable<NonNullable<MockRun['axisStats']>[string]['subDimStats']>[string]]> = [];
+          for (const ax of Object.keys(r.axisStats ?? {})) {
+            const sds = r.axisStats?.[ax]?.subDimStats ?? {};
+            for (const sd of Object.keys(sds)) subDimEntries.push([sd, sds[sd]]);
+          }
           return (
-            <div key={r.id} style={{
+            <div key={r.id}>
+            <div style={{
               padding: '14px 18px', display: 'grid',
               gridTemplateColumns: '90px 1fr 180px 160px 180px 60px',
               gap: 14, alignItems: 'center',
@@ -360,7 +410,96 @@ function QueueView() {
                     }}
                   >进度 →</button>
                 )}
+                {/* R5 · 粒度 1：展开看 per-sub_dim 计数 */}
+                <button
+                  onClick={() => setExpandedRunId(isExpanded ? null : r.id)}
+                  title={isExpanded ? '折叠' : '展开 sub_dim 详情'}
+                  style={{
+                    border: '1px solid var(--line)', background: isExpanded ? 'var(--paper-2)' : 'transparent',
+                    borderRadius: 4, padding: '4px 9px', fontSize: 10, cursor: 'pointer',
+                    color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: 0.2,
+                  }}
+                >{isExpanded ? '▴ 折叠' : '▾ 详情'}</button>
               </div>
+            </div>
+            {isExpanded && (
+              <div style={{
+                padding: '10px 18px 14px 36px',
+                background: 'var(--paper-2)',
+                borderTop: '1px dashed var(--line-2)',
+              }}>
+                {subDimEntries.length === 0 ? (
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                    暂无 sub_dim 详情（可能是改动前跑的老 run，或 axisStats 还未写入）
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {subDimEntries.map(([sdId, sdStats]) => {
+                      const sdLabel = axisMeta.subs.find(x => x.id === sdId)?.label ?? sdId;
+                      const failed = (sdStats.errors ?? 0) > 0 || (sdStats.parseFailures ?? 0) > 0;
+                      const affects = SUB_AFFECTS[sdId] ?? [];
+                      const primaryTab = affects[0];
+                      // 构造跳转 URL：optional href 否则 disabled tooltip
+                      let href: string | null = null;
+                      let hrefHint = '';
+                      if (primaryTab) {
+                        const ax = primaryTab.axis;
+                        if (ax === 'people' || ax === 'projects' || ax === 'knowledge' || ax === 'meta') {
+                          // 通过 _axisRegistry tab id 查 — primaryTab.tabLabel 是中文 label，需要 tab id
+                          // 简化：拼一个查询参数 tab=<tabLabel> 不够稳；这里用 axis 路由 + 让用户在 axis 页里
+                          // 自己点对应 tab。改进版可加 tab id 反向表，本次先到 axis 一级。
+                          href = `/meeting/axes/${ax}`;
+                          hrefHint = `${AXIS_SHORT_LABEL[ax] ?? ax} · ${primaryTab.tabLabel}`;
+                        } else if ((ax === 'a' || ax === 'b' || ax === 'c') && r.triggerMeetingId) {
+                          href = `/meeting/${r.triggerMeetingId}/${ax}`;
+                          hrefHint = `${AXIS_SHORT_LABEL[ax] ?? ax} · ${primaryTab.tabLabel}`;
+                        }
+                      }
+                      return (
+                        <div key={sdId} style={{
+                          display: 'grid', gridTemplateColumns: '180px 1fr 220px',
+                          gap: 12, alignItems: 'center',
+                          fontSize: 11.5,
+                        }}>
+                          <div style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)', fontWeight: 500 }}>
+                            {sdLabel}
+                            <span style={{ marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--ink-4)' }}>{sdId}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, fontFamily: 'var(--mono)', color: failed ? 'oklch(0.55 0.16 25)' : 'var(--ink-2)' }}>
+                            <span>{failed ? '⚠' : '✓'} {sdStats.created} created</span>
+                            {sdStats.updated > 0 && <span>· {sdStats.updated} updated</span>}
+                            {sdStats.skipped > 0 && <span>· {sdStats.skipped} skipped</span>}
+                            {sdStats.errors > 0 && <span>· <b>{sdStats.errors} errors</b></span>}
+                            {sdStats.parseFailures > 0 && <span>· {sdStats.parseFailures} parseFail</span>}
+                            {failed && sdStats.errorSamples && sdStats.errorSamples[0] && (
+                              <span title={sdStats.errorSamples[0].message} style={{ color: 'oklch(0.55 0.16 25)', fontStyle: 'italic' }}>
+                                {sdStats.errorSamples[0].message.slice(0, 80)}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            {href ? (
+                              <a
+                                href={href}
+                                onClick={(e) => { e.preventDefault(); navigate(href!); }}
+                                style={{
+                                  fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--accent)',
+                                  textDecoration: 'none',
+                                }}
+                              >→ 查看（{hrefHint}）</a>
+                            ) : (
+                              <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-4)' }}>
+                                {primaryTab ? '需 meeting 上下文' : '无对应轴 tab'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
           );
         })}
