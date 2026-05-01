@@ -10,6 +10,7 @@ import { PromiseTable } from './PromiseTable';
 import { VersionsTabs } from './VersionsTabs';
 import { RebuttalRehearsal } from './RebuttalRehearsal';
 import { useSelectedScopes } from '../../../shared/ScopePicker';
+import { GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -151,6 +152,8 @@ export function Boardroom() {
           ← 回到 CEO 主页
         </button>
       </header>
+
+      <GlobalScopeFilter />
 
       <main
         style={{

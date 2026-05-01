@@ -7,7 +7,7 @@ import { StakeholderHeatmap } from './StakeholderHeatmap';
 import { SignalWall } from './SignalWall';
 import { RubricMatrix } from './RubricMatrix';
 import { BLINDSPOTS, HORIZON_TABS } from './_situationFixtures';
-import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
@@ -153,6 +153,8 @@ export function Situation() {
           ← 回到 CEO 主页
         </button>
       </header>
+
+      <GlobalScopeFilter />
 
       <main
         style={{

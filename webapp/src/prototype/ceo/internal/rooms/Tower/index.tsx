@@ -9,7 +9,7 @@ import { RhythmPulse } from './RhythmPulse';
 import { DeficitAlert } from './DeficitAlert';
 import { RhythmsTabs } from './RhythmsTabs';
 import { BLOCKERS, POST_MEETING } from './_towerFixtures';
-import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
@@ -154,6 +154,8 @@ export function Tower() {
           ← 回到 CEO 主页
         </button>
       </header>
+
+      <GlobalScopeFilter />
 
       <main
         style={{

@@ -8,7 +8,7 @@ import { FormationMap } from './FormationMap';
 import { SandboxList } from './SandboxList';
 import { ConflictThermo } from './ConflictThermo';
 import { FormationAnalysis } from './FormationAnalysis';
-import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
@@ -154,6 +154,8 @@ export function WarRoom() {
           ← 回到 CEO 主页
         </button>
       </header>
+
+      <GlobalScopeFilter />
 
       <main
         style={{

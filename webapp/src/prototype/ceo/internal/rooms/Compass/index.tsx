@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ceoApi, buildScopeQuery } from '../../../_apiAdapters';
-import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { Astrolabe } from './Astrolabe';
 import { TimePie } from './TimePie';
 import { DriftRadar } from './DriftRadar';
@@ -168,6 +168,8 @@ export function Compass() {
           ← 回到 CEO 主页
         </button>
       </header>
+
+      <GlobalScopeFilter />
 
       {/* main grid */}
       <main

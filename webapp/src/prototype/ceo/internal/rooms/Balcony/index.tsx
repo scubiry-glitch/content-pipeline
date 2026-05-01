@@ -13,7 +13,7 @@ import {
   SELF_PROMISES,
   TIME_ROI,
 } from './_balconyFixtures';
-import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
 
 interface DashboardData {
@@ -116,6 +116,8 @@ export function Balcony() {
       >
         ← 回到 CEO 主页
       </button>
+
+      <GlobalScopeFilter />
 
       <main
         style={{
