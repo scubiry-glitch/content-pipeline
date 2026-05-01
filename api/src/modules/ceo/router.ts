@@ -12,7 +12,7 @@ import { createBalconyRouter } from './rooms/balcony/router.js';
 import { createPanoramaRouter } from './panorama/router.js';
 import { createBrainRouter } from './brain/router.js';
 import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
-import { getRecommendedScopes } from './recommendation/service.js';
+import { getRecommendedScopes, getDefaultScopes } from './recommendation/service.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -23,7 +23,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
       return engine.buildDashboard(scopeId);
     });
 
-    // 推荐 scope — 按素材丰富度排序，给前端首屏默认选择用
+    // 推荐 scope (动态评分) — 按素材丰富度排序
     // GET /api/v1/ceo/recommended-scopes?limit=3&minScore=1
     fastify.get('/recommended-scopes', async (request) => {
       const q = (request.query ?? {}) as { limit?: string; minScore?: string };
@@ -31,6 +31,46 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
         limit: q.limit ? Number(q.limit) : undefined,
         minScore: q.minScore ? Number(q.minScore) : undefined,
       });
+    });
+
+    // 默认 scope — 优先 CEO_PREFERRED_SCOPES 名字精确匹配，回退动态评分
+    // GET /api/v1/ceo/default-scopes
+    fastify.get('/default-scopes', async () => {
+      return getDefaultScopes(engine.deps);
+    });
+
+    // 批量分析填充 — 对一组 scope 入队 g2/g3/g4/g5 全部任务
+    // POST /api/v1/ceo/scopes/fill-all { scopeIds: ['<uuid>'], axes?: ['g2','g3','g4','g5'] }
+    // 返回每个 scope 的 runId 列表，用于前端追踪进度
+    fastify.post('/scopes/fill-all', async (request, reply) => {
+      const body = (request.body ?? {}) as { scopeIds?: string[]; axes?: string[] };
+      const ids = Array.isArray(body.scopeIds) ? body.scopeIds.filter((x) => typeof x === 'string') : [];
+      if (ids.length === 0) {
+        reply.code(400);
+        return { ok: false, error: 'scopeIds[] required' };
+      }
+      const axes = Array.isArray(body.axes) && body.axes.length > 0
+        ? body.axes.filter((a) => typeof a === 'string')
+        : ['g2', 'g3', 'g4', 'g5']; // 默认: 跳过 g1 (它由 mn ingest 触发)
+      const results: Array<{ scopeId: string; axis: string; ok: boolean; runId?: string; error?: string }> = [];
+      for (const scopeId of ids) {
+        for (const axis of axes) {
+          try {
+            const r = await engine.enqueueRun({
+              axis,
+              scopeKind: 'project',
+              scopeId,
+              metadata: { source: 'fill-all', triggeredAt: new Date().toISOString() },
+            });
+            results.push({ scopeId, axis, ok: r.ok, runId: r.runId });
+          } catch (e) {
+            results.push({ scopeId, axis, ok: false, error: (e as Error).message });
+          }
+        }
+      }
+      const total = results.length;
+      const enqueued = results.filter((r) => r.ok).length;
+      return { ok: enqueued > 0, total, enqueued, items: results };
     });
 
     // 房间子路由

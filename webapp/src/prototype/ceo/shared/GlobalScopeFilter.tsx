@@ -77,9 +77,14 @@ export function GlobalScopeFilter() {
         if (urlHasScopes || alreadyPicked) return;
 
         try {
-          const r = await fetch('/api/v1/ceo/recommended-scopes?limit=2');
+          // 优先用 /default-scopes (PREFERRED_SCOPE_NAMES 精确匹配，全部命中才返回)
+          // 没命中再回退动态推荐
+          const r = await fetch('/api/v1/ceo/default-scopes');
           if (!r.ok) return;
-          const data = (await r.json()) as { items?: Array<{ id: string; name: string; score: number }> };
+          const data = (await r.json()) as {
+            items?: Array<{ id: string; name: string; score: number }>;
+            mode?: 'preferred' | 'recommended' | 'empty';
+          };
           const picks = data.items ?? [];
           if (cancelled || picks.length === 0) return;
           const ids = picks.map((p) => p.id).join(',');
@@ -88,7 +93,8 @@ export function GlobalScopeFilter() {
           setParams(next, { replace: true });
           window.localStorage.setItem(AUTO_PICK_SENTINEL_KEY, '1');
           const summary = picks.map((p) => p.name).join(' + ');
-          setAutoPickHint(`已默认选中素材最丰富的 ${picks.length} 个 scope: ${summary}`);
+          const prefix = data.mode === 'preferred' ? '已默认选中部署偏好组合' : `已默认选中素材最丰富的 ${picks.length} 个 scope`;
+          setAutoPickHint(`${prefix}: ${summary}`);
           // 6s 后淡出提示
           window.setTimeout(() => !cancelled && setAutoPickHint(null), 6000);
         } catch {
@@ -252,6 +258,39 @@ export function GlobalScopeFilter() {
             {selected.size > 4 && (
               <span style={{ color: 'rgba(232,227,216,0.45)', fontSize: 10 }}>+{selected.size - 4}</span>
             )}
+            <button
+              onClick={async () => {
+                if (selected.size === 0) return;
+                if (!confirm(`将对 ${selected.size} 个 scope 入队 g2/g3/g4/g5 任务（评分/反方/批注/棱镜）。继续?`)) return;
+                try {
+                  const r = await fetch('/api/v1/ceo/scopes/fill-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scopeIds: Array.from(selected) }),
+                  });
+                  const data = await r.json();
+                  setAutoPickHint(`已入队 ${data.enqueued ?? 0}/${data.total ?? 0} 个任务，请到 Brain 页查看进度`);
+                  setTimeout(() => setAutoPickHint(null), 6000);
+                } catch (e) {
+                  setAutoPickHint(`入队失败: ${(e as Error).message}`);
+                  setTimeout(() => setAutoPickHint(null), 4000);
+                }
+              }}
+              title="对当前选中 scope 入队 g2/g3/g4/g5 任务，填充所有房间数据"
+              style={{
+                padding: '2px 8px',
+                background: 'rgba(166,204,154,0.12)',
+                color: '#A6CC9A',
+                border: '1px solid rgba(166,204,154,0.4)',
+                borderRadius: 99,
+                fontFamily: 'var(--mono)',
+                fontSize: 10,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ⚡ 分析填充
+            </button>
             <button
               onClick={clearAll}
               style={{
