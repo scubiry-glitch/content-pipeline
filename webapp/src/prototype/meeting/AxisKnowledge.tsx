@@ -11,6 +11,7 @@ import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
+import { useIsMobile } from '../_useIsMobile';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ const BIAS_SEV: Record<string, { bg: string; fg: string; label: string }> = {
 type JudgmentRow = typeof REUSABLE_JUDGMENTS[number];
 
 function Judgments({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [items, setItems] = useState<JudgmentRow[]>([]);
   const [isMock, setIsMock] = useState(true);
@@ -125,7 +127,7 @@ function Judgments({ scopeId }: { scopeId: string }) {
   }, [scopeId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           可复用判断 · Reusable judgments
@@ -185,6 +187,7 @@ function Judgments({ scopeId }: { scopeId: string }) {
 type MentalModelRow = typeof MENTAL_MODELS[number];
 
 function MentalModels({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [rows, setRows] = useState<MentalModelRow[]>([]);
   const [isMock, setIsMock] = useState(true);
@@ -212,7 +215,7 @@ function MentalModels({ scopeId }: { scopeId: string }) {
   }, [scopeId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           心智模型激活 · Mental models invoked
@@ -222,6 +225,8 @@ function MentalModels({ scopeId }: { scopeId: string }) {
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         会议中被激活的心智模型 —— 激活 ≠ 用得对。系统标记滥用与未激活的盲点。
       </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+       <div style={{ minWidth: 880 }}>
       <div style={{
         display: 'grid', gridTemplateColumns: '180px 1fr 80px 100px 1fr 120px',
         padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
@@ -267,7 +272,9 @@ function MentalModels({ scopeId }: { scopeId: string }) {
           </div>
         );
       })}
-      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+       </div>
+      </div>
+      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <CalloutCard title="盲点 · MM-05 Pre-mortem 未激活" tone="accent">
           <b>对 6000 万上限的决议，没有人做「如果 6 个月后 LP 反弹」的前事之鉴分析。</b>
           建议下次决议前由 p1 开启一次正式 pre-mortem。
@@ -282,9 +289,10 @@ function MentalModels({ scopeId }: { scopeId: string }) {
 }
 
 function Evidence() {
+  const isMobile = useIsMobile();
   const total = EVIDENCE_GRADES.reduce((s, g) => s + g.count, 0);
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
         证据层级 · Evidence grading
       </h3>
@@ -330,6 +338,7 @@ function Evidence() {
 type BiasRow = typeof COGNITIVE_BIASES[number];
 
 function Biases({ meetingId }: { meetingId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [rows, setRows] = useState<BiasRow[]>([]);
   const [isMock, setIsMock] = useState(true);
@@ -361,7 +370,7 @@ function Biases({ meetingId }: { meetingId: string }) {
   }, [meetingId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           认知偏差探测 · Cognitive-bias surface
@@ -417,8 +426,9 @@ function Biases({ meetingId }: { meetingId: string }) {
 }
 
 function Counterfactuals() {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
         反事实 / 未走的路 · Counterfactuals
       </h3>
@@ -666,9 +676,10 @@ export function AxisKnowledge() {
 // ── F7 · Live wrappers：有数据 → 渲染真实；无数据 → fallback 到原 mock 组件 ──
 
 function MentalModelsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  const isMobile = useIsMobile();
   if (!data || data.length === 0) return <>{fallback}</>;
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           心智模型激活 · {data.length} 项
@@ -699,9 +710,10 @@ function MentalModelsLive({ data, fallback }: { data: any[] | undefined; fallbac
 }
 
 function BiasesLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  const isMobile = useIsMobile();
   if (!data || data.length === 0) return <>{fallback}</>;
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
         认知偏差 · {data.length} 项
       </h3>
@@ -731,9 +743,10 @@ function BiasesLive({ data, fallback }: { data: any[] | undefined; fallback: Rea
 }
 
 function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
+  const isMobile = useIsMobile();
   if (!data || data.length === 0) return <>{fallback}</>;
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
         反事实 / 未走的路 · {data.length} 条
       </h3>
@@ -764,6 +777,7 @@ function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fall
 }
 
 function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number } | undefined | null; fallback: ReactNode; scopeAggregated?: boolean }) {
+  const isMobile = useIsMobile();
   if (!data) return <>{fallback}</>;
   const total = (data.dist_a ?? 0) + (data.dist_b ?? 0) + (data.dist_c ?? 0) + (data.dist_d ?? 0);
   if (total === 0) return <>{fallback}</>;
@@ -774,7 +788,7 @@ function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: num
     { k: 'D', n: data.dist_d, label: '道听途说', color: 'oklch(0.65 0.18 30)' },
   ];
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
         证据层级 · 总 {total} 条 · 加权 {Number(data.weighted_score ?? 0).toFixed(2)}
       </h3>
@@ -808,8 +822,9 @@ function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: num
 // mn_open_questions / mn_silence_signals 推导），但 router 尚未暴露 GET 接口，
 // 也尚未接入 _live wrapper。第一版用统一空态卡片，hint 引导用户跑生成中心补齐。
 function PendingSubdimTab({ title, subDim, hint }: { title: string; subDim: string; hint: string }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '28px 32px' }}>
       <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>
         {title}
       </div>

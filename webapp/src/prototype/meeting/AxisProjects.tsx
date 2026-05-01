@@ -11,6 +11,7 @@ import { P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
+import { useIsMobile } from '../_useIsMobile';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -163,6 +164,7 @@ type DecisionRow = typeof DECISION_CHAIN[number];
 
 function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<DecisionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -192,7 +194,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
   }, [scopeId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           决策溯源链 · Decision provenance
@@ -318,6 +320,7 @@ type AssumptionRow = typeof ASSUMPTIONS[number];
 
 function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<AssumptionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -358,7 +361,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
   }, [scopeId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           假设清单 · Assumptions ledger
@@ -370,6 +373,8 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
         这就是<i>"把会议室里的自信变成可验证的 bet"</i>。
       </div>
 
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+       <div style={{ minWidth: 850 }}>
       <div style={{
         display: 'grid', gridTemplateColumns: '80px minmax(280px,1fr) 110px 140px 140px 80px',
         padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
@@ -423,8 +428,10 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
           </div>
         );
       })}
+       </div>
+      </div>
 
-      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
         <CalloutCard title="高危假设 · 未验证" tone="accent">
           <b>AS-04</b> (LP 反弹) 和 <b>AS-02</b> (配额) 两条同时未验证，且共同支撑 D-06/D-07。
           建议立刻为 AS-04 排期 LP 预沟通。
@@ -446,6 +453,7 @@ type OpenQuestionRow = typeof OPEN_QUESTIONS[number];
 
 function OpenQuestions({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<OpenQuestionRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -481,7 +489,7 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
 
   const sorted = [...rows].sort((a, b) => b.timesRaised - a.timesRaised);
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           未解问题 · Open questions
@@ -505,7 +513,7 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
               background: chronic ? 'var(--accent-soft)' : 'var(--paper-2)',
               border: chronic ? '1px solid oklch(0.85 0.07 40)' : '1px solid var(--line-2)',
               borderRadius: 6, padding: '14px 18px',
-              display: 'grid', gridTemplateColumns: '1fr 180px 140px 80px', gap: 14, alignItems: 'center',
+              display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 180px 140px 80px', gap: 14, alignItems: 'center',
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -560,6 +568,7 @@ type RiskRow = typeof RISKS[number];
 
 function RiskHeat({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<RiskRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -590,7 +599,7 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
 
   const sorted = [...rows].sort((a, b) => b.heat - a.heat);
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           风险热度 · Risk heat
@@ -602,6 +611,8 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
         最危险的不是"严重的风险"，是"严重的风险但没人管"。系统把这两条信号合在一起，给你一个 triage 队列。
       </div>
 
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+       <div style={{ minWidth: 840 }}>
       <div style={{
         display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) 80px 80px 100px 180px 100px',
         padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
@@ -655,8 +666,10 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
           </div>
         );
       })}
+       </div>
+      </div>
 
-      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
         <CalloutCard title="3 个孤儿风险 · 需要 Triage" tone="accent">
           <b>R-01 · R-03 · R-07</b> 都是高 / 中严重度 + 趋势上行 + 无人处理。
           建议下次会议前 15 分钟做一次 triage，否则它们会出现在<i>未来事故复盘</i>的第一行。
@@ -787,6 +800,7 @@ export function AxisProjects() {
 
 /** 责任盘点：mn_commitments × ceo_attention_alloc 跨模块聚合 */
 function ResponsibilityTab({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<{ items: any[]; computedAt: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -799,7 +813,7 @@ function ResponsibilityTab({ scopeId }: { scopeId: string }) {
     return () => { cancelled = true; };
   }, [scopeId]);
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>责任盘点</h2>
         <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
@@ -861,6 +875,7 @@ function ResponsibilityTab({ scopeId }: { scopeId: string }) {
 
 /** 对外影响：直接调 CEO Situation 的 stakeholders endpoint（跨模块） */
 function StakeholderInfluenceTab({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -879,7 +894,7 @@ function StakeholderInfluenceTab({ scopeId }: { scopeId: string }) {
   const sorted = [...items].sort((a, b) => Number(b.heat ?? 0) - Number(a.heat ?? 0));
   const heatColor = (h: number) => h >= 0.7 ? 'oklch(0.55 0.18 25)' : h >= 0.4 ? 'oklch(0.65 0.16 75)' : 'oklch(0.55 0.10 160)';
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>对外影响 · 利益相关方热力图</h2>
         <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>

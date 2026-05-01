@@ -11,6 +11,7 @@ import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
+import { useIsMobile } from '../_useIsMobile';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ const EMOTION_CURVE = [
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function Quality({ meetingId }: { meetingId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [d, setD] = useState(DECISION_QUALITY);
   const [teamAvg, setTeamAvg] = useState<number | null>(null);
@@ -75,7 +77,7 @@ function Quality({ meetingId }: { meetingId: string }) {
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           决策质量打分 · Decision quality
@@ -85,7 +87,7 @@ function Quality({ meetingId }: { meetingId: string }) {
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 700 }}>
         一场会议的产出是一个<b>决议对象</b> —— 它可以被打分。本场决议在「可证伪性」上失分显著。
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 22 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap: 22 }}>
         <div style={{
           background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8,
           padding: '20px 22px', textAlign: 'center',
@@ -125,6 +127,7 @@ function Quality({ meetingId }: { meetingId: string }) {
 }
 
 function Necessity({ meetingId }: { meetingId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [n, setN] = useState(NECESSITY);
   const [isMock, setIsMock] = useState(true);
@@ -154,7 +157,7 @@ function Necessity({ meetingId }: { meetingId: string }) {
   }, [meetingId, forceMock]);
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           会议必要性审计 · Necessity audit
@@ -203,6 +206,7 @@ function Necessity({ meetingId }: { meetingId: string }) {
 type EmotionPoint = typeof EMOTION_CURVE[number];
 
 function Emotion({ meetingId }: { meetingId: string }) {
+  const isMobile = useIsMobile();
   const forceMock = useForceMock();
   const [curve, setCurve] = useState<EmotionPoint[]>([]);
   const [isMock, setIsMock] = useState(true);
@@ -233,7 +237,7 @@ function Emotion({ meetingId }: { meetingId: string }) {
   const yFor = (v: number) => H / 2 - v * (H / 2 - PAD);
   const sizeFor = (i: number) => 3 + i * 8;
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           情绪温度曲线 · Affective trace

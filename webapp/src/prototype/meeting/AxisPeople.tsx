@@ -11,6 +11,7 @@ import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
+import { useIsMobile } from '../_useIsMobile';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ type CommitmentRow = typeof COMMITMENTS[number];
 
 function PCommitments({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<CommitmentRow[]>([]);
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [isMock, setIsMock] = useState(true);
@@ -170,7 +172,7 @@ function PCommitments({ scopeId }: { scopeId: string }) {
       })).filter(x => x.items.length > 0);
 
   return (
-    <div style={{ padding: '24px 32px 36px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', gap: isMobile ? 16 : 24 }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
@@ -276,6 +278,7 @@ interface TrajectoryRow {
 
 function PTrajectory({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<TrajectoryRow[]>([]);
   const [isMock, setIsMock] = useState(true);
 
@@ -323,7 +326,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
     : '—';
 
   return (
-    <div style={{ padding: '24px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           角色画像演化 · {rows.length} 人
@@ -413,6 +416,7 @@ interface SpeechRow { who: string; claims: number; speechHighEntropy: number; be
 
 function PSpeech({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<SpeechRow[]>([]);
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -440,7 +444,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
   const max = Math.max(1, ...rows.map(s => s.claims));
   const hasClaims = rows.some(s => s.claims > 0);
   return (
-    <div style={{ padding: '24px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           发言质量 ≠ 发言数量
@@ -452,6 +456,8 @@ function PSpeech({ meetingId }: { meetingId: string }) {
         高熵 + 高追问 = 真正的贡献。发言多但双低的人，可能只是在填充空气。
       </div>
 
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+       <div style={{ minWidth: 680 }}>
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr 110px 110px 110px',
         padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
@@ -507,6 +513,8 @@ function PSpeech({ meetingId }: { meetingId: string }) {
           </div>
         );
       })}
+       </div>
+      </div>
 
       <div style={{ marginTop: 24, padding: '14px 18px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, maxWidth: 720 }}>
         <SectionLabel>批判提醒</SectionLabel>
@@ -524,6 +532,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
 
 function PSilence({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const defaultTopics = ['推理层', '训练层', '估值方法', '合规 / LP', '退出路径', '地缘 / 政策', '技术路线'];
   const defaultMatrix = [
     { who: 'p1', vals: ['spoke', 'spoke', 'spoke', 'abnormalSilence', 'spoke', 'normalSilence', 'normalSilence'] },
@@ -580,7 +589,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
   };
 
   return (
-    <div style={{ padding: '24px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px', letterSpacing: '-0.005em' }}>
           沉默信号 · Silence as signal
@@ -592,7 +601,8 @@ function PSilence({ meetingId }: { meetingId: string }) {
         <b> 最危险的信息往往藏在没说的话里。</b>
       </div>
 
-      <div style={{ display: 'inline-grid', gridTemplateColumns: `200px repeat(${topics.length}, 1fr)`, gap: 6, alignItems: 'center', maxWidth: '100%' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+      <div style={{ display: 'inline-grid', gridTemplateColumns: `200px repeat(${topics.length}, minmax(70px, 1fr))`, gap: 6, alignItems: 'center', minWidth: `${200 + topics.length * 70}px` }}>
         <div />
         {topics.map(t => (
           <div key={t} style={{ fontSize: 11, color: 'var(--ink-3)', textAlign: 'center', padding: '0 4px', lineHeight: 1.3, fontWeight: 500 }}>
@@ -628,6 +638,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
             </Fragment>
           );
         })}
+      </div>
       </div>
 
       <div style={{ display: 'flex', gap: 14, marginTop: 18, fontSize: 11.5, color: 'var(--ink-3)' }}>
@@ -800,6 +811,7 @@ export default AxisPeople;
 
 /** 信念轨迹：从 mn_belief_drift_series 读，与 longitudinal 同源。lite v1 复用 longitudinal API */
 function BeliefThreadTab({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -812,7 +824,7 @@ function BeliefThreadTab({ scopeId }: { scopeId: string }) {
     return () => { cancelled = true; };
   }, [scopeId]);
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>信念轨迹</h2>
         <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
@@ -840,6 +852,7 @@ function BeliefThreadTab({ scopeId }: { scopeId: string }) {
 
 /** 阵型：调 CEO War Room API */
 function FormationTab({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -856,7 +869,7 @@ function FormationTab({ scopeId }: { scopeId: string }) {
   const conflictTemp = data?.conflict_temp;
   const formationData = data?.formation_data;
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>阵型</h2>
         <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
@@ -893,6 +906,7 @@ function FormationTab({ scopeId }: { scopeId: string }) {
 
 /** 盲区档案：cognitive_biases + 自认矛盾。需要选定 person_id；scope 模式下显示选人引导 */
 function BlindSpotsTab({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
   const personId = searchParams.get('personId') || '';
   const [data, setData] = useState<{ biases: any[]; selfContradictions: any[] } | null>(null);
@@ -908,7 +922,7 @@ function BlindSpotsTab({ scopeId }: { scopeId: string }) {
     return () => { cancelled = true; };
   }, [personId]);
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>盲区档案</h2>
         <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
@@ -924,7 +938,7 @@ function BlindSpotsTab({ scopeId }: { scopeId: string }) {
       {personId && loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
       {personId && err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
       {personId && !loading && !err && data && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
               认知偏差 · {data.biases.length}
@@ -989,6 +1003,7 @@ interface PersonRow {
 }
 
 function PeopleManage({ scopeId }: { scopeId: string }) {
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<PersonRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1088,7 +1103,7 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
   }
 
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
           人物管理 · {rows?.length ?? '-'} 人
