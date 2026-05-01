@@ -792,7 +792,7 @@ export function AxisProjects() {
         {tab === 'stakeholders'   && <StakeholderInfluenceTab scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
-        <AxisRegeneratePanel initialAxis="projects" onClose={() => setRegenOpen(false)} />
+        <AxisRegeneratePanel initialAxis="projects" currentTab={tab} onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
   );

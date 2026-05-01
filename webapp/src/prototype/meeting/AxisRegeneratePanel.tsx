@@ -146,6 +146,46 @@ const AXIS_SHORT_LABEL: Record<string, string> = {
   a: 'A 视图', b: 'B 视图', c: 'C 视图',
 };
 
+// 轴 tab → 主驱动 sub_dim：用户从某 tab 点 ↻ 重算时，panel 自动定位到
+// 正确的 axis 并预勾选这些 sub。空 subs 表示该 tab 不在本面板重算
+// 职责内（跨模块 / 纯 UI tab），打开后保持空选让用户自己勾或关闭。
+type TabPreset = { axis: string; subs: string[] };
+const TAB_TO_SUBS: Record<string, Record<string, TabPreset>> = {
+  people: {
+    commitments:  { axis: 'people',    subs: ['commitments'] },
+    trajectory:   { axis: 'people',    subs: ['role_trajectory'] },
+    speech:       { axis: 'people',    subs: ['speech_quality'] },
+    silence:      { axis: 'people',    subs: ['silence_signal'] },
+    belief:       { axis: 'people',    subs: ['commitments'] },          // 派生自 commitments
+    formation:    { axis: 'people',    subs: [] },                       // 跨模块（CEO War Room）
+    blind_spots:  { axis: 'knowledge', subs: ['cognitive_biases'] },     // 跨轴搬家
+    manage:       { axis: 'people',    subs: [] },                       // 纯 UI 管理
+  },
+  projects: {
+    provenance:     { axis: 'projects', subs: ['decision_provenance'] },
+    assumptions:    { axis: 'projects', subs: ['assumptions'] },
+    questions:      { axis: 'projects', subs: ['open_questions'] },
+    risks:          { axis: 'projects', subs: ['risk_heat'] },
+    responsibility: { axis: 'people',   subs: ['commitments'] },         // 跨轴派生
+    stakeholders:   { axis: 'projects', subs: [] },                      // 跨模块（CEO Situation）
+  },
+  knowledge: {
+    cognition:       { axis: 'knowledge', subs: ['reusable_judgments'] },
+    mental_models:   { axis: 'knowledge', subs: ['mental_models', 'model_hitrate'] },  // 合并段
+    evidence:        { axis: 'knowledge', subs: ['evidence_grading'] },
+    counterfactuals: { axis: 'knowledge', subs: ['counterfactuals'] },
+    consensus:       { axis: 'knowledge', subs: ['consensus_track'] },
+    concept:         { axis: 'knowledge', subs: ['concept_drift'] },
+    lineage:         { axis: 'knowledge', subs: ['topic_lineage'] },
+    external:        { axis: 'knowledge', subs: ['external_experts'] },
+  },
+  meta: {
+    quality:    { axis: 'meta', subs: ['decision_quality'] },
+    necessity:  { axis: 'meta', subs: ['meeting_necessity'] },
+    emotion:    { axis: 'meta', subs: ['affect_curve'] },
+  },
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function Stat({ label, v }: { label: string; v: string }) {
@@ -170,14 +210,24 @@ const linkBtnStyle: React.CSSProperties = {
 
 export function AxisRegeneratePanel({
   initialAxis = 'knowledge',
+  currentTab,
   onClose,
 }: {
   initialAxis?: string;
+  /** 用户从轴视图哪个 tab 点开重算 → 自动定位 axis + 预勾对应 sub_dim */
+  currentTab?: string;
   onClose?: () => void;
 } = {}) {
-  const [axis, setAxis] = useState(initialAxis);
+  // 如果调用方传了 currentTab，就用 TAB_TO_SUBS 表查"该 tab 由哪些 sub 驱动"
+  // 跨轴 tab（blind_spots / responsibility）会切到 sub 实际所在的 axis
+  const tabPreset = currentTab ? TAB_TO_SUBS[initialAxis]?.[currentTab] : undefined;
+  const [axis, setAxis] = useState(tabPreset?.axis ?? initialAxis);
   const [selected, setSelected] = useState<string[]>(() => {
-    // 默认选中初始 axis 的全部 subDims；用户取消勾选保留交互
+    // 优先：tabPreset 命中 → 只勾该 tab 的主驱动 sub
+    if (tabPreset && tabPreset.subs.length > 0) return tabPreset.subs;
+    // 退化：tabPreset 命中但 subs 为空（跨模块 / UI tab）→ 不预勾，让用户自选
+    if (tabPreset) return [];
+    // 无 currentTab：保持旧默认 — 全选 initialAxis 的所有 sub
     const meta = AXIS_SUB[initialAxis];
     return meta ? meta.subs.map((s) => s.id) : [];
   });
@@ -280,6 +330,30 @@ export function AxisRegeneratePanel({
           重新生成 · 轴视图
         </h2>
         <MonoMeta>axis.regenerate · inline</MonoMeta>
+        {tabPreset && (
+          tabPreset.subs.length > 0 ? (
+            <span style={{
+              fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
+              background: 'var(--paper-2)', padding: '3px 8px', borderRadius: 4,
+              border: '1px dashed var(--line-2)',
+            }}>
+              已为 tab=<b style={{ color: 'var(--ink-2)' }}>{currentTab}</b> 预勾 {tabPreset.subs.length} 个 sub
+              {tabPreset.axis !== initialAxis && (
+                <span style={{ color: 'var(--ink-4)', marginLeft: 6 }}>
+                  (落在 {AXIS_SHORT_LABEL[tabPreset.axis] ?? tabPreset.axis} 轴)
+                </span>
+              )}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
+              background: 'var(--paper-2)', padding: '3px 8px', borderRadius: 4,
+              border: '1px dashed var(--line-2)',
+            }}>
+              tab=<b style={{ color: 'var(--ink-2)' }}>{currentTab}</b> 不在本面板重算职责内
+            </span>
+          )
+        )}
       </div>
       <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 720, lineHeight: 1.55 }}>
         从轴视图右上角「↻ 重算」打开。只暴露核心参数：选哪些子维度 · 用什么 preset · 在什么 scope 下。

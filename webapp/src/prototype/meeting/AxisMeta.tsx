@@ -357,7 +357,7 @@ export function AxisMeta() {
         {tab === 'emotion'   && <Emotion meetingId={meetingId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
-        <AxisRegeneratePanel initialAxis="meta" onClose={() => setRegenOpen(false)} />
+        <AxisRegeneratePanel initialAxis="meta" currentTab={tab} onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
   );
