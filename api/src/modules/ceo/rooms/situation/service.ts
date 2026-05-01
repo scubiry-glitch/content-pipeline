@@ -286,3 +286,128 @@ function missingKindLabel(k: string): string {
     default: return k;
   }
 }
+
+// ─── 写入端点 (Phase 1 输入接入层) ──────────────────────────
+
+const STAKEHOLDER_KINDS_WRITE = ['customer', 'regulator', 'investor', 'press', 'partner', 'employee', 'other'];
+
+export async function createStakeholder(
+  deps: CeoEngineDeps,
+  body: {
+    name?: string;
+    kind?: string;
+    heat?: number;
+    description?: string | null;
+    scopeId?: string | null;
+    escalationPath?: Record<string, any>;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.name) return { ok: false, error: 'name required' };
+  if (!body.kind || !STAKEHOLDER_KINDS_WRITE.includes(body.kind)) {
+    return { ok: false, error: 'kind must be one of ' + STAKEHOLDER_KINDS_WRITE.join('|') };
+  }
+  const heat = typeof body.heat === 'number' ? Math.max(0, Math.min(1, body.heat)) : 0;
+  const r = await deps.db.query(
+    `INSERT INTO ceo_stakeholders (scope_id, name, kind, heat, description, escalation_path, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id::text`,
+    [
+      body.scopeId ?? null,
+      body.name,
+      body.kind,
+      heat,
+      body.description ?? null,
+      body.escalationPath ?? {},
+      body.metadata ?? {},
+    ],
+  );
+  return { ok: true, id: r.rows[0].id };
+}
+
+export async function updateStakeholder(
+  deps: CeoEngineDeps,
+  id: string,
+  body: {
+    name?: string;
+    kind?: string;
+    heat?: number;
+    description?: string | null;
+    escalationPath?: Record<string, any>;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ ok: boolean; error?: string }> {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (body.name !== undefined) { params.push(body.name); sets.push(`name = $${params.length}`); }
+  if (body.kind !== undefined) {
+    if (!STAKEHOLDER_KINDS_WRITE.includes(body.kind)) return { ok: false, error: 'invalid kind' };
+    params.push(body.kind); sets.push(`kind = $${params.length}`);
+  }
+  if (body.heat !== undefined) {
+    params.push(Math.max(0, Math.min(1, body.heat))); sets.push(`heat = $${params.length}`);
+  }
+  if (body.description !== undefined) { params.push(body.description); sets.push(`description = $${params.length}`); }
+  if (body.escalationPath !== undefined) { params.push(body.escalationPath); sets.push(`escalation_path = $${params.length}`); }
+  if (body.metadata !== undefined) { params.push(body.metadata); sets.push(`metadata = $${params.length}`); }
+  if (sets.length === 0) return { ok: false, error: 'no fields to update' };
+  params.push(id);
+  const r = await deps.db.query(
+    `UPDATE ceo_stakeholders SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id::text`,
+    params,
+  );
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
+
+export async function deleteStakeholder(
+  deps: CeoEngineDeps,
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await deps.db.query(`DELETE FROM ceo_stakeholders WHERE id = $1 RETURNING id::text`, [id]);
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
+
+export async function createSignal(
+  deps: CeoEngineDeps,
+  body: {
+    stakeholderId?: string;
+    signalText?: string;
+    sourceUrl?: string | null;
+    sentiment?: number | null;
+    refAssetId?: string | null;
+    capturedAt?: string;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.stakeholderId || !body.signalText) {
+    return { ok: false, error: 'stakeholderId and signalText required' };
+  }
+  const sentiment = body.sentiment != null ? Math.max(-1, Math.min(1, body.sentiment)) : null;
+  const captured = body.capturedAt ?? null;
+  const r = await deps.db.query(
+    `INSERT INTO ceo_external_signals
+       (stakeholder_id, signal_text, source_url, sentiment, captured_at, ref_asset_id, metadata)
+     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, NOW()), $6, $7)
+     RETURNING id::text`,
+    [
+      body.stakeholderId,
+      body.signalText,
+      body.sourceUrl ?? null,
+      sentiment,
+      captured,
+      body.refAssetId ?? null,
+      body.metadata ?? {},
+    ],
+  );
+  // 同步刷新 stakeholder.last_signal_at + 简单 heat 增量 (max-clamp 1.0)
+  await deps.db.query(
+    `UPDATE ceo_stakeholders
+        SET last_signal_at = NOW(),
+            heat = LEAST(1.0, heat + 0.05)
+      WHERE id = $1`,
+    [body.stakeholderId],
+  ).catch(() => {/* 非致命: 触发 heat 刷新失败不阻塞 signal 写入 */});
+  return { ok: true, id: r.rows[0].id };
+}

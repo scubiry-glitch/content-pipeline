@@ -13,6 +13,11 @@ import {
   listBriefs,
   listPromises,
   listRebuttals,
+  createDirector,
+  updateDirector,
+  deleteDirector,
+  createConcern,
+  updateConcernStatus,
 } from './service.js';
 import { listAnnotations, generateAnnotation } from './annotations-service.js';
 
@@ -83,6 +88,44 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
         scopeIds,
         limit: limit ? Number(limit) : undefined,
       });
+    });
+
+    // ─── 输入接入层 (Phase 1) ─────────────────────────────────
+    fastify.post('/directors', async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await createDirector(engine.deps, body);
+      if (!r.ok) { reply.code(400); }
+      return r;
+    });
+
+    fastify.patch('/directors/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await updateDirector(engine.deps, id, body);
+      if (!r.ok) { reply.code(r.error === 'not found' ? 404 : 400); }
+      return r;
+    });
+
+    fastify.delete('/directors/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const r = await deleteDirector(engine.deps, id);
+      if (!r.ok) { reply.code(404); }
+      return r;
+    });
+
+    fastify.post('/concerns', async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await createConcern(engine.deps, body);
+      if (!r.ok) { reply.code(400); }
+      return r;
+    });
+
+    fastify.patch('/concerns/:id/status', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await updateConcernStatus(engine.deps, id, body);
+      if (!r.ok) { reply.code(r.error === 'not found' ? 404 : 400); }
+      return r;
     });
 
     fastify.post('/annotations/generate', async (request, reply) => {
