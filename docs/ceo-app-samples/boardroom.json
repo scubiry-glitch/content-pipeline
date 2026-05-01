@@ -7,7 +7,7 @@
     "② pre-brief draft":    "实装",
     "③ external annotations": "实装 (fixture, PR12 LLM 接入)",
     "④ promise tracking":   "实装",
-    "⑤ rebuttal rehearsal": "实装 (fixture, PR12 LLM g3 任务接入)",
+    "⑤ rebuttal rehearsal": "实装 — 优先 ceo_rebuttal_rehearsals 真数据 (空时回退 fixture); 顶部含 EnqueueRunButton (axis=g3) 触发 LLM 生成",
     "⑥ versions":           "实装 — VersionsTabs.tsx 拉 ceo_briefs 真数据，一页纸 / 完整套版 Tab 切换"
   },
   "endpoints": {

@@ -53,12 +53,14 @@
   },
   "tables": {
     "ceo_stakeholders": [
-      { "name": "LP",     "kind": "investor",  "heat": 0.92 },
-      { "name": "董事会", "kind": "investor",  "heat": 0.78 },
-      { "name": "同行",   "kind": "partner",   "heat": 0.62 },
-      { "name": "团队",   "kind": "employee",  "heat": 0.55 },
-      { "name": "监管",   "kind": "regulator", "heat": 0.45 },
-      { "name": "媒体",   "kind": "press",     "heat": 0.30 }
+      { "name": "LP",            "kind": "investor",  "heat": 0.92 },
+      { "name": "董事会",        "kind": "investor",  "heat": 0.78 },
+      { "name": "同行",          "kind": "partner",   "heat": 0.62 },
+      { "name": "Halycon 客户",  "kind": "customer",  "heat": 0.68 },
+      { "name": "Beacon 客户",   "kind": "customer",  "heat": 0.40 },
+      { "name": "团队",          "kind": "employee",  "heat": 0.55 },
+      { "name": "监管",          "kind": "regulator", "heat": 0.45 },
+      { "name": "媒体",          "kind": "press",     "heat": 0.30 }
     ],
     "ceo_external_signals": "见 endpoints['GET /signals'] 节，共 8 条",
     "ceo_rubric_scores": "见 endpoints['GET /rubric'] 节，共 30 行 (5 维 × 6 利益方)"

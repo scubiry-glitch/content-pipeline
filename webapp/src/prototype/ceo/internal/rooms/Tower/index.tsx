@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { CommitmentKanban } from './CommitmentKanban';
 import { RhythmPulse } from './RhythmPulse';
 import { DeficitAlert } from './DeficitAlert';
+import { RhythmsArchive } from './RhythmsArchive';
 import { BLOCKERS, POST_MEETING } from './_towerFixtures';
 
 interface DashboardData {
@@ -179,11 +180,8 @@ export function Tower() {
           <DeficitAlert />
         </Block>
 
-        <Block num="⑥ rhythms" title="周节律档案" meta="按月切片" spanFull>
-          <Placeholder>
-            按月查看节律切片 · 战略主线时长 / 救火比例 / 透支天数。
-            数据源 ceo_attention_alloc + ceo_time_roi (Balcony PR9 落地后联通)。
-          </Placeholder>
+        <Block num="⑥ rhythms" title="周节律档案" meta="滚动 12 周 · 按月切片" spanFull>
+          <RhythmsArchive />
         </Block>
       </main>
     </div>

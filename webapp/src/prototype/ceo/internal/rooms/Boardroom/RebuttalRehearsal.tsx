@@ -1,23 +1,87 @@
 // Boardroom · ⑤ 反对论点演练
 // 来源: 07-archive/会议纪要 (20260501)/boardroom.html .reh-row block
-// PR12 接 LLM 后由 g3 任务自动生成填充 ceo_rebuttal_rehearsals
+// 数据: 默认 fixture; 点击"生成反方演练"触发 g3 LLM 任务，结果落 ceo_rebuttal_rehearsals
 
+import { useEffect, useState } from 'react';
 import { REBUTTALS, type RebuttalCard } from './_boardroomFixtures';
+import { EnqueueRunButton } from '../../../shared/EnqueueRunButton';
 
 interface Props {
   rebuttals?: RebuttalCard[];
 }
 
+interface ApiRebuttal {
+  id: string;
+  attacker: string;
+  attack_text: string;
+  defense_text: string;
+  strength_score: number;
+}
+
 export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
+  const [apiData, setApiData] = useState<ApiRebuttal[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/v1/ceo/boardroom/rebuttals')
+      .then((r) => r.json())
+      .then((d: { items: ApiRebuttal[] }) => {
+        if (cancelled) return;
+        if (d.items?.length > 0) setApiData(d.items.slice(0, 3));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 优先 API 数据；为空时用 fixture
+  const display = apiData
+    ? apiData.map((r) => ({
+        attacker: r.attacker,
+        attack: r.attack_text,
+        defense: r.defense_text,
+        strength: Number(r.strength_score),
+      }))
+    : rebuttals;
+
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 14,
-      }}
-    >
-      {rebuttals.map((r, i) => (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+          gap: 12,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: 'var(--mono)',
+            fontSize: 10,
+            color: 'rgba(240,232,214,0.55)',
+            letterSpacing: 0.3,
+          }}
+        >
+          {apiData ? `LIVE · 共 ${apiData.length} 条` : 'FIXTURE · 演示数据'}
+        </span>
+        <EnqueueRunButton
+          axis="g3"
+          label="🎯 生成反方演练"
+          productName="反方演练"
+          tone="#D4A84B"
+          metadata={{ source: 'boardroom-block-5' }}
+        />
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 14,
+        }}
+      >
+      {display.map((r, i) => (
         <div
           key={i}
           style={{
@@ -106,6 +170,7 @@ export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

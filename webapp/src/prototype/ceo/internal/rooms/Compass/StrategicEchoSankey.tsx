@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { ceoApi } from '../../../_apiAdapters';
+import { EnqueueRunButton } from '../../../shared/EnqueueRunButton';
 
 interface Echo {
   id: string;
@@ -101,6 +102,33 @@ export function StrategicEchoSankey() {
   // 三列 Sankey 简化版：每条 echo 一行 (line | hypothesis ↔ fact | fate)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 4,
+          gap: 12,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: 'var(--mono)',
+            fontSize: 10,
+            color: 'rgba(26,46,61,0.55)',
+            letterSpacing: 0.3,
+          }}
+        >
+          LIVE · 共 {allEchos.length} 条 hypothesis ↔ fact 链
+        </span>
+        <EnqueueRunButton
+          axis="g4"
+          label="🌌 生成战略回响"
+          productName="战略回响"
+          tone="#3E6E8C"
+          metadata={{ source: 'compass-block-5' }}
+        />
+      </div>
       {allEchos.map((e) => (
         <div
           key={e.id}

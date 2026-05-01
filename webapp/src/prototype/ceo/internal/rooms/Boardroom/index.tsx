@@ -178,7 +178,7 @@ export function Boardroom() {
         <Block
           num="⑤ rebuttal rehearsal"
           title="反对论点演练 · 三个最尖锐的攻击"
-          meta="基于关切雷达 + 棱镜推演 (PR12 接 LLM)"
+          meta="基于关切雷达 + 棱镜推演 · g3 LLM"
           spanFull
         >
           <RebuttalRehearsal />

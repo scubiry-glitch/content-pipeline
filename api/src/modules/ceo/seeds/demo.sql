@@ -83,14 +83,62 @@ WHERE NOT EXISTS (
 
 INSERT INTO ceo_stakeholders (name, kind, heat, last_signal_at, description)
 SELECT n, k, h, NOW() - (offset_days * INTERVAL '1 day'), d FROM (VALUES
-  ('LP',       'investor',  0.92::numeric, 0, '林雾 + 3 位机构 — Q3 大会前需要退出方案'),
-  ('董事会',   'investor',  0.78::numeric, 1, 'Wei + Omar 主导 — 流程层关切升级'),
-  ('同行',     'partner',   0.62::numeric, 3, 'Sequoia + Lightspeed 扫描 Stellar'),
-  ('团队',     'employee',  0.55::numeric, 0, '陆景行连续 2 周加班，需关注'),
-  ('监管',     'regulator', 0.45::numeric, 5, '港 SFC + 美 SEC — 季度报告改革跟进'),
-  ('媒体',     'press',     0.30::numeric, 7, '财经口 — 本季无 inbound')
+  ('LP',           'investor',  0.92::numeric, 0, '林雾 + 3 位机构 — Q3 大会前需要退出方案'),
+  ('董事会',       'investor',  0.78::numeric, 1, 'Wei + Omar 主导 — 流程层关切升级'),
+  ('同行',         'partner',   0.62::numeric, 3, 'Sequoia + Lightspeed 扫描 Stellar'),
+  ('团队',         'employee',  0.55::numeric, 0, '陆景行连续 2 周加班，需关注'),
+  ('监管',         'regulator', 0.45::numeric, 5, '港 SFC + 美 SEC — 季度报告改革跟进'),
+  ('媒体',         'press',     0.30::numeric, 7, '财经口 — 本季无 inbound'),
+  ('Halycon 客户', 'customer',  0.68::numeric, 2, '被投 Halycon 的核心客户群 — Q1 ARR +47% 来源'),
+  ('Beacon 客户',  'customer',  0.40::numeric, 4, 'Beacon 退出后将转为新东家关系')
 ) AS s(n, k, h, offset_days, d)
 WHERE NOT EXISTS (SELECT 1 FROM ceo_stakeholders WHERE name = s.n);
+
+-- 历史 12 周时间分配 (供 Tower ⑥ rhythms / RhythmPulse 8 周折线 / Compass alignment 历史使用)
+INSERT INTO ceo_attention_alloc (week_start, project_id, hours, kind, source)
+SELECT DATE_TRUNC('week', NOW() - (n * INTERVAL '7 day'))::date, NULL, h, k, 'manual' FROM (VALUES
+  -- (周偏移, 主线 h, 支线 h, 救火 h)
+  (1::int,  18.5::numeric, 10.0::numeric, 8.5::numeric),
+  (2::int,  17.0::numeric, 11.5::numeric, 9.5::numeric),
+  (3::int,  19.5::numeric, 12.0::numeric, 6.0::numeric),
+  (4::int,  18.0::numeric, 11.0::numeric, 9.0::numeric),
+  (5::int,  16.5::numeric, 11.5::numeric, 10.0::numeric),
+  (6::int,  17.5::numeric, 12.5::numeric, 7.5::numeric),
+  (7::int,  20.0::numeric, 11.0::numeric, 6.0::numeric),
+  (8::int,  17.0::numeric, 12.0::numeric, 8.5::numeric),
+  (9::int,  18.5::numeric, 10.5::numeric, 9.5::numeric),
+  (10::int, 19.0::numeric, 12.0::numeric, 7.0::numeric),
+  (11::int, 16.0::numeric, 11.0::numeric, 11.0::numeric),
+  (12::int, 17.5::numeric, 11.5::numeric, 9.0::numeric)
+) AS w(n, m, b, f)
+CROSS JOIN LATERAL (VALUES (m, 'main'), (b, 'branch'), (f, 'firefighting')) AS k(h, k)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ceo_attention_alloc
+   WHERE week_start = DATE_TRUNC('week', NOW() - (w.n * INTERVAL '7 day'))::date
+     AND kind = k.k
+);
+
+-- 历史 12 周 time ROI (供 Tower ⑥ rhythms 透支天数计算)
+INSERT INTO ceo_time_roi (user_id, week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi)
+SELECT 'system', DATE_TRUNC('week', NOW() - (n * INTERVAL '7 day'))::date, t, df, m, tg, ROUND((df / NULLIF(tg, 0))::numeric, 3) FROM (VALUES
+  (1::int,  53.5::numeric, 12.5::numeric, 24.0::numeric, 18.0::numeric),
+  (2::int,  55.0::numeric, 10.0::numeric, 28.0::numeric, 18.0::numeric),
+  (3::int,  51.0::numeric, 14.0::numeric, 22.0::numeric, 18.0::numeric),
+  (4::int,  56.0::numeric, 11.5::numeric, 27.0::numeric, 18.0::numeric),
+  (5::int,  58.0::numeric,  9.5::numeric, 30.0::numeric, 18.0::numeric),
+  (6::int,  52.5::numeric, 13.0::numeric, 24.0::numeric, 18.0::numeric),
+  (7::int,  50.0::numeric, 15.0::numeric, 21.0::numeric, 18.0::numeric),
+  (8::int,  54.0::numeric, 12.0::numeric, 26.0::numeric, 18.0::numeric),
+  (9::int,  57.5::numeric, 10.5::numeric, 29.5::numeric, 18.0::numeric),
+  (10::int, 53.0::numeric, 13.5::numeric, 24.5::numeric, 18.0::numeric),
+  (11::int, 60.0::numeric,  8.5::numeric, 32.0::numeric, 18.0::numeric),
+  (12::int, 55.5::numeric, 11.0::numeric, 27.5::numeric, 18.0::numeric)
+) AS r(n, t, df, m, tg)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ceo_time_roi
+   WHERE user_id = 'system'
+     AND week_start = DATE_TRUNC('week', NOW() - (r.n * INTERVAL '7 day'))::date
+);
 
 INSERT INTO ceo_external_signals (stakeholder_id, signal_text, source_url, sentiment, captured_at)
 SELECT s.id, sig.text, sig.url, sig.sent, NOW() - (sig.days * INTERVAL '1 day') FROM ceo_stakeholders s

@@ -2,6 +2,14 @@
   "$comment": "Tower · 协调房间样例 — 主要复用 mn_commitments，不写 ceo_* 表",
   "$page": "/ceo/internal/ceo/tower",
   "$prototype": "07-archive/会议纪要 (20260501)/tower.html",
+  "$blocks_status": {
+    "① commitment kanban": "实装 — 4 列看板 (复用 mn_commitments)",
+    "② blocker radar":     "实装 — 14 天超期承诺自动检测",
+    "③ post-meeting card": "实装 — 上次会议未关闭项",
+    "④ rhythm pulse":      "实装 — 8 周双折线 (战略主线 vs 救火) + plan 20h 基线",
+    "⑤ deficit alert":     "实装 — 个人精力 gauge (实测 vs 预算)",
+    "⑥ rhythms":           "实装 — RhythmsArchive.tsx 12 周按月切片 (主线时长/救火比例/透支周/平均 ROI)"
+  },
   "endpoints": {
     "GET /api/v1/ceo/tower/dashboard": {
       "question": "谁欠谁什么? 卡在哪?",
@@ -41,6 +49,26 @@
         { "weekStart": "2026-04-27", "mainHours": 20.14, "firefightingHours": 6.46 }
       ],
       "planLine": 20
+    },
+    "$rhythms_archive_data_flow": {
+      "$comment": "Tower ⑥ rhythms 客户端聚合 — 不新建后端端点",
+      "step_1": "GET /api/v1/ceo/tower/pulse?weeks=12 (拿 12 周 main/firefighting 时数)",
+      "step_2": "并行 12 次 GET /api/v1/ceo/balcony/roi?userId=system&weekStart=YYYY-MM-DD (拿每周 deep_focus/total/roi)",
+      "step_3": "客户端 aggregateByMonth: 按 weekStart 月份聚合 → MonthSlice {monthLabel, totalMainHours, firefightingPct, deficitWeeks (total>50h 周数), avgWeeklyRoi}"
+    },
+    "$rhythms_archive_sample": {
+      "$comment": "RhythmsArchive 渲染示例数据 (滚动 12 周, 按月切片 ~3 个月)",
+      "monthSlices": [
+        { "monthLabel": "2026-02", "weekCount": 4, "totalMainHours": 71,   "firefightingPct": 0.20, "deficitWeeks": 1, "avgWeeklyRoi": 0.65 },
+        { "monthLabel": "2026-03", "weekCount": 4, "totalMainHours": 73.5, "firefightingPct": 0.22, "deficitWeeks": 2, "avgWeeklyRoi": 0.62 },
+        { "monthLabel": "2026-04", "weekCount": 4, "totalMainHours": 73,   "firefightingPct": 0.31, "deficitWeeks": 3, "avgWeeklyRoi": 0.55 }
+      ],
+      "$summary_strip": {
+        "主线时长": "217h (累 12 周)",
+        "救火比例": "24% (整体)",
+        "透支周数": "6/12",
+        "平均 ROI": "0.61"
+      }
     }
   },
   "tables_consumed": {
@@ -55,6 +83,15 @@
   "$aggregator": {
     "responsibility_clarity": "1 - 无主承诺数/总承诺数 (从 mn_commitments)",
     "calc": "无主 0 / 21 = 0 → 1 - 0 = 1.00 (但 demo 显示 0.78 — 实际项目中 owner_name 缺失更多)",
-    "blocker_definition": "in_progress 或 open 状态 + due_at < NOW - 14 天"
+    "blocker_definition": "in_progress 或 open 状态 + due_at < NOW - 14 天",
+    "rhythms_aggregator": {
+      "$comment": "RhythmsArchive 客户端按月聚合算子",
+      "firefightingPct": "totalFirefightingHours / (totalMainHours + totalFirefightingHours)",
+      "deficitWeeks": "总工时 > 50h 的周数 (从 ceo_time_roi.total_hours 判断)",
+      "avgWeeklyRoi": "该月各周 weekly_roi 平均",
+      "fire_warn_threshold": "firefightingPct >= 0.25",
+      "roi_warn_threshold": "avgWeeklyRoi < 0.55",
+      "deficit_warn_threshold": "deficitWeeks >= 2 (一个月 4 周里有半数透支)"
+    }
   }
 }

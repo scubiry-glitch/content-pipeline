@@ -8,7 +8,7 @@
     "② time pie": "实装 (TimePie.tsx)",
     "③ drift radar": "实装 (DriftRadar.tsx)",
     "④ project atlas": "实装入口卡 — 点击跳 /ceo/internal/ceo/compass/atlas (子房间)",
-    "⑤ strategic echo": "实装 — StrategicEchoSankey.tsx 拉 ceo_strategic_echos 真数据",
+    "⑤ strategic echo": "实装 — StrategicEchoSankey.tsx 拉 ceo_strategic_echos 真数据 + 含 EnqueueRunButton (axis=g4) 触发 LLM 跨会综合",
     "⑥ one-pager": "实装 — OnePagerPaper.tsx 拉 ceo_briefs 最新一份",
     "⑦ archives": "实装 — ArchivesTabs.tsx 按 board_session 分组"
   },
