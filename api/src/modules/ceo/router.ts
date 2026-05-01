@@ -10,6 +10,7 @@ import { createWarRoomRouter } from './rooms/war-room/router.js';
 import { createSituationRouter } from './rooms/situation/router.js';
 import { createBalconyRouter } from './rooms/balcony/router.js';
 import { createPanoramaRouter } from './panorama/router.js';
+import { createBrainRouter } from './brain/router.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -28,7 +29,8 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     await fastify.register(createSituationRouter(engine), { prefix: '/situation' });
     await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
     await fastify.register(createPanoramaRouter(engine), { prefix: '/panorama' });
-    // PR11 接入：
+    await fastify.register(createBrainRouter(engine), { prefix: '/brain' });
+    // PR12: g3/g4 LLM 任务接入 mn_runs (module='ceo')
     //   await fastify.register(createWarRoomRouter(engine), { prefix: '/war-room' });
     //   await fastify.register(createSituationRouter(engine), { prefix: '/situation' });
     //   await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
