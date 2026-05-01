@@ -47,5 +47,75 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
         metadata: body.metadata,
       });
     });
+
+    // R3-2 — SSE 流式进度
+    // GET /api/v1/ceo/runs/:runId/stream → text/event-stream
+    // 每 500ms 查 mn_runs 一次, push event; 终态后 done event 关闭
+    // 超时 60s 自动关闭 (避免连接泄漏)
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    fastify.get('/runs/:runId/stream', async (request, reply) => {
+      const { runId } = request.params as { runId: string };
+      if (!UUID_RE.test(runId)) {
+        reply.status(400);
+        return { error: 'invalid runId' };
+      }
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no', // Nginx: 关 buffer
+      });
+
+      let closed = false;
+      const cleanup = () => {
+        if (!closed) {
+          closed = true;
+          try { reply.raw.end(); } catch { /* ignore */ }
+        }
+      };
+      request.raw.on('close', cleanup);
+      request.raw.on('error', cleanup);
+
+      const startedAt = Date.now();
+      const TIMEOUT_MS = 60_000;
+      const POLL_MS = 500;
+
+      const tick = async () => {
+        if (closed) return;
+        if (Date.now() - startedAt > TIMEOUT_MS) {
+          try {
+            reply.raw.write(`event: timeout\ndata: ${JSON.stringify({ ok: false })}\n\n`);
+          } catch { /* ignore */ }
+          cleanup();
+          return;
+        }
+        try {
+          const r = await engine.deps.db.query(
+            `SELECT id::text, module, axis, state, triggered_by, preset, progress_pct,
+                    cost_tokens, cost_ms, error_message, started_at, finished_at, created_at,
+                    metadata
+               FROM mn_runs WHERE id = $1::uuid`,
+            [runId],
+          );
+          if (r.rows.length === 0) {
+            reply.raw.write(`event: not-found\ndata: ${JSON.stringify({ runId })}\n\n`);
+            cleanup();
+            return;
+          }
+          const row = r.rows[0];
+          reply.raw.write(`event: progress\ndata: ${JSON.stringify(row)}\n\n`);
+          if (['succeeded', 'failed', 'cancelled'].includes(row.state)) {
+            reply.raw.write(`event: done\ndata: ${JSON.stringify({ state: row.state })}\n\n`);
+            cleanup();
+            return;
+          }
+        } catch (e) {
+          reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: (e as Error).message })}\n\n`);
+        }
+        if (!closed) setTimeout(tick, POLL_MS);
+      };
+      tick();
+    });
   };
 }

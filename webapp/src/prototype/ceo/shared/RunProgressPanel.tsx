@@ -44,44 +44,91 @@ export function RunProgressPanel({ runId, tone = '#D9B88E', onCompleted, autoHid
   const [run, setRun] = useState<RunRow | null>(null);
   const [hidden, setHidden] = useState(false);
   const [pollCount, setPollCount] = useState(0);
+  const [transport, setTransport] = useState<'sse' | 'poll'>('sse');
 
   useEffect(() => {
     if (!runId) return;
     let cancelled = false;
-    let timer: NodeJS.Timeout | null = null;
     let stopAfter: NodeJS.Timeout | null = null;
+    let es: EventSource | null = null;
+    let pollTimer: NodeJS.Timeout | null = null;
 
-    const poll = async () => {
+    const handleRow = (row: RunRow) => {
       if (cancelled) return;
-      try {
-        const res = await fetch(`/api/v1/ceo/brain/tasks?ids=${encodeURIComponent(runId)}&limit=1`);
-        if (res.ok) {
-          const d = (await res.json()) as { items: RunRow[] };
-          const item = d.items?.[0];
-          if (item && !cancelled) {
-            setRun(item);
-            setPollCount((c) => c + 1);
-            if (['succeeded', 'failed', 'cancelled'].includes(item.state)) {
-              onCompleted?.(item);
-              if (autoHide) {
-                stopAfter = setTimeout(() => !cancelled && setHidden(true), 3000);
-              }
-              return;
+      setRun(row);
+      setPollCount((c) => c + 1);
+      if (['succeeded', 'failed', 'cancelled'].includes(row.state)) {
+        onCompleted?.(row);
+        if (autoHide) {
+          stopAfter = setTimeout(() => !cancelled && setHidden(true), 3000);
+        }
+        return true;
+      }
+      return false;
+    };
+
+    const startPolling = () => {
+      setTransport('poll');
+      const poll = async () => {
+        if (cancelled) return;
+        try {
+          const res = await fetch(`/api/v1/ceo/brain/tasks?ids=${encodeURIComponent(runId)}&limit=1`);
+          if (res.ok) {
+            const d = (await res.json()) as { items: RunRow[] };
+            const item = d.items?.[0];
+            if (item && !cancelled) {
+              if (handleRow(item)) return;
             }
           }
+        } catch {
+          /* 继续 poll */
         }
-      } catch {
-        /* 网络错误时继续 poll */
-      }
-      if (!cancelled) {
-        timer = setTimeout(poll, 1000);
-      }
+        if (!cancelled) {
+          pollTimer = setTimeout(poll, 1000);
+        }
+      };
+      poll();
     };
-    poll();
+
+    // 优先 SSE
+    try {
+      es = new EventSource(`/api/v1/ceo/runs/${encodeURIComponent(runId)}/stream`);
+
+      es.addEventListener('progress', (ev: MessageEvent) => {
+        try {
+          const row = JSON.parse(ev.data) as RunRow;
+          if (handleRow(row)) {
+            es?.close();
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+      es.addEventListener('done', () => {
+        es?.close();
+      });
+      es.addEventListener('not-found', () => {
+        es?.close();
+        if (!cancelled) startPolling(); // 切到轮询，可能 run 还没写库
+      });
+      es.addEventListener('timeout', () => {
+        es?.close();
+        if (!cancelled) startPolling();
+      });
+      es.onerror = () => {
+        // SSE 失败 → 退到轮询
+        es?.close();
+        if (!cancelled && transport === 'sse') startPolling();
+      };
+    } catch {
+      // EventSource 不可用 → 直接轮询
+      startPolling();
+    }
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      es?.close();
+      if (pollTimer) clearTimeout(pollTimer);
       if (stopAfter) clearTimeout(stopAfter);
     };
   }, [runId, onCompleted, autoHide]);
@@ -149,7 +196,7 @@ export function RunProgressPanel({ runId, tone = '#D9B88E', onCompleted, autoHid
           {run.module} · {run.axis} · {stateTone.label}
         </span>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'rgba(232,227,216,0.5)' }}>
-          run {run.id.slice(0, 8)} · poll #{pollCount}
+          run {run.id.slice(0, 8)} · {transport === 'sse' ? 'SSE' : 'poll'} #{pollCount}
         </span>
       </div>
 
