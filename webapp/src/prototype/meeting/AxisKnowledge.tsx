@@ -669,7 +669,7 @@ export function AxisKnowledge() {
         {tab === 'external'        && <PendingSubdimTab title="外脑批注" subDim="external_experts" hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
-        <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
+        <AxisRegeneratePanel initialAxis="knowledge" currentTab={tab} onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
   );

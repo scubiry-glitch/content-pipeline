@@ -801,7 +801,7 @@ export function AxisPeople() {
         {tab === 'manage'      && <PeopleManage scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
-        <AxisRegeneratePanel initialAxis="people" onClose={() => setRegenOpen(false)} />
+        <AxisRegeneratePanel initialAxis="people" currentTab={tab} onClose={() => setRegenOpen(false)} />
       </RegenerateOverlay>
     </>
   );
