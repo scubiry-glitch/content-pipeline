@@ -87,6 +87,7 @@ import { Compass as CeoCompass } from './prototype/ceo/internal/rooms/Compass';
 import { Boardroom as CeoBoardroom } from './prototype/ceo/internal/rooms/Boardroom';
 import { Tower as CeoTower } from './prototype/ceo/internal/rooms/Tower';
 import { WarRoom as CeoWarRoom } from './prototype/ceo/internal/rooms/WarRoom';
+import { Situation as CeoSituation } from './prototype/ceo/internal/rooms/Situation';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
 import { Compliance } from './pages/Compliance';
 import { Orchestrator } from './pages/Orchestrator';
@@ -274,6 +275,7 @@ function App() {
               <Route path="internal/ceo/boardroom" element={<CeoBoardroom />} />
               <Route path="internal/ceo/tower" element={<CeoTower />} />
               <Route path="internal/ceo/war-room" element={<CeoWarRoom />} />
+              <Route path="internal/ceo/situation" element={<CeoSituation />} />
               <Route path="internal/ceo/:room" element={<CeoRoomStub />} />
               <Route path="internal/brain" element={<CeoBrainShell />}>
                 <Route index element={<Navigate to="expert-library" replace />} />
