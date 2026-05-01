@@ -1703,15 +1703,21 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       }
 
       // 情绪峰值：从 samples 里取最大 |valence| 与对应 intensity
+      // R3-A bugfix: mn_affect_curve.samples 实际字段是 {t_sec, valence, intensity, tag}（DB 长名）
+      // 但前端 AffectOverlay 期望 {t, v, i, tag}（短名）—— 这里统一 normalize 成短名后输出，
+      // 同时兼容两种来源（旧 seed 短名 / 新 LLM 输出长名）。
+      type RawSample = { t?: number; v?: number; i?: number; t_sec?: number; valence?: number; intensity?: number; tag?: string };
+      const rawSamples: RawSample[] = Array.isArray(aR.rows[0]?.samples) ? (aR.rows[0].samples as RawSample[]) : [];
+      const normSamples = rawSamples.map((s) => ({
+        t:   Number(s.t ?? s.t_sec ?? 0) / (s.t !== undefined ? 1 : 60),  // 长名秒 → 分；短名按原样
+        v:   Number(s.v ?? s.valence ?? 0),
+        i:   Number(s.i ?? s.intensity ?? 0),
+        tag: typeof s.tag === 'string' ? s.tag : undefined,
+      }));
       let affectPeak: { valence: number; intensity: number; tag?: string } | null = null;
-      if (aR.rows[0]?.samples && Array.isArray(aR.rows[0].samples)) {
-        const samples = aR.rows[0].samples as Array<{ v?: number; i?: number; tag?: string }>;
-        for (const s of samples) {
-          const v = Number(s.v ?? 0);
-          const i = Number(s.i ?? 0);
-          if (!affectPeak || Math.abs(v) > Math.abs(affectPeak.valence)) {
-            affectPeak = { valence: v, intensity: i, tag: s.tag };
-          }
+      for (const s of normSamples) {
+        if (!affectPeak || Math.abs(s.v) > Math.abs(affectPeak.valence)) {
+          affectPeak = { valence: s.v, intensity: s.i, tag: s.tag };
         }
       }
 
@@ -1727,7 +1733,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           : null,
         affect: aR.rows[0]
           ? {
-              samples: aR.rows[0].samples ?? [],
+              samples: normSamples,  // R3-A bugfix: 输出短名 {t, v, i, tag}
               tensionPeaks: aR.rows[0].tension_peaks ?? null,
               insightPoints: aR.rows[0].insight_points ?? null,
               peak: affectPeak,
