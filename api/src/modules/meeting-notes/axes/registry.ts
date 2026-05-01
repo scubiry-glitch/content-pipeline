@@ -20,6 +20,11 @@ import { computeMentalModels } from './knowledge/mentalModelsComputer.js';
 import { computeCognitiveBiases } from './knowledge/cognitiveBiasesComputer.js';
 import { computeCounterfactuals } from './knowledge/counterfactualsComputer.js';
 import { computeEvidenceGrading } from './knowledge/evidenceGradingComputer.js';
+import { computeModelHitrate } from './knowledge/modelHitrateComputer.js';
+import { computeConsensusTrack } from './knowledge/consensusTrackComputer.js';
+import { computeConceptDrift } from './knowledge/conceptDriftComputer.js';
+import { computeTopicLineage } from './knowledge/topicLineageComputer.js';
+import { computeExternalExperts } from './knowledge/externalExpertsComputer.js';
 
 import { computeDecisionQuality } from './meta/decisionQualityComputer.js';
 import { computeMeetingNecessity } from './meta/meetingNecessityComputer.js';
@@ -36,12 +41,153 @@ export type ComputerFn = (deps: MeetingNotesDeps, args: ComputeArgs) => Promise<
 export const AXIS_SUBDIMS: Record<string, string[]> = {
   people:    ['commitments', 'role_trajectory', 'speech_quality', 'silence_signal'],
   projects:  ['decision_provenance', 'assumptions', 'open_questions', 'risk_heat'],
-  knowledge: ['reusable_judgments', 'mental_models', 'cognitive_biases', 'counterfactuals', 'evidence_grading'],
+  knowledge: ['reusable_judgments', 'mental_models', 'cognitive_biases', 'counterfactuals', 'evidence_grading',
+              'model_hitrate', 'consensus_track', 'concept_drift', 'topic_lineage', 'external_experts'],
   meta:      ['decision_quality', 'meeting_necessity', 'affect_curve'],
   tension:   ['intra_meeting'],
 };
 
 export const ALL_AXES = ['people', 'projects', 'knowledge', 'meta', 'tension'] as const;
+
+/**
+ * AXIS_REGISTRY — 单一注册表，喂给：
+ *   - panorama service / fallback（OUTPUTS / SOURCES 反向聚合）
+ *   - GenerationCenter / NewMeeting 前端（AXIS_TOTAL_COUNT / AXIS_SUB 派生）
+ *   - DAG scheduler（stage 决定 L1/L2 路由）
+ *
+ * 每个 axis 声明：
+ *   - subDims: 该 axis 下所有子维度（与 AXIS_SUBDIMS 等价，方便面向新 API 调用方）
+ *   - subDimLabels: subDim → 中文 label
+ *   - produces:   该 axis 跑完会产出哪些"产物标签"（panorama OUTPUTS）
+ *   - consumes:   该 axis 依赖哪些 source（panorama SOURCES）
+ *   - stage:      'L1' = per-meeting 体征（先跑）/ 'L2' = 跨会聚合（depends_on L1）
+ *   - perMeetingView: meta 数据被 a/b/c 单场视图吸收时的渲染位置（null=不在单场暴露）
+ */
+export type AxisStage = 'L1' | 'L2';
+
+export interface AxisMetadata {
+  axis: string;
+  subDims: string[];
+  subDimLabels: Record<string, string>;
+  produces: string[];
+  consumes: string[];
+  stage: AxisStage;
+  /** meta 轴的 3 个 sub_dim 各自归宿到哪个单场视图；其它轴留 null */
+  perMeetingView?: Partial<Record<string, 'a' | 'b' | 'c'>>;
+}
+
+export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
+  people: {
+    axis: 'people',
+    subDims: AXIS_SUBDIMS.people,
+    subDimLabels: {
+      commitments:      '承诺兑现',
+      role_trajectory:  '角色演化',
+      speech_quality:   '发言质量',
+      silence_signal:   '沉默信号',
+    },
+    produces: ['承诺清单', '角色轨迹', '发言图谱', '沉默信号'],
+    consumes: ['会议原材料', '历史纪要'],
+    stage: 'L2',
+  },
+  projects: {
+    axis: 'projects',
+    subDims: AXIS_SUBDIMS.projects,
+    subDimLabels: {
+      decision_provenance: '决议溯源',
+      assumptions:         '假设清单',
+      open_questions:      '开放问题',
+      risk_heat:           '风险热度',
+    },
+    produces: ['决策链', '假设清单', '开放问题', '风险热度'],
+    consumes: ['会议原材料', '历史纪要'],
+    stage: 'L2',
+  },
+  knowledge: {
+    axis: 'knowledge',
+    subDims: AXIS_SUBDIMS.knowledge,
+    subDimLabels: {
+      reusable_judgments: '可复用判断',
+      mental_models:      '心智模型命中',
+      cognitive_biases:   '认知偏误',
+      counterfactuals:    '反事实',
+      evidence_grading:   'Rubric 矩阵',
+      model_hitrate:      '心智模型命中率',
+      consensus_track:    '共识轨迹',
+      concept_drift:      '概念漂移',
+      topic_lineage:      '议题谱系',
+      external_experts:   '外部专家注释',
+    },
+    produces: [
+      '心智模型命中', '互补专家组', '盲区档案', 'Rubric 矩阵',
+      '心智模型命中率', '共识轨迹', '概念漂移', '议题谱系', '外部专家注释',
+    ],
+    consumes: ['会议原材料', '历史纪要', '专家库', '内容库 assets'],
+    stage: 'L2',
+  },
+  meta: {
+    axis: 'meta',
+    subDims: AXIS_SUBDIMS.meta,
+    subDimLabels: {
+      decision_quality:  '决策质量',
+      meeting_necessity: '必要性评估',
+      affect_curve:      '情绪热力图',
+    },
+    produces: ['会议健康度报告', '一页纸摘要'],
+    consumes: ['会议原材料'],
+    stage: 'L1',
+    perMeetingView: {
+      decision_quality:  'a',
+      meeting_necessity: 'b',
+      affect_curve:      'c',
+    },
+  },
+  tension: {
+    axis: 'tension',
+    subDims: AXIS_SUBDIMS.tension,
+    subDimLabels: {
+      intra_meeting: '张力清单',
+    },
+    produces: ['张力清单'],
+    consumes: ['会议原材料'],
+    stage: 'L1',
+    perMeetingView: { intra_meeting: 'b' },
+  },
+};
+
+/** 全局派生：所有 axis × subdim 总数（NewMeeting 文案 "22 子维度" 来自这里） */
+export const AXIS_TOTAL_COUNT: number = Object.values(AXIS_REGISTRY)
+  .reduce((sum, a) => sum + a.subDims.length, 0);
+
+/** panorama OUTPUTS 反向聚合（去重 + 按 axis 顺序） */
+export const ALL_PRODUCES: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const axis of ALL_AXES) {
+    for (const p of AXIS_REGISTRY[axis].produces) {
+      if (!seen.has(p)) { seen.add(p); out.push(p); }
+    }
+  }
+  return out;
+})();
+
+/** panorama SOURCES 反向聚合（去重） */
+export const ALL_CONSUMES: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const axis of ALL_AXES) {
+    for (const c of AXIS_REGISTRY[axis].consumes) {
+      if (!seen.has(c)) { seen.add(c); out.push(c); }
+    }
+  }
+  return out;
+})();
+
+/** L1 / L2 拆分（DAG scheduler 用） */
+export const AXES_BY_STAGE: Record<AxisStage, string[]> = {
+  L1: ALL_AXES.filter((a) => AXIS_REGISTRY[a].stage === 'L1'),
+  L2: ALL_AXES.filter((a) => AXIS_REGISTRY[a].stage === 'L2'),
+};
 
 const REGISTRY: Record<string, ComputerFn> = {
   // people
@@ -60,6 +206,11 @@ const REGISTRY: Record<string, ComputerFn> = {
   'knowledge/cognitive_biases':  computeCognitiveBiases,
   'knowledge/counterfactuals':   computeCounterfactuals,
   'knowledge/evidence_grading':  computeEvidenceGrading,
+  'knowledge/model_hitrate':     computeModelHitrate,
+  'knowledge/consensus_track':   computeConsensusTrack,
+  'knowledge/concept_drift':     computeConceptDrift,
+  'knowledge/topic_lineage':     computeTopicLineage,
+  'knowledge/external_experts':  computeExternalExperts,
   // meta
   'meta/decision_quality':       computeDecisionQuality,
   'meta/meeting_necessity':      computeMeetingNecessity,
