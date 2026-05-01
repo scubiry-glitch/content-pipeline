@@ -219,15 +219,33 @@ export class RunEngine {
     let recovered = 0;
     try {
       // module='mn' 过滤：CEO 模块的 run (module='ceo') 由 ceoEngine 自己接管
+      // 改动三 (DAG)：select 同时拉 stage / depends_on，L2 必须等所有 depends_on 都 succeeded 才 pickup
       const r = await this.deps.db.query(
         `SELECT id, scope_kind, scope_id::text AS scope_id, axis, sub_dims, preset,
-                strategy_spec, triggered_by, parent_run_id, metadata
+                strategy_spec, triggered_by, parent_run_id, metadata,
+                stage, depends_on, trigger_meeting_id::text AS trigger_meeting_id
            FROM mn_runs
           WHERE state = 'queued'
             AND module = 'mn'
           ORDER BY created_at ASC`,
       );
       for (const row of r.rows) {
+        // DAG gate：L2_aggregate 且仍有 depends_on 未 succeeded → 跳过这一轮
+        // 老 run（stage=NULL）路径完全不受影响
+        if (row.stage === 'L2_aggregate' && Array.isArray(row.depends_on) && row.depends_on.length > 0) {
+          const depCheck = await this.deps.db.query(
+            `SELECT COUNT(*)::int AS pending
+               FROM mn_runs
+              WHERE id = ANY($1::uuid[])
+                AND state <> 'succeeded'`,
+            [row.depends_on],
+          );
+          const pending = Number(depCheck.rows[0]?.pending ?? 0);
+          if (pending > 0) {
+            // 不入 in-memory 队列 — 下个 60s 周期再检查
+            continue;
+          }
+        }
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
         const mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
           meta.mode === 'claude-cli' ? 'claude-cli'
@@ -505,13 +523,23 @@ export class RunEngine {
       : req.mode === 'api-oneshot' ? 'api-oneshot'
       : 'multi-axis';
     if (runMode !== 'multi-axis') initialMeta.mode = runMode;
+
+    // 改动三 (DAG)：stage / depends_on / trigger_meeting_id 为可选字段
+    // claude-cli / api-oneshot 模式强制 stage=NULL（一次性跑全部，不参与 DAG 校验）
+    const dagStage: string | null = (runMode === 'multi-axis' && req.stage) ? req.stage : null;
+    const dagDeps: string[] = req.dependsOn ?? [];
+    const dagTriggerMeeting: string | null = req.triggerMeetingId
+      ?? (scopeNorm.kind === 'meeting' && req.stage === 'L1_meeting' ? scopeNorm.id ?? null : null);
+
     // workspace_id 显式注入；不传时由 mn_runs 的 DEFAULT (default ws) 兜底
     const ins = req.workspaceId
       ? await this.deps.db.query(
           `INSERT INTO mn_runs
              (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
-              state, triggered_by, parent_run_id, metadata, workspace_id)
-           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb, $10)
+              state, triggered_by, parent_run_id, metadata, workspace_id,
+              stage, depends_on, trigger_meeting_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb, $10,
+                   $11, $12::uuid[], $13::uuid)
            RETURNING id`,
           [
             scopeNorm.kind,
@@ -524,13 +552,18 @@ export class RunEngine {
             req.parentRunId ?? null,
             JSON.stringify(initialMeta),
             req.workspaceId,
+            dagStage,
+            dagDeps,
+            dagTriggerMeeting,
           ],
         )
       : await this.deps.db.query(
           `INSERT INTO mn_runs
              (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
-              state, triggered_by, parent_run_id, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb)
+              state, triggered_by, parent_run_id, metadata,
+              stage, depends_on, trigger_meeting_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb,
+                   $10, $11::uuid[], $12::uuid)
            RETURNING id`,
           [
             scopeNorm.kind,
@@ -542,6 +575,9 @@ export class RunEngine {
             triggeredBy,
             req.parentRunId ?? null,
             JSON.stringify(initialMeta),
+            dagStage,
+            dagDeps,
+            dagTriggerMeeting,
           ],
         );
     const runId = ins.rows[0].id as string;

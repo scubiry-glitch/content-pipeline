@@ -192,6 +192,18 @@ export interface EnqueueRunRequest {
   mode?: RunMode;
   /** 当前请求所在 workspace；不传时由 mn_runs 表的 DEFAULT (default ws) 兜底 */
   workspaceId?: string;
+  /**
+   * 改动三 (DAG)：可选 stage 标识。
+   * - undefined（默认）：走老路径，不参与 DAG 校验，与历史完全兼容
+   * - 'L1_meeting'：per-meeting 体征（meta + tension），由新会议入库自动触发
+   * - 'L2_aggregate'：跨会聚合，需要等 dependsOn 的所有 run 全部 succeeded 后才会被 worker pickup
+   * 'multi-axis' 模式 + 自动调度才会用 stage；'claude-cli'/'api-oneshot' 走 NULL 兼容路径
+   */
+  stage?: 'L1_meeting' | 'L2_aggregate';
+  /** 必须 succeeded 的上游 run id 列表（仅 stage='L2_aggregate' 时生效） */
+  dependsOn?: string[];
+  /** 触发该 run 的 meeting id（L1 = 来源会议；L2 = fan-out 自哪场会议） */
+  triggerMeetingId?: string;
 }
 
 export interface RunRecord {

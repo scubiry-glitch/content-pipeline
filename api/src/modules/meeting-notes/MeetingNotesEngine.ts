@@ -407,6 +407,87 @@ export class MeetingNotesEngine {
     return this.runEngine.enqueue(req);
   }
 
+  /**
+   * 改动三 (DAG)：单场会议入库后一次性铺开 L1 + L2 调度。
+   *
+   * - L1: 1 条 axis='meta' run（含 decision_quality / meeting_necessity / affect_curve）
+   *       + 1 条 axis='tension' run；scope=meeting
+   * - L2: people / projects / knowledge 三轴，scope 由调用方决定（通常 = 会议所属 project）
+   *       depends_on = [meta.id, tension.id]，由 recoverQueuedRuns 的 DAG gate 卡住等 L1 完成
+   *
+   * 老调用方继续使用单条 enqueueRun 不参与 DAG（stage=NULL 路径），完全兼容。
+   *
+   * 注：仅 mode='multi-axis' 才参与 DAG；claude-cli/api-oneshot 走单条一次性 run。
+   */
+  async enqueueDagForMeeting(args: {
+    meetingId: string;
+    aggregateScope: { kind: 'project' | 'client' | 'topic' | 'library'; id?: string };
+    preset?: 'lite' | 'standard' | 'max';
+    triggeredBy?: 'auto' | 'manual' | 'schedule' | 'cascade';
+    workspaceId?: string;
+    /** 仅 multi-axis 模式入 DAG；其它模式直接退回单条 axis='all' run */
+    mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
+  }): Promise<{
+    ok: boolean;
+    l1Ids?: string[];
+    l2Ids?: string[];
+    reason?: string;
+  }> {
+    const mode = args.mode ?? 'multi-axis';
+    const preset = args.preset ?? 'standard';
+    const triggeredBy = args.triggeredBy ?? 'auto';
+
+    if (mode !== 'multi-axis') {
+      // 兼容：非 DAG 模式落回单条 axis='all' 全量 run
+      const r = await this.runEngine.enqueue({
+        scope: { kind: 'meeting', id: args.meetingId },
+        axis: 'all',
+        preset,
+        triggeredBy,
+        mode,
+        workspaceId: args.workspaceId,
+        triggerMeetingId: args.meetingId,
+      });
+      return r.ok && r.runId ? { ok: true, l1Ids: [r.runId], l2Ids: [] } : { ok: false, reason: r.reason };
+    }
+
+    // L1 阶段：meta + tension（per-meeting）
+    const l1Ids: string[] = [];
+    for (const axis of ['meta', 'tension'] as const) {
+      const r = await this.runEngine.enqueue({
+        scope: { kind: 'meeting', id: args.meetingId },
+        axis,
+        preset,
+        triggeredBy,
+        mode: 'multi-axis',
+        stage: 'L1_meeting',
+        triggerMeetingId: args.meetingId,
+        workspaceId: args.workspaceId,
+      });
+      if (r.ok && r.runId) l1Ids.push(r.runId);
+    }
+
+    // L2 阶段：people / projects / knowledge（聚合到 args.aggregateScope）
+    // depends_on = 全部 L1 ids；DAG gate 会在 recoverQueuedRuns 里阻塞直到所有 L1 succeeded
+    const l2Ids: string[] = [];
+    for (const axis of ['people', 'projects', 'knowledge'] as const) {
+      const r = await this.runEngine.enqueue({
+        scope: args.aggregateScope,
+        axis,
+        preset,
+        triggeredBy: 'cascade',
+        mode: 'multi-axis',
+        stage: 'L2_aggregate',
+        dependsOn: l1Ids,
+        triggerMeetingId: args.meetingId,
+        workspaceId: args.workspaceId,
+      });
+      if (r.ok && r.runId) l2Ids.push(r.runId);
+    }
+
+    return { ok: l1Ids.length > 0, l1Ids, l2Ids };
+  }
+
   async getRun(id: string): Promise<RunRecord | null> {
     return this.runEngine.get(id);
   }
