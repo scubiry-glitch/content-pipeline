@@ -236,8 +236,11 @@ function FolderNode({
   const dropEnabled = !!onDropMeeting;
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(node.id)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(node.id); } }}
         onDragOver={dropEnabled ? (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'link';
@@ -344,7 +347,7 @@ function FolderNode({
         ) : (
           <MonoMeta style={{ fontSize: 10 }}>{node.count}</MonoMeta>
         )}
-      </button>
+      </div>
       {/* 子分组创建内联表单（替代 window.prompt） */}
       {isAddingHere && onCommitAddChild && (
         <InlineCreateScope
