@@ -11,6 +11,7 @@ import { useMeetingScope, type ScopeKind } from './_scopeContext';
 import { AxisVersionPanel } from './AxisVersionPanel';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
+import { useIsMobile } from '../_useIsMobile';
 
 export type AxisName = '人物' | '项目' | '知识' | '会议本身' | '纵向视图 · 跨会议';
 
@@ -504,74 +505,131 @@ export function DimShell({
   mock?: boolean;
 }) {
   const axisColor = axisColorFor(axis);
+  const isMobile = useIsMobile();
+
+  const axisTitle = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{
+        width: 34, height: 34, borderRadius: 7, flexShrink: 0,
+        background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+        borderLeft: `3px solid ${axisColor}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, color: 'var(--ink)',
+      }}>{axis[0]}</div>
+      <div style={{ minWidth: 0 }}>
+        <MonoMeta style={{ fontSize: 10 }}>AXIS · 一库多视图</MonoMeta>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.005em', marginTop: -2 }}>
+          {axis}轴
+          {mock && <MockBadge />}
+        </div>
+      </div>
+    </div>
+  );
+
+  const tabStrip = (
+    <div style={{
+      display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2,
+      flexShrink: 0,
+    }}>
+      {tabs.map((t) => {
+        const active = t.id === tab;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} title={t.sub} style={{
+            padding: '6px 13px', border: 0, borderRadius: 4, fontSize: 12.5,
+            background: active ? 'var(--ink)' : 'transparent',
+            color: active ? 'var(--paper)' : 'var(--ink-2)',
+            cursor: 'pointer', fontWeight: active ? 600 : 450,
+            fontFamily: 'var(--sans)', display: 'flex', alignItems: 'center', gap: 6,
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <Icon name={t.icon} size={12} />{t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const regenerateButton = (
+    <button
+      onClick={onOpenRegenerate}
+      disabled={!onOpenRegenerate}
+      title="重新生成此轴数据"
+      style={{
+        border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 5,
+        padding: '5px 10px', fontSize: 11.5,
+        cursor: onOpenRegenerate ? 'pointer' : 'not-allowed',
+        color: onOpenRegenerate ? 'var(--ink-2)' : 'var(--ink-4)',
+        display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--sans)',
+        opacity: onOpenRegenerate ? 1 : 0.6, flexShrink: 0,
+      }}>
+      <span style={{ fontSize: 13, lineHeight: 1 }}>↻</span>{!isMobile && ' 重算'}
+    </button>
+  );
+
+  const subLabel = tabs.find((t) => t.id === tab)?.sub;
+
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper)',
-      display: 'grid', gridTemplateRows: '64px 1fr', color: 'var(--ink)',
+      display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : '64px 1fr', color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
-        borderBottom: '1px solid var(--line-2)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {isMobile ? (
+        <header style={{ borderBottom: '1px solid var(--line-2)' }}>
+          {/* Row 1: axis title + regenerate */}
           <div style={{
-            width: 34, height: 34, borderRadius: 7,
-            background: 'var(--paper-2)', border: '1px solid var(--line-2)',
-            borderLeft: `3px solid ${axisColor}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, color: 'var(--ink)',
-          }}>{axis[0]}</div>
-          <div>
-            <MonoMeta style={{ fontSize: 10 }}>AXIS · 一库多视图</MonoMeta>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.005em', marginTop: -2 }}>
-              {axis}轴
-              {mock && <MockBadge />}
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+            minHeight: 48,
+          }}>
+            {axisTitle}
+            <div style={{ marginLeft: 'auto', flexShrink: 0 }}>{regenerateButton}</div>
+          </div>
+          {/* Row 2: tab strip (horizontal scroll) */}
+          <div style={{
+            overflowX: 'auto', overflowY: 'hidden',
+            padding: '0 14px 8px', WebkitOverflowScrolling: 'touch',
+          }}>
+            {tabStrip}
+          </div>
+          {/* Row 3: sub label + meta controls (flex wrap so popovers don't get clipped) */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            padding: '6px 14px 8px',
+            borderTop: '1px solid var(--line-2)',
+          }}>
+            {subLabel && (
+              <span style={{ fontSize: 11.5, color: 'var(--ink-3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {subLabel}
+              </span>
+            )}
+            <div style={{
+              marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+            }}>
+              <CrossAxisLink axis={axis} />
+              <ScopePill />
+              <VersionsButton axis={axis} />
+              <RunBadge axis={axis} />
             </div>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', marginLeft: 18, gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2 }}>
-          {tabs.map((t) => {
-            const active = t.id === tab;
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)} title={t.sub} style={{
-                padding: '6px 13px', border: 0, borderRadius: 4, fontSize: 12.5,
-                background: active ? 'var(--ink)' : 'transparent',
-                color: active ? 'var(--paper)' : 'var(--ink-2)',
-                cursor: 'pointer', fontWeight: active ? 600 : 450,
-                fontFamily: 'var(--sans)', display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                <Icon name={t.icon} size={12} />{t.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {tabs.map((t) => t.id === tab ? (
-            <span key={t.id} style={{ fontSize: 12, color: 'var(--ink-3)' }}>{t.sub}</span>
-          ) : null)}
-          <CrossAxisLink axis={axis} />
-          <ScopePill />
-          <VersionsButton axis={axis} />
-          <button
-            onClick={onOpenRegenerate}
-            disabled={!onOpenRegenerate}
-            title="重新生成此轴数据"
-            style={{
-              border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 5,
-              padding: '5px 10px', fontSize: 11.5,
-              cursor: onOpenRegenerate ? 'pointer' : 'not-allowed',
-              color: onOpenRegenerate ? 'var(--ink-2)' : 'var(--ink-4)',
-              display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--sans)',
-              opacity: onOpenRegenerate ? 1 : 0.6,
-            }}>
-            <span style={{ fontSize: 13, lineHeight: 1 }}>↻</span> 重算
-          </button>
-          <RunBadge axis={axis} />
-        </div>
-      </header>
+        </header>
+      ) : (
+        <header style={{
+          display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
+          borderBottom: '1px solid var(--line-2)',
+        }}>
+          {axisTitle}
+          <div style={{ marginLeft: 18 }}>{tabStrip}</div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            {subLabel && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{subLabel}</span>}
+            <CrossAxisLink axis={axis} />
+            <ScopePill />
+            <VersionsButton axis={axis} />
+            {regenerateButton}
+            <RunBadge axis={axis} />
+          </div>
+        </header>
+      )}
 
       <div style={{ overflow: 'auto' }}>{children}</div>
     </div>
