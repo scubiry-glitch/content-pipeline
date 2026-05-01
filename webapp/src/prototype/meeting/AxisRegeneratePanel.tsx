@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useMeetingScope } from './_scopeContext';
+import { AXIS_REGISTRY, ALL_AXES } from './_axisRegistry';
 
 // P1：把后端 4xx 的 code 翻成给用户看的中文文案
 function mapEnqueueError(raw: string): string {
@@ -24,52 +25,62 @@ function mapEnqueueError(raw: string): string {
   return `入队失败：${raw}`;
 }
 
-// ── Mock data ────────────────────────────────────────────────────────────────
+// ── Sub-dim 元数据（cost / depsOn） ───────────────────────────────────────────
+// 派生数据：sub_dim 列表与 label 全部来自 _axisRegistry.ts → AXIS_REGISTRY
+// （后端 api/src/modules/meeting-notes/axes/registry.ts AXIS_SUBDIMS 镜像）。
+// 仅 cost / depsOn 是 panel 自身的展示元数据，按 sub_id 维护一张表。
+type Cost = 'low' | 'medium' | 'high';
+const SUB_META: Record<string, { cost: Cost; depsOn: string[] }> = {
+  // people
+  commitments:         { cost: 'medium', depsOn: ['commitment_trace', 'track_record_verify'] },
+  role_trajectory:     { cost: 'low',    depsOn: ['evidence_anchored'] },
+  speech_quality:      { cost: 'low',    depsOn: ['rubric_anchored_output'] },
+  silence_signal:      { cost: 'medium', depsOn: ['failure_check'] },
+  // projects
+  decision_provenance: { cost: 'high',   depsOn: ['knowledge_grounded', 'evidence_anchored'] },
+  assumptions:         { cost: 'medium', depsOn: ['contradictions_surface'] },
+  open_questions:      { cost: 'low',    depsOn: ['chronic_question_surface'] },
+  risk_heat:           { cost: 'medium', depsOn: ['calibrated_confidence'] },
+  // knowledge
+  reusable_judgments:  { cost: 'medium', depsOn: ['knowledge_grounded'] },
+  mental_models:       { cost: 'high',   depsOn: ['model_hitrate_audit'] },
+  cognitive_biases:    { cost: 'medium', depsOn: ['drift_detect'] },
+  counterfactuals:     { cost: 'high',   depsOn: ['contradictions_surface', 'debate'] },
+  evidence_grading:    { cost: 'low',    depsOn: ['evidence_anchored'] },
+  model_hitrate:       { cost: 'medium', depsOn: ['mental_models'] },
+  consensus_track:     { cost: 'medium', depsOn: ['reusable_judgments', 'cognitive_biases'] },
+  concept_drift:       { cost: 'medium', depsOn: ['reusable_judgments'] },
+  topic_lineage:       { cost: 'medium', depsOn: ['reusable_judgments'] },
+  external_experts:    { cost: 'low',    depsOn: [] },
+  // meta
+  decision_quality:    { cost: 'low',    depsOn: ['rubric_anchored_output'] },
+  meeting_necessity:   { cost: 'low',    depsOn: ['failure_check'] },
+  affect_curve:        { cost: 'medium', depsOn: ['evidence_anchored'] },
+  // tension
+  intra_meeting:       { cost: 'medium', depsOn: ['contradictions_surface'] },
+};
 
-// 注意：subs[].id 必须与后端 axes/registry.ts 的 AXIS_SUBDIMS 一一对应，
-// 否则 enqueueRun 时 resolveComputer(axis, sd) 返回 null → run "succeeded" 但 created/updated/llmCalls 全 0（空跑）
+// AXIS_SUB 派生：subs 来自 registry，cost/depsOn 来自 SUB_META
+// 这样新增 sub_dim 只需在 SUB_META 加一行 + registry 已有即可（registry 是 SSoT）
 const AXIS_SUB: Record<string, {
   label: string;
   color: string;
-  subs: { id: string; label: string; cost: 'low' | 'medium' | 'high'; depsOn: string[] }[];
-}> = {
-  people: {
-    label: '人物轴', color: 'var(--accent)',
-    subs: [
-      { id: 'commitments',     label: '承诺兑现', cost: 'medium', depsOn: ['commitment_trace','track_record_verify'] },
-      { id: 'role_trajectory', label: '角色演化', cost: 'low',    depsOn: ['evidence_anchored'] },
-      { id: 'speech_quality',  label: '发言质量', cost: 'low',    depsOn: ['rubric_anchored_output'] },
-      { id: 'silence_signal',  label: '沉默信号', cost: 'medium', depsOn: ['failure_check'] },
-    ],
-  },
-  projects: {
-    label: '项目轴', color: 'var(--teal)',
-    subs: [
-      { id: 'decision_provenance', label: '决议溯源', cost: 'high',   depsOn: ['knowledge_grounded','evidence_anchored'] },
-      { id: 'assumptions',         label: '假设清单', cost: 'medium', depsOn: ['contradictions_surface'] },
-      { id: 'open_questions',      label: '开放问题', cost: 'low',    depsOn: ['chronic_question_surface'] },
-      { id: 'risk_heat',           label: '风险热度', cost: 'medium', depsOn: ['calibrated_confidence'] },
-    ],
-  },
-  knowledge: {
-    label: '知识轴', color: 'oklch(0.55 0.08 280)',
-    subs: [
-      { id: 'reusable_judgments', label: '可复用判断',    cost: 'medium', depsOn: ['knowledge_grounded'] },
-      { id: 'mental_models',      label: '心智模型命中率', cost: 'high',   depsOn: ['model_hitrate_audit'] },
-      { id: 'cognitive_biases',   label: '认知偏误',      cost: 'medium', depsOn: ['drift_detect'] },
-      { id: 'counterfactuals',    label: '反事实',        cost: 'high',   depsOn: ['contradictions_surface','debate'] },
-      { id: 'evidence_grading',   label: '证据分级',      cost: 'low',    depsOn: ['evidence_anchored'] },
-    ],
-  },
-  meta: {
-    label: '会议本身', color: 'var(--amber)',
-    subs: [
-      { id: 'decision_quality',   label: '质量分',     cost: 'low',    depsOn: ['rubric_anchored_output'] },
-      { id: 'meeting_necessity',  label: '必要性评估', cost: 'low',    depsOn: ['failure_check'] },
-      { id: 'affect_curve',       label: '情绪热力图', cost: 'medium', depsOn: ['evidence_anchored'] },
-    ],
-  },
-};
+  subs: { id: string; label: string; cost: Cost; depsOn: string[] }[];
+}> = Object.fromEntries(
+  ALL_AXES.map((axisId) => {
+    const meta = AXIS_REGISTRY[axisId];
+    return [axisId, {
+      label: meta.label,
+      color: meta.color,
+      subs: meta.subDims.map((sd) => ({
+        id: sd.id,
+        label: sd.label,
+        cost: SUB_META[sd.id]?.cost ?? 'medium',
+        depsOn: SUB_META[sd.id]?.depsOn ?? [],
+      })),
+    }];
+  }),
+);
 
 const COST_TABLE = {
   low:    { tok: '~4k',  time: '20-40s' },
@@ -223,8 +234,9 @@ export function AxisRegeneratePanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
           <div>
             <SectionLabel>① 选择轴</SectionLabel>
-            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-              {Object.entries(AXIS_SUB).map(([id, a]) => {
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: `repeat(${ALL_AXES.length},1fr)`, gap: 8 }}>
+              {ALL_AXES.map((id) => {
+                const a = AXIS_SUB[id];
                 const active = id === axis;
                 return (
                   <button key={id} onClick={() => { setAxis(id); setSelected([]); }} style={{
