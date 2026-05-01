@@ -68,11 +68,13 @@ export async function computeSpeechQuality(
   }));
 
   for (const item of items) {
+    let entropy = 0;
+    let followups = 0;
     try {
       const personId = await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
       if (!personId) { out.skipped += 1; continue; }
-      const entropy = Math.max(0, Math.min(100, item.entropy_pct ?? 0));
-      const followups = Math.max(0, item.followed_up_count ?? 0);
+      entropy = Math.max(0, Math.min(100, item.entropy_pct ?? 0));
+      followups = Math.max(0, item.followed_up_count ?? 0);
       const quality = entropy * 0.6 + Math.min(100, followups * 10) * 0.4;
       const samples = item.sample_quote ? [item.sample_quote] : [];
       await deps.db.query(

@@ -2179,7 +2179,7 @@ export class RunEngine {
             runId: payload.runId,
             scopeKind: payload.scope.kind,
             scopeId: payload.scope.id ?? null,
-            axis: payload.axis,
+            axis: payload.axis as any,
             data: snapshot,
           });
         }

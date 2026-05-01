@@ -35,7 +35,7 @@ export function routeMeetingKind(
   asset: Asset,
   callerStrategy?: ExpertStrategySpec,
 ): { skip: boolean; reason?: string; derivedStrategy?: ExpertStrategySpec } {
-  if (asset.type !== 'meeting_minutes') return { skip: false };
+  if ((asset as any).type !== 'meeting_minutes') return { skip: false };
   const meetingKind: string | undefined = (asset as any).metadata?.meeting_kind;
   if (shouldSkipExpertAnalysis(meetingKind)) {
     return { skip: true, reason: `meeting_kind=${meetingKind}` };

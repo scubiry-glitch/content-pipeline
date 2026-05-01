@@ -2,8 +2,8 @@
 // Round 2: 把"如何把专家用到分析里"从 Round 1 的硬编码 `expertEngine.invoke()`
 // 抽成可组合策略。调用点声明 strategy spec，实现细节由策略决定。
 
+import type { ExpertEngine } from '../../modules/expert-library/ExpertEngine.js';
 import type {
-  ExpertEngine,
   ExpertProfile,
   TaskType,
   OutputSection,

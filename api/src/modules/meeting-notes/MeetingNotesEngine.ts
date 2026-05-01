@@ -557,7 +557,7 @@ export class MeetingNotesEngine {
     return { ok: true, result: await this.longitudinal.modelHitRate.recomputeForScope(req.scopeId) };
   }
 
-  async getLongitudinal(scopeId: string, kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate') {
+  async getLongitudinal(scopeId: string, kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate'): Promise<any> {
     if (kind === 'belief_drift') return this.longitudinal.beliefDrift.list(scopeId);
     if (kind === 'decision_tree') return this.longitudinal.decisionTree.latestForScope(scopeId);
     return this.longitudinal.modelHitRate.listForScope(scopeId);

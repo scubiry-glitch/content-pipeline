@@ -62,7 +62,7 @@ export function makeTrackRecordVerifyDecorator(
         params: { depth: 'quick' },
       });
 
-      const reconciliation = resp.output.sections.map((s) => s.content).join('\n\n');
+      const reconciliation = resp.output.sections.map((s: any) => s.content).join('\n\n');
 
       return {
         output: {

@@ -85,7 +85,7 @@ export const mentalModelRotationStrategy: ExpertApplicationStrategy = {
 
       modelOutputs.push({
         modelName: model.name,
-        content: resp.output.sections.map((s) => `### ${s.title}\n${s.content}`).join('\n\n'),
+        content: resp.output.sections.map((s: any) => `### ${s.title}\n${s.content}`).join('\n\n'),
       });
     }
 
@@ -130,7 +130,7 @@ export const mentalModelRotationStrategy: ExpertApplicationStrategy = {
             title: `模型应用: ${m.modelName}`,
             content: m.content,
           })),
-          ...synth.output.sections.map((s) => ({
+          ...synth.output.sections.map((s: any) => ({
             title: `跨模型综合 · ${s.title}`,
             content: s.content,
           })),

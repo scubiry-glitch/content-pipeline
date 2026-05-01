@@ -138,7 +138,7 @@ export const debateStrategy: ExpertApplicationStrategy = {
         sections: [
           { title: `正方 (${expertA.name})`, content: sectionsA },
           { title: `反方/互补 (${expertB.name})`, content: sectionsB },
-          ...respJudge.output.sections.map((s) => ({
+          ...respJudge.output.sections.map((s: any) => ({
             title: `裁判 (${expertJudge.name}) · ${s.title}`,
             content: s.content,
           })),

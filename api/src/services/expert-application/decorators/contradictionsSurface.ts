@@ -61,7 +61,7 @@ export function makeContradictionsSurfaceDecorator(
         params: { depth: 'quick' },
       });
 
-      const parsed = tryParseJson(resp.output.sections.map((s) => s.content).join('\n'));
+      const parsed = tryParseJson(resp.output.sections.map((s: any) => s.content).join('\n'));
       const activated = Array.isArray(parsed?.activated) ? parsed.activated : [];
       const positions = Array.isArray(parsed?.positions) ? parsed.positions : [];
 

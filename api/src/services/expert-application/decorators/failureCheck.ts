@@ -57,7 +57,7 @@ export function makeFailureCheckDecorator(
         params: { depth: 'quick' },
       });
 
-      const parsed = tryParseJson(resp.output.sections.map((s) => s.content).join('\n'));
+      const parsed = tryParseJson(resp.output.sections.map((s: any) => s.content).join('\n'));
       const outOfZone = parsed?.out_of_competence_zone === true;
 
       // 追加一个 section

@@ -53,7 +53,7 @@ export class BeliefDriftComputer {
       const entry = groups.get(key) ?? {
         person_id: row.author_person_id,
         topic_id: String(row.domain),
-        pts: [],
+        pts: [] as DriftPoint[],
       };
       entry.pts.push({
         meeting_id: row.meeting_id,
