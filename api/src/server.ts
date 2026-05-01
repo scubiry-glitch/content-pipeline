@@ -70,7 +70,9 @@ import {
   createMeetingNotesEngine,
   createLocalAssetsAiAdapter,
   createRouter as createMeetingNotesRouter,
+  LocalEventBus,
 } from './modules/meeting-notes/index.js';
+import { MEETING_NOTES_EVENTS } from './modules/meeting-notes/types.js';
 import {
   createPipelineDeps as createMeetingNotesDeps,
   createPipelineDBAdapter as createMeetingNotesDBAdapter,
@@ -264,9 +266,12 @@ async function main() {
   // 依赖 expert-library（experts.invoke）与 services/expert-application（strategy resolver）
   // PR1 仅暴露 /health；后续 PR 逐步补齐 parse / axes / runs / longitudinal
   const mnDbAdapter = createMeetingNotesDBAdapter(query);
+  // 共享 event bus — meeting-notes publish, CEO subscribe (g1 auto-enqueue 等跨模块联动)
+  const sharedEventBus = new LocalEventBus();
   const meetingNotesEngine = createMeetingNotesEngine(
     createMeetingNotesDeps({
       db: mnDbAdapter,
+      eventBus: sharedEventBus,
       // Local ASR-like parser — reads assets.content, regex-splits speakers/timestamps,
       // persists segment stats into assets.metadata.parse. Replaces the noop adapter
       // that previously made step3 "ingest" stage observable but inert.
@@ -314,6 +319,27 @@ async function main() {
   );
   initCeoEngineSingleton(ceoEngine);
   await fastify.register(createCeoRouter(ceoEngine), { prefix: '/api/v1/ceo' });
+
+  // 跨模块: meeting parsed → CEO g1 自动入队 (Phase 1 leftover)
+  // 不在 CeoEngine 内做，是为了保留模块依赖方向 (mn 不知道 ceo)，由 server.ts 编排
+  sharedEventBus.subscribe(MEETING_NOTES_EVENTS.MEETING_PARSED, async (payload) => {
+    const assetId = (payload as { assetId?: string })?.assetId;
+    if (!assetId) return;
+    try {
+      await ceoEngine.enqueueRun({
+        axis: 'g1',
+        metadata: {
+          targetMeetingId: assetId,
+          source: 'auto',
+          currentStep: 'auto-enqueued-from-mn-parse',
+          triggeredBy: 'mn.meeting.parsed',
+        },
+      });
+    } catch (e) {
+      // 非致命: CEO 入队失败不阻塞 mn 解析流程
+      console.warn('[ceo g1 auto-enqueue] failed:', (e as Error).message);
+    }
+  });
 
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });
