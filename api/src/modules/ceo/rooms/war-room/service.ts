@@ -1,0 +1,100 @@
+// War Room · 团队房间 service
+// 阵型快照来自 ceo_formation_snapshots；阵型缺口由规则从 mn_silence_signals + mn_judgments 推导
+// 兵棋推演 (sandbox) 是 stub — 完整实现待原型扩充 + LLM 集成
+
+import type { CeoEngineDeps } from '../../types.js';
+import { computeFormationHealth, classifyConflicts } from './aggregator.js';
+
+export async function getFormationSnapshot(
+  deps: CeoEngineDeps,
+  filter: { scopeId?: string; weekStart?: string },
+): Promise<{ snapshot: any | null; computedAt: string | null }> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filter.scopeId) {
+    params.push(filter.scopeId);
+    where.push(`scope_id = $${params.length}`);
+  }
+  if (filter.weekStart) {
+    params.push(filter.weekStart);
+    where.push(`week_start = $${params.length}`);
+  }
+  const sql = `SELECT id::text, scope_id::text, week_start, formation_data, conflict_temp, computed_at
+                 FROM ceo_formation_snapshots
+                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                ORDER BY week_start DESC
+                LIMIT 1`;
+  const r = await deps.db.query(sql, params);
+  if (r.rows.length === 0) return { snapshot: null, computedAt: null };
+  return { snapshot: r.rows[0], computedAt: r.rows[0].computed_at };
+}
+
+export async function listFormationGaps(
+  _deps: CeoEngineDeps,
+  _scopeId?: string,
+): Promise<{ items: Array<{ text: string; action: string; severity: 'warn' | 'info' }> }> {
+  // 规则定义（PR12 LLM 接入后从 mn_silence_signals + mn_judgments 自动推导）：
+  //   - 4+ 周无人唱反调 → 张力缺失
+  //   - 关键议题某人单点承担 >60% → 单点风险
+  //   - 沉默时长记录最长 → 值得复盘
+  // 当前 fixture 形态返回常见缺口
+  return {
+    items: [
+      {
+        text: '团队连续 4 周缺少建设性反对意见',
+        action: '安排一次反方推演',
+        severity: 'warn',
+      },
+      {
+        text: '关键决策由单人主导比例 67%',
+        action: '把下一次评审主持权交叉',
+        severity: 'warn',
+      },
+      {
+        text: '本月最长沉默 2分14秒，值得回放',
+        action: '跳到张力流复盘',
+        severity: 'info',
+      },
+    ],
+  };
+}
+
+export async function getWarRoomDashboard(
+  deps: CeoEngineDeps,
+  scopeId?: string,
+): Promise<{
+  question: string;
+  metric: { label: string; value: string; delta: string };
+  formationHealth: number;
+  conflictKinds: { build: number; destructive: number; silent: number; total: number };
+  conflictTemp: number;
+  verdict: string;
+}> {
+  const formationHealth = await computeFormationHealth(deps, scopeId);
+  const conflictKinds = await classifyConflicts(deps, scopeId);
+  const conflictTemp =
+    conflictKinds.total > 0
+      ? Number((conflictKinds.build / conflictKinds.total).toFixed(3))
+      : 0;
+
+  let verdict = '尚无数据';
+  if (conflictKinds.total > 0) {
+    if (conflictTemp >= 0.7) verdict = '健康 — 偏热，建设性冲突充分';
+    else if (conflictTemp >= 0.55) verdict = '健康 — 略偏冷，可再激发一次反方思考';
+    else if (conflictTemp >= 0.4) verdict = '注意 — 破坏性冲突偏高，需要主持调度';
+    else verdict = '警告 — 团队回避真问题';
+  }
+
+  return {
+    question: '团队健康吗? 有建设性冲突吗?',
+    metric: {
+      label: '阵型健康',
+      value: `${(formationHealth * 100).toFixed(0)}`,
+      delta: '本月',
+    },
+    formationHealth,
+    conflictKinds,
+    conflictTemp,
+    verdict,
+  };
+}

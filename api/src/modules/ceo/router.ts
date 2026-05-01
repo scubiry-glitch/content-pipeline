@@ -6,6 +6,7 @@ import type { CeoEngine } from './CeoEngine.js';
 import { createCompassRouter } from './rooms/compass/router.js';
 import { createBoardroomRouter } from './rooms/boardroom/router.js';
 import { createTowerRouter } from './rooms/tower/router.js';
+import { createWarRoomRouter } from './rooms/war-room/router.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -20,7 +21,8 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     await fastify.register(createCompassRouter(engine), { prefix: '/compass' });
     await fastify.register(createBoardroomRouter(engine), { prefix: '/boardroom' });
     await fastify.register(createTowerRouter(engine), { prefix: '/tower' });
-    // PR7-PR9 接入：
+    await fastify.register(createWarRoomRouter(engine), { prefix: '/war-room' });
+    // PR8-PR9 接入：
     //   await fastify.register(createWarRoomRouter(engine), { prefix: '/war-room' });
     //   await fastify.register(createSituationRouter(engine), { prefix: '/situation' });
     //   await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
