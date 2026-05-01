@@ -110,6 +110,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { getDirectoryWatcherService } from './services/directoryWatcher.js';
 import { initLLMRouter, isClaudeCodeEnvironment } from './providers/index.js';
 import { ensureDbPoolConnected, ensureRuntimePerformanceIndexes, initDatabase, setupAuthSchema } from './db/connection.js';
+import { ensureCeoModuleSchema } from './db/ensureCeoSchema.js';
+import { ensureMeetingNotesModuleSchema } from './db/ensureMeetingNotesSchema.js';
 import { printAPICheckReport, validateRequiredConfig } from './services/apiCheck.js';
 
 async function main() {
@@ -378,6 +380,17 @@ async function main() {
           console.log('[Server] DB auto-migrate disabled, only checking connectivity');
           await ensureDbPoolConnected();
           await ensureRuntimePerformanceIndexes();
+          // meeting-notes / CEO 模块迁移与全量 init 解耦（mn_runs.axis=g3 等依赖顺序）
+          try {
+            await ensureMeetingNotesModuleSchema(query);
+          } catch (err) {
+            console.warn('[Server] ensureMeetingNotesModuleSchema warning:', (err as Error).message);
+          }
+          try {
+            await ensureCeoModuleSchema(query);
+          } catch (err) {
+            console.warn('[Server] ensureCeoModuleSchema warning:', (err as Error).message);
+          }
         }
         // 账号体系基础表幂等建表 + 种子（与 DB_AUTO_MIGRATE 解耦：始终保证 auth 可用）
         try {
