@@ -1647,6 +1647,102 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // 改动六 · 单场会议「健康度」聚合：quality + necessity + affect + tension 四合一
+    // 供 A/B/C 三视图顶部 4 徽章 + d 体检视图（如启用）+ longitudinal?tab=health 单点拉取
+    fastify.get('/meetings/:id/health', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) {
+        return { quality: null, necessity: null, affect: null, tension: null, deprecated: false };
+      }
+      const db = engine.deps.db;
+      const [qR, nR, aR, tR] = await Promise.all([
+        db.query(
+          `SELECT meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, computed_at
+             FROM mn_decision_quality WHERE meeting_id = $1`,
+          [id],
+        ),
+        db.query(
+          `SELECT meeting_id, verdict, suggested_duration_min, reasons, computed_at
+             FROM mn_meeting_necessity WHERE meeting_id = $1`,
+          [id],
+        ),
+        db.query(
+          `SELECT meeting_id, samples, tension_peaks, insight_points, computed_at
+             FROM mn_affect_curve WHERE meeting_id = $1`,
+          [id],
+        ),
+        db.query(
+          `SELECT MAX(intensity)::float AS peak, COUNT(*)::int AS count
+             FROM mn_tensions WHERE meeting_id = $1`,
+          [id],
+        ),
+      ]);
+
+      // 决策质量：转成前端期望的 { overall, dims[] } 形态（与 /decision-quality 对齐）
+      let quality: unknown = null;
+      if (qR.rows[0]) {
+        const row = qR.rows[0];
+        const notes = (row.notes ?? {}) as Record<string, string>;
+        const dimMeta = [
+          { id: 'clarity',     label: '清晰度' },
+          { id: 'actionable',  label: '可执行' },
+          { id: 'traceable',   label: '可追溯' },
+          { id: 'falsifiable', label: '可证伪' },
+          { id: 'aligned',     label: '对齐度' },
+        ] as const;
+        quality = {
+          overall: Number(row.overall ?? 0),
+          dims: dimMeta.map(({ id: dimId, label }) => ({
+            id: dimId,
+            label,
+            score: Number((row as Record<string, unknown>)[dimId] ?? 0),
+            note: notes[dimId] ?? '',
+          })),
+          computedAt: row.computed_at,
+        };
+      }
+
+      // 情绪峰值：从 samples 里取最大 |valence| 与对应 intensity
+      let affectPeak: { valence: number; intensity: number; tag?: string } | null = null;
+      if (aR.rows[0]?.samples && Array.isArray(aR.rows[0].samples)) {
+        const samples = aR.rows[0].samples as Array<{ v?: number; i?: number; tag?: string }>;
+        for (const s of samples) {
+          const v = Number(s.v ?? 0);
+          const i = Number(s.i ?? 0);
+          if (!affectPeak || Math.abs(v) > Math.abs(affectPeak.valence)) {
+            affectPeak = { valence: v, intensity: i, tag: s.tag };
+          }
+        }
+      }
+
+      return {
+        quality,
+        necessity: nR.rows[0]
+          ? {
+              verdict: nR.rows[0].verdict,
+              suggestedDurationMin: nR.rows[0].suggested_duration_min,
+              reasons: nR.rows[0].reasons ?? [],
+              computedAt: nR.rows[0].computed_at,
+            }
+          : null,
+        affect: aR.rows[0]
+          ? {
+              samples: aR.rows[0].samples ?? [],
+              tensionPeaks: aR.rows[0].tension_peaks ?? null,
+              insightPoints: aR.rows[0].insight_points ?? null,
+              peak: affectPeak,
+              computedAt: aR.rows[0].computed_at,
+            }
+          : null,
+        tension: tR.rows[0]
+          ? {
+              peakIntensity: Number(tR.rows[0].peak ?? 0),
+              count: Number(tR.rows[0].count ?? 0),
+            }
+          : { peakIntensity: 0, count: 0 },
+      };
+    });
+
     // Phase 15.14 · AxisMeta · Emotion curve (mn_affect_curve)
     fastify.get('/meetings/:id/emotion-curve', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };

@@ -3,6 +3,9 @@
 
 import type { Tone } from './_atoms';
 
+// 改动六：axis 元数据集中到 _axisRegistry.ts，这里只 re-export 给老调用方
+export { AXIS_REGISTRY, AXIS_TOTAL_COUNT, AXES_BY_STAGE, AXIS_SUB, ALL_AXES } from './_axisRegistry';
+
 // ── Meeting ──
 export const MEETING = {
   id: 'M-2026-04-11-0237',

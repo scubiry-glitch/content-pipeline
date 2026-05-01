@@ -1,6 +1,9 @@
 // Panorama · 全景画板 service
 // 聚合 6 房间 metric + 5 组步骤完成度（PR12 LLM 接通后从 mn_runs(module='ceo') 计数）
-// + 4 源 + 12 产出 总览
+// + 4 源 + 12+ 产出 总览
+//
+// 重构 (改动六)：SOURCES / OUTPUTS 改为从 axes/registry 派生，消除与
+// _panoramaApi.ts 双写硬编码；STEP_GROUPS 增加 stageCounts 字段映射 L1/L2 DAG。
 
 import type { CeoEngineDeps, PrismKind } from '../types.js';
 import { computeAlignmentScore } from '../rooms/compass/aggregator.js';
@@ -9,6 +12,7 @@ import { computeResponsibilityClarity } from '../rooms/tower/aggregator.js';
 import { computeFormationHealth } from '../rooms/war-room/aggregator.js';
 import { computeCoverage } from '../rooms/situation/aggregator.js';
 import { computeWeeklyRoi } from '../rooms/balcony/aggregator.js';
+import { ALL_PRODUCES, ALL_CONSUMES } from '../../meeting-notes/axes/registry.js';
 
 export interface PanoramaData {
   prisms: Array<{
@@ -26,6 +30,8 @@ export interface PanoramaData {
     sub: string;
     members: string;
     runCount: number; // PR12 接 mn_runs(module='ceo' AND axis='gN')
+    /** 改动六：拆 L1/L2 stage 计数（来自 mn_runs.stage） */
+    stageCounts?: { L1: number; L2: number };
   }>;
   sources: Array<{ id: string; label: string; sub: string }>;
   outputs: string[];
@@ -79,27 +85,45 @@ const STEP_GROUPS: PanoramaData['stepGroups'] = [
   { id: 'g5', label: '棱镜聚合', sub: '六面指标合成', members: '11', runCount: 0 },
 ];
 
-const SOURCES = [
-  { id: 'src-rec', label: '会议原材料', sub: '录音 / 录像 / 文档' },
-  { id: 'src-lib', label: '内容库 assets', sub: 'RSS · 手动 · 深度分析' },
-  { id: 'src-exp', label: '专家库', sub: 'S 级 · 心智模型' },
-  { id: 'src-hist', label: '历史纪要', sub: '信念 · 决策链' },
+// 改动六：SOURCES / OUTPUTS 不再硬编码，由 axes/registry 反向聚合派生。
+// SOURCES 的 sub 描述 (录音/录像/RSS 等) 与 axis 无关，在这里维护一份 label→sub 字典。
+const SOURCE_SUB: Record<string, { id: string; sub: string }> = {
+  '会议原材料':    { id: 'src-rec',  sub: '录音 / 录像 / 文档' },
+  '内容库 assets': { id: 'src-lib',  sub: 'RSS · 手动 · 深度分析' },
+  '专家库':        { id: 'src-exp',  sub: 'S 级 · 心智模型' },
+  '历史纪要':      { id: 'src-hist', sub: '信念 · 决策链' },
+};
+
+// CEO 全局产物（不属于 mn axes 但在 panorama 时间轴上可见）：
+// 由 ceo runHandlers (g1..g5) 产出，axes/registry 无法表达，独立维护
+const CEO_PRODUCES = [
+  '转写',           // g1 ASR
+  'rehash 指数',    // g4 跨会
+  '外脑批注',       // g4 外脑
+  '六棱镜指标',     // g5 棱镜聚合
+  '一页纸摘要',     // g5 简报
 ];
 
-const OUTPUTS = [
-  '转写',
-  '承诺清单',
-  '张力清单',
-  'Rubric 矩阵',
-  '信念轨迹',
-  '心智模型命中',
-  '盲区档案',
-  '互补专家组',
-  'rehash 指数',
-  '外脑批注',
-  '六棱镜指标',
-  '一页纸摘要',
-];
+const SOURCES = ALL_CONSUMES.map((label) => ({
+  id: SOURCE_SUB[label]?.id ?? `src-${label.replace(/\s+/g, '-')}`,
+  label,
+  sub: SOURCE_SUB[label]?.sub ?? '',
+}));
+
+// 合并 mn axes 产物 + CEO 自己的产物，按出现顺序去重
+const OUTPUTS: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  // ALL_PRODUCES 顺序优先（mn axes）
+  for (const p of ALL_PRODUCES) {
+    if (!seen.has(p)) { seen.add(p); out.push(p); }
+  }
+  // CEO 全局产物补到末尾
+  for (const p of CEO_PRODUCES) {
+    if (!seen.has(p)) { seen.add(p); out.push(p); }
+  }
+  return out;
+})();
 
 export async function getPanoramaData(
   deps: CeoEngineDeps,
@@ -124,8 +148,8 @@ export async function getPanoramaData(
     self: { label: '本周 ROI', value: roi.toFixed(2) },
   };
 
-  // 5 组步骤的 run 数（按 module='ceo' 分组）
-  const stepGroups = [...STEP_GROUPS];
+  // 5 组步骤的 run 数（按 module='ceo' 分组）+ DAG stage 拆分（mn module）
+  const stepGroups = STEP_GROUPS.map((g) => ({ ...g, stageCounts: { L1: 0, L2: 0 } }));
   try {
     const r = await deps.db.query(
       `SELECT axis, COUNT(*)::int AS n
@@ -139,6 +163,27 @@ export async function getPanoramaData(
     for (const g of stepGroups) g.runCount = cnt.get(g.id) ?? 0;
   } catch {
     // 模块未上线 / 无数据 — 保持 runCount=0
+  }
+
+  // 改动六：mn module 的 L1/L2 stage 计数 — 全 mn axes 总数，按 stage 分桶
+  // 简化：把总数挂到 g1 (体征 ≈ L1) 和 g2 (聚合 ≈ L2)，让时间轴可染色显示 DAG 进度
+  try {
+    const r = await deps.db.query(
+      `SELECT stage, COUNT(*)::int AS n
+         FROM mn_runs
+        WHERE module = 'mn' AND stage IS NOT NULL
+        GROUP BY stage`,
+    );
+    let l1 = 0;
+    let l2 = 0;
+    for (const row of r.rows) {
+      if (row.stage === 'L1_meeting') l1 = Number(row.n);
+      else if (row.stage === 'L2_aggregate') l2 = Number(row.n);
+    }
+    if (stepGroups[0]) stepGroups[0].stageCounts = { L1: l1, L2: 0 };
+    if (stepGroups[1]) stepGroups[1].stageCounts = { L1: 0, L2: l2 };
+  } catch {
+    // 024 migration 未跑 / 无数据 — stageCounts 保持 0
   }
 
   return {

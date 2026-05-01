@@ -1,4 +1,10 @@
 // Panorama 客户端 API + 类型
+//
+// 改动六：PANORAMA_FALLBACK 不再硬编码 sources / outputs，
+// 改为从 prototype/meeting/_axisRegistry 派生（消除 service.ts 与本文件双写）。
+// CEO 自己的 g1..g5 产物（转写/rehash/外脑批注/...）由 CEO_PRODUCES 局部维护。
+
+import { ALL_PRODUCES, ALL_CONSUMES } from '../../../meeting/_axisRegistry';
 
 export type PrismKind = 'direction' | 'board' | 'coord' | 'team' | 'ext' | 'self';
 
@@ -18,6 +24,8 @@ export interface PanoramaStepGroup {
   sub: string;
   members: string;
   runCount: number;
+  /** 改动六：DAG L1/L2 stage 计数（来自 mn_runs.stage）；service 端聚合后塞入 */
+  stageCounts?: { L1: number; L2: number };
 }
 
 export interface PanoramaData {
@@ -32,6 +40,37 @@ export interface PanoramaData {
     prismCount: number;
   };
 }
+
+// CEO 全局产物（不在 mn axes 注册表里，由 ceo runHandlers g1..g5 产出）
+const CEO_PRODUCES = [
+  '转写',           // g1 ASR
+  'rehash 指数',    // g4 跨会
+  '外脑批注',       // g4 外脑
+  '六棱镜指标',     // g5 棱镜聚合
+  '一页纸摘要',     // g5 简报
+];
+
+// SOURCE label → sub 描述字典（与 service.ts SOURCE_SUB 一致）
+const SOURCE_SUB: Record<string, { id: string; sub: string }> = {
+  '会议原材料':    { id: 'src-rec',  sub: '录音 / 录像 / 文档' },
+  '内容库 assets': { id: 'src-lib',  sub: 'RSS · 手动 · 深度分析' },
+  '专家库':        { id: 'src-exp',  sub: 'S 级 · 心智模型' },
+  '历史纪要':      { id: 'src-hist', sub: '信念 · 决策链' },
+};
+
+const FALLBACK_SOURCES = ALL_CONSUMES.map((label) => ({
+  id: SOURCE_SUB[label]?.id ?? `src-${label.replace(/\s+/g, '-')}`,
+  label,
+  sub: SOURCE_SUB[label]?.sub ?? '',
+}));
+
+const FALLBACK_OUTPUTS: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of ALL_PRODUCES) if (!seen.has(p)) { seen.add(p); out.push(p); }
+  for (const p of CEO_PRODUCES) if (!seen.has(p)) { seen.add(p); out.push(p); }
+  return out;
+})();
 
 // Fixture 兜底（API 不可用时）
 export const PANORAMA_FALLBACK: PanoramaData = {
@@ -50,14 +89,14 @@ export const PANORAMA_FALLBACK: PanoramaData = {
     { id: 'g4', label: '跨会 & 批注', sub: 'rehash · 外脑批注生成', members: '09·10', runCount: 0 },
     { id: 'g5', label: '棱镜聚合', sub: '六面指标合成', members: '11', runCount: 0 },
   ],
-  sources: [
-    { id: 'src-rec', label: '会议原材料', sub: '录音 / 录像 / 文档' },
-    { id: 'src-lib', label: '内容库 assets', sub: 'RSS · 手动 · 深度分析' },
-    { id: 'src-exp', label: '专家库', sub: 'S 级 · 心智模型' },
-    { id: 'src-hist', label: '历史纪要', sub: '信念 · 决策链' },
-  ],
-  outputs: ['转写', '承诺清单', '张力清单', 'Rubric 矩阵', '信念轨迹', '心智模型命中', '盲区档案', '互补专家组', 'rehash 指数', '外脑批注', '六棱镜指标', '一页纸摘要'],
-  meta: { sourceCount: 4, stepGroupCount: 5, outputCount: 12, prismCount: 6 },
+  sources: FALLBACK_SOURCES,
+  outputs: FALLBACK_OUTPUTS,
+  meta: {
+    sourceCount: FALLBACK_SOURCES.length,
+    stepGroupCount: 5,
+    outputCount: FALLBACK_OUTPUTS.length,
+    prismCount: 6,
+  },
 };
 
 export async function fetchPanoramaData(scopeId?: string): Promise<PanoramaData> {
