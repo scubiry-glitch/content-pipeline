@@ -33,43 +33,115 @@ const FALLBACK_PATTERN = (day: number, hour: number): number => {
 export async function getTeamHeatmap(
   deps: CeoEngineDeps,
   filter: { scopeIds?: string[]; weekStart?: string },
-): Promise<{ weekStart: string; cells: HeatmapCell[] }> {
+): Promise<{ weekStart: string; cells: HeatmapCell[]; source: 'real' | 'fallback' | 'mixed'; counts: { meetings: number; commitments: number } }> {
   const cells: HeatmapCell[] = [];
+  // 三类信号加权：会议 (assets meeting_minutes) × 1.0, 承诺截止 (mn_commitments due_at) × 0.6, runs 起跑 × 0.3
+  const grid: Record<string, number> = {};
+  let meetingsCount = 0;
+  let commitmentsCount = 0;
 
-  // 尝试从真实 mn_meetings (assets type=meeting_minutes) 拉时间分布
-  // 若失败或为空，全部走 fallback pattern
-  let realData = false;
+  const accumulate = (rows: Array<{ day: number; hour: number; n: number }>, weight: number) => {
+    for (const row of rows) {
+      const key = `${row.day}-${row.hour}`;
+      grid[key] = (grid[key] ?? 0) + Number(row.n) * weight;
+    }
+  };
+
+  // 1. 会议时间分布 (主信号)
   try {
+    const params: any[] = [];
+    let scopeClause = '';
+    if (filter.scopeIds && filter.scopeIds.length > 0) {
+      params.push(filter.scopeIds);
+      scopeClause = `AND id IN (
+        SELECT DISTINCT meeting_id FROM mn_scope_memberships
+         WHERE scope_id = ANY($${params.length}::uuid[])
+      )`;
+    }
     const r = await deps.db.query(
       `SELECT
-          (EXTRACT(DOW FROM created_at)::int + 6) % 7 AS day,  -- DOW: Sun=0..Sat=6 → Mon=0..Sun=6
+          (EXTRACT(DOW FROM created_at)::int + 6) % 7 AS day,
           EXTRACT(HOUR FROM created_at)::int AS hour,
           COUNT(*)::int AS n
          FROM assets
         WHERE type = 'meeting_minutes'
           AND created_at > NOW() - INTERVAL '8 weeks'
+          ${scopeClause}
+        GROUP BY day, hour`,
+      params,
+    );
+    accumulate(r.rows, 1.0);
+    meetingsCount = r.rows.reduce((s, row) => s + Number(row.n), 0);
+  } catch {
+    /* schema 缺失则跳过此源 */
+  }
+
+  // 2. 承诺截止 due_at 分布 (次信号 — 反映团队"被推动"的时点)
+  try {
+    const params: any[] = [];
+    let scopeClause = '';
+    if (filter.scopeIds && filter.scopeIds.length > 0) {
+      params.push(filter.scopeIds);
+      scopeClause = `AND scope_id = ANY($${params.length}::uuid[])`;
+    }
+    const r = await deps.db.query(
+      `SELECT
+          (EXTRACT(DOW FROM due_at)::int + 6) % 7 AS day,
+          EXTRACT(HOUR FROM due_at)::int AS hour,
+          COUNT(*)::int AS n
+         FROM mn_commitments
+        WHERE due_at IS NOT NULL
+          AND due_at > NOW() - INTERVAL '8 weeks'
+          ${scopeClause}
+        GROUP BY day, hour`,
+      params,
+    );
+    accumulate(r.rows, 0.6);
+    commitmentsCount = r.rows.reduce((s, row) => s + Number(row.n), 0);
+  } catch {
+    /* schema 缺失则跳过此源 */
+  }
+
+  // 3. CEO runs 起跑 (轻信号 — 反映 CEO 处理任务的节奏)
+  try {
+    const r = await deps.db.query(
+      `SELECT
+          (EXTRACT(DOW FROM created_at)::int + 6) % 7 AS day,
+          EXTRACT(HOUR FROM created_at)::int AS hour,
+          COUNT(*)::int AS n
+         FROM mn_runs
+        WHERE module = 'ceo'
+          AND created_at > NOW() - INTERVAL '8 weeks'
         GROUP BY day, hour`,
     );
-    if (r.rows.length > 0) {
-      const max = r.rows.reduce((m, row) => Math.max(m, Number(row.n)), 0);
-      if (max > 0) {
-        realData = true;
-        const grid: Record<string, number> = {};
-        for (const row of r.rows) {
-          grid[`${row.day}-${row.hour}`] = Number(row.n) / max;
-        }
-        for (let day = 0; day < 7; day++) {
-          for (let hour = 0; hour < 24; hour++) {
-            cells.push({ day, hour, intensity: grid[`${day}-${hour}`] ?? 0 });
-          }
+    accumulate(r.rows, 0.3);
+  } catch {
+    /* ignore */
+  }
+
+  // 归一化 + 输出
+  const totalSignals = meetingsCount + commitmentsCount;
+  const useReal = totalSignals >= 5;  // 阈值: 5 个信号以上才算"真数据"
+  let source: 'real' | 'fallback' | 'mixed' = 'fallback';
+
+  if (useReal) {
+    const max = Math.max(0, ...Object.values(grid));
+    if (max > 0) {
+      source = totalSignals >= 30 ? 'real' : 'mixed';
+      // mixed 模式: 真数据 + fallback pattern 各占一半
+      const realBlend = source === 'real' ? 1.0 : 0.5;
+      for (let day = 0; day < 7; day++) {
+        for (let hour = 0; hour < 24; hour++) {
+          const realIntensity = (grid[`${day}-${hour}`] ?? 0) / max;
+          const fallbackIntensity = FALLBACK_PATTERN(day, hour);
+          const blended = realBlend * realIntensity + (1 - realBlend) * fallbackIntensity;
+          cells.push({ day, hour, intensity: Number(blended.toFixed(3)) });
         }
       }
     }
-  } catch {
-    /* assets 表 schema 不一致或不存在，走 fallback */
   }
 
-  if (!realData) {
+  if (cells.length === 0) {
     for (let day = 0; day < 7; day++) {
       for (let hour = 0; hour < 24; hour++) {
         cells.push({ day, hour, intensity: FALLBACK_PATTERN(day, hour) });
@@ -80,6 +152,8 @@ export async function getTeamHeatmap(
   return {
     weekStart: filter.weekStart ?? new Date().toISOString().slice(0, 10),
     cells,
+    source,
+    counts: { meetings: meetingsCount, commitments: commitmentsCount },
   };
 }
 

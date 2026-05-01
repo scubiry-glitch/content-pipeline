@@ -9,6 +9,13 @@ interface HeatmapCell {
   intensity: number;
 }
 
+interface HeatmapResponse {
+  weekStart: string;
+  cells: HeatmapCell[];
+  source?: 'real' | 'fallback' | 'mixed';
+  counts?: { meetings: number; commitments: number };
+}
+
 interface Props {
   weekStart?: string;
 }
@@ -28,6 +35,8 @@ export function TeamHeatmap({ weekStart }: Props) {
   const [cells, setCells] = useState<HeatmapCell[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredCell, setHoveredCell] = useState<HeatmapCell | null>(null);
+  const [source, setSource] = useState<HeatmapResponse['source']>('fallback');
+  const [counts, setCounts] = useState<HeatmapResponse['counts']>({ meetings: 0, commitments: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -35,9 +44,11 @@ export function TeamHeatmap({ weekStart }: Props) {
     const q = weekStart ? `?weekStart=${weekStart}` : '';
     fetch(`/api/v1/ceo/tower/heatmap${q}`)
       .then((r) => r.json())
-      .then((d: { cells: HeatmapCell[] }) => {
+      .then((d: HeatmapResponse) => {
         if (cancelled) return;
         setCells(d.cells ?? []);
+        setSource(d.source ?? 'fallback');
+        setCounts(d.counts ?? { meetings: 0, commitments: 0 });
         setLoading(false);
       })
       .catch(() => !cancelled && setLoading(false));
@@ -45,6 +56,12 @@ export function TeamHeatmap({ weekStart }: Props) {
       cancelled = true;
     };
   }, [weekStart]);
+
+  const sourceLabel: Record<NonNullable<HeatmapResponse['source']>, { label: string; tone: string }> = {
+    real: { label: '真数据', tone: '#5FA39E' },
+    mixed: { label: '混合', tone: '#C49B4D' },
+    fallback: { label: '兜底', tone: 'rgba(232,239,242,0.5)' },
+  };
 
   // grid by [day][hour]
   const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
@@ -60,6 +77,33 @@ export function TeamHeatmap({ weekStart }: Props) {
 
   return (
     <div>
+      {/* 数据源徽标 */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          marginBottom: 8,
+          fontFamily: 'var(--mono)',
+          fontSize: 10,
+          color: 'rgba(232,239,242,0.55)',
+        }}
+      >
+        <span
+          style={{
+            padding: '2px 8px',
+            background: `${(sourceLabel[source ?? 'fallback']).tone}20`,
+            color: sourceLabel[source ?? 'fallback'].tone,
+            border: `1px solid ${sourceLabel[source ?? 'fallback'].tone}55`,
+            borderRadius: 99,
+            letterSpacing: 0.2,
+          }}
+        >
+          {sourceLabel[source ?? 'fallback'].label}
+        </span>
+        {(counts?.meetings ?? 0) > 0 && <span>· 会议 {counts?.meetings}</span>}
+        {(counts?.commitments ?? 0) > 0 && <span>· 承诺截止 {counts?.commitments}</span>}
+      </div>
+
       {/* 顶部小时轴 */}
       <div
         style={{
