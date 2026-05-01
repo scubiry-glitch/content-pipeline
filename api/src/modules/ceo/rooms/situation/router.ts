@@ -2,7 +2,15 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
-import { listStakeholders, listSignals, getRubricMatrix, getSituationDashboard } from './service.js';
+import {
+  listStakeholders,
+  listSignals,
+  getRubricMatrix,
+  getSituationDashboard,
+  listBlindspots,
+  listObservers,
+  getHorizon,
+} from './service.js';
 
 export function createSituationRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function situationRoutes(fastify: FastifyInstance) {
@@ -24,6 +32,23 @@ export function createSituationRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/rubric', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getRubricMatrix(engine.deps, scopeId);
+    });
+
+    // ─── samples-s 对齐 ─────────────────────────────────────────
+    fastify.get('/blindspots', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return listBlindspots(engine.deps, scopeId);
+    });
+
+    fastify.get('/observers', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return listObservers(engine.deps, scopeId);
+    });
+
+    fastify.get('/horizon', async (request) => {
+      const { scopeId, range } = (request.query ?? {}) as { scopeId?: string; range?: string };
+      const r = range === 'mid' ? 'mid' : range === 'far' ? 'far' : 'near';
+      return getHorizon(engine.deps, r, scopeId);
     });
   };
 }

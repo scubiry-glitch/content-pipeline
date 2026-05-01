@@ -25,14 +25,44 @@ export async function listDirectors(
   filter: ScopeFilter,
 ): Promise<{ items: any[] }> {
   const ids = scopeIdsParam(filter.scopeIds);
-  const r = await deps.db.query(
-    `SELECT id::text, name, role, weight, scope_id::text
-       FROM ceo_directors
-      WHERE ($1::uuid[] IS NULL OR scope_id = ANY($1::uuid[]))
-      ORDER BY weight DESC, name`,
-    [ids],
-  );
-  return { items: r.rows };
+  // 编辑入口在 meeting-notes 人轴 → 人物管理 (写 ceo_person_agent_links)
+  // 这里只是只读 LEFT JOIN，无绑定时 expert_binding=null
+  let rows: any[] = [];
+  try {
+    const r = await deps.db.query(
+      `SELECT d.id::text, d.name, d.role, d.weight, d.scope_id::text,
+              l.expert_id, ep.name AS expert_name
+         FROM ceo_directors d
+         LEFT JOIN ceo_person_agent_links l ON l.person_id = d.id
+         LEFT JOIN expert_profiles ep ON ep.expert_id = l.expert_id
+        WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+        ORDER BY d.weight DESC, d.name`,
+      [ids],
+    );
+    rows = r.rows;
+  } catch {
+    // expert_profiles 可能不存在 (expert-library 未启用) — 退化为不带 expert_binding
+    const r = await deps.db.query(
+      `SELECT d.id::text, d.name, d.role, d.weight, d.scope_id::text,
+              l.expert_id, NULL::text AS expert_name
+         FROM ceo_directors d
+         LEFT JOIN ceo_person_agent_links l ON l.person_id = d.id
+        WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+        ORDER BY d.weight DESC, d.name`,
+      [ids],
+    ).catch(() => ({ rows: [] as any[] }));
+    rows = r.rows;
+  }
+  const items = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    weight: row.weight,
+    scope_id: row.scope_id,
+    personId: row.id,
+    expert_binding: row.expert_id ? { expert_id: row.expert_id, name: row.expert_name ?? row.expert_id } : null,
+  }));
+  return { items };
 }
 
 export async function listConcerns(
@@ -201,9 +231,17 @@ export async function getBoardroomDashboard(
   question: string;
   metric: { label: string; value: string; delta: string };
   concernsByStatus: { pending: number; answered: number; superseded: number };
-  topConcerns: Array<{ name: string; meta: string; text: string; warn: boolean }>;
+  topConcerns: Array<{
+    name: string;
+    personId: string | null;
+    personRole: string | null;
+    meta: string;
+    text: string;
+    warn: boolean;
+  }>;
   forwardPct: number;
   promiseStats: { total: number; done: number; in_progress: number; late: number };
+  appliedScopes?: Array<{ id: string; name: string; kind: string }>;
 }> {
   const ids = scopeIdsParam(scopeIds);
 
@@ -221,19 +259,21 @@ export async function getBoardroomDashboard(
   }
 
   const top = await deps.db.query(
-    `SELECT d.name AS name, d.role AS role,
+    `SELECT d.id::text AS director_id, d.name AS name, d.role AS role,
             COUNT(*)::int AS cnt, MAX(c.raised_at) AS last_raised
        FROM ceo_director_concerns c
        LEFT JOIN ceo_directors d ON d.id = c.director_id
       WHERE c.status = 'pending'
         AND ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
-      GROUP BY d.name, d.role
+      GROUP BY d.id, d.name, d.role
       ORDER BY cnt DESC, last_raised DESC NULLS LAST
       LIMIT 5`,
     [ids],
   );
   const topConcerns = top.rows.map((r) => ({
     name: r.name ?? '匿名董事',
+    personId: r.director_id ?? null,
+    personRole: r.role ?? null,
     meta: `${r.cnt} 次 · ${r.role ?? ''}`.trim(),
     text: '待回应',
     warn: r.cnt >= 3,
@@ -270,6 +310,24 @@ export async function getBoardroomDashboard(
     else if (status === 'in_progress' || status === 'on_track' || status === 'at_risk') promiseStats.in_progress += n;
   }
 
+  // appliedScopes 回显（多 scope 模式）
+  let appliedScopes: Array<{ id: string; name: string; kind: string }> | undefined;
+  if (ids && ids.length > 0) {
+    try {
+      const sc = await deps.db.query(
+        `SELECT id::text, name, kind FROM mn_scopes WHERE id = ANY($1::uuid[])`,
+        [ids],
+      );
+      appliedScopes = sc.rows.map((row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        kind: String(row.kind),
+      }));
+    } catch {
+      appliedScopes = ids.map((id) => ({ id, name: id, kind: 'unknown' }));
+    }
+  }
+
   return {
     question: '下次董事会我要带什么?',
     metric: {
@@ -281,5 +339,6 @@ export async function getBoardroomDashboard(
     topConcerns,
     forwardPct,
     promiseStats,
+    ...(appliedScopes ? { appliedScopes } : {}),
   };
 }

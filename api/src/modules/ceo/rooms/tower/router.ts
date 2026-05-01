@@ -3,7 +3,14 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
-import { getTowerDashboard, listCommitmentsByStatus, listBlockers, getRhythmPulse } from './service.js';
+import {
+  getTowerDashboard,
+  listCommitmentsByStatus,
+  listBlockers,
+  getRhythmPulse,
+  getPostMeeting,
+  getDeficit,
+} from './service.js';
 import { getTeamHeatmap, getPersonalRhythm } from './heatmap-service.js';
 
 export function createTowerRouter(engine: CeoEngine): FastifyPluginAsync {
@@ -37,6 +44,17 @@ export function createTowerRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/personal-rhythm', async (request) => {
       const q = (request.query ?? {}) as { userId?: string; weekStart?: string };
       return getPersonalRhythm(engine.deps, { userId: q.userId, weekStart: q.weekStart });
+    });
+
+    // ─── samples-s 对齐 ─────────────────────────────────────────
+    fastify.get('/post-meeting', async (request) => {
+      const { scopeId } = (request.query ?? {}) as { scopeId?: string };
+      return getPostMeeting(engine.deps, scopeId);
+    });
+
+    fastify.get('/deficit', async (request) => {
+      const { userId } = (request.query ?? {}) as { userId?: string };
+      return getDeficit(engine.deps, { userId });
     });
   };
 }

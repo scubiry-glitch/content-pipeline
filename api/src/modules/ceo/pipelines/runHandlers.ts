@@ -9,7 +9,7 @@
 // 而是写入"占位结果 + 标记为 stub"，让 UI 看到 run 走完整生命周期。
 // 真正接入 claude-cli 由独立 commit 完成（依赖 mn_runs.runEngine.dispatchPlan 路由）。
 
-import type { CeoEngineDeps, PrismKind } from '../types.js';
+import type { CeoEngineDeps, CeoLLMInvokeResult, PrismKind } from '../types.js';
 import { computeAlignmentScore } from '../rooms/compass/aggregator.js';
 import { computeForwardPct } from '../rooms/boardroom/aggregator.js';
 import { computeResponsibilityClarity } from '../rooms/tower/aggregator.js';
@@ -18,6 +18,58 @@ import { computeCoverage } from '../rooms/situation/aggregator.js';
 import { computeWeeklyRoi } from '../rooms/balcony/aggregator.js';
 
 export type CeoAxis = 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+
+/**
+ * Brain `$cost_window` 依赖 mn_runs.cost_tokens / cost_ms 真实增长。
+ * 每个 LLM 调用后调一次：累加 token + duration，把 metadata.llmCalls/llmProvider 写上。
+ */
+function inferProvider(model?: string): string {
+  if (!model) return 'unknown';
+  const m = model.toLowerCase();
+  if (m.includes('claude')) return 'claude';
+  if (m.includes('kimi') || m.includes('moonshot')) return 'kimi';
+  if (m.includes('gpt') || m.includes('o1') || m.includes('openai')) return 'openai';
+  return model;
+}
+
+async function recordLlmCost(
+  deps: CeoEngineDeps,
+  runId: string,
+  result: CeoLLMInvokeResult,
+): Promise<void> {
+  const tokens = (result.tokensIn ?? 0) + (result.tokensOut ?? 0);
+  const provider = inferProvider(result.model);
+  try {
+    await deps.db.query(
+      `UPDATE mn_runs
+          SET cost_tokens = COALESCE(cost_tokens, 0) + $2::int,
+              cost_ms     = COALESCE(cost_ms, 0) + $3::int,
+              metadata    = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                'llmCalls', COALESCE((metadata->>'llmCalls')::int, 0) + 1,
+                'llmProvider', $4::text,
+                'llmModel', $5::text
+              )
+        WHERE id = $1::uuid`,
+      [runId, tokens, result.durationMs ?? 0, provider, result.model ?? null],
+    );
+  } catch (e) {
+    console.warn('[recordLlmCost] failed:', (e as Error).message);
+  }
+}
+
+/** 标 stub 模式（无 LLM 可用时仍写 llmProvider='stub'，便于 Brain 区分） */
+async function recordStubProvider(deps: CeoEngineDeps, runId: string): Promise<void> {
+  try {
+    await deps.db.query(
+      `UPDATE mn_runs
+          SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('llmProvider', 'stub')
+        WHERE id = $1::uuid`,
+      [runId],
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 export interface CeoRunRow {
   id: string;
@@ -140,6 +192,7 @@ async function handleG3Sandbox(
         maxTokens: 1500,
         taskTag: 'g3-sandbox',
       });
+      await recordLlmCost(deps, run.id, result);
       const parsed = JSON.parse(result.text) as {
         branches?: unknown;
         evaluation?: any;
@@ -154,6 +207,8 @@ async function handleG3Sandbox(
     } catch (e) {
       console.warn('[g3-sandbox] LLM invoke failed, fallback to stub:', (e as Error).message);
     }
+  } else {
+    await recordStubProvider(deps, run.id);
   }
 
   await deps.db.query(
@@ -224,6 +279,7 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
         maxTokens: 600,
         taskTag: 'g3-rebuttal',
       });
+      await recordLlmCost(deps, run.id, result);
       const parsed = JSON.parse(result.text) as { attack?: string; defense?: string; strength?: number };
       if (parsed.attack) attackText = parsed.attack;
       if (parsed.defense) defenseText = parsed.defense;
@@ -232,6 +288,8 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
     } catch (e) {
       console.warn('[g3] LLM invoke failed, falling back to stub:', (e as Error).message);
     }
+  } else {
+    await recordStubProvider(deps, run.id);
   }
 
   const ins = await deps.db.query(
@@ -295,6 +353,7 @@ async function handleG4Annotations(
         maxTokens: 800,
         taskTag: 'g4-annotations',
       });
+      await recordLlmCost(deps, run.id, result);
       const parsed = JSON.parse(result.text) as {
         mode?: string;
         highlight?: string;
@@ -316,6 +375,8 @@ async function handleG4Annotations(
     } catch (e) {
       console.warn('[g4-annotations] LLM invoke failed, fallback to stub:', (e as Error).message);
     }
+  } else {
+    await recordStubProvider(deps, run.id);
   }
 
   const ins = await deps.db.query(
@@ -405,6 +466,7 @@ async function handleG4BalconyPrompt(
         maxTokens: 400,
         taskTag: 'g4-balcony-prompt',
       });
+      await recordLlmCost(deps, run.id, result);
       promptText = result.text.trim();
       mode = 'llm';
     } catch (e) {
@@ -413,6 +475,8 @@ async function handleG4BalconyPrompt(
         (e as Error).message,
       );
     }
+  } else {
+    await recordStubProvider(deps, run.id);
   }
 
   await deps.db.query(
@@ -468,6 +532,7 @@ async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
         maxTokens: 500,
         taskTag: 'g4-cross-meeting',
       });
+      await recordLlmCost(deps, run.id, result);
       const parsed = JSON.parse(result.text) as { hypothesis?: string; fact?: string; fate?: string };
       if (parsed.hypothesis) hypothesisText = parsed.hypothesis;
       if (parsed.fact) factText = parsed.fact;
@@ -478,6 +543,8 @@ async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
     } catch (e) {
       console.warn('[g4] LLM invoke failed, falling back to stub:', (e as Error).message);
     }
+  } else {
+    await recordStubProvider(deps, run.id);
   }
 
   const ins = await deps.db.query(
@@ -557,6 +624,7 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
         [run.scope_id, stakeholderId, dim, 0.6, run.id, '[stub g2] LLM 未配置时的中性兜底'],
       );
     }
+    await recordStubProvider(deps, run.id);
     return {
       ok: true,
       result: { mode: 'stub', dimensions: RUBRIC_DIMENSIONS.length },
@@ -596,6 +664,7 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
       maxTokens: 200,
       taskTag: 'g2-rubric',
     });
+    await recordLlmCost(deps, run.id, result);
     const parsed = JSON.parse(result.text) as Record<string, unknown>;
     for (const dim of RUBRIC_DIMENSIONS) {
       const v = parsed[dim];
