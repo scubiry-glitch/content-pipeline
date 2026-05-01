@@ -1,0 +1,188 @@
+// Boardroom · 董事会房间 service
+// 关切雷达 / 预读包 / 承诺追踪 / 反方演练 读取 + 聚合
+
+import type { CeoEngineDeps } from '../../types.js';
+import { computeForwardPct } from './aggregator.js';
+
+export async function listDirectors(
+  deps: CeoEngineDeps,
+  filter: { scopeId?: string },
+): Promise<{ items: any[] }> {
+  const r = await deps.db.query(
+    `SELECT id::text, name, role, weight, scope_id::text
+       FROM ceo_directors
+      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+      ORDER BY weight DESC, name`,
+    [filter.scopeId ?? null],
+  );
+  return { items: r.rows };
+}
+
+export async function listConcerns(
+  deps: CeoEngineDeps,
+  filter: { directorId?: string; status?: string },
+): Promise<{ items: any[] }> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filter.directorId) {
+    params.push(filter.directorId);
+    where.push(`director_id = $${params.length}`);
+  }
+  if (filter.status) {
+    params.push(filter.status);
+    where.push(`status = $${params.length}`);
+  }
+  const r = await deps.db.query(
+    `SELECT c.id::text, c.director_id::text, c.topic, c.status,
+            c.raised_count, c.raised_at, c.source_meeting_id::text,
+            c.resolution, c.resolved_at,
+            d.name AS director_name, d.role AS director_role
+       FROM ceo_director_concerns c
+       LEFT JOIN ceo_directors d ON d.id = c.director_id
+       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       ORDER BY c.raised_at DESC
+       LIMIT 50`,
+    params,
+  );
+  return { items: r.rows };
+}
+
+export async function listBriefs(
+  deps: CeoEngineDeps,
+  filter: { scopeId?: string; session?: string },
+): Promise<{ items: any[] }> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filter.scopeId) {
+    params.push(filter.scopeId);
+    where.push(`scope_id = $${params.length}`);
+  }
+  if (filter.session) {
+    params.push(filter.session);
+    where.push(`board_session = $${params.length}`);
+  }
+  const r = await deps.db.query(
+    `SELECT id::text, scope_id::text, board_session, version, toc, page_count,
+            status, generated_run_id, generated_at, read_at, updated_at
+       FROM ceo_briefs
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY updated_at DESC
+      LIMIT 30`,
+    params,
+  );
+  return { items: r.rows };
+}
+
+export async function listPromises(
+  deps: CeoEngineDeps,
+  filter: { briefId?: string },
+): Promise<{ items: any[] }> {
+  if (!filter.briefId) return { items: [] };
+  const r = await deps.db.query(
+    `SELECT id::text, brief_id::text, what, owner, due_at, status, source_decision_id
+       FROM ceo_board_promises
+      WHERE brief_id = $1::uuid
+      ORDER BY status, due_at NULLS LAST`,
+    [filter.briefId],
+  );
+  return { items: r.rows };
+}
+
+export async function listRebuttals(
+  deps: CeoEngineDeps,
+  filter: { briefId?: string; scopeId?: string },
+): Promise<{ items: any[] }> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filter.briefId) {
+    params.push(filter.briefId);
+    where.push(`brief_id = $${params.length}::uuid`);
+  } else if (filter.scopeId) {
+    params.push(filter.scopeId);
+    where.push(`scope_id = $${params.length}::uuid`);
+  }
+  const r = await deps.db.query(
+    `SELECT id::text, brief_id::text, scope_id::text, attacker, attack_text,
+            defense_text, strength_score, generated_run_id, created_at
+       FROM ceo_rebuttal_rehearsals
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY strength_score DESC NULLS LAST, created_at DESC
+      LIMIT 20`,
+    params,
+  );
+  return { items: r.rows };
+}
+
+/** Boardroom dashboard: 关切雷达 + 最新预读包 + 承诺状态 + forward_pct */
+export async function getBoardroomDashboard(
+  deps: CeoEngineDeps,
+  scopeId?: string,
+): Promise<{
+  question: string;
+  metric: { label: string; value: string; delta: string };
+  concernsByStatus: { pending: number; answered: number; superseded: number };
+  topConcerns: Array<{ name: string; meta: string; text: string; warn: boolean }>;
+  forwardPct: number;
+  promiseStats: { total: number; done: number; in_progress: number; late: number };
+}> {
+  const cs = await deps.db.query(
+    `SELECT c.status, COUNT(*)::int AS n
+       FROM ceo_director_concerns c
+       LEFT JOIN ceo_directors d ON d.id = c.director_id
+      WHERE ($1::uuid IS NULL OR d.scope_id = $1::uuid)
+      GROUP BY c.status`,
+    [scopeId ?? null],
+  );
+  const concernsByStatus = { pending: 0, answered: 0, superseded: 0 };
+  for (const r of cs.rows) {
+    if (r.status in concernsByStatus) (concernsByStatus as any)[r.status] = r.n;
+  }
+
+  const top = await deps.db.query(
+    `SELECT d.name AS name, d.role AS role,
+            COUNT(*)::int AS cnt, MAX(c.raised_at) AS last_raised
+       FROM ceo_director_concerns c
+       LEFT JOIN ceo_directors d ON d.id = c.director_id
+      WHERE c.status = 'pending'
+        AND ($1::uuid IS NULL OR d.scope_id = $1::uuid)
+      GROUP BY d.name, d.role
+      ORDER BY cnt DESC, last_raised DESC NULLS LAST
+      LIMIT 5`,
+    [scopeId ?? null],
+  );
+  const topConcerns = top.rows.map((r) => ({
+    name: r.name ?? '匿名董事',
+    meta: `${r.cnt} 次 · ${r.role ?? ''}`.trim(),
+    text: '待回应',
+    warn: r.cnt >= 3,
+  }));
+
+  const forwardPct = await computeForwardPct(deps, scopeId);
+
+  const ps = await deps.db.query(
+    `SELECT p.status, COUNT(*)::int AS n
+       FROM ceo_board_promises p
+       LEFT JOIN ceo_briefs b ON b.id = p.brief_id
+      WHERE ($1::uuid IS NULL OR b.scope_id = $1::uuid)
+      GROUP BY p.status`,
+    [scopeId ?? null],
+  );
+  const promiseStats = { total: 0, done: 0, in_progress: 0, late: 0 };
+  for (const r of ps.rows) {
+    if (r.status in promiseStats) (promiseStats as any)[r.status] = r.n;
+    promiseStats.total += Number(r.n);
+  }
+
+  return {
+    question: '下次董事会我要带什么?',
+    metric: {
+      label: '前瞻占比',
+      value: `${(forwardPct * 100).toFixed(0)}%`,
+      delta: '本季',
+    },
+    concernsByStatus,
+    topConcerns,
+    forwardPct,
+    promiseStats,
+  };
+}
