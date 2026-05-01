@@ -1892,7 +1892,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                 ARRAY(
                   SELECT p.canonical_name
                     FROM unnest(t.between_ids) AS bid
-                    LEFT JOIN mn_people p ON p.id::text = bid
+                    LEFT JOIN mn_people p ON p.id = bid
                 ) AS between_names,
                 COALESCE(
                   json_agg(
