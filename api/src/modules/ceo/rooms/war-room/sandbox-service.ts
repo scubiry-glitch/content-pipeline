@@ -113,10 +113,10 @@ export async function startSandboxRun(
   }
 
   const enq = await enqueueCeoRun(deps, {
-    axis: 'g3',
+    axis: 'warroom-sandbox',
     scopeId: sandbox.scope_id,
     metadata: {
-      kind: 'g3-sandbox',
+      kind: 'g3-sandbox', // legacy kind 兼容 handleG3Sandbox 内部判断
       sandboxId,
       topicText: sandbox.topic_text,
       sourceSparkId: sandbox.source_spark_id,

@@ -15,7 +15,7 @@ export class CeoScheduler {
   start(): void {
     // 启动 30 秒后跑一次 g5 (开发期方便验证)
     this.bootTimer = setTimeout(() => {
-      enqueueCeoRun(this.deps, { axis: 'g5', metadata: { source: 'boot-tick' } }).catch(() => {});
+      enqueueCeoRun(this.deps, { axis: 'panorama-aggregate', metadata: { source: 'boot-tick' } }).catch(() => {});
     }, 30_000);
     if (typeof this.bootTimer.unref === 'function') this.bootTimer.unref();
 
@@ -44,7 +44,7 @@ export class CeoScheduler {
           LIMIT 1`,
       );
       if (r.rows.length === 0) {
-        await enqueueCeoRun(this.deps, { axis: 'g5', metadata: { source: 'weekly-tick' } });
+        await enqueueCeoRun(this.deps, { axis: 'panorama-aggregate', metadata: { source: 'weekly-tick' } });
       }
     }
   }

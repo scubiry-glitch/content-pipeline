@@ -159,7 +159,7 @@ export function StrategicEchoSankey() {
       >
         无战略回声数据。先 seed: <code>cd api && npm run ceo:seed-demo</code>，
         再触发 g4 跨会批注 LLM 任务（PR12:{' '}
-        <code>{'POST /api/v1/ceo/runs/enqueue {"axis":"g4"}'}</code>）。
+        <code>{'POST /api/v1/ceo/runs/enqueue {"axis":"compass-echo"}'}</code>）。
       </div>
     );
   }
@@ -190,7 +190,7 @@ export function StrategicEchoSankey() {
           流的颜色 · 命运 · 节点的边框 · 主线状态
         </span>
         <EnqueueRunButton
-          axis="g4"
+          axis="compass-echo"
           label="🌌 生成战略回响"
           productName="战略回响"
           tone="#3E6E8C"

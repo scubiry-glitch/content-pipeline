@@ -29,6 +29,7 @@ const FILES = [
   '019-scope-hierarchy.sql',
   '020-runs-module.sql',
   '021-runs-axis-ceo.sql',
+  '022-runs-axis-relax.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {

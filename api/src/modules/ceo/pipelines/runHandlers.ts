@@ -618,7 +618,19 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   return { ok: true, result: { mode, dimensions: RUBRIC_DIMENSIONS.length, scores } };
 }
 
-const HANDLERS: Record<string, (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>> = {
+type Handler = (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>;
+
+const HANDLERS: Record<string, Handler> = {
+  // ─── 语义化命名 (2026-05-01+) ────────────────────────
+  'warroom-sandbox': handleG3Sandbox,
+  'boardroom-rebuttal': handleG3,                // handleG3 默认走 rebuttal 分支
+  'boardroom-annotations': handleG4Annotations,
+  'compass-echo': handleG4,                      // handleG4 默认走 echo 分支
+  'balcony-prompt': handleG4BalconyPrompt,
+  'situation-rubric': handleG2,
+  'panorama-aggregate': handleG5,
+
+  // ─── Legacy 数字命名 (向后兼容, 通过 metadata.kind 内部分流) ─
   g1: handleG1,
   g2: handleG2,
   g3: handleG3,
@@ -626,7 +638,13 @@ const HANDLERS: Record<string, (deps: CeoEngineDeps, run: CeoRunRow) => Promise<
   g5: handleG5,
 };
 
-/** 通用入口：runEngine 路由到这里时调用 */
+/** 通用入口：runEngine 路由到这里时调用
+ *
+ * 路由策略:
+ *   1. 语义化 axis 直接命中 HANDLERS 表
+ *   2. legacy g1..g5 也命中 (handleG3/G4 内部按 metadata.kind 分流)
+ *   3. 兜底: axis 以 room 名开头 (e.g. "boardroom-foo") 但未注册 → 返回 error
+ */
 export async function handleCeoRun(
   deps: CeoEngineDeps,
   run: CeoRunRow,

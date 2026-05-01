@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { RunProgressPanel } from './RunProgressPanel';
 
 interface Props {
-  axis: 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+  axis: string;  // 推荐 'warroom-sandbox' / 'boardroom-rebuttal' / 'compass-echo' 等; legacy g1..g5 也接受
   /** 按钮显示文案 */
   label: string;
   /** axis 对应的产物名 */

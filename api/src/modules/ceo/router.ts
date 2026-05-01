@@ -33,12 +33,14 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     await fastify.register(createBrainRouter(engine), { prefix: '/brain' });
     await fastify.register(createPeopleAgentsRouter(engine), { prefix: '/people' });
 
-    // PR12 — 5 组加工接生成中心：手动入队接口
+    // 手动入队接口
+    // axis 接受语义化命名 (room-action, e.g. 'warroom-sandbox') 或 legacy 'g1'..'g5'
+    const AXIS_RE = /^[a-z][a-z0-9_-]{0,63}$/;
     fastify.post('/runs/enqueue', async (request) => {
       const body = (request.body ?? {}) as Record<string, any>;
-      const axis = body.axis as 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
-      if (!['g1', 'g2', 'g3', 'g4', 'g5'].includes(axis)) {
-        return { ok: false, error: 'axis must be one of g1..g5' };
+      const axis = body.axis as string;
+      if (typeof axis !== 'string' || !AXIS_RE.test(axis)) {
+        return { ok: false, error: 'axis must match /^[a-z][a-z0-9_-]{0,63}$/' };
       }
       return engine.enqueueRun({
         axis,

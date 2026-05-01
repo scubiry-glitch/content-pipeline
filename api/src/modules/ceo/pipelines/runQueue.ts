@@ -95,14 +95,24 @@ export class CeoRunQueue {
 /**
  * 入队一个 CEO LLM/规则任务到 mn_runs (module='ceo')
  *
- * @param axis 'g1'..'g5' 标记加工步骤
+ * 命名规范 (2026-05-01 重构):
+ *   优先使用 `<room>-<action>` 语义化 axis (如 'warroom-sandbox', 'boardroom-rebuttal',
+ *   'boardroom-annotations', 'compass-echo', 'balcony-prompt', 'panorama-aggregate').
+ *
+ *   也接受历史 'g1'..'g5' (legacy, 仍由 dispatcher 路由到对应 handler).
+ *
+ * @param axis 语义化 axis 或 g1..g5
  * @param scopeId 可选 scope 范围
- * @param metadata 任务上下文（如 briefId）
+ * @param metadata 任务上下文 (briefId / sandboxId / 等)
  */
+export type CeoAxis =
+  | 'g1' | 'g2' | 'g3' | 'g4' | 'g5'
+  | `${'compass' | 'boardroom' | 'tower' | 'warroom' | 'situation' | 'balcony' | 'panorama'}-${string}`;
+
 export async function enqueueCeoRun(
   deps: CeoEngineDeps,
   input: {
-    axis: 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+    axis: CeoAxis | string;
     scopeKind?: string;
     scopeId?: string | null;
     metadata?: Record<string, unknown>;

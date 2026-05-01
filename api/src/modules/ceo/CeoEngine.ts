@@ -90,9 +90,13 @@ export class CeoEngine {
     }
   }
 
-  /** 手动入队一个 CEO 加工任务 (g1..g5)；返回 mn_runs.id */
+  /** 手动入队一个 CEO 加工任务；返回 mn_runs.id
+   *
+   * axis 推荐用语义化命名 (e.g. 'warroom-sandbox', 'boardroom-rebuttal'),
+   * 也接受 legacy 'g1'..'g5'.
+   */
   async enqueueRun(input: {
-    axis: 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+    axis: string;
     scopeKind?: string;
     scopeId?: string | null;
     metadata?: Record<string, unknown>;

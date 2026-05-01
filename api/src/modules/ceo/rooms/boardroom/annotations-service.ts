@@ -82,7 +82,7 @@ export async function generateAnnotation(
   },
 ): Promise<{ runId: string }> {
   const enq = await enqueueCeoRun(deps, {
-    axis: 'g4',
+    axis: 'boardroom-annotations',
     scopeId: payload.scopeId ?? null,
     metadata: {
       kind: 'annotations',
@@ -95,7 +95,7 @@ export async function generateAnnotation(
   });
 
   if (!enq.ok || !enq.runId) {
-    throw new Error('Failed to enqueue g4-annotations run');
+    throw new Error('Failed to enqueue boardroom-annotations run');
   }
   return { runId: enq.runId };
 }

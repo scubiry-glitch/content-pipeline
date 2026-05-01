@@ -60,7 +60,7 @@ export async function listReflections(
     if (deps.llm?.isAvailable()) {
       for (const row of seeded) {
         enqueueCeoRun(deps, {
-          axis: 'g4',
+          axis: 'balcony-prompt',
           metadata: {
             kind: 'balcony-prompt',
             userId,

@@ -67,7 +67,7 @@ export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
           {apiData ? `LIVE · 共 ${apiData.length} 条` : 'FIXTURE · 演示数据'}
         </span>
         <EnqueueRunButton
-          axis="g3"
+          axis="boardroom-rebuttal"
           label="🎯 生成反方演练"
           productName="反方演练"
           tone="#D4A84B"
