@@ -8,6 +8,7 @@ import type {
   MeetingNotesEngineHandle,
   ExpertEngineHandle,
   ContentLibraryEngineHandle,
+  CeoLLMAdapter,
 } from '../types.js';
 
 interface PipelineDepsInput {
@@ -16,6 +17,8 @@ interface PipelineDepsInput {
   meetingNotesEngine?: MeetingNotesEngineHandle;
   expertEngine?: ExpertEngineHandle;
   contentLibraryEngine?: ContentLibraryEngineHandle;
+  /** g3/g4 LLM 任务用，可选；不传则 stub */
+  llm?: CeoLLMAdapter;
 }
 
 export function createCeoPipelineDeps(input: PipelineDepsInput): CeoEngineDeps {
@@ -28,5 +31,6 @@ export function createCeoPipelineDeps(input: PipelineDepsInput): CeoEngineDeps {
     meetingNotes: input.meetingNotesEngine,
     expert: input.expertEngine,
     contentLibrary: input.contentLibraryEngine,
+    llm: input.llm,
   };
 }

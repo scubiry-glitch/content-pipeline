@@ -92,7 +92,8 @@ export function StrategicEchoSankey() {
         }}
       >
         无战略回响数据。先 seed: <code>cd api && npm run ceo:seed-demo</code>，
-        再触发 g4 跨会批注 LLM 任务（PR12: <code>POST /api/v1/ceo/runs/enqueue {"axis":"g4"}</code>）。
+        再触发 g4 跨会批注 LLM 任务（PR12:{' '}
+        <code>{'POST /api/v1/ceo/runs/enqueue {"axis":"g4"}'}</code>）。
       </div>
     );
   }

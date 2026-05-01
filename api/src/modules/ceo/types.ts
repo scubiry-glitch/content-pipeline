@@ -31,12 +31,37 @@ export interface ContentLibraryEngineHandle {
   getOverviewStats?(): Promise<unknown>;
 }
 
+/** LLM Adapter 接口 (g3/g4 加工任务用，可选注入；未注入时 handler 走 stub 兜底) */
+export interface CeoLLMInvokeInput {
+  prompt: string;
+  system?: string;
+  responseFormat?: 'text' | 'json';
+  maxTokens?: number;
+  temperature?: number;
+  taskTag?: string;
+}
+
+export interface CeoLLMInvokeResult {
+  text: string;
+  tokensIn: number;
+  tokensOut: number;
+  durationMs: number;
+  model?: string;
+}
+
+export interface CeoLLMAdapter {
+  invoke(input: CeoLLMInvokeInput): Promise<CeoLLMInvokeResult>;
+  isAvailable(): boolean;
+}
+
 /** CeoEngine 注入的全部外部依赖 */
 export interface CeoEngineDeps {
   db: DatabaseAdapter;
   meetingNotes?: MeetingNotesEngineHandle;
   expert?: ExpertEngineHandle;
   contentLibrary?: ContentLibraryEngineHandle;
+  /** g3/g4 LLM 任务用；不注入则 stub 兜底 */
+  llm?: CeoLLMAdapter;
 }
 
 // ============================================================

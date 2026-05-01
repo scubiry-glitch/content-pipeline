@@ -22,6 +22,7 @@ export { createRouter } from './router.js';
 
 // Adapters
 export { createCeoPipelineDeps } from './adapters/pipeline.js';
+export { NullCeoLLMAdapter, createClaudeCliCeoLLMAdapter } from './adapters/llm.js';
 
 // Singleton
 export {
@@ -38,6 +39,9 @@ export type {
   MeetingNotesEngineHandle,
   ExpertEngineHandle,
   ContentLibraryEngineHandle,
+  CeoLLMAdapter,
+  CeoLLMInvokeInput,
+  CeoLLMInvokeResult,
   PrismKind,
   Prism,
   PrismWeight,

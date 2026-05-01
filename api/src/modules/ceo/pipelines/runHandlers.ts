@@ -76,7 +76,7 @@ async function handleG5(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   };
 }
 
-/** g3 — 矛盾&专家：占位生成 1 条反方演练 */
+/** g3 — 矛盾&专家：deps.llm 注入则真调，否则 stub */
 async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
   const meta = run.metadata ?? {};
   const briefId = (meta.briefId as string) ?? null;
@@ -84,28 +84,50 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
     `SELECT name, kind FROM ceo_directors LIMIT 1`,
   );
   const attacker = stakes.rows[0]?.name ?? '匿名董事';
+
+  let attackText = `[stub g3] LLM 接入后将基于关切雷达 + 棱镜推演生成具体攻击点`;
+  let defenseText = `[stub g3] 回防草稿待 LLM 填充`;
+  let strength = 0.5;
+  let mode: 'stub' | 'llm' = 'stub';
+
+  if (deps.llm && deps.llm.isAvailable()) {
+    try {
+      const concerns = await deps.db.query(
+        `SELECT topic FROM ceo_director_concerns WHERE status = 'pending' ORDER BY raised_count DESC LIMIT 5`,
+      );
+      const topics = concerns.rows.map((r) => r.topic).join(' / ');
+      const result = await deps.llm.invoke({
+        system:
+          '你是 CEO 的反方教练。基于董事会近 90 天的关切，演练最尖锐的一次攻击 + CEO 的回防草稿。输出 JSON: {attack, defense, strength: 0..1}',
+        prompt: `攻击者: ${attacker}\n董事关切话题: ${topics}\n请生成一个具体、有数据支撑的攻击 + 回防。`,
+        responseFormat: 'json',
+        maxTokens: 600,
+        taskTag: 'g3-rebuttal',
+      });
+      const parsed = JSON.parse(result.text) as { attack?: string; defense?: string; strength?: number };
+      if (parsed.attack) attackText = parsed.attack;
+      if (parsed.defense) defenseText = parsed.defense;
+      if (typeof parsed.strength === 'number') strength = Math.max(0, Math.min(1, parsed.strength));
+      mode = 'llm';
+    } catch (e) {
+      console.warn('[g3] LLM invoke failed, falling back to stub:', (e as Error).message);
+    }
+  }
+
   const ins = await deps.db.query(
     `INSERT INTO ceo_rebuttal_rehearsals
        (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id)
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
      RETURNING id::text`,
-    [
-      briefId,
-      run.scope_id,
-      attacker,
-      `[stub g3] LLM 接入后将基于关切雷达 + 棱镜推演生成具体攻击点`,
-      `[stub g3] 回防草稿待 LLM 填充`,
-      0.5,
-      run.id,
-    ],
+    [briefId, run.scope_id, attacker, attackText, defenseText, strength, run.id],
   );
-  return { ok: true, result: { rebuttalId: ins.rows[0]?.id, mode: 'stub' } };
+  return { ok: true, result: { rebuttalId: ins.rows[0]?.id, mode } };
 }
 
-/** g4 — 跨会&批注：占位生成 1 条战略回响 */
+/** g4 — 跨会&批注：deps.llm 注入则真调，否则 stub */
 async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
   const lines = await deps.db.query(
-    `SELECT id::text FROM ceo_strategic_lines
+    `SELECT id::text, name, description FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
       ORDER BY established_at DESC LIMIT 1`,
     [run.scope_id ?? null],
@@ -113,20 +135,43 @@ async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   if (lines.rows.length === 0) {
     return { ok: true, result: { mode: 'noop', reason: '无战略主线可挂载' } };
   }
-  const lineId = lines.rows[0].id;
+  const line = lines.rows[0];
+
+  let hypothesisText = '[stub g4] 假设描述将由 LLM 跨会议综合产出';
+  let factText = '[stub g4] 现实回响待 LLM 抽取';
+  let fate: 'confirm' | 'refute' | 'pending' = 'pending';
+  let mode: 'stub' | 'llm' = 'stub';
+
+  if (deps.llm && deps.llm.isAvailable()) {
+    try {
+      const result = await deps.llm.invoke({
+        system:
+          '你是 CEO 的跨会综合官。基于战略线和最近会议，给出一条 hypothesis (假设) ↔ fact (现实回响) ↔ fate (confirm/refute/pending) 三元组。输出 JSON。',
+        prompt: `战略线: ${line.name}\n描述: ${line.description ?? ''}\n请生成 {hypothesis, fact, fate}。`,
+        responseFormat: 'json',
+        maxTokens: 500,
+        taskTag: 'g4-cross-meeting',
+      });
+      const parsed = JSON.parse(result.text) as { hypothesis?: string; fact?: string; fate?: string };
+      if (parsed.hypothesis) hypothesisText = parsed.hypothesis;
+      if (parsed.fact) factText = parsed.fact;
+      if (parsed.fate === 'confirm' || parsed.fate === 'refute' || parsed.fate === 'pending') {
+        fate = parsed.fate;
+      }
+      mode = 'llm';
+    } catch (e) {
+      console.warn('[g4] LLM invoke failed, falling back to stub:', (e as Error).message);
+    }
+  }
+
   const ins = await deps.db.query(
     `INSERT INTO ceo_strategic_echos
        (line_id, hypothesis_text, fact_text, fate, evidence_run_ids)
-     VALUES ($1::uuid, $2, $3, 'pending', ARRAY[$4]::text[])
+     VALUES ($1::uuid, $2, $3, $4, ARRAY[$5]::text[])
      RETURNING id::text`,
-    [
-      lineId,
-      '[stub g4] 假设描述将由 LLM 跨会议综合产出',
-      '[stub g4] 现实回响待 LLM 抽取',
-      run.id,
-    ],
+    [line.id, hypothesisText, factText, fate, run.id],
   );
-  return { ok: true, result: { echoId: ins.rows[0]?.id, mode: 'stub' } };
+  return { ok: true, result: { echoId: ins.rows[0]?.id, mode } };
 }
 
 const HANDLERS: Record<string, (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>> = {
