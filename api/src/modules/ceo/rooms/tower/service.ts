@@ -342,3 +342,62 @@ export async function getDeficit(
     ],
   };
 }
+
+// ─── 写入端点 (Phase 1 输入接入层) ──────────────────────────
+
+const ATTENTION_KINDS = ['main', 'branch', 'firefighting'];
+
+function isoWeekStart(input?: string): string {
+  const d = input ? new Date(input) : new Date();
+  const dow = (d.getDay() + 6) % 7; // 0 = Mon
+  const m = new Date(d);
+  m.setDate(d.getDate() - dow);
+  return m.toISOString().slice(0, 10);
+}
+
+export async function upsertAttentionAlloc(
+  deps: CeoEngineDeps,
+  body: {
+    weekStart?: string;
+    kind?: string;
+    hours?: number;
+    userId?: string | null;
+    scopeId?: string | null;
+    projectId?: string | null;
+    source?: string;
+  },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.kind || !ATTENTION_KINDS.includes(body.kind)) {
+    return { ok: false, error: 'kind must be main|branch|firefighting' };
+  }
+  if (typeof body.hours !== 'number' || body.hours < 0) {
+    return { ok: false, error: 'hours must be a non-negative number' };
+  }
+  const weekStart = isoWeekStart(body.weekStart);
+  // 同一 (week, scope|user|project, kind) 视为同一行 → 先删后插实现 upsert
+  // (表无 UNIQUE 约束，避免误判 NULL，因此手动按业务键去重)
+  await deps.db.query(
+    `DELETE FROM ceo_attention_alloc
+      WHERE week_start = $1
+        AND kind = $2
+        AND COALESCE(scope_id::text,'') = COALESCE($3::text,'')
+        AND COALESCE(user_id,'') = COALESCE($4,'')
+        AND COALESCE(project_id::text,'') = COALESCE($5::text,'')`,
+    [weekStart, body.kind, body.scopeId ?? null, body.userId ?? null, body.projectId ?? null],
+  );
+  const r = await deps.db.query(
+    `INSERT INTO ceo_attention_alloc (week_start, kind, hours, scope_id, user_id, project_id, source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id::text`,
+    [
+      weekStart,
+      body.kind,
+      body.hours,
+      body.scopeId ?? null,
+      body.userId ?? null,
+      body.projectId ?? null,
+      body.source ?? 'manual',
+    ],
+  );
+  return { ok: true, id: r.rows[0].id };
+}

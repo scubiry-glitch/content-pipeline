@@ -14,6 +14,9 @@ import {
   getDriftRadar,
   getOnePager,
   getArchives,
+  createStrategicLine,
+  updateStrategicLine,
+  deleteStrategicLine,
 } from './service.js';
 import { getProjectAtlas } from './atlas.js';
 
@@ -80,6 +83,29 @@ export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
       const { scopeId, tab } = (request.query ?? {}) as { scopeId?: string; tab?: string };
       const t = tab === 'drift' ? 'drift' : 'main';
       return getArchives(engine.deps, t, scopeId);
+    });
+
+    // ─── 输入接入层 (Phase 1) ─────────────────────────────────
+    fastify.post('/lines', async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await createStrategicLine(engine.deps, body);
+      if (!r.ok) { reply.code(400); }
+      return r;
+    });
+
+    fastify.patch('/lines/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, any>;
+      const r = await updateStrategicLine(engine.deps, id, body);
+      if (!r.ok) { reply.code(r.error === 'not found' ? 404 : 400); }
+      return r;
+    });
+
+    fastify.delete('/lines/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const r = await deleteStrategicLine(engine.deps, id);
+      if (!r.ok) { reply.code(404); }
+      return r;
     });
   };
 }

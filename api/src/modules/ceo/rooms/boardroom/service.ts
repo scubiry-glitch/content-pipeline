@@ -342,3 +342,86 @@ export async function getBoardroomDashboard(
     ...(appliedScopes ? { appliedScopes } : {}),
   };
 }
+
+// ─── 写入端点 (Phase 1 输入接入层) ──────────────────────────
+
+export async function createDirector(
+  deps: CeoEngineDeps,
+  body: { name?: string; role?: string | null; weight?: number; scopeId?: string | null; metadata?: Record<string, any> },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.name) return { ok: false, error: 'name required' };
+  const r = await deps.db.query(
+    `INSERT INTO ceo_directors (scope_id, name, role, weight, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id::text`,
+    [body.scopeId ?? null, body.name, body.role ?? null, body.weight ?? 1.0, body.metadata ?? {}],
+  );
+  return { ok: true, id: r.rows[0].id };
+}
+
+export async function updateDirector(
+  deps: CeoEngineDeps,
+  id: string,
+  body: { name?: string; role?: string | null; weight?: number; metadata?: Record<string, any> },
+): Promise<{ ok: boolean; error?: string }> {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (body.name !== undefined) { params.push(body.name); sets.push(`name = $${params.length}`); }
+  if (body.role !== undefined) { params.push(body.role); sets.push(`role = $${params.length}`); }
+  if (body.weight !== undefined) { params.push(body.weight); sets.push(`weight = $${params.length}`); }
+  if (body.metadata !== undefined) { params.push(body.metadata); sets.push(`metadata = $${params.length}`); }
+  if (sets.length === 0) return { ok: false, error: 'no fields to update' };
+  params.push(id);
+  const r = await deps.db.query(
+    `UPDATE ceo_directors SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id::text`,
+    params,
+  );
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
+
+export async function deleteDirector(
+  deps: CeoEngineDeps,
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await deps.db.query(`DELETE FROM ceo_directors WHERE id = $1 RETURNING id::text`, [id]);
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
+
+export async function createConcern(
+  deps: CeoEngineDeps,
+  body: { directorId?: string; topic?: string; sourceMeetingId?: string | null },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.directorId || !body.topic) return { ok: false, error: 'directorId and topic required' };
+  const r = await deps.db.query(
+    `INSERT INTO ceo_director_concerns (director_id, topic, source_meeting_id)
+     VALUES ($1, $2, $3)
+     RETURNING id::text`,
+    [body.directorId, body.topic, body.sourceMeetingId ?? null],
+  );
+  return { ok: true, id: r.rows[0].id };
+}
+
+export async function updateConcernStatus(
+  deps: CeoEngineDeps,
+  id: string,
+  body: { status?: string; resolution?: string | null },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!body.status) return { ok: false, error: 'status required' };
+  if (!['pending', 'answered', 'superseded'].includes(body.status)) {
+    return { ok: false, error: 'invalid status' };
+  }
+  const resolvedAt = body.status === 'answered' ? 'NOW()' : 'NULL';
+  const r = await deps.db.query(
+    `UPDATE ceo_director_concerns
+        SET status = $1,
+            resolution = $2,
+            resolved_at = ${resolvedAt}
+      WHERE id = $3
+      RETURNING id::text`,
+    [body.status, body.resolution ?? null, id],
+  );
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}

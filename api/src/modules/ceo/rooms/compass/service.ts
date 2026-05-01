@@ -577,3 +577,98 @@ export async function getArchives(
     })),
   };
 }
+
+// ─── 写入端点 (Phase 1 输入接入层) ──────────────────────────
+
+const STRATEGIC_KINDS = ['main', 'branch', 'drift'];
+const STRATEGIC_STATUSES = ['active', 'paused', 'retired'];
+
+export async function createStrategicLine(
+  deps: CeoEngineDeps,
+  body: {
+    name?: string;
+    kind?: string;
+    description?: string | null;
+    scopeId?: string | null;
+    alignmentScore?: number | null;
+    status?: string;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!body.name) return { ok: false, error: 'name required' };
+  if (!body.kind || !STRATEGIC_KINDS.includes(body.kind)) {
+    return { ok: false, error: 'kind must be main|branch|drift' };
+  }
+  if (body.status && !STRATEGIC_STATUSES.includes(body.status)) {
+    return { ok: false, error: 'status must be active|paused|retired' };
+  }
+  const score = body.alignmentScore != null ? Math.max(0, Math.min(1, body.alignmentScore)) : null;
+  const r = await deps.db.query(
+    `INSERT INTO ceo_strategic_lines
+       (scope_id, name, kind, alignment_score, status, description, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id::text`,
+    [
+      body.scopeId ?? null,
+      body.name,
+      body.kind,
+      score,
+      body.status ?? 'active',
+      body.description ?? null,
+      body.metadata ?? {},
+    ],
+  );
+  return { ok: true, id: r.rows[0].id };
+}
+
+export async function updateStrategicLine(
+  deps: CeoEngineDeps,
+  id: string,
+  body: {
+    name?: string;
+    kind?: string;
+    description?: string | null;
+    alignmentScore?: number | null;
+    status?: string;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ ok: boolean; error?: string }> {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (body.name !== undefined) { params.push(body.name); sets.push(`name = $${params.length}`); }
+  if (body.kind !== undefined) {
+    if (!STRATEGIC_KINDS.includes(body.kind)) return { ok: false, error: 'invalid kind' };
+    params.push(body.kind); sets.push(`kind = $${params.length}`);
+  }
+  if (body.description !== undefined) { params.push(body.description); sets.push(`description = $${params.length}`); }
+  if (body.alignmentScore !== undefined) {
+    const score = body.alignmentScore != null ? Math.max(0, Math.min(1, body.alignmentScore)) : null;
+    params.push(score); sets.push(`alignment_score = $${params.length}`);
+  }
+  if (body.status !== undefined) {
+    if (!STRATEGIC_STATUSES.includes(body.status)) return { ok: false, error: 'invalid status' };
+    params.push(body.status); sets.push(`status = $${params.length}`);
+  }
+  if (body.metadata !== undefined) { params.push(body.metadata); sets.push(`metadata = $${params.length}`); }
+  if (sets.length === 0) return { ok: false, error: 'no fields to update' };
+  sets.push(`updated_at = NOW()`);
+  params.push(id);
+  const r = await deps.db.query(
+    `UPDATE ceo_strategic_lines SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id::text`,
+    params,
+  );
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
+
+export async function deleteStrategicLine(
+  deps: CeoEngineDeps,
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await deps.db.query(
+    `DELETE FROM ceo_strategic_lines WHERE id = $1 RETURNING id::text`,
+    [id],
+  );
+  if (r.rows.length === 0) return { ok: false, error: 'not found' };
+  return { ok: true };
+}
