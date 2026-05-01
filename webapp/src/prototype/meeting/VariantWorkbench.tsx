@@ -10,7 +10,7 @@ import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge, momentToText, mo
 import { CrossAxisLinkInline } from './_axisShared';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
-import { useMeetingShellTitle, useMeetingDetail } from './MeetingDetailShell';
+import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { MeetingChatDrawer } from './MeetingChatDrawer';
 
 type PFn = (id: string) => Participant;
@@ -958,6 +958,9 @@ export function VariantWorkbench() {
           borderLeft: '1px solid var(--line)', background: 'var(--paper)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
+          {/* R3-A · 改动一：B 视图吸收 meta.necessity + tension 张力数据 */}
+          <CostAndTensionCard />
+
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <SectionLabel>原文锚点 Evidence</SectionLabel>
@@ -1068,6 +1071,89 @@ export function VariantWorkbench() {
         tension={chatDrawerTension}
         resolveParticipant={P}
       />
+    </div>
+  );
+}
+
+// R3-A · 改动一：B 视图右栏顶部 — 「这场会的代价」卡片
+// 数据：useMeetingHealth() — necessity（verdict / suggestedDuration / reasons）
+//       + tension（peakIntensity / count）
+// anchors: id='necessity-section' + id='tension-section'，对应顶部对应徽章点击
+function CostAndTensionCard() {
+  const health = useMeetingHealth();
+  const n = health?.necessity;
+  const t = health?.tension;
+  const verdictLabel = (v?: string) =>
+    v === 'async_ok' ? '本可异步' : v === 'partial' ? '部分必要' : v === 'needed' ? '确有必要' : '—';
+  const verdictColor = (v?: string) =>
+    v === 'async_ok' ? 'oklch(0.40 0.10 30)'
+    : v === 'partial' ? 'oklch(0.45 0.09 75)'
+    : v === 'needed'  ? 'oklch(0.40 0.09 160)'
+    : 'var(--ink-3)';
+  return (
+    <div id="necessity-section" style={{
+      padding: '14px 16px', borderBottom: '1px solid var(--line)',
+      background: 'var(--paper-2)',
+    }}>
+      <SectionLabel>这场会的代价 · Cost & Tension</SectionLabel>
+      {!n && !t ? (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>
+          数据待生成 · meta.necessity / tension
+        </div>
+      ) : (
+        <>
+          {n && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{
+                  fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600,
+                  color: verdictColor(n.verdict),
+                }}>
+                  {verdictLabel(n.verdict)}
+                </span>
+                {n.suggestedDurationMin !== undefined && (
+                  <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                    建议 {n.suggestedDurationMin} 分钟
+                  </span>
+                )}
+              </div>
+              {Array.isArray(n.reasons) && n.reasons.length > 0 && (
+                <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none' }}>
+                  {n.reasons.slice(0, 3).map((r, i) => (
+                    <li key={i} style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginTop: 3 }}>
+                      · {r.t || r.k || ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {t && t.count > 0 && (
+            <div id="tension-section" style={{
+              marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--line-2)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>张力</span>
+                <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, color: 'oklch(0.40 0.11 25)' }}>
+                  {t.peakIntensity.toFixed(2)}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>峰值</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                  {t.count} 处
+                </span>
+              </div>
+              {/* 简易强度条：max=1，按 peakIntensity 显示 */}
+              <div style={{ height: 4, background: 'var(--line-2)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${Math.min(100, Math.max(0, t.peakIntensity * 100))}%`,
+                  height: '100%',
+                  background: 'oklch(0.60 0.16 25)',
+                }} />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

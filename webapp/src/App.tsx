@@ -255,7 +255,12 @@ function App() {
               <Route path="axes/people" element={<AxisPeopleProto />} />
               <Route path="axes/projects" element={<AxisProjectsProto />} />
               <Route path="axes/knowledge" element={<AxisKnowledgeProto />} />
-              <Route path="axes/meta" element={<AxisMetaProto />} />
+              {/* R3-A 改动一：/meeting/axes/meta 重定向到 /meeting/longitudinal?tab=health
+                  会议本身（meta）的全局视角并入纵向视图的"健康度"分屏（趋势 + 分布）；
+                  单场体征通过 /meeting/:id/{a,b,c} 顶部 4 徽章访问。
+                  老组件 AxisMeta 暂保留以便对照查看。 */}
+              <Route path="axes/meta" element={<Navigate to="/meeting/longitudinal?tab=health" replace />} />
+              <Route path="axes/meta-legacy" element={<AxisMetaProto />} />
             </Route>
             {/* 会议详情 A/B/C —— 独立 shell，顶栏 + tab，不显示主导航侧栏 */}
             <Route path="/meeting/:id" element={<MeetingDetailShell />}>

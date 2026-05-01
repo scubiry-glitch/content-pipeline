@@ -396,6 +396,23 @@ export const meetingNotesApi = {
       `/meetings/${meetingId}/necessity-audit`,
     ),
 
+  // R3-A · 改动一：单场会议体征聚合（quality + necessity + affect + tension 四合一）
+  getMeetingHealth: (meetingId: string) =>
+    jget<{
+      quality: { overall: number; dims: Array<{ id: string; label: string; score: number; note: string }>; computedAt?: string } | null;
+      necessity: { verdict: 'async_ok' | 'partial' | 'needed'; suggestedDurationMin?: number; reasons?: Array<{ k?: string; t?: string }>; computedAt?: string } | null;
+      affect: {
+        samples?: Array<{ t?: number; v?: number; i?: number; tag?: string }>;
+        tensionPeaks?: unknown;
+        insightPoints?: unknown;
+        peak?: { valence: number; intensity: number; tag?: string } | null;
+        computedAt?: string;
+      } | null;
+      tension: { peakIntensity: number; count: number };
+    } | null>(
+      `/meetings/${meetingId}/health`,
+    ),
+
   // Phase 15.12 · AxisPeople · Silence
   getMeetingSilence: (meetingId: string, q: { personId?: string } = {}) => {
     const qs = new URLSearchParams(q as any).toString();

@@ -8,7 +8,7 @@ import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
-import { useMeetingDetail } from './MeetingDetailShell';
+import { useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 
 type PFn = (id: string) => Participant;
 type ThreadEvent = { t: number; kind: string; label?: string; ref?: string };
@@ -168,6 +168,9 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
         <LegendDot color="var(--ink-3)" label="倾听 / listen" small />
         <LegendDot color="var(--ink-2)" label="让步 · 决断" square />
       </div>
+
+      {/* R3-A · 改动一：C 视图吸收 affect_curve 情绪曲线，叠加在时间轴上方 */}
+      <AffectOverlay startX={startX} endX={endX} />
 
       {/* Chart · API 模式由 analysis 派生事件（无真实时间戳，按数组序号铺到时间轴） */}
       <div style={{
@@ -810,6 +813,72 @@ export function VariantThreads() {
       {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} P={P} participants={lanePeople} events={derivedEvents} />}
       {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={apiParticipants} P={P} />}
       {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} P={P} />}
+    </div>
+  );
+}
+
+// R3-A · 改动一：C 视图情绪曲线叠加层
+// 数据：useMeetingHealth().affect.samples — [{t, v, i, tag}]
+//   v: valence (-1..1) 决定颜色（暖/冷）；i: intensity (0..1) 决定高度
+// 渲染：与下方时间轴对齐的横向半透明色块/线，鼠标悬停看 tag
+// anchor: id='affect-section'
+function AffectOverlay({ startX, endX }: { startX: number; endX: number }) {
+  const health = useMeetingHealth();
+  const samples = health?.affect?.samples ?? [];
+  // 估算最大 t 用作 X 轴归一化（默认 118 分钟，与时间轴一致）
+  const MIN = 118;
+  const maxT = Math.max(MIN, ...samples.map((s) => Number(s.t ?? 0)));
+  return (
+    <div id="affect-section" style={{
+      position: 'relative', height: 56, marginBottom: 10,
+      background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
+      padding: '8px 0', overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', top: 4, left: 12,
+        fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--ink-3)', letterSpacing: '0.16em',
+      }}>
+        AFFECT · 情绪曲线
+      </div>
+      {samples.length === 0 ? (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
+        }}>
+          数据待生成 · meta/affect_curve
+        </div>
+      ) : (
+        <div style={{ position: 'absolute', left: startX, right: 60, top: 18, bottom: 6 }}>
+          {samples.map((s, i) => {
+            const t = Number(s.t ?? 0);
+            const v = Number(s.v ?? 0);
+            const intensity = Math.max(0, Math.min(1, Number(s.i ?? 0)));
+            const x = (t / maxT) * 100;
+            const h = 6 + intensity * 24;
+            // 暖（v>0 红黄）/ 冷（v<0 蓝）
+            const color = v >= 0
+              ? `oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${75 - v * 35})`
+              : `oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${210 + v * 30})`;
+            return (
+              <div
+                key={i}
+                title={`t=${t}m · valence=${v.toFixed(2)} · intensity=${intensity.toFixed(2)}${s.tag ? ` · ${s.tag}` : ''}`}
+                style={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  bottom: 0,
+                  width: 4,
+                  height: h,
+                  background: color,
+                  borderRadius: 2,
+                  opacity: 0.85,
+                  transform: 'translateX(-50%)',
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

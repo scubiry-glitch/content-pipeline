@@ -9,7 +9,7 @@ import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
-import { useMeetingShellTitle, useMeetingDetail } from './MeetingDetailShell';
+import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 
 type PFn = (id: string) => Participant;
 
@@ -671,8 +671,58 @@ export function VariantEditorial() {
         {dim === 'focus_map'     && <SecFocusMap      a={a} P={P} />}
         {dim === 'consensus'     && <SecConsensus     a={a} P={P} />}
         {dim === 'cross_view'    && <SecCrossView     a={a} P={P} />}
+
+        {/* R3-A · 改动一：质量审定段 — 文末，5D 雷达 + 评注，与 serif 风格契合 */}
+        <SecQualityAudit />
       </main>
     </div>
+  );
+}
+
+// R3-A · 改动一：A 视图吸收会议本身轴的「决策质量」
+// 数据源：useMeetingHealth() — Shell 已统一拉好；此处只读不抓
+// anchor: id='quality-section'，对应顶部"质量"徽章点击平滑滚动
+function SecQualityAudit() {
+  const health = useMeetingHealth();
+  const q = health?.quality;
+  return (
+    <section id="quality-section" style={{ marginTop: 56, paddingTop: 32, borderTop: '1px solid var(--line-2)', maxWidth: 860 }}>
+      <SectionLabel>质量审定 · Decision Quality</SectionLabel>
+      {!q ? (
+        <div style={{ marginTop: 18, padding: '16px 20px', background: 'var(--paper-2)', borderRadius: 6, color: 'var(--ink-3)', fontSize: 12.5 }}>
+          数据待生成 · 跑生成中心 → meta/decision_quality 后写入 mn_decision_quality
+        </div>
+      ) : (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 36, fontWeight: 600, color: 'var(--ink)' }}>
+              {q.overall.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+              五维加权 · 0..1 · 来自 mn_decision_quality
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+            {q.dims.map((d) => (
+              <div key={d.id} style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: 14 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>{d.label}</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginTop: 4 }}>
+                  {d.score.toFixed(2)}
+                </div>
+                <div style={{ height: 4, background: 'var(--line-2)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.max(0, Math.min(1, d.score)) * 100}%`, height: '100%', background: 'oklch(0.55 0.16 285)' }} />
+                </div>
+                {d.note && (
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'var(--serif)', fontStyle: 'italic', lineHeight: 1.5, marginTop: 10 }}>
+                    {d.note}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

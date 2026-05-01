@@ -19,7 +19,29 @@ export type MeetingShellContext = {
   meetingDetail: any | null;
   /** 'loading' = 还在抓; 'ok' = 已就绪; 'error' = 后端 404/异常; 'skipped' = forceMock 或非 UUID id */
   detailState: 'loading' | 'ok' | 'error' | 'skipped';
+  /** R3-A · 改动一：单场会议体征（quality+necessity+affect+tension），来自 GET /meetings/:id/health */
+  health: MeetingHealth | null;
 };
+
+// R3-A · 改动一：单场会议 health 聚合（quality + necessity + affect + tension）
+// 由 GET /meetings/:id/health 一次取齐 → 顶部 4 徽章 + Outlet context 透传给 A/B/C
+export interface MeetingHealth {
+  quality: { overall: number; dims: Array<{ id: string; label: string; score: number; note: string }>; computedAt?: string } | null;
+  necessity: { verdict: 'async_ok' | 'partial' | 'needed'; suggestedDurationMin?: number; reasons?: Array<{ k?: string; t?: string }>; computedAt?: string } | null;
+  affect: {
+    samples?: Array<{ t?: number; v?: number; i?: number; tag?: string }>;
+    tensionPeaks?: unknown;
+    insightPoints?: unknown;
+    peak?: { valence: number; intensity: number; tag?: string } | null;
+    computedAt?: string;
+  } | null;
+  tension: { peakIntensity: number; count: number };
+}
+
+export function useMeetingHealth(): MeetingHealth | null {
+  const ctx = useOutletContext<MeetingShellContext | null>();
+  return ctx?.health ?? null;
+}
 
 export function useMeetingShellTitle(fallback?: string): string {
   const ctx = useOutletContext<MeetingShellContext | undefined>();
@@ -45,6 +67,8 @@ export function MeetingDetailShell() {
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   /** 缓存完整 detail 响应供 Variants 通过 Outlet context 复用 — 避免子组件重复 fetch */
   const [apiDetail, setApiDetail] = useState<any | null>(null);
+  /** R3-A · 改动一：单场体征 health 数据（4 徽章 + Outlet 透传） */
+  const [health, setHealth] = useState<MeetingHealth | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
@@ -64,6 +88,7 @@ export function MeetingDetailShell() {
       setApiState('skipped');
       setApiDetail(null);
       setRunSource(null);
+      setHealth(null);
       setEditingTitle(false);
       return;
     }
@@ -73,8 +98,13 @@ export function MeetingDetailShell() {
     setApiDate(null);
     setApiDetail(null);
     setRunSource(null);
+    setHealth(null);
     setEditingTitle(false);
     let cancelled = false;
+    // R3-A · 并行拉 health（顶部 4 徽章 + Outlet 透传），失败不影响主 detail 加载
+    meetingNotesApi.getMeetingHealth(id)
+      .then((h: MeetingHealth | null) => { if (!cancelled) setHealth(h); })
+      .catch(() => { if (!cancelled) setHealth(null); });
     // 单一 fetch — 同时供 shell 顶栏与子 Variants 消费，Variants 通过 useMeetingDetail() 读取
     meetingNotesApi.getMeetingDetail(id, 'A')
       .then((r: any) => {
@@ -326,16 +356,121 @@ export function MeetingDetailShell() {
         </div>
       </header>
 
+      {/* R3-A · 改动一：4 徽章 status bar — 决策质量 / 必要性 / 情绪峰 / 张力峰 */}
+      <MeetingHealthBadges health={health} />
+
       <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         <Outlet context={{
           shellTitle: effectiveTitle,
           meetingDetail: apiDetail,
           detailState: apiState,
+          health,
         } satisfies MeetingShellContext} />
       </main>
       <MockToggleBar />
     </div>
     </MockToggleProvider>
+  );
+}
+
+// R3-A · 改动一：单场会议 health 4 徽章
+// 决策质量 / 必要性 / 情绪峰 / 张力峰；点击徽章 → 当前视图内对应 anchor 的平滑滚动
+function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
+  // 数据完全空也保留一行轻量占位，让用户知道有这个区域（避免页面突然多/少一条）
+  const verdictText = (v?: 'async_ok' | 'partial' | 'needed') =>
+    v === 'async_ok' ? '本可异步' : v === 'partial' ? '部分必要' : v === 'needed' ? '确有必要' : '—';
+  const verdictTone = (v?: 'async_ok' | 'partial' | 'needed'): { fg: string; bg: string; bd: string } =>
+    v === 'async_ok' ? { fg: 'oklch(0.40 0.10 30)',  bg: 'oklch(0.95 0.04 30)',  bd: 'oklch(0.85 0.07 30)' }
+    : v === 'partial' ? { fg: 'oklch(0.45 0.09 75)',  bg: 'oklch(0.96 0.05 75)',  bd: 'oklch(0.85 0.08 75)' }
+    : v === 'needed'  ? { fg: 'oklch(0.40 0.09 160)', bg: 'oklch(0.95 0.04 160)', bd: 'oklch(0.85 0.07 160)' }
+    : { fg: 'var(--ink-3)', bg: 'var(--paper-2)', bd: 'var(--line-2)' };
+
+  const qualityScore = health?.quality?.overall;
+  const necessity = health?.necessity?.verdict;
+  const affectPeak = health?.affect?.peak;
+  const tensionPeak = health?.tension?.peakIntensity ?? 0;
+  const tensionCount = health?.tension?.count ?? 0;
+
+  const necTone = verdictTone(necessity);
+
+  const goAnchor = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 28px', background: 'var(--paper-2)',
+      borderBottom: '1px solid var(--line-2)',
+      fontFamily: 'var(--mono)', fontSize: 11,
+    }}>
+      <span style={{ color: 'var(--ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 8 }}>
+        体征
+      </span>
+      <button
+        onClick={() => goAnchor('quality-section')}
+        title="决策质量 5D · 跳到 A 视图文末「质量审定」"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          background: 'oklch(0.96 0.03 285)',
+          color: 'oklch(0.32 0.10 285)',
+          border: '1px solid oklch(0.85 0.07 285)',
+          fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.55 0.16 285)' }} />
+        质量 {qualityScore !== undefined ? qualityScore.toFixed(2) : '—'}
+      </button>
+      <button
+        onClick={() => goAnchor('necessity-section')}
+        title="本场必要性评估 · 跳到 B 视图右栏「这场会的代价」"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          background: necTone.bg, color: necTone.fg, border: `1px solid ${necTone.bd}`,
+          fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: necTone.fg }} />
+        必要性 {verdictText(necessity)}
+      </button>
+      <button
+        onClick={() => goAnchor('affect-section')}
+        title="情绪曲线峰值 · 跳到 C 视图时间轴叠加层"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          background: 'oklch(0.96 0.04 75)',
+          color: 'oklch(0.40 0.10 75)',
+          border: '1px solid oklch(0.85 0.08 75)',
+          fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.65 0.14 75)' }} />
+        情绪峰 {affectPeak ? `${affectPeak.valence > 0 ? '+' : ''}${affectPeak.valence.toFixed(2)}` : '—'}
+      </button>
+      <button
+        onClick={() => goAnchor('tension-section')}
+        title="张力清单峰值 · 跳到 B 视图右栏张力时序条"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          background: 'oklch(0.96 0.04 25)',
+          color: 'oklch(0.40 0.11 25)',
+          border: '1px solid oklch(0.85 0.08 25)',
+          fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.60 0.16 25)' }} />
+        张力峰 {tensionPeak > 0 ? tensionPeak.toFixed(2) : '—'}
+        {tensionCount > 0 && <span style={{ opacity: 0.6, fontWeight: 500 }}>· {tensionCount}</span>}
+      </button>
+      <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 10 }}>
+        来源 · GET /meetings/:id/health
+      </span>
+    </div>
   );
 }
 

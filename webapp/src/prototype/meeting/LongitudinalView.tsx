@@ -2,7 +2,7 @@
 // 原型来源：/tmp/mn-proto/longitudinal.jsx
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
@@ -382,10 +382,74 @@ function ModelHitrate({ scopeId }: { scopeId: string }) {
   );
 }
 
+// ── R3-A · 健康度趋势分屏 ──────────────────────────────────────────────────
+// 吸收原 /meeting/axes/meta 的全局视角：
+//   - 决策质量分布：scope 内所有 meeting 的 mn_decision_quality.overall 箱线/分布
+//   - 必要性饼图：mn_meeting_necessity.verdict 三类按月分布
+//   - 情绪/张力双折线：affect curve peak + tension intensity 时序
+// 第一版 lite：聚合接口尚未上线，用占位卡片 + 跳生成中心引导
+function MeetingHealthTrend({ scopeId }: { scopeId: string }) {
+  return (
+    <div style={{ padding: '28px 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 18 }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>
+          会议健康度趋势
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+          scope = <code>{scopeId.slice(0, 8)}…</code> · R3-A 改动一
+        </div>
+      </div>
+      <div style={{
+        background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+        borderRadius: 8, padding: '20px 24px', marginBottom: 18, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.7,
+      }}>
+        会议本身（meta 轴）的全局视角已并入此分屏。单场会议的体征数据仍可在
+        <code style={{ margin: '0 4px', color: 'var(--ink)' }}>/meeting/:id/{`{a,b,c}`}</code>
+        顶部 4 徽章访问 — A/B/C 三视图各自吸收了一部分（决策质量进 A、必要性 + 张力进 B、情绪曲线进 C）。
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+        {[
+          { title: '决策质量分布', sub: '本 scope 所有 meeting 的 overall 箱线', src: 'mn_decision_quality' },
+          { title: '必要性饼图（按月）', sub: 'async_ok / partial / needed', src: 'mn_meeting_necessity' },
+          { title: '情绪峰值时序', sub: 'affect_curve.samples max |valence|', src: 'mn_affect_curve' },
+          { title: '张力强度时序', sub: 'mn_tensions.intensity per meeting', src: 'mn_tensions' },
+        ].map((card) => (
+          <div key={card.title} style={{
+            background: 'var(--paper)', border: '1px dashed var(--line-2)',
+            borderRadius: 6, padding: '24px 18px',
+          }}>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+              {card.title}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 16 }}>{card.sub}</div>
+            <div style={{
+              fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)',
+              background: 'var(--paper-2)', padding: '8px 12px', borderRadius: 4,
+            }}>
+              source: {card.src} · 待聚合接口上线
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ──────────────────────────────────────────────────────────────
 
 export function LongitudinalView() {
-  const [tab, setTab] = useState('drift');
+  // R3-A · ?tab=health 由 /meeting/axes/meta 重定向带过来；初始 tab 从 URL 读
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'drift';
+  const [tab, setTabState] = useState(initialTab);
+  const setTab = (next: string) => {
+    setTabState(next);
+    // 只在切换到非默认 tab 时写 URL，保持原有 ?tab=drift 不脏
+    const sp = new URLSearchParams(searchParams);
+    if (next === 'drift') sp.delete('tab');
+    else sp.set('tab', next);
+    setSearchParams(sp, { replace: true });
+  };
   const [regenOpen, setRegenOpen] = useState(false);
   const scope = useMeetingScope();
   const scopeId = scope.effectiveScopeId;
@@ -393,6 +457,7 @@ export function LongitudinalView() {
   const [headerMock, setHeaderMock] = useState(true);
   useEffect(() => {
     if (forceMock) { setHeaderMock(true); return; }
+    if (tab === 'health') { setHeaderMock(true); return; } // health 用 mn_runs 聚合，先 mock
     let cancelled = false;
     const kind = tab === 'drift' ? 'belief_drift' : tab === 'tree' ? 'decision_tree' : 'model_hit_rate';
     meetingNotesApi.getLongitudinal(scopeId, kind)
@@ -404,6 +469,8 @@ export function LongitudinalView() {
     { id: 'drift',   label: '信念漂移',       sub: '同一人在同一议题上随时间的判断变化', icon: 'arrow' as const },
     { id: 'tree',    label: '决策树',         sub: '项目的所有分岔点与未来待决',          icon: 'git' as const },
     { id: 'hitrate', label: '心智模型命中率', sub: '反向校准专家库',                       icon: 'target' as const },
+    // R3-A · 健康度分屏：吸收原 /meeting/axes/meta 的全局视角（决策质量分布、必要性饼图、情绪/张力趋势）
+    { id: 'health',  label: '健康度',         sub: '决策质量 / 必要性 / 情绪 / 张力 跨会趋势', icon: 'target' as const },
   ];
   return (
     <>
@@ -411,6 +478,7 @@ export function LongitudinalView() {
         {tab === 'drift'   && <BeliefDrift scopeId={scopeId} />}
         {tab === 'tree'    && <DecisionTree scopeId={scopeId} />}
         {tab === 'hitrate' && <ModelHitrate scopeId={scopeId} />}
+        {tab === 'health'  && <MeetingHealthTrend scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />

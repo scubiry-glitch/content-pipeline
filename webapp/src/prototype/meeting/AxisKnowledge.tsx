@@ -565,6 +565,12 @@ export function AxisKnowledge() {
     { id: 'evidence',        label: '证据层级',       sub: 'A/B/C/D 分级统计',          icon: 'layers' as const },
     { id: 'biases',          label: '认知偏差',       sub: '本场激活的 5 种偏差',        icon: 'wand' as const },
     { id: 'counterfactuals', label: '反事实 / 未走的路', sub: '被否决的路径持续追踪',   icon: 'git' as const },
+    // R3-A · 知识轴扩展 5 子维度（023-knowledge-axis-extension.sql）
+    { id: 'model_hitrate',   label: '心智模型命中率', sub: '6 个月滚动校准',           icon: 'compass' as const },
+    { id: 'consensus_track', label: '共识 / 分歧轨迹', sub: '一个 topic 的多场表态',     icon: 'layers' as const },
+    { id: 'concept_drift',   label: '概念漂移',       sub: '同词不同义诊断',            icon: 'wand' as const },
+    { id: 'topic_lineage',   label: '议题谱系',       sub: '出生 / 健康 / 濒危',         icon: 'git' as const },
+    { id: 'external_experts',label: '外部专家注释',   sub: '引用源 + 事后准确度',        icon: 'book' as const },
   ];
   return (
     <>
@@ -592,6 +598,12 @@ export function AxisKnowledge() {
         {tab === 'evidence'        && <EvidenceLive data={aggregatedEvidence ?? knowledgeData?.evidence_grades} fallback={<Evidence />} scopeAggregated={!!aggregatedEvidence} />}
         {tab === 'biases'          && <BiasesLive data={knowledgeData?.cognitive_biases} fallback={<Biases meetingId={meetingId} />} />}
         {tab === 'counterfactuals' && <CounterfactualsLive data={knowledgeData?.counterfactuals} fallback={<Counterfactuals />} />}
+        {/* R3-A · 5 个新子维度：computer 已就位（lite 派生），UI 暂用统一 PendingTab 占位 */}
+        {tab === 'model_hitrate'   && <PendingSubdimTab title="心智模型命中率" subDim="model_hitrate" hint="跑生成中心 → knowledge/model_hitrate 后写入 mn_model_hitrates" />}
+        {tab === 'consensus_track' && <PendingSubdimTab title="共识 / 分歧轨迹" subDim="consensus_track" hint="跑生成中心 → knowledge/consensus_track 后写入 mn_consensus_tracks" />}
+        {tab === 'concept_drift'   && <PendingSubdimTab title="概念漂移" subDim="concept_drift" hint="跑生成中心 → knowledge/concept_drift 后写入 mn_concept_drifts" />}
+        {tab === 'topic_lineage'   && <PendingSubdimTab title="议题谱系" subDim="topic_lineage" hint="跑生成中心 → knowledge/topic_lineage 后写入 mn_topic_lineage" />}
+        {tab === 'external_experts'&& <PendingSubdimTab title="外部专家注释" subDim="external_experts" hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
@@ -735,6 +747,34 @@ function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: num
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// R3-A · 知识轴扩展 5 子维度的统一占位 tab。
+// computer 已就位（lite 派生：从 mn_mental_model_invocations / mn_judgments /
+// mn_open_questions / mn_silence_signals 推导），但 router 尚未暴露 GET 接口，
+// 也尚未接入 _live wrapper。第一版用统一空态卡片，hint 引导用户跑生成中心补齐。
+function PendingSubdimTab({ title, subDim, hint }: { title: string; subDim: string; hint: string }) {
+  return (
+    <div style={{ padding: '28px 32px' }}>
+      <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginBottom: 18 }}>
+        knowledge / {subDim}  ·  R3-A 新增子维度
+      </div>
+      <div style={{
+        background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+        borderRadius: 8, padding: '40px 28px', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 14, color: 'var(--ink-2)', marginBottom: 10, fontFamily: 'var(--serif)' }}>
+          数据待生成
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', lineHeight: 1.6 }}>
+          {hint}
+        </div>
       </div>
     </div>
   );

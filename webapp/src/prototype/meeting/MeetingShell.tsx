@@ -20,11 +20,14 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/meeting/today',              label: '今天',          icon: 'sparkle',  group: '做什么' },
   { to: '/meeting/library',            label: '库',            icon: 'folder',   group: '做什么' },
+  // R3-A · 改动一：四轴 → 三轴。会议本身（meta）不再做全局轴入口，
+  // 单场体征下沉到 /meeting/:id/{a,b,c} 顶部 4 徽章（VariantsHealthBadges），
+  // 跨会聚合（健康度趋势）下沉到 /meeting/longitudinal?tab=health。
   { to: '/meeting/axes/people',        label: '人物轴',        icon: 'users',    group: '三轴视图' },
   { to: '/meeting/axes/projects',      label: '项目轴',        icon: 'network',  group: '三轴视图' },
   { to: '/meeting/axes/knowledge',     label: '知识轴',        icon: 'book',     group: '三轴视图' },
-  { to: '/meeting/axes/meta',          label: '会议本身',      icon: 'target',   group: '三轴视图' },
   { to: '/meeting/longitudinal',       label: '纵向视图',      icon: 'layers',   group: '跨会议' },
+  { to: '/meeting/longitudinal?tab=health', label: '健康度',  icon: 'target',   group: '跨会议' },
   { to: '/meeting/scopes',             label: '调用配置',      icon: 'scale',    group: '专家系统' },
   { to: '/meeting/strategies',         label: '策略 / 装饰器', icon: 'git',      group: '专家系统' },
   { to: '/meeting/generation-center',  label: '生成中心',      icon: 'play',     group: '专家系统' },
