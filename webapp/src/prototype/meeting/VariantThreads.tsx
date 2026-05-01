@@ -32,14 +32,38 @@ const EVENTS: Record<string, Array<{ t: number; kind: string; label?: string; re
   p6: [{ t: 72, kind: 'data', label: '18 warm intro' }, { t: 96, kind: 'listen' }],
 };
 
+// ── Legend kind groups (used for toggleable filter) ──
+const LEGEND_KINDS: Array<{
+  label: string; kinds: string[];
+  color: string; ring?: boolean; small?: boolean; square?: boolean;
+}> = [
+  { label: '主张 / claim',     kinds: ['claim'],                              color: 'var(--ink)' },
+  { label: '冲击 / clash',     kinds: ['clash'],                              color: 'var(--accent)', ring: true },
+  { label: '信念更新 / update', kinds: ['update'],                             color: 'var(--teal)' },
+  { label: '数据 / evidence',  kinds: ['data'],                               color: 'var(--amber)' },
+  { label: '倾听 / listen',    kinds: ['listen'],                             color: 'var(--ink-3)', small: true },
+  { label: '让步 · 决断',      kinds: ['yield', 'commit', 'decide', 'fork', 'flag'], color: 'var(--ink-2)', square: true },
+];
+
 // ── LegendDot ──
-function LegendDot({ color, label, ring, small, square }: {
+function LegendDot({ color, label, ring, small, square, onClick, hidden }: {
   color: string; label: string; ring?: boolean; small?: boolean; square?: boolean;
+  onClick?: () => void; hidden?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        cursor: onClick ? 'pointer' : undefined,
+        opacity: hidden ? 0.3 : 1,
+        textDecoration: hidden ? 'line-through' : undefined,
+        userSelect: 'none',
+        transition: 'opacity 0.15s',
+      }}
+    >
       {square ? (
-        <div style={{ width: 9, height: 9, background: color, transform: 'rotate(45deg)' }} />
+        <div style={{ width: 9, height: 9, background: color, transform: 'rotate(45deg)', opacity: hidden ? 0.4 : 1 }} />
       ) : ring ? (
         <div style={{ width: 10, height: 10, border: `1.5px solid ${color}`, borderRadius: 99 }} />
       ) : (
@@ -139,6 +163,17 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
   /** 信念事件 dict（mock 模式来自模块级 EVENTS；API 模式从 analysis 派生） */
   events?: Record<string, ThreadEvent[]>;
 }) {
+  const [hiddenKinds, setHiddenKinds] = useState(new Set<string>());
+  const toggleKind = (kinds: string[]) => {
+    setHiddenKinds((prev) => {
+      const next = new Set(prev);
+      const allHidden = kinds.every((k) => next.has(k));
+      if (allHidden) kinds.forEach((k) => next.delete(k));
+      else kinds.forEach((k) => next.add(k));
+      return next;
+    });
+  };
+
   const lanePeople = participants && participants.length > 0 ? participants : PARTICIPANTS;
   const eventDict = events ?? EVENTS;
   const W = 1440 - 56 * 2;
@@ -159,14 +194,28 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
         </div>
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 14, marginBottom: 18, fontSize: 11.5, color: 'var(--ink-3)' }}>
-        <LegendDot color="var(--ink)" label="主张 / claim" />
-        <LegendDot color="var(--accent)" label="冲击 / clash" ring />
-        <LegendDot color="var(--teal)" label="信念更新 / update" />
-        <LegendDot color="var(--amber)" label="数据 / evidence" />
-        <LegendDot color="var(--ink-3)" label="倾听 / listen" small />
-        <LegendDot color="var(--ink-2)" label="让步 · 决断" square />
+      {/* Legend — click to toggle kind visibility */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 18, fontSize: 11.5, color: 'var(--ink-3)', flexWrap: 'wrap' }}>
+        {LEGEND_KINDS.map((item) => (
+          <LegendDot
+            key={item.label}
+            color={item.color}
+            label={item.label}
+            ring={item.ring}
+            small={item.small}
+            square={item.square}
+            hidden={item.kinds.every((k) => hiddenKinds.has(k))}
+            onClick={() => toggleKind(item.kinds)}
+          />
+        ))}
+        {hiddenKinds.size > 0 && (
+          <span
+            onClick={() => setHiddenKinds(new Set())}
+            style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10.5, alignSelf: 'center' }}
+          >
+            全部显示
+          </span>
+        )}
       </div>
 
       {/* Chart · API 模式由 analysis 派生事件（无真实时间戳，按数组序号铺到时间轴） */}
@@ -225,7 +274,9 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
             }} />
             {/* Events · 贪心 slot 分配，相邻 label 自动上下错开避让 */}
             {(() => {
-              const events = (eventDict[p.id] ?? []).slice().sort((a, b) => a.t - b.t);
+              const events = (eventDict[p.id] ?? [])
+                .filter((e) => !hiddenKinds.has(e.kind))
+                .slice().sort((a, b) => a.t - b.t);
               const MIN_DIST = 96; // 与 labelStyle.maxWidth 一致：相邻 label 至少留 96px
               const slotEnds: number[] = [];
               const slots: number[] = events.map((e) => {
@@ -816,6 +867,45 @@ export function VariantThreads() {
   );
 }
 
+// ── label slot allocator：按 x 坐标贪心分配行，避免水平重叠 ──
+function assignLabelSlots(
+  items: Array<{ x: number; label: string }>,
+  numRows: number,
+  charWidthSvg = 7,
+  minGap = 12,
+): number[] {
+  const rowEnds: number[] = new Array(numRows).fill(-Infinity);
+  return items.map(({ x, label }) => {
+    const end = x + label.length * charWidthSvg + minGap;
+    for (let r = 0; r < numRows; r++) {
+      if (x >= rowEnds[r]) { rowEnds[r] = end; return r; }
+    }
+    // 全部行占用 → 选 end 最小的行
+    let minR = 0;
+    for (let r = 1; r < numRows; r++) if (rowEnds[r] < rowEnds[minR]) minR = r;
+    rowEnds[minR] = end;
+    return minR;
+  });
+}
+
+// ── SVG pill label：底色矩形 + 白色文字 ──
+function SvgLabel({ x, y, label, bg, fg = '#fff', anchor = 'start', fs = 10 }: {
+  x: number; y: number; label: string; bg: string; fg?: string;
+  anchor?: 'start' | 'middle' | 'end'; fs?: number;
+}) {
+  const w = label.length * 8 + 14;   // ~8 SVG units per mixed char
+  const h = fs + 6;
+  const ox = anchor === 'middle' ? -w / 2 : anchor === 'end' ? -w : 0;
+  return (
+    <g>
+      <rect x={x + ox} y={y - fs} width={w} height={h} rx={3} fill={bg} />
+      <text x={x} y={y - 1} fontFamily="var(--mono)" fontSize={fs} fill={fg} textAnchor={anchor}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
 // ── AffectiveTrace · 情绪温度曲线（C 视图独立 tab） ──
 // 数据：useMeetingHealth().affect — { samples, peak, tensionPeaks, insightPoints }
 //   sample: { t, v, i, tag }；v: valence (-1..1)；i: intensity (0..1)
@@ -823,17 +913,52 @@ export function VariantThreads() {
 //       + valence 折线（细线连各 sample 点）
 //       + 峰值标注（intensity 最大点）
 // anchor: id='affect-section'
+const AFFECT_LAYERS: Array<{ id: string; label: string; icon: React.ReactNode }> = [
+  { id: 'warm',    label: '正向 valence（暖）', icon: <span style={{ width: 12, height: 4, background: 'oklch(0.6 0.15 50)', borderRadius: 2, display: 'inline-block' }} /> },
+  { id: 'cool',    label: '负向 valence（冷）', icon: <span style={{ width: 12, height: 4, background: 'oklch(0.6 0.15 220)', borderRadius: 2, display: 'inline-block' }} /> },
+  { id: 'line',    label: 'valence 折线',       icon: <span style={{ width: 18, height: 1.5, background: 'var(--ink-2)', display: 'inline-block' }} /> },
+  { id: 'peak',    label: '峰值',               icon: <span style={{ width: 10, height: 10, border: '1.4px solid var(--accent)', borderRadius: 99, display: 'inline-block' }} /> },
+  { id: 'tension', label: '张力峰',             icon: <span style={{ display: 'inline-block', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: '8px solid var(--accent)', opacity: 0.85, verticalAlign: 'middle' }} /> },
+  { id: 'insight', label: '洞察点',             icon: <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 99, background: 'var(--teal)', opacity: 0.85 }} /> },
+];
+
 function AffectiveTrace({ isMock }: { isMock: boolean }) {
+  const [hiddenLayers, setHiddenLayers] = useState(new Set<string>());
+  const show = (id: string) => !hiddenLayers.has(id);
+  const toggleLayer = (id: string) => setHiddenLayers((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   const health = useMeetingHealth();
   const affect = health?.affect ?? null;
-  const samples = affect?.samples ?? [];
+  const rawSamples: any[] = affect?.samples ?? [];
+  // API returns t_sec/valence/intensity; normalize to t/v/i for chart
+  const samples = rawSamples.map((s: any) => ({
+    t: s.t ?? s.t_sec,
+    v: s.v ?? s.valence,
+    i: s.i ?? s.intensity,
+    tag: s.tag,
+  }));
   const peak = affect?.peak ?? null;
-  const tensionPeaks: unknown[] = Array.isArray(affect?.tensionPeaks) ? affect!.tensionPeaks : [];
-  const insightPoints: unknown[] = Array.isArray(affect?.insightPoints) ? affect!.insightPoints : [];
+  // tension_peaks and insight_points: { t_sec: seconds, note: string }
+  const normTensionPeaks: Array<{ t: number; note: string }> = (
+    Array.isArray(affect?.tensionPeaks) ? affect!.tensionPeaks as any[] : []
+  ).map((tp: any) => ({
+    t: Number(tp.t_sec ?? tp.t ?? 0) / (tp.t !== undefined ? 1 : 60),
+    note: String(tp.note ?? tp.tag ?? ''),
+  }));
+  const normInsightPoints: Array<{ t: number; note: string }> = (
+    Array.isArray(affect?.insightPoints) ? affect!.insightPoints as any[] : []
+  ).map((ip: any) => ({
+    t: Number(ip.t_sec ?? ip.t ?? 0) / (ip.t !== undefined ? 1 : 60),
+    note: String(ip.note ?? ip.tag ?? ''),
+  }));
 
-  // 主图尺寸
-  const W = 720, H = 320;
-  const PAD = { L: 56, R: 24, T: 28, B: 44 };
+  // 主图尺寸（逻辑坐标；SVG 用 viewBox 填满容器宽度）
+  const W = 1040, H = 460;
+  const PAD = { L: 56, R: 32, T: 52, B: 60 };
   const IW = W - PAD.L - PAD.R;
   const IH = H - PAD.T - PAD.B;
   const midY = PAD.T + IH / 2;
@@ -853,6 +978,43 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
     return idx;
   })();
 
+  // ── label 行槽预计算 ──
+  // 图内最多展示全文标签的数量；超出部分仅保留编号徽章，全量显示在侧边栏
+  const INLINE_MAX = 3;
+
+  // 张力峰：从顶部向下 3 行（仅为 inline 项分配 slot）
+  const TP_ROW_Y = [PAD.T + 32, PAD.T + 48, PAD.T + 64];
+  const tpInline = normTensionPeaks.slice(0, INLINE_MAX);
+  const tpSlots = assignLabelSlots(
+    tpInline.map((tp) => ({ x: xFor(tp.t) + 12, label: tp.note.slice(0, 36) })),
+    TP_ROW_Y.length,
+  );
+
+  // 洞察点：从底部向上 3 行（仅为 inline 项分配 slot）
+  const IP_ROW_Y = [H - PAD.B - 22, H - PAD.B - 38, H - PAD.B - 54];
+  const ipInline = normInsightPoints.slice(0, INLINE_MAX);
+  const ipSlots = assignLabelSlots(
+    ipInline.map((ip) => ({ x: xFor(ip.t) + 12, label: ip.note.slice(0, 36) })),
+    IP_ROW_Y.length,
+  );
+
+  // sample tag：正 valence 在中线上方 3 行，负 valence 在中线下方 3 行
+  const TAG_ROWS_ABOVE = [midY - 24, midY - 40, midY - 56].map((y) => Math.max(y, PAD.T + 10));
+  const TAG_ROWS_BELOW = [midY + 28, midY + 44, midY + 60].map((y) => Math.min(y, H - PAD.B - 8));
+  const taggedSamples = samples
+    .map((s, i) => ({ s, i, x: xFor(Number(s.t ?? 0)), v: Number(s.v ?? 0) }))
+    .filter(({ s }) => !!s.tag);
+  const aboveSamples = taggedSamples.filter(({ v }) => v >= 0);
+  const belowSamples = taggedSamples.filter(({ v }) => v < 0);
+  const aboveSlots = assignLabelSlots(
+    aboveSamples.map(({ x, s }) => ({ x, label: String(s.tag) })),
+    TAG_ROWS_ABOVE.length,
+  );
+  const belowSlots = assignLabelSlots(
+    belowSamples.map(({ x, s }) => ({ x, label: String(s.tag) })),
+    TAG_ROWS_BELOW.length,
+  );
+
   return (
     <div id="affect-section" style={{
       padding: '22px 56px 26px',
@@ -867,7 +1029,7 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
         </h2>
         <div style={{
           position: 'relative', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
-          borderRadius: 8, width: W, height: H, overflow: 'hidden',
+          borderRadius: 8, width: '100%', aspectRatio: `${W} / ${H}`, overflow: 'hidden',
         }}>
           {samples.length === 0 ? (
             <div style={{
@@ -877,7 +1039,7 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
               数据待生成 · meta/affect_curve
             </div>
           ) : (
-            <svg width={W} height={H} style={{ position: 'absolute', inset: 0 }}>
+            <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
               <defs>
                 <pattern id="affectDots" patternUnits="userSpaceOnUse" width="20" height="20">
                   <circle cx="2" cy="2" r="0.7" fill="oklch(0.85 0.01 75)" />
@@ -906,77 +1068,176 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
                     fill="var(--ink-3)" textAnchor="middle">{m}m</text>
                 </g>
               ))}
-              {/* 竖条 intensity（从中线出发，方向按 valence） */}
-              {samples.map((s, i) => {
+              {/* 竖条 intensity — 正向（暖） */}
+              {show('warm') && samples.filter((s) => Number(s.v ?? 0) >= 0).map((s, i) => {
                 const t = Number(s.t ?? 0);
                 const v = Number(s.v ?? 0);
                 const intensity = Math.max(0, Math.min(1, Number(s.i ?? 0)));
                 const x = xFor(t);
                 const halfH = (IH / 2 - 12) * intensity * 0.9;
-                const y2 = v >= 0 ? midY - halfH : midY + halfH;
-                const color = v >= 0
-                  ? `oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${75 - v * 35})`
-                  : `oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${210 + v * 30})`;
                 return (
-                  <line key={`bar-${i}`} x1={x} y1={midY} x2={x} y2={y2}
-                    stroke={color} strokeWidth={6} strokeLinecap="round" opacity={0.7}>
+                  <line key={`warm-${i}`} x1={x} y1={midY} x2={x} y2={midY - halfH}
+                    stroke={`oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${75 - v * 35})`}
+                    strokeWidth={8} strokeLinecap="round" opacity={0.7}>
                     <title>{`t=${t}m · valence=${v.toFixed(2)} · intensity=${intensity.toFixed(2)}${s.tag ? ` · ${s.tag}` : ''}`}</title>
                   </line>
                 );
               })}
-              {/* valence 折线 */}
-              <polyline
-                points={samples
-                  .map((s) => `${xFor(Number(s.t ?? 0))},${yForValence(Number(s.v ?? 0))}`)
-                  .join(' ')}
-                fill="none" stroke="var(--ink-2)" strokeWidth={1.4} opacity={0.85}
-              />
-              {/* sample 点 */}
-              {samples.map((s, i) => (
-                <circle key={`pt-${i}`}
-                  cx={xFor(Number(s.t ?? 0))}
-                  cy={yForValence(Number(s.v ?? 0))}
-                  r={2.5} fill="var(--ink)"
+              {/* 竖条 intensity — 负向（冷） */}
+              {show('cool') && samples.filter((s) => Number(s.v ?? 0) < 0).map((s, i) => {
+                const t = Number(s.t ?? 0);
+                const v = Number(s.v ?? 0);
+                const intensity = Math.max(0, Math.min(1, Number(s.i ?? 0)));
+                const x = xFor(t);
+                const halfH = (IH / 2 - 12) * intensity * 0.9;
+                return (
+                  <line key={`cool-${i}`} x1={x} y1={midY} x2={x} y2={midY + halfH}
+                    stroke={`oklch(${0.65 - intensity * 0.1} ${0.10 + intensity * 0.10} ${210 + v * 30})`}
+                    strokeWidth={8} strokeLinecap="round" opacity={0.7}>
+                    <title>{`t=${t}m · valence=${v.toFixed(2)} · intensity=${intensity.toFixed(2)}${s.tag ? ` · ${s.tag}` : ''}`}</title>
+                  </line>
+                );
+              })}
+              {/* valence 折线 + 点 */}
+              {show('line') && <>
+                <polyline
+                  points={samples.map((s) => `${xFor(Number(s.t ?? 0))},${yForValence(Number(s.v ?? 0))}`).join(' ')}
+                  fill="none" stroke="var(--ink-2)" strokeWidth={1.6} opacity={0.85}
                 />
-              ))}
+                {samples.map((s, i) => (
+                  <circle key={`pt-${i}`}
+                    cx={xFor(Number(s.t ?? 0))} cy={yForValence(Number(s.v ?? 0))}
+                    r={3} fill="var(--ink)" />
+                ))}
+              </>}
+              {/* 张力峰：三角 + 编号徽章（全部），前 INLINE_MAX 个额外显示全文标签 */}
+              {show('tension') && normTensionPeaks.map((tp, i) => {
+                const x = xFor(tp.t);
+                const isInline = i < INLINE_MAX;
+                const labelY = isInline ? TP_ROW_Y[tpSlots[i]] : 0;
+                return (
+                  <g key={`tp-${i}`}>
+                    <line x1={x} y1={PAD.T} x2={x} y2={H - PAD.B}
+                      stroke="var(--accent)" strokeWidth={1.2} strokeDasharray="4 3" opacity={0.45} />
+                    {/* 三角图标 */}
+                    <polygon
+                      points={`${x},${PAD.T + 2} ${x - 6},${PAD.T + 13} ${x + 6},${PAD.T + 13}`}
+                      fill="var(--accent)" opacity={0.9}
+                    />
+                    {/* 编号徽章（始终显示） */}
+                    <circle cx={x} cy={PAD.T + 24} r={9} fill="oklch(0.42 0.18 25)" />
+                    <text x={x} y={PAD.T + 28} fontFamily="var(--mono)" fontSize="10"
+                      fill="#fff" textAnchor="middle" fontWeight="bold">{i + 1}</text>
+                    {/* 全文标签（仅前 INLINE_MAX 个） */}
+                    {isInline && tp.note && <>
+                      {labelY > PAD.T + 36 && (
+                        <line x1={x} y1={PAD.T + 34} x2={x} y2={labelY - 4}
+                          stroke="var(--accent)" strokeWidth={0.7} strokeDasharray="2 3" opacity={0.4} />
+                      )}
+                      <SvgLabel x={x + 12} y={labelY} label={tp.note.slice(0, 36)}
+                        bg="oklch(0.42 0.18 25)" fg="#fff" />
+                    </>}
+                  </g>
+                );
+              })}
+              {/* 洞察点：编号圆圈（全部），前 INLINE_MAX 个额外显示全文标签 */}
+              {show('insight') && normInsightPoints.map((ip, i) => {
+                const x = xFor(ip.t);
+                const isInline = i < INLINE_MAX;
+                const labelY = isInline ? IP_ROW_Y[ipSlots[i]] : 0;
+                return (
+                  <g key={`ip-${i}`}>
+                    <line x1={x} y1={PAD.T} x2={x} y2={H - PAD.B}
+                      stroke="var(--teal)" strokeWidth={1.2} strokeDasharray="4 3" opacity={0.45} />
+                    {/* 编号圆圈（始终显示） */}
+                    <circle cx={x} cy={H - PAD.B - 11} r={10} fill="oklch(0.32 0.10 200)" />
+                    <text x={x} y={H - PAD.B - 7} fontFamily="var(--mono)" fontSize="10"
+                      fill="#fff" textAnchor="middle" fontWeight="bold">{i + 1}</text>
+                    {/* 全文标签（仅前 INLINE_MAX 个） */}
+                    {isInline && ip.note && <>
+                      {labelY < H - PAD.B - 24 && (
+                        <line x1={x} y1={H - PAD.B - 22} x2={x} y2={labelY + 4}
+                          stroke="var(--teal)" strokeWidth={0.7} strokeDasharray="2 3" opacity={0.4} />
+                      )}
+                      <SvgLabel x={x + 12} y={labelY} label={ip.note.slice(0, 36)}
+                        bg="oklch(0.32 0.10 200)" fg="#fff" />
+                    </>}
+                  </g>
+                );
+              })}
+              {/* sample tag 标注：slot 行错开，正 valence 上方，负 valence 下方 */}
+              {aboveSamples.map(({ s, x }, j) => {
+                if (!show('warm')) return null;
+                const labelY = TAG_ROWS_ABOVE[aboveSlots[j]];
+                const py = yForValence(Number(s.v ?? 0));
+                return (
+                  <g key={`atag-${j}`}>
+                    <line x1={x} y1={py - 4} x2={x} y2={labelY + 4}
+                      stroke="var(--line)" strokeWidth={0.7} strokeDasharray="2 2" />
+                    <SvgLabel x={x} y={labelY} label={String(s.tag)}
+                      bg="oklch(0.22 0.02 75)" fg="#e8e3da" anchor="middle" fs={9} />
+                  </g>
+                );
+              })}
+              {belowSamples.map(({ s, x }, j) => {
+                if (!show('cool')) return null;
+                const labelY = TAG_ROWS_BELOW[belowSlots[j]];
+                const py = yForValence(Number(s.v ?? 0));
+                return (
+                  <g key={`btag-${j}`}>
+                    <line x1={x} y1={py + 4} x2={x} y2={labelY - 12}
+                      stroke="var(--line)" strokeWidth={0.7} strokeDasharray="2 2" />
+                    <SvgLabel x={x} y={labelY} label={String(s.tag)}
+                      bg="oklch(0.22 0.02 75)" fg="#e8e3da" anchor="middle" fs={9} />
+                  </g>
+                );
+              })}
               {/* 峰值标注 */}
-              {peakIdx >= 0 && (() => {
+              {show('peak') && peakIdx >= 0 && (() => {
                 const s = samples[peakIdx];
                 const x = xFor(Number(s.t ?? 0));
                 const y = yForValence(Number(s.v ?? 0));
                 const tagText = peak?.tag ?? s.tag ?? `i=${Number(s.i ?? 0).toFixed(2)}`;
                 return (
                   <g>
-                    <circle cx={x} cy={y} r={7} fill="none" stroke="var(--accent)" strokeWidth={1.4} />
-                    <text x={x + 10} y={y - 6} fontFamily="var(--mono)" fontSize="10" fill="var(--accent)">
-                      峰 · {tagText}
-                    </text>
+                    <circle cx={x} cy={y} r={9} fill="none" stroke="var(--accent)" strokeWidth={1.6} />
+                    <SvgLabel x={x + 12} y={y - 5} label={`峰 · ${tagText}`}
+                      bg="oklch(0.42 0.18 25)" fg="#fff" fs={11} />
                   </g>
                 );
               })()}
             </svg>
           )}
         </div>
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 14, marginTop: 12, fontSize: 11, color: 'var(--ink-3)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 12, height: 4, background: 'oklch(0.6 0.15 50)', borderRadius: 2 }} />
-            正向 valence（暖）
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 12, height: 4, background: 'oklch(0.6 0.15 220)', borderRadius: 2 }} />
-            负向 valence（冷）
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 18, height: 1.5, background: 'var(--ink-2)' }} />
-            valence 折线
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              width: 10, height: 10, border: '1.4px solid var(--accent)', borderRadius: 99,
-            }} />
-            峰值
-          </span>
+        {/* Legend — 点击切换显示/隐藏 */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 11, color: 'var(--ink-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+          {AFFECT_LAYERS.map((layer) => {
+            const hidden = hiddenLayers.has(layer.id);
+            return (
+              <span
+                key={layer.id}
+                onClick={() => toggleLayer(layer.id)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  cursor: 'pointer', userSelect: 'none',
+                  opacity: hidden ? 0.3 : 1,
+                  textDecoration: hidden ? 'line-through' : undefined,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {layer.icon}
+                {layer.label}
+              </span>
+            );
+          })}
+          {hiddenLayers.size > 0 && (
+            <span
+              onClick={() => setHiddenLayers(new Set())}
+              style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10.5 }}
+            >
+              全部显示
+            </span>
+          )}
         </div>
       </div>
       <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -997,53 +1258,77 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
             </div>
           </div>
         )}
+        {/* 张力峰全量列表 */}
         <div style={{
           background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
           padding: '14px 16px',
         }}>
-          <SectionLabel>张力峰 · tension peaks</SectionLabel>
-          <MonoMeta style={{ marginLeft: 6 }}>{tensionPeaks.length}</MonoMeta>
-          {tensionPeaks.length === 0 ? (
-            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>暂无</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <SectionLabel>张力峰 · tension peaks</SectionLabel>
+            <MonoMeta>{normTensionPeaks.length}</MonoMeta>
+            {normTensionPeaks.length > INLINE_MAX && (
+              <MonoMeta style={{ color: 'var(--ink-3)', fontSize: 9.5 }}>
+                图内显示 {INLINE_MAX} 个
+              </MonoMeta>
+            )}
+          </div>
+          {normTensionPeaks.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>暂无</div>
           ) : (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {tensionPeaks.slice(0, 6).map((tp, i) => {
-                let line = '';
-                try { line = JSON.stringify(tp); } catch { line = '[unserializable]'; }
-                return (
-                  <div key={i} style={{
-                    fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'var(--mono)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }} title={line}>{line}</div>
-                );
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {normTensionPeaks.map((tp, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 99, flexShrink: 0, marginTop: 1,
+                    background: 'oklch(0.42 0.18 25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontFamily: 'var(--mono)', color: '#fff', fontWeight: 700,
+                  }}>{i + 1}</div>
+                  <div>
+                    <MonoMeta style={{ fontSize: 10 }}>{Math.round(tp.t)}m</MonoMeta>
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 2 }}>{tp.note}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
+        {/* 洞察点全量列表 */}
         <div style={{
           background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
           padding: '14px 16px',
         }}>
-          <SectionLabel>洞察点 · insight points</SectionLabel>
-          <MonoMeta style={{ marginLeft: 6 }}>{insightPoints.length}</MonoMeta>
-          {insightPoints.length === 0 ? (
-            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>暂无</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <SectionLabel>洞察点 · insight points</SectionLabel>
+            <MonoMeta>{normInsightPoints.length}</MonoMeta>
+            {normInsightPoints.length > INLINE_MAX && (
+              <MonoMeta style={{ color: 'var(--ink-3)', fontSize: 9.5 }}>
+                图内显示 {INLINE_MAX} 个
+              </MonoMeta>
+            )}
+          </div>
+          {normInsightPoints.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>暂无</div>
           ) : (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {insightPoints.slice(0, 6).map((ip, i) => {
-                let line = '';
-                try { line = JSON.stringify(ip); } catch { line = '[unserializable]'; }
-                return (
-                  <div key={i} style={{
-                    fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'var(--mono)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }} title={line}>{line}</div>
-                );
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {normInsightPoints.map((ip, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 99, flexShrink: 0, marginTop: 1,
+                    background: 'oklch(0.32 0.10 200)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontFamily: 'var(--mono)', color: '#fff', fontWeight: 700,
+                  }}>{i + 1}</div>
+                  <div>
+                    <MonoMeta style={{ fontSize: 10 }}>{Math.round(ip.t)}m</MonoMeta>
+                    <div style={{ fontSize: 12, color: 'oklch(0.28 0.08 200)', lineHeight: 1.55, marginTop: 2 }}>{ip.note}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
-        {!peak && tensionPeaks.length === 0 && insightPoints.length === 0 && samples.length === 0 && (
+        {!peak && normTensionPeaks.length === 0 && normInsightPoints.length === 0 && samples.length === 0 && (
           <div style={{ fontSize: 11.5, color: 'var(--ink-3)', textAlign: 'center', padding: '8px 0' }}>
             <MonoMeta>暂无 affect 数据</MonoMeta>
           </div>
