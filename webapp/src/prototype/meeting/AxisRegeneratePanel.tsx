@@ -60,27 +60,56 @@ const SUB_META: Record<string, { cost: Cost; depsOn: string[] }> = {
   intra_meeting:       { cost: 'medium', depsOn: ['contradictions_surface'] },
 };
 
+// 重算 panel 视图：把 meta/tension 子维度 merge 进 people/projects（UI-only 重映射，
+// 不改 registry 也不改后端 sub_dim 归属 —— 后端 mn_runs.axis 仍按真实 axis 写入）。
+//
+// 设计依据：R3-D 已经把 meta 轴的轴入口取消，单场体征下沉到 A/B/C 视图；
+// "会议本身"和"张力"作为独立 axis card 在重算面板里产生认知负担。归并方案：
+//   decision_quality / meeting_necessity → projects（决策与必要性归项目维度）
+//   affect_curve / intra_meeting         → people  （情绪与张力归人物维度）
+const PANEL_DISPLAY_AXIS: Record<string, 'people' | 'projects' | 'knowledge'> = {
+  decision_quality:  'projects',
+  meeting_necessity: 'projects',
+  affect_curve:      'people',
+  intra_meeting:     'people',
+};
+
+const PANEL_AXES = ['people', 'projects', 'knowledge'] as const;
+type PanelAxis = typeof PANEL_AXES[number];
+
 // AXIS_SUB 派生：subs 来自 registry，cost/depsOn 来自 SUB_META
 // 这样新增 sub_dim 只需在 SUB_META 加一行 + registry 已有即可（registry 是 SSoT）
 const AXIS_SUB: Record<string, {
   label: string;
   color: string;
-  subs: { id: string; label: string; cost: Cost; depsOn: string[] }[];
-}> = Object.fromEntries(
-  ALL_AXES.map((axisId) => {
+  subs: { id: string; label: string; cost: Cost; depsOn: string[]; sourceAxis?: string }[];
+}> = (() => {
+  const out: Record<string, {
+    label: string;
+    color: string;
+    subs: { id: string; label: string; cost: Cost; depsOn: string[]; sourceAxis?: string }[];
+  }> = {};
+  for (const axisId of PANEL_AXES) {
     const meta = AXIS_REGISTRY[axisId];
-    return [axisId, {
-      label: meta.label,
-      color: meta.color,
-      subs: meta.subDims.map((sd) => ({
+    out[axisId] = { label: meta.label, color: meta.color, subs: [] };
+  }
+  for (const axisId of ALL_AXES) {
+    const axisMeta = AXIS_REGISTRY[axisId];
+    for (const sd of axisMeta.subDims) {
+      const target: PanelAxis = PANEL_DISPLAY_AXIS[sd.id]
+        ?? (PANEL_AXES.includes(axisId as PanelAxis) ? (axisId as PanelAxis) : 'projects');
+      out[target].subs.push({
         id: sd.id,
         label: sd.label,
         cost: SUB_META[sd.id]?.cost ?? 'medium',
         depsOn: SUB_META[sd.id]?.depsOn ?? [],
-      })),
-    }];
-  }),
-);
+        // 标记原归属轴：来自 meta/tension 时给"→ tab"附近显示一个小标签
+        sourceAxis: axisId !== target ? axisId : undefined,
+      });
+    }
+  }
+  return out;
+})();
 
 const COST_TABLE = {
   low:    { tok: '~4k',  time: '20-40s' },
@@ -179,10 +208,12 @@ const TAB_TO_SUBS: Record<string, Record<string, TabPreset>> = {
     lineage:         { axis: 'knowledge', subs: ['topic_lineage'] },
     external:        { axis: 'knowledge', subs: ['external_experts'] },
   },
+  // R5 · 重算面板把 meta/tension subs merge 到 people/projects 后，meta 轴 tab
+  // 通过 PANEL_DISPLAY_AXIS 指向合并后的 axis（legacy AxisMeta 仍走 currentTab 联动）
   meta: {
-    quality:    { axis: 'meta', subs: ['decision_quality'] },
-    necessity:  { axis: 'meta', subs: ['meeting_necessity'] },
-    emotion:    { axis: 'meta', subs: ['affect_curve'] },
+    quality:    { axis: 'projects', subs: ['decision_quality'] },
+    necessity:  { axis: 'projects', subs: ['meeting_necessity'] },
+    emotion:    { axis: 'people',   subs: ['affect_curve'] },
   },
 };
 
@@ -221,14 +252,19 @@ export function AxisRegeneratePanel({
   // 如果调用方传了 currentTab，就用 TAB_TO_SUBS 表查"该 tab 由哪些 sub 驱动"
   // 跨轴 tab（blind_spots / responsibility）会切到 sub 实际所在的 axis
   const tabPreset = currentTab ? TAB_TO_SUBS[initialAxis]?.[currentTab] : undefined;
-  const [axis, setAxis] = useState(tabPreset?.axis ?? initialAxis);
+  // R5: meta/tension subs 已合并到 people/projects；initialAxis='meta' 或 'tension'
+  // 时 panel 没有对应 axis card，回退到 'projects'。tabPreset 命中时优先用其 axis。
+  const resolvedInitialAxis = (PANEL_AXES as readonly string[]).includes(initialAxis)
+    ? initialAxis
+    : 'projects';
+  const [axis, setAxis] = useState(tabPreset?.axis ?? resolvedInitialAxis);
   const [selected, setSelected] = useState<string[]>(() => {
     // 优先：tabPreset 命中 → 只勾该 tab 的主驱动 sub
     if (tabPreset && tabPreset.subs.length > 0) return tabPreset.subs;
     // 退化：tabPreset 命中但 subs 为空（跨模块 / UI tab）→ 不预勾，让用户自选
     if (tabPreset) return [];
-    // 无 currentTab：保持旧默认 — 全选 initialAxis 的所有 sub
-    const meta = AXIS_SUB[initialAxis];
+    // 无 currentTab：保持旧默认 — 全选 resolvedInitialAxis 的所有 sub
+    const meta = AXIS_SUB[resolvedInitialAxis];
     return meta ? meta.subs.map((s) => s.id) : [];
   });
   const [preset, setPreset] = useState<'lite' | 'standard' | 'max'>('standard');
@@ -366,8 +402,8 @@ export function AxisRegeneratePanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
           <div>
             <SectionLabel>① 选择轴</SectionLabel>
-            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: `repeat(${ALL_AXES.length},1fr)`, gap: 8 }}>
-              {ALL_AXES.map((id) => {
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: `repeat(${PANEL_AXES.length},1fr)`, gap: 8 }}>
+              {PANEL_AXES.map((id) => {
                 const a = AXIS_SUB[id];
                 const active = id === axis;
                 return (
@@ -428,7 +464,17 @@ export function AxisRegeneratePanel({
                       {on && <Icon name="check" size={11} />}
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: on ? 600 : 500 }}>{sub.label}</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: on ? 600 : 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {sub.label}
+                        {sub.sourceAxis && (
+                          <span title={`本质属于 ${AXIS_REGISTRY[sub.sourceAxis]?.label ?? sub.sourceAxis}`} style={{
+                            fontFamily: 'var(--mono)', fontSize: 9.5, fontWeight: 500,
+                            padding: '1px 5px', borderRadius: 3, color: 'var(--ink-3)',
+                            background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+                            letterSpacing: '0.04em',
+                          }}>← {AXIS_REGISTRY[sub.sourceAxis]?.label ?? sub.sourceAxis}</span>
+                        )}
+                      </div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 3 }}>
                         deps: {sub.depsOn.length === 0 ? '—' : sub.depsOn.slice(0, 2).join(' · ')}{sub.depsOn.length > 2 && ' …'}
                       </div>
