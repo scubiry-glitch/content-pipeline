@@ -1,21 +1,18 @@
 // Compass · ④ Project Atlas 大入口卡
 // 来源: 07-archive/会议纪要 (20260501)/compass.html .atlas-card block
+// 点击跳转到 Project Atlas 子房间 /ceo/internal/ceo/compass/atlas
 
+import { useNavigate } from 'react-router-dom';
 import { ATLAS_STATS } from './_compassFixtures';
 
 export function ProjectAtlasCard() {
+  const navigate = useNavigate();
   return (
     <a
-      href="#project-atlas"
+      href="/ceo/internal/ceo/compass/atlas"
       onClick={(e) => {
         e.preventDefault();
-        // PR4 阶段：暂时不跳转，仅 toast 提示
-        const t = document.createElement('div');
-        t.textContent = '🌌 Project Atlas — 子房间在 PR10 接入';
-        t.style.cssText =
-          'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#FAF7F0;color:#1A2E3D;border:1px solid #3E6E8C;padding:10px 18px;border-radius:4px;font-family:var(--serif);font-style:italic;font-size:13px;z-index:9999';
-        document.body.appendChild(t);
-        setTimeout(() => t.remove(), 2000);
+        navigate('/ceo/internal/ceo/compass/atlas');
       }}
       style={{
         gridColumn: '1 / -1',

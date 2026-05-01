@@ -84,6 +84,7 @@ import { Panorama as CeoPanorama } from './prototype/ceo/internal/Panorama';
 import { BrainShell as CeoBrainShell } from './prototype/ceo/brain/BrainShell';
 import { BrainStub as CeoBrainStub } from './prototype/ceo/brain/BrainStub';
 import { Compass as CeoCompass } from './prototype/ceo/internal/rooms/Compass';
+import { ProjectAtlas as CeoProjectAtlas } from './prototype/ceo/internal/rooms/Compass/ProjectAtlas';
 import { Boardroom as CeoBoardroom } from './prototype/ceo/internal/rooms/Boardroom';
 import { Tower as CeoTower } from './prototype/ceo/internal/rooms/Tower';
 import { WarRoom as CeoWarRoom } from './prototype/ceo/internal/rooms/WarRoom';
@@ -273,6 +274,7 @@ function App() {
               <Route path="internal/ceo" element={<CEOHomePane />} />
               <Route path="internal/ceo/panorama" element={<CeoPanorama />} />
               <Route path="internal/ceo/compass" element={<CeoCompass />} />
+              <Route path="internal/ceo/compass/atlas" element={<CeoProjectAtlas />} />
               <Route path="internal/ceo/boardroom" element={<CeoBoardroom />} />
               <Route path="internal/ceo/tower" element={<CeoTower />} />
               <Route path="internal/ceo/war-room" element={<CeoWarRoom />} />
