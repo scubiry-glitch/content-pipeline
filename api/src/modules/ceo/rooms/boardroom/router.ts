@@ -14,6 +14,7 @@ import {
   listPromises,
   listRebuttals,
 } from './service.js';
+import { listAnnotations, generateAnnotation } from './annotations-service.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -71,6 +72,43 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
       const { briefId } = (request.query ?? {}) as { briefId?: string };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
       return listRebuttals(engine.deps, { briefId, scopeIds });
+    });
+
+    // ─── 外脑批注 (③ AnnotationsList LLM-backed) ───
+    fastify.get('/annotations', async (request) => {
+      const { briefId, limit } = (request.query ?? {}) as { briefId?: string; limit?: string };
+      const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
+      return listAnnotations(engine.deps, {
+        briefId,
+        scopeIds,
+        limit: limit ? Number(limit) : undefined,
+      });
+    });
+
+    fastify.post('/annotations/generate', async (request, reply) => {
+      const body = (request.body ?? {}) as {
+        briefId?: string | null;
+        scopeId?: string | null;
+        expertId?: string;
+        expertName?: string;
+        contextHint?: string;
+      };
+      if (!body.expertId || !body.expertName) {
+        reply.code(400);
+        return { error: 'expertId and expertName required' };
+      }
+      try {
+        return await generateAnnotation(engine.deps, {
+          briefId: body.briefId ?? null,
+          scopeId: body.scopeId ?? null,
+          expertId: body.expertId,
+          expertName: body.expertName,
+          contextHint: body.contextHint,
+        });
+      } catch (e) {
+        reply.code(500);
+        return { error: (e as Error).message };
+      }
     });
   };
 }

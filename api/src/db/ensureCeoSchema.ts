@@ -16,6 +16,7 @@ const FILES = [
   '006-person-agent-links.sql',
   '007-war-room-sparks.sql',
   '008-sandbox-runs.sql',
+  '009-ceo-annotations.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {

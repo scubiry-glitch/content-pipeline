@@ -244,8 +244,204 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   return { ok: true, result: { rebuttalId: ins.rows[0]?.id, mode } };
 }
 
-/** g4 — 跨会&批注：deps.llm 注入则真调，否则 stub */
+/**
+ * g4 annotations — 外脑批注: 基于 brief + 专家画像生成一条 synthesis/contrast/counter
+ *   metadata.briefId / expertId / expertName / contextHint
+ *   输出: 写 ceo_boardroom_annotations
+ */
+async function handleG4Annotations(
+  deps: CeoEngineDeps,
+  run: CeoRunRow,
+): Promise<{ ok: boolean; result: any }> {
+  const meta = run.metadata ?? {};
+  const briefId = (meta.briefId as string | undefined) ?? null;
+  const expertId = meta.expertId as string | undefined;
+  const expertName = meta.expertName as string | undefined;
+  const contextHint = (meta.contextHint as string | undefined) ?? '';
+
+  if (!expertId || !expertName) {
+    return { ok: false, result: { error: 'g4-annotations: expertId/expertName required' } };
+  }
+
+  let highlight = `[stub g4-annotations] LLM 未配置时的占位批注 — by ${expertName}`;
+  let bodyMd = `## 外脑批注 (stub)\n\nLLM 未配置 — 真接 \`CLAUDE_API_KEY\` / \`KIMI_API_KEY\` / \`OPENAI_API_KEY\` 后将基于预读包+专家画像生成具体批注。\n\n**专家**: ${expertName}\n**模式**: synthesis`;
+  let mode: 'synthesis' | 'contrast' | 'counter' | 'extension' = 'synthesis';
+  let citations: Array<{ type: string; id?: string; label: string }> = [];
+  let llmMode: 'stub' | 'llm' = 'stub';
+
+  if (deps.llm?.isAvailable()) {
+    try {
+      // 拉 brief toc + 最近董事关切
+      let briefContext = '';
+      if (briefId) {
+        const r = await deps.db.query(
+          `SELECT board_session, version, toc, page_count FROM ceo_briefs WHERE id = $1::uuid`,
+          [briefId],
+        );
+        if (r.rows[0]) {
+          briefContext = `预读包: ${r.rows[0].board_session} v${r.rows[0].version}, ${r.rows[0].page_count} 页\nTOC: ${JSON.stringify(r.rows[0].toc)}`;
+        }
+      }
+      const concerns = await deps.db.query(
+        `SELECT topic FROM ceo_director_concerns WHERE status = 'pending' ORDER BY raised_count DESC LIMIT 5`,
+      );
+      const topicLines = concerns.rows.map((r) => `- ${r.topic}`).join('\n');
+
+      const result = await deps.llm.invoke({
+        system:
+          '你是被聘请的外部专家，给 CEO 的董事会预读包写一条专家批注。你必须有立场、有锚点、有数据。\n输出 JSON: {"mode":"synthesis|contrast|counter|extension","highlight":"一句话核心观点 (不超过 40 字)","body_md":"完整批注正文 200-400 字","citations":[{"type":"meeting|asset|echo","label":"引用名"}]}',
+        prompt: `专家画像: ${expertName} (id: ${expertId})\n${contextHint ? `上下文提示: ${contextHint}\n` : ''}${briefContext}\n董事关切:\n${topicLines}\n\n请基于专家身份给出一条批注。`,
+        responseFormat: 'json',
+        maxTokens: 800,
+        taskTag: 'g4-annotations',
+      });
+      const parsed = JSON.parse(result.text) as {
+        mode?: string;
+        highlight?: string;
+        body_md?: string;
+        citations?: any[];
+      };
+      if (parsed.highlight) highlight = parsed.highlight;
+      if (parsed.body_md) bodyMd = parsed.body_md;
+      if (
+        parsed.mode === 'synthesis' ||
+        parsed.mode === 'contrast' ||
+        parsed.mode === 'counter' ||
+        parsed.mode === 'extension'
+      ) {
+        mode = parsed.mode;
+      }
+      if (Array.isArray(parsed.citations)) citations = parsed.citations;
+      llmMode = 'llm';
+    } catch (e) {
+      console.warn('[g4-annotations] LLM invoke failed, fallback to stub:', (e as Error).message);
+    }
+  }
+
+  const ins = await deps.db.query(
+    `INSERT INTO ceo_boardroom_annotations
+       (brief_id, scope_id, expert_id, expert_name, mode, highlight, body_md, citations, generated_run_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9)
+     RETURNING id::text`,
+    [
+      briefId,
+      run.scope_id,
+      expertId,
+      expertName,
+      mode,
+      highlight,
+      bodyMd,
+      JSON.stringify(citations),
+      run.id,
+    ],
+  );
+
+  return {
+    ok: true,
+    result: { annotationId: ins.rows[0]?.id, mode: llmMode, expertName, llmMode: mode },
+  };
+}
+
+/**
+ * g4 balcony-prompt — 阳台反思 prompt 填充
+ *   metadata.userId / weekStart / prismId
+ *   把 ceo_balcony_reflections.prompt 字段从空填到具体的本周 context
+ */
+async function handleG4BalconyPrompt(
+  deps: CeoEngineDeps,
+  run: CeoRunRow,
+): Promise<{ ok: boolean; result: any }> {
+  const meta = run.metadata ?? {};
+  const userId = (meta.userId as string | undefined) ?? 'system';
+  const weekStart = meta.weekStart as string | undefined;
+  const prismId = meta.prismId as string | undefined;
+
+  if (!weekStart || !prismId) {
+    return { ok: false, result: { error: 'balcony-prompt: weekStart/prismId required' } };
+  }
+
+  // 拉本周 reflection question
+  const r = await deps.db.query(
+    `SELECT id::text, question FROM ceo_balcony_reflections
+      WHERE user_id = $1 AND week_start = $2 AND prism_id = $3 LIMIT 1`,
+    [userId, weekStart, prismId],
+  );
+  const reflection = r.rows[0];
+  if (!reflection) {
+    return { ok: false, result: { error: 'reflection row not found' } };
+  }
+
+  let promptText =
+    '[stub g4-balcony-prompt] LLM 未配置 — 真接配置后将基于本周会议+承诺+张力信号生成具体 context';
+  let mode: 'stub' | 'llm' = 'stub';
+
+  if (deps.llm?.isAvailable()) {
+    try {
+      // 拉本周 mn_judgments + commitments + sparks 作 context
+      const judgments = await deps.db.query(
+        `SELECT kind, text FROM mn_judgments
+          WHERE created_at > $1::timestamptz - INTERVAL '8 days'
+            AND created_at < $1::timestamptz + INTERVAL '8 days'
+          LIMIT 8`,
+        [weekStart],
+      );
+      const commitments = await deps.db.query(
+        `SELECT text, due_at FROM mn_commitments
+          WHERE created_at > $1::timestamptz - INTERVAL '8 days'
+          LIMIT 8`,
+        [weekStart],
+      );
+      const ctx = [
+        `本周关键判断 (${judgments.rows.length}):`,
+        ...judgments.rows.map((j) => `- [${j.kind}] ${j.text}`),
+        `本周新承诺 (${commitments.rows.length}):`,
+        ...commitments.rows.map((c) => `- ${c.text}${c.due_at ? ` (due ${c.due_at})` : ''}`),
+      ].join('\n');
+
+      const result = await deps.llm.invoke({
+        system:
+          '你是 CEO 的反思教练。基于本周的判断/承诺/张力数据，给出一段具体、有钩子、唤起记忆的 prompt 文本，作为该 prism 反思问题的上下文。\n要求:\n- 直接陈述事实（如"周三下午 2:14 你在陈汀发言时沉默 2 分 14 秒"），不要"建议"\n- 80-150 字\n- 输出纯文本, 不要 markdown',
+        prompt: `Prism: ${prismId}\n反思问题: ${reflection.question}\n\n本周数据:\n${ctx || '(本周暂无明显信号)'}`,
+        maxTokens: 400,
+        taskTag: 'g4-balcony-prompt',
+      });
+      promptText = result.text.trim();
+      mode = 'llm';
+    } catch (e) {
+      console.warn(
+        '[g4-balcony-prompt] LLM invoke failed, fallback to stub:',
+        (e as Error).message,
+      );
+    }
+  }
+
+  await deps.db.query(
+    `UPDATE ceo_balcony_reflections SET prompt = $1 WHERE id = $2::uuid`,
+    [promptText, reflection.id],
+  );
+
+  return { ok: true, result: { reflectionId: reflection.id, mode } };
+}
+
+/**
+ * g4 — 跨会&批注：deps.llm 注入则真调，否则 stub
+ *
+ * metadata.kind:
+ *   undefined / 'echo'      → 战略回响 (默认, 写 ceo_strategic_echos)
+ *   'annotations'           → 外脑批注 (写 ceo_boardroom_annotations)
+ *   'balcony-prompt'        → 阳台反思 prompt (更新 ceo_balcony_reflections.prompt)
+ */
 async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
+  const meta = run.metadata ?? {};
+  const kind = (meta.kind as string | undefined) ?? 'echo';
+
+  if (kind === 'annotations') {
+    return handleG4Annotations(deps, run);
+  }
+  if (kind === 'balcony-prompt') {
+    return handleG4BalconyPrompt(deps, run);
+  }
+
   const lines = await deps.db.query(
     `SELECT id::text, name, description FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)

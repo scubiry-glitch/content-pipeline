@@ -1,8 +1,10 @@
 // Balcony · 个人房间 service
 // 周日反思 + 时间 ROI + 棱镜雷达
+// R3-6: prompt 字段为空时 lazy enqueue g4-balcony-prompt LLM 任务填充
 
 import type { CeoEngineDeps, PrismKind } from '../../types.js';
 import { computeWeeklyRoi, computePrismScores } from './aggregator.js';
+import { enqueueCeoRun } from '../../pipelines/runQueue.js';
 
 const REFLECTION_TEMPLATES: Array<{ prism: PrismKind; question: string }> = [
   { prism: 'direction', question: '你这周做的决定里，哪一个 是在承诺而非选择?' },
@@ -36,9 +38,15 @@ export async function listReflections(
   );
 
   if (r.rows.length === 0) {
-    // 自动种 3 张：从模板池抽前 3 个 (PR12 LLM 接管后改为按周轮换 + LLM 生成 prompt)
+    // 按周从模板池轮换 3 张 (week-of-year 决定 startIdx, 让每周问题不同)
+    const wk = weekOfYear(weekStart);
+    const startIdx = wk % REFLECTION_TEMPLATES.length;
+    const picks: typeof REFLECTION_TEMPLATES = [];
+    for (let i = 0; i < 3; i++) {
+      picks.push(REFLECTION_TEMPLATES[(startIdx + i) % REFLECTION_TEMPLATES.length]);
+    }
     const seeded = [];
-    for (const t of REFLECTION_TEMPLATES.slice(0, 3)) {
+    for (const t of picks) {
       const ins = await deps.db.query(
         `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question)
          VALUES ($1, $2, $3, $4)
@@ -48,9 +56,31 @@ export async function listReflections(
       );
       seeded.push(ins.rows[0]);
     }
+    // 后台异步 enqueue g4-balcony-prompt 填充每条 prompt (不阻塞首次响应)
+    if (deps.llm?.isAvailable()) {
+      for (const row of seeded) {
+        enqueueCeoRun(deps, {
+          axis: 'g4',
+          metadata: {
+            kind: 'balcony-prompt',
+            userId,
+            weekStart,
+            prismId: row.prism_id,
+            currentStep: 'queued',
+          },
+        }).catch(() => {/* 非致命: 失败 → 下次再试 */});
+      }
+    }
     return { items: seeded, weekStart };
   }
   return { items: r.rows, weekStart };
+}
+
+function weekOfYear(weekStart: string): number {
+  const d = new Date(weekStart);
+  const start = new Date(d.getFullYear(), 0, 1);
+  const diffMs = d.getTime() - start.getTime();
+  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
 }
 
 export async function upsertReflection(

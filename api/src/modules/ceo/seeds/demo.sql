@@ -413,6 +413,41 @@ SELECT
   'system'
 WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs WHERE topic_text = '头部项目暂缓的 6 月后果 · Project Halycon');
 
+-- ─────────────────────────────────────────────────────────
+-- Boardroom · 外脑批注 3 例 (LLM 接入前的 fixture, 已配置 LLM 后由 g4-annotations 替补)
+-- ─────────────────────────────────────────────────────────
+
+INSERT INTO ceo_boardroom_annotations (expert_id, expert_name, mode, highlight, body_md, citations)
+SELECT eid, ename, m, h, b, c::jsonb FROM (VALUES
+  (
+    'wei-tan-rubric',
+    'Wei Tan (Rubric 派)',
+    'synthesis',
+    '估值反复 5 次的根因不在项目，而在你们没有书面化的尽调框架',
+    E'## 综合观点\n\n基于 Halycon / Stellar / Beacon 三案例的对照,Stellar 估值反复 5 次有一个共同特征: **每次反复都引入一个新维度**(2 月加财务模型, 3 月加 governance, 4 月加退出锁定...)。\n\n这不是项目问题,是流程问题。\n\n## 我的建议\n\n1. 把 Halycon 决策时使用的 5 维 rubric 书面化, 命名《估值锚定五条》\n2. 下一次类似案例**先填 rubric, 再讨论数字**\n3. 一年内复用 ≥ 10 次, 形成肌肉记忆',
+    '[{"type":"meeting","label":"2026-04-23 IC #14"},{"type":"echo","label":"Halycon 拐点假设"}]'
+  ),
+  (
+    'omar-counterfactual',
+    'Omar K. (反事实派)',
+    'counter',
+    '部署节奏放慢 18 个月,可能不是策略,是判断问题',
+    E'## 反方观点\n\nCEO 把"放慢"框为"等估值回调",但**没有 IF/THEN 触发条件**。这意味着:\n- 如果市场再下行 12 个月,你会继续等吗?\n- 如果 IRR 目标松动到 18%,你的判断会变吗?\n\n## 反方诉求\n\n请在下次 IC 给出: **3 个明确的市场信号**, 触达任一 → 自动恢复正常节奏。\n\n没有触发条件的"等待"和"原地踏步"分不清。',
+    '[{"type":"meeting","label":"2026-04-15 IC #13"}]'
+  ),
+  (
+    'sara-compliance',
+    'Sara M. (合规视角)',
+    'extension',
+    'Crucible 创始人失联 4 周, 不只是项目问题,是合规风险',
+    E'## 延展\n\n创始人连续 4 周失联,以下几个合规风险窗口已打开:\n\n1. **重大事项告知义务** — 港 SFC 规定 PE 投资标的发生重大事项需 5 工作日内告知 LP, 现已超期\n2. **审计签字风险** — Q2 审计会要求 Crucible 创始人签字, 如继续失联需出具 management override\n3. **退出条款触发** — 多数 SHA 含 "founder undisclosed absence > 30 days" 触发条款\n\n## 建议\n\n本周内: 邮件 + 律函发出"重大事项询证函", 无回应即触发 SHA 退出条款的预警通知。',
+    '[{"type":"asset","label":"Crucible SHA v2.1"},{"type":"meeting","label":"2026-04-30 法务月会"}]'
+  )
+) AS a(eid, ename, m, h, b, c)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ceo_boardroom_annotations WHERE expert_id = a.eid AND highlight = a.h
+);
+
 COMMIT;
 
 -- 数据自检
@@ -420,7 +455,7 @@ DO $$
 DECLARE counts text;
 BEGIN
   SELECT format(
-    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s · sparks=%s · sandboxes=%s',
+    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s · sparks=%s · sandboxes=%s · annotations=%s',
     (SELECT COUNT(*) FROM ceo_directors),
     (SELECT COUNT(*) FROM ceo_director_concerns),
     (SELECT COUNT(*) FROM ceo_strategic_lines),
@@ -431,7 +466,8 @@ BEGIN
     (SELECT COUNT(*) FROM ceo_balcony_reflections WHERE user_id = 'system'),
     (SELECT COUNT(*) FROM ceo_time_roi WHERE user_id = 'system'),
     (SELECT COUNT(*) FROM ceo_war_room_sparks),
-    (SELECT COUNT(*) FROM ceo_sandbox_runs)
+    (SELECT COUNT(*) FROM ceo_sandbox_runs),
+    (SELECT COUNT(*) FROM ceo_boardroom_annotations)
   ) INTO counts;
   RAISE NOTICE '%', counts;
 END $$;
