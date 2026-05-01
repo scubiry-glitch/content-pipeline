@@ -30,12 +30,20 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
     await fastify.register(createPanoramaRouter(engine), { prefix: '/panorama' });
     await fastify.register(createBrainRouter(engine), { prefix: '/brain' });
-    // PR12: g3/g4 LLM 任务接入 mn_runs (module='ceo')
-    //   await fastify.register(createWarRoomRouter(engine), { prefix: '/war-room' });
-    //   await fastify.register(createSituationRouter(engine), { prefix: '/situation' });
-    //   await fastify.register(createBalconyRouter(engine), { prefix: '/balcony' });
-    // PR10-PR11:
-    //   await fastify.register(createPanoramaRouter(engine), { prefix: '/panorama' });
-    //   await fastify.register(createBrainRouter(engine), { prefix: '/brain' });
+
+    // PR12 — 5 组加工接生成中心：手动入队接口
+    fastify.post('/runs/enqueue', async (request) => {
+      const body = (request.body ?? {}) as Record<string, any>;
+      const axis = body.axis as 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
+      if (!['g1', 'g2', 'g3', 'g4', 'g5'].includes(axis)) {
+        return { ok: false, error: 'axis must be one of g1..g5' };
+      }
+      return engine.enqueueRun({
+        axis,
+        scopeKind: body.scopeKind,
+        scopeId: body.scopeId,
+        metadata: body.metadata,
+      });
+    });
   };
 }
