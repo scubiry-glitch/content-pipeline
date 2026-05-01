@@ -29,6 +29,14 @@ export interface MeetingAxesGenerateOptions {
   wikiRoot: string;
   /** 每个 deliverable 最多渲染多少行 (避免某个 axis 表行数极大时文件爆炸) */
   limitPerAxis?: number;
+  /**
+   * R3-B · DAG 的 stage 过滤：
+   *   - 'L1'：只跑 meta + tension axes wiki + per-meeting health.md
+   *   - 'L2'：只跑 people / projects / knowledge axes wiki
+   *   - 'all' / undefined：跑全部（默认）
+   * 让 ops 在 L1 完成后单独重跑 L2 wiki（或反之），不必整盘重生成。
+   */
+  stage?: 'L1' | 'L2' | 'all';
 }
 
 export interface MeetingAxesGenerateResult {
@@ -66,6 +74,12 @@ const DELIVERABLE_LABEL: Record<string, string> = {
   'cognitive-biases': '认知偏误',
   counterfactuals: '反事实',
   'evidence-grades': '证据等级',
+  // R3-A · 知识轴扩展 5 子维度（023-knowledge-axis-extension.sql）
+  'model-hitrate':    '心智模型命中率',
+  'consensus-track':  '共识轨迹',
+  'concept-drift':    '概念漂移',
+  'topic-lineage':    '议题谱系',
+  'external-experts': '外部专家注释',
   // meta
   'decision-quality': '决策质量',
   'necessity-audit': '必要性审计',
@@ -120,6 +134,10 @@ export class MeetingAxesGenerator {
     const started = Date.now();
     const wikiRoot = path.resolve(opts.wikiRoot);
     const limit = opts.limitPerAxis ?? DEFAULT_LIMIT;
+    const stage = opts.stage ?? 'all';
+    // R3-B · stage gate：L1 = meta + tension（per-meeting 体征）；L2 = people/projects/knowledge（聚合）
+    const runL2 = stage === 'all' || stage === 'L2';
+    const runL1 = stage === 'all' || stage === 'L1';
     const errors: string[] = [];
     let filesWritten = 0;
     const axes: Record<string, Record<string, number>> = {
@@ -135,7 +153,7 @@ export class MeetingAxesGenerator {
     }
 
     // ── people 轴 ──────────────────────────────────────────────
-    {
+    if (runL2) {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['commitments', () => this.deps.db.query(
           `SELECT c.id, c.text, c.due_at, c.state, c.progress,
@@ -203,7 +221,7 @@ export class MeetingAxesGenerator {
     }
 
     // ── projects 轴 ────────────────────────────────────────────
-    {
+    if (runL2) {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['decisions', () => this.deps.db.query(
           `SELECT d.id, d.title, d.rationale, d.confidence, d.is_current, d.created_at,
@@ -266,7 +284,7 @@ export class MeetingAxesGenerator {
     }
 
     // ── knowledge 轴 ──────────────────────────────────────────
-    {
+    if (runL2) {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['reusable-judgments', () => this.deps.db.query(
           `SELECT j.id, j.text, j.domain, j.generality_score, j.reuse_count,
@@ -317,6 +335,38 @@ export class MeetingAxesGenerator {
             ORDER BY eg.computed_at DESC NULLS LAST LIMIT $1`,
           [limit],
         ), rows => this.renderEvidenceGrades(rows)],
+
+        // R3-A · 知识轴扩展 5 子维度（023-knowledge-axis-extension.sql）
+        // 用 lite renderer：表头 + JSON 行；后续可换成定制 renderer
+        ['model-hitrate', () => this.deps.db.query(
+          `SELECT scope_id, model_name, window_label, total_invocations, correct_count, hit_rate, computed_at
+             FROM mn_model_hitrates ORDER BY hit_rate DESC NULLS LAST LIMIT $1`,
+          [limit],
+        ), rows => this.renderJsonRows(rows, '心智模型命中率', 'mn_model_hitrates')],
+
+        ['consensus-track', () => this.deps.db.query(
+          `SELECT scope_id, topic, meeting_id, consensus_score, dominant_view, created_at
+             FROM mn_consensus_tracks ORDER BY created_at DESC LIMIT $1`,
+          [limit],
+        ), rows => this.renderJsonRows(rows, '共识轨迹', 'mn_consensus_tracks')],
+
+        ['concept-drift', () => this.deps.db.query(
+          `SELECT scope_id, term, drift_severity, first_observed_at, last_observed_at
+             FROM mn_concept_drifts ORDER BY last_observed_at DESC NULLS LAST LIMIT $1`,
+          [limit],
+        ), rows => this.renderJsonRows(rows, '概念漂移', 'mn_concept_drifts')],
+
+        ['topic-lineage', () => this.deps.db.query(
+          `SELECT scope_id, topic, birth_meeting_id, health_state, last_active_at, mention_count
+             FROM mn_topic_lineage ORDER BY last_active_at DESC NULLS LAST LIMIT $1`,
+          [limit],
+        ), rows => this.renderJsonRows(rows, '议题谱系', 'mn_topic_lineage')],
+
+        ['external-experts', () => this.deps.db.query(
+          `SELECT name, domain, cite_count, accuracy_score
+             FROM mn_external_experts ORDER BY cite_count DESC LIMIT $1`,
+          [limit],
+        ), rows => this.renderJsonRows(rows, '外部专家注释', 'mn_external_experts')],
       ];
       for (const [name, query, render] of tasks) {
         try {
@@ -341,8 +391,8 @@ export class MeetingAxesGenerator {
       }
     }
 
-    // ── meta 轴 ───────────────────────────────────────────────
-    {
+    // ── meta 轴（L1：per-meeting 体征） ──────────────────────
+    if (runL1) {
       const tasks: Array<[string, () => Promise<{ rows: any[] }>, (rows: any[]) => string]> = [
         ['decision-quality', () => this.deps.db.query(
           `SELECT dq.meeting_id, dq.overall, dq.clarity, dq.actionable, dq.traceable,
@@ -387,6 +437,38 @@ export class MeetingAxesGenerator {
         filesWritten++;
       } catch (e) {
         errors.push(`meta/_index: ${(e as Error).message}`);
+      }
+
+      // R3-A · 改动一：per-meeting health.md
+      // 把 meta 三表 + tension 按 meeting_id 分桶写到 sources/meeting/per-meeting/{slug}/health.md
+      // 让 d 视图 / 静态 wiki 消费方一站式拿到该会议的体征
+      try {
+        const perMeetingDir = path.join(wikiRoot, 'sources/meeting/per-meeting');
+        await fs.mkdir(perMeetingDir, { recursive: true });
+        const health = await this.deps.db.query(
+          `SELECT a.id::text AS meeting_id, a.title,
+                  dq.overall AS quality_overall, dq.clarity, dq.actionable, dq.traceable, dq.falsifiable, dq.aligned, dq.notes,
+                  nec.verdict, nec.suggested_duration_min, nec.reasons,
+                  ac.samples AS affect_samples, ac.tension_peaks, ac.insight_points,
+                  (SELECT COUNT(*)::int FROM mn_tensions WHERE meeting_id = a.id) AS tension_count,
+                  (SELECT MAX(intensity)::float FROM mn_tensions WHERE meeting_id = a.id) AS tension_peak
+             FROM assets a
+             LEFT JOIN mn_decision_quality   dq  ON dq.meeting_id  = a.id
+             LEFT JOIN mn_meeting_necessity  nec ON nec.meeting_id = a.id
+             LEFT JOIN mn_affect_curve       ac  ON ac.meeting_id  = a.id
+            WHERE dq.meeting_id IS NOT NULL OR nec.meeting_id IS NOT NULL OR ac.meeting_id IS NOT NULL
+            LIMIT $1`,
+          [Math.min(limit, 200)],
+        );
+        for (const row of health.rows) {
+          const slug = this.meetingDirById.get(row.meeting_id) ?? buildMeetingDirSlug(row.meeting_id, row.title);
+          const dir = path.join(perMeetingDir, slug);
+          await fs.mkdir(dir, { recursive: true });
+          await fs.writeFile(path.join(dir, 'health.md'), this.renderPerMeetingHealth(row), 'utf8');
+          filesWritten++;
+        }
+      } catch (e) {
+        errors.push(`per-meeting/health: ${(e as Error).message}`);
       }
     }
 
@@ -452,6 +534,111 @@ export class MeetingAxesGenerator {
       `共 ${count} 条 · 跨所有会议聚合`,
       '',
     ].join('\n');
+  }
+
+  /**
+   * R3-A · 通用 lite renderer：表头 + JSON 行。
+   * 给新增子维度（model_hitrate / consensus_track / concept_drift / topic_lineage / external_experts）兜底用，
+   * 后续可换成定制 renderer 输出更易读的 markdown。
+   */
+  private renderJsonRows(rows: any[], label: string, table: string): string {
+    const lines: string[] = [
+      renderFrontmatter({
+        type: 'source',
+        subtype: `axes/knowledge/${table}`,
+        app: 'meeting-notes',
+        generatedBy: 'meeting-axes-generator',
+        lastEditedAt: new Date().toISOString(),
+      } as WikiFrontmatter),
+      '',
+      `# ${label}`,
+      '',
+      `**source**: \`${table}\` · ${rows.length} 行`,
+      '',
+    ];
+    if (rows.length === 0) {
+      lines.push('_暂无数据 · 跑生成中心 → knowledge axis 触发对应 computer_');
+    } else {
+      lines.push('```json');
+      for (const r of rows) lines.push(JSON.stringify(r));
+      lines.push('```');
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * R3-A · 改动一：单场会议体征聚合页（health.md）
+   * 输出到 sources/meeting/per-meeting/{slug}/health.md
+   * 与 GET /meetings/:id/health 同源，方便 d 视图 + 静态 wiki 消费方对照
+   */
+  private renderPerMeetingHealth(row: any): string {
+    const lines: string[] = [
+      renderFrontmatter({
+        type: 'source',
+        subtype: 'per-meeting/health',
+        app: 'meeting-notes',
+        generatedBy: 'meeting-axes-generator',
+        lastEditedAt: new Date().toISOString(),
+      } as WikiFrontmatter),
+      '',
+      `# 会议体征 · ${row.title || row.meeting_id?.slice(0, 8)}`,
+      '',
+      `> meeting_id: \`${row.meeting_id}\`  ·  来源 GET /meetings/:id/health`,
+      '',
+      '## 决策质量 · Decision Quality',
+      '',
+    ];
+    if (row.quality_overall !== null && row.quality_overall !== undefined) {
+      lines.push(`overall = **${Number(row.quality_overall).toFixed(2)}**`);
+      lines.push('');
+      lines.push('| 维度 | 分数 |');
+      lines.push('| --- | --- |');
+      for (const [k, label] of [['clarity', '清晰度'], ['actionable', '可执行'], ['traceable', '可追溯'], ['falsifiable', '可证伪'], ['aligned', '对齐度']] as const) {
+        if (row[k] !== null && row[k] !== undefined) {
+          lines.push(`| ${label} | ${Number(row[k]).toFixed(2)} |`);
+        }
+      }
+    } else {
+      lines.push('_未计算_');
+    }
+    lines.push('');
+    lines.push('## 必要性评估 · Necessity');
+    lines.push('');
+    if (row.verdict) {
+      const verdictLabel = row.verdict === 'async_ok' ? '本可异步' : row.verdict === 'partial' ? '部分必要' : '确有必要';
+      lines.push(`**${verdictLabel}** (${row.verdict})`);
+      if (row.suggested_duration_min) lines.push(`建议 ${row.suggested_duration_min} 分钟`);
+      if (Array.isArray(row.reasons) && row.reasons.length > 0) {
+        lines.push('');
+        for (const r of row.reasons.slice(0, 5)) {
+          lines.push(`- ${r.t || r.k || JSON.stringify(r)}`);
+        }
+      }
+    } else {
+      lines.push('_未计算_');
+    }
+    lines.push('');
+    lines.push('## 情绪曲线 · Affect Curve');
+    lines.push('');
+    if (Array.isArray(row.affect_samples) && row.affect_samples.length > 0) {
+      lines.push(`${row.affect_samples.length} 个采样点`);
+      lines.push('');
+      lines.push('```json');
+      lines.push(JSON.stringify(row.affect_samples.slice(0, 20)));
+      lines.push('```');
+    } else {
+      lines.push('_未计算_');
+    }
+    lines.push('');
+    lines.push('## 张力 · Tension');
+    lines.push('');
+    const peak = Number(row.tension_peak ?? 0);
+    const cnt = Number(row.tension_count ?? 0);
+    lines.push(cnt > 0
+      ? `${cnt} 处张力 · 峰值 ${peak.toFixed(2)}`
+      : '_未识别张力_');
+    lines.push('');
+    return lines.join('\n');
   }
 
   private renderAxisIndex(axis: string, label: string, deliverables: Record<string, number>): string {

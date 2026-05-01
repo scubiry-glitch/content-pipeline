@@ -2,7 +2,15 @@
 // 直接调 MeetingAxesGenerator + MeetingScopeGenerator 写 axes/ + scopes/
 // 不走 claude-cli run, 用现有 mn_* 数据 (4000+ rows) 跑.
 //
-// 用法: node scripts/run-meeting-generators.mjs [--axes] [--scopes] [--all (default)]
+// 用法:
+//   node scripts/run-meeting-generators.mjs [--axes] [--scopes] [--all (default)]
+//                                           [--stage L1|L2|all (default all)]
+//
+// R3-B · --stage 配合 mn_runs DAG 拆分：
+//   --stage L1  → 只重生成 meta + tension axes wiki + per-meeting health.md
+//   --stage L2  → 只重生成 people / projects / knowledge axes wiki
+//   --stage all → 全部（默认）
+// 让 ops 在 L1 完成后单独刷 L2 wiki，不必整盘重生成。
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +22,17 @@ const repoRoot = resolve(__dirname, '..');
 const argv = process.argv.slice(2);
 const RUN_AXES = argv.includes('--axes') || argv.includes('--all') || argv.length === 0 || (!argv.includes('--scopes') && !argv.includes('--axes'));
 const RUN_SCOPES = argv.includes('--scopes') || argv.includes('--all') || argv.length === 0 || (!argv.includes('--scopes') && !argv.includes('--axes'));
+
+// R3-B · --stage L1|L2|all
+function readStageArg() {
+  const i = argv.indexOf('--stage');
+  if (i < 0) return 'all';
+  const v = (argv[i + 1] || 'all').toLowerCase();
+  if (v === 'l1' || v === 'l1_meeting') return 'L1';
+  if (v === 'l2' || v === 'l2_aggregate') return 'L2';
+  return 'all';
+}
+const STAGE = readStageArg();
 
 // load env
 const envText = readFileSync(resolve(repoRoot, 'api/.env'), 'utf8');
@@ -29,7 +48,7 @@ const wikiRoot = process.env.MN_CLAUDE_WIKI_ROOT
   || resolve(repoRoot, 'data/content-wiki/default');
 
 console.log(`wikiRoot: ${wikiRoot}`);
-console.log(`axes: ${RUN_AXES} · scopes: ${RUN_SCOPES}\n`);
+console.log(`axes: ${RUN_AXES} · scopes: ${RUN_SCOPES} · stage: ${STAGE}\n`);
 
 import pg from 'pg';
 const pool = new pg.Pool({
@@ -48,7 +67,7 @@ async function main() {
     console.log('=== MeetingAxesGenerator ===');
     const { MeetingAxesGenerator } = await import('../api/src/modules/meeting-notes/wiki/meetingAxesGenerator.ts');
     const gen = new MeetingAxesGenerator(deps);
-    const r = await gen.generate({ wikiRoot, limitPerAxis: 200 });
+    const r = await gen.generate({ wikiRoot, limitPerAxis: 200, stage: STAGE });
     console.log(`  files written: ${r.filesWritten}`);
     console.log(`  durationMs: ${r.durationMs}`);
     console.log(`  axes summary:`, JSON.stringify(r.axes, null, 2));
