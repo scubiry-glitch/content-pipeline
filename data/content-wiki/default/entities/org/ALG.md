@@ -9,15 +9,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.071Z"
+lastEditedAt: "2026-05-01T06:09:16.981Z"
 sources:
   - asset_8414c8f0
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.071Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:16.981Z\"}"
 entityType: company
 domains:
   - 酒店旅游
-updatedAt: "2026-04-28T12:35:01.071Z"
+updatedAt: "2026-05-01T06:09:16.981Z"
 ---
 
 # ALG

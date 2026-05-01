@@ -1,0 +1,931 @@
+{
+  "$comment": "Brain · 外脑图书馆样例 — 跨模块任务队列 (mn + ceo, 9 axes) + 4 摘要页深链 + SSE 流 + LLM adapter",
+  "$page": "/ceo/internal/brain/{tasks,content-library,expert-library,assets,hot-topics}",
+  "$prototype": "07-archive/会议纪要 (20260501)/brain-rooms.jsx",
+  "$question": "外脑图书馆里在跑什么 / 沉淀了什么?",
+  "endpoints": {
+    "GET /api/v1/ceo/brain/overview": {
+      "$desc": "Brain 总览 · 跨模块 byModule 计数 + 14 天 LLM 调用累计 + axis 分组明细",
+      "byModule": {
+        "mn": {
+          "queued": 0,
+          "running": 1,
+          "succeeded": 28,
+          "failed": 2,
+          "$axis_breakdown": {
+            "people": {
+              "queued": 0,
+              "running": 1,
+              "succeeded": 8,
+              "failed": 0
+            },
+            "projects": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 7,
+              "failed": 1
+            },
+            "knowledge": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 6,
+              "failed": 1
+            },
+            "longitudinal": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 4,
+              "failed": 0
+            },
+            "meta": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 3,
+              "failed": 0
+            },
+            "all": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 0,
+              "failed": 0
+            }
+          }
+        },
+        "ceo": {
+          "queued": 1,
+          "running": 1,
+          "succeeded": 12,
+          "failed": 1,
+          "$axis_breakdown": {
+            "g1": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 5,
+              "failed": 0,
+              "$desc": "ASR & 实体 — 转写 / diarize / 承诺抽取"
+            },
+            "g2": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 4,
+              "failed": 0,
+              "$desc": "评分 & 信念 — Rubric / 信念提取"
+            },
+            "g3": {
+              "queued": 0,
+              "running": 1,
+              "succeeded": 2,
+              "failed": 1,
+              "$desc": "矛盾 & 专家 — 自认 / 外识 / 互补匹配 / 沙盘",
+              "$sub_kinds": {
+                "g3-rebuttal": {
+                  "succeeded": 1,
+                  "failed": 1,
+                  "$desc": "rebuttal — 外脑反驳生成"
+                },
+                "g3-sandbox": {
+                  "succeeded": 1,
+                  "running": 1,
+                  "$desc": "sandbox — 兵棋推演 (R3-3)"
+                }
+              }
+            },
+            "g4": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 1,
+              "failed": 0,
+              "$desc": "跨会 & 批注 — rehash + 外脑批注资产"
+            },
+            "g5": {
+              "queued": 1,
+              "running": 0,
+              "succeeded": 0,
+              "failed": 0,
+              "$desc": "棱镜聚合 — 六面指标合成"
+            }
+          }
+        }
+      },
+      "recentLlmCalls": 47,
+      "$llm_calls_window": "14 天 SUM(metadata.llmCalls) 来自 mn_runs",
+      "$cost_window": {
+        "tokens_14d": 2842000,
+        "ms_14d": 184500,
+        "usd_estimate_14d": 12.41
+      }
+    },
+    "GET /api/v1/ceo/brain/tasks?module=ceo&limit=10": {
+      "$desc": "TasksRoom · ceo 模块的 g1..g5 任务 (含 g3-sandbox 子类)",
+      "items": [
+        {
+          "id": "bbbbbbbb-0001-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": null,
+          "axis": "g5",
+          "state": "succeeded",
+          "triggered_by": "manual",
+          "preset": "lite",
+          "progress_pct": 100,
+          "started_at": "2026-05-01T03:00:30Z",
+          "finished_at": "2026-05-01T03:00:32Z",
+          "created_at": "2026-05-01T03:00:30Z",
+          "cost_tokens": 4200,
+          "cost_ms": 1840,
+          "error_message": null,
+          "metadata": {
+            "source": "boot-tick",
+            "ceoRunStartedAt": "2026-05-01T03:00:30Z",
+            "ceoResult": {
+              "prismId": "self",
+              "weekStart": "2026-04-27",
+              "scores": {
+                "direction": 0.72,
+                "board": 0.58,
+                "coord": 0.78,
+                "team": 0.78,
+                "ext": 0.6,
+                "self": 0.41
+              }
+            },
+            "llmProvider": "stub"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0002-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-board-13-uuid",
+          "axis": "g4",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-04-30T22:14:11Z",
+          "finished_at": "2026-04-30T22:16:02Z",
+          "created_at": "2026-04-30T22:14:00Z",
+          "cost_tokens": 38400,
+          "cost_ms": 110200,
+          "error_message": null,
+          "metadata": {
+            "currentStep": "g4 · 外脑批注生成",
+            "kind": "annotation",
+            "expertHandle": "Wei Tan",
+            "outputAssetId": "annotation-board-13-wei-001",
+            "llmCalls": 4,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0003-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": "halycon-uuid",
+          "axis": "g3",
+          "state": "running",
+          "triggered_by": "manual",
+          "preset": "deep",
+          "progress_pct": 62,
+          "started_at": "2026-05-01T08:30:00Z",
+          "finished_at": null,
+          "created_at": "2026-05-01T08:29:50Z",
+          "cost_tokens": 18200,
+          "cost_ms": 0,
+          "error_message": null,
+          "metadata": {
+            "currentStep": "g3 · 沙盘推演 · branch evaluation",
+            "kind": "g3-sandbox",
+            "sandboxRunId": "sandbox-q2-ai-infra-40m",
+            "sandboxLink": "/ceo/internal/ceo/war-room/sandbox/sandbox-q2-ai-infra-40m",
+            "llmCalls": 7,
+            "llmProvider": "claude",
+            "branchProgress": {
+              "evaluated": 3,
+              "total": 5
+            }
+          }
+        },
+        {
+          "id": "bbbbbbbb-0004-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": "stellar-uuid",
+          "axis": "g3",
+          "state": "succeeded",
+          "triggered_by": "manual",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-04-29T15:10:00Z",
+          "finished_at": "2026-04-29T15:14:32Z",
+          "created_at": "2026-04-29T15:09:55Z",
+          "cost_tokens": 22400,
+          "cost_ms": 272000,
+          "error_message": null,
+          "metadata": {
+            "currentStep": "g3 · 反驳生成",
+            "kind": "g3-rebuttal",
+            "expertHandle": "Wei Zhao",
+            "rebuttalAssetId": "rebuttal-stellar-wei-007",
+            "llmCalls": 5,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0005-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": "crucible-uuid",
+          "axis": "g3",
+          "state": "failed",
+          "triggered_by": "auto",
+          "preset": "lite",
+          "progress_pct": 35,
+          "started_at": "2026-04-28T11:02:14Z",
+          "finished_at": "2026-04-28T11:03:00Z",
+          "created_at": "2026-04-28T11:02:00Z",
+          "cost_tokens": 1200,
+          "cost_ms": 46300,
+          "error_message": "原文素材不足 — content-library 该 scope 仅 2 条引用, 需 ≥ 5",
+          "metadata": {
+            "kind": "g3-rebuttal",
+            "expertHandle": "First Principles",
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0006-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-ic-34-uuid",
+          "axis": "g2",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-04-30T14:02:00Z",
+          "finished_at": "2026-04-30T14:04:18Z",
+          "created_at": "2026-04-30T14:01:55Z",
+          "cost_tokens": 14700,
+          "cost_ms": 138400,
+          "error_message": null,
+          "metadata": {
+            "currentStep": "g2 · Rubric 评分",
+            "kind": "rubric",
+            "llmCalls": 2,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0007-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-board-13-uuid",
+          "axis": "g1",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-04-30T22:00:01Z",
+          "finished_at": "2026-04-30T22:13:50Z",
+          "created_at": "2026-04-30T22:00:00Z",
+          "cost_tokens": 9800,
+          "cost_ms": 829400,
+          "error_message": null,
+          "metadata": {
+            "currentStep": "g1 · ASR + 承诺抽取",
+            "kind": "asr+commit",
+            "llmCalls": 1,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "bbbbbbbb-0008-0000-0000-000000000001",
+          "module": "ceo",
+          "scope_kind": "project",
+          "scope_id": "halycon-uuid",
+          "axis": "g5",
+          "state": "queued",
+          "triggered_by": "manual",
+          "preset": "lite",
+          "progress_pct": 0,
+          "started_at": null,
+          "finished_at": null,
+          "created_at": "2026-05-01T09:00:00Z",
+          "cost_tokens": 0,
+          "cost_ms": 0,
+          "error_message": null,
+          "metadata": {
+            "queuedReason": "用户在 Halycon Compass 页面点了「重新聚合棱镜指标」",
+            "llmProvider": null
+          }
+        }
+      ]
+    },
+    "GET /api/v1/ceo/brain/tasks?module=mn&limit=10": {
+      "$desc": "TasksRoom · mn 模块的 6 axes — people/projects/knowledge/longitudinal/meta/all",
+      "items": [
+        {
+          "id": "cccccccc-0001-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-ic-34-uuid",
+          "axis": "people",
+          "state": "running",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 47,
+          "started_at": "2026-05-01T03:01:00Z",
+          "finished_at": null,
+          "created_at": "2026-05-01T03:00:50Z",
+          "cost_tokens": 12400,
+          "cost_ms": 0,
+          "metadata": {
+            "currentStep": "people · commitmentComputer",
+            "currentStepKey": "people-commitments",
+            "llmCalls": 3,
+            "inputTokens": 12400,
+            "outputTokens": 1820,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "cccccccc-0002-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-ic-34-uuid",
+          "axis": "projects",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-05-01T02:45:00Z",
+          "finished_at": "2026-05-01T02:46:42Z",
+          "created_at": "2026-05-01T02:44:55Z",
+          "cost_tokens": 18900,
+          "cost_ms": 102400,
+          "metadata": {
+            "currentStep": "projects · projectRadar",
+            "llmCalls": 2,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "cccccccc-0003-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "topic",
+          "scope_id": "topic-pricing-uuid",
+          "axis": "knowledge",
+          "state": "succeeded",
+          "triggered_by": "manual",
+          "preset": "deep",
+          "progress_pct": 100,
+          "started_at": "2026-04-30T19:10:00Z",
+          "finished_at": "2026-04-30T19:18:47Z",
+          "created_at": "2026-04-30T19:09:50Z",
+          "cost_tokens": 42700,
+          "cost_ms": 525300,
+          "metadata": {
+            "currentStep": "knowledge · synthesizer",
+            "llmCalls": 6,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "cccccccc-0004-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "project",
+          "scope_id": "halycon-uuid",
+          "axis": "longitudinal",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 100,
+          "started_at": "2026-04-29T03:00:00Z",
+          "finished_at": "2026-04-29T03:05:14Z",
+          "created_at": "2026-04-29T03:00:00Z",
+          "cost_tokens": 27800,
+          "cost_ms": 314200,
+          "metadata": {
+            "currentStep": "longitudinal · trendComposer",
+            "llmCalls": 4,
+            "llmProvider": "claude"
+          }
+        },
+        {
+          "id": "cccccccc-0005-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-ic-33-uuid",
+          "axis": "meta",
+          "state": "succeeded",
+          "triggered_by": "auto",
+          "preset": "lite",
+          "progress_pct": 100,
+          "started_at": "2026-04-28T09:00:00Z",
+          "finished_at": "2026-04-28T09:01:08Z",
+          "created_at": "2026-04-28T08:59:55Z",
+          "cost_tokens": 5400,
+          "cost_ms": 68100,
+          "metadata": {
+            "currentStep": "meta · qualityGate",
+            "llmCalls": 1,
+            "llmProvider": "kimi"
+          }
+        },
+        {
+          "id": "cccccccc-0006-0000-0000-000000000001",
+          "module": "mn",
+          "scope_kind": "meeting",
+          "scope_id": "meeting-ic-32-uuid",
+          "axis": "knowledge",
+          "state": "failed",
+          "triggered_by": "auto",
+          "preset": "standard",
+          "progress_pct": 22,
+          "started_at": "2026-04-27T22:11:00Z",
+          "finished_at": "2026-04-27T22:11:48Z",
+          "created_at": "2026-04-27T22:10:50Z",
+          "cost_tokens": 1800,
+          "cost_ms": 47900,
+          "error_message": "claudeCli timeout @ 45s — 转写过长",
+          "metadata": {
+            "currentStep": "knowledge · synthesizer",
+            "llmCalls": 1,
+            "llmProvider": "claude"
+          }
+        }
+      ]
+    },
+    "GET /api/v1/ceo/brain/tasks?module=ceo&state=running": {
+      "$desc": "R3-3 · TasksRoom 仅显示 running 状态 + 渲染 g3-sandbox 类型 metadata",
+      "items": [
+        {
+          "id": "bbbbbbbb-0003-0000-0000-000000000001",
+          "module": "ceo",
+          "axis": "g3",
+          "state": "running",
+          "progress_pct": 62,
+          "metadata": {
+            "kind": "g3-sandbox",
+            "sandboxRunId": "sandbox-q2-ai-infra-40m",
+            "$ui_render": "TasksRoom 在 metadata.kind='g3-sandbox' 时渲染特殊徽章 + 「打开沙盘」深链按钮 (跳 sandboxLink)",
+            "branchProgress": {
+              "evaluated": 3,
+              "total": 5
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$sse_endpoint": {
+    "$desc": "R3-2 · 单 run 实时进度流 — text/event-stream",
+    "endpoint": "GET /api/v1/ceo/runs/:runId/stream",
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no"
+    },
+    "example_event_sequence": [
+      {
+        "event": "snapshot",
+        "data": {
+          "id": "bbbbbbbb-0003-...",
+          "state": "running",
+          "progress_pct": 12,
+          "metadata": {
+            "currentStep": "g3 · 沙盘 · 加载 branches"
+          }
+        }
+      },
+      {
+        "event": "progress",
+        "data": {
+          "progress_pct": 24,
+          "currentStep": "g3 · 沙盘 · 评估 branch r0-a"
+        }
+      },
+      {
+        "event": "progress",
+        "data": {
+          "progress_pct": 38,
+          "currentStep": "g3 · 沙盘 · 评估 branch r0-a-1",
+          "llmCalls": 2
+        }
+      },
+      {
+        "event": "progress",
+        "data": {
+          "progress_pct": 62,
+          "currentStep": "g3 · 沙盘 · 评估 branch r0-b",
+          "llmCalls": 4
+        }
+      },
+      {
+        "event": "progress",
+        "data": {
+          "progress_pct": 84,
+          "currentStep": "g3 · 沙盘 · 写入 evaluation",
+          "llmCalls": 7
+        }
+      },
+      {
+        "event": "done",
+        "data": {
+          "state": "succeeded",
+          "progress_pct": 100,
+          "cost_tokens": 22400,
+          "cost_ms": 272000
+        }
+      }
+    ],
+    "$polling_fallback": "若 EventSource 不可用 (旧浏览器 / 代理截流), 前端降级为 8 秒 polling /api/v1/ceo/brain/tasks?ids=<runId>",
+    "$keep_alive": "服务端每 25s 发一条 ': keep-alive\\n\\n' 注释行, 防止代理 60s 超时"
+  },
+  "$llm_adapter": {
+    "$desc": "R3-6 · CEO LLM Adapter — 复用 mn 的 LlmHandle, 多 provider 解析",
+    "source": "api/src/modules/ceo/adapters/llm.ts",
+    "providers": [
+      {
+        "id": "claude",
+        "name": "Claude (Sonnet/Opus)",
+        "transport": "claudeCli (本地 binary)",
+        "fallbackOrder": 1,
+        "isAvailable": "ANTHROPIC 凭证 OR CLAUDE_CLI_PATH 存在"
+      },
+      {
+        "id": "kimi",
+        "name": "Kimi (Moonshot)",
+        "transport": "HTTP API (KIMI_API_KEY)",
+        "fallbackOrder": 2,
+        "isAvailable": "process.env.KIMI_API_KEY 非空"
+      },
+      {
+        "id": "openai",
+        "name": "OpenAI (gpt-4)",
+        "transport": "HTTP API (OPENAI_API_KEY)",
+        "fallbackOrder": 3,
+        "isAvailable": "process.env.OPENAI_API_KEY 非空"
+      }
+    ],
+    "resolution_order": [
+      "1. avail = handle.available() → { kimi, claude, openai } 三 boolean",
+      "2. if avail.claude → handle.generateWithClaude(prompt) — 优先 (本地 cli, 0 网络成本)",
+      "3. else if avail.kimi → handle.generateWithKimi(prompt)",
+      "4. else if avail.openai → handle.generateWithOpenAI(prompt)",
+      "5. else throw '[CeoLLM] no provider available'"
+    ],
+    "$coverage_axis": {
+      "g1": {
+        "real_llm": false,
+        "reason": "ASR + 实体抽取走 mn 内部 step, CEO 不直接调 LLM"
+      },
+      "g2": {
+        "real_llm": true,
+        "providers_used": [
+          "claude"
+        ],
+        "preset_minutes": "standard 2.3 min"
+      },
+      "g3-rebuttal": {
+        "real_llm": true,
+        "providers_used": [
+          "claude"
+        ],
+        "preset_minutes": "standard 4.5 min"
+      },
+      "g3-sandbox": {
+        "real_llm": true,
+        "providers_used": [
+          "claude"
+        ],
+        "preset_minutes": "deep 12.0 min",
+        "$note": "branch evaluation 需多轮调用"
+      },
+      "g4": {
+        "real_llm": true,
+        "providers_used": [
+          "claude"
+        ],
+        "preset_minutes": "standard 1.8 min"
+      },
+      "g5": {
+        "real_llm": false,
+        "reason": "stub — 算 6 房间 aggregator 数学, 不调 LLM (R3-6 之后会接 narrative-gen LLM)"
+      }
+    },
+    "$stub_mode": "环境无任何 provider 时, ceo 模块仍可启动 — runHandlers 走 stub 分支 (return random scores), 标记 metadata.llmProvider='stub'",
+    "$cost_breakdown_14d": {
+      "claude": {
+        "calls": 38,
+        "tokens": 2540000,
+        "ms": 168400
+      },
+      "kimi": {
+        "calls": 6,
+        "tokens": 180000,
+        "ms": 12800
+      },
+      "openai": {
+        "calls": 3,
+        "tokens": 122000,
+        "ms": 3300
+      }
+    }
+  },
+  "tables_consumed": {
+    "mn_runs": {
+      "$desc": "全部 module IN ('mn','ceo') 的 run, 按 created_at DESC",
+      "$schema": "id, module, scope_kind, scope_id, axis, state, triggered_by, preset, progress_pct, cost_tokens, cost_ms, error_message, started_at, finished_at, created_at, metadata",
+      "$indexes": [
+        "(module, state, created_at DESC)",
+        "(scope_kind, scope_id)",
+        "(axis)"
+      ],
+      "module_distribution": {
+        "mn": "复用现有 axis 重算 (people/projects/knowledge/longitudinal/meta/all)",
+        "ceo": "g1..g5 加工步骤, 由 PR12 CeoRunQueue 拉取执行"
+      }
+    },
+    "ceo_assets": "ContentLibrary 摘要页对应 — type=meeting_minutes/research_report/news/podcast/slides",
+    "ceo_experts": "ExpertLibrary 摘要页对应 — 12 位 S 级 + 候选名单, 含 mental_models 数组",
+    "ceo_hot_topics": "HotTopics 摘要页对应 — 30 天滚动窗口热度",
+    "ceo_content_clips": "ContentLibrary 摘要页 — 转写/证据/引用 clips"
+  },
+  "$summary_pages": {
+    "$comment": "4 摘要页 (content-library/expert-library/assets/hot-topics) 不调 backend, 只渲染前端配置卡片, 深链跳现有 /content-library /expert-* /assets /hot-topics 等页。配置见 webapp/src/prototype/ceo/brain/_brainConfigs.ts",
+    "content-library": {
+      "$desc": "结构化记忆 · 事实 / 实体 / 综合 / 共识 / 争议 / 信念演化",
+      "cards": [
+        "事实+实体",
+        "认知综合+共识",
+        "争议+信念演化",
+        "保鲜度+增量"
+      ],
+      "asset_distribution": {
+        "$range": "近 90 天 ceo_assets COUNT BY type",
+        "meeting_minutes": 87,
+        "research_report": 42,
+        "news": 156,
+        "podcast": 18,
+        "slides": 24,
+        "$total": 327,
+        "$delta_vs_prev_90d": "+ 18%"
+      },
+      "deep_links": {
+        "facts": "/content-library/facts",
+        "synthesis": "/content-library/synthesis",
+        "contradictions": "/content-library/contradictions",
+        "freshness": "/content-library/freshness"
+      }
+    },
+    "expert-library": {
+      "$desc": "S 级认知数字孪生 · 心智模型 · 认知盘点",
+      "cards": [
+        "专家全景图",
+        "辩论/对比",
+        "心智模型/知识图谱",
+        "调度+对话"
+      ],
+      "expert_summary": {
+        "$total_experts": 12,
+        "by_domain": {
+          "战略 (7 Powers / Counter-positioning)": 2,
+          "行为经济学 (Kahneman)": 1,
+          "组织行为学 (Schein)": 1,
+          "博弈论 (Nash / Schelling)": 2,
+          "系统思考 (Senge)": 1,
+          "颠覆理论 (Christensen)": 1,
+          "斯多葛 / 哲学": 1,
+          "第一性原理": 1,
+          "合规 / 监管": 1,
+          "金融 / 估值": 1
+        },
+        "s_tier_ratio": "0.67 (8 / 12 为 S 级)",
+        "mental_model_matrix_dimensions": [
+          "时间尺度 (短期 / 中期 / 长期)",
+          "决策类型 (战术 / 战略 / 元决策)",
+          "证据要求 (低 / 中 / 高)",
+          "可逆性 (低 / 中 / 高)"
+        ],
+        "$total_mental_models": 34,
+        "$annotations_30d": 87,
+        "$accept_rate": 0.68
+      },
+      "deep_links": {
+        "panorama": "/expert-panorama",
+        "debate": "/expert-debate",
+        "models": "/mental-models",
+        "schedule": "/expert-scheduling"
+      }
+    },
+    "assets": {
+      "$desc": "研报 / 报告 / 简报快照 — 可对外发布 / 可重复使用 / 可绑定生产任务",
+      "cards": [
+        "研报库",
+        "热门资产",
+        "RSS 订阅"
+      ],
+      "deep_links": {
+        "reports": "/assets/reports",
+        "popular": "/assets/popular",
+        "rss": "/assets/rss"
+      }
+    },
+    "hot-topics": {
+      "$desc": "议题谱系 + 热度雷达",
+      "cards": [
+        "热点列表",
+        "洞察分析"
+      ],
+      "deep_links": {
+        "list": "/hot-topics",
+        "insights": "/hot-topics/insights"
+      }
+    }
+  },
+  "$hot_topics_endpoint": {
+    "$desc": "ContentLibrary 联动 — 热点话题 (近 7 天)",
+    "endpoint": "GET /api/v1/content-library/hot-topics?days=7",
+    "items": [
+      {
+        "name": "Stellar 估值反复",
+        "mention_count": 47,
+        "sentiment_avg": -0.52,
+        "top_assets_3": [
+          "asset:Stellar 备忘录 v7",
+          "asset:估值锚定五条 v0.3",
+          "report:亚洲 PE 季度扫描"
+        ],
+        "suggested_decision": "本周 1v1 + Sequoia/Lightspeed 同案对照, 不要等 Q3 LP 大会"
+      },
+      {
+        "name": "AI 基础设施 $40M 加配",
+        "mention_count": 38,
+        "sentiment_avg": 0.21,
+        "top_assets_3": [
+          "sandbox:Q2 投资决策推演",
+          "report:Halycon 月报 04",
+          "asset:KPI gate 6 项设计"
+        ],
+        "suggested_decision": "采纳 sandbox 推荐路径 r0-b-1 (分批 + KPI gate, confidence 0.85)"
+      },
+      {
+        "name": "SFC 季度报告改革",
+        "mention_count": 29,
+        "sentiment_avg": -0.38,
+        "top_assets_3": [
+          "asset:SFC 意见函草稿 v1",
+          "asset:Tower IC 节奏方案 v2",
+          "report:港 SFC 公告原文"
+        ],
+        "suggested_decision": "Sara 主笔反馈 (5/30 截止), Tower IC 提前到月初"
+      },
+      {
+        "name": "陆景行加班 / 团队节奏",
+        "mention_count": 22,
+        "sentiment_avg": -0.15,
+        "top_assets_3": [
+          "asset:Halycon 补员候选清单",
+          "asset:陆景行 1:1 待办",
+          "report:14 周时间分配折线"
+        ],
+        "suggested_decision": "5/7 1:1 不可推迟 + Halycon 候选 X 第二轮加快"
+      },
+      {
+        "name": "Crucible 退出预案",
+        "mention_count": 19,
+        "sentiment_avg": -0.61,
+        "top_assets_3": [
+          "asset:Crucible 季度更新 草稿",
+          "sandbox:头部项目暂缓 6 月后果",
+          "report:业内自媒体引用"
+        ],
+        "suggested_decision": "5/4 投委会 #35 表决暂缓, 6 月再评; 季度更新留底, 不主动外发"
+      }
+    ]
+  },
+  "$ui_behavior": {
+    "tasks_room_polling": "TasksRoom 每 8 秒重新调 fetchBrainTasks + fetchBrainOverview (R3-2 接 SSE 后, running 任务直连流, polling 降为 30s)",
+    "module_filter": "all / mn / ceo 三 tab, 前端拼 query string 给 /tasks endpoint",
+    "axis_filter": "ceo tab 下出现 g1..g5 二级 chips; mn tab 下出现 people/projects/knowledge/longitudinal/meta chips",
+    "state_color_pill": [
+      "queued (灰)",
+      "running (金)",
+      "succeeded (绿)",
+      "failed (红)",
+      "cancelled (淡灰)"
+    ],
+    "g3_sandbox_badge": "metadata.kind='g3-sandbox' 行右侧渲染「沙盘」徽章 + 「→ 打开」按钮深链至 sandboxLink",
+    "g3_rebuttal_badge": "metadata.kind='g3-rebuttal' 行渲染 expertHandle (e.g. Wei Zhao 头像)",
+    "summary_pages_no_polling": "4 个摘要页是静态卡片, 不调 backend, 只在 useEffect 首次渲染"
+  },
+  "$pack_s": {
+    "id": "samples-s",
+    "generated_at": "2026-05-01T05:57:09.370Z",
+    "query": "业务支持 / 美租 / 养老 / 集团分析",
+    "scopes": [
+      {
+        "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "kind": "project",
+        "slug": "s-vszo4",
+        "name": "美租",
+        "meeting_count": 9
+      },
+      {
+        "id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "kind": "project",
+        "slug": "sh-ai-2026",
+        "name": "业务支持",
+        "meeting_count": 8
+      },
+      {
+        "id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "kind": "project",
+        "slug": "s-fy4rc",
+        "name": "集团分析",
+        "meeting_count": 5
+      },
+      {
+        "id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "kind": "project",
+        "slug": "s-vbvnb",
+        "name": "养老",
+        "meeting_count": 2
+      }
+    ],
+    "line_names": [
+      "美租",
+      "业务支持",
+      "集团分析",
+      "养老",
+      "养老·协同风险",
+      "集团分析·外部节奏"
+    ],
+    "evidence_by_scope": [
+      {
+        "scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "scope_name": "美租",
+        "scope_member_count": 9,
+        "meeting_titles": [
+          "贝壳 × 宁波银行 · 美租信托资金端对接会",
+          "成都美租.txt",
+          "新录音 (1).txt",
+          "房屋装修及租赁方案讨论.txt",
+          "会议纪要-续约沟通.docx",
+          "美租续约 · 三方案技术对齐会",
+          "内部战略碰头 · 项目推进与高管协调路径",
+          "探讨装修贷款与分期付款的定价策略",
+          "探讨装修贷款与分期付款的定价策略"
+        ],
+        "runs_for_scope_meetings": 49
+      },
+      {
+        "scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "scope_name": "业务支持",
+        "scope_member_count": 8,
+        "meeting_titles": [
+          "成都攻略.txt",
+          "成功攻略",
+          "成都美租 · 业务复盘会 (4 月推进汇报)",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "上海汇聚 AI 项目 · 两轮 · 管理模式 A→B 点规划",
+          "上海惠居 · 2026 AI 元年 · B 点研讨 · 第二轮",
+          "上海汇聚 AI 项目 · 启动 · 管理模式迭代"
+        ],
+        "runs_for_scope_meetings": 47
+      },
+      {
+        "scope_id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "scope_name": "集团分析",
+        "scope_member_count": 5,
+        "meeting_titles": [
+          "北上链家业务经营分析与预算规划",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "北上链家业务经营分析与预算规划",
+          "北上链家业务经营分析与预算规划-ClaudeCli"
+        ],
+        "runs_for_scope_meetings": 13
+      },
+      {
+        "scope_id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "scope_name": "养老",
+        "scope_member_count": 2,
+        "meeting_titles": [
+          "新录音 (1).txt",
+          "养老"
+        ],
+        "runs_for_scope_meetings": 21
+      }
+    ],
+    "stats": {
+      "total_meeting_titles": 24,
+      "total_mn_runs_meeting_scope": 130
+    },
+    "methodology": "底层仍是 docs/ceo-app-samples 的 UI fixture；在 $pack_s.evidence_by_scope 与各文件内少量「首条」字段写入 **SQL 拉取的真实会议标题与 mn_runs 计数**。要全量替换叙事需另做 LLM 或手写 PRD。",
+    "note": null
+  }
+}

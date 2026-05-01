@@ -6,7 +6,7 @@ slug: E10
 taxonomy_code: E10
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-01T03:33:28.741Z"
+lastEditedAt: "2026-05-01T06:09:17.110Z"
 factCount: 12
 entityCount: 1
 domain: 先进制造

@@ -6,11 +6,11 @@ slug: MetLife
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.076Z"
+lastEditedAt: "2026-05-01T06:09:16.986Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.076Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:16.986Z\"}"
 entityType: company
-updatedAt: "2026-04-28T12:35:01.076Z"
+updatedAt: "2026-05-01T06:09:16.986Z"
 ---
 
 # MetLife

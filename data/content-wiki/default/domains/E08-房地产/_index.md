@@ -6,20 +6,21 @@ slug: E08
 taxonomy_code: E08
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.742Z"
-factCount: 1847
+lastEditedAt: "2026-05-01T06:09:17.109Z"
+factCount: 1862
 entityCount: 30
 domain: 房地产
 ---
 
 # E08 · 房地产
 
-本父域聚合了 2 个子域、1847 条事实、30 个高频实体。
+本父域聚合了 3 个子域、1862 条事实、30 个高频实体。
 
 ## 子域
 
-- [[E08.RENT-租赁与长租|租赁与长租]] (1823 条事实)
+- [[E08.RENT-租赁与长租|租赁与长租]] (1836 条事实)
 - [[E08.INDUS-产业_物流地产|产业/物流地产]] (24 条事实)
+- [[E08.POLICY-住房政策|住房政策]] (2 条事实)
 
 ## 跨子域高频实体
 

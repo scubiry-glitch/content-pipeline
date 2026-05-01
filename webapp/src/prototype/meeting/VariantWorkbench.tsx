@@ -721,6 +721,23 @@ export function VariantWorkbench() {
     meetingNotesApi.getMeetingTensions(id)
       .then((data) => {
         if (data?.items?.length) {
+          // 把 between_ids（mn_people UUID）→ canonical_name 注入 apiParticipants，
+          // 让 P(uuid) 能解析出真实姓名而非显示原始 UUID。
+          const uuidEntries: Array<{ id: string; name: string }> = [];
+          data.items.forEach((t) => {
+            (t.between_ids ?? []).forEach((uid, i) => {
+              const name = t.between_names?.[i];
+              if (uid && name) uuidEntries.push({ id: uid, name });
+            });
+          });
+          if (uuidEntries.length) {
+            setApiParticipants((prev) => {
+              const existing = new Set(prev.map((p) => p.id));
+              const newEntries = uuidEntries.filter((e) => !existing.has(e.id));
+              return newEntries.length ? [...prev, ...newEntries] : prev;
+            });
+          }
+
           setA((prev) => ({ ...prev, tension: data.items.map((t) => ({
             id: t.tension_key,
             between: t.between_ids,

@@ -1,19 +1,24 @@
 ---
 type: index
-updatedAt: "2026-04-28T12:35:01.746Z"
+updatedAt: "2026-05-01T06:09:17.112Z"
 ---
 
 # 内容库 Wiki 索引
 
 - **实体**: 500 个
-- **事实**: 4409 条
+- **事实**: 4453 条
 - **来源**: 0 个
-- **领域**: 19 个
+- **领域**: 22 个
 
 ## 领域 (concepts/)
 
+- [[concepts/E02.CONSUM|E02.CONSUM]]
 - [[concepts/E08.RENT|E08.RENT]]
 - [[concepts/E99.OTHER|E99.OTHER]]
+- [[concepts/E10.AUTO|E10.AUTO]]
+- [[concepts/E08.POLICY|E08.POLICY]]
+- [[concepts/E02.ASSET|E02.ASSET]]
+- [[concepts/E02.REG|E02.REG]]
 - [[concepts/E08.INDUS|E08.INDUS]]
 - [[concepts/E02.BANK|E02.BANK]]
 - [[concepts/E05.HOSPITALITY|E05.HOSPITALITY]]
@@ -25,8 +30,6 @@ updatedAt: "2026-04-28T12:35:01.746Z"
 - [[concepts/E01|E01]]
 - [[concepts/E07.APP|E07.APP]]
 - [[concepts/E11.GOV|E11.GOV]]
-- [[concepts/E02.ASSET|E02.ASSET]]
-- [[concepts/E02.REG|E02.REG]]
 - [[concepts/E99.USER|E99.USER]]
 - [[concepts/E08|E08]]
 - [[concepts/E07|E07]]

@@ -127,8 +127,8 @@ export interface GenerationParams {
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
-  /** 流式生成进度回调，每收到 N 个 token 时触发；tokensSoFar 为已生成 token 数 */
-  onProgress?: (tokensSoFar: number) => void;
+  /** 流式生成进度回调，每收到 N 个 token 时触发；snippet 为最新输出的尾部片段（≤150字符） */
+  onProgress?: (tokensSoFar: number, snippet: string) => void;
 }
 
 export interface GenerationResult {

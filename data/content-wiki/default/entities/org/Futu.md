@@ -12,11 +12,11 @@ slug: Futu
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.627Z"
+lastEditedAt: "2026-05-01T06:09:17.090Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.627Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.090Z\"}"
 entityType: company
-updatedAt: "2026-04-28T12:35:01.627Z"
+updatedAt: "2026-05-01T06:09:17.090Z"
 ---
 
 # Futu

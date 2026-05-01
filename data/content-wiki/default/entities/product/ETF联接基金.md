@@ -9,15 +9,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.341Z"
+lastEditedAt: "2026-05-01T06:09:17.047Z"
 sources:
   - asset_c98c7c05
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.341Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.047Z\"}"
 entityType: product
 domains:
   - 金融/资产管理
-updatedAt: "2026-04-28T12:35:01.341Z"
+updatedAt: "2026-05-01T06:09:17.047Z"
 ---
 
 # ETF联接基金

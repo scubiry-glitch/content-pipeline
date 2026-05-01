@@ -11,15 +11,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.700Z"
+lastEditedAt: "2026-05-01T06:09:17.101Z"
 sources:
   - asset_44741921
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.700Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.101Z\"}"
 entityType: metric
 domains:
   - 金融科技
-updatedAt: "2026-04-28T12:35:01.700Z"
+updatedAt: "2026-05-01T06:09:17.101Z"
 ---
 
 # 第三方Fintech玩家总收入

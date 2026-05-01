@@ -11,15 +11,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.186Z"
+lastEditedAt: "2026-05-01T06:09:17.018Z"
 sources:
   - asset_08e3d65c
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.186Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.018Z\"}"
 entityType: event
 domains:
   - 房地产资产管理/AI应用
-updatedAt: "2026-04-28T12:35:01.186Z"
+updatedAt: "2026-05-01T06:09:17.018Z"
 ---
 
 # 上海汇聚AI项目

@@ -8,11 +8,11 @@ slug: Pipeline
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.069Z"
+lastEditedAt: "2026-05-01T06:09:16.980Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.069Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:16.980Z\"}"
 entityType: metric
-updatedAt: "2026-04-28T12:35:01.069Z"
+updatedAt: "2026-05-01T06:09:16.980Z"
 ---
 
 # Pipeline

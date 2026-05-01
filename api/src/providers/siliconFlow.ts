@@ -16,7 +16,7 @@ async function generateViaStream(
   baseUrl: string,
   apiKey: string,
   body: Record<string, any>,
-  onProgress?: (tokensSoFar: number) => void,
+  onProgress?: (tokensSoFar: number, snippet: string) => void,
 ): Promise<{ content: string; model: string; promptTokens: number; completionTokens: number }> {
   const ctrl = new AbortController();
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,7 +89,8 @@ async function generateViaStream(
             tokensSoFar = Math.round(content.length / 2);
             if (onProgress && tokensSoFar - lastProgressAt >= PROGRESS_INTERVAL) {
               lastProgressAt = tokensSoFar;
-              onProgress(tokensSoFar);
+              const snippet = content.slice(-150);
+              onProgress(tokensSoFar, snippet);
             }
           }
         } catch { /* 跳过格式异常的 chunk */ }

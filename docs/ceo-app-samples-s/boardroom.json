@@ -1,0 +1,969 @@
+{
+  "$comment": "Boardroom · 董事会房间样例 — 5 董事 / 5 关切 / 预读包 / 12 承诺 (mn+ceo) / 5 批注 / 3 反方演练 / 一页纸+完整套版+v1/v2/v3 历史",
+  "$page": "/ceo/internal/ceo/boardroom",
+  "$prototype": "07-archive/会议纪要 (20260501)/boardroom.html",
+  "$blocks_status": {
+    "① concerns radar": "实装",
+    "② pre-brief draft": "实装",
+    "③ external annotations": "实装 — fixture 5 条，PR12 g4 LLM (synthesis/contrast) 生成后从 mn_runs.metadata WHERE module='ceo' 拉取",
+    "④ promise tracking": "实装 — 双源: mn_commitments (会议承诺) + ceo_board_promises (董事会专项承诺)",
+    "⑤ rebuttal rehearsal": "实装 — 优先 ceo_rebuttal_rehearsals 真数据 (空时回退 fixture); 顶部含 EnqueueRunButton (axis=g3) 触发 LLM 生成",
+    "⑥ versions": "实装 — VersionsTabs.tsx 拉 ceo_briefs 真数据，一页纸 / 完整套版 Tab 切换 + v1/v2/v3 历史下拉"
+  },
+  "$scope_picker_behavior": {
+    "$comment": "R2-1 多 scope 选择器 — 顶部 ScopePicker.tsx 支持多选，URL 序列化为 ?scopes=uuid1,uuid2",
+    "url_example_single": "/ceo/internal/ceo/boardroom?scopes=halycon-uuid-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "url_example_intersect": "/ceo/internal/ceo/boardroom?scopes=halycon-uuid-aaaa-aaaa-aaaa-aaaaaaaaaaaa,lp-uuid-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "ui": "Pill 列表显示已选 scope，X 移除；下拉框'+ 添加 scope'。激活 ≥2 时显示 '交集' 提示徽章。",
+    "backend_query": "scope_id = ANY($1::uuid[]) AND meeting_id IN (SELECT meeting_id FROM mn_scope_memberships GROUP BY meeting_id HAVING COUNT(DISTINCT scope_id) = $2)",
+    "intersect_semantics": "交集模式 = '同时属于全部 scope 的资源'（默认），并集模式见高级开关 ?scopes_op=union"
+  },
+  "endpoints": {
+    "GET /api/v1/ceo/boardroom/dashboard?scopes=halycon-uuid,lp-uuid": {
+      "$comment": "多 scope 交集示例 — 仅返回同时属于 美租 与 LP 两个 scope 的董事/关切/承诺/简报",
+      "question": "下次董事会我要带什么?",
+      "metric": {
+        "label": "前瞻占比",
+        "value": "58%",
+        "delta": "本季"
+      },
+      "concernsByStatus": {
+        "pending": 9,
+        "answered": 5,
+        "superseded": 1
+      },
+      "topConcerns": [
+        {
+          "name": "林雾",
+          "personId": "33333333-1f01-4001-8000-000000000003",
+          "personRole": "LP 代表",
+          "meta": "3 次 · LP 代表",
+          "text": "待回应",
+          "warn": true
+        },
+        {
+          "name": "Wei Zhao",
+          "personId": "33333333-1f01-4001-8000-000000000004",
+          "personRole": "独立董事",
+          "meta": "2 次 · 独立董事",
+          "text": "待回应",
+          "warn": false
+        },
+        {
+          "name": "Omar K.",
+          "personId": "33333333-1f01-4001-8000-000000000005",
+          "personRole": "独立董事",
+          "meta": "2 次 · 独立董事",
+          "text": "待回应",
+          "warn": false
+        }
+      ],
+      "forwardPct": 0.58,
+      "promiseStats": {
+        "total": 12,
+        "done": 3,
+        "in_progress": 5,
+        "late": 4
+      },
+      "appliedScopes": [
+        {
+          "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+          "name": "美租",
+          "kind": "project"
+        },
+        {
+          "id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+          "name": "业务支持",
+          "kind": "project"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/directors": {
+      "items": [
+        {
+          "id": "33333333-1f01-4001-8000-000000000003",
+          "name": "林雾",
+          "role": "LP 代表",
+          "weight": 1.5,
+          "scope_id": null,
+          "personId": "33333333-1f01-4001-8000-000000000003",
+          "expert_binding": {
+            "expert_id": "lp-coach-v1",
+            "name": "LP 关系教练"
+          }
+        },
+        {
+          "id": "33333333-1f01-4001-8000-000000000004",
+          "name": "Wei Zhao",
+          "role": "独立董事",
+          "weight": 1.2,
+          "scope_id": null,
+          "personId": "33333333-1f01-4001-8000-000000000004",
+          "expert_binding": {
+            "expert_id": "wei-rubric",
+            "name": "估值锚定 rubric"
+          }
+        },
+        {
+          "id": "33333333-1f01-4001-8000-000000000005",
+          "name": "Omar K.",
+          "role": "独立董事",
+          "weight": 1.2,
+          "scope_id": null,
+          "personId": "33333333-1f01-4001-8000-000000000005",
+          "expert_binding": {
+            "expert_id": "omar-cycle",
+            "name": "周期判断教练"
+          }
+        },
+        {
+          "id": "33333333-1f01-4001-8000-000000000006",
+          "name": "陆景行",
+          "role": "创始合伙人",
+          "weight": 1,
+          "scope_id": null,
+          "personId": "33333333-1f01-4001-8000-000000000006",
+          "expert_binding": null
+        },
+        {
+          "id": "33333333-1f01-4001-8000-000000000007",
+          "name": "Sara M.",
+          "role": "法务顾问",
+          "weight": 0.8,
+          "scope_id": null,
+          "personId": "33333333-1f01-4001-8000-000000000007",
+          "expert_binding": {
+            "expert_id": "sara-compliance",
+            "name": "合规备案教练"
+          }
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/concerns?status=pending": {
+      "items": [
+        {
+          "id": "44444444-0000-4000-8000-000000000001",
+          "director_id": "33333333-1f01-4001-8000-000000000003",
+          "director_name": "林雾",
+          "director_role": "LP 代表",
+          "personId": "33333333-1f01-4001-8000-000000000003",
+          "personRole": "LP 代表",
+          "topic": "退出路径再不明确,Q3 LP 大会怎么开?",
+          "status": "pending",
+          "raised_count": 3,
+          "raised_at": "2026-04-28T14:00:00Z",
+          "source_meeting_ids": [
+            "mn-meeting-2026-03-12",
+            "mn-meeting-2026-04-09",
+            "mn-meeting-2026-04-28"
+          ]
+        },
+        {
+          "id": "44444444-0000-4000-8000-000000000002",
+          "director_id": "33333333-1f01-4001-8000-000000000004",
+          "director_name": "Wei Zhao",
+          "director_role": "独立董事",
+          "personId": "33333333-1f01-4001-8000-000000000004",
+          "personRole": "独立董事",
+          "topic": "集团分析 估值反复 5 次,你们的尽调标准到底是什么?",
+          "status": "pending",
+          "raised_count": 2,
+          "raised_at": "2026-04-26T10:00:00Z",
+          "source_meeting_ids": [
+            "mn-meeting-2026-03-22",
+            "mn-meeting-2026-04-26"
+          ]
+        },
+        {
+          "id": "44444444-0000-4000-8000-000000000003",
+          "director_id": "33333333-1f01-4001-8000-000000000005",
+          "director_name": "Omar K.",
+          "director_role": "独立董事",
+          "personId": "33333333-1f01-4001-8000-000000000005",
+          "personRole": "独立董事",
+          "topic": "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?",
+          "status": "pending",
+          "raised_count": 2,
+          "raised_at": "2026-04-19T15:00:00Z"
+        },
+        {
+          "id": "44444444-0000-4000-8000-000000000004",
+          "director_id": "33333333-1f01-4001-8000-000000000006",
+          "director_name": "陆景行",
+          "personId": "33333333-1f01-4001-8000-000000000006",
+          "personRole": "创始合伙人",
+          "topic": "美租 团队该补人了 — 下个新人储备得抓紧。",
+          "status": "pending",
+          "raised_count": 1,
+          "raised_at": "2026-04-15T11:00:00Z"
+        },
+        {
+          "id": "44444444-0000-4000-8000-000000000005",
+          "director_id": "33333333-1f01-4001-8000-000000000007",
+          "director_name": "Sara M.",
+          "personId": "33333333-1f01-4001-8000-000000000007",
+          "personRole": "法务顾问",
+          "topic": "养老·协同风险 的合规备案需在月内完成。",
+          "status": "pending",
+          "raised_count": 1,
+          "raised_at": "2026-04-12T16:00:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/briefs": {
+      "$comment": "返回当前 board_session 全部历史版本（v1/v2/v3）— UI 上方下拉切换",
+      "items": [
+        {
+          "id": "55555555-0000-4000-8000-000000000003",
+          "scope_id": null,
+          "board_session": "2026 Q2 · BOARD #14",
+          "version": 3,
+          "is_current": true,
+          "toc": [
+            {
+              "num": "01",
+              "title": "基金部署节奏 vs 部署计划",
+              "page_range": "p.2-4",
+              "future_tagged": false
+            },
+            {
+              "num": "02",
+              "title": "美租 进展 + 团队补员",
+              "page_range": "p.5-7",
+              "future_tagged": false
+            },
+            {
+              "num": "03",
+              "title": "集团分析 尽调结论 / 估值分歧",
+              "page_range": "p.8-10",
+              "future_tagged": false
+            },
+            {
+              "num": "04",
+              "title": "养老·协同风险 处置建议",
+              "page_range": "p.11-12",
+              "future_tagged": true
+            },
+            {
+              "num": "05",
+              "title": "退出路径回应(林雾)",
+              "page_range": "p.13-15",
+              "future_tagged": true
+            },
+            {
+              "num": "06",
+              "title": "风险与合规附录",
+              "page_range": "p.16",
+              "future_tagged": false
+            }
+          ],
+          "page_count": 16,
+          "status": "draft",
+          "generated_run_id": "mn-run-uuid-g4-2026-04-29-2000",
+          "generated_at": "2026-04-29T20:00:00Z",
+          "read_at": null,
+          "updated_at": "2026-04-29T20:00:00Z",
+          "onepager_text": "本季要董事会盖章的事:三件 — 节奏、退出、集团分析"
+        },
+        {
+          "id": "55555555-0000-4000-8000-000000000002",
+          "board_session": "2026 Q2 · BOARD #14",
+          "version": 2,
+          "is_current": false,
+          "page_count": 14,
+          "status": "superseded",
+          "generated_at": "2026-04-22T19:00:00Z",
+          "read_at": "2026-04-23T08:30:00Z",
+          "diff_from_v1": "+ 集团分析 尽调一章, - 删除 4 月运营杂项"
+        },
+        {
+          "id": "55555555-0000-4000-8000-000000000001",
+          "board_session": "2026 Q2 · BOARD #14",
+          "version": 1,
+          "is_current": false,
+          "page_count": 11,
+          "status": "superseded",
+          "generated_at": "2026-04-15T14:00:00Z",
+          "read_at": "2026-04-16T07:50:00Z",
+          "diff_from_v0": "v1 = 初稿，仅含 美租 + 业务支持 章节"
+        }
+      ],
+      "$ui_versions_dropdown": "页面顶部'版本: v3 (current)'下拉，切换后整个 ②/③/⑤ 区会重新拉对应 brief_id"
+    },
+    "GET /api/v1/ceo/boardroom/promises?briefId=...": {
+      "$comment": "B · R2-1 双源承诺 — mn (会议派生) + ceo (董事会专项)。UI 用 source 标签区分 (mn = 蓝标, ceo = 金标)。",
+      "items": [
+        {
+          "id": "mn-cmt-uuid-001",
+          "source": "mn",
+          "what": "建立 LP 反馈闭环机制",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "owner_personRole": "CEO",
+          "beneficiary_name": "林雾",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000003",
+          "status": "late",
+          "due_at": "2026-03-28T00:00:00Z",
+          "days_overdue": 34,
+          "source_meeting_id": "mn-meeting-2026-02-12",
+          "source_meeting_title": "BOARD #13 · LP 关系专题"
+        },
+        {
+          "id": "mn-cmt-uuid-002",
+          "source": "mn",
+          "what": "美租 团队补员 3 人",
+          "owner_name": "陆景行",
+          "owner_personId": "33333333-1f01-4001-8000-000000000006",
+          "owner_personRole": "创始合伙人",
+          "beneficiary_name": "董事会",
+          "beneficiary_personId": null,
+          "status": "in_progress",
+          "due_at": "2026-06-30T00:00:00Z",
+          "progress_text": "1/3 已入职 (后端工程 Apr-25)",
+          "source_meeting_id": "mn-meeting-2026-02-12"
+        },
+        {
+          "id": "mn-cmt-uuid-003",
+          "source": "mn",
+          "what": "《估值锚定五条》起草",
+          "owner_name": "Wei Zhao",
+          "owner_personId": "33333333-1f01-4001-8000-000000000004",
+          "owner_personRole": "独立董事",
+          "beneficiary_name": "陈汀",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000001",
+          "status": "in_progress",
+          "due_at": "2026-04-23T00:00:00Z",
+          "days_overdue": 8,
+          "progress_text": "草案 v0.4，待 Wei 签字",
+          "source_meeting_id": "mn-meeting-2026-03-22"
+        },
+        {
+          "id": "mn-cmt-uuid-004",
+          "source": "mn",
+          "what": "养老·协同风险 合规备案 80%",
+          "owner_name": "Sara M.",
+          "owner_personId": "33333333-1f01-4001-8000-000000000007",
+          "owner_personRole": "法务顾问",
+          "beneficiary_name": "陈汀",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000001",
+          "status": "in_progress",
+          "due_at": "2026-04-30T00:00:00Z",
+          "progress_text": "材料 80%，待证监问询",
+          "source_meeting_id": "mn-meeting-2026-04-12"
+        },
+        {
+          "id": "mn-cmt-uuid-005",
+          "source": "mn",
+          "what": "Q1 季度报告交付",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "beneficiary_name": "林雾",
+          "status": "done",
+          "due_at": "2026-04-22T00:00:00Z",
+          "completed_at": "2026-04-21T17:00:00Z"
+        },
+        {
+          "id": "mn-cmt-uuid-006",
+          "source": "mn",
+          "what": "业务支持 退出策略评审",
+          "owner_name": "Omar K.",
+          "owner_personId": "33333333-1f01-4001-8000-000000000005",
+          "beneficiary_name": "董事会",
+          "status": "done",
+          "due_at": "2026-04-15T00:00:00Z",
+          "completed_at": "2026-04-15T15:30:00Z"
+        },
+        {
+          "id": "ceo-bp-uuid-001",
+          "source": "ceo",
+          "what": "退出路径年度路线图（写入 Q3 LP 大会预读）",
+          "owner_name": "陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000001",
+          "beneficiary_name": "董事会",
+          "status": "in_progress",
+          "due_at": "2026-06-15T00:00:00Z",
+          "$source_table": "ceo_board_promises",
+          "linked_concern_id": "44444444-0000-4000-8000-000000000001"
+        },
+        {
+          "id": "ceo-bp-uuid-002",
+          "source": "ceo",
+          "what": "《估值锚定五条》入运营手册",
+          "owner_name": "Wei + 陈汀",
+          "owner_personId": "33333333-1f01-4001-8000-000000000004",
+          "beneficiary_name": "董事会",
+          "status": "late",
+          "due_at": "2026-04-15T00:00:00Z",
+          "days_overdue": 16,
+          "$source_table": "ceo_board_promises",
+          "linked_concern_id": "44444444-0000-4000-8000-000000000002"
+        },
+        {
+          "id": "ceo-bp-uuid-003",
+          "source": "ceo",
+          "what": "每月报告增加 3 个有效退出窗口预测",
+          "owner_name": "陈汀",
+          "beneficiary_name": "Omar K.",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000005",
+          "status": "in_progress",
+          "due_at": "2026-05-31T00:00:00Z",
+          "$source_table": "ceo_board_promises"
+        },
+        {
+          "id": "ceo-bp-uuid-004",
+          "source": "ceo",
+          "what": "Sara → 林雾 月度合规简报",
+          "owner_name": "Sara M.",
+          "beneficiary_name": "林雾",
+          "beneficiary_personId": "33333333-1f01-4001-8000-000000000003",
+          "status": "in_progress",
+          "due_at": "2026-05-15T00:00:00Z",
+          "$source_table": "ceo_board_promises"
+        },
+        {
+          "id": "ceo-bp-uuid-005",
+          "source": "ceo",
+          "what": "养老·协同风险 暂停决议正式纪要存档",
+          "owner_name": "Sara M.",
+          "beneficiary_name": "董事会",
+          "status": "late",
+          "due_at": "2026-04-25T00:00:00Z",
+          "days_overdue": 6,
+          "$source_table": "ceo_board_promises"
+        },
+        {
+          "id": "ceo-bp-uuid-006",
+          "source": "ceo",
+          "what": "BOARD #13 决议汇总归档（v1 已完成）",
+          "owner_name": "陈汀",
+          "beneficiary_name": "董事会",
+          "status": "done",
+          "due_at": "2026-03-15T00:00:00Z",
+          "completed_at": "2026-03-12T18:00:00Z",
+          "$source_table": "ceo_board_promises"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/annotations?briefId=55555555-0000-4000-8000-000000000003": {
+      "$comment": "③ AnnotationsList — 5 条外脑批注，从 mn_runs.metadata.synthesis WHERE module='ceo' AND axis='g4' 拉取；mode 区分 synthesis(综合) 与 contrast(对比反方)",
+      "$source_query": "SELECT id, metadata FROM mn_runs WHERE module='ceo' AND axis='g4' AND status='done' AND brief_id=$1 ORDER BY created_at DESC",
+      "items": [
+        {
+          "id": "ann-uuid-001",
+          "expert_id": "wei-rubric",
+          "expertName": "Wei Zhao · 估值锚定 rubric",
+          "mode": "contrast",
+          "tag": "04-23 · rubric 7.2",
+          "highlight": "估值不应反复;反复 3 次以上 = 尽调流程出问题,而不是项目本身。",
+          "body": "**对 集团分析 备忘录的批注**\n\n你们这次反复了 5 次。把这次拆开看:\n\n1. 第一次反复 — 信息不对称（投资团队 vs CFO）\n2. 第二、三次反复 — 锚没定下来（PE 还是 EV/EBITDA?）\n3. 第四、五次 — 心理博弈（不愿意拒绝创始人）\n\n**建议:** 在尽调启动 day 0 就书面化估值锚（参考我 04-19 留的 rubric），如果一旦反复 ≥3 次自动触发 review。",
+          "citations": [
+            {
+              "type": "meeting",
+              "id": "mn-meeting-2026-04-23",
+              "title": "集团分析 估值复盘"
+            },
+            {
+              "type": "asset",
+              "id": "asset-stellar-memo-v3",
+              "title": "集团分析 备忘录 v3"
+            }
+          ],
+          "created_at": "2026-04-23T16:00:00Z",
+          "generated_run_id": "mn-run-uuid-g4-001"
+        },
+        {
+          "id": "ann-uuid-002",
+          "expert_id": "omar-cycle",
+          "expertName": "Omar K. · 周期判断教练",
+          "mode": "contrast",
+          "tag": "04-19 · rubric 6.8",
+          "highlight": "放慢部署节奏不是错,但要明示这是策略选择,不是市场逼迫。",
+          "body": "**对部署节奏报告的批注**\n\n你们说部署慢了 18 个月。两种讲法:\n\n- A. 'IRR 25%+ 的 hurdle 不可妥协，估值未充分回调，所以放慢' — **策略**\n- B. '市场太烂没好项目' — **被动**\n\nLP 听到 B 会跑路，听到 A 会留下。**给一个 IF/THEN trigger** 让 LP 知道你什么时候会恢复正常节奏（例如 PE/Sales 中位数跌穿 X）。",
+          "citations": [
+            {
+              "type": "meeting",
+              "id": "mn-meeting-2026-04-19",
+              "title": "Q2 部署计划评审"
+            }
+          ],
+          "created_at": "2026-04-19T14:30:00Z"
+        },
+        {
+          "id": "ann-uuid-003",
+          "expert_id": "sara-compliance",
+          "expertName": "Sara M. · 合规备案教练",
+          "mode": "synthesis",
+          "tag": "04-12 · rubric 8.5",
+          "highlight": "3 周失联法则若已生效,合规备案须同步更新 — 别等到月底。",
+          "body": "**对 养老·协同风险 处置的批注**\n\n你们 03-15 援引了 '3 周失联法则' 但备案动作落后:\n\n| 步骤 | 应在 | 实际 |\n|---|---|---|\n| 通知监事 | 失联 D+7 | D+22 |\n| 备案存档 | 失联 D+14 | 未做 |\n| LP 披露 | 失联 D+21 | 未做 |\n\n**风险:** 一旦创始人回来抗辩，你们的处置缺乏程序合法性。建议本周补齐备案，月底前披露。",
+          "citations": [
+            {
+              "type": "meeting",
+              "id": "mn-meeting-2026-04-12",
+              "title": "养老·协同风险 处置讨论"
+            },
+            {
+              "type": "asset",
+              "id": "asset-crucible-3w-rule",
+              "title": "3 周失联法则 v2"
+            }
+          ],
+          "created_at": "2026-04-12T11:00:00Z"
+        },
+        {
+          "id": "ann-uuid-004",
+          "expert_id": "lp-coach-v1",
+          "expertName": "林雾 · LP 关系教练",
+          "mode": "synthesis",
+          "tag": "04-28 · rubric 7.8",
+          "highlight": "退出窗口预测必须可证伪 — 否则 LP 觉得你在画饼。",
+          "body": "**对预读包草稿 v3 第 5 章的批注**\n\n你写的 '3 个有效退出窗口预测' 太软。每个预测必须包含:\n\n- 标的（必须命名，不能写 portfolio company A）\n- 触发条件（量化指标 + 阈值）\n- 时间窗（季度精度）\n- 反方意见（一行）\n\n参考我去年留的 LP 通讯模板（asset-lp-template-v4）。",
+          "citations": [
+            {
+              "type": "meeting",
+              "id": "mn-meeting-2026-04-28",
+              "title": "LP 关切应对会"
+            },
+            {
+              "type": "asset",
+              "id": "asset-lp-template-v4",
+              "title": "LP 通讯模板 v4"
+            }
+          ],
+          "created_at": "2026-04-28T15:00:00Z"
+        },
+        {
+          "id": "ann-uuid-005",
+          "expert_id": "external-tony",
+          "expertName": "Tony Ge · 外部周期顾问",
+          "mode": "contrast",
+          "tag": "04-26 · rubric 6.2",
+          "highlight": "你们对 'AI 基础设施' 的加配过于跟随热度，要把决议挂在数据上。",
+          "body": "**对 BOARD #14 第 1 章的批注**\n\nQ2 AI 基础设施加配决议看起来 '又是一个跟热度' 的动作。**反方观点:** 训推算力价格 6 个月内可能再降 40%，加配窗口不必现在。\n\n**建议挂在数据上:** 把决议表达为'**若**算力指数（NVD-A100/H100 现货）在 60 天内不下跌 ≥15%，**则**加配' — 给 LP 看到你不是冲动。",
+          "citations": [
+            {
+              "type": "external",
+              "url": "internal://expert-library/tony-ge/2026-04-26"
+            }
+          ],
+          "created_at": "2026-04-26T20:00:00Z"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/boardroom/rebuttals": {
+      "$comment": "⑤ RebuttalRehearsal — strength_score 由 g3 LLM 评分，rubric 5 维 + IF/THEN trigger 加 0.05 bonus",
+      "items": [
+        {
+          "id": "66666666-0000-4000-8000-000000000001",
+          "brief_id": "55555555-0000-4000-8000-000000000003",
+          "attacker": "林雾(LP代表)",
+          "attack_text": "退出路径都讲不清楚,凭什么相信你们的部署节奏?",
+          "defense_text": "承认这是过去 3 季的盲点。给出具体补救:Q3 起每月报告增加'3 个有效退出窗口预测',并由 Omar 独立验证。",
+          "strength_score": 0.62,
+          "$score_breakdown": {
+            "rubric_dims_covered": "3/5 (承认/补救/验证人，缺少 IF-THEN + 时间窗精度)",
+            "if_then_bonus": false,
+            "rationale": "0.62 = 3/5 × 0.9 + 0 trigger bonus + 0.08 humility 加分。LLM 建议补'若 6 月 LP 大会前未交付，则启动退出咨询委员会'。"
+          },
+          "generated_run_id": "mn-run-uuid-g3-001",
+          "created_at": "2026-04-29T22:00:00Z"
+        },
+        {
+          "id": "66666666-0000-4000-8000-000000000002",
+          "attacker": "Wei Zhao(独立董事)",
+          "attack_text": "集团分析 估值反复 5 次 — 这不是项目问题,是你们的尽调流程问题。",
+          "defense_text": "同意。已起草《估值锚定五条》(沿用 Wei 的 rubric),下次会议前书面化、签字、归档。承诺一年内复用 ≥10 次。复用计数纳入运营 KPI；若年内复用 <10 次自动触发流程复盘。",
+          "strength_score": 0.78,
+          "$score_breakdown": {
+            "rubric_dims_covered": "5/5 (承认/补救/方法论/时间窗/触发条件)",
+            "if_then_bonus": true,
+            "rationale": "0.78 = 5/5 × 0.9 + 0.05 IF-THEN trigger bonus + 0.03 量化承诺加分（≥10 次、年内）。这是三条中最强的一条。"
+          },
+          "generated_run_id": "mn-run-uuid-g3-002",
+          "created_at": "2026-04-29T22:00:00Z"
+        },
+        {
+          "id": "66666666-0000-4000-8000-000000000003",
+          "attacker": "Omar K.(独立董事)",
+          "attack_text": "部署节奏放慢 18 个月 — 是策略,还是判断失准?",
+          "defense_text": "策略。明示前提:估值未充分回调,而 IRR 目标 25%+ 不可妥协。给出 IF/THEN 触发条件:若市场指标跌穿 X,则恢复正常节奏。",
+          "strength_score": 0.54,
+          "$score_breakdown": {
+            "rubric_dims_covered": "2.5/5 (前提/触发，但缺少 X 的具体指标 + 量化承诺 + 反方处理)",
+            "if_then_bonus": true,
+            "rationale": "0.54 = 2.5/5 × 0.9 + 0.05 IF-THEN bonus + 0.04 prem 明示加分。LLM 警示: 'X' 必须替换成具体指标（如 PE/Sales 中位数 < 8x）否则 Omar 会追问。"
+          },
+          "generated_run_id": "mn-run-uuid-g3-003",
+          "created_at": "2026-04-29T22:00:00Z"
+        }
+      ]
+    }
+  },
+  "$ui_create_expert": {
+    "$comment": "E · R2-4 CreateExpertModal — '外脑批注' 区右上 + 新建专家 按钮，弹模态表单",
+    "trigger": "boardroom ③ 批注卡片右上角 '+ 新建专家' 按钮",
+    "post_endpoint": "POST /api/v1/expert-library/experts",
+    "form_fields": {
+      "expert_id": {
+        "type": "string",
+        "required": true,
+        "placeholder": "例: lp-coach-v2",
+        "validation": "kebab-case + 唯一"
+      },
+      "name": {
+        "type": "string",
+        "required": true,
+        "placeholder": "例: LP 关系教练 v2"
+      },
+      "domain": {
+        "type": "string[]",
+        "required": true,
+        "options": [
+          "LP 关系",
+          "估值",
+          "尽调",
+          "退出策略",
+          "合规",
+          "周期判断",
+          "团队管理"
+        ]
+      },
+      "persona": {
+        "style": {
+          "type": "string",
+          "options": [
+            "简洁",
+            "诘问",
+            "对比",
+            "故事化",
+            "数据驱动"
+          ],
+          "default": "简洁"
+        },
+        "tone": {
+          "type": "string",
+          "options": [
+            "友好",
+            "中性",
+            "尖锐"
+          ],
+          "default": "中性"
+        }
+      },
+      "method": {
+        "frameworks": {
+          "type": "string[]",
+          "placeholder": "如: rubric_5d, IF-THEN, premortem"
+        }
+      }
+    },
+    "example_request_body": {
+      "expert_id": "lp-coach-v2",
+      "name": "LP 关系教练 v2",
+      "domain": [
+        "LP 关系",
+        "退出策略"
+      ],
+      "persona": {
+        "style": "对比",
+        "tone": "尖锐"
+      },
+      "method": {
+        "frameworks": [
+          "rubric_5d",
+          "IF-THEN",
+          "premortem"
+        ]
+      }
+    },
+    "after_create": "新建成功后立即出现在董事的 expert_binding 下拉中可选；同时 PersonDrawer 中 '绑定外脑' 按钮可见。"
+  },
+  "$person_agent_flow": {
+    "$comment": "D · R2-3 PersonChip → PersonDrawer → expert-library 调用链 (端到端样例)",
+    "step_1_open_drawer": {
+      "trigger": "boardroom 顶部董事卡片名字（PersonChip）点击",
+      "ui": "右侧 PersonDrawer 滑出，展示 person 基本信息 + 当前绑定的 expert",
+      "api_called": "GET /api/v1/ceo/people/33333333-1f01-4001-8000-000000000003/expert"
+    },
+    "step_2_bind_or_change_expert": {
+      "trigger": "Drawer 内 '绑定 / 更换外脑' 按钮",
+      "ui": "下拉选择已有 expert OR 跳到 CreateExpertModal",
+      "api_called": "POST /api/v1/ceo/people/33333333-1f01-4001-8000-000000000003/bind-expert",
+      "request_body_example": {
+        "expertId": "lp-coach-v2",
+        "overrides": {
+          "tone": "尖锐"
+        },
+        "taskType": "annotation",
+        "createdBy": "system"
+      },
+      "response_example": {
+        "person_id": "33333333-1f01-4001-8000-000000000003",
+        "expert_id": "lp-coach-v2",
+        "task_type": "annotation",
+        "overrides": {
+          "tone": "尖锐"
+        },
+        "bound_at": "2026-04-30T10:00:00Z"
+      }
+    },
+    "step_3_invoke": {
+      "trigger": "Drawer 内 '问外脑一个问题' 输入框 + 提交",
+      "ui": "Drawer 下半部出现 thinking → response 卡片",
+      "api_called": "POST /api/v1/ceo/people/33333333-1f01-4001-8000-000000000003/invoke",
+      "request_body_example": {
+        "question": "Q3 LP 大会议程框架，前 3 个最该回答的问题是？",
+        "context": {
+          "meeting_id": "mn-meeting-2026-04-28",
+          "concern_id": "44444444-0000-4000-8000-000000000001"
+        },
+        "depth": "concise"
+      },
+      "response_example": {
+        "ok": true,
+        "answer_markdown": "**前 3 个必答:**\n1. 退出路径年度路线图（含 3 个量化窗口）\n2. 部署节奏放慢的 IF-THEN trigger\n3. LP 反馈闭环机制何时上线\n\n**反方提示:** 如果你不带 #1，林雾会带着退出咨询委员会的提案进会。",
+        "model": "claude-opus-4-7",
+        "expert_id_used": "lp-coach-v2",
+        "run_id": "mn-run-uuid-people-invoke-001"
+      }
+    },
+    "ui_behavior_notes": {
+      "person_chip_styling": "boardroom/tower/balcony 任意 owner_name/beneficiary_name 都用 <PersonChip personId={…} role={…} />，hover 显示绑定 expert 缩略图",
+      "drawer_close": "ESC 或点击空白；URL 不变",
+      "binding_revoke": "点击绑定下拉的 '解绑' = DELETE /api/v1/ceo/people/:personId/expert（404 即未绑定）"
+    }
+  },
+  "tables": {
+    "ceo_directors": [
+      {
+        "name": "林雾",
+        "role": "LP 代表",
+        "weight": 1.5
+      },
+      {
+        "name": "Wei Zhao",
+        "role": "独立董事",
+        "weight": 1.2
+      },
+      {
+        "name": "Omar K.",
+        "role": "独立董事",
+        "weight": 1.2
+      },
+      {
+        "name": "陆景行",
+        "role": "创始合伙人",
+        "weight": 1
+      },
+      {
+        "name": "Sara M.",
+        "role": "法务顾问",
+        "weight": 0.8
+      }
+    ],
+    "ceo_director_concerns": [
+      {
+        "director_name": "林雾",
+        "topic": "退出路径再不明确,Q3 LP 大会怎么开?",
+        "status": "pending",
+        "raised_count": 3
+      },
+      {
+        "director_name": "Wei Zhao",
+        "topic": "集团分析 估值反复 5 次,你们的尽调标准到底是什么?",
+        "status": "pending",
+        "raised_count": 2
+      },
+      {
+        "director_name": "Omar K.",
+        "topic": "基金部署节奏比预期慢 18 个月 — 是市场变了还是判断变了?",
+        "status": "pending",
+        "raised_count": 2
+      },
+      {
+        "director_name": "陆景行",
+        "topic": "下个新人储备得抓紧 — 美租 团队该补人了。",
+        "status": "pending",
+        "raised_count": 1
+      },
+      {
+        "director_name": "Sara M.",
+        "topic": "养老·协同风险 的合规备案需在月内完成。",
+        "status": "pending",
+        "raised_count": 1
+      }
+    ],
+    "ceo_briefs": [
+      {
+        "board_session": "2026 Q2 · BOARD #14",
+        "version": 3,
+        "page_count": 16,
+        "status": "draft",
+        "future_chapters": [
+          "养老·协同风险 处置建议",
+          "退出路径回应(林雾)"
+        ],
+        "future_chapter_pages": 5,
+        "total_pages_via_toc": 16,
+        "forward_pct": 0.31
+      }
+    ],
+    "ceo_board_promises": [
+      {
+        "what": "退出路径年度路线图（写入 Q3 LP 大会预读）",
+        "owner_name": "陈汀",
+        "beneficiary_name": "董事会",
+        "status": "in_progress",
+        "due_at": "2026-06-15"
+      },
+      {
+        "what": "《估值锚定五条》入运营手册",
+        "owner_name": "Wei + 陈汀",
+        "beneficiary_name": "董事会",
+        "status": "late",
+        "due_at": "2026-04-15"
+      },
+      {
+        "what": "每月报告增加 3 个有效退出窗口预测",
+        "owner_name": "陈汀",
+        "beneficiary_name": "Omar K.",
+        "status": "in_progress",
+        "due_at": "2026-05-31"
+      },
+      {
+        "what": "Sara → 林雾 月度合规简报",
+        "owner_name": "Sara M.",
+        "beneficiary_name": "林雾",
+        "status": "in_progress",
+        "due_at": "2026-05-15"
+      },
+      {
+        "what": "养老·协同风险 暂停决议正式纪要存档",
+        "owner_name": "Sara M.",
+        "beneficiary_name": "董事会",
+        "status": "late",
+        "due_at": "2026-04-25"
+      },
+      {
+        "what": "BOARD #13 决议汇总归档",
+        "owner_name": "陈汀",
+        "beneficiary_name": "董事会",
+        "status": "done",
+        "due_at": "2026-03-15"
+      }
+    ]
+  },
+  "$aggregator": {
+    "forward_pct": "toc 中 future_tagged 章节字数 / 总字数 (用 page_range 估算)",
+    "calc": "养老·协同风险 处置 (p.11-12 → 2 页) + 退出路径回应 (p.13-15 → 3 页) = 5 页 future / 16 总页 = 31%",
+    "note": "demo 数据中显示 58% 是 prototype 给定的故事值，与上面 31% 不一致 — 真实生产以聚合算子为准",
+    "promise_double_source": "items = (SELECT *,'mn' AS source FROM mn_commitments WHERE meeting_id IN linked_meetings) UNION ALL (SELECT *,'ceo' AS source FROM ceo_board_promises WHERE board_session=:current)"
+  },
+  "$pack_s": {
+    "id": "samples-s",
+    "generated_at": "2026-05-01T05:57:09.370Z",
+    "query": "业务支持 / 美租 / 养老 / 集团分析",
+    "scopes": [
+      {
+        "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "kind": "project",
+        "slug": "s-vszo4",
+        "name": "美租",
+        "meeting_count": 9
+      },
+      {
+        "id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "kind": "project",
+        "slug": "sh-ai-2026",
+        "name": "业务支持",
+        "meeting_count": 8
+      },
+      {
+        "id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "kind": "project",
+        "slug": "s-fy4rc",
+        "name": "集团分析",
+        "meeting_count": 5
+      },
+      {
+        "id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "kind": "project",
+        "slug": "s-vbvnb",
+        "name": "养老",
+        "meeting_count": 2
+      }
+    ],
+    "line_names": [
+      "美租",
+      "业务支持",
+      "集团分析",
+      "养老",
+      "养老·协同风险",
+      "集团分析·外部节奏"
+    ],
+    "evidence_by_scope": [
+      {
+        "scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "scope_name": "美租",
+        "scope_member_count": 9,
+        "meeting_titles": [
+          "贝壳 × 宁波银行 · 美租信托资金端对接会",
+          "成都美租.txt",
+          "新录音 (1).txt",
+          "房屋装修及租赁方案讨论.txt",
+          "会议纪要-续约沟通.docx",
+          "美租续约 · 三方案技术对齐会",
+          "内部战略碰头 · 项目推进与高管协调路径",
+          "探讨装修贷款与分期付款的定价策略",
+          "探讨装修贷款与分期付款的定价策略"
+        ],
+        "runs_for_scope_meetings": 49
+      },
+      {
+        "scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "scope_name": "业务支持",
+        "scope_member_count": 8,
+        "meeting_titles": [
+          "成都攻略.txt",
+          "成功攻略",
+          "成都美租 · 业务复盘会 (4 月推进汇报)",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "上海汇聚 AI 项目 · 两轮 · 管理模式 A→B 点规划",
+          "上海惠居 · 2026 AI 元年 · B 点研讨 · 第二轮",
+          "上海汇聚 AI 项目 · 启动 · 管理模式迭代"
+        ],
+        "runs_for_scope_meetings": 47
+      },
+      {
+        "scope_id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "scope_name": "集团分析",
+        "scope_member_count": 5,
+        "meeting_titles": [
+          "北上链家业务经营分析与预算规划",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "北上链家业务经营分析与预算规划",
+          "北上链家业务经营分析与预算规划-ClaudeCli"
+        ],
+        "runs_for_scope_meetings": 13
+      },
+      {
+        "scope_id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "scope_name": "养老",
+        "scope_member_count": 2,
+        "meeting_titles": [
+          "新录音 (1).txt",
+          "养老"
+        ],
+        "runs_for_scope_meetings": 21
+      }
+    ],
+    "stats": {
+      "total_meeting_titles": 24,
+      "total_mn_runs_meeting_scope": 130
+    },
+    "methodology": "底层仍是 docs/ceo-app-samples 的 UI fixture；在 $pack_s.evidence_by_scope 与各文件内少量「首条」字段写入 **SQL 拉取的真实会议标题与 mn_runs 计数**。要全量替换叙事需另做 LLM 或手写 PRD。",
+    "note": null
+  }
+}

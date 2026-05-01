@@ -8,11 +8,11 @@ slug: operating profit
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.679Z"
+lastEditedAt: "2026-05-01T06:09:17.099Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.679Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.099Z\"}"
 entityType: metric
-updatedAt: "2026-04-28T12:35:01.679Z"
+updatedAt: "2026-05-01T06:09:17.099Z"
 ---
 
 # operating profit

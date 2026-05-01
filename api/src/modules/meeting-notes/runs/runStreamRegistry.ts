@@ -9,6 +9,8 @@ export interface ProgressPayload {
   tokensSoFar: number;
   ratio: number;
   message: string;
+  /** 最新输出的尾部片段（≤150字符），用于前端实时预览 */
+  snippet: string;
 }
 
 export interface TerminalPayload {

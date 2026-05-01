@@ -1763,6 +1763,12 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT t.id, t.tension_key, t.between_ids, t.topic, t.intensity, t.summary,
+                -- 把 between_ids（mn_people.id UUID）解析成真实姓名数组，顺序与 between_ids 一致
+                ARRAY(
+                  SELECT p.canonical_name
+                    FROM unnest(t.between_ids) AS bid
+                    LEFT JOIN mn_people p ON p.id::text = bid
+                ) AS between_names,
                 COALESCE(
                   json_agg(
                     json_build_object('who', m.person_id::text, 'text', m.quote)

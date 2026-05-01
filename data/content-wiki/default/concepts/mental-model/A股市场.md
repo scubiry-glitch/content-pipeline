@@ -12,15 +12,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.667Z"
+lastEditedAt: "2026-05-01T06:09:17.098Z"
 sources:
   - asset_c98c7c05
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-04-28T12:35:01.667Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.098Z\"}"
 entityType: concept
 domains:
   - 金融/资产管理
-updatedAt: "2026-04-28T12:35:01.667Z"
+updatedAt: "2026-05-01T06:09:17.098Z"
 ---
 
 # A股市场

@@ -1476,6 +1476,7 @@ function FlowProcessing({
   // SSE 实时 token 进度
   const [sseTokens, setSseTokens] = useState<number | null>(null);
   const [sseMessage, setSseMessage] = useState<string | null>(null);
+  const [sseSnippet, setSseSnippet] = useState<string | null>(null);
   // Phase 15.6 · getRun 扩 tokens/cost/currentStep
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
@@ -1639,11 +1640,12 @@ function FlowProcessing({
       onProgress: (data) => {
         setSseTokens(data.tokensSoFar);
         setSseMessage(data.message);
+        setSseSnippet(data.snippet ?? null);
       },
       onTerminal: () => {
-        // terminal 事件到达后清掉 SSE 显示，让轮询接管最终态
         setSseTokens(null);
         setSseMessage(null);
+        setSseSnippet(null);
       },
     });
     return stop;
@@ -2074,6 +2076,24 @@ function FlowProcessing({
                     transition: 'width 0.4s ease',
                   }} />
                 </div>
+              )}
+              {sseSnippet && realState !== 'failed' && realState !== 'cancelled' && (
+                <pre style={{
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  background: 'var(--surface-2, #f5f5f5)',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  color: 'var(--ink-3)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  maxHeight: 80,
+                  overflow: 'hidden',
+                  lineHeight: 1.5,
+                }}>
+                  {sseSnippet}
+                </pre>
               )}
             </div>
             <button onClick={onBack} style={btnGhost}>← 返回</button>

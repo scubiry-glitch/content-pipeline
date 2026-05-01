@@ -493,7 +493,7 @@ export const meetingNotesApi = {
 
   // Phase 15.15 · C.1 · Tension classification
   getMeetingTensions: (id: string) =>
-    jget<{ items: Array<{ id: string; tension_key: string; between_ids: string[]; topic: string; intensity: number; summary: string; moments: Array<{ who: string; text: string }> }> }>(`/meetings/${id}/tensions`),
+    jget<{ items: Array<{ id: string; tension_key: string; between_ids: string[]; between_names?: string[]; topic: string; intensity: number; summary: string; moments: Array<{ who: string; text: string }> }> }>(`/meetings/${id}/tensions`),
 
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
@@ -537,6 +537,7 @@ export interface StreamProgressEvent {
   tokensSoFar: number;
   ratio: number;
   message: string;
+  snippet: string;
 }
 export interface StreamTerminalEvent {
   state: 'succeeded' | 'failed' | 'cancelled';

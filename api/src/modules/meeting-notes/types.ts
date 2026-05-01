@@ -20,8 +20,8 @@ export interface LLMOptions {
   maxTokens?: number;
   model?: string;
   responseFormat?: 'text' | 'json';
-  /** 流式生成进度回调，每收到 N 个 token 时触发 */
-  onProgress?: (tokensSoFar: number) => void;
+  /** 流式生成进度回调，每收到 N 个 token 时触发；snippet 为最新输出的尾部片段（≤150字符） */
+  onProgress?: (tokensSoFar: number, snippet: string) => void;
 }
 
 export interface EmbeddingAdapter {

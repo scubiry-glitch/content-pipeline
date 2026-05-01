@@ -6,7 +6,7 @@ slug: E05
 taxonomy_code: E05
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-04-28T12:35:01.742Z"
+lastEditedAt: "2026-05-01T06:09:17.110Z"
 factCount: 90
 entityCount: 30
 domain: 消费零售

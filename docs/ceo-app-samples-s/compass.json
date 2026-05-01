@@ -1,0 +1,929 @@
+{
+  "$comment": "Compass · 方向房间样例 — 7 块 (① 星盘 ② 时间饼 ③ 漂移雷达 ④ Atlas 入口 ⑤ 战略回声 Sankey ⑥ 一页纸 ⑦ 档案) 完整 fixture",
+  "$page": "/ceo/internal/ceo/compass",
+  "$sub_page": "/ceo/internal/ceo/compass/atlas",
+  "$prototype": "07-archive/会议纪要 (20260501)/compass.html + project-atlas.html",
+  "$blocks_status": {
+    "① astrolabe": "实装 (Astrolabe.tsx) — SVG 北极星 + 6 战略线轨道布局",
+    "② time pie": "实装 (TimePie.tsx) — 三段饼图 main/branch/firefighting",
+    "③ drift radar": "实装 (DriftRadar.tsx) — 漂移项目 bullet 列表",
+    "④ project atlas": "实装 — 入口卡跳 /ceo/internal/ceo/compass/atlas",
+    "⑤ strategic echo": "R2-3 重做 — Strategic养老Sankey.tsx 真 3 列 SVG Sankey + EnqueueRunButton (axis=g4)",
+    "⑥ one-pager": "实装 (OnePagerPaper.tsx) — 拉 ceo_briefs 最新 + markdown 渲染",
+    "⑦ archives": "实装 (ArchivesTabs.tsx) — Tab1 主线档案 / Tab2 漂移记录"
+  },
+  "endpoints": {
+    "GET /api/v1/ceo/compass/dashboard": {
+      "question": "我把时间花在战略主线上了吗?",
+      "metric": {
+        "label": "战略对齐度",
+        "value": "0.72",
+        "delta": "本周"
+      },
+      "lines": {
+        "main": 2,
+        "branch": 2,
+        "drift": 2
+      },
+      "attention": {
+        "main": 20.14,
+        "branch": 11.4,
+        "firefighting": 6.46,
+        "total": 38
+      },
+      "driftAlerts": [
+        {
+          "name": "养老·协同风险",
+          "delta": "28%",
+          "text": "「美租」绑定会议标题样例：贝壳 × 宁波银行 · 美租信托资金端对接会；成都美租.txt；新录音 (1).txt；房屋装修及租赁方案讨论.txt；会议纪要-续约沟通.docx…等9条；members=9；mn_runs(meeting)=49。",
+          "severity": "danger"
+        },
+        {
+          "name": "集团分析·外部节奏",
+          "delta": "22%",
+          "text": "偏离主线 — 业内传言'动向不明'",
+          "severity": "danger"
+        }
+      ],
+      "alignmentScore": 0.72
+    },
+    "GET /api/v1/ceo/compass/astrolabe": {
+      "$comment": "① 战略星盘 — 北极星居中 + 6 战略线作为轨道恒星; cx/cy 由 kind 决定轨道半径",
+      "polaris": {
+        "label": "北极星",
+        "alignment": 0.72,
+        "cx": 300,
+        "cy": 200,
+        "r": 32
+      },
+      "stars": [
+        {
+          "id": "lin-halycon",
+          "name": "美租",
+          "kind": "main",
+          "alignment_score": 0.82,
+          "cx": 364,
+          "cy": 186,
+          "r": 22,
+          "orbit": "中环",
+          "fate_summary": "✅ 主线在轨 — Q1 ARR +47%",
+          "scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842"
+        },
+        {
+          "id": "lin-beacon",
+          "name": "业务支持",
+          "kind": "main",
+          "alignment_score": 0.76,
+          "cx": 236,
+          "cy": 186,
+          "r": 22,
+          "orbit": "中环",
+          "fate_summary": "✅ 主线在轨 — 5 月签字",
+          "scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e"
+        },
+        {
+          "id": "lin-stellar",
+          "name": "集团分析",
+          "kind": "branch",
+          "alignment_score": 0.62,
+          "cx": 138,
+          "cy": 308,
+          "r": 18,
+          "orbit": "中外环",
+          "fate_summary": "⚠ 估值反复 5 次",
+          "scope_id": "c41c181f-a463-4c16-a896-69bb70bd0e3d"
+        },
+        {
+          "id": "lin-echo",
+          "name": "养老",
+          "kind": "branch",
+          "alignment_score": 0.58,
+          "cx": 462,
+          "cy": 308,
+          "r": 18,
+          "orbit": "中外环",
+          "fate_summary": "⚠ 等待估值回调",
+          "scope_id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2"
+        },
+        {
+          "id": "lin-crucible",
+          "name": "养老·协同风险",
+          "kind": "drift",
+          "alignment_score": 0.28,
+          "cx": 462,
+          "cy": 134,
+          "r": 14,
+          "orbit": "外环",
+          "fate_summary": "🔴 漂移 — 创始人失联 4 周",
+          "scope_id": null
+        },
+        {
+          "id": "lin-pyre",
+          "name": "集团分析·外部节奏",
+          "kind": "drift",
+          "alignment_score": 0.22,
+          "cx": 138,
+          "cy": 134,
+          "r": 14,
+          "orbit": "外环",
+          "fate_summary": "🔴 漂移 — 部署节奏未恢复",
+          "scope_id": null
+        }
+      ],
+      "$layout_logic": {
+        "polaris": "中心 (300, 200)",
+        "main_orbit_radius": 90,
+        "branch_orbit_radius": 165,
+        "drift_orbit_radius": 230,
+        "angle_distribution": "同 kind 星均分 90° 扇区, 极角 = (i / count) × π × 0.5"
+      }
+    },
+    "GET /api/v1/ceo/compass/time-pie": {
+      "$comment": "② 时间饼 — 三段, 总 38h",
+      "weekStart": "2026-04-27",
+      "totalHours": 38,
+      "segments": [
+        {
+          "kind": "main",
+          "label": "战略主线",
+          "hours": 20.14,
+          "pct": 0.53,
+          "color": "#7BA7C4",
+          "tooltip": "美租 (12.5h) · 业务支持 (7.6h)"
+        },
+        {
+          "kind": "branch",
+          "label": "支线",
+          "hours": 11.4,
+          "pct": 0.3,
+          "color": "#C8A15C",
+          "tooltip": "集团分析 (6.5h) · 养老 (4.9h)"
+        },
+        {
+          "kind": "firefighting",
+          "label": "救火",
+          "hours": 6.46,
+          "pct": 0.17,
+          "color": "#D85A5A",
+          "tooltip": "养老·协同风险 (4.2h) · 集团分析·外部节奏 (2.3h)"
+        }
+      ],
+      "verdict": "53% 主线 (目标 50–60%) · 17% 救火 (上周 9% → 警告突破 20%)",
+      "trend": {
+        "mainPct_lastWeek": 0.49,
+        "firefightPct_lastWeek": 0.09
+      }
+    },
+    "GET /api/v1/ceo/compass/drift-radar": {
+      "$comment": "③ 漂移雷达 — 列出注意力被瓜分的项目",
+      "items": [
+        {
+          "name": "养老·协同风险",
+          "drift_pct": 0.28,
+          "weeks_off_ic": 5,
+          "text": "「美租」绑定会议标题样例：贝壳 × 宁波银行 · 美租信托资金端对接会；成都美租.txt；新录音 (1).txt；房屋装修及租赁方案讨论.txt；会议纪要-续约沟通.docx…等9条；members=9；mn_runs(meeting)=49。",
+          "severity": "danger",
+          "trend": "up",
+          "delta": "+0.04"
+        },
+        {
+          "name": "集团分析·外部节奏",
+          "drift_pct": 0.22,
+          "weeks_off_ic": 4,
+          "text": "Q2 部署节奏未恢复, 等待市场指标",
+          "severity": "danger",
+          "trend": "up",
+          "delta": "+0.02"
+        }
+      ],
+      "attention_eaten": {
+        "$comment": "本周注意力被瓜分项目列表 — 救火 6.46h 中的归因",
+        "Crucible": 4.2,
+        "Pyre": 2.3
+      }
+    },
+    "GET /api/v1/ceo/compass/lines?kind=main": {
+      "items": [
+        {
+          "id": "11111111-1111-1111-1111-111111111101",
+          "scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+          "name": "美租",
+          "kind": "main",
+          "alignment_score": 0.82,
+          "status": "active",
+          "description": "AI 基础设施战略主线 — Q1 ARR +47%"
+        },
+        {
+          "id": "11111111-1111-1111-1111-111111111102",
+          "scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+          "name": "业务支持",
+          "kind": "main",
+          "alignment_score": 0.76,
+          "status": "active",
+          "description": "退出协议主体条款达成 — 5 月签"
+        }
+      ]
+    },
+    "GET /api/v1/ceo/compass/echos?lineId=ALL": {
+      "$comment": "⑤ 战略回声 Sankey 数据源 — 5 echos (1 line × 多 echo) 三列流",
+      "items": [
+        {
+          "id": "22222222-1111-1111-1111-222222222201",
+          "line_id": "11111111-1111-1111-1111-111111111101",
+          "lineName": "美租",
+          "hypothesis_text": "加配 $40M AI 基础设施会推高 ARR",
+          "fact_text": "Q1 ARR +47%, 新签 2 单战略客户",
+          "fate": "confirm",
+          "evidence_run_ids": [
+            "mn-run-2026-04-22-ic",
+            "mn-run-2026-04-29-monthly"
+          ],
+          "narrative": "印证最强 — 数据 +47% 远超假设, 战略加配判断正确",
+          "source_meeting_id": null,
+          "updated_at": "2026-04-22T10:30:00Z",
+          "line_scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842"
+        },
+        {
+          "id": "22222222-1111-1111-1111-222222222202",
+          "line_id": "11111111-1111-1111-1111-111111111102",
+          "lineName": "业务支持",
+          "hypothesis_text": "主体条款 H1 内可签",
+          "fact_text": "5 月签字会议已排期",
+          "fate": "confirm",
+          "evidence_run_ids": [
+            "mn-run-2026-04-15-beacon"
+          ],
+          "narrative": "印证 — 节奏与计划匹配, 风险已转移到法务执行",
+          "updated_at": "2026-04-15T11:00:00Z",
+          "line_scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e"
+        },
+        {
+          "id": "22222222-1111-1111-1111-222222222203",
+          "line_id": "11111111-1111-1111-1111-111111111103",
+          "lineName": "集团分析",
+          "hypothesis_text": "估值反复 3 次以内可控",
+          "fact_text": "已反复 5 次, Sequoia/Lightspeed 同时扫描中",
+          "fate": "refute",
+          "evidence_run_ids": [
+            "mn-run-2026-04-12-stellar",
+            "mn-run-2026-04-26-stellar"
+          ],
+          "narrative": "反驳强 — 假设的'容忍阈值 3 次'被现实推翻 → 应升级为尽调标准而非延续支线",
+          "updated_at": "2026-04-26T14:00:00Z",
+          "line_scope_id": "c41c181f-a463-4c16-a896-69bb70bd0e3d"
+        },
+        {
+          "id": "22222222-1111-1111-1111-222222222204",
+          "line_id": "11111111-1111-1111-1111-111111111105",
+          "lineName": "养老·协同风险",
+          "hypothesis_text": "创始人沟通中断 2 周内会恢复",
+          "fact_text": "已 4 周失联, 业内自媒体提及'动向不明'",
+          "fate": "refute",
+          "evidence_run_ids": [
+            "mn-run-2026-04-22-crucible"
+          ],
+          "narrative": "反驳 — 反例已超假设 200%, 主线应宣判而非继续等待",
+          "updated_at": "2026-04-22T10:30:00Z",
+          "line_scope_id": null
+        },
+        {
+          "id": "22222222-1111-1111-1111-222222222205",
+          "line_id": "11111111-1111-1111-1111-111111111106",
+          "lineName": "集团分析·外部节奏",
+          "hypothesis_text": "Q2 部署节奏可拉回正常",
+          "fact_text": "尚未恢复 — 等待市场指标",
+          "fate": "pending",
+          "evidence_run_ids": [],
+          "narrative": "未定 — 缺市场指标信号, 建议挂起到 5 月底再评",
+          "updated_at": "2026-04-29T09:00:00Z",
+          "line_scope_id": null
+        }
+      ],
+      "$sankey_layout": {
+        "$comment": "Strategic养老Sankey.tsx 三列 SVG 布局参数",
+        "viewBox": "0 0 1380 460",
+        "col1_x_center": 130,
+        "col1_node_w": 180,
+        "col1_node_h": 70,
+        "col2_x_center": 690,
+        "col2_node_w": 240,
+        "col2_node_h": 50,
+        "col3_x_center": 1250,
+        "col3_node_w": 200,
+        "col3_node_h": 50,
+        "top_pad": 50,
+        "bot_pad": 30,
+        "node_gap": 14,
+        "flow_curve": "Cubic Bezier band, 控制点 x ∈ [0.45, 0.55] 之间",
+        "fate_color_map": {
+          "confirm": {
+            "fill": "rgba(106,154,92,0.22)",
+            "stroke": "rgba(106,154,92,0.55)",
+            "ink": "#6A9A5C"
+          },
+          "refute": {
+            "fill": "rgba(176,90,74,0.22)",
+            "stroke": "rgba(176,90,74,0.6)",
+            "ink": "#B05A4A"
+          },
+          "pending": {
+            "fill": "rgba(184,147,72,0.18)",
+            "stroke": "rgba(184,147,72,0.5)",
+            "ink": "#B89348",
+            "dashed": true
+          }
+        }
+      },
+      "$echo_interpretive_footer": {
+        "$comment": "FootInterpretation 自动产出的读法 (Strategic养老Sankey.tsx L467-513)",
+        "healthy_lines": [
+          "美租",
+          "业务支持"
+        ],
+        "review_lines": [
+          "集团分析",
+          "养老·协同风险"
+        ],
+        "narrative": "读法 · 主线 美租、业务支持 整体在轨。主线 集团分析、养老·协同风险 多条假设已被反驳 — 需要重审而非延续。"
+      }
+    },
+    "GET /api/v1/ceo/compass/attention?weekStart=2026-04-27": {
+      "weekStart": "2026-04-27",
+      "items": [
+        {
+          "id": "...",
+          "week_start": "2026-04-27",
+          "project_id": null,
+          "hours": 20.14,
+          "kind": "main"
+        },
+        {
+          "id": "...",
+          "week_start": "2026-04-27",
+          "project_id": null,
+          "hours": 11.4,
+          "kind": "branch"
+        },
+        {
+          "id": "...",
+          "week_start": "2026-04-27",
+          "project_id": null,
+          "hours": 6.46,
+          "kind": "firefighting"
+        }
+      ],
+      "total": 38
+    },
+    "POST /api/v1/ceo/compass/recompute": {
+      "scopeId": null,
+      "alignmentScore": 0.72
+    },
+    "GET /api/v1/ceo/compass/atlas": {
+      "$comment": "Project Atlas 子房间 — 复用 ceo_strategic_lines, 自动布局 + 健康分类 + 风险榜",
+      "stars": [
+        {
+          "id": "...",
+          "name": "美租",
+          "kind": "main",
+          "alignmentScore": 0.82,
+          "health": "healthy",
+          "cx": 364,
+          "cy": 186,
+          "r": 26,
+          "risk": 0.18
+        },
+        {
+          "id": "...",
+          "name": "业务支持",
+          "kind": "main",
+          "alignmentScore": 0.76,
+          "health": "healthy",
+          "cx": 236,
+          "cy": 186,
+          "r": 26,
+          "risk": 0.24
+        },
+        {
+          "id": "...",
+          "name": "集团分析",
+          "kind": "branch",
+          "alignmentScore": 0.62,
+          "health": "warn",
+          "cx": 138,
+          "cy": 308,
+          "r": 18,
+          "risk": 0.38
+        },
+        {
+          "id": "...",
+          "name": "养老",
+          "kind": "branch",
+          "alignmentScore": 0.58,
+          "health": "warn",
+          "cx": 462,
+          "cy": 308,
+          "r": 18,
+          "risk": 0.42
+        },
+        {
+          "id": "...",
+          "name": "养老·协同风险",
+          "kind": "drift",
+          "alignmentScore": 0.28,
+          "health": "danger",
+          "cx": 462,
+          "cy": 134,
+          "r": 14,
+          "risk": 0.72
+        },
+        {
+          "id": "...",
+          "name": "集团分析·外部节奏",
+          "kind": "drift",
+          "alignmentScore": 0.22,
+          "health": "danger",
+          "cx": 138,
+          "cy": 134,
+          "r": 14,
+          "risk": 0.78
+        }
+      ],
+      "legend": [
+        {
+          "label": "健康",
+          "color": "#4FB3A9"
+        },
+        {
+          "label": "预警",
+          "color": "#E8A547"
+        },
+        {
+          "label": "危险",
+          "color": "#D85A5A"
+        },
+        {
+          "label": "沉默/边缘",
+          "color": "rgba(180,180,180,0.5)"
+        }
+      ],
+      "dangerBoard": [
+        {
+          "name": "集团分析·外部节奏",
+          "riskScore": 0.78,
+          "trend": "up",
+          "signals": [
+            {
+              "tag": "注意力流失",
+              "severity": "warn"
+            },
+            {
+              "tag": "承诺-行动差距",
+              "severity": "crit"
+            },
+            {
+              "tag": "信念背离",
+              "severity": "crit"
+            }
+          ],
+          "text": "风险值持续偏高 — 评估处置 (止损 / 重组 / 安乐死)"
+        },
+        {
+          "name": "养老·协同风险",
+          "riskScore": 0.72,
+          "trend": "up",
+          "signals": [
+            {
+              "tag": "注意力流失",
+              "severity": "warn"
+            },
+            {
+              "tag": "承诺-行动差距",
+              "severity": "crit"
+            },
+            {
+              "tag": "信念背离",
+              "severity": "crit"
+            }
+          ],
+          "text": "已连续 5 周未在 IC 议程出现 · 距核心战略 0.72"
+        },
+        {
+          "name": "养老",
+          "riskScore": 0.42,
+          "trend": "flat",
+          "signals": [
+            {
+              "tag": "信念一致性 ↓",
+              "severity": "warn"
+            }
+          ],
+          "text": "风险监控中"
+        },
+        {
+          "name": "集团分析",
+          "riskScore": 0.38,
+          "trend": "flat",
+          "signals": [
+            {
+              "tag": "信念一致性 ↓",
+              "severity": "warn"
+            }
+          ],
+          "text": "风险监控中"
+        },
+        {
+          "name": "业务支持",
+          "riskScore": 0.24,
+          "trend": "flat",
+          "signals": [],
+          "text": "风险监控中"
+        }
+      ],
+      "meta": {
+        "total": 6,
+        "healthy": 2,
+        "warn": 2,
+        "danger": 2,
+        "silent": 0
+      }
+    },
+    "GET /api/v1/ceo/compass/one-pager": {
+      "$comment": "⑥ 一页纸 — 拉 ceo_briefs 最新一份 (status='ready' OR 最新 draft)",
+      "id": "55555555-2222-3333-4444-555555555501",
+      "scope_id": null,
+      "weekStart": "2026-04-27",
+      "title": "本周战略快照 · 一页纸 · 主线整体在轨,但 集团分析 的尽调拖累了节奏,养老·协同风险 该宣判",
+      "subtitle": "2026-04-25 ~ 05-01 · 自动汇编自 6 场会议",
+      "metrics": {
+        "alignmentScore": 0.72,
+        "alignmentDelta": "+0.04",
+        "mainSharePct": 0.53,
+        "firefightSharePct": 0.17,
+        "firefightDeltaPct": "+0.08",
+        "warningThresholdPct": 0.2
+      },
+      "body_md": "**方向对齐度 0.72** (**+0.04**) — 主线占用 **53%** 时间,符合预期 (目标 50–60%)。\n\n**三件该决定的事:**\n1. **养老·协同风险 是否官方暂停** — 已 5 周未上 IC, 创始人失联 4 周, 业内自媒体'动向不明'\n2. **集团分析 估值分歧是否升级为尽调标准** — 反复 5 次 > 假设阈值 3 次, Wei 已起草《估值锚定五条》\n3. **林雾的退出路径问题排进下次议程** — 已连续 3 周推迟, 林雾 3 次反事实提问全部未排议程\n\n**一句话警告:** 救火占比从 9% → 17%, 如果再不宣判 养老·协同风险, 下周可能突破 20% 阈值。",
+      "sources_footer": "SOURCES · 6 meetings · 12 readings · 2 laws applied",
+      "exportable": true,
+      "generated_at": "2026-04-29T22:00:00Z",
+      "version": 3,
+      "$ui_actions": [
+        "→ 导出 PDF",
+        "→ 跳董事会",
+        "→ 跳战略回响 Sankey"
+      ]
+    },
+    "GET /api/v1/ceo/compass/archives?tab=main": {
+      "$comment": "⑦ archives Tab1 主线档案",
+      "items": [
+        {
+          "id": "lin-halycon",
+          "name": "美租",
+          "kind": "main",
+          "established_at": "2024-08",
+          "alignment_score": 0.82,
+          "status": "active",
+          "brief": "主线 A · '投资基础设施层 (infra)' — 23 个项目相关, 对齐度 0.82",
+          "related_count": 23
+        },
+        {
+          "id": "lin-beacon",
+          "name": "业务支持",
+          "kind": "main",
+          "established_at": "2025-03",
+          "alignment_score": 0.76,
+          "status": "active",
+          "brief": "主线 B · '亚洲 + 北美双核团队' — 12 个决策相关, 对齐度 0.76",
+          "related_count": 12
+        },
+        {
+          "id": "lin-stellar",
+          "name": "集团分析",
+          "kind": "branch",
+          "established_at": "2025-09",
+          "alignment_score": 0.62,
+          "status": "active",
+          "brief": "支线 — 尽调反复 5 次, 估值锚定中",
+          "related_count": 7
+        },
+        {
+          "id": "lin-echo",
+          "name": "养老",
+          "kind": "branch",
+          "established_at": "2025-11",
+          "alignment_score": 0.58,
+          "status": "active",
+          "brief": "支线 — 等待估值回调, 探索期",
+          "related_count": 4
+        },
+        {
+          "id": "lin-pyre-c",
+          "name": "LP 反馈闭环",
+          "kind": "minor",
+          "established_at": "2026-01",
+          "alignment_score": 0.41,
+          "status": "fading",
+          "brief": "主线 C · 'Q3 起建立 LP 反馈闭环' — 4 次提及, 对齐度 0.41 ↓",
+          "related_count": 4
+        },
+        {
+          "id": "lin-crucible",
+          "name": "养老·协同风险",
+          "kind": "drift",
+          "established_at": "2025-06",
+          "alignment_score": 0.28,
+          "status": "drifting",
+          "brief": "原 3% 注意力升至 11% — 创始人失联 4 周",
+          "related_count": 5
+        }
+      ]
+    },
+    "GET /api/v1/ceo/compass/archives?tab=drift": {
+      "$comment": "⑦ archives Tab2 漂移记录 — 时间线",
+      "items": [
+        {
+          "date": "2026-04-22",
+          "name": "养老·协同风险 救火占用 73 分钟,挤掉原定 LP 议题",
+          "status": "已记录 · 未补救",
+          "severity": "crimson"
+        },
+        {
+          "date": "2026-04-12",
+          "name": "集团分析 估值分歧持续 49 分钟,未达成结论",
+          "status": "已记录 · 已建议升级为尽调标准",
+          "severity": "gold"
+        },
+        {
+          "date": "2026-04-05",
+          "name": "林雾的退出路径问题被推迟到下一次",
+          "status": "已记录 · 已连续 3 周",
+          "severity": "steel"
+        },
+        {
+          "date": "2026-03-29",
+          "name": "集团分析 估值反复第 4 次 — Wei 起草锚定备忘",
+          "status": "已记录 · Wei 备忘 v1",
+          "severity": "gold"
+        },
+        {
+          "date": "2026-03-15",
+          "name": "集团分析·外部节奏 部署节奏首次出现停滞 — 等待市场",
+          "status": "已记录 · 持续观察",
+          "severity": "steel"
+        }
+      ]
+    }
+  },
+  "tables": {
+    "ceo_strategic_lines": [
+      {
+        "name": "美租",
+        "kind": "main",
+        "alignment_score": 0.82,
+        "status": "active",
+        "established_at": "2024-08"
+      },
+      {
+        "name": "业务支持",
+        "kind": "main",
+        "alignment_score": 0.76,
+        "status": "active",
+        "established_at": "2025-03"
+      },
+      {
+        "name": "集团分析",
+        "kind": "branch",
+        "alignment_score": 0.62,
+        "status": "active",
+        "established_at": "2025-09"
+      },
+      {
+        "name": "养老",
+        "kind": "branch",
+        "alignment_score": 0.58,
+        "status": "active",
+        "established_at": "2025-11"
+      },
+      {
+        "name": "养老·协同风险",
+        "kind": "drift",
+        "alignment_score": 0.28,
+        "status": "active",
+        "established_at": "2025-06"
+      },
+      {
+        "name": "集团分析·外部节奏",
+        "kind": "drift",
+        "alignment_score": 0.22,
+        "status": "active",
+        "established_at": "2025-04"
+      }
+    ],
+    "ceo_strategic_echos": [
+      {
+        "line_name": "美租",
+        "hypothesis_text": "加配 $40M AI 基础设施会推高 ARR",
+        "fact_text": "Q1 ARR +47%, 新签 2 单战略客户",
+        "fate": "confirm"
+      },
+      {
+        "line_name": "业务支持",
+        "hypothesis_text": "主体条款 H1 内可签",
+        "fact_text": "5 月签字会议已排期",
+        "fate": "confirm"
+      },
+      {
+        "line_name": "集团分析",
+        "hypothesis_text": "估值反复 3 次以内可控",
+        "fact_text": "已反复 5 次, Sequoia/Lightspeed 同时扫描中",
+        "fate": "refute"
+      },
+      {
+        "line_name": "养老·协同风险",
+        "hypothesis_text": "创始人沟通中断 2 周内会恢复",
+        "fact_text": "已 4 周失联, 业内自媒体提及'动向不明'",
+        "fate": "refute"
+      },
+      {
+        "line_name": "集团分析·外部节奏",
+        "hypothesis_text": "Q2 部署节奏可拉回正常",
+        "fact_text": "尚未恢复 — 等待市场指标",
+        "fate": "pending"
+      }
+    ],
+    "ceo_attention_alloc": [
+      {
+        "week_start": "2026-04-27",
+        "kind": "main",
+        "hours": 20.14
+      },
+      {
+        "week_start": "2026-04-27",
+        "kind": "branch",
+        "hours": 11.4
+      },
+      {
+        "week_start": "2026-04-27",
+        "kind": "firefighting",
+        "hours": 6.46
+      }
+    ],
+    "ceo_briefs": [
+      {
+        "scope_id": null,
+        "board_session": "weekly-2026-04-27",
+        "version": 3,
+        "page_count": 1,
+        "status": "ready",
+        "kind": "one-pager"
+      }
+    ]
+  },
+  "$aggregator": {
+    "alignment_score": "0.6 × main_share + 0.4 × (1 - drift_count/total)",
+    "main_share": "20.14 / 38.0 ≈ 0.530",
+    "drift_share": "2 / 6 ≈ 0.333 → non_drift = 0.667",
+    "alignment_score_calc": "0.6 × 0.530 + 0.4 × 0.667 = 0.318 + 0.267 = 0.585 (~0.72 在 seed 中由 alignment_score 字段直接给出, 未走聚合)",
+    "atlas_layout": {
+      "main": "中环 r=90 半径 26",
+      "branch": "中外环 r=165 半径 18",
+      "drift": "外环 r=230 半径 14",
+      "angle": "同 kind 等距 90° 扇区"
+    },
+    "atlas_health": {
+      ">=0.7": "healthy",
+      ">=0.4": "warn",
+      "else": "danger",
+      "status_paused_or_retired": "silent"
+    },
+    "atlas_risk": "1 - alignment_score (限 [0,1]; null → 0.4 中性)",
+    "echo_sankey": {
+      "$comment": "⑤ Sankey 流粗细 + 颜色聚合算子",
+      "flow_thickness": "12px (constant band height); 未来可按 evidence_run_ids 计数加权",
+      "flow_color": "fate ∈ {confirm: green, refute: red, pending: gold-dashed}",
+      "footer_logic": "对每 line 统计 refute/total 与 confirm/total, ≥0.5 入 healthy/review_lines"
+    }
+  },
+  "$verdict_logic": {
+    "$comment": "Project Atlas ⑥ 救活 vs 安乐死 — 按 risk 自动归类",
+    ">=0.75": "Sunset (安乐死, 红) — 止损发布会前关停",
+    ">=0.6": "Halt (止损, 黄) — 冻结新增承诺, 3 周二选一",
+    "else": "Watch (观察, 绿) — 月底重评"
+  },
+  "$ui_behavior": {
+    "astrolabe_click_star": "点恒星 → 跳 /ceo/internal/ceo/compass/atlas?focus=lineId",
+    "time_pie_hover": "扇区 hover → tooltip 展开 segments[].tooltip 子项",
+    "drift_radar_click": "点 bullet → 跳 /atlas?focus=lineId",
+    "sankey_hover_path": "hover 流 → 显示 lineName → hypothesis → fact 文本 + 命运标签",
+    "sankey_enqueue_btn": "顶部右侧 EnqueueRunButton (axis=g4) → POST /api/v1/ceo/runs/enqueue 触发跨会综合 LLM",
+    "one_pager_export": "→ 导出 PDF (可逆模板)",
+    "archives_tab_switch": "Tab1 主线档案 / Tab2 漂移记录 — pure client-side"
+  },
+  "$pack_s": {
+    "id": "samples-s",
+    "generated_at": "2026-05-01T05:57:09.370Z",
+    "query": "业务支持 / 美租 / 养老 / 集团分析",
+    "scopes": [
+      {
+        "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "kind": "project",
+        "slug": "s-vszo4",
+        "name": "美租",
+        "meeting_count": 9
+      },
+      {
+        "id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "kind": "project",
+        "slug": "sh-ai-2026",
+        "name": "业务支持",
+        "meeting_count": 8
+      },
+      {
+        "id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "kind": "project",
+        "slug": "s-fy4rc",
+        "name": "集团分析",
+        "meeting_count": 5
+      },
+      {
+        "id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "kind": "project",
+        "slug": "s-vbvnb",
+        "name": "养老",
+        "meeting_count": 2
+      }
+    ],
+    "line_names": [
+      "美租",
+      "业务支持",
+      "集团分析",
+      "养老",
+      "养老·协同风险",
+      "集团分析·外部节奏"
+    ],
+    "evidence_by_scope": [
+      {
+        "scope_id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+        "scope_name": "美租",
+        "scope_member_count": 9,
+        "meeting_titles": [
+          "贝壳 × 宁波银行 · 美租信托资金端对接会",
+          "成都美租.txt",
+          "新录音 (1).txt",
+          "房屋装修及租赁方案讨论.txt",
+          "会议纪要-续约沟通.docx",
+          "美租续约 · 三方案技术对齐会",
+          "内部战略碰头 · 项目推进与高管协调路径",
+          "探讨装修贷款与分期付款的定价策略",
+          "探讨装修贷款与分期付款的定价策略"
+        ],
+        "runs_for_scope_meetings": 49
+      },
+      {
+        "scope_id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+        "scope_name": "业务支持",
+        "scope_member_count": 8,
+        "meeting_titles": [
+          "成都攻略.txt",
+          "成功攻略",
+          "成都美租 · 业务复盘会 (4 月推进汇报)",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "上海汇聚 AI 项目 · 两轮 · 管理模式 A→B 点规划",
+          "上海惠居 · 2026 AI 元年 · B 点研讨 · 第二轮",
+          "上海汇聚 AI 项目 · 启动 · 管理模式迭代"
+        ],
+        "runs_for_scope_meetings": 47
+      },
+      {
+        "scope_id": "c41c181f-a463-4c16-a896-69bb70bd0e3d",
+        "scope_name": "集团分析",
+        "scope_member_count": 5,
+        "meeting_titles": [
+          "北上链家业务经营分析与预算规划",
+          "成都美租.txt",
+          "北京被窝家装业务经营分析",
+          "北上链家业务经营分析与预算规划",
+          "北上链家业务经营分析与预算规划-ClaudeCli"
+        ],
+        "runs_for_scope_meetings": 13
+      },
+      {
+        "scope_id": "3ea48b8b-78e3-4afd-a900-9a784a2169e2",
+        "scope_name": "养老",
+        "scope_member_count": 2,
+        "meeting_titles": [
+          "新录音 (1).txt",
+          "养老"
+        ],
+        "runs_for_scope_meetings": 21
+      }
+    ],
+    "stats": {
+      "total_meeting_titles": 24,
+      "total_mn_runs_meeting_scope": 130
+    },
+    "methodology": "底层仍是 docs/ceo-app-samples 的 UI fixture；在 $pack_s.evidence_by_scope 与各文件内少量「首条」字段写入 **SQL 拉取的真实会议标题与 mn_runs 计数**。要全量替换叙事需另做 LLM 或手写 PRD。",
+    "note": null
+  }
+}

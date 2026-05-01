@@ -323,10 +323,10 @@ export async function runOneshotMode(
       const oneshotModel = getOneshotModel();
       const maxTok = getOneshotMaxTokens();
       // 把已生成 token 数折算成 0.5→0.82 区间的进度，每 200 token 写一次 DB
-      const onProgress = async (tokensSoFar: number) => {
+      const onProgress = async (tokensSoFar: number, snippet: string) => {
         const ratio = 0.5 + Math.min(0.32, 0.32 * (tokensSoFar / maxTok));
         const message = `生成中… ${tokensSoFar} / ${maxTok} tokens`;
-        emitProgress(payload.runId, { tokensSoFar, ratio, message });
+        emitProgress(payload.runId, { tokensSoFar, ratio, message, snippet });
         await hooks.writeStep('streaming', ratio, message);
       };
       raw = await deps.llm.completeWithSystem(prompt, '', {
