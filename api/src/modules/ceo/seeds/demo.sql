@@ -308,6 +308,111 @@ WHERE NOT EXISTS (
   SELECT 1 FROM ceo_war_room_sparks WHERE headline = s.h
 );
 
+-- ─────────────────────────────────────────────────────────
+-- War Room · Sandbox 兵棋推演 3 例 (含完整决策树 + 评估)
+-- ─────────────────────────────────────────────────────────
+
+-- ① Q2 投资决策推演 · AI 基础设施加配 (completed)
+INSERT INTO ceo_sandbox_runs (topic_text, status, branches, evaluation, created_by, completed_at)
+SELECT
+  'Q2 投资决策推演 · AI 基础设施加配 $40M',
+  'completed',
+  '[{
+    "id":"r0",
+    "label":"加配 $40M AI 基础设施 (Halycon 扩张)",
+    "options":[
+      {
+        "id":"r0-a","label":"全额加配 $40M","confidence":0.62,
+        "expected":"Q3 ARR 预计 +28%, 但消耗 LP 沟通信用",
+        "children":[
+          {"id":"r0-a-1","label":"绑定 governance 改革 (LP 席位扩 2)","confidence":0.71,"expected":"换得 LP 沟通空间, 风险被分担"},
+          {"id":"r0-a-2","label":"不附加条件","confidence":0.42,"expected":"短期资金到位, Q3 LP 大会硬碰硬"}
+        ]
+      },
+      {
+        "id":"r0-b","label":"分批加配 ($15M + $25M, 2 季度)","confidence":0.78,
+        "expected":"风险可控, 但错过 Halycon 关键 Q2 招聘窗口",
+        "children":[
+          {"id":"r0-b-1","label":"第一批捆绑 KPI gate","confidence":0.85,"expected":"最优解 — LP 信任 + 团队压力可控"},
+          {"id":"r0-b-2","label":"无条件分批","confidence":0.55,"expected":"折衷方案, 双方都不满意"}
+        ]
+      },
+      {
+        "id":"r0-c","label":"暂缓 (维持 $20M 现状)","confidence":0.34,
+        "expected":"Halycon 团队士气崩盘, 下季度 churn 风险 +12%",
+        "children":[]
+      }
+    ]
+  }]'::jsonb,
+  '{
+    "recommendedPath":"r0 → r0-b → r0-b-1",
+    "recommendedLabel":"分批加配 + 第一批捆绑 KPI gate",
+    "riskScore":0.32,
+    "expectedReversibility":"medium",
+    "summaryMd":"### 推演结论\n\n**最优路径**: 分批加配 ($15M Q2 + $25M Q3), 第一批绑定 6 个 KPI gate (招聘 / ARR / churn / governance 等)。\n\n**为何这条路**:\n- 信心 0.85 (3 条路径中最高)\n- 可逆性 medium — 第一批后可叫停\n- LP 沟通成本最低 (有 KPI 数据撑腰)\n\n**风险**:\n- KPI 设计若过松等同于全额加配\n- Halycon 团队需感知 Q3 续投不是默认\n\n**下一步行动**:\n1. 与陆景行确认 KPI 6 项指标\n2. 林雾 1v1 沟通\n3. Wei Tan 起草 governance 备忘"
+  }'::jsonb,
+  'system',
+  NOW() - INTERVAL '3 days'
+WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs WHERE topic_text = 'Q2 投资决策推演 · AI 基础设施加配 $40M');
+
+-- ② LP 沟通策略推演 · 如何向林雾解释暂缓 (completed)
+INSERT INTO ceo_sandbox_runs (topic_text, status, branches, evaluation, created_by, completed_at)
+SELECT
+  'LP 沟通策略推演 · 如何向林雾解释 Stellar 暂缓',
+  'completed',
+  '[{
+    "id":"r0",
+    "label":"如何向林雾解释 Stellar 暂缓决策",
+    "options":[
+      {
+        "id":"r0-a","label":"主动 1v1 + 完整数据包","confidence":0.81,
+        "expected":"高信任度路径, 但可能引来追问",
+        "children":[
+          {"id":"r0-a-1","label":"附 Sequoia/Lightspeed 同案对照","confidence":0.88,"expected":"最强叙事 — 行业共识背书"},
+          {"id":"r0-a-2","label":"只给内部数据","confidence":0.62,"expected":"会被追问 ''其他基金怎么看'' "}
+        ]
+      },
+      {
+        "id":"r0-b","label":"在 Q3 LP 大会上集中说明","confidence":0.42,
+        "expected":"延后但风险高 — 林雾会感到被''最后才知道''",
+        "children":[]
+      },
+      {
+        "id":"r0-c","label":"通过陆景行间接传达","confidence":0.51,
+        "expected":"省力但模糊责任, 林雾未来追问会更难处理",
+        "children":[]
+      }
+    ]
+  }]'::jsonb,
+  '{
+    "recommendedPath":"r0 → r0-a → r0-a-1",
+    "recommendedLabel":"主动 1v1 + Sequoia/Lightspeed 行业对照",
+    "riskScore":0.18,
+    "expectedReversibility":"high",
+    "summaryMd":"### 推演结论\n\n**最优路径**: 本周内主动约林雾 1v1, 携带 Sequoia/Lightspeed 在 Stellar 同期决策的对照数据 (Wei Tan 已有内部备忘)。\n\n**为何**:\n- 信心 0.88, 风险 0.18 — 各路径中最优\n- 行业对照将''暂缓''从''你们的判断''重新框为''行业共识''\n- 可逆性高, 谈坏了还有 Q3 LP 大会兜底\n\n**剧本要点**:\n1. 开场 30s 表态''我知道这次的反复让你压力很大''\n2. 前 5 分钟数据, 后 25 分钟听他\n3. 不承诺 Q3 决策, 只承诺''下次见面前给你数据''"
+  }'::jsonb,
+  'system',
+  NOW() - INTERVAL '7 days'
+WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs WHERE topic_text LIKE 'LP 沟通策略推演 ·%');
+
+-- ③ 头部项目暂缓的 6 月后果 · Project Halycon (pending)
+INSERT INTO ceo_sandbox_runs (topic_text, status, branches, created_by)
+SELECT
+  '头部项目暂缓的 6 月后果 · Project Halycon',
+  'pending',
+  '[{
+    "id":"r0",
+    "label":"如果 Halycon 暂缓 6 个月, 哪些是不可逆后果?",
+    "options":[
+      {"id":"r0-a","label":"团队层面 (招聘 / 留存 / 士气)","confidence":0.0,"expected":"待推演","children":[]},
+      {"id":"r0-b","label":"财务层面 (ARR / runway / 估值)","confidence":0.0,"expected":"待推演","children":[]},
+      {"id":"r0-c","label":"竞争层面 (Sequoia / 字节 / 微软)","confidence":0.0,"expected":"待推演","children":[]},
+      {"id":"r0-d","label":"LP 层面 (信任 / Q3 大会 / 续投)","confidence":0.0,"expected":"待推演","children":[]}
+    ]
+  }]'::jsonb,
+  'system'
+WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs WHERE topic_text = '头部项目暂缓的 6 月后果 · Project Halycon');
+
 COMMIT;
 
 -- 数据自检
@@ -315,7 +420,7 @@ DO $$
 DECLARE counts text;
 BEGIN
   SELECT format(
-    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s · sparks=%s',
+    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s · sparks=%s · sandboxes=%s',
     (SELECT COUNT(*) FROM ceo_directors),
     (SELECT COUNT(*) FROM ceo_director_concerns),
     (SELECT COUNT(*) FROM ceo_strategic_lines),
@@ -325,7 +430,8 @@ BEGIN
     (SELECT COUNT(*) FROM ceo_rubric_scores),
     (SELECT COUNT(*) FROM ceo_balcony_reflections WHERE user_id = 'system'),
     (SELECT COUNT(*) FROM ceo_time_roi WHERE user_id = 'system'),
-    (SELECT COUNT(*) FROM ceo_war_room_sparks)
+    (SELECT COUNT(*) FROM ceo_war_room_sparks),
+    (SELECT COUNT(*) FROM ceo_sandbox_runs)
   ) INTO counts;
   RAISE NOTICE '%', counts;
 END $$;

@@ -76,9 +76,129 @@ async function handleG5(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   };
 }
 
-/** g3 — 矛盾&专家：deps.llm 注入则真调，否则 stub */
+/**
+ * g3 sandbox — 兵棋推演分支：基于 topic_text 生成决策树 + evaluation
+ *   输出: 更新 ceo_sandbox_runs (branches, evaluation, status='completed')
+ */
+async function handleG3Sandbox(
+  deps: CeoEngineDeps,
+  run: CeoRunRow,
+): Promise<{ ok: boolean; result: any }> {
+  const meta = run.metadata ?? {};
+  const sandboxId = meta.sandboxId as string | undefined;
+  const topicText = (meta.topicText as string | undefined) ?? '未命名推演';
+
+  if (!sandboxId) {
+    return { ok: false, result: { error: 'sandbox: metadata.sandboxId required' } };
+  }
+
+  let branches: unknown = [
+    {
+      id: 'r0',
+      label: topicText,
+      options: [
+        {
+          id: 'r0-a',
+          label: '路径 A · 激进',
+          confidence: 0.55,
+          expected: '[stub] LLM 未配置 — 输出占位推演',
+          children: [],
+        },
+        {
+          id: 'r0-b',
+          label: '路径 B · 折衷',
+          confidence: 0.7,
+          expected: '[stub] LLM 未配置 — 输出占位推演',
+          children: [],
+        },
+        {
+          id: 'r0-c',
+          label: '路径 C · 保守',
+          confidence: 0.42,
+          expected: '[stub] LLM 未配置 — 输出占位推演',
+          children: [],
+        },
+      ],
+    },
+  ];
+  let evaluation: any = {
+    recommendedPath: 'r0 → r0-b',
+    recommendedLabel: '路径 B · 折衷',
+    riskScore: 0.5,
+    expectedReversibility: 'medium',
+    summaryMd: `### 推演结论 (stub)\n\nLLM 未配置时的占位输出。配置 \`CLAUDE_API_KEY\` / \`KIMI_API_KEY\` / \`OPENAI_API_KEY\` 后将基于 topic 实际生成 3 路径决策树。\n\n**主题**: ${topicText}`,
+  };
+  let mode: 'stub' | 'llm' = 'stub';
+
+  if (deps.llm?.isAvailable()) {
+    try {
+      const result = await deps.llm.invoke({
+        system:
+          '你是 CEO 的兵棋推演助理。基于推演主题，输出一棵 2-3 层的决策树 (3 个根选项, 每个 0-2 个子选项) + 总评估。\n输出 JSON 格式: {"branches":[{...}], "evaluation":{recommendedPath, recommendedLabel, riskScore (0..1), expectedReversibility (low|medium|high), summaryMd}}\n每个 option 字段: {id, label, confidence (0..1), expected, children}',
+        prompt: `推演主题: ${topicText}\n\n请生成决策树 JSON。`,
+        responseFormat: 'json',
+        maxTokens: 1500,
+        taskTag: 'g3-sandbox',
+      });
+      const parsed = JSON.parse(result.text) as {
+        branches?: unknown;
+        evaluation?: any;
+      };
+      if (Array.isArray(parsed.branches) && parsed.branches.length > 0) {
+        branches = parsed.branches;
+      }
+      if (parsed.evaluation && typeof parsed.evaluation === 'object') {
+        evaluation = { ...evaluation, ...parsed.evaluation };
+      }
+      mode = 'llm';
+    } catch (e) {
+      console.warn('[g3-sandbox] LLM invoke failed, fallback to stub:', (e as Error).message);
+    }
+  }
+
+  await deps.db.query(
+    `UPDATE ceo_sandbox_runs
+        SET status = 'completed',
+            branches = $1::jsonb,
+            evaluation = $2::jsonb,
+            completed_at = NOW()
+      WHERE id = $3::uuid`,
+    [JSON.stringify(branches), JSON.stringify(evaluation), sandboxId],
+  );
+
+  return { ok: true, result: { mode, sandboxId, optionsCount: countOptions(branches) } };
+}
+
+function countOptions(branches: unknown): number {
+  if (!Array.isArray(branches)) return 0;
+  let count = 0;
+  const walk = (nodes: any[]) => {
+    for (const n of nodes) {
+      if (Array.isArray(n.options)) {
+        count += n.options.length;
+        n.options.forEach((opt: any) => {
+          if (Array.isArray(opt.children)) walk([{ options: opt.children }]);
+        });
+      }
+    }
+  };
+  walk(branches as any[]);
+  return count;
+}
+
+/** g3 — 矛盾&专家：deps.llm 注入则真调，否则 stub
+ *
+ * metadata.kind === 'g3-sandbox' → 兵棋推演分支 (写 ceo_sandbox_runs)
+ * 其他 → 反方演练分支 (写 ceo_rebuttal_rehearsals)
+ */
 async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
   const meta = run.metadata ?? {};
+  const kind = (meta.kind as string | undefined) ?? 'g3-rebuttal';
+
+  if (kind === 'g3-sandbox') {
+    return handleG3Sandbox(deps, run);
+  }
+
   const briefId = (meta.briefId as string) ?? null;
   const stakes = await deps.db.query(
     `SELECT name, kind FROM ceo_directors LIMIT 1`,

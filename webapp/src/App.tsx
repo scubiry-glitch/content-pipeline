@@ -88,6 +88,7 @@ import { ProjectAtlas as CeoProjectAtlas } from './prototype/ceo/internal/rooms/
 import { Boardroom as CeoBoardroom } from './prototype/ceo/internal/rooms/Boardroom';
 import { Tower as CeoTower } from './prototype/ceo/internal/rooms/Tower';
 import { WarRoom as CeoWarRoom } from './prototype/ceo/internal/rooms/WarRoom';
+import { SandboxDetail as CeoSandboxDetail } from './prototype/ceo/internal/rooms/WarRoom/SandboxDetail';
 import { Situation as CeoSituation } from './prototype/ceo/internal/rooms/Situation';
 import { Balcony as CeoBalcony } from './prototype/ceo/internal/rooms/Balcony';
 import { SentimentAnalysisPage } from './pages/SentimentAnalysis';
@@ -278,6 +279,7 @@ function App() {
               <Route path="internal/ceo/boardroom" element={<CeoBoardroom />} />
               <Route path="internal/ceo/tower" element={<CeoTower />} />
               <Route path="internal/ceo/war-room" element={<CeoWarRoom />} />
+              <Route path="internal/ceo/war-room/sandbox/:id" element={<CeoSandboxDetail />} />
               <Route path="internal/ceo/situation" element={<CeoSituation />} />
               <Route path="internal/ceo/balcony" element={<CeoBalcony />} />
               <Route path="internal/ceo/:room" element={<CeoRoomStub />} />
