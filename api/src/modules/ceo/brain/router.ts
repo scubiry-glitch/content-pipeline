@@ -10,15 +10,20 @@ export function createBrainRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/overview', async () => getBrainOverview(engine.deps));
 
     fastify.get('/tasks', async (request) => {
-      const { state, module: moduleFilter, limit } = (request.query ?? {}) as {
+      const { state, module: moduleFilter, limit, ids } = (request.query ?? {}) as {
         state?: string;
         module?: string;
         limit?: string;
+        ids?: string;
       };
+      const idArr = ids
+        ? ids.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined;
       return listCrossModuleTasks(engine.deps, {
         state,
         module: moduleFilter,
         limit: limit ? Number(limit) : 30,
+        ids: idArr,
       });
     });
   };

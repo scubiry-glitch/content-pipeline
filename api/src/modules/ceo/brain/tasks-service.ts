@@ -5,7 +5,7 @@ import type { CeoEngineDeps } from '../types.js';
 
 export async function listCrossModuleTasks(
   deps: CeoEngineDeps,
-  filter: { state?: string; module?: string; limit?: number },
+  filter: { state?: string; module?: string; limit?: number; ids?: string[] },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
   const params: any[] = [];
@@ -16,6 +16,10 @@ export async function listCrossModuleTasks(
   if (filter.module) {
     params.push(filter.module);
     where.push(`module = $${params.length}`);
+  }
+  if (filter.ids && filter.ids.length > 0) {
+    params.push(filter.ids);
+    where.push(`id = ANY($${params.length}::uuid[])`);
   }
   const limitN = Math.max(1, Math.min(filter.limit ?? 30, 100));
 

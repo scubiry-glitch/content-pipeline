@@ -174,7 +174,137 @@ async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   return { ok: true, result: { echoId: ins.rows[0]?.id, mode } };
 }
 
+/**
+ * g1 ASR & 实体: 不重做，委托给 mn 现有 ingest pipeline
+ *   CEO 任务通常没有 audio 文件，需要绑定一个 mn meeting → 触发 mn 的 axis 重算
+ *   metadata.targetMeetingId 必填；否则 noop 返回 (避免 silently 失败)
+ */
+async function handleG1(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
+  const meta = run.metadata ?? {};
+  const targetMeetingId = (meta.targetMeetingId as string | undefined) ?? null;
+  const targetAxis = (meta.targetAxis as string | undefined) ?? 'all';
+
+  if (!targetMeetingId) {
+    return {
+      ok: true,
+      result: {
+        mode: 'noop',
+        reason: 'g1 委托模式需要 metadata.targetMeetingId — 当前未提供 (CEO 视角不直接持 audio)',
+      },
+    };
+  }
+
+  // 复用 mn 的 enqueue API
+  const mn = deps.meetingNotes as { enqueue?: (req: unknown) => Promise<{ ok: boolean; runId?: string }> } | undefined;
+  if (!mn?.enqueue) {
+    return { ok: false, result: null };
+  }
+
+  try {
+    const enq = await mn.enqueue({
+      scope: { kind: 'meeting', id: targetMeetingId },
+      axis: targetAxis,
+      preset: meta.preset ?? 'standard',
+      triggeredBy: 'auto',
+      parentRunId: run.id,
+    });
+    return {
+      ok: true,
+      result: {
+        mode: 'delegated-to-mn',
+        delegatedToMnRunId: enq.runId,
+        targetMeetingId,
+        targetAxis,
+      },
+    };
+  } catch (e) {
+    return { ok: false, result: { mode: 'failed', error: (e as Error).message } };
+  }
+}
+
+/**
+ * g2 评分 & 信念: LLM 算 5 维 rubric (战略清晰/节奏匹配/沟通透明/流程严谨/回应速度)
+ *   输入: 最近 30 天 mn_judgments
+ *   输出: 写 ceo_rubric_scores
+ */
+async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
+  const RUBRIC_DIMENSIONS = ['战略清晰', '节奏匹配', '沟通透明', '流程严谨', '回应速度'];
+  const stakeholderId = ((run.metadata ?? {}).stakeholderId as string | undefined) ?? null;
+
+  if (!deps.llm?.isAvailable()) {
+    // stub: 写 5 个 0.6 兜底分
+    for (const dim of RUBRIC_DIMENSIONS) {
+      await deps.db.query(
+        `INSERT INTO ceo_rubric_scores
+           (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
+        [run.scope_id, stakeholderId, dim, 0.6, run.id, '[stub g2] LLM 未配置时的中性兜底'],
+      );
+    }
+    return {
+      ok: true,
+      result: { mode: 'stub', dimensions: RUBRIC_DIMENSIONS.length },
+    };
+  }
+
+  // 拉最近 30 天 mn_judgments
+  let judgments: Array<{ kind: string; text: string }> = [];
+  try {
+    const r = await deps.db.query(
+      `SELECT kind, text FROM mn_judgments
+        WHERE created_at > NOW() - INTERVAL '30 days'
+          AND ($1::uuid IS NULL OR scope_id = $1::uuid)
+        ORDER BY created_at DESC
+        LIMIT 80`,
+      [run.scope_id ?? null],
+    );
+    judgments = r.rows;
+  } catch {
+    /* mn_judgments schema 不一致时跳过 */
+  }
+
+  let scores: Record<string, number> = {};
+  let mode: 'stub' | 'llm' = 'stub';
+  try {
+    const result = await deps.llm.invoke({
+      system: `你是 CEO 视角的评分员。基于近 30 天的 mn_judgments 列表，给 5 维 rubric 打分 (每维 0..1)。
+维度: ${RUBRIC_DIMENSIONS.join(' / ')}
+仅输出 JSON: {"战略清晰":0.x,"节奏匹配":0.x,"沟通透明":0.x,"流程严谨":0.x,"回应速度":0.x}`,
+      prompt: judgments.length > 0
+        ? `近 30 天 ${judgments.length} 条 judgment:\n${judgments
+            .slice(0, 40)
+            .map((j) => `- [${j.kind}] ${j.text}`)
+            .join('\n')}`
+        : '近 30 天暂无 judgment 数据，按中性分给',
+      responseFormat: 'json',
+      maxTokens: 200,
+      taskTag: 'g2-rubric',
+    });
+    const parsed = JSON.parse(result.text) as Record<string, unknown>;
+    for (const dim of RUBRIC_DIMENSIONS) {
+      const v = parsed[dim];
+      scores[dim] = typeof v === 'number' ? Math.max(0, Math.min(1, v)) : 0.6;
+    }
+    mode = 'llm';
+  } catch (e) {
+    console.warn('[g2] LLM invoke failed, falling back to stub:', (e as Error).message);
+    for (const dim of RUBRIC_DIMENSIONS) scores[dim] = 0.6;
+  }
+
+  for (const dim of RUBRIC_DIMENSIONS) {
+    await deps.db.query(
+      `INSERT INTO ceo_rubric_scores
+         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
+      [run.scope_id, stakeholderId, dim, scores[dim], run.id, mode === 'llm' ? null : '[stub g2]'],
+    );
+  }
+  return { ok: true, result: { mode, dimensions: RUBRIC_DIMENSIONS.length, scores } };
+}
+
 const HANDLERS: Record<string, (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>> = {
+  g1: handleG1,
+  g2: handleG2,
   g3: handleG3,
   g4: handleG4,
   g5: handleG5,
