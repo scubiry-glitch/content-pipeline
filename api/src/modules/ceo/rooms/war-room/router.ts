@@ -4,6 +4,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { getWarRoomDashboard, getFormationSnapshot, listFormationGaps } from './service.js';
+import { listSparks } from './sparks-service.js';
 
 export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function warRoomRoutes(fastify: FastifyInstance) {
@@ -23,6 +24,16 @@ export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/gaps', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return listFormationGaps(engine.deps, scopeId);
+    });
+
+    fastify.get('/sparks', async (request) => {
+      const q = (request.query ?? {}) as { seed?: string; limit?: string; scopes?: string };
+      const seed = q.seed ? Number(q.seed) : 0;
+      const limit = q.limit ? Number(q.limit) : 4;
+      const scopeIds = q.scopes
+        ? q.scopes.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined;
+      return listSparks(engine.deps, { seed, limit, scopeIds });
     });
   };
 }

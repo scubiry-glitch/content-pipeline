@@ -1,16 +1,57 @@
 // War Room · ④/⑤ 阵型分析 (Tabs)
 // 来源: 07-archive/会议纪要 (20260501)/war-room.html .gaps + .sparks
+// R2-5: Sparks tab 升级为 3D 翻面卡 + reroll 骰子动画 + 后端真数据
 
-import { useState } from 'react';
-import { GAPS, SPARKS, type GapCard, type SparkCard } from './_warRoomFixtures';
+import { useEffect, useState } from 'react';
+import { GAPS, type GapCard } from './_warRoomFixtures';
+import { SparkCard, type SparkRow } from './SparkCardComponent';
 
 interface Props {
   gaps?: GapCard[];
-  sparks?: SparkCard[];
 }
 
-export function FormationAnalysis({ gaps = GAPS, sparks = SPARKS }: Props) {
+const DICE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+export function FormationAnalysis({ gaps = GAPS }: Props) {
   const [tab, setTab] = useState<'gaps' | 'sparks'>('gaps');
+  const [sparks, setSparks] = useState<SparkRow[]>([]);
+  const [seed, setSeed] = useState(0);
+  const [rolling, setRolling] = useState(false);
+  const [diceFace, setDiceFace] = useState(2);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'sparks') return;
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/v1/ceo/war-room/sparks?seed=${seed}&limit=4`)
+      .then((r) => r.json())
+      .then((d: { items: SparkRow[] }) => {
+        if (cancelled) return;
+        setSparks(d.items ?? []);
+        setLoading(false);
+      })
+      .catch(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, seed]);
+
+  const reroll = () => {
+    if (rolling) return;
+    setRolling(true);
+    let i = 0;
+    const id = setInterval(() => {
+      setDiceFace(i % 6);
+      i++;
+      if (i > 11) {
+        clearInterval(id);
+        setRolling(false);
+        setSeed((s) => s + 1);
+      }
+    }, 80);
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -82,63 +123,106 @@ export function FormationAnalysis({ gaps = GAPS, sparks = SPARKS }: Props) {
       )}
 
       {tab === 'sparks' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div
             style={{
-              fontFamily: 'var(--mono)',
-              fontSize: 9.5,
-              color: 'rgba(245,217,217,0.5)',
-              marginBottom: 4,
-              letterSpacing: 0.2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
             }}
           >
-            基于 12 位专家批注 · 87 场会议 · 34 个心智模型
-          </div>
-          {sparks.map((s, i) => (
-            <div
-              key={i}
+            <span
               style={{
-                padding: '10px 12px',
-                background: 'rgba(200,161,92,0.06)',
-                border: '1px solid rgba(200,161,92,0.25)',
-                borderLeft: '3px solid #C8A15C',
-                borderRadius: '0 4px 4px 0',
+                fontFamily: 'var(--mono)',
+                fontSize: 9.5,
+                color: 'rgba(245,217,217,0.5)',
+                letterSpacing: 0.2,
               }}
             >
-              <div
+              基于 12 位专家批注 · 87 场会议 · 34 个心智模型 · 第 {(seed % 3) + 1}/3 组
+            </span>
+            <button
+              onClick={reroll}
+              disabled={rolling}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 12px',
+                background: 'rgba(200,161,92,0.1)',
+                border: '1px solid rgba(200,161,92,0.5)',
+                color: '#C8A15C',
+                fontFamily: 'var(--mono)',
+                fontSize: 11,
+                borderRadius: 4,
+                cursor: rolling ? 'wait' : 'pointer',
+              }}
+            >
+              <span
                 style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 10,
-                  color: '#C8A15C',
-                  letterSpacing: 0.2,
-                  marginBottom: 4,
+                  fontSize: 16,
+                  display: 'inline-block',
+                  transition: 'transform 0.1s',
+                  transform: rolling ? 'rotate(45deg)' : 'rotate(0)',
                 }}
               >
-                {s.tag}
-              </div>
-              <div
-                style={{
-                  fontFamily: 'var(--serif)',
-                  fontStyle: 'italic',
-                  fontSize: 13,
-                  color: '#F5D9D9',
-                  lineHeight: 1.5,
-                  marginBottom: 6,
-                }}
-              >
-                {s.headline}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'rgba(245,217,217,0.6)',
-                  lineHeight: 1.5,
-                }}
-              >
-                {s.evidence}
-              </div>
+                {DICE[diceFace]}
+              </span>
+              {rolling ? '骰中…' : '再来一组'}
+            </button>
+          </div>
+
+          {loading && (
+            <div
+              style={{
+                padding: '20px',
+                color: 'rgba(245,217,217,0.5)',
+                fontStyle: 'italic',
+                textAlign: 'center',
+                fontSize: 12,
+              }}
+            >
+              加载灵光…
             </div>
-          ))}
+          )}
+
+          {!loading && sparks.length === 0 && (
+            <div
+              style={{
+                padding: '20px',
+                color: 'rgba(245,217,217,0.55)',
+                fontStyle: 'italic',
+                textAlign: 'center',
+                fontSize: 12,
+                background: 'rgba(214,69,69,0.05)',
+                border: '1px dashed rgba(214,69,69,0.3)',
+                borderRadius: 4,
+              }}
+            >
+              无候选。先 seed: cd api && npm run ceo:seed-demo
+            </div>
+          )}
+
+          {!loading && sparks.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {sparks.map((s) => (
+                <SparkCard
+                  key={s.id}
+                  spark={s}
+                  onAdopt={(id) => {
+                    const t = document.createElement('div');
+                    t.textContent = `✓ 采纳: ${id.slice(0, 8)} (后续接入议程系统)`;
+                    t.style.cssText =
+                      'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#1A0E0E;color:#C8A15C;border:1px solid #C8A15C;padding:10px 18px;border-radius:4px;font-family:var(--serif);font-style:italic;font-size:13px;z-index:9999';
+                    document.body.appendChild(t);
+                    setTimeout(() => t.remove(), 2500);
+                  }}
+                  onReplace={() => setSeed((s) => s + 1)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

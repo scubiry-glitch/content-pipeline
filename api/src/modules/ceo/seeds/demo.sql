@@ -220,6 +220,94 @@ WHERE NOT EXISTS (
    WHERE x.user_id = 'system' AND x.week_start = DATE_TRUNC('week', NOW())::date AND x.prism_id = r.p
 );
 
+-- ─────────────────────────────────────────────────────────
+-- War Room · 灵光一闪 sparks (12 张候选, 3 组用于 reroll)
+-- ─────────────────────────────────────────────────────────
+
+INSERT INTO ceo_war_room_sparks (tag, headline, evidence_short, why_evidence, risk_text, seed_group)
+SELECT t, h, e, w::jsonb, r, g FROM (VALUES
+  -- Group 0 (默认 4 张)
+  ('🔮 跨项目人才嫁接',
+   '让 Wei Tan 主导 LP 沟通方案 —— 也许他的二阶思考能给林雾一个交代',
+   '过去 6 场会议中，Wei 的 3 次反事实提问被 LP 提到 2 次',
+   '["Wei 的 calibration 0.78,组内最高","历史上他在''未走的路''分析中命中率 62%","林雾最近 3 次提问都是反事实,Wei 风格契合"]',
+   '⚠ 沈岚可能感觉被绕过 — 提前 1v1 沟通',
+   0),
+  ('⚡ 张力配对',
+   '把 陈汀+沈岚 送进同一个尽调会议 —— 让估值分歧变成尽调标准',
+   '两人在估值上的分歧 6 次中 5 次落在同一逻辑分支',
+   '["分歧已稳定为''$60M vs $80M'',不是情绪化","把内部冲突转化为外部尽调输出","Wei 之前提议过类似做法,得到 0.7 confidence"]',
+   '⚠ 项目方会感觉被''双面夹击'' — 提前打招呼',
+   0),
+  ('🌱 沉默激活',
+   '让 Omar K. 主持下次"未解问题"会议 —— 他的反事实没人接住,也许他自己能接',
+   'Omar 在 9 场会议中提出 14 次反事实,12 次未被回应',
+   '["Omar 的''二阶+反事实''在专家库 rubric 中得分 0.81","主持位置可以放大他原本被忽视的视角","沉默信号矩阵显示他''高质量低发言''"]',
+   '⚠ 内部人员可能不习惯外援主持',
+   0),
+  ('🔄 角色翻转',
+   '让 周劭然 出一次决策提案 —— 听了 48 场会的人最知道盲区',
+   '他的会议纪要里包含 23 条"未被采纳但反复出现"的提问',
+   '["纪要里他暗中标注了 23 次''重复未答的提问''","他的发言质量 (信息熵) 0.74,被低估","角色翻转能激活他的执行视角"]',
+   '⚠ 改变他原本的''低存在感安全区''',
+   0),
+
+  -- Group 1 (再来一组之 1)
+  ('🪞 镜像演练',
+   '让 Sara M. 模拟"如果你是被投公司 CEO" 的反方 —— 法务视角的盲区在合规之外',
+   'Sara 过去 8 次法务备忘录中有 4 次提出非合规问题但未被讨论',
+   '["Sara 的法务 lens 经常意外打中战略盲区","角色互换能让她跳出合规框架","可与 Wei 的 calibration 形成对照"]',
+   '⚠ Sara 可能不愿意越界 — 给她明确的安全网',
+   1),
+  ('🎲 三角验证',
+   '同一个 Stellar 估值问题让 沈岚 / Wei / Omar 各自独立打分 —— 不交流,72 小时后对比',
+   '三人之前的分歧从未同步过,各自的逻辑链未被相互检验',
+   '["独立评分能暴露各自的判断框架","对比 72h 后再开会效率倍增","Wei 提议过的方法,首次可执行"]',
+   '⚠ 行政成本高 — 第一次跑要保护时间',
+   1),
+  ('💧 注水试验',
+   '故意把一个低优先级议题放到下次 IC 头条 —— 看看团队会不会自觉过滤',
+   '过去 12 次议程,有 9 次按顺序消化,缺乏自主优先级判断',
+   '["被动议程压制了自主判断","注水试验是低风险的元能力训练","Edmondson 心理安全分预测可承受"]',
+   '⚠ 个别成员可能误以为这是真议题 — 事后说明',
+   1),
+  ('🌊 退出复盘',
+   '把 Beacon 退出案例做反向推演 —— 如果失败会是哪几个原因',
+   '只复盘了成功路径,缺一次"备选反事实"输出',
+   '["反事实复盘对未来同类项目复用价值 ×3","团队近 6 月复盘格式化,需要一次破格","Omar 已主动表达兴趣"]',
+   '⚠ 团队可能误读为''否定 Beacon 成功''',
+   1),
+
+  -- Group 2 (再来一组之 2)
+  ('🧭 跨基金对话',
+   '主动约 Sequoia Q3 早午餐 —— 不为合作,为打探他们如何看 Stellar',
+   'Sequoia 与 Lightspeed 同时扫描 Stellar 的信号未被深度利用',
+   '["竞品视角能打破 echo chamber","非交易性约谈门槛低","可能拿到二阶情报"]',
+   '⚠ 谈话内容可能被传回项目方',
+   2),
+  ('🦉 静默 24h',
+   '本周三晚 6 点到周四晚 6 点,所有内部群禁言 24h —— 看看是否真有不靠 IM 的事',
+   '过去 30 天 IM 流量 +47%,但决策密度未提升',
+   '["IM 是注意力税,不是协作工具","静默 24h 已被 5 家基金验证有效","成本极低,失败也只损失 1 天信息"]',
+   '⚠ 紧急合规事件可能受影响 — Sara 持紧急通道',
+   2),
+  ('⚖ 重新调权',
+   '把 LP 关切的 4 维 (退出/节奏/沟通/流程) 临时上调到 50%权重 —— 一个月,看 IC 决策会怎么变',
+   'LP 关切目前只占 IC 评分 18%,但 Q3 大会权重应该是它',
+   '["权重再校准是元决策,稀缺但高 ROI","可逆,30 天后重新评估","与 Wei 的''rubric 反复''意见一致"]',
+   '⚠ 会被项目方解读为''越来越保守''',
+   2),
+  ('🔥 烧毁备忘',
+   '本季度所有未结案的备忘 >90 天的,统一''决议归零'' —— 强制重新开始',
+   '当前未结案备忘 31 份,平均 76 天,系统性卡死',
+   '["决策腐败 (decision rot) 的标准疗法","一次性清算成本远低于持续维护","团队会感谢这个决定"]',
+   '⚠ 个别长期项目的人可能感觉被冒犯',
+   2)
+) AS s(t, h, e, w, r, g)
+WHERE NOT EXISTS (
+  SELECT 1 FROM ceo_war_room_sparks WHERE headline = s.h
+);
+
 COMMIT;
 
 -- 数据自检
@@ -227,7 +315,7 @@ DO $$
 DECLARE counts text;
 BEGIN
   SELECT format(
-    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s',
+    'CEO seed: directors=%s · concerns=%s · lines=%s · echos=%s · stakeholders=%s · signals=%s · rubric=%s · reflections=%s · roi=%s · sparks=%s',
     (SELECT COUNT(*) FROM ceo_directors),
     (SELECT COUNT(*) FROM ceo_director_concerns),
     (SELECT COUNT(*) FROM ceo_strategic_lines),
@@ -236,7 +324,8 @@ BEGIN
     (SELECT COUNT(*) FROM ceo_external_signals),
     (SELECT COUNT(*) FROM ceo_rubric_scores),
     (SELECT COUNT(*) FROM ceo_balcony_reflections WHERE user_id = 'system'),
-    (SELECT COUNT(*) FROM ceo_time_roi WHERE user_id = 'system')
+    (SELECT COUNT(*) FROM ceo_time_roi WHERE user_id = 'system'),
+    (SELECT COUNT(*) FROM ceo_war_room_sparks)
   ) INTO counts;
   RAISE NOTICE '%', counts;
 END $$;
