@@ -12,6 +12,7 @@ import { createBalconyRouter } from './rooms/balcony/router.js';
 import { createPanoramaRouter } from './panorama/router.js';
 import { createBrainRouter } from './brain/router.js';
 import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
+import { getRecommendedScopes } from './recommendation/service.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -20,6 +21,16 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.get('/dashboard', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return engine.buildDashboard(scopeId);
+    });
+
+    // 推荐 scope — 按素材丰富度排序，给前端首屏默认选择用
+    // GET /api/v1/ceo/recommended-scopes?limit=3&minScore=1
+    fastify.get('/recommended-scopes', async (request) => {
+      const q = (request.query ?? {}) as { limit?: string; minScore?: string };
+      return getRecommendedScopes(engine.deps, {
+        limit: q.limit ? Number(q.limit) : undefined,
+        minScore: q.minScore ? Number(q.minScore) : undefined,
+      });
     });
 
     // 房间子路由

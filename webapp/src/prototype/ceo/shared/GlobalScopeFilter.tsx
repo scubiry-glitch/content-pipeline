@@ -36,12 +36,17 @@ const AXIS_LABEL: Record<Axis, string> = {
   knowledge: '知识',
 };
 
+// localStorage sentinel — 一旦设置过就不再自动套用推荐 scope
+// 写入时机: (1) 首次自动套用后  (2) 用户点 ✕ 清除 (= 明确表示要"全部")
+const AUTO_PICK_SENTINEL_KEY = 'ceo:scopes:auto-picked:v1';
+
 export function GlobalScopeFilter() {
   const [params, setParams] = useSearchParams();
   const [scopes, setScopes] = useState<ScopeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [expandedScope, setExpandedScope] = useState<string | null>(null);
+  const [autoPickHint, setAutoPickHint] = useState<string | null>(null);
 
   const selected = useMemo(() => parseSelected(params.get('scopes')), [params]);
   const axisOverrides = useMemo(() => parseAxes(params.get('axes')), [params]);
@@ -55,7 +60,7 @@ export function GlobalScopeFilter() {
           .catch(() => ({ items: [] })),
       ),
     )
-      .then((results) => {
+      .then(async (results) => {
         if (cancelled) return;
         const merged: ScopeRow[] = [];
         for (const res of results as Array<{ items: ScopeRow[] }>) {
@@ -63,11 +68,38 @@ export function GlobalScopeFilter() {
         }
         setScopes(merged);
         setLoading(false);
+
+        // 首屏自动套用最丰富的 scope —
+        // 仅当：URL 没有 ?scopes 参数 + localStorage 还没记录过自动套用
+        const urlHasScopes = !!params.get('scopes');
+        const alreadyPicked =
+          typeof window !== 'undefined' && window.localStorage.getItem(AUTO_PICK_SENTINEL_KEY);
+        if (urlHasScopes || alreadyPicked) return;
+
+        try {
+          const r = await fetch('/api/v1/ceo/recommended-scopes?limit=2');
+          if (!r.ok) return;
+          const data = (await r.json()) as { items?: Array<{ id: string; name: string; score: number }> };
+          const picks = data.items ?? [];
+          if (cancelled || picks.length === 0) return;
+          const ids = picks.map((p) => p.id).join(',');
+          const next = new URLSearchParams(params);
+          next.set('scopes', ids);
+          setParams(next, { replace: true });
+          window.localStorage.setItem(AUTO_PICK_SENTINEL_KEY, '1');
+          const summary = picks.map((p) => p.name).join(' + ');
+          setAutoPickHint(`已默认选中素材最丰富的 ${picks.length} 个 scope: ${summary}`);
+          // 6s 后淡出提示
+          window.setTimeout(() => !cancelled && setAutoPickHint(null), 6000);
+        } catch {
+          /* 推荐失败不影响首屏可用性 */
+        }
       })
       .catch(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const byKind = useMemo(() => {
@@ -123,6 +155,11 @@ export function GlobalScopeFilter() {
       p.delete('axes');
     });
     setExpandedScope(null);
+    // 用户明确选择"全部" — 写入 sentinel，下次进入也不要再自动套推荐
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(AUTO_PICK_SENTINEL_KEY, '1');
+    }
+    setAutoPickHint(null);
   };
 
   if (loading) {
@@ -170,6 +207,23 @@ export function GlobalScopeFilter() {
           {expanded ? '▾ 收起 scope' : '▸ 范围筛选'}
         </button>
         <span style={{ color: 'rgba(232,227,216,0.55)', fontSize: 10.5 }}>{summary}</span>
+        {autoPickHint && (
+          <span
+            style={{
+              padding: '2px 8px',
+              fontSize: 9.5,
+              fontFamily: 'var(--mono)',
+              color: '#A6CC9A',
+              background: 'rgba(166,204,154,0.10)',
+              border: '1px solid rgba(166,204,154,0.35)',
+              borderRadius: 4,
+              letterSpacing: 0.2,
+            }}
+            title="点 ✕ 清除 切回'全部 scope'"
+          >
+            ⓘ {autoPickHint}
+          </span>
+        )}
         {selected.size > 0 && (
           <>
             <span style={{ flex: 1 }} />
