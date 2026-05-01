@@ -27,6 +27,7 @@ const FILES = [
   '017-detail-perf-indexes.sql',
   '018-library-list-perf.sql',
   '019-scope-hierarchy.sql',
+  '020-runs-module.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {

@@ -217,11 +217,13 @@ export class RunEngine {
   async recoverQueuedRuns(): Promise<{ recovered: number }> {
     let recovered = 0;
     try {
+      // module='mn' 过滤：CEO 模块的 run (module='ceo') 由 ceoEngine 自己接管
       const r = await this.deps.db.query(
         `SELECT id, scope_kind, scope_id::text AS scope_id, axis, sub_dims, preset,
                 strategy_spec, triggered_by, parent_run_id, metadata
            FROM mn_runs
           WHERE state = 'queued'
+            AND module = 'mn'
           ORDER BY created_at ASC`,
       );
       for (const row of r.rows) {
@@ -280,6 +282,7 @@ export class RunEngine {
       // 只扫"apiHost = 我.hostname AND apiPid != 我.pid"的行 —— 那一定是同机器上一辈进程留下的孤儿。
       // 老 run（没 apiHost 字段，例如 metadata 里只有 cliPid 没 apiHost）也只在 apiHost 缺失时才扫，
       // 假定它是本机老格式（向后兼容）。
+      // module='mn' 过滤：只扫本模块的 run，避免误杀 CEO 模块 (module='ceo') 的进程
       const r = await this.deps.db.query(
         `SELECT id,
                 (metadata->>'cliPid')::int  AS cli_pid,
@@ -288,6 +291,7 @@ export class RunEngine {
                 metadata->>'apiHost'        AS api_host
            FROM mn_runs
           WHERE state = 'running'
+            AND module = 'mn'
             AND metadata ? 'cliPid'
             AND (metadata->>'apiPid')::int IS DISTINCT FROM $1::int
             AND (
@@ -386,6 +390,7 @@ export class RunEngine {
       //     5min 太激进会误杀正常 run; 远小于 zombieMin=30min, 反应仍及时）
       //   - 没 heartbeat 列（旧 run 或 worker 崩溃前 30s 内）：fallback 走 started_at < NOW() - zombieMin
       const heartbeatStaleMin = Number(process.env.MN_HEARTBEAT_STALE_MIN ?? 15);
+      // module='mn' 过滤：CEO 模块 (module='ceo') 的僵尸由 ceoEngine 自己清理
       const r1 = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'failed', finished_at = NOW(),
@@ -398,6 +403,7 @@ export class RunEngine {
                   'staleSeconds', EXTRACT(EPOCH FROM (NOW() - COALESCE(last_heartbeat_at, started_at)))
                 )
           WHERE state = 'running'
+            AND module = 'mn'
             AND (
               (last_heartbeat_at IS NOT NULL
                 AND last_heartbeat_at < NOW() - ($2::int * INTERVAL '1 minute'))
@@ -421,6 +427,7 @@ export class RunEngine {
             SET state = 'cancelled', finished_at = NOW(),
                 error_message = COALESCE(error_message, 'queued-timeout: not picked up by worker within 6h')
           WHERE state = 'queued'
+            AND module = 'mn'
             AND created_at < NOW() - INTERVAL '6 hours'
           RETURNING id`,
       );
