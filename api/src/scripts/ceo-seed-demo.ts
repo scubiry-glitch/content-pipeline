@@ -28,8 +28,10 @@ for (const p of envPaths) {
 async function main() {
   // 延迟 import 让 dotenv 先加载
   const { query, ensureDbPoolConnected } = await import('../db/connection.js');
+  const { ensureCeoModuleSchema } = await import('../db/ensureCeoSchema.js');
 
   await ensureDbPoolConnected();
+  await ensureCeoModuleSchema(query);
 
   const candidates = [
     join(process.cwd(), 'src/modules/ceo/seeds/demo.sql'),

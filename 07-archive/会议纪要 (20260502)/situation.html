@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>各方瞻望 · Situation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg-deep: #1B2538;
+    --bg-mid:  #202B40;
+    --bg-soft: #28344B;
+    --line:    rgba(178, 195, 220, 0.14);
+    --line-2:  rgba(178, 195, 220, 0.28);
+    --steel:   #8294B0;
+    --indigo:  #6679B5;
+    --indigo-soft:#8B9BC8;
+    --gold:    #C49B4D;
+    --crimson: #C46A50;
+    --green:   #82A86E;
+    --teal:    #5FA39E;
+    --rose:    #C786A2;
+    --ink:     #E6ECF5;
+    --ink-2:   rgba(230, 236, 245, 0.7);
+    --ink-3:   rgba(230, 236, 245, 0.42);
+    --serif:   "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --mono:    "JetBrains Mono", "Menlo", monospace;
+    --sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    background: var(--bg-deep); color: var(--ink); font-family: var(--sans);
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(102,121,181,0.08), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(199,134,162,0.05), transparent 60%);
+  }
+
+  .topbar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 36px; border-bottom:1px solid var(--line);
+    background:rgba(27,37,56,0.85); backdrop-filter: blur(8px);
+    position:relative; z-index:5;
+  }
+  .crest { display:flex; align-items:center; gap:14px; }
+  .crest-icon {
+    width:42px; height:42px; border-radius:6px;
+    border:1.5px solid var(--indigo);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:rgba(102,121,181,0.1);
+  }
+  .crest h1 {
+    font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:22px; letter-spacing:-0.005em;
+  }
+  .crest-tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.3em;
+    color:var(--indigo-soft); text-transform:uppercase; margin-top:2px;
+  }
+  .question {
+    flex:1; text-align:center;
+    font-family:var(--serif); font-style:italic; font-size:14.5px;
+    color:var(--ink-2); padding:0 30px;
+  }
+  .exit {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em;
+    color:var(--ink-2); text-decoration:none; text-transform:uppercase;
+    padding:7px 14px; border:1px solid var(--line-2); border-radius:3px;
+    transition: all .25s; background:rgba(230,236,245,0.04);
+  }
+  .exit:hover { color:var(--indigo-soft); border-color:var(--indigo); }
+
+  main {
+    position:relative; z-index:2;
+    display:grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px; padding: 24px 36px 50px;
+    max-width: 1480px; margin: 0 auto;
+  }
+  .block {
+    background: var(--bg-mid);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .block-head {
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .block-num {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+    color: var(--indigo-soft); text-transform:uppercase;
+  }
+  .block-title {
+    font-family:var(--serif); font-style:italic; font-size:18px; font-weight:600;
+    color:var(--ink); flex:1;
+  }
+  .block-meta {
+    font-family:var(--mono); font-size:10px; color:var(--ink-3);
+    letter-spacing:0.1em;
+  }
+
+  /* ① 利益相关方热力图 (圆形地图) */
+  .heatmap-block { grid-column: span 2; }
+  .heatmap-row { display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:center; }
+  .heatmap-svg-wrap {
+    background: rgba(0,0,0,0.22); border-radius:4px;
+    padding:14px; border:1px solid var(--line);
+  }
+  .heatmap-svg { width:100%; height:300px; }
+  .stake-list { display:flex; flex-direction:column; gap:10px; }
+  .stake {
+    padding:10px 13px;
+    background: rgba(102,121,181,0.05);
+    border:1px solid var(--line);
+    border-left:3px solid var(--indigo);
+    border-radius: 0 3px 3px 0;
+  }
+  .stake.hot { border-left-color: var(--crimson); background: rgba(196,106,80,0.06); }
+  .stake.warm { border-left-color: var(--gold); background: rgba(196,155,77,0.06); }
+  .stake.calm { border-left-color: var(--teal); background: rgba(95,163,158,0.05); }
+  .stake-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;
+  }
+  .stake-name {
+    font-family:var(--serif); font-style:italic; font-size:13.5px; color:var(--ink);
+  }
+  .stake-name b { color: var(--indigo-soft); font-weight:600; }
+  .hot .stake-name b { color: var(--crimson); }
+  .warm .stake-name b { color: var(--gold); }
+  .calm .stake-name b { color: var(--teal); }
+  .stake-temp {
+    font-family:var(--mono); font-size:10px; color: var(--ink-3); letter-spacing:0.1em;
+  }
+  .stake-text {
+    font-size:11.5px; color:var(--ink-2); line-height:1.55;
+  }
+
+  /* ② 外部信号墙 */
+  .signal-wall {
+    display: grid; grid-template-columns: 1fr 1fr; gap:9px;
+  }
+  .signal {
+    padding: 9px 11px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    border-top: 2px solid var(--steel);
+  }
+  .signal.pos { border-top-color: var(--green); }
+  .signal.neg { border-top-color: var(--crimson); }
+  .signal.warn { border-top-color: var(--gold); }
+  .sig-meta {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;
+    font-family:var(--mono); font-size:9px; color: var(--ink-3); letter-spacing:0.12em;
+  }
+  .sig-src { color: var(--indigo-soft); text-transform:uppercase; }
+  .sig-text {
+    font-size:11.5px; color: var(--ink); line-height:1.45;
+    font-family:var(--serif); font-style:italic;
+  }
+  .sig-tag {
+    margin-top:5px; font-family:var(--mono); font-size:9px;
+    color: var(--ink-3); letter-spacing:0.1em;
+  }
+  .sig-tag .impact {
+    color: var(--gold);
+  }
+  .neg .sig-tag .impact { color: var(--crimson); }
+  .pos .sig-tag .impact { color: var(--green); }
+
+  /* ③ Rubric 矩阵 */
+  .rubric-block { grid-column: span 3; }
+  .rubric-table {
+    width:100%; border-collapse: collapse; font-size: 12px;
+  }
+  .rubric-table th, .rubric-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+  .rubric-table th {
+    font-family:var(--mono); font-size:10px; letter-spacing:0.15em;
+    color: var(--ink-3); text-transform:uppercase;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .rubric-table th.dim {
+    text-align:center; min-width: 90px;
+  }
+  .rubric-table td.who {
+    font-family: var(--serif); font-style: italic; color: var(--ink); font-size: 13px;
+  }
+  .rubric-table td.who small {
+    display:block; font-family:var(--mono); font-size: 9px;
+    color: var(--ink-3); letter-spacing: 0.1em; margin-top:2px; font-style: normal;
+  }
+  .rubric-table td.score {
+    text-align:center;
+    font-family: var(--serif); font-style: italic; font-size: 16px; font-weight:600;
+  }
+  .score.s-high { color: var(--green); }
+  .score.s-mid  { color: var(--gold); }
+  .score.s-low  { color: var(--crimson); }
+  .score.s-na   { color: var(--ink-3); font-size: 11px !important; font-family: var(--mono) !important; font-style: normal; }
+  .score-bar {
+    display: block; height: 3px; background: rgba(178,195,220,0.1);
+    border-radius:2px; margin-top:3px; overflow:hidden;
+    position:relative; max-width:50px; margin-left:auto; margin-right:auto;
+  }
+  .score-bar i {
+    display:block; height:100%;
+    background: linear-gradient(90deg, var(--crimson), var(--gold), var(--green));
+  }
+  .rubric-table td.avg {
+    font-family: var(--mono); color: var(--ink-2);
+    font-size: 11px; text-align: right;
+  }
+
+  /* ④ 盲点警报 */
+  .blind-list { display:flex; flex-direction:column; gap:11px; }
+  .blind {
+    padding: 11px 13px;
+    background: rgba(196,106,80,0.06);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--crimson);
+    border-radius: 0 3px 3px 0;
+  }
+  .blind-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;
+  }
+  .blind-name {
+    font-family:var(--serif); font-style:italic; font-size:13.5px; color: var(--ink);
+  }
+  .blind-tag {
+    font-family:var(--mono); font-size:9px; letter-spacing:0.15em;
+    color: var(--crimson); text-transform: uppercase;
+  }
+  .blind-text {
+    font-size: 11.5px; color: var(--ink-2); line-height: 1.55;
+  }
+  .blind-text em {
+    color: var(--ink); font-style: italic;
+  }
+
+  /* ⑤ 反方观察者 */
+  .observer-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .observer {
+    padding: 13px 15px;
+    background: rgba(95,163,158,0.05);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal);
+    border-radius: 0 3px 3px 0;
+  }
+  .observer.cold {
+    border-left-color: var(--rose); background: rgba(199,134,162,0.05);
+  }
+  .obs-head {
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px;
+  }
+  .obs-name {
+    font-family:var(--serif); font-style:italic; font-size:14px; color: var(--ink);
+  }
+  .obs-name b { color: var(--teal); font-weight: 600; }
+  .cold .obs-name b { color: var(--rose); }
+  .obs-tag {
+    font-family:var(--mono); font-size:9px; letter-spacing:0.15em;
+    color: var(--ink-3); text-transform: uppercase;
+  }
+  .obs-quote {
+    font-size: 12.5px; color: var(--ink); line-height: 1.6;
+    font-family: var(--serif); font-style: italic;
+    padding: 9px 11px;
+    background: rgba(0,0,0,0.18);
+    border-radius: 3px;
+    margin-bottom: 7px;
+  }
+  .obs-quote::before { content:'"'; opacity:0.5; }
+  .obs-quote::after { content:'"'; opacity:0.5; }
+  .obs-meta {
+    font-family:var(--mono); font-size:9.5px; color: var(--ink-3); letter-spacing: 0.1em;
+  }
+
+  /* ⑥ Tab · 这周 / 这季 */
+  .horizon-block { grid-column: span 3; }
+  .tabs-row {
+    display:flex; gap:0; border-bottom:1px solid var(--line);
+    margin: -8px -24px 14px; padding: 0 24px;
+  }
+  .tab {
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--ink-3);
+    padding:10px 0; margin-right:24px; cursor:pointer;
+    border-bottom:2px solid transparent; transition: all .2s;
+  }
+  .tab.active { color:var(--indigo-soft); border-bottom-color:var(--indigo); }
+
+  .timeline-grid {
+    display:grid; grid-template-columns: repeat(7, 1fr); gap:0;
+    border-left: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    background: rgba(0,0,0,0.18);
+    border-radius: 3px; overflow: hidden;
+  }
+  .day-col {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 9px; min-height: 130px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .day-head {
+    font-family:var(--mono); font-size:9.5px; letter-spacing: 0.15em;
+    color: var(--ink-3); text-transform: uppercase;
+    margin-bottom: 4px; padding-bottom: 4px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .day-head b { color: var(--ink); font-weight: 600; }
+  .ev {
+    font-size: 10.5px; line-height: 1.4;
+    padding: 5px 7px;
+    background: rgba(102,121,181,0.1);
+    border-left: 2px solid var(--indigo);
+    border-radius: 0 2px 2px 0;
+    color: var(--ink-2);
+    font-family: var(--serif); font-style: italic;
+  }
+  .ev.neg { border-left-color: var(--crimson); background: rgba(196,106,80,0.08); }
+  .ev.pos { border-left-color: var(--green); background: rgba(130,168,110,0.08); }
+  .ev.warn { border-left-color: var(--gold); background: rgba(196,155,77,0.08); }
+
+  .quarter-grid {
+    display:grid; grid-template-columns: 80px 1fr; gap: 14px;
+  }
+  .month-row {
+    display:contents;
+  }
+  .month-label {
+    font-family:var(--serif); font-style:italic; font-size: 26px;
+    font-weight: 600; color: var(--ink-3);
+    text-align:right; padding-top: 6px;
+  }
+  .month-row.now .month-label { color: var(--indigo-soft); }
+  .month-events {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.18);
+    border-left: 2px solid var(--line);
+    border-radius: 0 3px 3px 0;
+  }
+  .month-row.now .month-events { border-left-color: var(--indigo); }
+  .me-item {
+    display: flex; gap: 10px; font-size: 12px; color: var(--ink-2); line-height: 1.55;
+  }
+  .me-date {
+    font-family:var(--mono); font-size: 9.5px; color: var(--ink-3);
+    letter-spacing: 0.1em; min-width: 50px; padding-top: 2px;
+  }
+  .me-item b { color: var(--ink); font-weight: 600; font-style: italic; font-family: var(--serif); }
+  .me-item .pos { color: var(--green); }
+  .me-item .neg { color: var(--crimson); }
+  .me-item .warn { color: var(--gold); }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .heatmap-block, .rubric-block, .horizon-block { grid-column: span 1; }
+    .signal-wall, .observer-row { grid-template-columns: 1fr; }
+    .heatmap-row { grid-template-columns: 1fr; }
+    .timeline-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="crest">
+    <div class="crest-icon">🌐</div>
+    <div>
+      <h1>Situation</h1>
+      <div class="crest-tag">internal · 各方 · 瞻望</div>
+    </div>
+  </div>
+  <div class="question">"外部世界怎么看我 ?"</div>
+  <a class="exit" href="index.html">← 回到 CEO 主页</a>
+</header>
+
+<main>
+
+  <!-- ① 利益相关方热力图 -->
+  <section class="block heatmap-block">
+    <div class="block-head">
+      <span class="block-num">① stakeholder heat</span>
+      <span class="block-title">利益相关方热力图 · 谁在升温</span>
+      <span class="block-meta">滚动 30 天 · 6 类</span>
+    </div>
+    <div class="heatmap-row">
+      <div class="heatmap-svg-wrap">
+        <svg class="heatmap-svg" viewBox="0 0 320 300">
+          <!-- 同心圆 -->
+          <g transform="translate(160 150)">
+            <circle r="125" fill="none" stroke="rgba(178,195,220,0.1)" stroke-width="0.8"/>
+            <circle r="90"  fill="none" stroke="rgba(178,195,220,0.1)" stroke-width="0.8"/>
+            <circle r="55"  fill="none" stroke="rgba(178,195,220,0.1)" stroke-width="0.8"/>
+            <text x="0" y="-128" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace"
+                  font-size="8" fill="rgba(230,236,245,0.42)" letter-spacing="0.15em">远</text>
+            <text x="0" y="-58" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace"
+                  font-size="8" fill="rgba(230,236,245,0.42)" letter-spacing="0.15em">近</text>
+            <!-- 中心 = 你 -->
+            <circle r="14" fill="rgba(102,121,181,0.2)" stroke="#6679B5" stroke-width="1.5"/>
+            <text x="0" y="3" text-anchor="middle"
+                  font-family="Source Han Serif SC, Georgia, serif" font-style="italic"
+                  font-size="11" fill="#8B9BC8">你</text>
+            <!-- 利益方 (pos: x,y -- size: 半径) -->
+            <!-- LP -- 远但热 -->
+            <g>
+              <circle cx="0" cy="-100" r="18" fill="rgba(196,106,80,0.7)" stroke="#C46A50" stroke-width="1.5"/>
+              <text x="0" y="-97" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="10" fill="#fff">LP</text>
+              <text x="0" y="-78" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#C46A50">↑↑↑</text>
+            </g>
+            <!-- 董事会 -- 近 中 -->
+            <g>
+              <circle cx="76" cy="-44" r="22" fill="rgba(196,155,77,0.5)" stroke="#C49B4D" stroke-width="1.5"/>
+              <text x="76" y="-41" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="10" fill="#fff">董事会</text>
+              <text x="76" y="-22" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#C49B4D">↑↑</text>
+            </g>
+            <!-- 媒体 -- 远 平 -->
+            <g>
+              <circle cx="100" cy="60" r="14" fill="rgba(102,121,181,0.4)" stroke="#6679B5" stroke-width="1.2"/>
+              <text x="100" y="63" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="10" fill="#fff">媒体</text>
+              <text x="100" y="80" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#8B9BC8">→</text>
+            </g>
+            <!-- 监管 -- 中 平 -->
+            <g>
+              <circle cx="-65" cy="55" r="13" fill="rgba(102,121,181,0.4)" stroke="#6679B5" stroke-width="1.2"/>
+              <text x="-65" y="58" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="9.5" fill="#fff">监管</text>
+              <text x="-65" y="76" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#8B9BC8">→</text>
+            </g>
+            <!-- 同行 -- 中 升 -->
+            <g>
+              <circle cx="-90" cy="-30" r="15" fill="rgba(196,155,77,0.45)" stroke="#C49B4D" stroke-width="1.2"/>
+              <text x="-90" y="-27" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="9.5" fill="#fff">同行</text>
+              <text x="-90" y="-9" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#C49B4D">↑</text>
+            </g>
+            <!-- 团队 -- 近 暖 -->
+            <g>
+              <circle cx="42" cy="80" r="16" fill="rgba(95,163,158,0.5)" stroke="#5FA39E" stroke-width="1.2"/>
+              <text x="42" y="83" text-anchor="middle" font-family="Source Han Serif SC, Georgia, serif" font-style="italic" font-size="10" fill="#fff">团队</text>
+              <text x="42" y="101" text-anchor="middle" font-family="JetBrains Mono, Menlo, monospace" font-size="8" fill="#5FA39E">↗</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="stake-list">
+        <div class="stake hot">
+          <div class="stake-head">
+            <span class="stake-name"><b>LP</b> · 林雾 + 3 位机构</span>
+            <span class="stake-temp">温度 ↑↑↑ · 28 天升温</span>
+          </div>
+          <div class="stake-text">退出路径 + 部署节奏两个问题叠加,Q3 大会临近</div>
+        </div>
+        <div class="stake warm">
+          <div class="stake-head">
+            <span class="stake-name"><b>董事会</b> · Wei + Omar 主导</span>
+            <span class="stake-temp">温度 ↑↑ · 流程问题升级</span>
+          </div>
+          <div class="stake-text">从"项目层"上升到"流程层"的关切</div>
+        </div>
+        <div class="stake warm">
+          <div class="stake-head">
+            <span class="stake-name"><b>同行</b> · 3 家友基扫描中</span>
+            <span class="stake-temp">温度 ↑ · Stellar 关注</span>
+          </div>
+          <div class="stake-text">Sequoia + Lightspeed 都在看 Stellar — 估值反复传到外面</div>
+        </div>
+        <div class="stake calm">
+          <div class="stake-head">
+            <span class="stake-name"><b>团队</b> · 内部</span>
+            <span class="stake-temp">温度 ↗ · 紧绷但不裂</span>
+          </div>
+          <div class="stake-text">陆景行连续 2 周加班,需关注</div>
+        </div>
+        <div class="stake">
+          <div class="stake-head">
+            <span class="stake-name"><b>监管</b> · 港 SFC + 美 SEC</span>
+            <span class="stake-temp">温度 → · 平稳</span>
+          </div>
+          <div class="stake-text">无新规变化;Crucible 合规进度可追</div>
+        </div>
+        <div class="stake">
+          <div class="stake-head">
+            <span class="stake-name"><b>媒体</b> · 财经口</span>
+            <span class="stake-temp">温度 → · 无负面</span>
+          </div>
+          <div class="stake-text">本季无 inbound,本基金未上头条</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② 外部信号墙 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">② signal wall</span>
+      <span class="block-title">外部信号墙</span>
+      <span class="block-meta">7 天 · 8 条</span>
+    </div>
+    <div class="signal-wall">
+      <div class="signal neg">
+        <div class="sig-meta"><span class="sig-src">Bloomberg</span><span>05-01</span></div>
+        <div class="sig-text">亚洲 PE 估值 H1 普跌 12%,IRR 中位数下滑</div>
+        <div class="sig-tag">PE 行业 · <span class="impact">→ 影响 Stellar 估值锚</span></div>
+      </div>
+      <div class="signal warn">
+        <div class="sig-meta"><span class="sig-src">FT</span><span>04-30</span></div>
+        <div class="sig-text">SFC 拟将 PE 报告周期由半年改季度</div>
+        <div class="sig-tag">监管 · <span class="impact">→ Sara 已在跟进</span></div>
+      </div>
+      <div class="signal pos">
+        <div class="sig-meta"><span class="sig-src">Halycon 创始人</span><span>04-29</span></div>
+        <div class="sig-text">Q1 ARR +47%,新签 2 单战略客户</div>
+        <div class="sig-tag">portfolio · <span class="impact">→ 强信号</span></div>
+      </div>
+      <div class="signal neg">
+        <div class="sig-meta"><span class="sig-src">业内传言</span><span>04-28</span></div>
+        <div class="sig-text">Stellar 估值反复传至 3 家同行</div>
+        <div class="sig-tag">声誉 · <span class="impact">→ 流程层风险</span></div>
+      </div>
+      <div class="signal">
+        <div class="sig-meta"><span class="sig-src">Reuters</span><span>04-26</span></div>
+        <div class="sig-text">Sequoia 完成第 IV 期亚洲基金募集</div>
+        <div class="sig-tag">同行 · 中性</div>
+      </div>
+      <div class="signal warn">
+        <div class="sig-meta"><span class="sig-src">林雾(私聊)</span><span>04-25</span></div>
+        <div class="sig-text">"Q3 大会前我需要看到方案"</div>
+        <div class="sig-tag">LP · <span class="impact">→ 直接信号</span></div>
+      </div>
+      <div class="signal pos">
+        <div class="sig-meta"><span class="sig-src">Beacon 团队</span><span>04-24</span></div>
+        <div class="sig-text">退出协议主体条款达成,5 月签</div>
+        <div class="sig-tag">portfolio · <span class="impact">→ 验证策略</span></div>
+      </div>
+      <div class="signal neg">
+        <div class="sig-meta"><span class="sig-src">Crucible 媒体</span><span>04-23</span></div>
+        <div class="sig-text">业内自媒体提及该公司"动向不明"</div>
+        <div class="sig-tag">portfolio · <span class="impact">→ 加快宣判</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ Rubric 矩阵 -->
+  <section class="block rubric-block">
+    <div class="block-head">
+      <span class="block-num">③ rubric matrix</span>
+      <span class="block-title">Rubric 矩阵 · 各方对你的评分</span>
+      <span class="block-meta">5 个维度 × 6 类利益方 · Q2</span>
+    </div>
+    <table class="rubric-table">
+      <thead>
+        <tr>
+          <th style="width: 22%;">利益方</th>
+          <th class="dim">战略清晰</th>
+          <th class="dim">节奏匹配</th>
+          <th class="dim">沟通透明</th>
+          <th class="dim">流程严谨</th>
+          <th class="dim">回应速度</th>
+          <th style="width: 8%; text-align: right;">均分</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="who">LP · 林雾<small>3 位机构 LP 平均</small></td>
+          <td class="score s-mid">6.5<span class="score-bar"><i style="width:65%"></i></span></td>
+          <td class="score s-low">4.2<span class="score-bar"><i style="width:42%"></i></span></td>
+          <td class="score s-low">5.0<span class="score-bar"><i style="width:50%"></i></span></td>
+          <td class="score s-mid">7.0<span class="score-bar"><i style="width:70%"></i></span></td>
+          <td class="score s-low">3.8<span class="score-bar"><i style="width:38%"></i></span></td>
+          <td class="avg">5.3</td>
+        </tr>
+        <tr>
+          <td class="who">董事会<small>Wei + Omar + 陆景行</small></td>
+          <td class="score s-high">8.2<span class="score-bar"><i style="width:82%"></i></span></td>
+          <td class="score s-mid">6.8<span class="score-bar"><i style="width:68%"></i></span></td>
+          <td class="score s-mid">7.0<span class="score-bar"><i style="width:70%"></i></span></td>
+          <td class="score s-mid">6.2<span class="score-bar"><i style="width:62%"></i></span></td>
+          <td class="score s-mid">7.5<span class="score-bar"><i style="width:75%"></i></span></td>
+          <td class="avg">7.1</td>
+        </tr>
+        <tr>
+          <td class="who">团队<small>陆景行 + 投资分析师</small></td>
+          <td class="score s-high">8.5<span class="score-bar"><i style="width:85%"></i></span></td>
+          <td class="score s-mid">6.5<span class="score-bar"><i style="width:65%"></i></span></td>
+          <td class="score s-high">8.8<span class="score-bar"><i style="width:88%"></i></span></td>
+          <td class="score s-mid">7.2<span class="score-bar"><i style="width:72%"></i></span></td>
+          <td class="score s-high">8.0<span class="score-bar"><i style="width:80%"></i></span></td>
+          <td class="avg">7.8</td>
+        </tr>
+        <tr>
+          <td class="who">portfolio 创始人<small>Halycon + Beacon</small></td>
+          <td class="score s-high">8.0<span class="score-bar"><i style="width:80%"></i></span></td>
+          <td class="score s-high">8.4<span class="score-bar"><i style="width:84%"></i></span></td>
+          <td class="score s-high">8.2<span class="score-bar"><i style="width:82%"></i></span></td>
+          <td class="score s-high">8.5<span class="score-bar"><i style="width:85%"></i></span></td>
+          <td class="score s-high">8.1<span class="score-bar"><i style="width:81%"></i></span></td>
+          <td class="avg">8.2</td>
+        </tr>
+        <tr>
+          <td class="who">同行<small>2 家友基非正式</small></td>
+          <td class="score s-mid">7.0<span class="score-bar"><i style="width:70%"></i></span></td>
+          <td class="score s-low">5.5<span class="score-bar"><i style="width:55%"></i></span></td>
+          <td class="score s-na">N/A</td>
+          <td class="score s-mid">6.4<span class="score-bar"><i style="width:64%"></i></span></td>
+          <td class="score s-na">N/A</td>
+          <td class="avg">6.3</td>
+        </tr>
+        <tr>
+          <td class="who">监管 + 法务<small>Sara 内推估</small></td>
+          <td class="score s-mid">7.5<span class="score-bar"><i style="width:75%"></i></span></td>
+          <td class="score s-na">N/A</td>
+          <td class="score s-mid">7.2<span class="score-bar"><i style="width:72%"></i></span></td>
+          <td class="score s-mid">6.8<span class="score-bar"><i style="width:68%"></i></span></td>
+          <td class="score s-mid">7.0<span class="score-bar"><i style="width:70%"></i></span></td>
+          <td class="avg">7.1</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ④ 盲点警报 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">④ blindspot alarms</span>
+      <span class="block-title">盲点警报 · 没人提但应该提的</span>
+      <span class="block-meta">3 个 · AI 推断</span>
+    </div>
+    <div class="blind-list">
+      <div class="blind">
+        <div class="blind-head">
+          <span class="blind-name">"流程 vs 项目"已被外部讨论</span>
+          <span class="blind-tag">→ 声誉风险</span>
+        </div>
+        <div class="blind-text">Stellar 估值反复传到 3 家同行 — 没有任何 LP/董事提过<em>"友基怎么看你"</em>这个角度,但它正在成型。</div>
+      </div>
+      <div class="blind">
+        <div class="blind-head">
+          <span class="blind-name">陆景行的疲劳信号</span>
+          <span class="blind-tag">→ 关键人风险</span>
+        </div>
+        <div class="blind-text">他连续 2 周加班、Halycon 补员仅 1/3 — 没人提过这是<em>"双核结构"主线的执行风险</em>,但这是。</div>
+      </div>
+      <div class="blind">
+        <div class="blind-head">
+          <span class="blind-name">SFC 报告周期变化的提前应对</span>
+          <span class="blind-tag">→ 合规节奏风险</span>
+        </div>
+        <div class="blind-text">Sara 在跟进,但<em>没人提</em>:报告周期改季度后,Tower 的"会议节奏"和 Compass 的"主线主导"都需要重新对齐。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑤ 反方观察者 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">⑤ outside observer</span>
+      <span class="block-title">反方观察者 · 外脑视角</span>
+      <span class="block-meta">Wei / Omar 的最近批注</span>
+    </div>
+    <div class="observer-row">
+      <div class="observer">
+        <div class="obs-head">
+          <span class="obs-name"><b>Wei Zhao</b> 看你</span>
+          <span class="obs-tag">04-23 · rubric 7.2</span>
+        </div>
+        <div class="obs-quote">你们在战略上很清楚,但战术执行的"反复"会侵蚀外部信任 — 这是流程问题,不是判断问题。</div>
+        <div class="obs-meta">参考 Halycon 决议 + Stellar 反复 + 估值锚定五条草案</div>
+      </div>
+      <div class="observer cold">
+        <div class="obs-head">
+          <span class="obs-name"><b>Omar K.</b> 看你</span>
+          <span class="obs-tag">04-19 · rubric 6.8</span>
+        </div>
+        <div class="obs-quote">放慢节奏没问题,但你需要让 LP 看见"放慢是策略",不是被动 — 否则他们会觉得你在等市场。</div>
+        <div class="obs-meta">参考部署节奏数据 + 林雾的 3 次问询</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ Tab · 这周 / 这季 -->
+  <section class="block horizon-block">
+    <div class="block-head" style="border-bottom:none; padding-bottom:0;">
+      <span class="block-num">⑥ horizon</span>
+      <span class="block-title">视野</span>
+    </div>
+    <div class="tabs-row">
+      <div class="tab active" data-tab="week">📅 这周</div>
+      <div class="tab" data-tab="quarter">📆 这季</div>
+    </div>
+
+    <div class="tab-pane" id="pane-week">
+      <div class="timeline-grid">
+        <div class="day-col">
+          <div class="day-head"><b>周一</b> 05-04</div>
+          <div class="ev">投委会 #35 · 议程含 Crucible 表决</div>
+          <div class="ev neg">林雾 私下追问 LP 闭环</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周二</b> 05-05</div>
+          <div class="ev pos">Beacon 退出协议 主体签字</div>
+          <div class="ev">Stellar 估值锚定五条 内审</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周三</b> 05-06</div>
+          <div class="ev warn">SFC 新规咨询会(Sara 出席)</div>
+          <div class="ev">Halycon 候选人 X 第二轮</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周四</b> 05-07</div>
+          <div class="ev">陆景行 1:1 · 节奏复盘</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周五</b> 05-08</div>
+          <div class="ev neg">同行扫描简报(Sequoia 动向)</div>
+          <div class="ev">Halycon 月报</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周六</b> 05-09</div>
+          <div class="ev">— 无外部</div>
+        </div>
+        <div class="day-col">
+          <div class="day-head"><b>周日</b> 05-10</div>
+          <div class="ev">Boardroom 准备(BOARD #14)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-quarter" style="display:none;">
+      <div class="quarter-grid">
+        <div class="month-row now">
+          <div class="month-label">5 月</div>
+          <div class="month-events">
+            <div class="me-item"><span class="me-date">05-04</span><div><b>投委会 #35</b> · Crucible 暂停表决</div></div>
+            <div class="me-item"><span class="me-date">05-12</span><div><b>BOARD #14</b> · 退出路径 + 估值五条 + Crucible 三项决议</div></div>
+            <div class="me-item"><span class="me-date">05-22</span><div><span class="pos">Beacon 退出</span> · 协议盖章</div></div>
+            <div class="me-item"><span class="me-date">05-30</span><div><span class="warn">SFC 新规</span>意见反馈截止 · Sara 主笔</div></div>
+          </div>
+        </div>
+        <div class="month-row">
+          <div class="month-label">6 月</div>
+          <div class="month-events">
+            <div class="me-item"><span class="me-date">06-08</span><div>同行扫描季报 · 友基新基金动向</div></div>
+            <div class="me-item"><span class="me-date">06-15</span><div><b>LP 月度通讯</b>(含退出路径首次正式回应)</div></div>
+            <div class="me-item"><span class="me-date">06-25</span><div>Halycon 团队补员 全部到位(目标)</div></div>
+            <div class="me-item"><span class="me-date">06-30</span><div><span class="warn">Q2 风险盘点</span> · Sara + Wei 联合</div></div>
+          </div>
+        </div>
+        <div class="month-row">
+          <div class="month-label">7 月</div>
+          <div class="month-events">
+            <div class="me-item"><span class="me-date">07-08</span><div><b>Q3 LP 大会</b> · 林雾主理 · 退出路径成核心议题</div></div>
+            <div class="me-item"><span class="me-date">07-20</span><div><span class="pos">Q2 报告</span>分发 LP</div></div>
+            <div class="me-item"><span class="me-date">07-28</span><div>Stellar 投决会 · 估值锚定五条首次复用</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const which = t.dataset.tab;
+      document.getElementById('pane-week').style.display    = which==='week'    ? '' : 'none';
+      document.getElementById('pane-quarter').style.display = which==='quarter' ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>

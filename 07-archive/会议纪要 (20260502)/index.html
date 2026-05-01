@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>会议纪要 · Prototype</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: oklch(0.22 0.01 60);
+    --ink-2: oklch(0.38 0.01 60);
+    --ink-3: oklch(0.55 0.01 60);
+    --ink-4: oklch(0.72 0.01 60);
+    --paper: oklch(0.985 0.006 75);
+    --paper-2: oklch(0.965 0.008 75);
+    --paper-3: oklch(0.94 0.01 75);
+    --line: oklch(0.88 0.01 75);
+    --line-2: oklch(0.92 0.008 75);
+    --accent: oklch(0.58 0.13 40);    /* terracotta */
+    --accent-soft: oklch(0.92 0.04 40);
+    --teal: oklch(0.55 0.09 200);     /* cool contrast */
+    --teal-soft: oklch(0.93 0.03 200);
+    --amber: oklch(0.7 0.11 75);
+    --amber-soft: oklch(0.95 0.04 75);
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Noto Sans SC", sans-serif;
+    --serif: "Source Serif 4", "Noto Serif SC", Georgia, serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  html, body { margin:0; padding:0; background: #f0eee9; color: var(--ink); font-family: var(--sans); }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="application/json" id="tweak-defaults">
+{ "theme": "light", "variant": "all" }
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="variant-a.jsx"></script>
+<script type="text/babel" src="variant-b.jsx"></script>
+<script type="text/babel" src="variant-c.jsx"></script>
+<script type="text/babel" src="strategy-panel.jsx"></script>
+<script type="text/babel" src="scope-expert-config.jsx"></script>
+<script type="text/babel" src="library.jsx"></script>
+<script type="text/babel" src="dimensions-people.jsx"></script>
+<script type="text/babel" src="dimensions-people-extra.jsx"></script>
+<script type="text/babel" src="dimensions-projects.jsx"></script>
+<script type="text/babel" src="dimensions-projects-extra.jsx"></script>
+<script type="text/babel" src="dimensions-knowledge.jsx"></script>
+<script type="text/babel" src="dimensions-knowledge-extra.jsx"></script>
+<script type="text/babel" src="dimensions-meta.jsx"></script>
+<script type="text/babel" src="longitudinal.jsx"></script>
+<script type="text/babel" src="changelog.jsx"></script>
+<script type="text/babel" src="axis-regenerate.jsx"></script>
+<script type="text/babel" src="panorama.jsx"></script>
+<script type="text/babel" src="world-shell.jsx"></script>
+<script type="text/babel" src="brain-library.jsx"></script>
+<script type="text/babel" src="meeting-readings.jsx"></script>
+<script type="text/babel" src="main-shell.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "headerPreset": "twoRow",
+  "headerTabStyle": "pill-icon",
+  "headerIdentity": "full",
+  "headerShowSubtitle": true,
+  "headerCollapseUtils": false
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  // Push to window so DimShell (deep in a subtree) can read without prop drilling
+  React.useEffect(() => {
+    window.__headerTweaks = t;
+    window.dispatchEvent(new Event("__headerTweaksChanged"));
+  }, [t]);
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    const h = () => force(n => n+1);
+    window.addEventListener("__headerTweaksChanged", h);
+    return () => window.removeEventListener("__headerTweaksChanged", h);
+  }, []);
+  return (
+    <>
+    <DesignCanvas>
+      <DCSection id="world" title="★ 主导航双模 · 外部/内部世界 + CEO 六房间" subtitle="☀️ 外部世界(会议/库) ⇄ 🌙 内部世界(CEO/外脑)">
+        <DCArtboard id="world-shell" label="World Shell  —  双模切换 + CEO 六棱镜六房间入口" width={1440} height={960}>
+          <WorldShell />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="readings" title="★ 单场纪要 · 4 读法切换" subtitle="概览 / 时间线 / 决策树 / 张力流 —— 同一份数据,四种目录结构">
+        <DCArtboard id="reading-playground" label="4 Readings  —  顶部切换 + 底部三轴入口" width={1440} height={1680}>
+          <ReadingPlayground />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="panorama" title="★ 系统全景画板 · Panorama" subtitle="一套数据 × 三视图 · 熔炉 / 冰山 / 时间轴 · 从一场会议到一生积累">
+        <DCArtboard id="panorama" label="全景画板  —  三视图切换：时间轴 / 熔炉 / 冰山" width={1440} height={900}>
+          <PanoramaBoard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="changelog" title="★ 本次修改说明 · Changelog" subtitle="第一性原理重构 · 纵向视图 → 拆回三条主轴">
+        <DCArtboard id="changelog" label="修改说明  —  为什么把纵向视图拆回去" width={1200} height={1200}>
+          <ChangelogView />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="shell" title="App Shell · 主壳 & 详情枢纽" subtitle="三 tab: 今天 / 库 / 轴 · 及会议详情中的 A/B/C 视图切换">
+        <DCArtboard id="main-shell" label="Main shell  —  今天 / 库 / 轴" width={1520} height={900}>
+          <MainShell />
+        </DCArtboard>
+        <DCArtboard id="meeting-hub" label="Meeting detail hub  —  A/B/C 视图切换" width={1520} height={900}>
+          <MeetingHub />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="lib" title="会议纪要库 · 支持不同的文件夹分组" subtitle="按项目 / 按客户 / 按主题 三种分组维度切换 · 同一批纪要落入不同的文件夹树">
+        <DCArtboard id="library" label="Library  —  可切换分组维度的会议纪要库" width={1520} height={980}>
+          <Library />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="axes" title="三轴视图 · 一库多视图" subtitle="人物 · 项目 · 知识 · 会议本身 —— 同一批会议数据的不同投射">
+        <DCArtboard id="axis-people" label="人物轴  —  承诺兑现 / 角色演化 / 发言质量 / 沉默信号" width={1520} height={1000}>
+          <DimensionPeople />
+        </DCArtboard>
+        <DCArtboard id="axis-projects" label="项目轴  —  决议溯源 / 假设清单 / 开放问题 / 风险热度" width={1520} height={1000}>
+          <DimensionProjects />
+        </DCArtboard>
+        <DCArtboard id="axis-knowledge" label="知识轴  —  判断库 / 心智模型激活 / 认知偏误 / 反事实" width={1520} height={1000}>
+          <DimensionKnowledge />
+        </DCArtboard>
+        <DCArtboard id="axis-meta" label="会议本身  —  质量分 / 必要性 / 情绪热力" width={1520} height={900}>
+          <DimensionMeta />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="regen" title="轴的生成与重算" subtitle="方案 C · 轴视图内快捷重算 + 独立生成中心 · project 自动增量 / library 手动触发">
+        <DCArtboard id="axis-regen" label="★ 轴内快捷重算面板  —  选子维度 / scope / preset" width={1440} height={820}>
+          <AxisRegeneratePanel />
+        </DCArtboard>
+        <DCArtboard id="gen-center" label="★ 生成中心  —  queue / versions / schedule" width={1440} height={900}>
+          <GenerationCenter />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="longitudinal" title="时间维度 · 汇报用横向总图" subtitle="原纵向视图 —— 子维度已迁入各主轴 · 此处仅保留跨轴一览（外发/汇报场景）">
+        <DCArtboard id="long" label="时间维度 · 一览（已降级为辅助视图）" width={1520} height={900}>
+          <LongitudinalView />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="main" title="会议纪要 · Meeting Intelligence" subtitle="三个方向 · 同一套数据模型 · 点击任意画板进入 focus 模式">
+        <DCArtboard id="editorial" label="A · Editorial  —  以「文档」为中心，适合精读与外发" width={1440} height={980}>
+          <VariantEditorial />
+        </DCArtboard>
+        <DCArtboard id="workbench" label="B · Workbench  —  以「分析」为中心，三栏工作台" width={1440} height={980}>
+          <VariantWorkbench />
+        </DCArtboard>
+        <DCArtboard id="threads" label="C · Threads  —  以「人物与观点」为中心，关系编织" width={1440} height={980}>
+          <VariantThreads />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="system" title="专家调用系统 · Strategies · Decorators · Presets" subtitle="按 §6.3/6.4/6.5 的产品化呈现">
+        <DCArtboard id="scope-config" label="★ 专家调用 · 作用层配置  —  meeting / project / library 三层切换" width={1440} height={1060}>
+          <ScopeExpertConfig />
+        </DCArtboard>
+        <DCArtboard id="strategies" label="Base Strategies  —  4 种调用策略" width={1440} height={820}>
+          <StrategiesTable />
+        </DCArtboard>
+        <DCArtboard id="decorators" label="Decorators  —  9 个装饰器" width={1440} height={960}>
+          <DecoratorsTable />
+        </DCArtboard>
+        <DCArtboard id="presets" label="Presets  —  lite / standard / max" width={1440} height={900}>
+          <PresetsTable />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="flow" title="关键流程 · Upload → Experts → Processing → Multi-view" subtitle="单线路原型，演示状态流转">
+        <DCArtboard id="upload" label="① 上传 / 绑定目录" width={1200} height={760}>
+          <FlowUpload />
+        </DCArtboard>
+        <DCArtboard id="experts" label="② 专家推荐 · 来自 batch-ops 的深度分析逻辑" width={1200} height={760}>
+          <FlowExperts />
+        </DCArtboard>
+        <DCArtboard id="processing" label="③ 处理中 · 策略 + 装饰器栈可见" width={1200} height={760}>
+          <FlowProcessing />
+        </DCArtboard>
+        <DCArtboard id="multi-view" label="④ Multi-view · 解析完成 · 直接进入多维视图（流程终点）" width={1520} height={1000}>
+          <FlowMultiView />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+    <TweaksPanel title="Tweaks · 轴头密度">
+      <TweakSection label="预设组合"/>
+      <TweakSelect label="Header 预设"
+        value={t.headerPreset}
+        options={[
+          { value: "current",   label: "当前 64px · 基线" },
+          { value: "minimal",   label: "Minimal 48px · 极简" },
+          { value: "twoRow",    label: "Two-row 88px · 分层" },
+          { value: "underline", label: "Underline · 无胶囊" },
+        ]}
+        onChange={(v) => setTweak('headerPreset', v)}/>
+      <TweakSection label="细粒度调整 · 仅在 Header 预设 = 当前 时生效"/>
+      <TweakSelect label="Tab 样式"
+        value={t.headerTabStyle}
+        options={[
+          { value: "pill-icon", label: "图标 + 文字" },
+          { value: "pill-text", label: "仅文字" },
+          { value: "icon-only", label: "仅图标" },
+          { value: "underline", label: "下划线" },
+        ]}
+        onChange={(v) => setTweak('headerTabStyle', v)}/>
+      <TweakSelect label="轴身份"
+        value={t.headerIdentity}
+        options={[
+          { value: "full",    label: "完整（34px 方块）" },
+          { value: "compact", label: "紧凑（细条）" },
+          { value: "dot",     label: "圆点（最省）" },
+        ]}
+        onChange={(v) => setTweak('headerIdentity', v)}/>
+      <TweakToggle label="显示 tab 描述文字"
+        value={t.headerShowSubtitle}
+        onChange={(v) => setTweak('headerShowSubtitle', v)}/>
+      <TweakToggle label="次要操作收进 ⋯ 菜单"
+        value={t.headerCollapseUtils}
+        onChange={(v) => setTweak('headerCollapseUtils', v)}/>
+    </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>
