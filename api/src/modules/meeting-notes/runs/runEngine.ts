@@ -142,6 +142,7 @@ function mapRun(row: Record<string, any>): RunRecord {
       decorators: meta.decorators ?? null,
       synthesis: meta.synthesis ?? null,
       render: meta.render ?? null,
+      axisStats: meta.axisStats ?? null,
     },
   };
 }
@@ -2040,6 +2041,30 @@ export class RunEngine {
           // 聚合 per-axis stats
           const sumField = (k: 'created' | 'updated' | 'skipped' | 'errors' | 'parseFailures') =>
             r.reduce((s, x) => s + (Number((x as any)[k] ?? 0) || 0), 0);
+          // R5 · 粒度 1：per-sub_dim 计数（同 sub 多 meeting 时累加，errorSamples 取并集 cap 5）
+          const subDimStats: Record<string, {
+            created: number; updated: number; skipped: number; errors: number;
+            parseFailures: number;
+            errorSamples: Array<{ kind: string; message: string; excerpt?: string }>;
+          }> = {};
+          for (const cr of r) {
+            const sd = cr.subDim;
+            if (!sd) continue;
+            const cur = subDimStats[sd] ?? {
+              created: 0, updated: 0, skipped: 0, errors: 0,
+              parseFailures: 0, errorSamples: [],
+            };
+            cur.created += Number(cr.created ?? 0);
+            cur.updated += Number(cr.updated ?? 0);
+            cur.skipped += Number(cr.skipped ?? 0);
+            cur.errors += Number(cr.errors ?? 0);
+            cur.parseFailures += Number(cr.parseFailures ?? 0);
+            for (const es of (cr.errorSamples ?? [])) {
+              if (cur.errorSamples.length >= 5) break;
+              cur.errorSamples.push(es);
+            }
+            subDimStats[sd] = cur;
+          }
           axisStats[ax] = {
             durationMs: Date.now() - axisStartedAt,
             llmCallsDelta: counter.calls - prevCalls,
@@ -2051,6 +2076,7 @@ export class RunEngine {
             skipped: sumField('skipped'),
             errors: sumField('errors'),
             parseFailures: sumField('parseFailures'),
+            subDimStats,
           };
           prevCalls = counter.calls;
           prevIn = counter.input;

@@ -235,6 +235,27 @@ export interface RunRecord {
     decorators?: any;
     synthesis?: any;
     render?: any;
+    /** R5 · 粒度 1：per-axis 聚合统计（含 subDimStats per-sub_dim 计数） */
+    axisStats?: Record<string, {
+      durationMs?: number;
+      llmCallsDelta?: number;
+      inputTokensDelta?: number;
+      outputTokensDelta?: number;
+      subDimCount?: number;
+      created?: number;
+      updated?: number;
+      skipped?: number;
+      errors?: number;
+      parseFailures?: number;
+      subDimStats?: Record<string, {
+        created: number;
+        updated: number;
+        skipped: number;
+        errors: number;
+        parseFailures: number;
+        errorSamples?: Array<{ kind: string; message: string; excerpt?: string }>;
+      }>;
+    }>;
   };
 }
 
