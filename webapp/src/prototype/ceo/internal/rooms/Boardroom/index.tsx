@@ -7,6 +7,7 @@ import { ConcernsRadar } from './ConcernsRadar';
 import { PrebriefDraft } from './PrebriefDraft';
 import { AnnotationsList } from './AnnotationsList';
 import { PromiseTable } from './PromiseTable';
+import { VersionsTabs } from './VersionsTabs';
 import { RebuttalRehearsal } from './RebuttalRehearsal';
 
 interface DashboardData {
@@ -183,11 +184,8 @@ export function Boardroom() {
           <RebuttalRehearsal />
         </Block>
 
-        <Block num="⑥ versions" title="两个版本" spanFull>
-          <Placeholder>
-            一页纸版 / 完整套版 (16 页) Tab 切换 — 待 PR12 LLM 出稿后接入。
-            数据源 ceo_briefs(version, body_md, page_count)。
-          </Placeholder>
+        <Block num="⑥ versions" title="两个版本" meta="ceo_briefs latest" spanFull>
+          <VersionsTabs />
         </Block>
       </main>
     </div>
