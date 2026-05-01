@@ -88,6 +88,64 @@ const COST_TABLE = {
   high:   { tok: '~30k', time: '3-6m'   },
 } as const;
 
+// ── sub_dim → 主驱动 tab（用于"重算后会刷哪些 tab"提示） ───────────────────
+// 当 sub_dim 与 tab 不在同一 axis 时（如 cognitive_biases 在 people/盲区档案），
+// 跨轴透明化展示给用户，避免"勾这个 sub 怎么没刷新这个轴"的困惑。
+type AffectedTab = { axis: string; tabLabel: string; note?: string };
+const SUB_AFFECTS: Record<string, AffectedTab[]> = {
+  // people
+  commitments:         [
+    { axis: 'people',   tabLabel: '承诺与兑现' },
+    { axis: 'projects', tabLabel: '责任盘点', note: '派生' },
+  ],
+  role_trajectory:     [{ axis: 'people', tabLabel: '角色画像演化' }],
+  speech_quality:      [{ axis: 'people', tabLabel: '发言质量' }],
+  silence_signal:      [{ axis: 'people', tabLabel: '沉默信号 + RASIC' }],
+  // projects
+  decision_provenance: [{ axis: 'projects', tabLabel: '决策溯源' }],
+  assumptions:         [{ axis: 'projects', tabLabel: '假设清单' }],
+  open_questions:      [{ axis: 'projects', tabLabel: '未解问题' }],
+  risk_heat:           [{ axis: 'projects', tabLabel: '风险与收益' }],
+  // knowledge
+  reusable_judgments:  [{ axis: 'knowledge', tabLabel: '认知沉淀' }],
+  mental_models:       [{ axis: 'knowledge', tabLabel: '心智模型 · 上半段' }],
+  cognitive_biases:    [{ axis: 'people',    tabLabel: '盲区档案', note: '跨轴搬家' }],
+  counterfactuals:     [{ axis: 'knowledge', tabLabel: '反事实 / 未走的路' }],
+  evidence_grading:    [{ axis: 'knowledge', tabLabel: '证据层级' }],
+  model_hitrate:       [{ axis: 'knowledge', tabLabel: '心智模型 · 命中率（下半段）' }],
+  consensus_track:     [{ axis: 'knowledge', tabLabel: '共识与分歧' }],
+  concept_drift:       [{ axis: 'knowledge', tabLabel: '概念辨析' }],
+  topic_lineage:       [{ axis: 'knowledge', tabLabel: '议题谱系与健康' }],
+  external_experts:    [{ axis: 'knowledge', tabLabel: '外脑批注' }],
+  // meta
+  decision_quality:    [
+    { axis: 'meta', tabLabel: '决策质量' },
+    { axis: 'a',    tabLabel: 'A 视图末段质量审计', note: '吸收' },
+  ],
+  meeting_necessity:   [
+    { axis: 'meta', tabLabel: '会议必要性' },
+    { axis: 'b',    tabLabel: 'B 视图 CostAndTension 卡', note: '吸收' },
+  ],
+  affect_curve:        [
+    { axis: 'meta', tabLabel: '情绪温度' },
+    { axis: 'c',    tabLabel: 'C 视图情绪温度曲线 tab', note: '吸收' },
+  ],
+  // tension（无独立轴视图，挂 B 视图）
+  intra_meeting:       [{ axis: 'b', tabLabel: 'B 视图 dim=tension' }],
+};
+
+// 跨模块 tab：数据来源不在 meeting-notes 重算职责内（CEO 模块维护），
+// panel 不暴露重算选项，但顶部 banner 透明化告诉用户这些 tab 该去哪儿刷新。
+const CROSS_MODULE_TABS: Array<{ axisLabel: string; tabLabel: string; source: string }> = [
+  { axisLabel: '人物', tabLabel: '阵型',     source: 'CEO War Room' },
+  { axisLabel: '项目', tabLabel: '对外影响', source: 'CEO Situation' },
+];
+
+const AXIS_SHORT_LABEL: Record<string, string> = {
+  people: '人物', projects: '项目', knowledge: '知识', meta: 'meta', tension: '张力',
+  a: 'A 视图', b: 'B 视图', c: 'C 视图',
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function Stat({ label, v }: { label: string; v: string }) {
@@ -254,6 +312,21 @@ export function AxisRegeneratePanel({
                 );
               })}
             </div>
+            {/* 跨模块 tab 透明化：人物/阵型 + 项目/对外影响 由 CEO 模块维护 */}
+            <div style={{
+              marginTop: 10, padding: '8px 12px',
+              background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 5,
+              fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.6,
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            }}>
+              <Icon name="info" size={11} />
+              <span>跨模块 tab 不在本面板重算（数据由其他模块写入）：</span>
+              {CROSS_MODULE_TABS.map((t, i) => (
+                <Chip key={i} tone="ghost" style={{ fontSize: 10.5 }}>
+                  {t.axisLabel} · {t.tabLabel} ← {t.source}
+                </Chip>
+              ))}
+            </div>
           </div>
 
           <div>
@@ -283,8 +356,27 @@ export function AxisRegeneratePanel({
                     <div>
                       <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: on ? 600 : 500 }}>{sub.label}</div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 3 }}>
-                        deps: {sub.depsOn.slice(0, 2).join(' · ')}{sub.depsOn.length > 2 && ' …'}
+                        deps: {sub.depsOn.length === 0 ? '—' : sub.depsOn.slice(0, 2).join(' · ')}{sub.depsOn.length > 2 && ' …'}
                       </div>
+                      {SUB_AFFECTS[sub.id] && SUB_AFFECTS[sub.id].length > 0 && (
+                        <div style={{
+                          fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)',
+                          marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+                        }}>
+                          <span style={{ color: 'var(--ink-4)' }}>→ tab:</span>
+                          {SUB_AFFECTS[sub.id].map((t, ti) => (
+                            <span key={ti} style={{
+                              background: 'var(--paper-2)', padding: '1px 6px', borderRadius: 3,
+                              color: 'var(--ink-2)',
+                            }}>
+                              {AXIS_SHORT_LABEL[t.axis] ?? t.axis} · {t.tabLabel}
+                              {t.note && (
+                                <span style={{ marginLeft: 4, color: 'var(--ink-4)' }}>({t.note})</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <span style={{
                       fontFamily: 'var(--mono)', fontSize: 10.5, padding: '2px 8px', borderRadius: 3,
