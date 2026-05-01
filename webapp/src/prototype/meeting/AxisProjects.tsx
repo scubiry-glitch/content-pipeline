@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, Icon, MockBadge, SectionLabel } from './_atoms';
-import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -749,8 +749,10 @@ function RiskRewardScatter({ rows }: { rows: Array<{ id: string; text: string; s
 
 // ── Main export ─────────────────────────────────────────────────────────────
 
+const AXIS_PROJECTS_TABS = ['provenance', 'assumptions', 'questions', 'risks', 'responsibility', 'stakeholders'] as const;
+
 export function AxisProjects() {
-  const [tab, setTab] = useState('provenance');
+  const [tab, setTab] = useStickyTab('axis.projects.tab', 'provenance', AXIS_PROJECTS_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;

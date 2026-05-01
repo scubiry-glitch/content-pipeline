@@ -5,7 +5,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
-import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -472,9 +472,11 @@ function Counterfactuals() {
 
 // ── Main export ─────────────────────────────────────────────────────────────
 
+const AXIS_KNOWLEDGE_TABS = ['cognition', 'mental_models', 'evidence', 'counterfactuals', 'consensus', 'concept', 'lineage', 'external'] as const;
+
 export function AxisKnowledge() {
   // R4 · tab id 重组：默认 → 'cognition' (原 judgments tab 升级为合并段)
-  const [tab, setTab] = useState('cognition');
+  const [tab, setTab] = useStickyTab('axis.knowledge.tab', 'cognition', AXIS_KNOWLEDGE_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const scope = useMeetingScope();

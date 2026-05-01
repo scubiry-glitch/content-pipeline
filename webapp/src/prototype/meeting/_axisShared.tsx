@@ -22,6 +22,29 @@ export interface TabDef {
   icon: IconName;
 }
 
+export function useStickyTab(
+  storageKey: string,
+  fallback: string,
+  validIds?: readonly string[],
+): [string, (next: string) => void] {
+  const [tab, setTabState] = useState<string>(() => {
+    if (typeof window === 'undefined') return fallback;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) return fallback;
+      if (validIds && !validIds.includes(stored)) return fallback;
+      return stored;
+    } catch {
+      return fallback;
+    }
+  });
+  const setTab = (next: string) => {
+    setTabState(next);
+    try { window.localStorage.setItem(storageKey, next); } catch { /* noop */ }
+  };
+  return [tab, setTab];
+}
+
 function axisColorFor(axis: string): string {
   if (axis === '人物') return 'var(--accent)';
   if (axis === '项目') return 'var(--teal)';

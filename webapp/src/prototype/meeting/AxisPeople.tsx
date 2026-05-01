@@ -5,7 +5,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
-import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay } from './_axisShared';
+import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyTab } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -738,8 +738,10 @@ function RasicMatrixSection({ topics, matrix, personNames }: {
 
 // ── Main export ─────────────────────────────────────────────────────────────
 
+const AXIS_PEOPLE_TABS = ['commitments', 'trajectory', 'speech', 'silence', 'belief', 'formation', 'blind_spots', 'manage'] as const;
+
 export function AxisPeople() {
-  const [tab, setTab] = useState('commitments');
+  const [tab, setTab] = useStickyTab('axis.people.tab', 'commitments', AXIS_PEOPLE_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const forceMock = useForceMock();
