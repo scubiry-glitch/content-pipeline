@@ -84,9 +84,17 @@ import {
   createCeoPipelineDeps,
   initCeoEngineSingleton,
 } from './modules/ceo/index.js';
+import { createServiceLLMCeoAdapter } from './modules/ceo/adapters/llm.js';
 import { resolveStrategyForMeeting, shouldSkipExpertAnalysis } from './services/expert-application/meetingKindStrategyMap.js';
 import { query } from './db/connection.js';
-import { generateEmbedding } from './services/llm.js';
+import {
+  generateEmbedding,
+  hasAvailableLLM,
+  getAvailableLLMs,
+  generateWithClaude,
+  generateWithKimi,
+  generateWithOpenAI,
+} from './services/llm.js';
 import { sentimentRoutes } from './routes/sentiment.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { publicAPIRoutes } from './routes/public-api.js';
@@ -280,16 +288,27 @@ async function main() {
   initMeetingNotesEngineSingleton(meetingNotesEngine);
   await fastify.register(createMeetingNotesRouter(meetingNotesEngine), { prefix: '/api/v1/meeting-notes' });
 
-  // CEO 决策驾驶舱模块 (PR3 骨架) — 双模主壳 + 6 房间 + Panorama + 外脑图书馆
+  // CEO 决策驾驶舱模块 — 双模主壳 + 6 房间 + Panorama + 外脑图书馆
   // 跨模块仅走 engine 接口，不直接 SQL 跨表
-  // PR3 阶段：仅暴露 /health + /dashboard 占位；房间路由 PR4-9 各自补齐；LLM 生成中心整合 PR12
+  // g3/g4 加工任务通过 LLM Adapter (services/llm.ts) 调真 LLM；未配置 API Key 时 handler 走 stub 兜底
+  const ceoLlmAdapter = createServiceLLMCeoAdapter({
+    hasAvailable: hasAvailableLLM,
+    available: getAvailableLLMs,
+    generateWithClaude,
+    generateWithKimi,
+    generateWithOpenAI,
+  });
   const ceoEngine = createCeoEngine(
     createCeoPipelineDeps({
       dbQuery: query,
       meetingNotesEngine: meetingNotesEngine as any,
       expertEngine: expertEngine as any,
       contentLibraryEngine: contentLibraryEngine as any,
+      llm: ceoLlmAdapter,
     }),
+  );
+  console.log(
+    `🪞 CEO LLM adapter: ${ceoLlmAdapter.isAvailable() ? 'enabled (real LLM)' : 'stub (no API key)'}`,
   );
   initCeoEngineSingleton(ceoEngine);
   await fastify.register(createCeoRouter(ceoEngine), { prefix: '/api/v1/ceo' });
