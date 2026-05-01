@@ -3,6 +3,7 @@
 
 import { Pool, PoolClient, QueryResult } from 'pg';
 import { ensureMeetingNotesModuleSchema } from './ensureMeetingNotesSchema.js';
+import { ensureCeoModuleSchema } from './ensureCeoSchema.js';
 
 let pool: Pool | null = null;
 const SLOW_QUERY_THRESHOLD_MS = parseInt(process.env.DB_SLOW_QUERY_THRESHOLD_MS || '1000', 10);
@@ -1670,8 +1671,12 @@ async function setupContentLibrarySchema(): Promise<void> {
       WITH (lists = 50)
   `).catch(() => console.log('[DB] content_entities ivfflat index skipped'));
 
-  // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–011 SQL 对齐
+  // Meeting Notes 生成中心 / scopes / 四轴等（mn_runs 等）— 与 modules 下 001–020 SQL 对齐
   await ensureMeetingNotesModuleSchema(query);
+
+  // CEO 决策驾驶舱（六棱镜 / 六房间 / 简报 / 利益相关方 / 阳台反思）
+  // 必须在 mn_runs 加 module 字段后跑（依赖 migration 020 已就位）
+  await ensureCeoModuleSchema(query);
 
   // Hot-path indexes used by dashboard list APIs
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_scopes_kind_created ON mn_scopes(kind, created_at DESC)`).catch(() => {});

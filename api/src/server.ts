@@ -78,6 +78,12 @@ import {
   createPipelineExpertApplicationAdapter,
 } from './modules/meeting-notes/adapters/pipeline.js';
 import { initMeetingNotesEngineSingleton } from './modules/meeting-notes/singleton.js';
+import {
+  createCeoEngine,
+  createRouter as createCeoRouter,
+  createCeoPipelineDeps,
+  initCeoEngineSingleton,
+} from './modules/ceo/index.js';
 import { resolveStrategyForMeeting, shouldSkipExpertAnalysis } from './services/expert-application/meetingKindStrategyMap.js';
 import { query } from './db/connection.js';
 import { generateEmbedding } from './services/llm.js';
@@ -274,6 +280,20 @@ async function main() {
   initMeetingNotesEngineSingleton(meetingNotesEngine);
   await fastify.register(createMeetingNotesRouter(meetingNotesEngine), { prefix: '/api/v1/meeting-notes' });
 
+  // CEO 决策驾驶舱模块 (PR3 骨架) — 双模主壳 + 6 房间 + Panorama + 外脑图书馆
+  // 跨模块仅走 engine 接口，不直接 SQL 跨表
+  // PR3 阶段：仅暴露 /health + /dashboard 占位；房间路由 PR4-9 各自补齐；LLM 生成中心整合 PR12
+  const ceoEngine = createCeoEngine(
+    createCeoPipelineDeps({
+      dbQuery: query,
+      meetingNotesEngine: meetingNotesEngine as any,
+      expertEngine: expertEngine as any,
+      contentLibraryEngine: contentLibraryEngine as any,
+    }),
+  );
+  initCeoEngineSingleton(ceoEngine);
+  await fastify.register(createCeoRouter(ceoEngine), { prefix: '/api/v1/ceo' });
+
   // 收藏路由 (v5.1.1)
   await fastify.register(favoritesRoutes, { prefix: '/api/v1/favorites' });
 
@@ -430,6 +450,14 @@ async function main() {
       console.log('🗓️ Meeting Notes 模块 scheduler 启动（project auto / library monthly）');
     } catch (err) {
       console.warn('🗓️ Meeting Notes scheduler 启动失败（不影响其他服务）:', (err as Error).message);
+    }
+
+    // CEO 模块 scheduler (PR3 占位 placeholder, PR4+ 接入聚合/晋升/异常/评分流)
+    try {
+      ceoEngine.startScheduler();
+      console.log('🪞 CEO 模块 scheduler 启动（placeholder, PR4+ 接入规则流）');
+    } catch (err) {
+      console.warn('🪞 CEO scheduler 启动失败（不影响其他服务）:', (err as Error).message);
     }
 
     // RSS 自动采集已整合，可通过 /api/v1/quality/rss-sources/crawl 接口手动触发
