@@ -5,7 +5,7 @@
 
 import type { MeetingNotesDeps } from '../types.js';
 
-interface TreeNode {
+export interface TreeNode {
   id: string;
   parent: string | null;      // 单父（取 based_on_ids[0] 做主线）
   title: string;
