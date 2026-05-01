@@ -9,6 +9,9 @@ import { Astrolabe } from './Astrolabe';
 import { TimePie } from './TimePie';
 import { DriftRadar } from './DriftRadar';
 import { ProjectAtlasCard } from './ProjectAtlasCard';
+import { StrategicEchoSankey } from './StrategicEchoSankey';
+import { OnePagerPaper } from './OnePagerPaper';
+import { ArchivesTabs } from './ArchivesTabs';
 
 export function Compass() {
   const navigate = useNavigate();
@@ -193,33 +196,19 @@ export function Compass() {
         {/* ④ Project Atlas */}
         <ProjectAtlasCard />
 
-        {/* ⑤ 战略回响 Sankey — 待 PR12 接 LLM 后填充 */}
-        <Block
-          num="⑤ strategic echo"
-          title="战略回响 · 假设 ↔ 现实"
-          meta="hypothesis → fact (g4 LLM)"
-          spanFull
-        >
-          <Placeholder>
-            Sankey 流：左列假设 ↔ 中列证据 run ↔ 右列结局 (confirm/refute/pending)。
-            数据源 ceo_strategic_echos，由 g4 跨会批注 LLM 任务填充 (PR12)。
-          </Placeholder>
+        {/* ⑤ 战略回响 Sankey — 接 ceo_strategic_echos 真数据 */}
+        <Block num="⑤ strategic echo" title="战略回响 · 假设 ↔ 现实" meta="hypothesis ↔ fact ↔ fate" spanFull>
+          <StrategicEchoSankey />
         </Block>
 
-        {/* ⑥ 一页纸摘要 */}
-        <Block num="⑥ one-pager" title="一页纸摘要" meta="本周战略口径">
-          <Placeholder>
-            5 段式摘要：本周主线 / 风险 / 决定 / 下周关注 / 一句话总结。
-            将在 PR12 由 LLM 自动生成，落到 ceo_briefs。
-          </Placeholder>
+        {/* ⑥ 一页纸摘要 — 接 ceo_briefs 最新一份 */}
+        <Block num="⑥ one-pager" title="一页纸摘要" meta="ceo_briefs latest">
+          <OnePagerPaper />
         </Block>
 
-        {/* ⑦ Archives */}
+        {/* ⑦ Archives — 接 ceo_briefs 历史版本 */}
         <Block num="⑦ archives" title="历史档案" meta="按 board session" spanFull>
-          <Placeholder>
-            按董事会版本展示：v1 / v2 / v3 ... 每条对应 ceo_briefs(version)。
-            待 PR5 Boardroom 完成后接入。
-          </Placeholder>
+          <ArchivesTabs />
         </Block>
       </main>
     </div>
@@ -352,26 +341,6 @@ function Legend() {
         />
         漂移 (S 极)
       </div>
-    </div>
-  );
-}
-
-function Placeholder({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: '20px 18px',
-        background: 'rgba(62,110,140,0.04)',
-        border: '1px dashed rgba(62,110,140,0.3)',
-        borderRadius: 4,
-        fontFamily: 'var(--serif)',
-        fontStyle: 'italic',
-        fontSize: 13,
-        color: 'rgba(26,46,61,0.62)',
-        lineHeight: 1.7,
-      }}
-    >
-      {children}
     </div>
   );
 }
