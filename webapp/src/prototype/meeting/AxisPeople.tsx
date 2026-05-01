@@ -652,6 +652,75 @@ function PSilence({ meetingId }: { meetingId: string }) {
           如果议题只谈了 3 分钟，没人来得及说话，那不是信号，那是噪声。
         </CalloutCard>
       </div>
+
+      {/* R4 · 改动一：沉默信号 tab 内追加 RASIC 矩阵子段
+            (Responsible / Accountable / Support / Informed / Consulted)
+          v1 lite：从 mock 派生（spoke→R, abnormalSilence→A, normalSilence→I, absent→—），
+          后续可换成 LLM 抽取的真实角色矩阵。 */}
+      <RasicMatrixSection topics={topics} matrix={matrix} personNames={personNames} />
+    </div>
+  );
+}
+
+function RasicMatrixSection({ topics, matrix, personNames }: {
+  topics: string[];
+  matrix: Array<{ who: string; vals: string[] }>;
+  personNames: Record<string, string>;
+}) {
+  // 派生规则（lite v1）：spoke→R, abnormalSilence→A (问责), normalSilence→I, absent→—
+  const stateToRasic = (s: string): { code: string; tone: string } => {
+    if (s === 'spoke') return { code: 'R', tone: 'oklch(0.40 0.14 160)' };
+    if (s === 'abnormalSilence') return { code: 'A', tone: 'oklch(0.42 0.16 25)' };
+    if (s === 'normalSilence') return { code: 'I', tone: 'var(--ink-3)' };
+    if (s === 'absent') return { code: '—', tone: 'var(--ink-4)' };
+    return { code: '·', tone: 'var(--ink-4)' };
+  };
+  return (
+    <div style={{ marginTop: 36 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
+        <SectionLabel>RASIC 矩阵</SectionLabel>
+        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+          (人 × 议题) 角色映射 · v1 lite 派生
+        </span>
+      </div>
+      <div style={{
+        background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
+        padding: '12px 14px', overflow: 'auto',
+      }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 11 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--ink-3)', fontWeight: 500, fontFamily: 'var(--mono)' }}>person \ topic</th>
+              {topics.map((t) => (
+                <th key={t} style={{ padding: '4px 8px', color: 'var(--ink-3)', fontWeight: 500, fontFamily: 'var(--mono)', whiteSpace: 'nowrap' }}>
+                  {t.length > 8 ? t.slice(0, 7) + '…' : t}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.map((row) => {
+              const name = personNames[row.who] || P(row.who).name;
+              return (
+                <tr key={row.who}>
+                  <td style={{ padding: '4px 8px', whiteSpace: 'nowrap', color: 'var(--ink-2)' }}>{name}</td>
+                  {row.vals.map((v, i) => {
+                    const r = stateToRasic(v);
+                    return (
+                      <td key={i} style={{ padding: '4px 8px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 600, color: r.tone }}>
+                        {r.code}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ marginTop: 8, fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+          R = Responsible · A = Accountable · S = Support · I = Informed · C = Consulted
+        </div>
+      </div>
     </div>
   );
 }
@@ -691,11 +760,18 @@ export function AxisPeople() {
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
 
+  // R4 · 改动一：4 → 8 tabs（保留人物管理）
   const tabs = [
     { id: 'commitments', label: '承诺与兑现', sub: '说到做到率 · 跨会议承诺 ledger', icon: 'check' as const },
     { id: 'trajectory',  label: '角色画像演化', sub: '功能角色的漂移 · 提出者 / 质疑者 / 执行者', icon: 'git' as const },
     { id: 'speech',      label: '发言质量',   sub: '信息熵 · 被追问率 · 引用率', icon: 'mic' as const },
-    { id: 'silence',     label: '沉默信号',   sub: '谁在什么议题上反常沉默', icon: 'wand' as const },
+    { id: 'silence',     label: '沉默信号 + RASIC', sub: '反常沉默 + (人 × 议题) 角色矩阵', icon: 'wand' as const },
+    // R4 · 跨模块下沉
+    { id: 'belief',      label: '信念轨迹', sub: '同议题上同人随时间的判断变化 · 来自 longitudinal', icon: 'arrow' as const },
+    { id: 'formation',   label: '阵型',     sub: 'CEO War Room · 团队战术编队', icon: 'layers' as const },
+    // R4 · 跨轴搬家：cognitive_biases 知识 → 人物
+    { id: 'blind_spots', label: '盲区档案', sub: '认知偏差 + 自认矛盾', icon: 'wand' as const },
+    // 保留：人物管理（R4 设计原则 #2）
     { id: 'manage',      label: '人物管理',   sub: '改名 · alias 历史映射', icon: 'users' as const },
   ];
   return (
@@ -705,6 +781,10 @@ export function AxisPeople() {
         {tab === 'trajectory'  && <PTrajectory scopeId={scopeId} />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
         {tab === 'silence'     && <PSilence meetingId={meetingId} />}
+        {/* R4 · 3 个新 tab */}
+        {tab === 'belief'      && <BeliefThreadTab scopeId={scopeId} />}
+        {tab === 'formation'   && <FormationTab scopeId={scopeId} />}
+        {tab === 'blind_spots' && <BlindSpotsTab scopeId={scopeId} />}
         {tab === 'manage'      && <PeopleManage scopeId={scopeId} />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
@@ -715,6 +795,186 @@ export function AxisPeople() {
 }
 
 export default AxisPeople;
+
+// ── R4 · 跨模块/跨轴 3 个新 tab 组件 ──────────────────────────────
+
+/** 信念轨迹：从 mn_belief_drift_series 读，与 longitudinal 同源。lite v1 复用 longitudinal API */
+function BeliefThreadTab({ scopeId }: { scopeId: string }) {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    meetingNotesApi.getLongitudinal(scopeId, 'belief_drift')
+      .then((r) => { if (!cancelled) { setData(r); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>信念轨迹</h2>
+        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+          mn_belief_drift_series · 与 /meeting/longitudinal?tab=drift 同源
+        </span>
+      </div>
+      {loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
+      {err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
+      {!loading && !err && (
+        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
+          {data && (Array.isArray(data.series) ? data.series.length : 0) > 0 ? (
+            <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
+              {JSON.stringify(data, null, 2).slice(0, 800)}{(JSON.stringify(data).length > 800) ? '\n…' : ''}
+            </pre>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              本 scope 暂无信念轨迹数据 · 跑生成中心 → longitudinal/belief_drift 触发
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 阵型：调 CEO War Room API */
+function FormationTab({ scopeId }: { scopeId: string }) {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    const url = `/api/v1/ceo/war-room/formation${scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : ''}`;
+    fetch(url, { headers: { 'X-API-Key': (import.meta as any).env?.VITE_API_KEY ?? '' } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  const conflictTemp = data?.conflict_temp;
+  const formationData = data?.formation_data;
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>阵型</h2>
+        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+          来源 GET /api/v1/ceo/war-room/formation · ceo_formation_snapshots
+        </span>
+      </div>
+      {loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
+      {err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
+      {!loading && !err && (
+        <>
+          {conflictTemp !== undefined && conflictTemp !== null && (
+            <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ink-2)' }}>
+              冲突温度 <strong style={{ fontFamily: 'var(--serif)', fontSize: 18, color: 'oklch(0.40 0.14 25)' }}>
+                {Number(conflictTemp).toFixed(2)}
+              </strong>
+            </div>
+          )}
+          <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
+            {formationData ? (
+              <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
+                {JSON.stringify(formationData, null, 2).slice(0, 1200)}
+              </pre>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                本 scope 暂无阵型快照 · 在 /ceo/internal/ceo/war-room 触发后回看
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 盲区档案：cognitive_biases + 自认矛盾。需要选定 person_id；scope 模式下显示选人引导 */
+function BlindSpotsTab({ scopeId }: { scopeId: string }) {
+  const [searchParams] = useSearchParams();
+  const personId = searchParams.get('personId') || '';
+  const [data, setData] = useState<{ biases: any[]; selfContradictions: any[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!personId) return;
+    let cancelled = false;
+    setLoading(true); setErr(null);
+    meetingNotesApi.getPersonBlindSpots(personId)
+      .then((r) => { if (!cancelled) { setData(r); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [personId]);
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>盲区档案</h2>
+        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+          认知偏差 (mn_cognitive_biases) + 自认矛盾派生 (mn_belief_drift_series)
+        </span>
+      </div>
+      {!personId && (
+        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '20px 24px', fontSize: 12, color: 'var(--ink-3)' }}>
+          点选某个人物 → URL 加 <code>?personId=&lt;uuid&gt;</code> 查看其盲区档案。
+          后续可加人员选择器 UI（v1 暂用 URL 参数）。
+        </div>
+      )}
+      {personId && loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
+      {personId && err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
+      {personId && !loading && !err && data && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
+              认知偏差 · {data.biases.length}
+            </div>
+            {data.biases.length === 0 ? (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)' }}>未识别偏差</div>
+            ) : (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {data.biases.slice(0, 8).map((b: any) => (
+                  <div key={b.id} style={{ borderLeft: '2px solid oklch(0.55 0.18 285)', paddingLeft: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                      <Chip tone={b.severity === 'high' ? 'accent' : b.severity === 'med' ? 'amber' : 'ghost'}>{b.bias_type}</Chip>
+                      {b.mitigated && <span style={{ fontSize: 10, color: 'oklch(0.40 0.10 160)' }}>已缓解</span>}
+                    </div>
+                    {b.where_excerpt && (
+                      <div style={{ marginTop: 4, fontSize: 11.5, fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                        "{b.where_excerpt}"
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 16px' }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
+              自认矛盾 · {data.selfContradictions.length}
+            </div>
+            {data.selfContradictions.length === 0 ? (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)' }}>同议题上未发现立场翻号</div>
+            ) : (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {data.selfContradictions.slice(0, 8).map((f: any) => (
+                  <div key={f.id} style={{ borderLeft: '2px solid oklch(0.55 0.16 75)', paddingLeft: 10 }}>
+                    <div style={{ fontSize: 12, fontFamily: 'var(--serif)', color: 'var(--ink-2)' }}>
+                      <code style={{ color: 'var(--ink)' }}>{f.topic_id}</code>
+                    </div>
+                    <div style={{ marginTop: 3, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+                      {f.from > 0 ? '+' : ''}{Number(f.from).toFixed(2)} → {f.to > 0 ? '+' : ''}{Number(f.to).toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── F11 · 人物管理：改名 + alias 历史映射 ──────────────────────────
 
