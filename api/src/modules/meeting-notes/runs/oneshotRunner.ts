@@ -13,6 +13,7 @@
 import type { MeetingNotesDeps } from '../types.js';
 import type { ExpertSnapshot, ExpertRoleAssignment } from './expertProfileLoader.js';
 import { buildFullPrompt } from './promptTemplates/claudeCliFullPipeline.js';
+import { emitProgress } from './runStreamRegistry.js';
 
 // ============================================================
 // 入参 / 出参（与 ClaudeCliRunnerCtx/Hooks/Result 同形，去掉 CLI 专属字段）
@@ -320,10 +321,19 @@ export async function runOneshotMode(
     let raw = '';
     try {
       const oneshotModel = getOneshotModel();
+      const maxTok = getOneshotMaxTokens();
+      // 把已生成 token 数折算成 0.5→0.82 区间的进度，每 200 token 写一次 DB
+      const onProgress = async (tokensSoFar: number) => {
+        const ratio = 0.5 + Math.min(0.32, 0.32 * (tokensSoFar / maxTok));
+        const message = `生成中… ${tokensSoFar} / ${maxTok} tokens`;
+        emitProgress(payload.runId, { tokensSoFar, ratio, message });
+        await hooks.writeStep('streaming', ratio, message);
+      };
       raw = await deps.llm.completeWithSystem(prompt, '', {
         responseFormat: 'json',
         temperature,
-        maxTokens: getOneshotMaxTokens(),
+        maxTokens: maxTok,
+        onProgress,
         ...(oneshotModel ? { model: oneshotModel } : {}),
       });
     } catch (e) {

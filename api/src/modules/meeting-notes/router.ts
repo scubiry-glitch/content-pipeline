@@ -12,6 +12,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
 import { assertRowInWorkspace, currentWorkspaceId } from '../../db/repos/withWorkspace.js';
+import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -2015,6 +2016,54 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
      *
      * 必须在 /runs/:id 之前注册，否则 _diagnostics 会被当成 id 路由到 getRun → 404 / 500
      */
+
+    /**
+     * GET /runs/:id/stream — SSE 实时推送 oneshot 生成进度
+     * 客户端用 fetch + ReadableStream 连接（支持自定义 X-API-Key header）。
+     * 事件类型：progress { tokensSoFar, ratio, message }  |  terminal { state }  |  heartbeat {}
+     * 必须在 /runs/:id 之前注册。
+     */
+    fastify.get('/runs/:id/stream', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const raw = reply.raw;
+
+      raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      raw.setHeader('Cache-Control', 'no-cache');
+      raw.setHeader('Connection', 'keep-alive');
+      raw.setHeader('X-Accel-Buffering', 'no');
+      raw.flushHeaders();
+
+      const send = (event: string, data: unknown) => {
+        if (!raw.writableEnded) {
+          raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        }
+      };
+
+      send('heartbeat', { ts: Date.now() });
+      const heartbeat = setInterval(() => send('heartbeat', { ts: Date.now() }), 15_000);
+
+      const onProgress = (data: unknown) => send('progress', data);
+      const onTerminal = (data: unknown) => {
+        send('terminal', data);
+        if (!raw.writableEnded) raw.end();
+      };
+
+      subscribe(id, 'progress', onProgress);
+      subscribe(id, 'terminal', onTerminal);
+
+      const cleanup = () => {
+        clearInterval(heartbeat);
+        unsubscribe(id, 'progress', onProgress);
+        unsubscribe(id, 'terminal', onTerminal);
+      };
+
+      raw.on('close', cleanup);
+      raw.on('error', cleanup);
+
+      // 保持连接直到客户端断开
+      await new Promise<void>((resolve) => raw.on('close', resolve));
+    });
+
     fastify.get('/runs/_diagnostics', { preHandler: authenticate }, async () => {
       return engine.getRunDiagnostics();
     });

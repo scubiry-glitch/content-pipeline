@@ -34,6 +34,7 @@ import { renderMultiDim } from './renderMultiDim.js';
 import { composeAnalysisFromAxes, persistAnalysisToAsset } from './composeAnalysis.js';
 import { autoMatchAndBindScopes } from './scopeMatcher.js';
 import { parseMeeting } from '../parse/meetingParser.js';
+import { emitTerminal } from './runStreamRegistry.js';
 
 interface QueuePayload {
   runId: string;
@@ -2258,6 +2259,7 @@ export class RunEngine {
         console.warn('[runEngine] axisIssues write failed:', (e as Error).message);
       }
 
+      emitTerminal(payload.runId, 'succeeded');
       await this.deps.eventBus.publish('mn.run.completed', {
         runId: payload.runId,
         results: allResults,
@@ -2278,6 +2280,7 @@ export class RunEngine {
           WHERE id = $1`,
         [payload.runId, Date.now() - startedAt, msg, counter.input + counter.output, counter.input, counter.output, counter.calls],
       );
+      emitTerminal(payload.runId, 'failed');
       await this.deps.eventBus.publish('mn.run.failed', { runId: payload.runId, error: msg });
     } finally {
       // F3 · 清掉 heartbeat timer，无论成功失败 / cancel

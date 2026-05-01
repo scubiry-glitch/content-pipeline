@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { EXPERTS, ExpertMock } from './_fixtures';
-import { meetingNotesApi } from '../../api/meetingNotes';
+import { meetingNotesApi, streamRunProgress } from '../../api/meetingNotes';
 import { bindingsApi, expertLibraryApi } from '../../api/client';
 import { EXPERT_API_KEYS } from '../../hooks/useExpertApi';
 import { useCachedData } from '../../hooks/useSWRConfig';
@@ -1449,19 +1449,25 @@ function StepDot({ state, tick }: { state: string; tick: number }) {
 }
 
 function FlowProcessing({
-  onBack, runId, onViewRun, onGoMultiView, onRetry,
+  onBack, runId, onViewRun, onGoMultiView, onRetry, onAssetIdRecovered, onRunMetaRecovered,
 }: {
   onBack: () => void;
   runId: string | null;
   onViewRun: (runId: string) => void;
   onGoMultiView: (meetingId: string) => void;
   onRetry: () => Promise<boolean>;
+  onAssetIdRecovered?: (assetId: string) => void;
+  onRunMetaRecovered?: (meta: { preset: string; mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' }) => void;
 }) {
   const [tick, setTick] = useState(0);
   const [done, setDone] = useState(false);
   const [realRunId, setRealRunId] = useState<string | null>(runId);
   const [realMeetingId, setRealMeetingId] = useState<string | null>(null);
   const [realProgress, setRealProgress] = useState<number | null>(null);
+  const metaRecoveredRef = useRef(false);
+  // SSE 实时 token 进度
+  const [sseTokens, setSseTokens] = useState<number | null>(null);
+  const [sseMessage, setSseMessage] = useState<string | null>(null);
   // Phase 15.6 · getRun 扩 tokens/cost/currentStep
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
@@ -1533,6 +1539,8 @@ function FlowProcessing({
           metadata?: { currentStep?: string; currentStepKey?: string; llmCalls?: number; mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot' };
           surfaces?: { dispatchPlan?: any; decorators?: any; synthesis?: any; render?: any };
           errorMessage?: string;
+          preset?: string;
+          scope?: { kind?: string; id?: string };
         } = await meetingNotesApi.getRun(runId);
         if (cancelled) return;
         consecutiveErrors = 0;
@@ -1562,8 +1570,18 @@ function FlowProcessing({
         if (llmCount != null) setRealLlmCalls(llmCount);
         // API 返回 scope: { kind:'meeting', id:uuid } — meetingId 就在 scope.id 里
         const mid = r.meetingId ?? r.result?.meetingId
-          ?? ((r as any).scope?.kind === 'meeting' ? (r as any).scope?.id : undefined);
-        if (mid) setRealMeetingId(mid);
+          ?? (r.scope?.kind === 'meeting' ? r.scope?.id : undefined);
+        if (mid) {
+          setRealMeetingId(mid);
+          onAssetIdRecovered?.(mid);
+        }
+        // 首次 poll 成功时把 preset / mode 回传父组件，恢复 lastSubmitBody
+        if (!metaRecoveredRef.current && r.preset) {
+          metaRecoveredRef.current = true;
+          const recoveredMode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+            r.metadata?.mode ?? 'api-oneshot';
+          onRunMetaRecovered?.({ preset: r.preset, mode: recoveredMode });
+        }
         if (state === 'done' || state === 'completed' || state === 'succeeded') {
           setDone(true);
         } else if (state === 'failed' || state === 'cancelled') {
@@ -1604,6 +1622,23 @@ function FlowProcessing({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
+  }, [runId]);
+
+  // SSE 实时进度 effect — runId 存在且 run 尚未结束时连接
+  useEffect(() => {
+    if (!runId) return;
+    const stop = streamRunProgress(runId, {
+      onProgress: (data) => {
+        setSseTokens(data.tokensSoFar);
+        setSseMessage(data.message);
+      },
+      onTerminal: () => {
+        // terminal 事件到达后清掉 SSE 显示，让轮询接管最终态
+        setSseTokens(null);
+        setSseMessage(null);
+      },
+    });
+    return stop;
   }, [runId]);
 
   // R15: 用 surfaces 动态生成 dispatch / dec 标签，避免硬编码 "3 位专家"
@@ -2017,8 +2052,21 @@ function FlowProcessing({
                   ? <>任务排队中 · 正等待执行</>
                   : (realState === 'failed' || realState === 'cancelled')
                     ? <>任务执行失败 · 请返回上一步重试</>
-                    : <>解析进行中 · 约 <b>48 秒</b> 后可进入多维视图</>}
+                    : sseMessage
+                      ? <>{sseMessage}</>
+                      : <>解析进行中 · 约 <b>48 秒</b> 后可进入多维视图</>}
               </div>
+              {sseTokens != null && realState !== 'failed' && realState !== 'cancelled' && (
+                <div style={{ marginTop: 4, height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden', width: '100%' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, (sseTokens / 16384) * 100)}%`,
+                    background: 'var(--teal)',
+                    borderRadius: 2,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
             </div>
             <button onClick={onBack} style={btnGhost}>← 返回</button>
             {(realState === 'failed' || realState === 'cancelled') && (
@@ -2137,6 +2185,12 @@ export function NewMeeting() {
           runId={runId}
           onViewRun={(rid) => navigate(`/meeting/generation-center?run=${rid}`)}
           onGoMultiView={(mid) => navigate(`/meeting/${mid}/a`)}
+          onAssetIdRecovered={(id) => setAssetId(id)}
+          onRunMetaRecovered={({ preset, mode }) => {
+            if (!lastSubmitBody) {
+              setLastSubmitBody({ presetId: preset, expertIds: [], expertRoles: { people: [], projects: [], knowledge: [] }, mode });
+            }
+          }}
           onRetry={async () => {
             if (!lastSubmitBody) return false;
             return handleSubmit(lastSubmitBody);

@@ -7,22 +7,32 @@
 //   fallback: <repo-root>/data/content-wiki/default
 //
 // 一个项目最好只 set 其中一个; 三个都 set 时优先 MN_CLAUDE_WIKI_ROOT.
+//
+// 相对路径 (env 或 API override): 相对「仓库根」解析 —— REPO_ROOT_FALLBACK =
+//   cwd 去掉末尾的 /api 或 /api/...（与 api/migrations 里 repoRoot 语义一致），
+//   避免在 api/ 下启动且 WIKI_ROOT=data/... 时误写到 api/data/content-wiki。
 
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 const REPO_ROOT_FALLBACK = process.cwd().replace(/\/api(?:\/.*)?$/, '');
 const DEFAULT_WIKI_ROOT_REL = 'data/content-wiki/default';
 
 export const DEFAULT_WIKI_ROOT_ABS = resolve(REPO_ROOT_FALLBACK, DEFAULT_WIKI_ROOT_REL);
 
+function resolveWikiPathCandidate(raw: string): string {
+  const trimmed = raw.trim();
+  if (isAbsolute(trimmed)) return resolve(trimmed);
+  return resolve(REPO_ROOT_FALLBACK, trimmed);
+}
+
 /** 解析 wiki vault 根的绝对路径; 是所有写 wiki 代码的唯一入口 */
 export function resolveWikiRoot(override?: string | null): string {
-  if (override && override.trim().length > 0) return resolve(override.trim());
+  if (override && override.trim().length > 0) return resolveWikiPathCandidate(override);
   const envRoot =
     process.env.MN_CLAUDE_WIKI_ROOT
     ?? process.env.CONTENT_LIBRARY_WIKI_ROOT
     ?? process.env.WIKI_ROOT;
-  if (envRoot && envRoot.trim().length > 0) return resolve(envRoot.trim());
+  if (envRoot && envRoot.trim().length > 0) return resolveWikiPathCandidate(envRoot);
   return DEFAULT_WIKI_ROOT_ABS;
 }
 

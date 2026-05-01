@@ -34,6 +34,7 @@ function toRouterParams(options?: LLMOptions, systemPrompt?: string): Generation
     temperature: options?.temperature,
     maxTokens: options?.maxTokens,
     model: options?.model,
+    onProgress: options?.onProgress,
   };
   if (systemPrompt) p.systemPrompt = systemPrompt;
   if (options?.responseFormat) p.responseFormat = options.responseFormat;

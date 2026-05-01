@@ -513,3 +513,72 @@ export const meetingNotesApi = {
 };
 
 export { API_BASE as MEETING_NOTES_API_BASE };
+
+// ── SSE streaming ────────────────────────────────────────────────────────────
+
+export interface StreamProgressEvent {
+  tokensSoFar: number;
+  ratio: number;
+  message: string;
+}
+export interface StreamTerminalEvent {
+  state: 'succeeded' | 'failed' | 'cancelled';
+}
+
+/**
+ * 连接 GET /runs/:id/stream SSE 端点，实时接收生成进度。
+ * 返回一个 cleanup 函数，调用后断开连接。
+ */
+export function streamRunProgress(
+  runId: string,
+  handlers: {
+    onProgress?: (data: StreamProgressEvent) => void;
+    onTerminal?: (data: StreamTerminalEvent) => void;
+    onError?: (err: Error) => void;
+  },
+): () => void {
+  const ctrl = new AbortController();
+
+  (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/runs/${runId}/stream`, {
+        headers: authHeader(),
+        signal: ctrl.signal,
+      });
+      if (!response.ok || !response.body) return;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // SSE blocks are separated by double newline
+        const blocks = buf.split('\n\n');
+        buf = blocks.pop() ?? '';
+
+        for (const block of blocks) {
+          let event = 'message';
+          let data = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) event = line.slice(7).trim();
+            if (line.startsWith('data: ')) data = line.slice(6).trim();
+          }
+          if (!data) continue;
+          try {
+            const parsed = JSON.parse(data);
+            if (event === 'progress') handlers.onProgress?.(parsed as StreamProgressEvent);
+            if (event === 'terminal') handlers.onTerminal?.(parsed as StreamTerminalEvent);
+          } catch { /* malformed chunk */ }
+        }
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') handlers.onError?.(e instanceof Error ? e : new Error(String(e)));
+    }
+  })();
+
+  return () => ctrl.abort();
+}
