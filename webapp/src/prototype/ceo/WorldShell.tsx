@@ -6,6 +6,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import './_tokens.css';
 import { PersonDrawerProvider } from './shared/PersonDrawerProvider';
 import { PersonDrawer } from './shared/PersonDrawer';
+import { GlobalScopeFilter } from './shared/GlobalScopeFilter';
 
 type Mode = 'external' | 'internal';
 type ExtTab = 'meetings' | 'library';
@@ -86,6 +87,7 @@ export function WorldShell() {
             ink={themeInk}
             mode={mode}
           />
+          <GlobalScopeFilter />
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <Outlet />
           </div>

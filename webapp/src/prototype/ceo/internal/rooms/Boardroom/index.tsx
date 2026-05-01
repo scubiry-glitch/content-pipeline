@@ -9,7 +9,7 @@ import { AnnotationsList } from './AnnotationsList';
 import { PromiseTable } from './PromiseTable';
 import { VersionsTabs } from './VersionsTabs';
 import { RebuttalRehearsal } from './RebuttalRehearsal';
-import { ScopePicker, useSelectedScopes } from '../../../shared/ScopePicker';
+import { useSelectedScopes } from '../../../shared/ScopePicker';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -162,14 +162,7 @@ export function Boardroom() {
           margin: '0 auto',
         }}
       >
-        <Block
-          num="◐ scope filter"
-          title="勾选 scope · 项目 / 客户 / 主题"
-          meta="多选 intersection · URL 持久化"
-          spanFull
-        >
-          <ScopePicker />
-        </Block>
+        {/* R3-7: scope filter 已上移到 WorldShell 全局栏 (顶部 ▸ 范围筛选) — 此处保留 hook 以读取选中 scopes */}
 
         <Block num="① concerns radar" title="董事关切雷达 · 每位董事最近 3 次提的问题" meta="5 位董事 · 滚动 90 天" tall>
           <ConcernsRadar />
