@@ -98,7 +98,7 @@ export async function getSituationDashboard(
 ): Promise<{
   question: string;
   metric: { label: string; value: string; delta: string };
-  coverage: number;
+  coverage: { covered: number; total: number; missing: string[] };
   coveredKinds: string[];
   missingKinds: string[];
   topHeat: Array<{ name: string; kind: string; heat: number }>;

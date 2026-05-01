@@ -25,6 +25,7 @@
     "expert:export-builtin-approved": "tsx src/scripts/export-builtin-experts-to-approved.ts",
     "expert:upsert-approved": "tsx src/scripts/upsert-expert-profiles-from-files.ts",
     "expert:seed-builtins": "tsx src/scripts/seed-expert-library-builtins.ts",
+    "ceo:seed-demo": "tsx src/scripts/ceo-seed-demo.ts",
     "setup:production": "tsx src/scripts/setup-production.ts",
     "worker": "tsx src/worker.ts",
     "test": "vitest run",
