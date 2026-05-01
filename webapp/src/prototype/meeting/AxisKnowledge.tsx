@@ -463,7 +463,8 @@ function Counterfactuals() {
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export function AxisKnowledge() {
-  const [tab, setTab] = useState('judgments');
+  // R4 · tab id 重组：默认 → 'cognition' (原 judgments tab 升级为合并段)
+  const [tab, setTab] = useState('cognition');
   const [regenOpen, setRegenOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const scope = useMeetingScope();
@@ -559,18 +560,22 @@ export function AxisKnowledge() {
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
 
+  // R4 · 改动三：10 → 8 tabs。
+  //   - cognition: 合并 reusable_judgments + 新认知摘要
+  //   - mental_models: 合并 mental_models 激活 + model_hitrate 命中率
+  //   - 移除 biases 独立 tab（cognitive_biases 数据 + sub_dim 后端保留，UI 转到 /meeting/axes/people 的盲区档案）
+  //   - 议题谱系与健康: lineage + rehash 占位
+  //   - 概念辨析: 升级标签（原 concept_drift）
+  // 后端 mn_runs / AXIS_SUBDIMS 完全不动，老 sub_dim 'cognitive_biases' 等仍可执行
   const tabs = [
-    { id: 'judgments',       label: '可复用判断',    sub: '从具体案例提炼的通用结论',  icon: 'book' as const },
-    { id: 'mental_models',   label: '心智模型激活',  sub: '谁用了什么模型，用得对吗',  icon: 'compass' as const },
-    { id: 'evidence',        label: '证据层级',       sub: 'A/B/C/D 分级统计',          icon: 'layers' as const },
-    { id: 'biases',          label: '认知偏差',       sub: '本场激活的 5 种偏差',        icon: 'wand' as const },
-    { id: 'counterfactuals', label: '反事实 / 未走的路', sub: '被否决的路径持续追踪',   icon: 'git' as const },
-    // R3-A · 知识轴扩展 5 子维度（023-knowledge-axis-extension.sql）
-    { id: 'model_hitrate',   label: '心智模型命中率', sub: '6 个月滚动校准',           icon: 'compass' as const },
-    { id: 'consensus_track', label: '共识 / 分歧轨迹', sub: '一个 topic 的多场表态',     icon: 'layers' as const },
-    { id: 'concept_drift',   label: '概念漂移',       sub: '同词不同义诊断',            icon: 'wand' as const },
-    { id: 'topic_lineage',   label: '议题谱系',       sub: '出生 / 健康 / 濒危',         icon: 'git' as const },
-    { id: 'external_experts',label: '外部专家注释',   sub: '引用源 + 事后准确度',        icon: 'book' as const },
+    { id: 'cognition',       label: '认知沉淀',       sub: '可复用判断 + 本场新认知',          icon: 'book' as const },
+    { id: 'mental_models',   label: '心智模型',       sub: '激活 + 6 个月命中率',              icon: 'compass' as const },
+    { id: 'evidence',        label: '证据层级',       sub: 'A/B/C/D 分级统计',                icon: 'layers' as const },
+    { id: 'counterfactuals', label: '反事实 / 未走的路', sub: '被否决的路径持续追踪',         icon: 'git' as const },
+    { id: 'consensus',       label: '共识与分歧',     sub: '一个 topic 的多场表态',            icon: 'layers' as const },
+    { id: 'concept',         label: '概念辨析',       sub: '同词不同义诊断',                   icon: 'wand' as const },
+    { id: 'lineage',         label: '议题谱系与健康', sub: '出生 / 健康 / 濒危 + rehash 指数', icon: 'git' as const },
+    { id: 'external',        label: '外脑批注',       sub: '引用源 + 事后准确度',              icon: 'book' as const },
   ];
   return (
     <>
@@ -593,17 +598,63 @@ export function AxisKnowledge() {
             {!searchParams.get('meetingId') && autoMeetingId && <span style={{ color: '#065f46', marginLeft: 4 }}>(auto-pick)</span>}
           </span>
         </div>
-        {tab === 'judgments'       && <Judgments scopeId={scopeId} />}
-        {tab === 'mental_models'   && <MentalModelsLive data={knowledgeData?.mental_models} fallback={<MentalModels scopeId={scopeId} />} />}
+        {/* R4 · 改动三：tabs 重组 + 合并段
+            - cognition = Judgments（沉淀） + 简短提示"新认知摘要"
+            - mental_models tab = MentalModelsLive (激活) 上方 + model_hitrate 占位下方
+            - 议题谱系与健康 = topic_lineage 占位 + rehash 占位 */}
+        {tab === 'cognition' && (
+          <>
+            <Judgments scopeId={scopeId} />
+            <div style={{ padding: '0 32px 28px' }}>
+              <div style={{
+                background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+                borderRadius: 6, padding: '14px 18px', fontSize: 12, color: 'var(--ink-3)',
+              }}>
+                <strong style={{ color: 'var(--ink-2)' }}>本场新认知摘要</strong>{' '}
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5 }}>
+                  · 待 LLM 抽取；v1 暂沿用上方 Judgments 的高 generality 子集
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+        {tab === 'mental_models' && (
+          <>
+            <MentalModelsLive data={knowledgeData?.mental_models} fallback={<MentalModels scopeId={scopeId} />} />
+            <div style={{ padding: '0 32px 28px' }}>
+              <div style={{
+                background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+                borderRadius: 6, padding: '14px 18px', fontSize: 12, color: 'var(--ink-3)',
+              }}>
+                <strong style={{ color: 'var(--ink-2)' }}>6 个月命中率校准</strong>{' '}
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5 }}>
+                  · 来源 mn_model_hitrates · 跑生成中心 → knowledge/model_hitrate 后填充
+                </span>
+              </div>
+            </div>
+          </>
+        )}
         {tab === 'evidence'        && <EvidenceLive data={aggregatedEvidence ?? knowledgeData?.evidence_grades} fallback={<Evidence />} scopeAggregated={!!aggregatedEvidence} />}
-        {tab === 'biases'          && <BiasesLive data={knowledgeData?.cognitive_biases} fallback={<Biases meetingId={meetingId} />} />}
         {tab === 'counterfactuals' && <CounterfactualsLive data={knowledgeData?.counterfactuals} fallback={<Counterfactuals />} />}
-        {/* R3-A · 5 个新子维度：computer 已就位（lite 派生），UI 暂用统一 PendingTab 占位 */}
-        {tab === 'model_hitrate'   && <PendingSubdimTab title="心智模型命中率" subDim="model_hitrate" hint="跑生成中心 → knowledge/model_hitrate 后写入 mn_model_hitrates" />}
-        {tab === 'consensus_track' && <PendingSubdimTab title="共识 / 分歧轨迹" subDim="consensus_track" hint="跑生成中心 → knowledge/consensus_track 后写入 mn_consensus_tracks" />}
-        {tab === 'concept_drift'   && <PendingSubdimTab title="概念漂移" subDim="concept_drift" hint="跑生成中心 → knowledge/concept_drift 后写入 mn_concept_drifts" />}
-        {tab === 'topic_lineage'   && <PendingSubdimTab title="议题谱系" subDim="topic_lineage" hint="跑生成中心 → knowledge/topic_lineage 后写入 mn_topic_lineage" />}
-        {tab === 'external_experts'&& <PendingSubdimTab title="外部专家注释" subDim="external_experts" hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
+        {tab === 'consensus'       && <PendingSubdimTab title="共识 / 分歧轨迹" subDim="consensus_track" hint="跑生成中心 → knowledge/consensus_track 后写入 mn_consensus_tracks" />}
+        {tab === 'concept'         && <PendingSubdimTab title="概念辨析" subDim="concept_drift" hint="跑生成中心 → knowledge/concept_drift 后写入 mn_concept_drifts" />}
+        {tab === 'lineage'         && (
+          <>
+            <PendingSubdimTab title="议题谱系与健康" subDim="topic_lineage" hint="跑生成中心 → knowledge/topic_lineage 后写入 mn_topic_lineage" />
+            <div style={{ padding: '0 32px 28px' }}>
+              <div style={{
+                background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+                borderRadius: 6, padding: '14px 18px', fontSize: 12, color: 'var(--ink-3)',
+              }}>
+                <strong style={{ color: 'var(--ink-2)' }}>rehash 指数</strong>{' '}
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5 }}>
+                  · 待接入 ceo rehash 计算；v1 占位
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+        {tab === 'external'        && <PendingSubdimTab title="外脑批注" subDim="external_experts" hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" onClose={() => setRegenOpen(false)} />
