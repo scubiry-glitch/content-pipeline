@@ -256,7 +256,7 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
 
   const briefId = (meta.briefId as string) ?? null;
   const stakes = await deps.db.query(
-    `SELECT name, kind FROM ceo_directors LIMIT 1`,
+    `SELECT name, role FROM ceo_directors LIMIT 1`,
   );
   const attacker = stakes.rows[0]?.name ?? '匿名董事';
 
