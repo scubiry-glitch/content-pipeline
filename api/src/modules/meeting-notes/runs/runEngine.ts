@@ -465,19 +465,27 @@ export class RunEngine {
       // 1h 太激进会误杀。错误信息也改为更诚实的字面意思（不假设是重启）。
       // F6 · 兼容 resume 路径：把 resume 时间也算进基准，否则 resume 一条老 run（created_at 早于 6h）
       // 会立刻被本 sweeper 秒杀（实测 d0604fff 第一次 resume 后 21 秒内被错误 cancel）。
-      const r2 = await this.deps.db.query(
-        `UPDATE mn_runs
-            SET state = 'cancelled', finished_at = NOW(),
-                error_message = COALESCE(error_message, 'queued-timeout: not picked up by worker within 6h')
-          WHERE state = 'queued'
-            AND module = 'mn'
-            AND GREATEST(
-                  created_at,
-                  COALESCE((metadata->>'resumedAt')::timestamptz, created_at)
-                ) < NOW() - INTERVAL '6 hours'
-          RETURNING id`,
-      );
-      cancelledQueued = (r2 as any).rowCount ?? r2.rows?.length ?? 0;
+      // F8 · target_worker 过滤：只取消路由给本 worker 的 run（或 target_worker IS NULL 的通用 run）。
+      // 防止 accept_modules=[] 的机器（TencentNodeDB 等）误杀路由给其他 worker 的任务。
+      const { getWorkerId, workerAcceptsModule } = await import('../../run-routing/service.js');
+      if (workerAcceptsModule('mn')) {
+        const workerId = getWorkerId();
+        const r2 = await this.deps.db.query(
+          `UPDATE mn_runs
+              SET state = 'cancelled', finished_at = NOW(),
+                  error_message = COALESCE(error_message, 'queued-timeout: not picked up by worker within 6h')
+            WHERE state = 'queued'
+              AND module = 'mn'
+              AND (target_worker IS NULL OR target_worker = $1)
+              AND GREATEST(
+                    created_at,
+                    COALESCE((metadata->>'resumedAt')::timestamptz, created_at)
+                  ) < NOW() - INTERVAL '6 hours'
+            RETURNING id`,
+          [workerId],
+        );
+        cancelledQueued = (r2 as any).rowCount ?? r2.rows?.length ?? 0;
+      }
     } catch (e) {
       console.warn('[RunEngine] cleanup queued orphans failed:', (e as Error).message);
     }
@@ -807,6 +815,7 @@ export class RunEngine {
     scopeKind?: string;
     scopeId?: string | null;
     axis?: string;
+    module?: string;
     state?: RunState;
     limit?: number;
     workspaceId?: string;
@@ -822,8 +831,9 @@ export class RunEngine {
       params.push(filter.scopeId ?? null);
       where.push(`COALESCE(scope_id::text,'') = COALESCE($${params.length}::text,'')`);
     }
-    if (filter.axis)  { params.push(filter.axis);  where.push(`axis = $${params.length}`); }
-    if (filter.state) { params.push(filter.state); where.push(`state = $${params.length}`); }
+    if (filter.axis)   { params.push(filter.axis);   where.push(`axis = $${params.length}`); }
+    if (filter.module) { params.push(filter.module); where.push(`module = $${params.length}`); }
+    if (filter.state)  { params.push(filter.state);  where.push(`state = $${params.length}`); }
     params.push(Math.min(100, Math.max(1, filter.limit ?? 20)));
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const r = await this.deps.db.query(

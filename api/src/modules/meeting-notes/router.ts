@@ -2280,6 +2280,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         scopeKind: q.scopeKind,
         scopeId: q.scopeId,
         axis: q.axis,
+        module: q.module,
         state: q.state,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
         workspaceId: currentWorkspaceId(request) ?? undefined,

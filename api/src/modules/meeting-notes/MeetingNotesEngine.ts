@@ -496,6 +496,7 @@ export class MeetingNotesEngine {
     scopeKind?: string;
     scopeId?: string | null;
     axis?: string;
+    module?: string;
     state?: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     limit?: number;
     workspaceId?: string;
