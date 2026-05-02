@@ -173,6 +173,8 @@ function QueueView() {
   const [stageFilter, setStageFilter] = useState<string>('');
   /** F5 · meetingId → title 反查表，让 meeting-scope 的 row 显示真名 */
   const [meetingTitles, setMeetingTitles] = useState<Record<string, string>>({});
+  /** scopeId → name 反查表（project/topic/client scope） */
+  const [scopeTitles, setScopeTitles] = useState<Record<string, string>>({});
   /** R5 · 粒度 1：展开哪一行查看 per-sub_dim 计数；null 全部折叠 */
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
@@ -207,6 +209,22 @@ function QueueView() {
         const map: Record<string, string> = {};
         for (const m of items) if (m?.id) map[m.id] = m.title || '(未命名)';
         setMeetingTitles(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [forceMock]);
+
+  // 拉 scopes 做 id→name 反查（project / topic / client）
+  useEffect(() => {
+    if (forceMock) return;
+    let cancelled = false;
+    meetingNotesApi.listScopes()
+      .then((r: any) => {
+        if (cancelled) return;
+        const items: any[] = Array.isArray(r) ? r : (r?.items ?? []);
+        const map: Record<string, string> = {};
+        for (const s of items) if (s?.id) map[s.id] = s.name || s.slug || s.id.slice(0, 8);
+        setScopeTitles(map);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -412,11 +430,13 @@ function QueueView() {
                   {r.scope === 'library' && '📚 '}
                   {r.scope} · {r.preset}
                 </div>
-                {/* F5 · meeting-scope 优先显示真实标题；其它 scope 保留原 scopeLabel */}
+                {/* 优先用 id→名称反查；meeting 用 meetingTitles，project/topic/client 用 scopeTitles */}
                 <div style={{ fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink-2)', marginTop: 3, lineHeight: 1.35 }}>
-                  {r.scope === 'meeting' && meetingTitles[r.scopeLabel]
-                    ? meetingTitles[r.scopeLabel]
-                    : r.scopeLabel}
+                  {r.scope === 'meeting'
+                    ? (meetingTitles[r.scopeLabel] || r.scopeLabel || '—')
+                    : r.scope === 'library'
+                      ? '全部会议'
+                      : (scopeTitles[r.scopeLabel] || r.scopeLabel?.slice(0, 8) || '—')}
                 </div>
               </div>
               <div>
@@ -492,10 +512,14 @@ function QueueView() {
                   <span style={{ color: 'var(--line)' }}>·</span>
                   <span>
                     <span style={{ color: 'var(--ink-4)' }}>
-                      {r.scope === 'meeting' ? '会议 ' : r.scope === 'project' ? '项目 ' : r.scope === 'topic' ? '话题 ' : r.scope === 'library' ? '会议库 ' : `${r.scope} `}
+                      {r.scope === 'meeting' ? '会议 ' : r.scope === 'project' ? '项目 ' : r.scope === 'topic' ? '话题 ' : r.scope === 'client' ? '客户 ' : r.scope === 'library' ? '全库 ' : `${r.scope} `}
                     </span>
-                    <span style={{ fontFamily: 'var(--serif)', color: 'var(--ink-2)' }}>
-                      {r.scope === 'meeting' && meetingTitles[r.scopeLabel] ? meetingTitles[r.scopeLabel] : (r.scopeLabel || '—')}
+                    <span style={{ fontFamily: 'var(--serif)', fontWeight: 600, color: 'var(--ink-1)' }}>
+                      {r.scope === 'meeting'
+                        ? (meetingTitles[r.scopeLabel] || r.scopeLabel || '—')
+                        : r.scope === 'library'
+                          ? '全部会议'
+                          : (scopeTitles[r.scopeLabel] || r.scopeLabel?.slice(0, 12) || '—')}
                     </span>
                   </span>
                   {r.stage && (
@@ -531,9 +555,29 @@ function QueueView() {
                     </>
                   )}
                 </div>
+                {/* 分析维度：r.subs 列表（始终可见，不依赖 axisStats 是否写入） */}
+                {r.subs.length > 0 && (
+                  <div style={{
+                    marginBottom: 10, paddingBottom: 8, borderBottom: '1px dashed var(--line-2)',
+                    display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap',
+                  }}>
+                    <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap', paddingTop: 2 }}>分析维度</span>
+                    {r.subs.map((s) => {
+                      const lbl = axisMeta.subs.find(x => x.id === s)?.label ?? s;
+                      return (
+                        <span key={s} style={{
+                          padding: '2px 8px', borderRadius: 4,
+                          background: axisMeta.color + '22',
+                          border: `1px solid ${axisMeta.color}55`,
+                          fontSize: 11.5, fontFamily: 'var(--serif)', color: 'var(--ink-1)',
+                        }}>{lbl}</span>
+                      );
+                    })}
+                  </div>
+                )}
                 {subDimEntries.length === 0 ? (
                   <div style={{ fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
-                    暂无 sub_dim 详情（可能是改动前跑的老 run，或 axisStats 还未写入）
+                    {r.subs.length > 0 ? '运行中 · 完成后可看 sub_dim 统计' : '暂无 sub_dim 详情'}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

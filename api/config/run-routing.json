@@ -111,8 +111,8 @@
       "host": "115.190.221.164",
       "ssh": { "user": "root", "port": 22 },
       "deploy": {
-        "repo": "/proweb/run/pipeline",
-        "api_dir": "/proweb/run/pipeline/api",
+        "repo": "/proweb/run/Pipeline/content-pipeline/",
+        "api_dir": "/proweb/run/Pipeline/content-pipeline/api",
         "worker_log": "/tmp/worker-llm.log"
       },
       "runtime": {
