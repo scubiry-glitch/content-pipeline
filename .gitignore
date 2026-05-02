@@ -51,3 +51,7 @@ test-*.mjs
 # Temporary
 /tmp/
 *.tmp
+
+# VM-specific PM2 configs（各机器不同，不入库）
+mn-worker.config.cjs
+**/mn-worker.config.cjs
