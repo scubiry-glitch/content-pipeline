@@ -32,8 +32,10 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
       { id: 'role_trajectory', label: '角色演化' },
       { id: 'speech_quality',  label: '发言质量' },
       { id: 'silence_signal',  label: '沉默信号' },
+      { id: 'affect_curve',    label: '情绪热力图' },
+      { id: 'intra_meeting',   label: '张力清单' },
     ],
-    produces: ['承诺清单', '角色轨迹', '发言图谱', '沉默信号'],
+    produces: ['承诺清单', '角色轨迹', '发言图谱', '沉默信号', '情绪热力图', '张力清单'],
     consumes: ['会议原材料', '历史纪要'],
     stage: 'L2',
   },
@@ -46,8 +48,10 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
       { id: 'assumptions',         label: '假设清单' },
       { id: 'open_questions',      label: '开放问题' },
       { id: 'risk_heat',           label: '风险热度' },
+      { id: 'decision_quality',    label: '决策质量' },
+      { id: 'meeting_necessity',   label: '必要性评估' },
     ],
-    produces: ['决策链', '假设清单', '开放问题', '风险热度'],
+    produces: ['决策链', '假设清单', '开放问题', '风险热度', '会议健康度报告', '一页纸摘要'],
     consumes: ['会议原材料', '历史纪要'],
     stage: 'L2',
   },
@@ -74,33 +78,9 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
     consumes: ['会议原材料', '历史纪要', '专家库', '内容库 assets'],
     stage: 'L2',
   },
-  meta: {
-    axis: 'meta',
-    label: '会议本身',
-    color: 'var(--amber)',
-    subDims: [
-      { id: 'decision_quality',  label: '决策质量' },
-      { id: 'meeting_necessity', label: '必要性评估' },
-      { id: 'affect_curve',      label: '情绪热力图' },
-    ],
-    produces: ['会议健康度报告', '一页纸摘要'],
-    consumes: ['会议原材料'],
-    stage: 'L1',
-    perMeetingView: { decision_quality: 'a', meeting_necessity: 'b', affect_curve: 'c' },
-  },
-  tension: {
-    axis: 'tension',
-    label: '张力轴',
-    color: 'var(--ink-2)',
-    subDims: [{ id: 'intra_meeting', label: '张力清单' }],
-    produces: ['张力清单'],
-    consumes: ['会议原材料'],
-    stage: 'L1',
-    perMeetingView: { intra_meeting: 'b' },
-  },
 };
 
-export const ALL_AXES = ['people', 'projects', 'knowledge', 'meta', 'tension'] as const;
+export const ALL_AXES = ['people', 'projects', 'knowledge'] as const;
 
 /** 全部子维度总数（NewMeeting 文案"22 子维度"来源） */
 export const AXIS_TOTAL_COUNT: number = ALL_AXES.reduce(

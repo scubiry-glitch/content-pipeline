@@ -45,6 +45,55 @@ export function useStickyTab(
   return [tab, setTab];
 }
 
+/**
+ * 双向同步 scopeId ↔ URL ?scopeId。
+ *
+ * - ScopePill 切换 scope → 更新 URL（让链接可分享）
+ * - URL 带 ?scopeId 打开页面 → 同步到 context（让 ScopePill 显示正确 scope）
+ *
+ * 调用时机：在 AxisPeople / AxisProjects / AxisKnowledge 的主组件顶层调用一次。
+ */
+export function useScopeUrlSync(
+  setSearchParams: (fn: (prev: URLSearchParams) => URLSearchParams, opts?: { replace?: boolean }) => void,
+  urlScopeId: string | undefined,
+) {
+  const scope = useMeetingScope();
+  // 捕捉挂载时的 URL scopeId；后续不再随 urlScopeId 变动
+  const initialUrlScopeIdRef = useRef(urlScopeId);
+  // 标记 URL→context 同步是否已完成（或不需要）
+  const syncedRef = useRef(!urlScopeId); // 没有初始 URL scopeId 时视为"已同步"
+
+  // Effect A: URL → context（scopes 加载完成后，把 URL scopeId 同步给 context）
+  useEffect(() => {
+    const initId = initialUrlScopeIdRef.current;
+    if (!initId || scope.loading || syncedRef.current) return;
+    for (const group of scope.kinds) {
+      if (group.instances.some((i) => i.id === initId)) {
+        if (scope.instanceId !== initId) scope.setInstance(group.id, initId);
+        break;
+      }
+    }
+    syncedRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope.loading, scope.kinds]);
+
+  // Effect B: context → URL（每次 effectiveScopeId 变化，更新 URL ?scopeId）
+  // 等 Effect A 完成后才执行（避免用默认 scope 覆盖分享链接的 scopeId）
+  useEffect(() => {
+    if (!syncedRef.current) return;
+    const newId = scope.effectiveScopeId;
+    if (!newId) return;
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev);
+      if (n.get('scopeId') === newId) return prev; // 无变化，不触发 re-render
+      n.set('scopeId', newId);
+      n.delete('version'); // version 是 scope 级别的，切换 scope 时清除
+      return n;
+    }, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope.effectiveScopeId]);
+}
+
 function axisColorFor(axis: string): string {
   if (axis === '人物') return 'var(--accent)';
   if (axis === '项目') return 'var(--teal)';
@@ -517,7 +566,7 @@ const AXIS_BACKEND_ID: Record<AxisName, string> = {
 };
 
 export function DimShell({
-  axis, tabs, tab, setTab, children, onOpenRegenerate, mock,
+  axis, tabs, tab, setTab, children, onOpenRegenerate, mock, version, scopeLabel,
 }: {
   axis: AxisName;
   tabs: TabDef[];
@@ -526,6 +575,10 @@ export function DimShell({
   children: ReactNode;
   onOpenRegenerate?: () => void;
   mock?: boolean;
+  /** URL ?version= 值，显示在标题栏 */
+  version?: string;
+  /** URL ?scopeId= 对应的名称（可选，用于显示当前作用域） */
+  scopeLabel?: string;
 }) {
   const axisColor = axisColorFor(axis);
   const isMobile = useIsMobile();
@@ -544,6 +597,20 @@ export function DimShell({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.005em', marginTop: -2 }}>
           {axis}轴
           {mock && <MockBadge />}
+          {version && (
+            <span style={{
+              fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.04em',
+              padding: '2px 7px', borderRadius: 4,
+              background: 'var(--amber-soft)', color: 'oklch(0.38 0.09 75)',
+              border: '1px solid oklch(0.85 0.07 75)',
+            }}>{version}</span>
+          )}
+          {scopeLabel && (
+            <span style={{
+              fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 400,
+              color: 'var(--ink-3)', marginLeft: 2,
+            }}>· {scopeLabel}</span>
+          )}
         </div>
       </div>
     </div>
@@ -743,6 +810,20 @@ export function CalloutCard({
       <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 8, color: 'var(--ink-2)', fontFamily: 'var(--serif)' }}>
         {children}
       </div>
+    </div>
+  );
+}
+
+export function AxisLoadingSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div style={{ padding: '24px 32px 36px' }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{
+          height: i === 0 ? 20 : 52,
+          background: 'var(--paper-2)', borderRadius: 5, marginBottom: 10,
+          opacity: Math.max(0.3, 1 - i * 0.18),
+        }} />
+      ))}
     </div>
   );
 }

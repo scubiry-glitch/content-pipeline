@@ -39,15 +39,16 @@ export type ComputerFn = (deps: MeetingNotesDeps, args: ComputeArgs) => Promise<
  * 注：evidence_grading 必须在 assumptions 之后（派生聚合依赖前者）。
  */
 export const AXIS_SUBDIMS: Record<string, string[]> = {
-  people:    ['commitments', 'role_trajectory', 'speech_quality', 'silence_signal'],
-  projects:  ['decision_provenance', 'assumptions', 'open_questions', 'risk_heat'],
+  people:    ['commitments', 'role_trajectory', 'speech_quality', 'silence_signal', 'affect_curve', 'intra_meeting'],
+  projects:  ['decision_provenance', 'assumptions', 'open_questions', 'risk_heat', 'decision_quality', 'meeting_necessity'],
   knowledge: ['reusable_judgments', 'mental_models', 'cognitive_biases', 'counterfactuals', 'evidence_grading',
               'model_hitrate', 'consensus_track', 'concept_drift', 'topic_lineage', 'external_experts'],
-  meta:      ['decision_quality', 'meeting_necessity', 'affect_curve'],
-  tension:   ['intra_meeting'],
+  // meta/tension 已合并入 people/projects，保留空数组供旧 run 记录向后兼容
+  meta:    [],
+  tension: [],
 };
 
-export const ALL_AXES = ['people', 'projects', 'knowledge', 'meta', 'tension'] as const;
+export const ALL_AXES = ['people', 'projects', 'knowledge'] as const;
 
 /**
  * AXIS_REGISTRY — 单一注册表，喂给：
@@ -85,8 +86,10 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
       role_trajectory:  '角色演化',
       speech_quality:   '发言质量',
       silence_signal:   '沉默信号',
+      affect_curve:     '情绪热力图',
+      intra_meeting:    '张力清单',
     },
-    produces: ['承诺清单', '角色轨迹', '发言图谱', '沉默信号'],
+    produces: ['承诺清单', '角色轨迹', '发言图谱', '沉默信号', '情绪热力图', '张力清单'],
     consumes: ['会议原材料', '历史纪要'],
     stage: 'L2',
   },
@@ -98,8 +101,10 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
       assumptions:         '假设清单',
       open_questions:      '开放问题',
       risk_heat:           '风险热度',
+      decision_quality:    '决策质量',
+      meeting_necessity:   '必要性评估',
     },
-    produces: ['决策链', '假设清单', '开放问题', '风险热度'],
+    produces: ['决策链', '假设清单', '开放问题', '风险热度', '会议健康度报告', '一页纸摘要'],
     consumes: ['会议原材料', '历史纪要'],
     stage: 'L2',
   },
@@ -124,34 +129,6 @@ export const AXIS_REGISTRY: Record<string, AxisMetadata> = {
     ],
     consumes: ['会议原材料', '历史纪要', '专家库', '内容库 assets'],
     stage: 'L2',
-  },
-  meta: {
-    axis: 'meta',
-    subDims: AXIS_SUBDIMS.meta,
-    subDimLabels: {
-      decision_quality:  '决策质量',
-      meeting_necessity: '必要性评估',
-      affect_curve:      '情绪热力图',
-    },
-    produces: ['会议健康度报告', '一页纸摘要'],
-    consumes: ['会议原材料'],
-    stage: 'L1',
-    perMeetingView: {
-      decision_quality:  'a',
-      meeting_necessity: 'b',
-      affect_curve:      'c',
-    },
-  },
-  tension: {
-    axis: 'tension',
-    subDims: AXIS_SUBDIMS.tension,
-    subDimLabels: {
-      intra_meeting: '张力清单',
-    },
-    produces: ['张力清单'],
-    consumes: ['会议原材料'],
-    stage: 'L1',
-    perMeetingView: { intra_meeting: 'b' },
   },
 };
 
@@ -211,12 +188,12 @@ const REGISTRY: Record<string, ComputerFn> = {
   'knowledge/concept_drift':     computeConceptDrift,
   'knowledge/topic_lineage':     computeTopicLineage,
   'knowledge/external_experts':  computeExternalExperts,
-  // meta
-  'meta/decision_quality':       computeDecisionQuality,
-  'meta/meeting_necessity':      computeMeetingNecessity,
-  'meta/affect_curve':           computeAffectCurve,
-  // tension (P1-5)
-  'tension/intra_meeting':       computeTensions,
+  // projects (merged from meta)
+  'projects/decision_quality':   computeDecisionQuality,
+  'projects/meeting_necessity':  computeMeetingNecessity,
+  // people (merged from meta + tension)
+  'people/affect_curve':         computeAffectCurve,
+  'people/intra_meeting':        computeTensions,
 };
 
 export function resolveComputer(axis: string, subDim: string): ComputerFn | null {

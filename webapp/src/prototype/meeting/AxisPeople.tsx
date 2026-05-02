@@ -5,11 +5,11 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
-import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyTab } from './_axisShared';
+import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock } from './_mockToggle';
+import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 
@@ -121,12 +121,15 @@ type CommitmentRow = typeof COMMITMENTS[number];
 
 function PCommitments({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [items, setItems] = useState<CommitmentRow[]>([]);
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); return; }
+    if (forceMock) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeCommitments(scopeId)
       .then((r) => {
@@ -151,13 +154,12 @@ function PCommitments({ scopeId }: { scopeId: string }) {
             progress: Math.min(1, Number(c.progress ?? 0) / 100),
           };
         });
-        setItems(mapped);
-        setPersonNames(names);
-        setIsMock(false);
+        setItems(mapped); setPersonNames(names); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={5} />;
 
   const byPerson = isMock
     ? PARTICIPANTS.map(p => ({
@@ -278,9 +280,11 @@ interface TrajectoryRow {
 
 function PTrajectory({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<TrajectoryRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
 
   useEffect(() => {
     if (forceMock) {
@@ -288,20 +292,22 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
         who: s.who, name: P(s.who).name, role: P(s.who).role,
         points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
       })));
-      setIsMock(true);
+      setIsMock(true); setLoading(false);
       return;
     }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getScopeRoleTrajectory(scopeId)
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
         if (items.length === 0) {
+          // API 返回空：降级到 mock 演示数据
           setRows(PEOPLE_STATS.map(s => ({
             who: s.who, name: P(s.who).name, role: P(s.who).role,
             points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
           })));
-          setIsMock(true);
+          setIsMock(true); setLoading(false);
           return;
         }
         const mapped: TrajectoryRow[] = items.map(it => ({
@@ -313,12 +319,12 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
             m: (p.occurred_at ?? '').slice(0, 7) || '?',
           })),
         }));
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   const allMonths = rows.flatMap(r => r.points.map(p => p.m)).sort();
   const monthRange = allMonths.length > 0
@@ -416,30 +422,31 @@ interface SpeechRow { who: string; claims: number; speechHighEntropy: number; be
 
 function PSpeech({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<SpeechRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); return; }
+    if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getSpeechMetrics(meetingId)
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        // 后端 mn_speech_metrics 不存 claims（发言次数）· API 模式 claims=0
-        // render 端用 hasClaims 判定是否显示 volume bar
         const mapped: SpeechRow[] = items.map((it) => ({
           who: String(it.personId),
           claims: 0,
           speechHighEntropy: Number(it.entropy ?? 0),
           beingFollowedUp: Number(it.followedUp ?? 0),
         }));
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   const max = Math.max(1, ...rows.map(s => s.claims));
   const hasClaims = rows.some(s => s.claims > 0);
@@ -532,6 +539,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
 
 function PSilence({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const defaultTopics = ['推理层', '训练层', '估值方法', '合规 / LP', '退出路径', '地缘 / 政策', '技术路线'];
   const defaultMatrix = [
@@ -545,10 +553,12 @@ function PSilence({ meetingId }: { meetingId: string }) {
   const [topics, setTopics] = useState(defaultTopics);
   const [matrix, setMatrix] = useState(defaultMatrix);
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
 
   useEffect(() => {
-    if (forceMock) { setTopics(defaultTopics); setMatrix(defaultMatrix); setPersonNames({}); setIsMock(true); return; }
+    if (forceMock) { setTopics(defaultTopics); setMatrix(defaultMatrix); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingSilence(meetingId)
       .then((r) => {
@@ -572,14 +582,13 @@ function PSilence({ meetingId }: { meetingId: string }) {
           who: pid,
           vals: topicSet.map((t) => grouped[pid][t] ?? 'normalSilence'),
         }));
-        setTopics(topicSet);
-        setMatrix(newMatrix);
-        setPersonNames(names);
-        setIsMock(false);
+        setTopics(topicSet); setMatrix(newMatrix); setPersonNames(names);
+        setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={6} />;
   const cellStyle: Record<string, { bg: string; fg: string; symbol: string; hint: string }> = {
     'spoke':           { bg: 'var(--ink)',        fg: 'var(--paper)',  symbol: '●', hint: '发言' },
     'normalSilence':   { bg: 'var(--paper-3)',    fg: 'var(--ink-4)', symbol: '·', hint: '未涉及 · 符合常态' },
@@ -741,12 +750,30 @@ function RasicMatrixSection({ topics, matrix, personNames }: {
 const AXIS_PEOPLE_TABS = ['commitments', 'trajectory', 'speech', 'silence', 'belief', 'formation', 'blind_spots', 'manage'] as const;
 
 export function AxisPeople() {
-  const [tab, setTab] = useStickyTab('axis.people.tab', 'commitments', AXIS_PEOPLE_TABS);
+  const [stickyTab, setStickyTab] = useStickyTab('axis.people.tab', 'commitments', AXIS_PEOPLE_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const forceMock = useForceMock();
   const scope = useMeetingScope();
-  const scopeId = scope.effectiveScopeId;
+
+  // URL params 优先：?scopeId / ?version / ?tab
+  const urlScopeId = searchParams.get('scopeId') ?? undefined;
+  const urlScopeKind = searchParams.get('scopeKind') ?? undefined;
+  const version = searchParams.get('version') ?? undefined;
+  const scopeId = urlScopeId ?? scope.effectiveScopeId;
+  const _scopeKind = urlScopeKind ?? (urlScopeId ? 'project' : scope.kindId === 'all' ? 'project' : scope.kindId);
+  void _scopeKind;
+
+  // 双向同步 scopeId ↔ URL（ScopePill 切换 → 更新 URL；URL 有 ?scopeId → 同步到 context）
+  useScopeUrlSync(setSearchParams, urlScopeId);
+
+  // tab：URL ?tab 优先，写回时同步 URL（replace 不进历史）
+  const urlTab = searchParams.get('tab');
+  const tab = (urlTab && (AXIS_PEOPLE_TABS as readonly string[]).includes(urlTab)) ? urlTab : stickyTab;
+  const setTab = (next: string) => {
+    setStickyTab(next);
+    setSearchParams((p) => { const n = new URLSearchParams(p); n.set('tab', next); return n; }, { replace: true });
+  };
 
   // F7 (sibling) · auto-pick scope 下首场会议；URL ?meetingId 优先；否则 fixture
   const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
@@ -763,9 +790,10 @@ export function AxisPeople() {
 
   // 各 sub-tab 自己拉 live（PTrajectory/PSpeech/PSilence 都内置 live 拉取）
   // 这里只判一次 isMock 给 DimShell 顶部 badge 用
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => { if (!cancelled) setIsMock(!r?.people); })
@@ -789,7 +817,7 @@ export function AxisPeople() {
   ];
   return (
     <>
-      <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
+      <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
         {tab === 'trajectory'  && <PTrajectory scopeId={scopeId} />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}

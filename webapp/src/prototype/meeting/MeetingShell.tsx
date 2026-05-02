@@ -5,8 +5,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import type { IconName } from './_atoms';
-import { SCOPES } from './_fixtures';
-import { MeetingScopeProvider } from './_scopeContext';
+import { MeetingScopeProvider, useMeetingScope } from './_scopeContext';
 import { MockToggleProvider, MockToggleBar } from './_mockToggle';
 import './_tokens.css';
 
@@ -121,31 +120,7 @@ export function MeetingShell() {
           </div>
         ))}
 
-        <div style={{ marginTop: 'auto' }}>
-          <div style={{
-            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
-            letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6,
-          }}>
-            作用域快捷
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {SCOPES.project.slice(0, 3).map((s) => (
-              <button
-                key={s.id}
-                onClick={() => navigate(`/meeting/library?scope=${s.id}`)}
-                style={{
-                  textAlign: 'left',
-                  padding: '6px 8px', borderRadius: 4,
-                  background: 'transparent', border: '1px solid transparent',
-                  fontFamily: 'var(--sans)', cursor: 'pointer',
-                }}
-              >
-                <MonoMeta>project</MonoMeta>
-                <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{s.name}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+        <ScopeShortcuts />
       </aside>
 
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -170,6 +145,46 @@ export function MeetingShell() {
     </div>
     </MeetingScopeProvider>
     </MockToggleProvider>
+  );
+}
+
+// 动态作用域快捷——从 MeetingScopeProvider 读取，点击设全局 scope
+function ScopeShortcuts() {
+  const scope = useMeetingScope();
+  const projectGroup = scope.kinds.find((g) => g.id === 'project');
+  const items = projectGroup?.instances.slice(0, 3) ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div style={{ marginTop: 'auto' }}>
+      <div style={{
+        fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
+        letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6,
+      }}>
+        作用域快捷
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((s) => {
+          const active = scope.kindId === 'project' && scope.instanceId === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => scope.setInstance('project', s.id)}
+              style={{
+                textAlign: 'left', padding: '6px 8px', borderRadius: 4, cursor: 'pointer',
+                background: active ? 'var(--paper-2)' : 'transparent',
+                border: active ? '1px solid var(--line-2)' : '1px solid transparent',
+                fontFamily: 'var(--sans)',
+              }}
+            >
+              <MonoMeta style={{ color: active ? 'var(--teal)' : undefined }}>project</MonoMeta>
+              <div style={{ fontSize: 12.5, color: active ? 'var(--ink)' : 'var(--ink-2)', fontWeight: active ? 600 : 450 }}>
+                {s.label}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

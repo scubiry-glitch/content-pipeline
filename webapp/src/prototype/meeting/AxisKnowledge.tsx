@@ -5,11 +5,11 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
-import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock } from './_mockToggle';
+import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 
@@ -100,10 +100,13 @@ type JudgmentRow = typeof REUSABLE_JUDGMENTS[number];
 function Judgments({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const [items, setItems] = useState<JudgmentRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setItems(REUSABLE_JUDGMENTS); setIsMock(true); return; }
+    if (forceMock) { setItems(REUSABLE_JUDGMENTS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeJudgments(scopeId)
       .then((r) => {
@@ -119,12 +122,12 @@ function Judgments({ scopeId }: { scopeId: string }) {
           domain: j.domain ?? '—',
           author: j.author_name ?? '—',
         }));
-        setItems(mapped);
-        setIsMock(false);
+        setItems(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={4} />;
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
@@ -189,10 +192,13 @@ type MentalModelRow = typeof MENTAL_MODELS[number];
 function MentalModels({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const [rows, setRows] = useState<MentalModelRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(MENTAL_MODELS); setIsMock(true); return; }
+    if (forceMock) { setRows(MENTAL_MODELS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getScopeMentalModelHitRate(scopeId)
       .then((r) => {
@@ -207,12 +213,12 @@ function MentalModels({ scopeId }: { scopeId: string }) {
           outcome: `命中率 ${(Number(m.hit_rate ?? 0) * 100).toFixed(0)}% · ${m.hits}/${m.invocations} · flag=${m.flag}`,
           expert: '—',
         }));
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={5} />;
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
@@ -340,10 +346,13 @@ type BiasRow = typeof COGNITIVE_BIASES[number];
 function Biases({ meetingId }: { meetingId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const [rows, setRows] = useState<BiasRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(COGNITIVE_BIASES); setIsMock(true); return; }
+    if (forceMock) { setRows(COGNITIVE_BIASES); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingBiases(meetingId)
       .then((r) => {
@@ -362,12 +371,12 @@ function Biases({ meetingId }: { meetingId: string }) {
             mitigation: b.mitigation_strategy,
           };
         });
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={5} />;
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
@@ -476,9 +485,9 @@ const AXIS_KNOWLEDGE_TABS = ['cognition', 'mental_models', 'evidence', 'counterf
 
 export function AxisKnowledge() {
   // R4 · tab id 重组：默认 → 'cognition' (原 judgments tab 升级为合并段)
-  const [tab, setTab] = useStickyTab('axis.knowledge.tab', 'cognition', AXIS_KNOWLEDGE_TABS);
+  const [stickyTab, setStickyTab] = useStickyTab('axis.knowledge.tab', 'cognition', AXIS_KNOWLEDGE_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const scope = useMeetingScope();
   const forceMock = useForceMock();
 
@@ -487,9 +496,21 @@ export function AxisKnowledge() {
   // 优先级：URL > useMeetingScope().effectiveScopeId
   const scopeIdFromUrl = searchParams.get('scopeId');
   const scopeKindFromUrl = searchParams.get('scopeKind');
+  const version = searchParams.get('version') ?? undefined;
   const scopeId = scopeIdFromUrl ?? scope.effectiveScopeId;
   // scopeKind 默认 project；library 时 listScopeMeetings 不适用，由 auto-pick 兜底
   const scopeKind = scopeKindFromUrl ?? (scopeIdFromUrl ? 'project' : scope.kindId === 'all' ? 'project' : scope.kindId);
+
+  // 双向同步 scopeId ↔ URL
+  useScopeUrlSync(setSearchParams, scopeIdFromUrl ?? undefined);
+
+  // tab：URL ?tab 优先，写回时同步 URL（replace 不进历史）
+  const urlTab = searchParams.get('tab');
+  const tab = (urlTab && (AXIS_KNOWLEDGE_TABS as readonly string[]).includes(urlTab)) ? urlTab : stickyTab;
+  const setTab = (next: string) => {
+    setStickyTab(next);
+    setSearchParams((p) => { const n = new URLSearchParams(p); n.set('tab', next); return n; }, { replace: true });
+  };
 
   // F7 → F9.1 · 智能 auto-pick：listScopeMeetings 后预拉 axes，选第一个 mental_models /
   // cognitive_biases / counterfactuals 任一非空的会议；都为空则用第一个（兜底）。
@@ -525,9 +546,10 @@ export function AxisKnowledge() {
   // 一次性拉 getMeetingAxes，让 5 个 tab 读取真实 mn_* 数据（之前 mental_models /
   // evidence / counterfactuals 都查错表或纯 mock）
   const [knowledgeData, setKnowledgeData] = useState<any>(null);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
     if (forceMock) { setKnowledgeData(null); setIsMock(true); return; }
+    setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
       .then((r) => {
@@ -591,7 +613,7 @@ export function AxisKnowledge() {
   ];
   return (
     <>
-      <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
+      <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
         {/* F10 · 数据源指示条：scope/meeting 来自哪里，让用户能 verify 自己看的是哪份数据 */}
         <div style={{
           padding: '8px 28px', background: 'var(--paper-2)',

@@ -5,11 +5,11 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, Icon, MockBadge, SectionLabel } from './_atoms';
-import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab } from './_axisShared';
+import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock } from './_mockToggle';
+import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 
@@ -164,12 +164,14 @@ type DecisionRow = typeof DECISION_CHAIN[number];
 
 function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<DecisionRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); return; }
-    setIsMock(false);
+    if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeDecisions(scopeId)
       .then((r) => {
@@ -186,12 +188,12 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           supersededBy: d.superseded_by_id?.slice(0, 6),
           current: Boolean(d.is_current),
         }));
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={7} />;
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
@@ -320,12 +322,14 @@ type AssumptionRow = typeof ASSUMPTIONS[number];
 
 function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<AssumptionRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); return; }
-    setIsMock(false);
+    if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeAssumptions(scopeId)
       .then((r) => {
@@ -353,12 +357,12 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
             confidence: Number(a.confidence ?? 0.5),
           };
         });
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
@@ -453,12 +457,14 @@ type OpenQuestionRow = typeof OPEN_QUESTIONS[number];
 
 function OpenQuestions({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<OpenQuestionRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); return; }
-    setIsMock(false);
+    if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeOpenQuestions(scopeId)
       .then((r) => {
@@ -481,11 +487,12 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
           };
         });
         setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   const sorted = [...rows].sort((a, b) => b.timesRaised - a.timesRaised);
   return (
@@ -568,12 +575,14 @@ type RiskRow = typeof RISKS[number];
 
 function RiskHeat({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
+  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<RiskRow[]>([]);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock, setIsMock] = useState(() => forceMock);
+  const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(RISKS); setIsMock(true); return; }
-    setIsMock(false);
+    if (forceMock) { setRows(RISKS); setIsMock(true); setLoading(false); return; }
+    setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeRisks(scopeId)
       .then((r) => {
@@ -590,12 +599,12 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
           meetings: Math.max(1, Math.round(Number(x.mention_count ?? 1) / 2)),
           trend: (x.trend as 'up' | 'flat' | 'down') ?? 'flat',
         }));
-        setRows(mapped);
-        setIsMock(false);
+        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+  if (loading) return <AxisLoadingSkeleton rows={7} />;
 
   const sorted = [...rows].sort((a, b) => b.heat - a.heat);
   return (
@@ -752,14 +761,29 @@ function RiskRewardScatter({ rows }: { rows: Array<{ id: string; text: string; s
 const AXIS_PROJECTS_TABS = ['provenance', 'assumptions', 'questions', 'risks', 'responsibility', 'stakeholders'] as const;
 
 export function AxisProjects() {
-  const [tab, setTab] = useStickyTab('axis.projects.tab', 'provenance', AXIS_PROJECTS_TABS);
+  const [stickyTab, setStickyTab] = useStickyTab('axis.projects.tab', 'provenance', AXIS_PROJECTS_TABS);
   const [regenOpen, setRegenOpen] = useState(false);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const meetingId = searchParams.get('meetingId') ?? MEETING.id;
   const scope = useMeetingScope();
-  const scopeId = scope.effectiveScopeId;
   const forceMock = useForceMock();
-  const [isMock, setIsMock] = useState(true);
+
+  // URL params 优先：?scopeId / ?version / ?tab
+  const urlScopeId = searchParams.get('scopeId') ?? undefined;
+  const version = searchParams.get('version') ?? undefined;
+  const scopeId = urlScopeId ?? scope.effectiveScopeId;
+
+  // 双向同步 scopeId ↔ URL
+  useScopeUrlSync(setSearchParams, urlScopeId);
+
+  // tab：URL ?tab 优先，写回时同步 URL（replace 不进历史）
+  const urlTab = searchParams.get('tab');
+  const tab = (urlTab && (AXIS_PROJECTS_TABS as readonly string[]).includes(urlTab)) ? urlTab : stickyTab;
+  const setTab = (next: string) => {
+    setStickyTab(next);
+    setSearchParams((p) => { const n = new URLSearchParams(p); n.set('tab', next); return n; }, { replace: true });
+  };
+  const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
     if (forceMock) { setIsMock(true); return; }
     setIsMock(false);
@@ -781,7 +805,7 @@ export function AxisProjects() {
   ];
   return (
     <>
-      <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
+      <DimShell axis="项目" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
         <ProjectBanner />
         {tab === 'provenance'     && <ProvenanceChain scopeId={scopeId} />}
         {tab === 'assumptions'    && <AssumptionLedger scopeId={scopeId} />}

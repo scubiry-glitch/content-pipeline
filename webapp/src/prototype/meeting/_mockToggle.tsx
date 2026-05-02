@@ -1,13 +1,15 @@
-// _mockToggle.tsx — 全局 Mock 开关
+// _mockToggle.tsx — 全局 Mock 开关 + 慢 API 检测
 // 放在 MeetingShell 顶层；所有 API 探测的页面读 useForceMock() 决定是否跳过 fetch
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 const STORAGE_KEY = 'meeting-proto.forceMock';
 
 interface MockToggleValue {
   forceMock: boolean;
   setForceMock: (v: boolean) => void;
+  /** 组件成功拿到 API 数据后调用，取消 5s 慢 API 提示 */
+  reportApiSuccess: () => void;
 }
 
 const Ctx = createContext<MockToggleValue | null>(null);
@@ -17,6 +19,9 @@ export function MockToggleProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(STORAGE_KEY) === '1';
   });
+  const [slowVisible, setSlowVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const apiSucceededRef = useRef(false);
 
   const setForceMock = useCallback((v: boolean) => {
     setForceMockState(v);
@@ -26,8 +31,46 @@ export function MockToggleProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
   }, []);
 
-  const value = useMemo(() => ({ forceMock, setForceMock }), [forceMock, setForceMock]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  // 进入 API 模式时启动 5s 计时；任意组件报告成功则取消
+  useEffect(() => {
+    if (forceMock) {
+      setSlowVisible(false);
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      return;
+    }
+    apiSucceededRef.current = false;
+    timerRef.current = setTimeout(() => {
+      if (!apiSucceededRef.current) setSlowVisible(true);
+    }, 5000);
+    return () => {
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    };
+  }, [forceMock]);
+
+  const reportApiSuccess = useCallback(() => {
+    apiSucceededRef.current = true;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setSlowVisible(false);
+  }, []);
+
+  const value = useMemo(
+    () => ({ forceMock, setForceMock, reportApiSuccess }),
+    [forceMock, setForceMock, reportApiSuccess],
+  );
+
+  return (
+    <Ctx.Provider value={value}>
+      <>
+        {children}
+        {slowVisible && !forceMock && (
+          <SlowApiPrompt
+            onSwitch={() => { setForceMock(true); setSlowVisible(false); }}
+            onDismiss={() => setSlowVisible(false)}
+          />
+        )}
+      </>
+    </Ctx.Provider>
+  );
 }
 
 export function useForceMock(): boolean {
@@ -37,20 +80,61 @@ export function useForceMock(): boolean {
 
 export function useMockToggle(): MockToggleValue {
   const v = useContext(Ctx);
-  if (!v) return { forceMock: false, setForceMock: () => {} };
+  if (!v) return { forceMock: false, setForceMock: () => {}, reportApiSuccess: () => {} };
   return v;
 }
 
+// ── 慢 API 提示 ─────────────────────────────────────────────────────────────
+
+function SlowApiPrompt({ onSwitch, onDismiss }: { onSwitch: () => void; onDismiss: () => void }) {
+  return (
+    <div style={{
+      position: 'fixed', bottom: 64, right: 12, zIndex: 61,
+      background: 'var(--paper)', border: '1px solid var(--amber)',
+      borderRadius: 8, padding: '12px 14px', maxWidth: 280,
+      boxShadow: '0 8px 24px -8px rgba(0,0,0,0.22)',
+      fontFamily: 'var(--sans)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{
+          width: 20, height: 20, borderRadius: 5, background: 'var(--amber-soft)',
+          border: '1px solid var(--amber)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 11, color: 'oklch(0.38 0.09 75)', flexShrink: 0,
+        }}>⏱</span>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>API 响应超过 5 秒</div>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 10, lineHeight: 1.55 }}>
+        服务器可能不可用。切换到 Mock 模式可使用演示数据继续浏览。
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={onSwitch} style={{
+          flex: 1, padding: '6px 10px', fontSize: 11.5,
+          background: 'var(--amber)', color: 'var(--paper)',
+          border: '1px solid var(--amber)', borderRadius: 4, cursor: 'pointer',
+          fontFamily: 'var(--sans)', fontWeight: 600,
+        }}>切换到 Mock</button>
+        <button onClick={onDismiss} style={{
+          padding: '6px 10px', fontSize: 11.5,
+          background: 'transparent', color: 'var(--ink-3)',
+          border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer',
+          fontFamily: 'var(--sans)',
+        }}>继续等待</button>
+      </div>
+    </div>
+  );
+}
+
+// ── MockToggleBar · 右下角收纳开关 ──────────────────────────────────────────
+
 /**
  * 固定在视口右下角的 pill 开关。
- * 显示：绿色 API / 琥珀色 Mock；点击切换。
- * 禁用键盘可达性：用户期望鼠标操作，不干扰滚动。
+ * 默认收起；绿色 API / 琥珀色 Mock；点击切换。
+ * 键盘快捷键 Alt+M 切换。
  */
 export function MockToggleBar() {
   const { forceMock, setForceMock } = useMockToggle();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);  // 默认收起
 
-  // 键盘快捷键 Alt + M 切换
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.altKey && (e.key === 'm' || e.key === 'M')) {
