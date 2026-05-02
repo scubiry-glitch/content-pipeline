@@ -170,6 +170,77 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     }));
 
     // --------------------------------------------------------
+    // /today 页面底部 3 张 mini-stat 的数据源
+    //   - 待验证承诺 = mn_commitments WHERE state IN (on_track,at_risk)
+    //                  · 本周到期 = + due_at <= NOW()+7d
+    //   - 开放问题   = mn_open_questions WHERE status IN (open,assigned,chronic)
+    //                  · 超 2 周未决 = + created_at < NOW()-14d
+    //   - 新入库判断 = mn_judgments WHERE created_at >= NOW()-7d (本周新增)
+    // 全部按当前 workspace + is_shared 过滤，DB 不可达时降级为 0。
+    // --------------------------------------------------------
+    fastify.get('/today/stats', { preHandler: authenticate }, async (request) => {
+      const wsId = currentWorkspaceId(request);
+      const empty = {
+        commitments:   { total: 0, dueThisWeek: 0 },
+        openQuestions: { total: 0, longUnresolved: 0 },
+        newJudgments:  { total: 0 },
+      };
+      try {
+        const wsCond = `(
+          $1::uuid IS NULL
+          OR workspace_id = $1::uuid
+          OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared)
+        )`;
+        const [cmt, oq, jg] = await Promise.all([
+          engine.deps.db.query(
+            `SELECT
+               COUNT(*) FILTER (WHERE state IN ('on_track','at_risk'))                                              AS total,
+               COUNT(*) FILTER (WHERE state IN ('on_track','at_risk') AND due_at IS NOT NULL
+                                  AND due_at <= NOW() + INTERVAL '7 days')                                          AS due_this_week
+               FROM mn_commitments
+              WHERE ${wsCond}`,
+            [wsId],
+          ),
+          engine.deps.db.query(
+            `SELECT
+               COUNT(*) FILTER (WHERE status IN ('open','assigned','chronic'))                                      AS total,
+               COUNT(*) FILTER (WHERE status IN ('open','assigned','chronic')
+                                  AND created_at < NOW() - INTERVAL '14 days')                                      AS long_unresolved
+               FROM mn_open_questions
+              WHERE ${wsCond}`,
+            [wsId],
+          ),
+          engine.deps.db.query(
+            `SELECT COUNT(*)::int AS total
+               FROM mn_judgments
+              WHERE created_at >= NOW() - INTERVAL '7 days'
+                AND ${wsCond}`,
+            [wsId],
+          ),
+        ]);
+        return {
+          commitments: {
+            total: Number(cmt.rows[0]?.total ?? 0),
+            dueThisWeek: Number(cmt.rows[0]?.due_this_week ?? 0),
+          },
+          openQuestions: {
+            total: Number(oq.rows[0]?.total ?? 0),
+            longUnresolved: Number(oq.rows[0]?.long_unresolved ?? 0),
+          },
+          newJudgments: {
+            total: Number(jg.rows[0]?.total ?? 0),
+          },
+        };
+      } catch (error) {
+        if (isConnectionError(error)) {
+          request.log.warn({ err: error }, 'today/stats degraded: database unavailable');
+          return empty;
+        }
+        throw error;
+      }
+    });
+
+    // --------------------------------------------------------
     // Ingest routes (PR2)
     // --------------------------------------------------------
     await fastify.register(ingestRoutes, { pathPrefix: '/sources' });

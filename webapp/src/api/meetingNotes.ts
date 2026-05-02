@@ -71,6 +71,18 @@ async function jput<T>(path: string, body?: any): Promise<T> {
 // ========== Parse / Axes ==========
 
 export const meetingNotesApi = {
+  /**
+   * /today 页面底部 3 张 mini-stat（待验证承诺 / 开放问题 / 新入库判断）的真实数据。
+   * 后端跨 mn_commitments / mn_open_questions / mn_judgments 聚合，按 workspace 过滤；
+   * DB 不可达时返回全 0 而不是抛错。
+   */
+  getTodayStats: () =>
+    jget<{
+      commitments: { total: number; dueThisWeek: number };
+      openQuestions: { total: number; longUnresolved: number };
+      newJudgments: { total: number };
+    }>('/today/stats'),
+
   // Meeting-level
   parseMeeting: (assetId: string) => jpost<any>('/ingest/parse', { assetId }),
   /** 列最近 meetings（assets WHERE type='meeting_note' OR metadata?'meeting_kind'），含 title / meeting_kind / last_run / scope_bindings */

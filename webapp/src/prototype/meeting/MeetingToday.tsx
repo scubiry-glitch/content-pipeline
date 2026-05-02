@@ -62,6 +62,20 @@ function runToItem(run: ApiRun, meetings: ApiMeeting[]): TodayItem | null {
   };
 }
 
+// ── 底部 mini-stat（待跟进）─────────────────────────────────
+
+interface TodayStats {
+  commitments: { total: number; dueThisWeek: number };
+  openQuestions: { total: number; longUnresolved: number };
+  newJudgments: { total: number };
+}
+
+const MOCK_STATS: TodayStats = {
+  commitments: { total: 5, dueThisWeek: 2 },
+  openQuestions: { total: 8, longUnresolved: 3 },
+  newJudgments: { total: 4 },
+};
+
 // ── Main export ──────────────────────────────────────────────
 
 export function MeetingToday() {
@@ -70,15 +84,22 @@ export function MeetingToday() {
   const [items, setItems] = useState<TodayItem[]>(forceMock ? MOCK_ITEMS : []);
   const [isMock, setIsMock] = useState(true);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error'>(forceMock ? 'ok' : 'loading');
+  const [stats, setStats] = useState<TodayStats>(MOCK_STATS);
+  const [statsIsMock, setStatsIsMock] = useState(true);
 
   useEffect(() => {
-    if (forceMock) { setItems(MOCK_ITEMS); setIsMock(true); setApiState('ok'); return; }
+    if (forceMock) {
+      setItems(MOCK_ITEMS); setIsMock(true); setApiState('ok');
+      setStats(MOCK_STATS); setStatsIsMock(true);
+      return;
+    }
     let cancelled = false;
     setApiState('loading');
     Promise.allSettled([
       meetingNotesApi.listRuns({ limit: 10, state: 'done' }),
       meetingNotesApi.listMeetings({ limit: 5 }),
-    ]).then(([rRuns, rMeetings]) => {
+      meetingNotesApi.getTodayStats(),
+    ]).then(([rRuns, rMeetings, rStats]) => {
       if (cancelled) return;
       const runs: ApiRun[] = rRuns.status === 'fulfilled' ? (rRuns.value.items ?? []) : [];
       const meetings: ApiMeeting[] = rMeetings.status === 'fulfilled' ? (rMeetings.value.items ?? []) : [];
@@ -86,12 +107,19 @@ export function MeetingToday() {
       if (!apiResponded) {
         // 全部失败：降级 mock + 标记 error
         setItems(MOCK_ITEMS); setIsMock(true); setApiState('error');
-        return;
+      } else {
+        const apiItems = runs.slice(0, 3).map((r) => runToItem(r, meetings)).filter((x): x is TodayItem => !!x);
+        setItems(apiItems);
+        setIsMock(false);
+        setApiState('ok');
       }
-      const apiItems = runs.slice(0, 3).map((r) => runToItem(r, meetings)).filter((x): x is TodayItem => !!x);
-      setItems(apiItems);
-      setIsMock(false);
-      setApiState('ok');
+      if (rStats.status === 'fulfilled' && rStats.value) {
+        setStats(rStats.value);
+        setStatsIsMock(false);
+      } else {
+        setStats(MOCK_STATS);
+        setStatsIsMock(true);
+      }
     });
     return () => { cancelled = true; };
   }, [forceMock]);
@@ -150,13 +178,29 @@ export function MeetingToday() {
       <div style={{ marginTop: 32, padding: '20px 22px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6 }}>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>近期待跟进 · 承诺 + 验证点</span>
-          <MockBadge />
+          {statsIsMock && <MockBadge />}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           {[
-            { l: '待验证承诺', v: '5', sub: '本周到期 2 条',   c: 'var(--amber)',  to: '/meeting/axes/people' },
-            { l: '开放问题',   v: '8', sub: '3 条超 2 周未决', c: 'var(--accent)', to: '/meeting/axes/projects' },
-            { l: '新入库判断', v: '4', sub: '本周新增',         c: 'var(--teal)',   to: '/meeting/axes/knowledge' },
+            {
+              l: '待验证承诺', v: stats.commitments.total,
+              sub: stats.commitments.dueThisWeek > 0
+                ? `本周到期 ${stats.commitments.dueThisWeek} 条`
+                : '本周无到期',
+              c: 'var(--amber)', to: '/meeting/axes/people',
+            },
+            {
+              l: '开放问题', v: stats.openQuestions.total,
+              sub: stats.openQuestions.longUnresolved > 0
+                ? `${stats.openQuestions.longUnresolved} 条超 2 周未决`
+                : '无超期',
+              c: 'var(--accent)', to: '/meeting/axes/projects',
+            },
+            {
+              l: '新入库判断', v: stats.newJudgments.total,
+              sub: '本周新增',
+              c: 'var(--teal)', to: '/meeting/axes/knowledge',
+            },
           ].map(s => (
             <div key={s.l} onClick={() => navigate(s.to)} style={{
               padding: '14px 16px', background: 'var(--paper)', border: '1px solid var(--line-2)', borderRadius: 5,
