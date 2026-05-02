@@ -512,12 +512,14 @@ export function AxisKnowledge() {
     setSearchParams((p) => { const n = new URLSearchParams(p); n.set('tab', next); return n; }, { replace: true });
   };
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   // F7 → F9.1 · 智能 auto-pick：listScopeMeetings 后预拉 axes，选第一个 mental_models /
   // cognitive_biases / counterfactuals 任一非空的会议；都为空则用第一个（兜底）。
   // 之前按 created_at 顺序硬选，常落到刚建的"空会议"上 → tab 永远空。
   const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
   useEffect(() => {
-    if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
+    if (forceMock || searchParams.get('meetingId') || !UUID_RE.test(scopeId)) { setAutoMeetingId(null); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -548,7 +550,7 @@ export function AxisKnowledge() {
   const [knowledgeData, setKnowledgeData] = useState<any>(null);
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock) { setKnowledgeData(null); setIsMock(true); return; }
+    if (forceMock || !UUID_RE.test(meetingId)) { setKnowledgeData(null); setIsMock(true); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
@@ -568,7 +570,7 @@ export function AxisKnowledge() {
     dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number;
   } | null>(null);
   useEffect(() => {
-    if (forceMock) { setAggregatedEvidence(null); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setAggregatedEvidence(null); return; }
     let cancelled = false;
     (async () => {
       try {

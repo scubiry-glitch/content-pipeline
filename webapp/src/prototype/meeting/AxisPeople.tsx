@@ -14,6 +14,8 @@ import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 import { PersonLLMProfileModal } from './PersonLLMProfileModal';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ── Mock data ───────────────────────────────────────────────────────────────
 
 const COMMITMENTS = [
@@ -129,7 +131,7 @@ function PCommitments({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeCommitments(scopeId)
@@ -288,7 +290,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
   const [loading, setLoading] = useState(() => !forceMock);
 
   useEffect(() => {
-    if (forceMock) {
+    if (forceMock || !UUID_RE.test(scopeId)) {
       setRows(PEOPLE_STATS.map(s => ({
         who: s.who, name: P(s.who).name, role: P(s.who).role,
         points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
@@ -429,7 +431,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(meetingId)) { setRows(PEOPLE_STATS); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getSpeechMetrics(meetingId)
@@ -779,7 +781,7 @@ export function AxisPeople() {
   // F7 (sibling) · auto-pick scope 下首场会议；URL ?meetingId 优先；否则 fixture
   const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
   useEffect(() => {
-    if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
+    if (forceMock || searchParams.get('meetingId') || !UUID_RE.test(scopeId)) { setAutoMeetingId(null); return; }
     let cancelled = false;
     meetingNotesApi
       .listScopeMeetings(scopeId)
@@ -793,7 +795,7 @@ export function AxisPeople() {
   // 这里只判一次 isMock 给 DimShell 顶部 badge 用
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock) { setIsMock(true); return; }
+    if (forceMock || !UUID_RE.test(meetingId)) { setIsMock(true); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
@@ -847,6 +849,7 @@ function BeliefThreadTab({ scopeId }: { scopeId: string }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
+    if (!UUID_RE.test(scopeId)) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true); setErr(null);
     meetingNotesApi.getLongitudinal(scopeId, 'belief_drift')
@@ -1057,6 +1060,7 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
   const [aiProfileFor, setAiProfileFor] = useState<{ id: string; name: string } | null>(null);
 
   async function reload() {
+    if (!UUID_RE.test(scopeId)) return;
     setRows(null); setErr(null);
     try {
       const r = await meetingNotesApi.listScopePeople(scopeId);

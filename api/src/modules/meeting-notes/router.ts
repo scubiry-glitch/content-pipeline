@@ -162,6 +162,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       status: 'runs-online',
       endpoints: {
         health: 'GET /health',
+        todayStats: 'GET /today/stats',
         sources: '/sources/* (PR2)',
         parse: 'POST /ingest/parse (PR3)',
         meetingAxes: 'GET /meetings/:id/axes (PR3)',

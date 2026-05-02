@@ -2,6 +2,8 @@
 // 原型来源：/tmp/mn-proto/dimensions-projects.jsx DimensionProjects
 // 决策溯源链 · 假设清单 · 未解问题 · 风险热度
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, Icon, MockBadge, SectionLabel } from './_atoms';
@@ -170,7 +172,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setRows(DECISION_CHAIN); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeDecisions(scopeId)
@@ -215,7 +217,9 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           const currentColor = d.current ? 'var(--accent)' : d.superseded ? 'var(--ink-4)' : 'var(--ink)';
           return (
             <div key={d.id} style={{
-              display: 'grid', gridTemplateColumns: '54px 1fr 260px', gap: 14, alignItems: 'start',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '38px 1fr' : '54px 1fr 260px',
+              gap: isMobile ? 10 : 14, alignItems: 'start',
               padding: '14px 0', position: 'relative',
               opacity: d.superseded ? 0.55 : 1,
             }}>
@@ -234,7 +238,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
                   {d.superseded && <Chip tone="ghost">superseded by {(d as { supersededBy?: string }).supersededBy}</Chip>}
                 </div>
                 <div style={{
-                  fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, marginTop: 4,
+                  fontFamily: 'var(--serif)', fontSize: isMobile ? 14 : 16, fontWeight: 600, marginTop: 4,
                   letterSpacing: '-0.005em', textDecoration: d.superseded ? 'line-through' : 'none',
                 }}>
                   {d.title}
@@ -243,23 +247,42 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
                   <Avatar p={p} size={20} radius={4} />
                   <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{p.name} · 提出</span>
                 </div>
-              </div>
-              <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 5, padding: '8px 12px' }}>
-                <MonoMeta style={{ fontSize: 9.5 }}>BASED ON</MonoMeta>
-                <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 4, lineHeight: 1.5, fontFamily: 'var(--serif)' }}>
-                  {d.basedOn}
-                </div>
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MonoMeta style={{ fontSize: 9.5 }}>CONFIDENCE</MonoMeta>
-                  <div style={{ flex: 1, height: 3, background: 'var(--line-2)', borderRadius: 2 }}>
-                    <div style={{
-                      width: `${d.confidence * 100}%`, height: '100%',
-                      background: d.confidence > 0.7 ? 'var(--accent)' : 'var(--ink-3)', borderRadius: 2,
-                    }} />
+                {/* On mobile: show BASED ON inline below the decision content */}
+                {isMobile && (
+                  <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 5, padding: '8px 10px', marginTop: 10 }}>
+                    <MonoMeta style={{ fontSize: 9.5 }}>BASED ON</MonoMeta>
+                    <div style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 3, lineHeight: 1.5, fontFamily: 'var(--serif)' }}>
+                      {d.basedOn}
+                    </div>
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <MonoMeta style={{ fontSize: 9.5 }}>CONF</MonoMeta>
+                      <div style={{ flex: 1, height: 3, background: 'var(--line-2)', borderRadius: 2 }}>
+                        <div style={{ width: `${d.confidence * 100}%`, height: '100%', background: d.confidence > 0.7 ? 'var(--accent)' : 'var(--ink-3)', borderRadius: 2 }} />
+                      </div>
+                      <MonoMeta style={{ fontSize: 10.5 }}>{d.confidence.toFixed(2)}</MonoMeta>
+                    </div>
                   </div>
-                  <MonoMeta style={{ fontSize: 10.5 }}>{d.confidence.toFixed(2)}</MonoMeta>
-                </div>
+                )}
               </div>
+              {/* Desktop only: BASED ON column */}
+              {!isMobile && (
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 5, padding: '8px 12px' }}>
+                  <MonoMeta style={{ fontSize: 9.5 }}>BASED ON</MonoMeta>
+                  <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 4, lineHeight: 1.5, fontFamily: 'var(--serif)' }}>
+                    {d.basedOn}
+                  </div>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <MonoMeta style={{ fontSize: 9.5 }}>CONFIDENCE</MonoMeta>
+                    <div style={{ flex: 1, height: 3, background: 'var(--line-2)', borderRadius: 2 }}>
+                      <div style={{
+                        width: `${d.confidence * 100}%`, height: '100%',
+                        background: d.confidence > 0.7 ? 'var(--accent)' : 'var(--ink-3)', borderRadius: 2,
+                      }} />
+                    </div>
+                    <MonoMeta style={{ fontSize: 10.5 }}>{d.confidence.toFixed(2)}</MonoMeta>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -328,7 +351,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setRows(ASSUMPTIONS); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeAssumptions(scopeId)
@@ -463,7 +486,7 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setRows(OPEN_QUESTIONS); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeOpenQuestions(scopeId)
@@ -581,7 +604,7 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock) { setRows(RISKS); setIsMock(true); setLoading(false); return; }
+    if (forceMock || !UUID_RE.test(scopeId)) { setRows(RISKS); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeRisks(scopeId)
@@ -785,7 +808,7 @@ export function AxisProjects() {
   };
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock) { setIsMock(true); return; }
+    if (forceMock || !UUID_RE.test(meetingId)) { setIsMock(true); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)

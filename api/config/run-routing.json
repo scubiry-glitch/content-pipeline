@@ -34,9 +34,9 @@
     {
       "module": "mn",
       "model_pattern": "api-oneshot*",
-      "worker_id": "huoshanpro",
+      "worker_id": "prod-TencentOpenClaw",
       "priority": 20,
-      "notes": "会议轴 API 一次性任务 (走 HTTP 不走 CLI)"
+      "notes": "会议轴 API 一次性任务 (走 HTTP 不走 CLI)；huoshanpro 停服改由 prod-TencentOpenClaw 承接"
     },
     {
       "module": "ceo",

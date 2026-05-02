@@ -27,7 +27,6 @@ const NAV: NavItem[] = [
   { to: '/meeting/axes/projects',      label: '项目轴',        icon: 'network',  group: '三轴视图' },
   { to: '/meeting/axes/knowledge',     label: '知识轴',        icon: 'book',     group: '三轴视图' },
   { to: '/meeting/longitudinal',       label: '纵向视图',      icon: 'layers',   group: '跨会议' },
-  { to: '/meeting/longitudinal?tab=health', label: '健康度',  icon: 'target',   group: '跨会议' },
   { to: '/meeting/scopes',             label: '调用配置',      icon: 'scale',    group: '专家系统' },
   { to: '/meeting/strategies',         label: '策略 / 装饰器', icon: 'git',      group: '专家系统' },
   { to: '/meeting/generation-center',  label: '生成中心',      icon: 'play',     group: '专家系统' },
@@ -36,7 +35,7 @@ const NAV: NavItem[] = [
 // 每个导航项的 1-char 收起标签
 const NAV_SHORT: Record<string, string> = {
   '今天': '今', '库': '库', '人物轴': '人', '项目轴': '项', '知识轴': '知',
-  '纵向视图': '纵', '健康度': '健', '调用配置': '调', '策略 / 装饰器': '策', '生成中心': '生',
+  '纵向视图': '纵', '调用配置': '调', '策略 / 装饰器': '策', '生成中心': '生',
 };
 
 export function MeetingShell() {

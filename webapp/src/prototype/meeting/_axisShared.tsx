@@ -278,6 +278,7 @@ const KIND_TONE: Record<ScopeKind, string> = {
 function ScopePill() {
   const scope = useMeetingScope();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -359,13 +360,15 @@ function ScopePill() {
         <span style={{
           fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.4,
           padding: '2px 6px', borderRadius: 3, background: tone, color: 'var(--paper)',
+          flexShrink: 0,
         }}>{scope.kind}</span>
         <span style={{
           fontWeight: 600, color: 'var(--ink)',
-          maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          maxWidth: isMobile ? 72 : 180,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{scope.label}</span>
-        <span style={{ color: 'var(--ink-4)', fontSize: 10.5 }}>{scope.meta}</span>
-        <Icon name="chevronDown" size={11} style={{ color: 'var(--ink-4)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 160ms' }} />
+        {!isMobile && <span style={{ color: 'var(--ink-4)', fontSize: 10.5 }}>{scope.meta}</span>}
+        <Icon name="chevronDown" size={11} style={{ color: 'var(--ink-4)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 160ms', flexShrink: 0 }} />
       </button>
 
       {open && (
