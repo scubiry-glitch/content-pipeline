@@ -32,6 +32,7 @@ const FILES = [
   '022-runs-axis-relax.sql',
   '023-knowledge-axis-extension.sql',
   '024-runs-dag.sql',
+  '025-run-routing.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {

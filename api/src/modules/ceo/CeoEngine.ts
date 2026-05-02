@@ -57,11 +57,24 @@ export class CeoEngine {
     if (this.options.enableScheduler === false) return;
     if (this.runQueue) return;
 
-    this.runQueue = new CeoRunQueue(this.deps);
-    this.runQueue.start();
+    // CEO_WORKER_DISABLE=true → 不启动 CeoRunQueue（只入队、不消费 mn_runs 队列）
+    // 用于和 MN 模块的 MN_API_ONLY/MN_WORKER_ONLY 对偶：把执行权交给另一进程
+    // (e.g. 远端 nohup worker)。和 enableScheduler=false 的区别是：
+    // 这里仍会跑 CeoScheduler 的 cron 入队（可关，看 CEO_SCHEDULER_DISABLE）。
+    const workerDisabled = process.env.CEO_WORKER_DISABLE === 'true' || process.env.CEO_API_ONLY === 'true';
+    if (!workerDisabled) {
+      this.runQueue = new CeoRunQueue(this.deps);
+      this.runQueue.start();
+    } else {
+      console.log('[CeoEngine] CEO_WORKER_DISABLE/CEO_API_ONLY=true → CeoRunQueue 不启动 (只入队，不消费)');
+    }
 
-    this.cronScheduler = new CeoScheduler(this.deps);
-    this.cronScheduler.start();
+    if (process.env.CEO_SCHEDULER_DISABLE !== 'true') {
+      this.cronScheduler = new CeoScheduler(this.deps);
+      this.cronScheduler.start();
+    } else {
+      console.log('[CeoEngine] CEO_SCHEDULER_DISABLE=true → 跳过 cron scheduler');
+    }
 
     // 心跳日志（保留 schedulerRunning 状态指示）
     const tick = () => {

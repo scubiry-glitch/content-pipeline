@@ -221,6 +221,13 @@ export class RunEngine {
     try {
       // module='mn' 过滤：CEO 模块的 run (module='ceo') 由 ceoEngine 自己接管
       // 改动三 (DAG)：select 同时拉 stage / depends_on，L2 必须等所有 depends_on 都 succeeded 才 pickup
+      // 路由过滤 (025-run-routing.sql)：target_worker IS NULL（兼容老 run）或匹配本进程 WORKER_ID
+      const { getWorkerId, workerAcceptsModule } = await import('../../run-routing/service.js');
+      // accept_modules 安全网：本 worker spec 配置不接 'mn' module → 跳过本轮
+      if (!workerAcceptsModule('mn')) {
+        return { recovered: 0 };
+      }
+      const workerId = getWorkerId();
       const r = await this.deps.db.query(
         `SELECT id, scope_kind, scope_id::text AS scope_id, axis, sub_dims, preset,
                 strategy_spec, triggered_by, parent_run_id, metadata,
@@ -228,7 +235,9 @@ export class RunEngine {
            FROM mn_runs
           WHERE state = 'queued'
             AND module = 'mn'
+            AND (target_worker IS NULL OR target_worker = $1)
           ORDER BY created_at ASC`,
+        [workerId],
       );
       for (const row of r.rows) {
         // DAG gate：L2_aggregate 且仍有 depends_on 未 succeeded → 跳过这一轮
@@ -410,7 +419,14 @@ export class RunEngine {
       //     5min 太激进会误杀正常 run; 远小于 zombieMin=30min, 反应仍及时）
       //   - 没 heartbeat 列（旧 run 或 worker 崩溃前 30s 内）：fallback 走 started_at < NOW() - zombieMin
       const heartbeatStaleMin = Number(process.env.MN_HEARTBEAT_STALE_MIN ?? 15);
-      // module='mn' 过滤：CEO 模块 (module='ceo') 的僵尸由 ceoEngine 自己清理
+      // module='mn' 过滤：CEO 模块 (module='ceo') 的僵尸由 ceoEngine 自己清理。
+      // apiHost 过滤（split mode 防互杀）：只清本机起的 run；其他 host 起的 run 由人家自己的 sweeper 管。
+      // 没 apiHost 的老 run（向后兼容）任何 host 都能扫。语义对齐 recoverOrphanCliRuns 的过滤。
+      // F7 · cross-host stuck 兜底：跨 VM 迁移后旧 host 永不再回来，host-scoped sweeper
+      // 会漏掉那些 run。设一个长阈值（默认 6h，远超 zombieMin/heartbeatStaleMin）—— 任何 host 起的
+      // run heartbeat 沉默 ≥ 6h 都强收，避免老 run 永远 stuck running。
+      const myHost = osHostname();
+      const crossHostStaleHours = 6;
       const r1 = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'failed', finished_at = NOW(),
@@ -425,6 +441,11 @@ export class RunEngine {
           WHERE state = 'running'
             AND module = 'mn'
             AND (
+              metadata->>'apiHost' = $3::text
+              OR NOT (metadata ? 'apiHost')
+              OR COALESCE(last_heartbeat_at, started_at) < NOW() - ($4::int * INTERVAL '1 hour')
+            )
+            AND (
               (last_heartbeat_at IS NOT NULL
                 AND last_heartbeat_at < NOW() - ($2::int * INTERVAL '1 minute'))
               OR (last_heartbeat_at IS NULL
@@ -432,7 +453,7 @@ export class RunEngine {
                 AND started_at < NOW() - ($1::int * INTERVAL '1 minute'))
             )
           RETURNING id`,
-        [zombieMin, heartbeatStaleMin],
+        [zombieMin, heartbeatStaleMin, myHost, crossHostStaleHours],
       );
       failedRuns = (r1 as any).rowCount ?? r1.rows?.length ?? 0;
     } catch (e) {
@@ -442,13 +463,18 @@ export class RunEngine {
       // F5 · queued 超过 6 小时无人处理 → 标 cancelled
       // 阈值从 1h 上调到 6h：用户实测下午入队的 run 因 concurrency=2 排队等几小时是正常的，
       // 1h 太激进会误杀。错误信息也改为更诚实的字面意思（不假设是重启）。
+      // F6 · 兼容 resume 路径：把 resume 时间也算进基准，否则 resume 一条老 run（created_at 早于 6h）
+      // 会立刻被本 sweeper 秒杀（实测 d0604fff 第一次 resume 后 21 秒内被错误 cancel）。
       const r2 = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'cancelled', finished_at = NOW(),
                 error_message = COALESCE(error_message, 'queued-timeout: not picked up by worker within 6h')
           WHERE state = 'queued'
             AND module = 'mn'
-            AND created_at < NOW() - INTERVAL '6 hours'
+            AND GREATEST(
+                  created_at,
+                  COALESCE((metadata->>'resumedAt')::timestamptz, created_at)
+                ) < NOW() - INTERVAL '6 hours'
           RETURNING id`,
       );
       cancelledQueued = (r2 as any).rowCount ?? r2.rows?.length ?? 0;
@@ -532,15 +558,33 @@ export class RunEngine {
     const dagTriggerMeeting: string | null = req.triggerMeetingId
       ?? (scopeNorm.kind === 'meeting' && req.stage === 'L1_meeting' ? scopeNorm.id ?? null : null);
 
+    // 路由解析 (api/config/run-routing.json)：根据 (module='mn', scope_id, axis, mode)
+    // 决定 target_worker。
+    //   runMode='claude-cli'   → model='claude-cli'  → prod-tencent
+    //   runMode='api-oneshot'  → model='api-oneshot' → huoshanpro
+    //   runMode='multi-axis'   → model=null         → 兜底 local-mac
+    // metadata.workerHint 短路所有规则（显式声明）
+    const { resolveTargetWorker } = await import('../../run-routing/service.js');
+    const targetWorker = await resolveTargetWorker(this.deps.db, {
+      module: 'mn',
+      scopeId: scopeNorm.id ?? null,
+      axis: req.axis,
+      model:
+        runMode === 'claude-cli' ? 'claude-cli'
+        : runMode === 'api-oneshot' ? 'api-oneshot'
+        : null,
+      workerHint: (initialMeta as any).workerHint ?? null,
+    });
+
     // workspace_id 显式注入；不传时由 mn_runs 的 DEFAULT (default ws) 兜底
     const ins = req.workspaceId
       ? await this.deps.db.query(
           `INSERT INTO mn_runs
              (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
               state, triggered_by, parent_run_id, metadata, workspace_id,
-              stage, depends_on, trigger_meeting_id)
+              stage, depends_on, trigger_meeting_id, target_worker)
            VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb, $10,
-                   $11, $12::uuid[], $13::uuid)
+                   $11, $12::uuid[], $13::uuid, $14)
            RETURNING id`,
           [
             scopeNorm.kind,
@@ -556,15 +600,16 @@ export class RunEngine {
             dagStage,
             dagDeps,
             dagTriggerMeeting,
+            targetWorker,
           ],
         )
       : await this.deps.db.query(
           `INSERT INTO mn_runs
              (scope_kind, scope_id, axis, sub_dims, preset, strategy_spec,
               state, triggered_by, parent_run_id, metadata,
-              stage, depends_on, trigger_meeting_id)
+              stage, depends_on, trigger_meeting_id, target_worker)
            VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9::jsonb,
-                   $10, $11::uuid[], $12::uuid)
+                   $10, $11::uuid[], $12::uuid, $13)
            RETURNING id`,
           [
             scopeNorm.kind,
@@ -579,6 +624,7 @@ export class RunEngine {
             dagStage,
             dagDeps,
             dagTriggerMeeting,
+            targetWorker,
           ],
         );
     const runId = ins.rows[0].id as string;

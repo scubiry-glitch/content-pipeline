@@ -8,6 +8,7 @@
 
 import type { CeoEngineDeps } from '../types.js';
 import { handleCeoRun, type CeoRunRow } from './runHandlers.js';
+import { getWorkerId, resolveTargetWorker, workerAcceptsModule } from '../../run-routing/service.js';
 
 const POLL_INTERVAL_MS = Number(process.env.CEO_RUN_POLL_MS ?? 15000);
 
@@ -28,7 +29,7 @@ export class CeoRunQueue {
     setTimeout(tick, 5000);
     this.timer = setInterval(tick, POLL_INTERVAL_MS);
     if (typeof this.timer.unref === 'function') this.timer.unref();
-    console.log(`[CeoRunQueue] started (poll=${POLL_INTERVAL_MS}ms)`);
+    console.log(`[CeoRunQueue] started (poll=${POLL_INTERVAL_MS}ms, worker=${getWorkerId()})`);
   }
 
   stop(): void {
@@ -40,16 +41,23 @@ export class CeoRunQueue {
   /** 拉一条 queued run，跑完返回；并发由 executing 标记保护 */
   async drain(): Promise<{ picked: number }> {
     if (this.executing) return { picked: 0 };
+    // accept_modules 安全网：本 worker 配置不接 'ceo' module → 直接跳过本轮
+    if (!workerAcceptsModule('ceo')) return { picked: 0 };
     this.executing = true;
     let picked = 0;
     try {
+      const workerId = getWorkerId();
       while (this.running) {
+        // 路由过滤：只拿 target_worker IS NULL（无路由 = 任意 worker）或 = 本进程的 WORKER_ID
+        // 老 mn_runs 行 target_worker = NULL → 兼容
         const r = await this.deps.db.query(
           `SELECT id::text, axis, scope_kind, scope_id::text, metadata
              FROM mn_runs
             WHERE module = 'ceo' AND state = 'queued'
+              AND (target_worker IS NULL OR target_worker = $1)
             ORDER BY created_at ASC
             LIMIT 1`,
+          [workerId],
         );
         if (r.rows.length === 0) break;
         const run = r.rows[0] as CeoRunRow;
@@ -119,16 +127,27 @@ export async function enqueueCeoRun(
   },
 ): Promise<{ ok: boolean; runId?: string }> {
   try {
+    // 路由解析 — 写入 mn_runs.target_worker，让对应 worker 独占消费
+    // metadata.workerHint 显式覆盖；否则 model 命中 rule (CEO 一般不带 model)
+    const meta = input.metadata as Record<string, any> | undefined;
+    const targetWorker = await resolveTargetWorker(deps.db, {
+      module: 'ceo',
+      scopeId: input.scopeId ?? null,
+      axis: input.axis,
+      model: meta?.model ?? null,
+      workerHint: meta?.workerHint ?? null,
+    });
     const r = await deps.db.query(
       `INSERT INTO mn_runs
-        (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata)
-       VALUES ('ceo', $1, $2, $3, 'queued', 'manual', 'lite', '{}', $4::jsonb)
+        (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata, target_worker)
+       VALUES ('ceo', $1, $2, $3, 'queued', 'manual', 'lite', '{}', $4::jsonb, $5)
        RETURNING id::text`,
       [
         input.scopeKind ?? 'project',
         input.scopeId ?? null,
         input.axis,
         JSON.stringify(input.metadata ?? {}),
+        targetWorker,
       ],
     );
     return { ok: true, runId: r.rows[0]?.id };

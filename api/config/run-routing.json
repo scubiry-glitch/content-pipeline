@@ -1,0 +1,151 @@
+{
+  "$schema": "./run-routing.schema.json",
+  "$comment": "Worker 路由配置 — 入队时按 priority 升序匹配第一条命中的规则，把 worker_id 写入 mn_runs.target_worker。Worker 进程根据 WORKER_ID env 过滤要消费的任务。匹配字段缺省 = 通配。axis_pattern / model_pattern 用 glob 风格 (*/?)，不是 SQL LIKE。metadata.workerHint 在配置之外作为最高优先级强制覆盖（resolveTargetWorker 内置短路）。",
+
+  "strategy": [
+    "0. 显式 metadata.workerHint='local-mac'|'prod-tencent'|... → 直接用之 (代码内置短路)",
+    "1. 纯规则计算 (g5 panorama-aggregate) → worker_id=null (target_worker=NULL，任意 worker 可拿)",
+    "2. claude-cli 任务 (model_pattern='claude-cli*') → prod-TencentOpenClaw (Claude CLI 在 43.156.49.59)",
+    "3. API 模式任务 (model_pattern='api-oneshot*' 或 module='ceo') → huoshanpro (LLM HTTP API)",
+    "4. expert-library → local-mac (暂时本地，后续视量级再说)",
+    "5. 兜底 → local-mac (本机 PM2)"
+  ],
+
+  "rules": [
+    {
+      "axis_pattern": "panorama-aggregate",
+      "worker_id": null,
+      "priority": 5,
+      "notes": "g5 棱镜聚合 = 纯 SQL 规则计算，不调 LLM，谁先轮询到谁跑"
+    },
+    {
+      "axis_pattern": "g5",
+      "worker_id": null,
+      "priority": 5,
+      "notes": "legacy g5 命名同上"
+    },
+    {
+      "module": "mn",
+      "model_pattern": "claude-cli*",
+      "worker_id": "prod-TencentOpenClaw",
+      "priority": 10,
+      "notes": "会议轴 Claude CLI 任务 (Claude CLI 凭据在 prod-TencentOpenClaw 上配好)"
+    },
+    {
+      "module": "mn",
+      "model_pattern": "api-oneshot*",
+      "worker_id": "huoshanpro",
+      "priority": 20,
+      "notes": "会议轴 API 一次性任务 (走 HTTP 不走 CLI)"
+    },
+    {
+      "module": "ceo",
+      "worker_id": "huoshanpro",
+      "priority": 30,
+      "notes": "CEO 所有 LLM 任务 (g2/g3/g4) 走 services/llm.ts → API 模式 → huoshanpro"
+    },
+    {
+      "module": "expert",
+      "worker_id": "local-mac",
+      "priority": 50,
+      "notes": "专家库任务暂本地 (后续按量级再分流)"
+    },
+    {
+      "worker_id": "local-mac",
+      "priority": 999,
+      "notes": "兜底：其他全部走本地 worker"
+    }
+  ],
+
+  "workers": {
+    "local-mac": {
+      "enabled": true,
+      "tags": ["dev", "fallback"],
+      "host": "localhost",
+      "deploy": {
+        "api_dir": "/Users/scubiry/Documents/Scubiry/lab/pipeline/api"
+      },
+      "runtime": {
+        "concurrency": 1,
+        "env_extra": {
+          "WORKER_ID": "local-mac"
+        }
+      },
+      "health": { "url": "http://localhost:3006/health" },
+      "notes": "本地 PM2 跑的 content-pipeline-api (开发环境 / 兜底，能消费任意 module)"
+    },
+
+    "prod-TencentOpenClaw": {
+      "enabled": true,
+      "tags": ["claude-cli", "ssh-accessible"],
+      "host": "43.156.49.59",
+      "ssh": { "user": "root", "port": 22 },
+      "deploy": {
+        "repo": "/proweb/run/pipeline",
+        "api_dir": "/proweb/run/pipeline/api",
+        "node_bin": "/root/.nvm/versions/node/v22.22.0/bin/node",
+        "tsx_bin": "/proweb/run/pipeline/node_modules/.bin/tsx",
+        "worker_log": "/tmp/worker-mn.log",
+        "claude_cwd_base": "/proweb/wiki"
+      },
+      "claude_cli": {
+        "bin": "/root/.local/bin/claude",
+        "creds": "/root/.claude/.credentials.json"
+      },
+      "runtime": {
+        "concurrency": 2,
+        "accept_modules": ["mn"],
+        "env_extra": {
+          "MN_WORKER_ONLY": "true",
+          "CEO_WORKER_DISABLE": "true",
+          "WORKER_ID": "prod-TencentOpenClaw"
+        }
+      },
+      "health": { "url": null, "comment": "nohup 跑的，没 HTTP 探活；靠 mn_runs.heartbeat 判断" },
+      "notes": "腾讯云 nohup 跑的 mn-worker，专门消费 Claude CLI 任务"
+    },
+
+    "huoshanpro": {
+      "enabled": true,
+      "tags": ["llm-api", "fast-network"],
+      "host": "115.190.221.164",
+      "ssh": { "user": "root", "port": 22 },
+      "deploy": {
+        "repo": "/proweb/run/pipeline",
+        "api_dir": "/proweb/run/pipeline/api",
+        "worker_log": "/tmp/worker-llm.log"
+      },
+      "runtime": {
+        "concurrency": 4,
+        "accept_modules": ["ceo", "mn"],
+        "env_extra": {
+          "MN_WORKER_ONLY": "true",
+          "WORKER_ID": "huoshanpro"
+        }
+      },
+      "health": { "url": "http://115.190.221.164:3006/health" },
+      "notes": "火山云专跑 LLM HTTP API 调用的 worker，承担 CEO + mn api-oneshot 任务"
+    },
+
+    "TencentNodeDB": {
+      "enabled": true,
+      "tags": ["db-host", "self-hosted-node"],
+      "host": "124.156.192.230",
+      "ssh": { "user": "root", "port": 22 },
+      "deploy": {
+        "repo": "/newdata/pipeline",
+        "api_dir": "/newdata/pipeline/api",
+        "worker_log": "/tmp/worker-self.log"
+      },
+      "runtime": {
+        "comment": "暂无路由进来的任务；只跑该机自己 node 应用本地任务，不参与全局 mn/ceo 调度",
+        "accept_modules": [],
+        "env_extra": {
+          "WORKER_ID": "TencentNodeDB"
+        }
+      },
+      "health": { "url": null },
+      "notes": "DB 同主机的 node 应用所在机器 (Postgres 124.156.192.230 也住这)。`/newdata/pipeline/` 是项目位置。当前没接入全局调度，accept_modules=[] 显式拒收所有外来任务，避免误抢"
+    }
+  }
+}
