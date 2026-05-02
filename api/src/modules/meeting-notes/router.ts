@@ -13,12 +13,17 @@ import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
 import { assertRowInWorkspace, currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
+import { generate as llmGenerate } from '../../services/llm.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // P1 闸门 #3 阈值：scope 下所有 meetings.content 总字数 < 此值即拒绝重算
 // （避免用户点了重算才发现 transcript 没上传，silent succeeded 空集覆盖）
 const MIN_TRANSCRIPT_CHARS = parseInt(process.env.MN_MIN_TRANSCRIPT_CHARS ?? '2000', 10);
+
+function safeJson(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}
 
 async function resolveScopeUuid(db: any, idOrSlug: string): Promise<string | null> {
   if (UUID_RE.test(idOrSlug)) return idOrSlug;
@@ -1512,6 +1517,296 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return {
         biases: biasesR.rows,
         selfContradictions: flips,
+      };
+    });
+
+    /**
+     * POST /people/:id/llm-profile?scopeId=...
+     *   汇集该人物在历史会议中的全部"轨迹原料"（承诺 / 发言质量 / 角色 / 沉默信号 +
+     *   原文转写中以本人为说话人的段落），喂给 LLM 生成一份人物画像 markdown。
+     *   AxisPeople · manage tab 的"AI 画像"按钮调用。
+     *
+     *   ?scopeId 可选：只用该 scope 下的会议作为原料（默认全库）。
+     *   body.persist=true 时把结果写到 mn_people.metadata.llm_profile，下次直接读。
+     */
+    fastify.post('/people/:id/llm-profile', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const q = (request.query ?? {}) as { scopeId?: string };
+      const body = (request.body ?? {}) as { persist?: boolean };
+      const db = engine.deps.db;
+
+      // 1) 取人物基本信息
+      const pr = await db.query(
+        `SELECT id, canonical_name, aliases, role, org, metadata
+           FROM mn_people WHERE id = $1`,
+        [id],
+      );
+      if (pr.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      const person = pr.rows[0];
+      const aliases: string[] = Array.isArray(person.aliases) ? person.aliases : [];
+
+      // 2) 解析 scope 限定（可选）
+      let scopeUuid: string | null = null;
+      if (q.scopeId) {
+        scopeUuid = await resolveScopeUuid(db, q.scopeId);
+        if (!scopeUuid) { reply.status(404); return { error: 'scope not found' }; }
+      }
+
+      // 3) 收集本人参与过的 meetingIds（4 张表 union），可选与 scope 求交
+      const meetingsRes = await db.query(
+        `SELECT DISTINCT m.id::text AS id, m.title, m.created_at,
+                COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date') AS date
+           FROM (
+             SELECT meeting_id FROM mn_speech_quality        WHERE person_id = $1
+             UNION
+             SELECT meeting_id FROM mn_commitments           WHERE person_id = $1
+             UNION
+             SELECT meeting_id FROM mn_role_trajectory_points WHERE person_id = $1
+             UNION
+             SELECT meeting_id FROM mn_silence_signals       WHERE person_id = $1
+           ) mids
+           JOIN assets m ON m.id::text = mids.meeting_id::text
+          WHERE ($2::uuid IS NULL OR mids.meeting_id IN (
+                  SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $2::uuid
+                ))
+          ORDER BY COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date', m.created_at::text) DESC
+          LIMIT 10`,
+        [id, scopeUuid],
+      );
+      const meetings: Array<{ id: string; title: string | null; date: string | null; created_at: any }> = meetingsRes.rows;
+      if (meetings.length === 0) {
+        reply.status(409);
+        return {
+          error: 'NO_HISTORY',
+          message: '该人物没有任何关联会议轨迹，无法生成画像（先跑过会议解析或导入数据）。',
+        };
+      }
+      const meetingIds = meetings.map((m) => m.id);
+
+      // 4) 该人物的原料：commitments / role_trajectory / speech_quality / silence_signals
+      const [cmtR, roleR, sqR, silenceR, biasR] = await Promise.all([
+        db.query(
+          `SELECT meeting_id::text AS meeting_id, text, due_at, state, progress, created_at
+             FROM mn_commitments
+            WHERE person_id = $1 AND meeting_id::text = ANY($2::text[])
+            ORDER BY created_at DESC LIMIT 60`,
+          [id, meetingIds],
+        ).catch(() => ({ rows: [] })),
+        db.query(
+          `SELECT meeting_id::text AS meeting_id, role_label, confidence, occurred_at
+             FROM mn_role_trajectory_points
+            WHERE person_id = $1 AND meeting_id::text = ANY($2::text[])
+            ORDER BY occurred_at DESC NULLS LAST LIMIT 30`,
+          [id, meetingIds],
+        ).catch(() => ({ rows: [] })),
+        db.query(
+          `SELECT meeting_id::text AS meeting_id, entropy_pct, followed_up_count,
+                  quality_score, created_at
+             FROM mn_speech_quality
+            WHERE person_id = $1 AND meeting_id::text = ANY($2::text[])
+            ORDER BY created_at DESC LIMIT 30`,
+          [id, meetingIds],
+        ).catch(() => ({ rows: [] })),
+        db.query(
+          `SELECT meeting_id::text AS meeting_id, state, created_at
+             FROM mn_silence_signals
+            WHERE person_id = $1 AND meeting_id::text = ANY($2::text[])
+            ORDER BY created_at DESC LIMIT 30`,
+          [id, meetingIds],
+        ).catch(() => ({ rows: [] })),
+        db.query(
+          `SELECT meeting_id::text AS meeting_id, bias_type, where_excerpt, severity, mitigated, created_at
+             FROM mn_cognitive_biases
+            WHERE by_person_id = $1 AND meeting_id::text = ANY($2::text[])
+            ORDER BY created_at DESC LIMIT 20`,
+          [id, meetingIds],
+        ).catch(() => ({ rows: [] })),
+      ]);
+
+      // 5) 原文：从 assets.metadata.parse_segments.segments 里挑出 speaker 是该人物的段落
+      const segRes = await db.query(
+        `SELECT id::text AS meeting_id, metadata->'parse_segments'->'segments' AS segs
+           FROM assets WHERE id::text = ANY($1::text[])`,
+        [meetingIds],
+      ).catch(() => ({ rows: [] }));
+      const speakerNames = new Set<string>([person.canonical_name, ...aliases].map((n: string) => String(n).toLowerCase()));
+      const speakerSegments: Array<{ meeting_id: string; text: string }> = [];
+      const PER_MEETING_SEG_CAP = 5;
+      const SEG_CHAR_CAP = 400;
+      for (const row of segRes.rows) {
+        const raw = row.segs;
+        const segs: any[] = Array.isArray(raw) ? raw : (typeof raw === 'string' ? safeJson(raw) : []);
+        if (!Array.isArray(segs)) continue;
+        let kept = 0;
+        for (const s of segs) {
+          if (kept >= PER_MEETING_SEG_CAP) break;
+          const speaker = String((s as any)?.speaker ?? '').trim().toLowerCase();
+          if (!speaker || !speakerNames.has(speaker)) continue;
+          const text = String((s as any)?.text ?? '').trim();
+          if (!text || text.length < 30) continue;
+          speakerSegments.push({
+            meeting_id: row.meeting_id,
+            text: text.length > SEG_CHAR_CAP ? text.slice(0, SEG_CHAR_CAP) + '…' : text,
+          });
+          kept++;
+        }
+      }
+
+      // 6) 拼 prompt
+      const meetingById = new Map(meetings.map((m) => [m.id, m]));
+      const fmtMeeting = (mid: string) => {
+        const m = meetingById.get(mid);
+        return m ? `「${m.title ?? mid.slice(0, 8)}」(${m.date ?? '日期未知'})` : mid.slice(0, 8);
+      };
+
+      const lines: string[] = [];
+      lines.push(`# 人物画像生成原料`);
+      lines.push(``);
+      lines.push(`## 基本信息`);
+      lines.push(`- 姓名：${person.canonical_name}`);
+      if (aliases.length) lines.push(`- 别名：${aliases.join(', ')}`);
+      if (person.role) lines.push(`- 角色：${person.role}`);
+      if (person.org)  lines.push(`- 组织：${person.org}`);
+      lines.push(``);
+
+      lines.push(`## 参与的近 ${meetings.length} 场会议`);
+      for (const m of meetings) lines.push(`- ${m.date ?? '?'} ${m.title ?? '(无标题)'}`);
+      lines.push(``);
+
+      if (cmtR.rows.length) {
+        lines.push(`## 承诺轨迹 (${cmtR.rows.length} 条)`);
+        for (const c of cmtR.rows.slice(0, 30)) {
+          lines.push(`- [${c.state}] ${fmtMeeting(c.meeting_id)} · ${c.text}${c.due_at ? ` (due ${String(c.due_at).slice(0, 10)})` : ''}`);
+        }
+        lines.push(``);
+      }
+
+      if (roleR.rows.length) {
+        lines.push(`## 角色演化`);
+        for (const r of roleR.rows.slice(0, 20)) {
+          lines.push(`- ${fmtMeeting(r.meeting_id)} → ${r.role_label} (置信 ${Number(r.confidence ?? 0).toFixed(2)})`);
+        }
+        lines.push(``);
+      }
+
+      if (sqR.rows.length) {
+        const avgEntropy = sqR.rows.reduce((s: number, r: any) => s + Number(r.entropy_pct ?? 0), 0) / sqR.rows.length;
+        const totalFollowed = sqR.rows.reduce((s: number, r: any) => s + Number(r.followed_up_count ?? 0), 0);
+        const avgQuality = sqR.rows.reduce((s: number, r: any) => s + Number(r.quality_score ?? 0), 0) / sqR.rows.length;
+        lines.push(`## 发言质量汇总（最近 ${sqR.rows.length} 场）`);
+        lines.push(`- 平均熵值（话题分散度）：${avgEntropy.toFixed(2)}`);
+        lines.push(`- 被跟进次数总和：${totalFollowed}`);
+        lines.push(`- 平均质量分：${avgQuality.toFixed(2)}`);
+        lines.push(``);
+      }
+
+      if (silenceR.rows.length) {
+        const counts: Record<string, number> = {};
+        for (const r of silenceR.rows) counts[String(r.state)] = (counts[String(r.state)] ?? 0) + 1;
+        lines.push(`## 沉默信号分布（最近 ${silenceR.rows.length} 场）`);
+        for (const k of Object.keys(counts)) lines.push(`- ${k}: ${counts[k]} 次`);
+        lines.push(``);
+      }
+
+      if (biasR.rows.length) {
+        lines.push(`## 历史认知偏差（${biasR.rows.length} 条）`);
+        for (const b of biasR.rows.slice(0, 12)) {
+          lines.push(`- [${b.severity}] ${b.bias_type}${b.mitigated ? ' (已缓解)' : ''} — ${String(b.where_excerpt ?? '').slice(0, 160)}`);
+        }
+        lines.push(``);
+      }
+
+      if (speakerSegments.length) {
+        lines.push(`## 原文片段（共 ${speakerSegments.length} 段，每段最多 ${SEG_CHAR_CAP} 字）`);
+        for (const s of speakerSegments) {
+          lines.push(`- ${fmtMeeting(s.meeting_id)}: "${s.text.replace(/\s+/g, ' ').trim()}"`);
+        }
+        lines.push(``);
+      }
+
+      const systemPrompt = `你是一位资深的组织行为分析师 + 决策心智建模师。基于一位成员在多场内部会议中的承诺轨迹、发言质量数据、角色演化、沉默信号和原文发言片段，生成一份"人物画像"。
+
+输出 markdown，结构固定（缺料的 section 写"原料不足"，不要编造）：
+
+# {人物姓名}
+
+## 1. 决策风格 & 思维模式
+（关注因果链 / 第一性原理 / 类比 / 对照实验 / 经验主义 等。引用 1-2 条最有代表性的发言或承诺作支撑。）
+
+## 2. 反复出现的关注点（focus areas）
+（topic-level，不是 keyword-level。说明每个关注点最早出现在哪场会议，是否有信念漂移。）
+
+## 3. 承诺履约模式
+（on_track / at_risk / done / slipped 的比例和原因猜测；典型守信 / 典型失约的案例各 1-2 个。）
+
+## 4. 沟通风格
+（话题分散度 entropy 高低 → 收敛/发散；被跟进频次 → 影响力；沉默信号 → 主动观察 vs 被动逃避。）
+
+## 5. 信念漂移 / 认知盲点
+（基于历史 cognitive_biases 总结。如果数据不足直接写"原料不足"。）
+
+## 6. 协作建议
+（给老板用：跟此人开会、布置任务、读他建议时该注意什么。3-5 条。）
+
+避免泛泛而谈，每个论断必须能映射回原料中的某条承诺/发言/事件。引用时用「会议名」+ 摘要的形式。`;
+
+      const userPrompt = lines.join('\n');
+
+      // 7) 调 LLM
+      let result: { content: string; model: string; usage?: any };
+      try {
+        result = await llmGenerate(userPrompt, 'analysis', {
+          systemPrompt,
+          temperature: 0.5,
+          maxTokens: 2400,
+        });
+      } catch (e: any) {
+        request.log.error({ err: e, personId: id }, 'llm-profile generation failed');
+        reply.status(503);
+        return { error: 'LLM_UNAVAILABLE', message: e?.message ?? String(e) };
+      }
+
+      const generatedAt = new Date().toISOString();
+      const sources = {
+        meetings: meetings.length,
+        commitments: cmtR.rows.length,
+        roleTrajectory: roleR.rows.length,
+        speechRows: sqR.rows.length,
+        silenceRows: silenceR.rows.length,
+        biases: biasR.rows.length,
+        segments: speakerSegments.length,
+        scopeId: q.scopeId ?? null,
+      };
+
+      // 8) 可选持久化
+      if (body.persist) {
+        try {
+          await db.query(
+            `UPDATE mn_people
+                SET metadata = COALESCE(metadata, '{}'::jsonb)
+                  || jsonb_build_object('llm_profile', $2::jsonb),
+                    updated_at = NOW()
+              WHERE id = $1`,
+            [id, JSON.stringify({
+              content: result.content,
+              model: result.model,
+              generatedAt,
+              sources,
+            })],
+          );
+        } catch (e) {
+          request.log.warn({ err: e, personId: id }, 'llm-profile persist failed (non-fatal)');
+        }
+      }
+
+      return {
+        content: result.content,
+        model: result.model,
+        usage: result.usage ?? null,
+        generatedAt,
+        sources,
+        promptChars: userPrompt.length,
       };
     });
 

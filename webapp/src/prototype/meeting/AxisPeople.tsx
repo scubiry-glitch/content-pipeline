@@ -12,6 +12,7 @@ import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
+import { PersonLLMProfileModal } from './PersonLLMProfileModal';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -1052,6 +1053,9 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
     previewMergedAliases: string[];
   } | null>(null);
 
+  // T2 · AI 画像 modal（基于该人物全部历史会议轨迹喂 LLM 生成）
+  const [aiProfileFor, setAiProfileFor] = useState<{ id: string; name: string } | null>(null);
+
   async function reload() {
     setRows(null); setErr(null);
     try {
@@ -1185,7 +1189,7 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
 
       {rows && rows.length > 0 && (
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 100px 80px 100px',
+          display: 'grid', gridTemplateColumns: '1fr 100px 80px 140px',
           padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
           letterSpacing: 0.3, textTransform: 'uppercase', borderBottom: '1px solid var(--line-2)',
         }}>
@@ -1198,7 +1202,7 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
         const isMergeTargetable = mergeSourceId && mergeSourceId !== p.id;
         return (
           <div key={p.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr 100px 80px 100px',
+            display: 'grid', gridTemplateColumns: '1fr 100px 80px 140px',
             alignItems: 'center', gap: 10, padding: '12px 14px',
             borderBottom: '1px solid var(--line-2)',
             background: isMergeSource
@@ -1273,6 +1277,15 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
                       padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
                     }}
                   >🔗</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setAiProfileFor({ id: p.id, name: p.canonical_name }); }}
+                    title="基于该人物历史会议轨迹生成 LLM 画像"
+                    style={{
+                      border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                      padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--ink-2)',
+                      fontFamily: 'var(--mono)', letterSpacing: 0.3,
+                    }}
+                  >AI</button>
                 </>
               )}
               {isMergeSource && (
@@ -1371,6 +1384,15 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
             </div>
           </div>
         </div>
+      )}
+
+      {aiProfileFor && (
+        <PersonLLMProfileModal
+          personId={aiProfileFor.id}
+          personName={aiProfileFor.name}
+          scopeId={scopeId}
+          onClose={() => setAiProfileFor(null)}
+        />
       )}
     </div>
   );

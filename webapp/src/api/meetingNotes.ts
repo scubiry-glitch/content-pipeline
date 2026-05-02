@@ -310,6 +310,36 @@ export const meetingNotesApi = {
     >(`/people/${targetId}/merge`, body),
 
   /**
+   * 基于该人物历史会议轨迹（承诺 / 角色 / 发言 / 沉默 / 偏差 + 原文片段）
+   * 喂 LLM 生成一份 markdown 人物画像。AxisPeople · manage tab 的"AI 画像"按钮调用。
+   * 后端如果没找到任何历史会议返回 409 NO_HISTORY；LLM 不可达返回 503 LLM_UNAVAILABLE。
+   */
+  generatePersonLLMProfile: (
+    id: string,
+    body: { scopeId?: string; persist?: boolean } = {},
+  ) =>
+    jpost<{
+      content: string;
+      model: string;
+      usage: { inputTokens?: number; outputTokens?: number } | null;
+      generatedAt: string;
+      sources: {
+        meetings: number;
+        commitments: number;
+        roleTrajectory: number;
+        speechRows: number;
+        silenceRows: number;
+        biases: number;
+        segments: number;
+        scopeId: string | null;
+      };
+      promptChars: number;
+    }>(
+      `/people/${id}/llm-profile${body.scopeId ? `?scopeId=${encodeURIComponent(body.scopeId)}` : ''}`,
+      { persist: body.persist ?? false },
+    ),
+
+  /**
    * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。
    * 冲突响应：409 CANONICAL_NAME_CONFLICT（同 (canonical_name, org) 已被另一人占用）。
    */
