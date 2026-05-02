@@ -2,7 +2,7 @@
 // 顶栏显示 meeting 元数据 + A/B/C tab 切换 + 导航回库
 // 真正内容由子路由 VariantEditorial / VariantWorkbench / VariantThreads 提供
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import { MEETING } from './_fixtures';
@@ -332,6 +332,8 @@ export function MeetingDetailShell() {
           )}
           <Chip tone="ghost">{m.id}</Chip>
 
+          <ShareButton meetingId={id} disabled={!UUID_RE.test(id)} />
+
           <div style={{
             display: 'flex', gap: 2, border: '1px solid var(--line)',
             borderRadius: 6, padding: 3, background: 'var(--paper-2)',
@@ -470,6 +472,277 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
       <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 10 }}>
         来源 · GET /meetings/:id/health
       </span>
+    </div>
+  );
+}
+
+// ——————————————————————————————————————————————————
+// Share feature
+// ——————————————————————————————————————————————————
+
+type ShareRecord = {
+  id: string;
+  share_token: string;
+  mode: string;
+  targets: string[];
+  created_at: string;
+  expires_at: string | null;
+};
+
+function ShareButton({ meetingId, disabled }: { meetingId: string; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '5px 12px', borderRadius: 6, cursor: disabled ? 'default' : 'pointer',
+          border: '1px solid var(--line)', background: open ? 'var(--paper-2)' : 'var(--paper)',
+          color: 'var(--ink-2)', fontFamily: 'var(--sans)', fontSize: 12.5,
+          opacity: disabled ? 0.5 : 1,
+        }}
+        title="分享这条会议纪要"
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="13" cy="3" r="1.5" />
+          <circle cx="13" cy="13" r="1.5" />
+          <circle cx="3" cy="8" r="1.5" />
+          <line x1="4.4" y1="7.2" x2="11.6" y2="3.8" />
+          <line x1="4.4" y1="8.8" x2="11.6" y2="12.2" />
+        </svg>
+        分享
+      </button>
+      {open && (
+        <div ref={panelRef} style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200,
+          width: 340, background: 'var(--paper)', border: '1px solid var(--line)',
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 20,
+        }}>
+          <SharePanel meetingId={meetingId} onClose={() => setOpen(false)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SharePanel({ meetingId, onClose: _onClose }: { meetingId: string; onClose: () => void }) {
+  const [mode, setMode] = useState<'link' | 'targeted'>('link');
+  const [emailInput, setEmailInput] = useState('');
+  const [emails, setEmails] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [shares, setShares] = useState<ShareRecord[]>([]);
+  const [loadingShares, setLoadingShares] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadShares = useCallback(() => {
+    setLoadingShares(true);
+    meetingNotesApi.listShares(meetingId)
+      .then((res) => setShares(res.shares))
+      .catch(() => setShares([]))
+      .finally(() => setLoadingShares(false));
+  }, [meetingId]);
+
+  useEffect(() => { loadShares(); }, [loadShares]);
+
+  const addEmail = () => {
+    const e = emailInput.trim();
+    if (e && !emails.includes(e)) setEmails((prev) => [...prev, e]);
+    setEmailInput('');
+  };
+
+  const createShare = async () => {
+    if (mode === 'targeted' && emails.length === 0) {
+      setError('请至少添加一个邮箱');
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      await meetingNotesApi.createShare(meetingId, { mode, targets: mode === 'targeted' ? emails : [] });
+      setEmails([]);
+      setEmailInput('');
+      loadShares();
+    } catch {
+      setError('创建失败，请重试');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revokeShare = async (shareId: string) => {
+    await meetingNotesApi.deleteShare(meetingId, shareId).catch(() => null);
+    setShares((prev) => prev.filter((s) => s.id !== shareId));
+  };
+
+  const copyLink = (token: string, shareId: string) => {
+    const url = `${window.location.origin}/meeting/shared/${token}`;
+    void navigator.clipboard.writeText(url);
+    setCopiedId(shareId);
+    setTimeout(() => setCopiedId((id) => (id === shareId ? null : id)), 2000);
+  };
+
+  const sectionLabel: React.CSSProperties = {
+    fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600,
+    letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)', marginBottom: 8,
+  };
+
+  return (
+    <div>
+      <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 14, marginBottom: 16, color: 'var(--ink)' }}>
+        分享会议纪要
+      </div>
+
+      {/* Mode toggle */}
+      <div style={sectionLabel}>访问权限</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {(['link', 'targeted'] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            style={{
+              flex: 1, padding: '7px 0', borderRadius: 6, fontSize: 12.5,
+              fontFamily: 'var(--sans)', cursor: 'pointer',
+              border: mode === m ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+              background: mode === m ? 'var(--ink)' : 'var(--paper)',
+              color: mode === m ? 'var(--paper)' : 'var(--ink-2)',
+              fontWeight: mode === m ? 600 : 450,
+            }}
+          >
+            {m === 'link' ? '知道链接即可访问' : '指定人员'}
+          </button>
+        ))}
+      </div>
+
+      {/* Targeted: email list */}
+      {mode === 'targeted' && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={sectionLabel}>添加邮箱</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="email"
+              placeholder="example@company.com"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmail(); } }}
+              style={{
+                flex: 1, padding: '6px 10px', borderRadius: 6,
+                border: '1px solid var(--line)', background: 'var(--paper)',
+                fontFamily: 'var(--sans)', fontSize: 12.5, color: 'var(--ink)',
+              }}
+            />
+            <button
+              onClick={addEmail}
+              style={{
+                padding: '6px 12px', borderRadius: 6, fontSize: 12,
+                border: '1px solid var(--line)', background: 'var(--paper-2)',
+                color: 'var(--ink-2)', cursor: 'pointer',
+              }}
+            >
+              添加
+            </button>
+          </div>
+          {emails.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+              {emails.map((e) => (
+                <span key={e} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 8px', borderRadius: 99,
+                  background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+                  fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)',
+                }}>
+                  {e}
+                  <button
+                    onClick={() => setEmails((prev) => prev.filter((x) => x !== e))}
+                    style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 0, color: 'var(--ink-3)', fontSize: 12, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <p style={{ color: 'oklch(0.50 0.18 25)', fontSize: 12, marginBottom: 10 }}>{error}</p>}
+
+      <button
+        onClick={() => void createShare()}
+        disabled={creating}
+        style={{
+          width: '100%', padding: '8px 0', borderRadius: 6,
+          border: 0, background: 'var(--ink)', color: 'var(--paper)',
+          fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 600,
+          cursor: creating ? 'wait' : 'pointer', opacity: creating ? 0.7 : 1,
+          marginBottom: 20,
+        }}
+      >
+        {creating ? '创建中…' : '创建分享链接'}
+      </button>
+
+      {/* Existing shares */}
+      <div style={sectionLabel}>已有分享链接</div>
+      {loadingShares ? (
+        <p style={{ color: 'var(--ink-3)', fontSize: 12 }}>加载中…</p>
+      ) : shares.length === 0 ? (
+        <p style={{ color: 'var(--ink-3)', fontSize: 12 }}>暂无</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {shares.map((s) => (
+            <div key={s.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 10px', borderRadius: 7,
+              background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-2)' }}>
+                  {s.mode === 'targeted' ? `指定人员 (${(s.targets ?? []).length} 人)` : '知道链接即可访问'}
+                </div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
+                  {new Date(s.created_at).toLocaleDateString('zh-CN')}
+                  {s.expires_at && ` · 过期 ${new Date(s.expires_at).toLocaleDateString('zh-CN')}`}
+                </div>
+              </div>
+              <button
+                onClick={() => copyLink(s.share_token, s.id)}
+                style={{
+                  padding: '4px 9px', borderRadius: 5, fontSize: 11.5,
+                  border: '1px solid var(--line)', background: 'var(--paper)',
+                  color: copiedId === s.id ? 'oklch(0.45 0.12 160)' : 'var(--ink-2)',
+                  cursor: 'pointer', fontFamily: 'var(--sans)',
+                }}
+              >
+                {copiedId === s.id ? '已复制' : '复制链接'}
+              </button>
+              <button
+                onClick={() => void revokeShare(s.id)}
+                title="撤销分享"
+                style={{
+                  padding: '4px 7px', borderRadius: 5, fontSize: 11,
+                  border: '1px solid var(--line)', background: 'var(--paper)',
+                  color: 'var(--ink-3)', cursor: 'pointer',
+                }}
+              >
+                撤销
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

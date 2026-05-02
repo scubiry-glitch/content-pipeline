@@ -2,7 +2,7 @@
 // 原型来源：/tmp/mn-proto/library.jsx Library / FolderNode / MeetingCard / PreviewPanel
 // 三栏：左侧文件夹树 · 中间会议卡片 · 右侧详情预览
 
-import { useState, useMemo, useEffect, CSSProperties } from 'react';
+import { useState, useMemo, useEffect, useCallback, CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Chip, Dot, Icon, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import type { IconName } from './_atoms';
@@ -732,9 +732,10 @@ function MoveToScopeModal({
   );
 }
 
-function PreviewPanel({ m, tree, groupBy, onAction, busy }: {
+function PreviewPanel({ m, tree, groupBy, onAction, onClose, busy }: {
   m: Meeting; tree: TreeNode[]; groupBy: GroupKey;
   onAction: (action: PreviewAction, m: Meeting) => void;
+  onClose: () => void;
   busy?: PreviewAction | null;
 }) {
   const quickActions: Array<{ icon: IconName; label: string; action: PreviewAction }> = [
@@ -747,7 +748,19 @@ function PreviewPanel({ m, tree, groupBy, onAction, busy }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
-        <SectionLabel>预览</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <SectionLabel>预览</SectionLabel>
+          <button
+            onClick={onClose}
+            title="关闭预览"
+            style={{
+              border: 0, background: 'transparent', cursor: 'pointer',
+              color: 'var(--ink-4)', padding: '2px 4px', display: 'flex',
+            }}
+          >
+            <Icon name="x" size={15} />
+          </button>
+        </div>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: 0.3, marginTop: 8 }}>{m.id}</div>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '6px 0 10px', letterSpacing: '-0.005em', lineHeight: 1.25 }}>
           {m.title}
@@ -860,8 +873,20 @@ export function Library() {
   const navigate = useNavigate();
   const [groupBy, setGroupBy] = useState<GroupKey>('project');
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState('M-2026-04-11-0237');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    const h = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  // Mobile: left folder tree toggled via button
+  const [showMobileTree, setShowMobileTree] = useState(false);
 
   // API probe：默认 API 优先 · 加载期间不闪 mock · 仅 forceMock 或 API 失败时降级
   const forceMock = useForceMock();
@@ -1005,7 +1030,8 @@ export function Library() {
         return hay.includes(normalizedQ);
       });
   const visible = localFiltered.filter(m => matchGroup(m, activeGroup));
-  const selected = meetingsDisplay.find(m => m.id === selectedId) ?? visible[0];
+  const selected = selectedId ? (meetingsDisplay.find(m => m.id === selectedId) ?? null) : null;
+  const closePreview = useCallback(() => setSelectedId(null), []);
 
   // 跨可见会议全文 grep（每个会议串行调；可见 ≤ 12 时 ok，多了截断防雪崩）
   async function runFulltextGrep() {
@@ -1159,7 +1185,7 @@ export function Library() {
         await meetingNotesApi.archiveMeeting(m.id);
         // 默认列表只显示 active：归档后从当前列表移除
         setApiMeetings((prev) => (prev ?? []).filter((x) => x.id !== m.id));
-        if (selectedId === m.id) setSelectedId('');
+        if (selectedId === m.id) setSelectedId(null);
       } else if (action === 'unarchive') {
         setBusyAction('unarchive');
         await meetingNotesApi.unarchiveMeeting(m.id);
@@ -1170,7 +1196,7 @@ export function Library() {
         setBusyAction('delete');
         await meetingNotesApi.deleteMeeting(m.id);
         setApiMeetings((prev) => (prev ?? []).filter((x) => x.id !== m.id));
-        if (selectedId === m.id) setSelectedId('');
+        if (selectedId === m.id) setSelectedId(null);
       }
     } catch (e: any) {
       alert(`操作失败：${e?.message ?? e}`);
@@ -1233,27 +1259,31 @@ export function Library() {
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper)',
-      display: 'grid', gridTemplateRows: '56px 1fr', color: 'var(--ink)',
+      display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : '56px 1fr', color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
       {/* Top bar */}
       <header style={{
-        display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px',
+        display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16,
+        padding: isMobile ? '0 12px' : '0 24px',
         borderBottom: '1px solid var(--line-2)', background: 'var(--paper)',
+        minHeight: 48, overflowX: isMobile ? 'auto' : 'visible',
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        paddingTop: isMobile ? 8 : 0, paddingBottom: isMobile ? 8 : 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{
             width: 24, height: 24, borderRadius: 6, background: 'var(--ink)',
             color: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 600, fontSize: 14,
           }}>M</div>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>会议纪要库</span>
-          <MonoMeta>/ library</MonoMeta>
+          {!isMobile && <span style={{ fontWeight: 600, fontSize: 14 }}>会议纪要库</span>}
+          {!isMobile && <MonoMeta>/ library</MonoMeta>}
         </div>
 
-        <div style={{ height: 24, width: 1, background: 'var(--line)' }} />
-        <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>分组方式</div>
-        <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2 }}>
+        {!isMobile && <div style={{ height: 24, width: 1, background: 'var(--line)' }} />}
+        {!isMobile && <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>分组方式</div>}
+        <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2, flexShrink: 0 }}>
           {groupTabs.map(g => (
             <button key={g.id} onClick={() => { setGroupBy(g.id); setActiveGroup(null); }} style={{
               padding: '4px 12px', border: 0, borderRadius: 4, fontSize: 12,
@@ -1264,31 +1294,35 @@ export function Library() {
           ))}
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           {isMock && <MockBadge />}
-          <button
-            onClick={() => setShowArchived((v) => !v)}
-            title={showArchived ? '当前显示归档会议 · 点击切回 active' : '切换到「归档」视图，可在那里取消归档或永久删除'}
-            style={{
-              padding: '5px 11px', border: '1px solid var(--line)',
-              background: showArchived ? 'var(--ink)' : 'var(--paper)',
-              color: showArchived ? 'var(--paper)' : 'var(--ink-2)',
-              fontSize: 12, borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--sans)',
-              fontWeight: showArchived ? 600 : 450,
-            }}
-          >
-            {showArchived ? '归档' : '显示归档'}
-          </button>
-          <Chip tone="ghost">{meetingsDisplay.length} 条会议 · {allGroupIds.length} 个分组</Chip>
-          <button
-            onClick={() => alert('全文搜索 · 待接入（TODO: search API）')}
-            style={{
-              padding: '6px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
-              color: 'var(--ink-2)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)',
-            }}>
-            <Icon name="search" size={12} /> 搜索
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setShowArchived((v) => !v)}
+              title={showArchived ? '当前显示归档会议 · 点击切回 active' : '切换到「归档」视图，可在那里取消归档或永久删除'}
+              style={{
+                padding: '5px 11px', border: '1px solid var(--line)',
+                background: showArchived ? 'var(--ink)' : 'var(--paper)',
+                color: showArchived ? 'var(--paper)' : 'var(--ink-2)',
+                fontSize: 12, borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--sans)',
+                fontWeight: showArchived ? 600 : 450,
+              }}
+            >
+              {showArchived ? '归档' : '显示归档'}
+            </button>
+          )}
+          {!isMobile && <Chip tone="ghost">{meetingsDisplay.length} 条会议 · {allGroupIds.length} 个分组</Chip>}
+          {!isMobile && (
+            <button
+              onClick={() => alert('全文搜索 · 待接入（TODO: search API）')}
+              style={{
+                padding: '6px 14px', border: '1px solid var(--line)', background: 'var(--paper)',
+                color: 'var(--ink-2)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--sans)',
+              }}>
+              <Icon name="search" size={12} /> 搜索
+            </button>
+          )}
           <button
             onClick={() => navigate('/meeting/new')}
             style={{
@@ -1301,9 +1335,14 @@ export function Library() {
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 380px', overflow: 'hidden' }}>
-        {/* Left: folder tree */}
-        <aside style={{
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : (selected ? '240px 1fr 380px' : '240px 1fr'),
+        overflow: 'hidden',
+        transition: 'grid-template-columns 0.2s ease',
+      }}>
+        {/* Left: folder tree — hidden on mobile (toggled via sheet) */}
+        {!isMobile && <aside style={{
           borderRight: '1px solid var(--line-2)', background: 'var(--paper-2)',
           padding: '18px 14px', overflowY: 'auto',
         }}>
@@ -1371,19 +1410,49 @@ export function Library() {
             </div>
             把会议卡片拖到分组节点 → 自动绑定。Hover 节点 → ＋ 建子分组。
           </div>
-        </aside>
+        </aside>}
 
         {/* Middle: meeting cards */}
-        <main style={{ overflow: 'auto', padding: '20px 28px' }}>
+        <main style={{ overflow: 'auto', padding: isMobile ? '12px 16px' : '20px 28px' }}>
+          {/* Mobile: group filter shortcuts */}
+          {isMobile && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 2 }}>
+              <button
+                onClick={() => setActiveGroup(null)}
+                style={{
+                  flexShrink: 0, padding: '5px 12px', borderRadius: 99, border: '1px solid var(--line-2)',
+                  background: activeGroup === null ? 'var(--ink)' : 'var(--paper)',
+                  color: activeGroup === null ? 'var(--paper)' : 'var(--ink-2)',
+                  fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: activeGroup === null ? 600 : 450,
+                }}
+              >全部</button>
+              {tree.slice(0, 5).map((node) => (
+                <button
+                  key={node.id}
+                  onClick={() => setActiveGroup(node.id)}
+                  style={{
+                    flexShrink: 0, padding: '5px 12px', borderRadius: 99, border: '1px solid var(--line-2)',
+                    background: activeGroup === node.id ? 'var(--ink)' : 'var(--paper)',
+                    color: activeGroup === node.id ? 'var(--paper)' : 'var(--ink-2)',
+                    fontSize: 12, cursor: 'pointer', fontFamily: 'var(--sans)', fontWeight: activeGroup === node.id ? 600 : 450,
+                  }}
+                >
+                  {node.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 4 }}>
-            <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, margin: 0, letterSpacing: '-0.01em' }}>
+            <h2 style={{ fontFamily: 'var(--serif)', fontSize: isMobile ? 18 : 22, fontWeight: 600, margin: 0, letterSpacing: '-0.01em' }}>
               {activeGroup ? (findNode(tree, activeGroup)?.name ?? '—') : '全部会议'}
             </h2>
             <MonoMeta>{visible.length} 条</MonoMeta>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 12 }}>
-            按生成时间倒序 · 点击卡片预览 · 拖拽到左侧分组移动
-          </div>
+          {!isMobile && (
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 12 }}>
+              按生成时间倒序 · 点击卡片预览 · 拖拽到左侧分组移动
+            </div>
+          )}
           {/* 搜索：即时过滤 title/kind，按 Enter 或点全文搜按钮跨可见会议 grep */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
@@ -1403,7 +1472,7 @@ export function Library() {
                   setGrepResults(null);
                 }
               }}
-              placeholder={'搜会议标题 / 类型 / 分组 — 回车跨会议全文搜索（如「上海」、「贝壳」、「装修分期」…）'}
+              placeholder={isMobile ? '搜索会议标题 / 分组…' : '搜会议标题 / 类型 / 分组 — 回车跨会议全文搜索（如「上海」、「贝壳」、「装修分期」…）'}
               style={{
                 flex: 1, padding: '4px 6px', border: 0, background: 'transparent',
                 fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--sans)', outline: 'none',
@@ -1517,7 +1586,7 @@ export function Library() {
             );
           })()}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             {visible.map(m => (
               <MeetingCard key={m.id} m={m}
                 active={m.id === selectedId}
@@ -1539,11 +1608,39 @@ export function Library() {
           </div>
         </main>
 
-        {/* Right: preview panel */}
-        <aside style={{ borderLeft: '1px solid var(--line-2)', background: 'var(--paper)', overflow: 'auto', padding: '22px 22px' }}>
-          {selected && <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} busy={busyAction} />}
-        </aside>
+        {/* Right: preview panel — desktop only; mobile uses bottom sheet below */}
+        {!isMobile && selected && (
+          <aside style={{ borderLeft: '1px solid var(--line-2)', background: 'var(--paper)', overflow: 'auto', padding: '22px 22px' }}>
+            <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} onClose={closePreview} busy={busyAction} />
+          </aside>
+        )}
       </div>
+
+      {/* Mobile: preview bottom sheet */}
+      {isMobile && selected && (
+        <>
+          <div
+            onClick={closePreview}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 60 }}
+          />
+          <div style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 61,
+            background: 'var(--paper)',
+            borderRadius: '14px 14px 0 0',
+            borderTop: '1px solid var(--line-2)',
+            height: '76vh',
+            overflow: 'auto',
+            padding: '0 20px 32px',
+            boxShadow: '0 -8px 40px rgba(0,0,0,0.22)',
+          }}>
+            {/* Drag handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+              <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--line)' }} />
+            </div>
+            <PreviewPanel m={selected} tree={tree} groupBy={groupBy} onAction={handlePreviewAction} onClose={closePreview} busy={busyAction} />
+          </div>
+        </>
+      )}
 
       {/* Move-to-scope modal — 替代 window.prompt */}
       {moveModalMeeting && (

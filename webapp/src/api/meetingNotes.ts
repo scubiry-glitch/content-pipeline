@@ -364,6 +364,16 @@ export const meetingNotesApi = {
     jpost<{ id: string; title: string; archived: boolean }>(`/meetings/${id}/unarchive`),
   deleteMeeting: (id: string) =>
     jdelete<{ ok: boolean }>(`/meetings/${id}`),
+
+  // Meeting shares (分享链接)
+  createShare: (meetingId: string, body: { mode: 'link' | 'targeted'; targets?: string[]; expiresAt?: string }) =>
+    jpost<{ id: string; share_token: string; mode: string; targets: string[]; created_at: string; expires_at: string | null }>(`/meetings/${meetingId}/shares`, body),
+  listShares: (meetingId: string) =>
+    jget<{ shares: Array<{ id: string; share_token: string; mode: string; targets: string[]; created_at: string; expires_at: string | null }> }>(`/meetings/${meetingId}/shares`),
+  deleteShare: (meetingId: string, shareId: string) =>
+    jdelete<{ ok: boolean }>(`/meetings/${meetingId}/shares/${shareId}`),
+  getSharedMeeting: (token: string) =>
+    fetch(`/api/v1/meeting-notes/shared/${token}`).then((r) => r.ok ? r.json() : Promise.reject(r)),
   unbindScope: (scopeId: string, meetingId: string) =>
     jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
 

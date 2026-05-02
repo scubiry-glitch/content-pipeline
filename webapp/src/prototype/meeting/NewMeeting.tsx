@@ -144,9 +144,10 @@ interface JsonPreview {
   participants: number;
 }
 
-function FlowUpload({ onNext, onUploaded }: {
+function FlowUpload({ onNext, onUploaded, onScopeSelected }: {
   onNext: () => void;
   onUploaded: (assetId: string | null) => void;
+  onScopeSelected?: (scope: { id: string; kind: string; name: string } | null) => void;
 }) {
   const normalizePath = (p: string) =>
     p.trim().replace(/\\/g, '/').replace(/\/+$/, '');
@@ -187,6 +188,29 @@ function FlowUpload({ onNext, onUploaded }: {
   const [jsonPreview, setJsonPreview] = useState<JsonPreview | null>(null);
   const [jsonImporting, setJsonImporting] = useState(false);
   const [parsedData, setParsedData] = useState<Record<string, unknown> | null>(null);
+
+  // Scope pre-binding
+  const [scopePickerKind, setScopePickerKind] = useState<'project' | 'client' | 'topic' | null>(null);
+  const [scopeOptions, setScopeOptions] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [selectedScope, setSelectedScope] = useState<{ id: string; kind: string; name: string } | null>(null);
+
+  useEffect(() => {
+    if (!scopePickerKind) return;
+    setScopeLoading(true);
+    setScopeOptions([]);
+    meetingNotesApi.listScopes({ kind: scopePickerKind })
+      .then((r: { items?: Array<{ id: string; name: string; slug: string }> }) => setScopeOptions(r.items ?? []))
+      .catch(() => setScopeOptions([]))
+      .finally(() => setScopeLoading(false));
+  }, [scopePickerKind]);
+
+  const handleScopeSelect = useCallback((opt: { id: string; name: string } | null) => {
+    const scope = opt && scopePickerKind ? { id: opt.id, kind: scopePickerKind, name: opt.name } : null;
+    setSelectedScope(scope);
+    if (opt) setScopePickerKind(null); // collapse list after selection
+    onScopeSelected?.(scope);
+  }, [scopePickerKind, onScopeSelected]);
 
   const handleJsonFile = useCallback((f: File | null) => {
     setJsonFile(f);
@@ -803,6 +827,48 @@ function FlowUpload({ onNext, onUploaded }: {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Scope pre-binding ─────────────────────────────── */}
+      {mode !== 'json' && (
+      <div style={{ marginTop: 18, display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, color: 'var(--ink-3)', paddingTop: 5, flexShrink: 0 }}>关联到</span>
+        {(['project', 'client', 'topic'] as const).map(k => {
+          const labels = { project: '项目', client: '客户', topic: '主题' } as const;
+          const active = scopePickerKind === k;
+          return (
+            <button key={k}
+              onClick={() => { if (selectedScope?.kind === k) { handleScopeSelect(null); } else { setScopePickerKind(active ? null : k); } }}
+              style={{
+                padding: '4px 12px', border: '1px solid var(--line)', borderRadius: 999, fontSize: 12,
+                background: (active || selectedScope?.kind === k) ? 'var(--ink)' : 'var(--paper)',
+                color: (active || selectedScope?.kind === k) ? 'var(--paper)' : 'var(--ink-2)',
+                cursor: 'pointer',
+              }}
+            >{labels[k]}</button>
+          );
+        })}
+        {selectedScope && (
+          <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: 'var(--accent-soft)', color: 'oklch(0.35 0.1 40)', border: '1px solid oklch(0.85 0.08 40)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            ✓ {selectedScope.name}
+            <button onClick={() => handleScopeSelect(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'inherit', fontSize: 11, padding: 0, lineHeight: 1 }}>✕</button>
+          </span>
+        )}
+        {scopePickerKind && !selectedScope && (
+          <div style={{ width: '100%', marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {scopeLoading
+              ? <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>加载中…</span>
+              : scopeOptions.length === 0
+                ? <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>暂无数据</span>
+                : scopeOptions.map(opt => (
+                    <button key={opt.id} onClick={() => handleScopeSelect(opt)}
+                      style={{ padding: '4px 12px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--paper)', color: 'var(--ink-2)', fontSize: 12, cursor: 'pointer' }}
+                    >{opt.name}</button>
+                  ))
+            }
+          </div>
+        )}
+      </div>
       )}
 
       {mode !== 'json' && (
@@ -2135,6 +2201,7 @@ export function NewMeeting() {
   const runIdFromQuery = searchParams.get('runId');
   const [step, setStep] = useState<1 | 2 | 3>(runIdFromQuery ? 3 : 1);
   const [assetId, setAssetId] = useState<string | null>(null);
+  const [preBoundScope, setPreBoundScope] = useState<{ id: string; kind: string; name: string } | null>(null);
   const [runId, setRunId] = useState<string | null>(runIdFromQuery);
   const [lastSubmitBody, setLastSubmitBody] = useState<{
     presetId: string;
@@ -2193,6 +2260,10 @@ export function NewMeeting() {
       });
       if (r.runId) {
         setRunId(r.runId);
+        // 预绑定 scope：异步，不阻塞流程
+        if (preBoundScope && assetId) {
+          meetingNotesApi.bindMeeting(preBoundScope.id, assetId, 'pre-bound-at-creation').catch(() => {});
+        }
         return true;
       }
       console.warn('enqueueRun returned no runId:', r);
@@ -2205,7 +2276,7 @@ export function NewMeeting() {
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
-      {step === 1 && <FlowUpload onNext={() => setStep(2)} onUploaded={setAssetId} />}
+      {step === 1 && <FlowUpload onNext={() => setStep(2)} onUploaded={setAssetId} onScopeSelected={setPreBoundScope} />}
       {step === 2 && <FlowExperts onNext={() => setStep(3)} onBack={() => setStep(1)} onSubmit={handleSubmit} />}
       {step === 3 && (
         <FlowProcessing

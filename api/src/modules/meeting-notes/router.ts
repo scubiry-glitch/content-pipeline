@@ -251,7 +251,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            COALESCE(
              (SELECT json_agg(json_build_object(
                'scopeId', s.id, 'kind', s.kind, 'name', s.name, 'slug', s.slug
-             ) ORDER BY sm.bound_at)
+             ) ORDER BY sm.bound_at DESC)
              FROM mn_scope_members sm
             JOIN mn_scopes s ON s.id::text = sm.scope_id::text
              WHERE sm.meeting_id::text = a.id::text),
@@ -603,6 +603,73 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
       await engine.deps.db.query(`DELETE FROM assets WHERE id::text = $1::text`, [id]);
       return { ok: true };
+    });
+
+    // --------------------------------------------------------
+    // Meeting Shares (分享链接)
+    // --------------------------------------------------------
+
+    /** POST /meetings/:id/shares — 创建分享链接 */
+    fastify.post('/meetings/:id/shares', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as { mode?: string; targets?: string[]; expiresAt?: string } | null ?? {};
+      const mode = body.mode === 'targeted' ? 'targeted' : 'link';
+      const targets = Array.isArray(body.targets) ? body.targets.filter((e) => typeof e === 'string') : [];
+      const expiresAt = body.expiresAt ?? null;
+      const userId = request.auth?.user?.id;
+      const createdBy = typeof userId === 'string' && userId !== 'api-key' ? userId : null;
+
+      const result = await engine.deps.db.query(
+        `INSERT INTO mn_meeting_shares (meeting_id, mode, targets, created_by, expires_at)
+         VALUES ($1, $2, $3::jsonb, $4, $5)
+         RETURNING id, share_token, mode, targets, created_by, created_at, expires_at`,
+        [id, mode, JSON.stringify(targets), createdBy, expiresAt],
+      );
+      reply.code(201);
+      return result.rows[0];
+    });
+
+    /** GET /meetings/:id/shares — 列出该会议的所有分享链接 */
+    fastify.get('/meetings/:id/shares', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const result = await engine.deps.db.query(
+        `SELECT id, share_token, mode, targets, created_by, created_at, expires_at
+         FROM mn_meeting_shares
+         WHERE meeting_id = $1
+         ORDER BY created_at DESC`,
+        [id],
+      );
+      return { shares: result.rows };
+    });
+
+    /** DELETE /meetings/:id/shares/:shareId — 撤销分享 */
+    fastify.delete('/meetings/:id/shares/:shareId', { preHandler: authenticate }, async (request, reply) => {
+      const { id, shareId } = request.params as { id: string; shareId: string };
+      const result = await engine.deps.db.query(
+        `DELETE FROM mn_meeting_shares WHERE id = $1::uuid AND meeting_id = $2 RETURNING id`,
+        [shareId, id],
+      );
+      if (((result as any).rowCount ?? 0) === 0) return reply.code(404).send({ error: 'Share not found' });
+      return { ok: true };
+    });
+
+    /** GET /shared/:token — 公开只读，无需 auth；凭 share_token 访问会议摘要 */
+    fastify.get('/shared/:token', async (request, reply) => {
+      const { token } = request.params as { token: string };
+      const shareRow = await engine.deps.db.query(
+        `SELECT id, meeting_id, mode, targets, expires_at
+         FROM mn_meeting_shares
+         WHERE share_token = $1::uuid`,
+        [token],
+      ).catch(() => null);
+      if (!shareRow || ((shareRow as any).rowCount ?? 0) === 0) return reply.code(404).send({ error: 'Not Found' });
+      const share = shareRow.rows[0];
+      if (share.expires_at && new Date(share.expires_at) < new Date()) {
+        return reply.code(410).send({ error: 'Link expired' });
+      }
+      const detail = await engine.getMeetingDetail(share.meeting_id, 'A').catch(() => null);
+      if (!detail) return reply.code(404).send({ error: 'Meeting not found' });
+      return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: detail };
     });
 
     // --------------------------------------------------------
