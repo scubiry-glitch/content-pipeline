@@ -7,7 +7,7 @@
     "1. 纯规则计算 (g5 panorama-aggregate) → worker_id=null (target_worker=NULL，任意 worker 可拿)",
     "2. claude-cli 任务 (model_pattern='claude-cli*') → prod-TencentOpenClaw (Claude CLI 在 43.156.49.59)",
     "3. API 模式任务 (model_pattern='api-oneshot*' 或 module='ceo') → huoshanpro (LLM HTTP API)",
-    "4. expert-library → local-mac (暂时本地，后续视量级再说)",
+    "4. expert-library → null (本地跑，不限定 worker)",
     "5. 兜底 → null (不限定 worker，任意 self-hosted-node 均可消费)"
   ],
 
@@ -46,9 +46,9 @@
     },
     {
       "module": "expert",
-      "worker_id": "local-mac",
+      "worker_id": null,
       "priority": 50,
-      "notes": "专家库任务暂本地 (后续按量级再分流)"
+      "notes": "专家库任务不限定 worker，self-hosted-node 本地跑"
     },
     {
       "worker_id": null,
