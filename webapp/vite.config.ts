@@ -31,7 +31,9 @@ function pickApiHost(port: string): string {
       loopbackOwner = lines.find((l) => /127\.0\.0\.1:/.test(l))?.split(/\s+/)[0] ?? 'unknown'
     }
   } catch { /* lsof 不存在或无权限 — 用默认 */ }
-  if (!loopbackOwner) return 'localhost'
+  // 用 127.0.0.1 而非 'localhost'：API server bind 0.0.0.0 只起 IPv4 监听，
+  // 而 macOS 上 'localhost' 经 Node DNS 常先解析到 ::1，导致代理 ECONNREFUSED → 500。
+  if (!loopbackOwner) return '127.0.0.1'
   for (const list of Object.values(networkInterfaces())) {
     for (const iface of list ?? []) {
       if (iface.family === 'IPv4' && !iface.internal) {
@@ -41,7 +43,7 @@ function pickApiHost(port: string): string {
       }
     }
   }
-  return 'localhost'
+  return '127.0.0.1'
 }
 
 const API_URL = `http://${pickApiHost(apiPort)}:${apiPort}`

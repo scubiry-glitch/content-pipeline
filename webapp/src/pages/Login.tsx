@@ -22,11 +22,13 @@ export function Login() {
       .catch(() => setGoogleEnabled(false));
   }, []);
 
-  // 已登录则直接跳走
-  if (!loading && user) {
-    navigate(decodeURIComponent(next), { replace: true });
-    return null;
-  }
+  // 已登录则直接跳走（在 effect 里跳，避免 render 阶段 setState 触发 React 警告）
+  useEffect(() => {
+    if (!loading && user) {
+      navigate(decodeURIComponent(next), { replace: true });
+    }
+  }, [loading, user, next, navigate]);
+  if (!loading && user) return null;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
