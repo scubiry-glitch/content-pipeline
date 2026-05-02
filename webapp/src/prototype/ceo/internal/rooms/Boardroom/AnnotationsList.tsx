@@ -1,11 +1,12 @@
 // Boardroom · ③ 外脑批注摘要
 // 来源: GET /api/v1/ceo/boardroom/annotations (R3-6 LLM-backed) → fallback fixture
-// R2-4: 顶部 "+ 新建专家" 入口 → CreateExpertModal
+// R2-4 → T3 改造: 顶部入口从"+ 新建专家"改为"🔗 绑定专家"，复用 expert_library 已有人格；
+//        BindExpertModal 内含降级到 CreateExpertModal 的"仍要新建"二次入口。
 // R3-6: "🌌 生成新批注" 按钮 → POST /annotations/generate (g4-annotations LLM)
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ANNOTATIONS } from './_boardroomFixtures';
-import { CreateExpertModal } from './CreateExpertModal';
+import { BindExpertModal } from './BindExpertModal';
 import { RunProgressPanel } from '../../../shared/RunProgressPanel';
 
 interface RealAnnotation {
@@ -36,7 +37,9 @@ const MODE_COLOR: Record<string, string> = {
 
 export function AnnotationsList() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [createdExpertIds, setCreatedExpertIds] = useState<string[]>([]);
+  // 已绑定到本 Boardroom 的 expert_id 集合（含原"createdExpertIds"语义；
+  // 现在主要来源是 BindExpertModal 选了已有专家，少数走"+ 仍要新建"分支）
+  const [boundExpertIds, setBoundExpertIds] = useState<string[]>([]);
   const [items, setItems] = useState<RealAnnotation[] | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -117,10 +120,11 @@ export function AnnotationsList() {
 
   return (
     <div>
-      <CreateExpertModal
+      <BindExpertModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onCreated={(id) => setCreatedExpertIds((arr) => [...arr, id])}
+        alreadyBound={boundExpertIds}
+        onBound={(id) => setBoundExpertIds((arr) => arr.includes(id) ? arr : [...arr, id])}
       />
       <div
         style={{
@@ -140,8 +144,8 @@ export function AnnotationsList() {
           }}
         >
           {useReal
-            ? `LIVE · ${items!.length} 条批注${createdExpertIds.length > 0 ? ` · 已新建 ${createdExpertIds.length} 个专家` : ''}`
-            : `fixture · ${ANNOTATIONS.length} 条批注${createdExpertIds.length > 0 ? ` · 已新建 ${createdExpertIds.length} 个专家` : ''}`}
+            ? `LIVE · ${items!.length} 条批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`
+            : `fixture · ${ANNOTATIONS.length} 条批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`}
         </span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -174,7 +178,7 @@ export function AnnotationsList() {
               cursor: 'pointer',
             }}
           >
-            + 新建专家
+            🔗 绑定专家
           </button>
         </div>
       </div>
