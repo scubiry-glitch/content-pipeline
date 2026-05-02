@@ -8,7 +8,7 @@
     "2. claude-cli 任务 (model_pattern='claude-cli*') → prod-TencentOpenClaw (Claude CLI 在 43.156.49.59)",
     "3. API 模式任务 (model_pattern='api-oneshot*' 或 module='ceo') → huoshanpro (LLM HTTP API)",
     "4. expert-library → local-mac (暂时本地，后续视量级再说)",
-    "5. 兜底 → local-mac (本机 PM2)"
+    "5. 兜底 → null (不限定 worker，任意 self-hosted-node 均可消费)"
   ],
 
   "rules": [
@@ -51,9 +51,9 @@
       "notes": "专家库任务暂本地 (后续按量级再分流)"
     },
     {
-      "worker_id": "local-mac",
+      "worker_id": null,
       "priority": 999,
-      "notes": "兜底：其他全部走本地 worker"
+      "notes": "兜底：其他全部不限定 worker，谁先轮询到谁跑"
     }
   ],
 
