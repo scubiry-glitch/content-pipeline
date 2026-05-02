@@ -171,6 +171,16 @@ export class ScopeService {
     meetingId: string,
     opts?: { boundBy?: string; reason?: string },
   ): Promise<void> {
+    // 先删除同 meeting 在同 kind 下的旧 binding（一会议一 kind 只保留一条）
+    await this.deps.db.query(
+      `DELETE FROM mn_scope_members sm
+       USING mn_scopes s
+       WHERE sm.meeting_id = $1
+         AND sm.scope_id   = s.id
+         AND s.kind = (SELECT kind FROM mn_scopes WHERE id = $2)
+         AND sm.scope_id  != $2`,
+      [meetingId, scopeId],
+    );
     await this.deps.db.query(
       `INSERT INTO mn_scope_members (scope_id, meeting_id, bound_by, reason)
        VALUES ($1, $2, $3, $4)
