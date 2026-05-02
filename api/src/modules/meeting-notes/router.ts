@@ -1302,6 +1302,26 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     /**
+     * GET /meetings/:id/scope-bindings
+     * 该会议被绑到了哪些 scope（project/client/topic/library）。
+     * Participants 手动合并到项目人物的 UI 用：拿到本会议所属的 project scope
+     * 后再调 GET /scopes/:scopeId/people 取候选合并目标。
+     */
+    fastify.get('/meetings/:id/scope-bindings', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT s.id::text AS "scopeId", s.kind, s.name, s.slug, sm.bound_at
+           FROM mn_scope_members sm
+           JOIN mn_scopes s ON s.id::text = sm.scope_id::text
+          WHERE sm.meeting_id::text = $1
+          ORDER BY sm.bound_at DESC`,
+        [id],
+      );
+      return { items: r.rows };
+    });
+
+    /**
      * GET /scopes/:id/role-trajectory
      *   返回 scope 下每人按时间排序的角色演化点。供 AxisPeople · 角色画像演化 tab 渲染
      *   多场会议的"漂移"——和 mock 的 `roleTrajectory: [{role, m: 'YYYY-MM'}, ...]` 同形。

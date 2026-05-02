@@ -10,6 +10,7 @@ import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, m
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
+import { ParticipantMergeModal } from './ParticipantMergeModal';
 
 type PFn = (id: string) => Participant;
 
@@ -468,6 +469,7 @@ export function VariantEditorial() {
   const [tensionMock, setTensionMock] = useState(true);
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
+  const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
   // Shell 已经统一拉了 detail —— 这里直接消费，避免重复 fetch（dev 下 StrictMode + 4 处 fetch 共 8 次）
@@ -618,20 +620,36 @@ export function VariantEditorial() {
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(apiMeta && apiMeta.participants.length > 0
               ? apiMeta.participants
-              : EXPERTS.filter((e) => e.selected).map((e) => ({ name: e.name, role: e.field }))
-            ).map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 6, background: 'var(--paper-3)',
-                  color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>{p.name.slice(0, 2)}</div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
-                  {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
+              : EXPERTS.filter((e) => e.selected).map((e) => ({ name: e.name, role: e.field, id: undefined as string | undefined }))
+            ).map((p, i) => {
+              const pid = (p as { id?: string }).id;
+              return (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 6, background: 'var(--paper-3)',
+                    color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>{p.name.slice(0, 2)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
+                    {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
+                  </div>
+                  {pid && id && (
+                    <button
+                      onClick={() => setMergeFor({ id: pid, name: p.name })}
+                      title="合并到项目人物"
+                      style={{
+                        flexShrink: 0, marginTop: 1,
+                        padding: '2px 6px', border: '1px solid var(--line-2)',
+                        background: 'transparent', borderRadius: 3, cursor: 'pointer',
+                        fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.3,
+                        color: 'var(--ink-3)', textTransform: 'uppercase',
+                      }}
+                    >合并→</button>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </aside>
@@ -675,6 +693,20 @@ export function VariantEditorial() {
         {/* R3-A · 改动一：质量审定段 — 文末，5D 雷达 + 评注，与 serif 风格契合 */}
         <SecQualityAudit />
       </main>
+
+      {mergeFor && id && (
+        <ParticipantMergeModal
+          meetingId={id}
+          participant={mergeFor}
+          onClose={() => setMergeFor(null)}
+          onMerged={() => {
+            setMergeFor(null);
+            // 合并后 mn_* 链上 fromId 全部 reassign + DELETE，detail 缓存仍指旧 id 会 404；
+            // 直接 reload 让 Shell + VariantEditorial 重新拉 detail。
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

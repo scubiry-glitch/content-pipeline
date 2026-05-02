@@ -252,6 +252,22 @@ export const meetingNotesApi = {
       }>;
     }>(`/scopes/${scopeId}/role-trajectory`),
 
+  /**
+   * 列出该会议被绑定到的 scopes（project/client/topic/library）。
+   * Participants 手动合并到"项目人物"的 UI 用：拿到 project scope 后再去
+   * /scopes/:scopeId/people 取合并候选。
+   */
+  getMeetingScopeBindings: (id: string) =>
+    jget<{
+      items: Array<{
+        scopeId: string;
+        kind: 'library' | 'project' | 'client' | 'topic' | 'meeting';
+        name: string;
+        slug: string;
+        bound_at: string;
+      }>;
+    }>(`/meetings/${id}/scope-bindings`),
+
   // F11 · 人物管理（改名 + alias 历史映射）
   listScopePeople: (scopeId: string) =>
     jget<{
