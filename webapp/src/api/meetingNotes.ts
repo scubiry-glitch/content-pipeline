@@ -178,7 +178,7 @@ export const meetingNotesApi = {
       : body.scope;
     return jpost<{ ok: boolean; runId?: string; reason?: string }>('/runs', { ...body, scope });
   },
-  listRuns: (q: { scopeKind?: string; scopeId?: string; axis?: string; state?: string; limit?: number } = {}) => {
+  listRuns: (q: { scopeKind?: string; scopeId?: string; axis?: string; module?: string; state?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams(Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
       if (v !== undefined) acc[k] = String(v);
       return acc;

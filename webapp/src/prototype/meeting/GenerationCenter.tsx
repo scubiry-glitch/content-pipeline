@@ -34,6 +34,9 @@ interface MockRun {
   stage?: 'L1_meeting' | 'L2_aggregate' | null;
   dependsOn?: string[];
   triggerMeetingId?: string;
+  // 透传后端 module/prism 用于展开面板的上下文标签（CEO run 时显示棱镜名）
+  module?: string;
+  prism?: string;
   // R5 · 粒度 1：per-axis 聚合统计（含 subDimStats per-sub_dim 计数）
   axisStats?: Record<string, {
     durationMs?: number;
@@ -122,14 +125,21 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
   } else {
     costStr = '—';
   }
+  // 后端 RunRecord 把 scope 包在 { kind, id } 对象里；兼容 mock 的平铺字段
+  const scopeObj = (typeof it.scope === 'object' && it.scope !== null) ? (it.scope as Record<string, unknown>) : null;
+  const scopeKindResolved = (it.scopeKind as string | undefined)
+    ?? scopeObj?.kind as string | undefined
+    ?? (typeof it.scope === 'string' ? it.scope : undefined)
+    ?? 'project';
+  const scopeIdResolved = (it.scopeId as string | undefined) ?? scopeObj?.id as string | undefined;
   return {
     id: String(it.id ?? ''),
     state: (it.state as MockRun['state']) ?? 'queued',
     axis: String(it.axis ?? ''),
     subs: sub,
     preset: String(it.preset ?? 'standard'),
-    scope: String((it.scopeKind as string | undefined) ?? (it.scope as string | undefined) ?? 'project'),
-    scopeLabel: String(it.scopeLabel ?? it.scopeId ?? ''),
+    scope: scopeKindResolved,
+    scopeLabel: String(it.scopeLabel ?? scopeIdResolved ?? ''),
     started: String(it.startedAt ?? it.started ?? ''),
     eta: String(it.eta ?? (it.state === 'done' ? '已完成' : '')),
     pct: Number(it.progress ?? it.pct ?? 0),
@@ -142,6 +152,11 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     triggerMeetingId: typeof it.triggerMeetingId === 'string' ? it.triggerMeetingId : (typeof it.trigger_meeting_id === 'string' ? it.trigger_meeting_id : undefined),
     // R5 · 粒度 1：从 surfaces.axisStats 透出 per-sub_dim 计数（后端 mapRun 已写）
     axisStats: (it.surfaces?.axisStats ?? it.metadata?.axisStats ?? undefined) as MockRun['axisStats'],
+    module: typeof it.module === 'string' ? it.module : undefined,
+    // CEO 棱镜名常存于 metadata.prism 或顶层 prism；两条路径都吃
+    prism: typeof it.prism === 'string'
+      ? it.prism
+      : (typeof (it.metadata as any)?.prism === 'string' ? (it.metadata as any).prism : undefined),
   };
 }
 
@@ -150,8 +165,10 @@ function QueueView() {
   const forceMock = useForceMock();
   const [runs, setRuns] = useState<MockRun[]>([]);
   const [isMock, setIsMock] = useState(true);
-  /** F5 · scope filter: 让 meeting 队列单独可看 */
-  const [scopeFilter, setScopeFilter] = useState<string>('');
+  /** 模块筛选: '' = 全部 / 'mn' = 会议分析 / 'ceo' = CEO */
+  const [moduleFilter, setModuleFilter] = useState<string>('');
+  /** 轴筛选: '' = 全部 / 具体 axis key */
+  const [axisFilter, setAxisFilter] = useState<string>('');
   /** R3-B · stage filter: '' = 全部 / 'L1_meeting' / 'L2_aggregate' / 'null' = 老兼容路径 */
   const [stageFilter, setStageFilter] = useState<string>('');
   /** F5 · meetingId → title 反查表，让 meeting-scope 的 row 显示真名 */
@@ -161,7 +178,11 @@ function QueueView() {
 
   const refetch = () => {
     if (forceMock) { setRuns(MOCK_RUNS); setIsMock(true); return; }
-    meetingNotesApi.listRuns({ limit: 50, scopeKind: scopeFilter || undefined })
+    meetingNotesApi.listRuns({
+      limit: 50,
+      module: moduleFilter || undefined,
+      axis: axisFilter || undefined,
+    })
       .then((r) => {
         setRuns((r?.items ?? []).map(mapApiRun));
         setIsMock(false);
@@ -173,7 +194,7 @@ function QueueView() {
     if (forceMock) return;
     const t = setInterval(refetch, 5000);
     return () => clearInterval(t);
-  }, [forceMock, scopeFilter]);
+  }, [forceMock, moduleFilter, axisFilter]);
 
   // 拉一次 meetings 列表做 id→title 反查；100 条够用
   useEffect(() => {
@@ -246,42 +267,67 @@ function QueueView() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <SectionLabel>所有任务 · 近 48 小时</SectionLabel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11.5 }}>
-          {/* F5 · scope filter — 选 meeting 单独看会议级队列 */}
+          {/* 模块筛选：mn 会议分析 / ceo / 全部 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--ink-3)' }}>scope</span>
+            <span style={{ color: 'var(--ink-3)' }}>模块</span>
             <select
-              value={scopeFilter}
-              onChange={(e) => setScopeFilter(e.target.value)}
+              value={moduleFilter}
+              onChange={(e) => { setModuleFilter(e.target.value); setAxisFilter(''); }}
               style={{
                 border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
                 padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
               }}
             >
               <option value="">全部</option>
-              <option value="meeting">📄 meeting</option>
-              <option value="project">📁 project</option>
-              <option value="topic">🏷 topic</option>
-              <option value="client">🏢 client</option>
-              <option value="library">📚 library</option>
+              <option value="mn">🤝 会议分析</option>
+              <option value="ceo">🏢 CEO</option>
             </select>
           </div>
-          {/* R3-B · stage filter — DAG L1/L2 */}
+          {/* 轴筛选：按模块动态切换 MN 轴 vs CEO g3/g4/g5 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--ink-3)' }}>stage</span>
+            <span style={{ color: 'var(--ink-3)' }}>轴</span>
             <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
+              value={axisFilter}
+              onChange={(e) => setAxisFilter(e.target.value)}
               style={{
                 border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
                 padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
               }}
             >
               <option value="">全部</option>
-              <option value="L1_meeting">🔵 L1 体征</option>
-              <option value="L2_aggregate">🟡 L2 聚合</option>
-              <option value="null">⚪ 单条（老兼容路径）</option>
+              {(moduleFilter === '' || moduleFilter === 'mn') && <>
+                <option value="meta">体征 (meta)</option>
+                <option value="people">人物 (people)</option>
+                <option value="projects">项目 (projects)</option>
+                <option value="knowledge">知识 (knowledge)</option>
+                <option value="tension">张力 (tension)</option>
+              </>}
+              {(moduleFilter === '' || moduleFilter === 'ceo') && <>
+                <option value="g3">G3 专家标注</option>
+                <option value="g4">G4 跨会重构</option>
+                <option value="g5">G5 棱镜聚合</option>
+              </>}
             </select>
           </div>
+          {/* R3-B · stage filter — DAG L1/L2 (仅 mn 模块有意义) */}
+          {moduleFilter !== 'ceo' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: 'var(--ink-3)' }}>stage</span>
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                style={{
+                  border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 4,
+                  padding: '4px 8px', fontSize: 11.5, fontFamily: 'var(--sans)', cursor: 'pointer',
+                }}
+              >
+                <option value="">全部</option>
+                <option value="L1_meeting">🔵 L1 体征</option>
+                <option value="L2_aggregate">🟡 L2 聚合</option>
+                <option value="null">⚪ 单条</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
       <div style={{ marginTop: 10, border: '1px solid var(--line-2)', borderRadius: 8, overflow: 'hidden', background: 'var(--paper-2)' }}>
@@ -298,7 +344,8 @@ function QueueView() {
               : (r.state === 'failed' || r.state === 'cancelled')
                 ? 'oklch(0.55 0.16 25)'
                 : 'var(--amber)';
-          const axisMeta = AXIS_SUB[r.axis] ?? { label: r.axis, color: 'var(--ink-3)', subs: [] };
+          const CEO_AXIS_LABELS: Record<string, string> = { g3: 'G3 专家标注', g4: 'G4 跨会重构', g5: 'G5 棱镜聚合' };
+          const axisMeta = AXIS_SUB[r.axis] ?? { label: CEO_AXIS_LABELS[r.axis] ?? r.axis, color: 'oklch(0.55 0.12 280)', subs: [] };
           const isExpanded = expandedRunId === r.id;
           // R5 · 粒度 1：拿这个 run 的 per-sub_dim 计数（仅展开时用）
           const subDimEntries: Array<[string, NonNullable<NonNullable<MockRun['axisStats']>[string]['subDimStats']>[string]]> = [];
@@ -428,6 +475,62 @@ function QueueView() {
                 background: 'var(--paper-2)',
                 borderTop: '1px dashed var(--line-2)',
               }}>
+                {/* 上下文标签条：展开后也能看到此 run 属于哪个 轴 / 会议(scope) / DAG 阶段 / CEO 棱镜 */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 12px',
+                  marginBottom: 10, paddingBottom: 8, borderBottom: '1px dashed var(--line-2)',
+                  fontSize: 11.5, color: 'var(--ink-3)',
+                }}>
+                  <span>
+                    <span style={{ color: 'var(--ink-4)' }}>轴 </span>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: 99, background: axisMeta.color,
+                      display: 'inline-block', verticalAlign: 'middle', marginRight: 4,
+                    }} />
+                    <span style={{ fontFamily: 'var(--serif)', fontWeight: 600, color: 'var(--ink-1)' }}>{axisMeta.label}</span>
+                  </span>
+                  <span style={{ color: 'var(--line)' }}>·</span>
+                  <span>
+                    <span style={{ color: 'var(--ink-4)' }}>
+                      {r.scope === 'meeting' ? '会议 ' : r.scope === 'project' ? '项目 ' : r.scope === 'topic' ? '话题 ' : r.scope === 'library' ? '会议库 ' : `${r.scope} `}
+                    </span>
+                    <span style={{ fontFamily: 'var(--serif)', color: 'var(--ink-2)' }}>
+                      {r.scope === 'meeting' && meetingTitles[r.scopeLabel] ? meetingTitles[r.scopeLabel] : (r.scopeLabel || '—')}
+                    </span>
+                  </span>
+                  {r.stage && (
+                    <>
+                      <span style={{ color: 'var(--line)' }}>·</span>
+                      <span>
+                        <span style={{ color: 'var(--ink-4)' }}>DAG </span>
+                        <span style={{
+                          fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                          color: r.stage === 'L1_meeting' ? 'oklch(0.32 0.12 240)' : 'oklch(0.40 0.10 75)',
+                        }}>
+                          {r.stage === 'L1_meeting' ? 'L1 · per-meeting 体征' : 'L2 · 跨会聚合'}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                  {r.module === 'ceo' && (
+                    <>
+                      <span style={{ color: 'var(--line)' }}>·</span>
+                      <span>
+                        <span style={{ color: 'var(--ink-4)' }}>CEO 阶段 </span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600, color: 'var(--ink-1)' }}>{r.axis || '—'}</span>
+                      </span>
+                      {r.prism && (
+                        <>
+                          <span style={{ color: 'var(--line)' }}>·</span>
+                          <span>
+                            <span style={{ color: 'var(--ink-4)' }}>棱镜 </span>
+                            <span style={{ fontFamily: 'var(--serif)', fontWeight: 600, color: 'var(--ink-1)' }}>{r.prism}</span>
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
                 {subDimEntries.length === 0 ? (
                   <div style={{ fontSize: 11.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
                     暂无 sub_dim 详情（可能是改动前跑的老 run，或 axisStats 还未写入）
