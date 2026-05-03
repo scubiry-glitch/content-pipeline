@@ -72,7 +72,13 @@ async function main() {
   const { createCeoPipelineDeps } = await import('../modules/ceo/adapters/pipeline.js');
 
   await ensureDbPoolConnected();
-  await ensureCeoModuleSchema(query);
+  // 若 DB_AUTO_MIGRATE=false（典型生产/受限 DB 用户配置），跳过 schema ensure
+  // 假设 ceo_* / mn_* 表已通过 server.ts 启动或手动 psql 部署
+  if (process.env.DB_AUTO_MIGRATE !== 'false') {
+    await ensureCeoModuleSchema(query);
+  } else {
+    console.log('[ceo-generate-real] DB_AUTO_MIGRATE=false — 跳过 schema ensure');
+  }
 
   if (!hasAvailableLLM()) {
     console.error('[ceo-generate-real] 未配置 LLM API Key — 设置 CLAUDE_API_KEY / KIMI_API_KEY / OPENAI_API_KEY 任一');
