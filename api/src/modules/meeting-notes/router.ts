@@ -2398,15 +2398,33 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const { id } = request.params as { id: string };
       const uuid = await resolveScopeUuid(engine.deps.db, id);
       if (!uuid) return { items: [] };
+      // 质量v2 Phase 3 · 改读 mn_model_hitrates(window='6m')，对齐前端「6 个月命中率校准」标签。
+      // 旧逻辑读 mn_mental_model_hit_stats（all-time + 30d 趋势），与"6 个月"标签错配。
+      // 字段映射：total_invocations→invocations, correct_count→hits；trend_30d 在 6m 表无列，置 null；
+      // flag 在 handler 内按 hit_rate 派生（priority/downweight/unused/neutral）。
       const r = await engine.deps.db.query(
-        `SELECT id, model_name, invocations, hits, hit_rate, trend_30d, flag,
+        `SELECT id, model_name,
+                total_invocations AS invocations,
+                correct_count     AS hits,
+                hit_rate,
+                NULL::numeric     AS trend_30d,
                 computed_at
-           FROM mn_mental_model_hit_stats
-          WHERE scope_id = $1
-          ORDER BY hit_rate DESC, invocations DESC`,
+           FROM mn_model_hitrates
+          WHERE COALESCE(scope_id::text,'') = COALESCE($1::text,'')
+            AND window_label = '6m'
+          ORDER BY hit_rate DESC NULLS LAST, total_invocations DESC NULLS LAST`,
         [uuid],
       );
-      return { items: r.rows };
+      const items = r.rows.map((row: any) => {
+        const inv = Number(row.invocations) || 0;
+        const hr = Number(row.hit_rate) || 0;
+        let flag: 'priority' | 'downweight' | 'unused' | 'neutral' = 'neutral';
+        if (inv === 0) flag = 'unused';
+        else if (hr >= 0.8) flag = 'priority';
+        else if (hr < 0.65) flag = 'downweight';
+        return { ...row, flag };
+      });
+      return { items };
     });
 
     // 质量v2 Phase 1 · 4 条 sub-dim 只读路由 — 物理表已写但前端 Pending 占位
