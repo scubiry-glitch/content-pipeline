@@ -641,17 +641,7 @@ export function AxisKnowledge() {
         {tab === 'cognition' && (
           <>
             <Judgments scopeId={scopeId} />
-            <div style={{ padding: '0 32px 28px' }}>
-              <div style={{
-                background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
-                borderRadius: 6, padding: '14px 18px', fontSize: 12, color: 'var(--ink-3)',
-              }}>
-                <strong style={{ color: 'var(--ink-2)' }}>本场新认知摘要</strong>{' '}
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5 }}>
-                  · 待 LLM 抽取；v1 暂沿用上方 Judgments 的高 generality 子集
-                </span>
-              </div>
-            </div>
+            <NewCognitionSummary meetingId={meetingId} />
           </>
         )}
         {tab === 'mental_models' && (
@@ -869,6 +859,92 @@ function PendingSubdimTab({ title, subDim, hint }: { title: string; subDim: stri
           {hint}
         </div>
       </div>
+    </div>
+  );
+}
+
+// 质量v2 Phase 4 · 本场新认知摘要 —— 取该 meeting 的 judgments 高 generality 子集
+// 与上方 Judgments（scope 级历史沉淀）形成"过去 vs 本场新增"对比。
+function NewCognitionSummary({ meetingId }: { meetingId: string }) {
+  const isMobile = useIsMobile();
+  const forceMock = useForceMock();
+  const [items, setItems] = useState<Array<{ id: string; text: string; domain: string; generality_score: number; reuse_count: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (forceMock || !UUID_RE.test(meetingId)) { setItems([]); setLoading(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    meetingNotesApi.getMeetingAxes(meetingId)
+      .then((r) => {
+        if (cancelled) return;
+        const all = (r?.knowledge?.judgments ?? []) as Array<{ id: string; text: string; domain?: string; generality_score?: number; reuse_count?: number }>;
+        const HIGH = 0.7, FALLBACK = 0.5;
+        const high = all.filter((j) => Number(j.generality_score ?? 0) >= HIGH);
+        const pool = high.length >= 3 ? high : all.filter((j) => Number(j.generality_score ?? 0) >= FALLBACK);
+        const top = pool
+          .sort((a, b) => (Number(b.generality_score ?? 0) - Number(a.generality_score ?? 0))
+                       || (Number(b.reuse_count ?? 0) - Number(a.reuse_count ?? 0)))
+          .slice(0, 3)
+          .map((j) => ({
+            id: 'NJ-' + (j.id ?? '').slice(0, 6).toUpperCase(),
+            text: j.text ?? '',
+            domain: j.domain ?? '—',
+            generality_score: Number(j.generality_score ?? 0),
+            reuse_count: Number(j.reuse_count ?? 0),
+          }));
+        setItems(top);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) { setItems([]); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [meetingId, forceMock]);
+
+  return (
+    <div style={{ padding: isMobile ? '0 14px 24px' : '0 32px 28px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+        <h4 style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 600, margin: 0, color: 'var(--ink)' }}>
+          本场新认知摘要
+        </h4>
+        <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: 'var(--mono)' }}>
+          ≥0.7 generality_score 子集 · 取本场最具复用性的 1-3 条
+        </span>
+      </div>
+      {loading ? (
+        <AxisLoadingSkeleton rows={2} />
+      ) : items.length === 0 ? (
+        <div style={{
+          background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+          borderRadius: 6, padding: '14px 18px', fontSize: 12, color: 'var(--ink-3)',
+        }}>
+          本场尚未提炼出可复用新认知 · 跑生成中心 → knowledge/reusable_judgments 后回看
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((j) => (
+            <div key={j.id} style={{
+              background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--accent)',
+              borderRadius: 5, padding: '12px 16px',
+              display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'start',
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <MonoMeta>{j.id}</MonoMeta>
+                  <Chip tone="teal">{j.domain}</Chip>
+                </div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink)' }}>
+                  {j.text}
+                </div>
+              </div>
+              <div style={{ minWidth: 90, textAlign: 'right' }}>
+                <MonoMeta style={{ fontSize: 9.5 }}>GENERALITY</MonoMeta>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                  {j.generality_score.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
