@@ -961,6 +961,7 @@ const LIVE_TAB_SUB: React.CSSProperties = {
 const LIVE_CARD: React.CSSProperties = {
   background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--accent)',
   borderRadius: 5, padding: '14px 18px', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55,
+  boxSizing: 'border-box', maxWidth: '100%', overflow: 'hidden',
 };
 
 function ConsensusTracksTab({ scopeId, hint }: { scopeId: string; hint: string }) {
@@ -1018,7 +1019,7 @@ function ConceptDriftsTab({ scopeId, hint }: { scopeId: string; hint: string }) 
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={LIVE_TAB_HEADER}>概念辨析 · 漂移候选</div>
       <div style={LIVE_TAB_SUB}>knowledge / concept_drift  ·  共 {items.length} 条</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: '100%', overflow: 'hidden' }}>
         {items.map((it) => {
           const defs = Array.isArray(it.definition_at_meeting) ? it.definition_at_meeting as Array<{
             outcome: string; meeting_id: string; observed_at: string; correctly_used: boolean; model_variant?: string;

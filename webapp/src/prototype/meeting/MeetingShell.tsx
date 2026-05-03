@@ -8,6 +8,7 @@ import { Icon, MonoMeta, Chip } from './_atoms';
 import type { IconName } from './_atoms';
 import { MeetingScopeProvider, useMeetingScope } from './_scopeContext';
 import { MockToggleProvider, MockToggleBar } from './_mockToggle';
+import { ScopePill } from './_axisShared';
 import './_tokens.css';
 
 interface NavItem {
@@ -263,8 +264,8 @@ export function MeetingShell() {
               </button>
             )}
             <MonoMeta>/meeting{location.pathname === '/meeting' ? '' : location.pathname.replace('/meeting', '')}</MonoMeta>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <Chip tone="ghost">原型 · 阶段 1</Chip>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <ScopePill />
             </div>
           </header>
         )}

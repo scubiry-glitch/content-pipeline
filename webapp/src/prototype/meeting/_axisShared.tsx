@@ -275,7 +275,7 @@ const KIND_TONE: Record<ScopeKind, string> = {
   TOPIC:   'var(--amber)',
 };
 
-function ScopePill() {
+export function ScopePill() {
   const scope = useMeetingScope();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -290,7 +290,7 @@ function ScopePill() {
       ? { kind: 'auto',       label: nextLabel, msg: '后台已入队增量',          meta: 'run-240 · queued · ~45s' }
       : nextKindId === 'all'
       ? { kind: 'manual-lib', label: nextLabel, msg: '全库重算需手动触发',      meta: '预计 18 min · ~320k tokens · 上次 14 天前' }
-      : { kind: 'manual',     label: nextLabel, msg: '此 scope 需手动触发重算', meta: '数据显示上一次 run 的结果' };
+      : { kind: 'manual',     label: nextLabel, msg: '显示已有数据',             meta: '如需更新，前往生成中心手动触发' };
     setToast(data);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 6000);
@@ -463,12 +463,56 @@ function ScopePill() {
 
 // ── RunBadge · hover popover ──────────────────────────────────
 
-function RunBadge({ axis, run = 'run-237', version = 'v14', time = '08:03' }: { axis: AxisName; run?: string; version?: string; time?: string }) {
+type RunDetail = {
+  id: string; preset: string | null; strategy: string | null;
+  startedAt: string; finishedAt: string; costTokens: number; costMs: number;
+};
+
+function RunBadge({ axis, onRegenerate }: {
+  axis: AxisName; onRegenerate?: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
+  const scope = useMeetingScope();
+  const [versionLabel, setVersionLabel] = useState<string | null>(null);
+  const [prevLabel, setPrevLabel] = useState<string | null>(null);
+  const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
 
   const axisQuery = { '人物': 'people', '项目': 'projects', '知识': 'knowledge', '会议本身': 'meta', '纵向视图 · 跨会议': 'longitudinal' }[axis];
+  const backendAxis = AXIS_BACKEND_ID[axis];
+  const versionsSupported = backendAxis !== 'longitudinal';
+
+  useEffect(() => {
+    if (!versionsSupported) return;
+    let cancelled = false;
+    meetingNotesApi.listVersions(scope.kindId, backendAxis, scope.effectiveScopeId, 2)
+      .then(async (r) => {
+        if (cancelled) return;
+        const items: any[] = r?.items ?? [];
+        const latest = items[0] ?? null;
+        const prev   = items[1] ?? null;
+        setVersionLabel(latest?.versionLabel ?? null);
+        setPrevLabel(prev?.versionLabel ?? null);
+        if (latest?.runId) {
+          const run = await meetingNotesApi.getRun(latest.runId).catch(() => null);
+          if (!cancelled && run) setRunDetail(run as RunDetail);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [backendAxis, scope.kindId, scope.effectiveScopeId, versionsSupported]);
+
+  const version  = versionLabel ?? '—';
+  const time     = runDetail?.startedAt
+    ? new Date(runDetail.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    : '—';
+  const duration = runDetail?.costMs
+    ? (() => { const s = Math.round(runDetail.costMs / 1000); return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`; })()
+    : null;
+  const costTokens = runDetail?.costTokens ? runDetail.costTokens.toLocaleString() : null;
+  const runId    = runDetail?.id?.slice(0, 8) ?? '—';
 
   function mouseEnter() {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -481,79 +525,94 @@ function RunBadge({ axis, run = 'run-237', version = 'v14', time = '08:03' }: { 
   useEffect(() => () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); }, []);
 
   return (
-    <div style={{ position: 'relative' }} onMouseEnter={mouseEnter} onMouseLeave={mouseLeave}>
-      <button
-        title="点击进入生成中心 · 查看此轴的 run 详情与历史版本"
-        onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${axisQuery}`)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 8px', border: '1px solid var(--line-2)',
-          background: 'var(--paper)', borderRadius: 4, cursor: 'pointer',
-          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
-          letterSpacing: 0.3,
-        }}
-      >
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: 'var(--teal)', boxShadow: '0 0 0 2px var(--teal-soft)' }} />
-        {version} · {time}
-      </button>
+    <>
+      <div style={{ position: 'relative' }} onMouseEnter={mouseEnter} onMouseLeave={mouseLeave}>
+        <button
+          title="hover 查看 run 详情 · 点击进入生成中心"
+          onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${axisQuery}`)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 8px', border: '1px solid var(--line-2)',
+            background: 'var(--paper)', borderRadius: 4, cursor: 'pointer',
+            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
+            letterSpacing: 0.3,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: 99, background: 'var(--teal)', boxShadow: '0 0 0 2px var(--teal-soft)' }} />
+          {version} · {time}
+        </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 39,
-          minWidth: 300, background: 'var(--paper)', border: '1px solid var(--line)',
-          borderRadius: 8, boxShadow: '0 12px 28px -12px rgba(0,0,0,0.2)',
-          padding: '14px 16px', fontFamily: 'var(--sans)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 0.4,
-              padding: '2px 7px', borderRadius: 3, background: 'var(--ink)', color: 'var(--paper)',
-            }}>{run}</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600, letterSpacing: '-0.003em' }}>
-              {axis} · {version}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', fontSize: 11.5, lineHeight: 1.55 }}>
-            <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>strategy</span>
-            <span style={{ color: 'var(--ink)' }}>debate · 3 experts</span>
-            <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>preset</span>
-            <span style={{ color: 'var(--ink)' }}>standard</span>
-            <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>scope</span>
-            <span style={{ color: 'var(--ink)' }}>LIBRARY · 全库 48 meetings</span>
-            <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>cost</span>
-            <span style={{ color: 'var(--ink)' }}>49,622 tokens · 2m 08s</span>
-          </div>
-
+        {open && (
           <div style={{
-            marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-2)',
-            display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5,
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 39,
+            minWidth: 300, background: 'var(--paper)', border: '1px solid var(--line)',
+            borderRadius: 8, boxShadow: '0 12px 28px -12px rgba(0,0,0,0.2)',
+            padding: '14px 16px', fontFamily: 'var(--sans)',
           }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--ink-4)', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-              VS 上版 v13
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 0.4,
+                padding: '2px 7px', borderRadius: 3, background: 'var(--ink)', color: 'var(--paper)',
+              }}>{runId}</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600, letterSpacing: '-0.003em' }}>
+                {axis} · {version}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 10, color: 'var(--ink-2)' }}>
-              <span>承诺 <b style={{ color: 'var(--teal)' }}>+3</b></span>
-              <span>at-risk <b style={{ color: 'var(--accent)' }}>+1</b></span>
-              <span>置信度 <b style={{ color: 'var(--ink)' }}>0.78 → 0.81</b></span>
-            </div>
-          </div>
 
-          <div style={{ marginTop: 12, display: 'flex', gap: 6 }}>
-            <button onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${axisQuery}`)} style={{
-              flex: 1, padding: '7px 10px', fontSize: 11.5, fontFamily: 'var(--sans)',
-              border: '1px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)',
-              borderRadius: 4, cursor: 'pointer',
-            }}>生成中心 · versions →</button>
-            <button onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${axisQuery}&diff=v13`)} style={{
-              padding: '7px 10px', fontSize: 11.5, fontFamily: 'var(--sans)',
-              border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink-2)',
-              borderRadius: 4, cursor: 'pointer',
-            }}>diff v13</button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', fontSize: 11.5, lineHeight: 1.55 }}>
+              <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>scope</span>
+              <span style={{ color: 'var(--ink)' }}>{scope.kind} · {scope.label}</span>
+              {runDetail?.preset && <>
+                <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>preset</span>
+                <span style={{ color: 'var(--ink)' }}>{runDetail.preset}{runDetail.strategy ? ` · ${runDetail.strategy}` : ''}</span>
+              </>}
+              {costTokens && <>
+                <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>cost</span>
+                <span style={{ color: 'var(--ink)' }}>{costTokens} tokens{duration ? ` · ${duration}` : ''}</span>
+              </>}
+              {time !== '—' && <>
+                <span style={{ color: 'var(--ink-4)', fontFamily: 'var(--mono)', fontSize: 10 }}>ran at</span>
+                <span style={{ color: 'var(--ink)' }}>{time}</span>
+              </>}
+            </div>
+
+            {prevLabel && (
+              <div style={{
+                marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-2)',
+                fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-4)',
+              }}>
+                上一版本：{prevLabel} · 版本对比请前往生成中心
+              </div>
+            )}
+
+            <div style={{ marginTop: 12, display: 'flex', gap: 6 }}>
+              {onRegenerate && (
+                <button onClick={() => { setOpen(false); onRegenerate(); }} style={{
+                  padding: '7px 10px', fontSize: 11.5, fontFamily: 'var(--sans)',
+                  border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink-2)',
+                  borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                }}>↻ 重算</button>
+              )}
+              {versionsSupported && (
+                <button onClick={() => { setOpen(false); setShowVersions(true); }} style={{
+                  padding: '7px 10px', fontSize: 11.5, fontFamily: 'var(--sans)',
+                  border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink-2)',
+                  borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                }}>📚 版本</button>
+              )}
+              <button onClick={() => navigate(`/meeting/generation-center?tab=versions&axis=${axisQuery}`)} style={{
+                flex: 1, padding: '7px 10px', fontSize: 11.5, fontFamily: 'var(--sans)',
+                border: '1px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)',
+                borderRadius: 4, cursor: 'pointer',
+              }}>生成中心 →</button>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+      {showVersions && (
+        <AxisVersionPanel axis={backendAxis} scopeKind="project" onClose={() => setShowVersions(false)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -700,9 +759,7 @@ export function DimShell({
               justifyContent: 'flex-end',
             }}>
               <CrossAxisLink axis={axis} />
-              <ScopePill />
-              <VersionsButton axis={axis} />
-              <RunBadge axis={axis} />
+              <RunBadge axis={axis} onRegenerate={onOpenRegenerate} />
             </div>
           </div>
         </header>
@@ -716,10 +773,7 @@ export function DimShell({
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             {subLabel && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{subLabel}</span>}
             <CrossAxisLink axis={axis} />
-            <ScopePill />
-            <VersionsButton axis={axis} />
-            {regenerateButton}
-            <RunBadge axis={axis} />
+            <RunBadge axis={axis} onRegenerate={onOpenRegenerate} />
           </div>
         </header>
       )}
