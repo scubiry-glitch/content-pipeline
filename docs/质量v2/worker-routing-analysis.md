@@ -114,10 +114,47 @@ if (process.pid !== ENGINE_PID_AT_BOOT) { /* never happens unless eval */ }
 
 ## 推荐落地
 
-- **立即做（小改）**：A + B
+- **立即做（小改）**：A + B（已 commit `759ee00`）
 - **真正彻底**：C（需要测试 pm2 优雅停机 + drain 实现）
 
 A + B 加起来 < 30 行代码 + 1 个 SQL 加 INTERVAL filter。C 是基础设施级别改动，单独排期。
+
+## 后续发现 · "双胞胎 WORKER_ID" 才是真正的 race 来源
+
+实施 A+B 后跑 smoke 仍然命中老 worker。深挖 `pg_stat_activity` 发现：
+
+- `client_addr=43.156.49.59` (本机 VM-4-6-opencloudos)
+- `client_addr=221.195.29.81` (另一台 VM-0-11-opencloudos)
+
+两台都连同一个 PG 库 `124.156.192.230/author`，**两台都设了 `WORKER_ID=prod-TencentOpenClaw`**：
+
+- 本机 pid 1139386，刚 restart
+- 远程 VM-0-11 pid 390917，从 May 2 22:08 持续运行
+
+worker_id stamp（mn_runs.worker_id）显示最近 2 小时的 stamp：
+
+| worker_id | 来源 | 次数 |
+|---|---|---|
+| `VM-0-11-opencloudos:390917:1777744136668` | 另一台 VM 老进程 | 2 |
+| `host:1108909:1777795403922` | 本机 1108909（早一轮 pm2 restart） | 1 |
+| `host:938926:1777791265240` | 本机 938926（更早 pm2 restart） | 1 |
+| `host:97720:1777793042401` | 本机 97720（更早） | 1 |
+| `null` | 老 ceo run 残留 | 1 |
+
+→ 我的 smoke run 大多数被**另一台 VM** 的老进程抢去用旧代码跑。这不是 pm2 restart race（A+B 修的那个），是**两台真实 worker 双开**。
+
+### 这条 race 的解法（C++）
+
+1. **强制 WORKER_ID 唯一**：每台机器一个不同的 ID（如 `prod-tencent-A` / `prod-tencent-B`），`run-routing.json` 显式列出每条规则路由到哪台。本机 `.env` 改成 `WORKER_ID=tencent-vm-4-6` 之类。
+2. **入队时校验**：resolveTargetWorker 必须返回非 null（或 sentinel），不允许任何规则保持"任意 worker 都能拿"的 NULL 兜底；本次 Fix A 的 `${WORKER_ID}` sentinel 已实现。
+3. **claim 时校验 hostname**：`UPDATE ... WHERE state='queued' AND (target_worker IS NULL OR target_worker = $1) AND <hostname check>` —— 防御性，不必。
+4. **下线另一台 VM 上的老 worker**（最直接，但需要远程操作 VM-0-11，不在本会话能做）。
+
+**当前状态**：A+B 仅消除 pm2 restart 的瞬时 race；双开 race 需要协调两台机器的 env / config。Phase 8 的代码本身可能没问题，但因为大多数 smoke run 跑到了远端旧代码上，所以验证结果一直是"没生效"假象。
+
+### 验证 Phase 8 的临时手段
+
+将本机 `.env` 临时改 `WORKER_ID=tencent-vm-4-6-test`，pm2 restart，INSERT smoke run 时显式 `target_worker='tencent-vm-4-6-test'` —— 远端老 worker 不会拣选（其 WORKER_ID 是 `prod-TencentOpenClaw`），新代码独占该 run。验证完恢复 `.env`。
 
 ## 相关：第二个问题（finalize 段不进）
 
