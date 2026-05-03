@@ -30,14 +30,42 @@ export async function getFormationSnapshot(
 }
 
 export async function listFormationGaps(
-  _deps: CeoEngineDeps,
-  _scopeId?: string,
-): Promise<{ items: Array<{ text: string; action: string; severity: 'warn' | 'info' }> }> {
-  // 规则定义（PR12 LLM 接入后从 mn_silence_signals + mn_judgments 自动推导）：
-  //   - 4+ 周无人唱反调 → 张力缺失
-  //   - 关键议题某人单点承担 >60% → 单点风险
-  //   - 沉默时长记录最长 → 值得复盘
-  // 当前 fixture 形态返回常见缺口
+  deps: CeoEngineDeps,
+  scopeId?: string,
+): Promise<{ items: Array<{ text: string; action: string; severity: 'warn' | 'info' | 'critical' }> }> {
+  // 优先读 ceo_formation_snapshots.formation_data->>'gaps'（M1 war-room-formation
+  // handler 写入），缺失时再 fallback 到下面的硬编码 fixture（保持兼容）。
+  try {
+    const where: string[] = [];
+    const params: any[] = [];
+    if (scopeId) {
+      params.push(scopeId);
+      where.push(`scope_id = $${params.length}::uuid`);
+    }
+    const r = await deps.db.query(
+      `SELECT formation_data FROM ceo_formation_snapshots
+        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY week_start DESC, computed_at DESC LIMIT 1`,
+      params,
+    );
+    const data = r.rows[0]?.formation_data;
+    const gaps = data && Array.isArray(data.gaps) ? (data.gaps as any[]) : null;
+    if (gaps && gaps.length > 0) {
+      return {
+        items: gaps.map((g) => ({
+          text: String(g.text ?? ''),
+          action: String(g.action ?? ''),
+          severity: (g.severity === 'warn' || g.severity === 'info' || g.severity === 'critical')
+            ? g.severity
+            : 'warn',
+        })),
+      };
+    }
+  } catch {
+    /* fall through to fixture */
+  }
+
+  // Fallback fixture — 仅当 formation_snapshots 还没跑过 war-room-formation 时使用
   return {
     items: [
       {
