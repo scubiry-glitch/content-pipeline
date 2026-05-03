@@ -16,6 +16,7 @@ import { computeResponsibilityClarity } from '../rooms/tower/aggregator.js';
 import { computeFormationHealth } from '../rooms/war-room/aggregator.js';
 import { computeCoverage } from '../rooms/situation/aggregator.js';
 import { computeWeeklyRoi } from '../rooms/balcony/aggregator.js';
+import { PROMPT_HANDLERS } from './promptHandlers.js';
 
 export type CeoAxis = 'g1' | 'g2' | 'g3' | 'g4' | 'g5';
 
@@ -690,13 +691,14 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
 type Handler = (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>;
 
 const HANDLERS: Record<string, Handler> = {
-  // ─── 语义化命名 (2026-05-01+) ────────────────────────
+  // ─── 新 prompt-based 路径 (N3, 2026-05-03+) — 严格 schema + 质量校验 ──
+  // 这些 axes 的 inline 老 prompt 已升级为 prompts/ 模块；老 handler 仅用于 stub 场景
+  ...(PROMPT_HANDLERS as Record<string, Handler>),
+
+  // ─── 语义化命名 (2026-05-01+) — 保留为 legacy fallback ─────────────
   'warroom-sandbox': handleG3Sandbox,
-  'boardroom-rebuttal': handleG3,                // handleG3 默认走 rebuttal 分支
+  // 'boardroom-annotations' 复数版保留，给老 enqueue 调用方
   'boardroom-annotations': handleG4Annotations,
-  'compass-echo': handleG4,                      // handleG4 默认走 echo 分支
-  'balcony-prompt': handleG4BalconyPrompt,
-  'situation-rubric': handleG2,
   'panorama-aggregate': handleG5,
 
   // ─── Legacy 数字命名 (向后兼容, 通过 metadata.kind 内部分流) ─
