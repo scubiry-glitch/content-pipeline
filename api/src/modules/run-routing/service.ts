@@ -52,6 +52,10 @@ export interface WorkerSpec {
   enabled?: boolean;
   tags?: string[];
   host?: string;
+  /** 质量v2 · 双胞胎防御：额外的 host 标识（hostname / 内网 IP / 别名等）。
+   *  worker 启动自检会用 host + host_aliases 的并集去匹配 os.hostname() / 接口 IP。
+   *  当 host 是公网 IP 时（NAT 场景），必须把内网 IP / hostname 也列出来才能匹配本机。 */
+  host_aliases?: string[];
   ssh?: { user?: string; port?: number; key?: string };
   deploy?: {
     repo?: string;
@@ -82,18 +86,76 @@ interface RoutingConfig {
 let cachedWorkerId: string | null = null;
 let cachedConfig: RoutingConfig | null = null;
 
-/** 当前进程的 WORKER_ID — 一次解析后缓存 */
+/** 收集本机所有可用作 host 标识的字符串（hostname + 所有非 loopback IPv4）。 */
+function getLocalHostIdentifiers(): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const hn = os.hostname();
+    if (hn) {
+      ids.add(hn);
+      // 加 'localhost' 兼容 workers.local-mac 这类把 host 写成 'localhost' 的注册
+      ids.add('localhost');
+    }
+    const nets = os.networkInterfaces();
+    for (const arr of Object.values(nets ?? {})) {
+      for (const ni of arr ?? []) {
+        if (!ni.internal && (ni.family === 'IPv4' || (ni as any).family === 4)) {
+          ids.add(ni.address);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return ids;
+}
+
+/**
+ * 当前进程的 WORKER_ID — 一次解析后缓存。
+ *
+ * 质量v2 · 双胞胎 worker 防御：env 设了 WORKER_ID=X，但 run-routing.json
+ * `workers.X.host` 声明 X 应该住在另一台机器（hostname / 任何非 loopback IPv4
+ * 都不包含该 host）→ 拒绝冒用，降级到 host-derived id (`host-<hostname>`)，
+ * 让本进程不会被路由到该 X 的任务（target_worker = X 的 run 自动绕过本机）。
+ *
+ * 实测背景：VM-0-11-opencloudos (IP 221.195.29.81) 与 VM-4-6-opencloudos
+ * (IP 43.156.49.59) 都设了 WORKER_ID=prod-TencentOpenClaw 同时 poll DB，
+ * 抢任务跑老代码。注册表里 prod-TencentOpenClaw.host="43.156.49.59"，
+ * VM-0-11 启动时此处自检失败 → 自动改用 host-vm-0-11-opencloudos，
+ * 不再冒充 prod-TencentOpenClaw。
+ */
 export function getWorkerId(): string {
   if (cachedWorkerId) return cachedWorkerId;
-  const env = process.env.WORKER_ID;
-  if (env && env.trim().length > 0) {
-    cachedWorkerId = env.trim();
-  } else {
-    try {
-      cachedWorkerId = os.hostname() || 'unknown-worker';
-    } catch {
-      cachedWorkerId = 'unknown-worker';
+  const env = (process.env.WORKER_ID ?? '').trim();
+  const fallback = (() => {
+    try { return `host-${(os.hostname() || 'unknown').toLowerCase()}`; }
+    catch { return 'host-unknown'; }
+  })();
+
+  if (env) {
+    const cfg = loadConfig();
+    const spec = cfg.workers?.[env];
+    const declared = spec?.host;
+    const aliases = spec?.host_aliases ?? [];
+    if (declared && declared !== 'localhost') {
+      const localIds = getLocalHostIdentifiers();
+      const expected = new Set<string>([declared, ...aliases]);
+      const matched = [...expected].some((e) => localIds.has(e));
+      if (!matched) {
+        console.warn(
+          `[run-routing] WORKER_ID env="${env}" but workers.${env}.host="${declared}"`
+          + (aliases.length > 0 ? ` (aliases: ${aliases.join(',')})` : '')
+          + ` does not match this machine (${[...localIds].slice(0, 5).join(',')}). `
+          + `Falling back to "${fallback}" to prevent twin-worker race. `
+          + `Fix: set a unique WORKER_ID on this host, or add this host to `
+          + `workers.${env}.host_aliases in run-routing.json `
+          + `(e.g. ["${[...localIds][0] ?? 'this-hostname'}"]).`,
+        );
+        cachedWorkerId = fallback;
+        return cachedWorkerId;
+      }
     }
+    cachedWorkerId = env;
+  } else {
+    cachedWorkerId = fallback;
   }
   return cachedWorkerId;
 }

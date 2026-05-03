@@ -85,6 +85,7 @@
       "enabled": true,
       "tags": ["claude-cli", "ssh-accessible"],
       "host": "43.156.49.59",
+      "host_aliases": ["VM-4-6-opencloudos", "10.3.4.6"],
       "ssh": { "user": "root", "port": 22 },
       "deploy": {
         "repo": "/proweb/run/pipeline",
