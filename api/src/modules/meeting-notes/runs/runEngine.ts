@@ -2285,9 +2285,12 @@ export class RunEngine {
           }
           // 质量v2 · Phase 8 诊断 log：observe 是否进 multi-meeting finalize 路径
           // 以及 allMeetingIds 实际内容。配合 finalize 内的 snapshot / longitudinal 块用。
-          console.log(`[runEngine] multi-meeting finalize gate · run=${payload.runId.slice(0,8)} ` +
-            `scope=${payload.scope.kind}/${(payload.scope.id ?? 'null').slice(0,8)} ` +
-            `axis=${payload.axis} meetings=${allMeetingIds.length} ids=[${allMeetingIds.slice(0,3).map(x=>x.slice(0,8)).join(',')}${allMeetingIds.length>3?',…':''}]`);
+          // 用 MN_DEBUG=1 开启，生产默认静默。
+          if (process.env.MN_DEBUG) {
+            console.log(`[runEngine] multi-meeting finalize gate · run=${payload.runId.slice(0,8)} ` +
+              `scope=${payload.scope.kind}/${(payload.scope.id ?? 'null').slice(0,8)} ` +
+              `axis=${payload.axis} meetings=${allMeetingIds.length} ids=[${allMeetingIds.slice(0,3).map(x=>x.slice(0,8)).join(',')}${allMeetingIds.length>3?',…':''}]`);
+          }
           if (allMeetingIds.length > 0) {
             await writeStep('render', 0.85, `多会议收尾 · 合成 ANALYSIS（${allMeetingIds.length} 场）…`);
             let composeOk = 0;
@@ -2346,7 +2349,9 @@ export class RunEngine {
             // 导致 scope 级 run 完成后 mn_axis_versions 拿不到 vN（前端版本对比 / 跨会聚合视图全空）。
             // 按 axis 折叠 per-meeting axes 落 snapshot，对齐 router.ts:POST /versions 的格式。
             await writeStep('render', 0.98, '生成 scope-level axis snapshot…');
-            console.log(`[runEngine] F-snap entry · run=${payload.runId.slice(0,8)} axis=${payload.axis} meetings=${allMeetingIds.length}`);
+            if (process.env.MN_DEBUG) {
+              console.log(`[runEngine] F-snap entry · run=${payload.runId.slice(0,8)} axis=${payload.axis} meetings=${allMeetingIds.length}`);
+            }
             try {
               const perMeetingAxes: Array<Record<string, any>> = [];
               for (const mid of allMeetingIds) {
@@ -2420,18 +2425,24 @@ export class RunEngine {
             // mn_decision_tree_snapshots / mn_belief_drift_series /
             // mn_mental_model_hit_stats 一直 0 行 —— 事件路径在 worker 内未稳定派发）。
             // 6m mental_model 命中率（mn_model_hitrates）由 axis 子维度直写，与本块独立。
-            console.log(`[runEngine] longitudinal gate · run=${payload.runId.slice(0,8)} scope.kind=${payload.scope.kind} scope.id=${payload.scope.id ?? 'null'}`);
+            if (process.env.MN_DEBUG) {
+              console.log(`[runEngine] longitudinal gate · run=${payload.runId.slice(0,8)} scope.kind=${payload.scope.kind} scope.id=${payload.scope.id ?? 'null'}`);
+            }
             if (payload.scope.kind !== 'meeting' && payload.scope.id) {
               await writeStep('render', 0.99, '更新 longitudinal（决策树 / 信念漂移 / 命中统计）…');
               try {
                 const { LongitudinalService } = await import('../longitudinal/index.js');
                 const ls = new LongitudinalService(this.deps);
                 const out = await ls.recomputeAll(payload.scope.id, payload.runId);
-                const beliefRows = (out as any)?.beliefDrift?.rows ?? '?';
-                const decRows = (out as any)?.decisionTree?.rows ?? '?';
+                // 字段映射对齐各 computer 实际返回：
+                //   BeliefDriftComputer.recomputeForScope → { updated }
+                //   DecisionTreeBuilder.recomputeForScope → { nodes }
+                //   MentalModelHitRate.recomputeForScope → { rows }
+                const beliefRows = (out as any)?.beliefDrift?.updated ?? '?';
+                const decNodes = (out as any)?.decisionTree?.nodes ?? '?';
                 const hitRows = (out as any)?.modelHitRate?.rows ?? '?';
                 console.log(`[runEngine] multi-meeting longitudinal · scope=${payload.scope.id.slice(0,8)} · ` +
-                  `belief=${beliefRows}, decTree=${decRows}, hitStats=${hitRows}`);
+                  `belief=${beliefRows}, decTreeNodes=${decNodes}, hitStats=${hitRows}`);
               } catch (e) {
                 console.warn('[runEngine] multi-meeting longitudinal failed:', (e as Error).message);
               }
