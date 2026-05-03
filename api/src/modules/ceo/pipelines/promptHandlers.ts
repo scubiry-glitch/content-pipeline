@@ -73,27 +73,25 @@ async function invokeAndValidate<T>(
 
   let parsed: unknown;
   const stripped = stripCodeFence(result.text);
+  // **总是**先用 autoFix 规范化，再 parse —— 避免"先 try 后 fallback"路径下偶发出现
+  // e1==e2 同位置不变的诡异情况（实测某些 claude-cli 输出在 catch 分支里不复现 autoFix 效果）。
+  // autoFix 对已合法 JSON 是 idempotent —— inStr 状态机只在内嵌裸 ASCII " 后跟非结构符时改写。
+  const normalized = autoFixUnescapedQuotes(stripped);
   try {
-    parsed = JSON.parse(stripped);
+    parsed = JSON.parse(normalized);
   } catch (e) {
-    // 兜底 1：字符串值内裸 ASCII " → 中文 "（修复 LLM 常见漏转义）
-    const fixed = autoFixUnescapedQuotes(stripped);
-    try {
-      parsed = JSON.parse(fixed);
-    } catch (e2) {
-      // 诊断：CEO_DUMP_FAIL=1 时把完整 LLM 输出落盘，便于事后逐字符诊断 autoFix 漏的 case
-      if (process.env.CEO_DUMP_FAIL === '1' || process.env.CEO_DUMP_FAIL === 'true') {
-        try {
-          const path = `/tmp/ceo-llm-fail-${def.axis}-${runId.slice(0, 8)}.txt`;
-          writeFileSync(path, result.text, 'utf8');
-          console.warn(`[ceo-dump] LLM 输出已落盘: ${path}`);
-        } catch { /* ignore */ }
-      }
-      return {
-        ok: false,
-        error: `[LLM 输出非 JSON] e1=${(e as Error).message}; e2=${(e2 as Error).message}; head=${stripped.slice(0, 200)}`,
-      };
+    // 诊断：CEO_DUMP_FAIL=1 时把完整 LLM 输出落盘，便于事后逐字符诊断 autoFix 漏的 case
+    if (process.env.CEO_DUMP_FAIL === '1' || process.env.CEO_DUMP_FAIL === 'true') {
+      try {
+        const path = `/tmp/ceo-llm-fail-${def.axis}-${runId.slice(0, 8)}.txt`;
+        writeFileSync(path, result.text, 'utf8');
+        console.warn(`[ceo-dump] LLM 输出已落盘: ${path}`);
+      } catch { /* ignore */ }
     }
+    return {
+      ok: false,
+      error: `[LLM 输出非 JSON] ${(e as Error).message}; head=${stripped.slice(0, 200)}`,
+    };
   }
   let out: T;
   try {
