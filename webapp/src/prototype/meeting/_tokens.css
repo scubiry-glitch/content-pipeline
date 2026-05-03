@@ -51,3 +51,12 @@
 @keyframes mp-spin {
   to { transform: rotate(360deg); }
 }
+
+/* mobile: hide horizontal scrollbar visually but keep scrollable
+   用法：父元素加 inline style overflowX:auto，并加 className="mp-scroll-h"  */
+.meeting-proto .mp-scroll-h::-webkit-scrollbar {
+  display: none;
+}
+.meeting-proto .mp-scroll-h {
+  scrollbar-width: none;
+}

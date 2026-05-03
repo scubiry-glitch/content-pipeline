@@ -240,6 +240,7 @@ function SecTension({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: 
 
 // ── SecNewCognition ──
 function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
+  const isMobile = useIsMobile();
   return (
     <section>
       {sectionHeader('03', '新认知', '会议前后，谁的信念被更新？谁被什么触发？')}
@@ -248,16 +249,28 @@ function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
           const p = P(n.who);
           return (
             <div key={n.id} style={{
-              display: 'grid', gridTemplateColumns: '80px 1fr', gap: 24,
-              padding: '28px 0', borderTop: idx === 0 ? 'none' : '1px solid var(--line-2)',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : '80px 1fr',
+              gap: isMobile ? 14 : 24,
+              padding: isMobile ? '20px 0' : '28px 0',
+              borderTop: idx === 0 ? 'none' : '1px solid var(--line-2)',
             }}>
-              <div>
-                <Avatar p={p} size={48} radius={8} />
-                <div style={{ fontSize: 12, fontWeight: 500, marginTop: 8 }}>{p.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>
+              <div style={{ display: isMobile ? 'flex' : 'block', alignItems: 'center', gap: isMobile ? 10 : 0 }}>
+                <Avatar p={p} size={isMobile ? 32 : 48} radius={isMobile ? 6 : 8} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 500, marginTop: isMobile ? 0 : 8 }}>{p.name}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>
+                </div>
               </div>
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 14, alignItems: 'stretch' }}>
+                {/* mobile: BEFORE → arrow → AFTER 改为竖向堆叠（保留全部信息，箭头变成横向分隔） */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '1fr auto 1fr',
+                  gridAutoFlow: isMobile ? 'row' : 'column',
+                  gap: isMobile ? 8 : 14,
+                  alignItems: 'stretch',
+                }}>
                   <div style={{
                     background: 'var(--paper-2)', border: '1px solid var(--line-2)',
                     padding: '12px 14px', borderRadius: 4,
@@ -265,7 +278,13 @@ function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                     <MonoMeta>BEFORE</MonoMeta>
                     <div style={{ fontFamily: 'var(--serif)', fontSize: 15, marginTop: 4, lineHeight: 1.5, color: 'var(--ink-2)' }}>{n.before}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', color: 'var(--accent)' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--accent)',
+                    ...(isMobile ? { transform: 'rotate(90deg)', height: 18 } : {}),
+                  }}>
                     <Icon name="arrow" size={22} stroke={1.3} />
                   </div>
                   <div style={{
@@ -752,6 +771,7 @@ export function VariantEditorial() {
 // 数据源：useMeetingHealth() — Shell 已统一拉好；此处只读不抓
 // anchor: id='quality-section'，对应顶部"质量"徽章点击平滑滚动
 function SecQualityAudit() {
+  const isMobile = useIsMobile();
   const health = useMeetingHealth();
   const q = health?.quality;
   return (
@@ -771,7 +791,11 @@ function SecQualityAudit() {
               五维加权 · 0..1 · 来自 mn_decision_quality
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
+            gap: isMobile ? 8 : 12,
+          }}>
             {q.dims.map((d) => (
               <div key={d.id} style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: 14 }}>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>{d.label}</div>

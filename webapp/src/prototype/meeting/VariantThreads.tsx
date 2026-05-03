@@ -9,6 +9,7 @@ import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms'
 import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
+import { useIsMobile } from '../_useIsMobile';
 
 type PFn = (id: string) => Participant;
 type ThreadEvent = { t: number; kind: string; label?: string; ref?: string };
@@ -163,6 +164,7 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
   /** 信念事件 dict（mock 模式来自模块级 EVENTS；API 模式从 analysis 派生） */
   events?: Record<string, ThreadEvent[]>;
 }) {
+  const isMobile = useIsMobile();
   const [hiddenKinds, setHiddenKinds] = useState(new Set<string>());
   const toggleKind = (kinds: string[]) => {
     setHiddenKinds((prev) => {
@@ -184,9 +186,14 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
   const xFor = (min: number) => startX + (min / MIN) * (endX - startX);
 
   return (
-    <div style={{ padding: '26px 56px 32px', overflowY: 'auto' }}>
-      <div style={{ marginBottom: 18, display: 'flex', alignItems: 'baseline', gap: 18 }}>
-        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 26, margin: 0, letterSpacing: '-0.01em' }}>
+    <div style={{ padding: isMobile ? '16px 14px 22px' : '26px 56px 32px', overflowY: 'auto' }}>
+      <div style={{
+        marginBottom: 18, display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'baseline',
+        gap: isMobile ? 8 : 18,
+      }}>
+        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: isMobile ? 20 : 26, margin: 0, letterSpacing: '-0.01em' }}>
           信念演化 · Belief threads {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
         <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 560 }}>
@@ -219,9 +226,14 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
       </div>
 
       {/* Chart · API 模式由 analysis 派生事件（无真实时间戳，按数组序号铺到时间轴） */}
+      {/* mobile: 整张轨迹图（含 startX=170 + 1158px 时间轴）需要 ~1328px，包进横滑容器 */}
+      <div className={isMobile ? 'mp-scroll-h' : undefined} style={{
+        ...(isMobile ? { overflowX: 'auto' as const, WebkitOverflowScrolling: 'touch' as const } : {}),
+      }}>
       <div style={{
         position: 'relative', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
         borderRadius: 8, padding: '18px 0 30px',
+        ...(isMobile ? { width: W + 60 + startX } : {}),
       }}>
         {/* Time axis */}
         <div style={{ position: 'relative', height: 20, marginLeft: startX, marginRight: 60, marginBottom: 6 }}>
@@ -316,9 +328,14 @@ function ThreadView({ a, isMock, P = defaultP, participants, events }: {
           }}>DECISION · 108m</div>
         </>}
       </div>
+      </div>{/* close mp-scroll-h container (ThreadView chart) */}
 
       {/* Belief updates summary */}
-      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+      <div style={{
+        marginTop: 22, display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
+        gap: 14,
+      }}>
         {a.newCognition.map((n) => {
           const p = P(n.who);
           return (
@@ -356,6 +373,7 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
   apiParticipants?: Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>;
   P?: PFn;
 }) {
+  const isMobile = useIsMobile();
   const cons = a.consensus.filter((x) => x.kind === 'consensus');
   const divs = a.consensus.filter((x) => x.kind === 'divergence');
   // API 模式：participants 列表来自 /meetings/:id/detail.analysis.participants（含真实 UUID）
@@ -381,11 +399,28 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
   });
 
   return (
-    <div style={{ padding: '22px 56px 26px', display: 'grid', gridTemplateColumns: '900px 1fr', gap: 26, overflow: 'auto' }}>
-      <div style={{ position: 'relative', height: 720 }}>
-        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+    <div style={{
+      padding: isMobile ? '16px 14px 22px' : '22px 56px 26px',
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '900px 1fr',
+      gap: isMobile ? 18 : 26,
+      overflow: 'auto',
+    }}>
+      <div>
+        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: isMobile ? 20 : 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
           共识 · 分歧 · 图谱 {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
+        {/* mobile: 整张图谱（SVG + HTML 卡片）需要 900px 以保持坐标系，包进横滑容器 */}
+        <div className={isMobile ? 'mp-scroll-h' : undefined} style={{
+          position: 'relative', height: 720,
+          ...(isMobile ? {
+            overflowX: 'auto' as const, overflowY: 'hidden' as const,
+            WebkitOverflowScrolling: 'touch' as const,
+            border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--paper-2)',
+          } : {}),
+        }}>
+        {/* 内层强制 900px 宽，让 absolute 子元素的坐标系不被压缩 */}
+        <div style={{ position: 'relative', width: 900, height: 720 }}>
         <svg width={900} height={680} style={{ position: 'absolute', left: 0, top: 40 }}>
           <defs>
             <pattern id="dots" patternUnits="userSpaceOnUse" width="16" height="16">
@@ -517,6 +552,8 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
             ))}
           </div>
         ))}
+        </div>{/* close inner 900px-fixed wrapper */}
+        </div>{/* close mp-scroll-h container */}
       </div>
 
       {/* Right stats panel */}
@@ -554,6 +591,7 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
 
 // ── FocusNebula ──
 function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: boolean; P?: PFn }) {
+  const isMobile = useIsMobile();
   const W = 900, H = 620;
   const clusters = a.focusMap.map((f, i) => {
     const angle = (i / a.focusMap.length) * Math.PI * 2 - Math.PI / 2;
@@ -567,11 +605,21 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
   });
 
   return (
-    <div style={{ padding: '22px 56px 26px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 26, overflow: 'auto' }}>
+    <div style={{
+      padding: isMobile ? '16px 14px 22px' : '22px 56px 26px',
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
+      gap: isMobile ? 18 : 26,
+      overflow: 'auto',
+    }}>
       <div>
-        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
+        <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: isMobile ? 20 : 24, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
           关注点星云 · Focus nebula {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}
         </h2>
+        {/* mobile: 900px 星云图横滑（不压缩） */}
+        <div className={isMobile ? 'mp-scroll-h' : undefined} style={{
+          ...(isMobile ? { overflowX: 'auto' as const, WebkitOverflowScrolling: 'touch' as const } : {}),
+        }}>
         <div style={{
           position: 'relative', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
           borderRadius: 8, width: W, height: H, overflow: 'hidden',
@@ -629,6 +677,7 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
             );
           })}
         </div>
+        </div>{/* close mp-scroll-h container (FocusNebula) */}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* 重叠主题：API 模式从 a.focusMap 计算（同一 theme 被多人关注则归为重叠） */}
@@ -923,6 +972,7 @@ const AFFECT_LAYERS: Array<{ id: string; label: string; icon: React.ReactNode }>
 ];
 
 function AffectiveTrace({ isMock }: { isMock: boolean }) {
+  const isMobile = useIsMobile();
   const [hiddenLayers, setHiddenLayers] = useState(new Set<string>());
   const show = (id: string) => !hiddenLayers.has(id);
   const toggleLayer = (id: string) => setHiddenLayers((prev) => {
@@ -1017,12 +1067,15 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
 
   return (
     <div id="affect-section" style={{
-      padding: '22px 56px 26px',
-      display: 'grid', gridTemplateColumns: '1fr 340px', gap: 26, overflow: 'auto',
+      padding: isMobile ? '16px 14px 22px' : '22px 56px 26px',
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
+      gap: isMobile ? 18 : 26,
+      overflow: 'auto',
     }}>
       <div>
         <h2 style={{
-          fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24,
+          fontFamily: 'var(--serif)', fontWeight: 500, fontSize: isMobile ? 20 : 24,
           margin: '0 0 14px', letterSpacing: '-0.01em',
         }}>
           情绪温度曲线 · Affective trace {isMock && <MockBadge style={{ verticalAlign: 'middle', marginLeft: 6 }} />}

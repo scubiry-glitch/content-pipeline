@@ -12,6 +12,7 @@ import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis, normalizeTensionMoments } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { MeetingChatDrawer } from './MeetingChatDrawer';
+import { useIsMobile } from '../_useIsMobile';
 
 type PFn = (id: string) => Participant;
 
@@ -544,6 +545,9 @@ function WBCrossView({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
 export function VariantWorkbench() {
   const { id } = useParams<{ id: string }>();
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
+  // mobile-only: 三栏切换（左侧维度/中央工作区/右侧锚点）—— 桌面三栏并排，mobile segmented 切一个看
+  const [mobilePane, setMobilePane] = useState<'left' | 'center' | 'right'>('center');
   const [dim, setDim] = useState('tension');
   const [selectedT, setSelectedT] = useState('T1');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
@@ -776,15 +780,18 @@ export function VariantWorkbench() {
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper-2)',
-      display: 'grid', gridTemplateRows: '44px 1fr', color: 'var(--ink)',
+      display: 'grid',
+      gridTemplateRows: isMobile ? '44px 36px 1fr' : '44px 1fr',
+      color: 'var(--ink)',
       fontFamily: 'var(--sans)', fontSize: 13, overflow: 'hidden',
     }}>
       {/* ── Top bar ── */}
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px',
+      <header className={isMobile ? 'mp-scroll-h' : undefined} style={{
+        display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, padding: isMobile ? '0 12px' : '0 16px',
         borderBottom: '1px solid var(--line)', background: 'var(--paper)',
+        ...(isMobile ? { overflowX: 'auto' as const, WebkitOverflowScrolling: 'touch' as const } : {}),
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{
             width: 22, height: 22, borderRadius: 5, background: 'var(--ink)',
             color: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -793,18 +800,19 @@ export function VariantWorkbench() {
           <span style={{ fontWeight: 600 }}>Minutes</span>
           <MonoMeta>/ workbench</MonoMeta>
         </div>
-        <div style={{ height: 22, width: 1, background: 'var(--line)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-2)' }}>
-          <Icon name="folder" size={14} />
-          <span>{id ?? MEETING.id}</span>
-          <Icon name="chevron" size={12} style={{ color: 'var(--ink-4)' }} />
-          <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{displayTitle}</span>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+        {!isMobile && <>
+          <div style={{ height: 22, width: 1, background: 'var(--line)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-2)' }}>
+            <Icon name="folder" size={14} />
+            <span>{id ?? MEETING.id}</span>
+            <Icon name="chevron" size={12} style={{ color: 'var(--ink-4)' }} />
+            <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{displayTitle}</span>
+          </div>
+        </>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
           {usingMock && <MockBadge />}
-          {/* 这三个 chip 当前没有真实数据来源（音视频源、preset、active experts 计数）·
-              API 模式下隐藏，避免误导；mock 模式保留作为 demo 风味。 */}
-          {usingMock && <>
+          {/* mock-only chips — desktop 显示完整一组，mobile 省略以节省顶栏空间 */}
+          {usingMock && !isMobile && <>
             <Chip tone="ghost"><Icon name="mic" size={11} />m4a + docx</Chip>
             <Chip tone="ghost">preset: standard</Chip>
             <Chip tone="accent">3 experts active</Chip>
@@ -817,24 +825,56 @@ export function VariantWorkbench() {
               display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
               border: '1px solid var(--accent)', background: 'var(--accent-soft)',
               color: 'oklch(0.32 0.1 40)', fontSize: 12, borderRadius: 5, cursor: 'pointer',
-              fontFamily: 'var(--sans)', fontWeight: 600,
+              fontFamily: 'var(--sans)', fontWeight: 600, flexShrink: 0,
             }}
             title="基于会议上下文向 Claude 或专家追问"
           >
-            💬 追问此会
+            💬 {isMobile ? '追问' : '追问此会'}
           </button>
-          <TopBtn icon="search">搜索</TopBtn>
-          <TopBtn icon="upload">导出</TopBtn>
+          {!isMobile && <TopBtn icon="search">搜索</TopBtn>}
+          {!isMobile && <TopBtn icon="upload">导出</TopBtn>}
         </div>
       </header>
 
-      {/* ── Main grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 360px', height: '100%', minHeight: 0 }}>
+      {/* ── Mobile-only segmented switcher：左 / 中 / 右 三栏切换 ── */}
+      {isMobile && (
+        <div style={{
+          display: 'flex', alignItems: 'stretch', gap: 0,
+          borderBottom: '1px solid var(--line)', background: 'var(--paper-2)',
+          padding: '0 12px',
+        }}>
+          {([
+            { id: 'left',   label: '维度' },
+            { id: 'center', label: activeDim.label },
+            { id: 'right',  label: '锚点' },
+          ] as const).map((p) => {
+            const active = mobilePane === p.id;
+            return (
+              <button key={p.id} onClick={() => setMobilePane(p.id)} style={{
+                flex: 1, minWidth: 0, padding: '0 6px', border: 0, background: 'transparent',
+                color: active ? 'var(--ink)' : 'var(--ink-3)',
+                fontWeight: active ? 600 : 450,
+                fontSize: 12.5, cursor: 'pointer',
+                borderBottom: active ? '2px solid var(--ink)' : '2px solid transparent',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Main grid: 桌面三栏并排，mobile 单栏切换 ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '220px 1fr 360px',
+        height: '100%', minHeight: 0,
+      }}>
 
         {/* Left: nav + expert stack */}
         <aside style={{
-          borderRight: '1px solid var(--line)', background: 'var(--paper)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          borderRight: isMobile ? 'none' : '1px solid var(--line)', background: 'var(--paper)',
+          display: isMobile && mobilePane !== 'left' ? 'none' : 'flex',
+          flexDirection: 'column', overflow: 'hidden',
         }}>
           <div style={{ padding: '18px 16px 10px' }}>
             <SectionLabel>维度 Dimensions</SectionLabel>
@@ -930,7 +970,11 @@ export function VariantWorkbench() {
         </aside>
 
         {/* Center: dimension workspace */}
-        <section style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <section style={{
+          overflow: 'hidden',
+          display: isMobile && mobilePane !== 'center' ? 'none' : 'flex',
+          flexDirection: 'column', minWidth: 0,
+        }}>
           <div style={{
             padding: '14px 20px', borderBottom: '1px solid var(--line)',
             display: 'flex', alignItems: 'center', gap: 14, background: 'var(--paper)',
@@ -972,8 +1016,9 @@ export function VariantWorkbench() {
 
         {/* Right: transcript / evidence */}
         <aside style={{
-          borderLeft: '1px solid var(--line)', background: 'var(--paper)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          borderLeft: isMobile ? 'none' : '1px solid var(--line)', background: 'var(--paper)',
+          display: isMobile && mobilePane !== 'right' ? 'none' : 'flex',
+          flexDirection: 'column', overflow: 'hidden',
         }}>
           {/* R3-A · 改动一：B 视图吸收 meta.necessity + tension 张力数据 */}
           <CostAndTensionCard />

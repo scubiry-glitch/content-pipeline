@@ -199,7 +199,10 @@ export function MeetingDetailShell() {
     <MockToggleProvider>
     <div
       className="meeting-proto"
-      style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
+      style={{
+        display: 'flex', flexDirection: 'column', minHeight: '100vh',
+        width: '100%', maxWidth: '100vw', overflowX: 'hidden',
+      }}
     >
       {/* Detail top bar */}
       <header style={{
@@ -385,7 +388,7 @@ export function MeetingDetailShell() {
       {/* R3-A · 改动一：4 徽章 status bar — 决策质量 / 必要性 / 情绪峰 / 张力峰 */}
       <MeetingHealthBadges health={health} />
 
-      <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+      <main style={{ flex: 1, minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'auto' }}>
         <Outlet context={{
           shellTitle: effectiveTitle,
           meetingDetail: apiDetail,
@@ -426,13 +429,22 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
   };
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+    <div className={isMobile ? 'mp-scroll-h' : undefined} style={{
+      display: 'flex', alignItems: 'center',
+      flexWrap: isMobile ? 'nowrap' : 'wrap', gap: 6,
       padding: isMobile ? '6px 14px' : '8px 28px', background: 'var(--paper-2)',
       borderBottom: '1px solid var(--line-2)',
       fontFamily: 'var(--mono)', fontSize: 11,
+      // mobile: 信息不省略，横滑代替换行
+      ...(isMobile ? {
+        overflowX: 'auto' as const, overflowY: 'hidden' as const,
+        WebkitOverflowScrolling: 'touch' as const,
+      } : {}),
     }}>
-      <span style={{ color: 'var(--ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 4 }}>
+      <span style={{
+        color: 'var(--ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 4,
+        flexShrink: 0,
+      }}>
         体征
       </span>
       <button
@@ -440,7 +452,7 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
         title="决策质量 5D · 跳到 A 视图文末「质量审定」"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer', flexShrink: 0,
           background: 'oklch(0.96 0.03 285)',
           color: 'oklch(0.32 0.10 285)',
           border: '1px solid oklch(0.85 0.07 285)',
@@ -455,7 +467,7 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
         title="本场必要性评估 · 跳到 B 视图右栏「这场会的代价」"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer', flexShrink: 0,
           background: necTone.bg, color: necTone.fg, border: `1px solid ${necTone.bd}`,
           fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
         }}
@@ -468,7 +480,7 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
         title="情绪曲线峰值 · 跳到 C 视图时间轴叠加层"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer', flexShrink: 0,
           background: 'oklch(0.96 0.04 75)',
           color: 'oklch(0.40 0.10 75)',
           border: '1px solid oklch(0.85 0.08 75)',
@@ -483,7 +495,7 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
         title="张力清单峰值 · 跳到 B 视图右栏张力时序条"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+          padding: '3px 10px', borderRadius: 4, cursor: 'pointer', flexShrink: 0,
           background: 'oklch(0.96 0.04 25)',
           color: 'oklch(0.40 0.11 25)',
           border: '1px solid oklch(0.85 0.08 25)',
