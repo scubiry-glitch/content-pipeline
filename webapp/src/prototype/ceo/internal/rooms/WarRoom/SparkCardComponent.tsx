@@ -4,12 +4,16 @@
 
 import { useState } from 'react';
 
+/** Why 证据条目：新 schema 为 { text, source }（war-room-spark prompt 输出格式），
+ *  老数据 / mock 仍可能是 string —— 渲染处兼容两种形状。 */
+export type WhyEvidence = string | { text: string; source?: string | null };
+
 export interface SparkRow {
   id: string;
   tag: string;
   headline: string;
   evidence_short: string | null;
-  why_evidence: string[];
+  why_evidence: WhyEvidence[];
   risk_text: string | null;
 }
 
@@ -147,9 +151,21 @@ export function SparkCard({ spark, onAdopt, onReplace }: Props) {
               lineHeight: 1.6,
             }}
           >
-            {spark.why_evidence.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
+            {spark.why_evidence.map((w, i) => {
+              if (typeof w === 'string') return <li key={i}>{w}</li>;
+              const text = w?.text ?? '';
+              const source = w?.source;
+              return (
+                <li key={i}>
+                  {text}
+                  {source && (
+                    <span style={{
+                      marginLeft: 6, opacity: 0.55, fontFamily: 'var(--mono)', fontSize: 10.5,
+                    }}>· {source}</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           {spark.risk_text && (
             <div
