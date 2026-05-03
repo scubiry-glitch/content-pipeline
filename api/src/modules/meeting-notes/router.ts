@@ -1204,12 +1204,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // Scopes CRUD (PR4)
     // --------------------------------------------------------
     fastify.get('/scopes', { preHandler: authenticate }, async (request) => {
-      const q = request.query as { kind?: string; status?: string };
+      const q = request.query as { kind?: string; status?: string; dirty?: string };
+      const dirtyParam = typeof q.dirty === 'string'
+        ? (q.dirty === 'true' ? true : q.dirty === 'false' ? false : undefined)
+        : undefined;
       try {
         return {
           items: await engine.scopes.list({
             kind: q.kind as any,
             status: q.status as any,
+            dirty: dirtyParam,
             workspaceId: currentWorkspaceId(request) ?? undefined,
           }),
         };

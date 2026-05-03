@@ -2330,6 +2330,78 @@ export class RunEngine {
             } catch (e) {
               console.warn('[runEngine] multi-meeting MeetingScopeGenerator failed:', (e as Error).message);
             }
+
+            // F-snap · scope-level snapshot：multi-meeting 路径之前跳过 versionStore.snapshot，
+            // 导致 scope 级 run 完成后 mn_axis_versions 拿不到 vN（前端版本对比 / 跨会聚合视图全空）。
+            // 按 axis 折叠 per-meeting axes 落 snapshot，对齐 router.ts:POST /versions 的格式。
+            await writeStep('render', 0.98, '生成 scope-level axis snapshot…');
+            try {
+              const perMeetingAxes: Array<Record<string, any>> = [];
+              for (const mid of allMeetingIds) {
+                try {
+                  perMeetingAxes.push(await this.getMeetingAxes(mid));
+                } catch (e) {
+                  console.warn(`[runEngine] snapshot · getMeetingAxes ${mid.slice(0,8)} failed:`, (e as Error).message);
+                }
+              }
+              const axesForSnapshot: Array<'people' | 'projects' | 'knowledge' | 'meta'> =
+                payload.axis === 'all'
+                  ? ['people', 'projects', 'knowledge', 'meta']
+                  : payload.axis === 'longitudinal'
+                    ? []
+                    : [payload.axis as 'people' | 'projects' | 'knowledge' | 'meta'];
+              for (const ax of axesForSnapshot) {
+                const axisBlocks = perMeetingAxes.map((m) => (m?.[ax] as Record<string, any>) ?? {});
+                const subDimKeys = new Set<string>();
+                for (const b of axisBlocks) for (const k of Object.keys(b)) subDimKeys.add(k);
+                const capturedAxis: Record<string, any> = {};
+                for (const key of subDimKeys) {
+                  const samples = axisBlocks.map((b) => b[key]).filter((v) => v !== undefined && v !== null);
+                  if (samples.length === 0) { capturedAxis[key] = []; continue; }
+                  if (Array.isArray(samples[0])) {
+                    const tagged: any[] = [];
+                    axisBlocks.forEach((b, i) => {
+                      const arr = b[key];
+                      if (Array.isArray(arr)) for (const item of arr) tagged.push({ __meeting_id: allMeetingIds[i], ...item });
+                    });
+                    capturedAxis[key] = tagged;
+                  } else if (axisBlocks.length === 1) {
+                    capturedAxis[key] = samples[0];
+                  } else {
+                    const map: Record<string, any> = {};
+                    axisBlocks.forEach((b, i) => {
+                      if (b[key] !== undefined && b[key] !== null) map[allMeetingIds[i]] = b[key];
+                    });
+                    capturedAxis[key] = map;
+                  }
+                }
+                const data: Record<string, any> = {
+                  [ax]: capturedAxis,
+                  _meta: {
+                    snapshotVersion: 1,
+                    meetingIds: allMeetingIds,
+                    scopeKind: payload.scope.kind,
+                    scopeId: payload.scope.id ?? null,
+                    axis: ax,
+                    capturedAt: new Date().toISOString(),
+                    autoFromRun: payload.runId,
+                  },
+                };
+                try {
+                  await this.versionStore.snapshot({
+                    runId: payload.runId,
+                    scopeKind: payload.scope.kind,
+                    scopeId: payload.scope.id ?? null,
+                    axis: ax,
+                    data,
+                  });
+                } catch (e) {
+                  console.warn(`[runEngine] multi-meeting snapshot axis=${ax} failed:`, (e as Error).message);
+                }
+              }
+            } catch (e) {
+              console.warn('[runEngine] multi-meeting snapshot block failed:', (e as Error).message);
+            }
           }
         }
       });
@@ -2375,6 +2447,23 @@ export class RunEngine {
         }
       } catch (e) {
         console.warn('[runEngine] axisIssues write failed:', (e as Error).message);
+      }
+
+      // 028 · 清 mn_scopes.dirty_at — 仅当本次是 project 维度的 axis=all/projects 重算
+      // (CEO 模块的 g4/g5 走 CEO runQueue，不在此处)
+      if (
+        payload.scope?.kind === 'project'
+        && payload.scope?.id
+        && (payload.axis === 'all' || payload.axis === 'projects')
+      ) {
+        try {
+          await this.deps.db.query(
+            `UPDATE mn_scopes SET dirty_at = NULL, last_run_id = $1::uuid WHERE id = $2::uuid`,
+            [payload.runId, payload.scope.id],
+          );
+        } catch (e) {
+          console.warn('[runEngine] clear scope dirty failed:', (e as Error).message);
+        }
       }
 
       emitTerminal(payload.runId, 'succeeded');

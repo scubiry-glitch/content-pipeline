@@ -34,6 +34,8 @@ const FILES = [
   '024-runs-dag.sql',
   '025-run-routing.sql',
   '026-meeting-shares.sql',
+  '027-scope-one-per-kind.sql',
+  '028-scope-dirty-marker.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {

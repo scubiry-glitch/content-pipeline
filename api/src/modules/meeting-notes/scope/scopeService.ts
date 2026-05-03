@@ -19,6 +19,10 @@ export interface ScopeRow {
   metadata: Record<string, any>;
   /** 二级项目支持：父 scope 的 id；NULL 表示顶层 scope */
   parentScopeId: string | null;
+  /** 028: dirty 标记 — 绑/解绑会议后非空，runEngine 成功 g4/g5/all 后清 */
+  dirtyAt: string | null;
+  dirtyReason: string | null;
+  lastRunId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +59,9 @@ function mapScope(row: Record<string, any>): ScopeRow {
     description: row.description,
     metadata: row.metadata ?? {},
     parentScopeId: row.parent_scope_id ?? null,
+    dirtyAt: row.dirty_at ?? null,
+    dirtyReason: row.dirty_reason ?? null,
+    lastRunId: row.last_run_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -63,7 +70,7 @@ function mapScope(row: Record<string, any>): ScopeRow {
 export class ScopeService {
   constructor(private readonly deps: MeetingNotesDeps) {}
 
-  async list(filter: { kind?: ScopeKind; status?: ScopeStatus; workspaceId?: string } = {}): Promise<ScopeRow[]> {
+  async list(filter: { kind?: ScopeKind; status?: ScopeStatus; workspaceId?: string; dirty?: boolean } = {}): Promise<ScopeRow[]> {
     const where: string[] = [];
     const params: any[] = [];
     if (filter.workspaceId) {
@@ -72,9 +79,14 @@ export class ScopeService {
     }
     if (filter.kind)        { params.push(filter.kind);        where.push(`kind = $${params.length}`); }
     if (filter.status)      { params.push(filter.status);      where.push(`status = $${params.length}`); }
+    if (filter.dirty === true)  { where.push(`dirty_at IS NOT NULL`); }
+    if (filter.dirty === false) { where.push(`dirty_at IS NULL`); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const orderBy = filter.dirty === true
+      ? 'ORDER BY dirty_at DESC'
+      : 'ORDER BY created_at DESC';
     const r = await this.deps.db.query(
-      `SELECT * FROM mn_scopes ${clause} ORDER BY created_at DESC`,
+      `SELECT * FROM mn_scopes ${clause} ${orderBy}`,
       params,
     );
     return r.rows.map(mapScope);
@@ -172,21 +184,27 @@ export class ScopeService {
     opts?: { boundBy?: string; reason?: string },
   ): Promise<void> {
     // 先删除同 meeting 在同 kind 下的旧 binding（一会议一 kind 只保留一条）
-    await this.deps.db.query(
+    // 同时标记被替换的旧 scope 为 dirty（若有），避免遗漏。
+    const replaced = await this.deps.db.query(
       `DELETE FROM mn_scope_members sm
        USING mn_scopes s
        WHERE sm.meeting_id = $1
          AND sm.scope_id   = s.id
          AND s.kind = (SELECT kind FROM mn_scopes WHERE id = $2)
-         AND sm.scope_id  != $2`,
+         AND sm.scope_id  != $2
+       RETURNING sm.scope_id::text AS scope_id`,
       [meetingId, scopeId],
     );
+    for (const row of (replaced.rows ?? []) as { scope_id: string }[]) {
+      await this.markDirty(row.scope_id, `-1 meeting unbound (replaced): ${meetingId}`);
+    }
     await this.deps.db.query(
       `INSERT INTO mn_scope_members (scope_id, meeting_id, bound_by, reason)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (scope_id, meeting_id) DO NOTHING`,
       [scopeId, meetingId, opts?.boundBy ?? null, opts?.reason ?? null],
     );
+    await this.markDirty(scopeId, `+1 meeting bound: ${meetingId}`);
   }
 
   async unbindMeeting(scopeId: string, meetingId: string): Promise<boolean> {
@@ -194,7 +212,27 @@ export class ScopeService {
       `DELETE FROM mn_scope_members WHERE scope_id = $1 AND meeting_id = $2`,
       [scopeId, meetingId],
     );
-    return (r as any).rowCount > 0;
+    const removed = (r as any).rowCount > 0;
+    if (removed) {
+      await this.markDirty(scopeId, `-1 meeting unbound: ${meetingId}`);
+    }
+    return removed;
+  }
+
+  /** 028: 标记 scope 为 dirty（绑/解绑会议时）；runEngine 成功 g4/g5/all 后清。 */
+  async markDirty(scopeId: string, reason: string): Promise<void> {
+    await this.deps.db.query(
+      `UPDATE mn_scopes SET dirty_at = NOW(), dirty_reason = $2 WHERE id = $1`,
+      [scopeId, reason],
+    );
+  }
+
+  /** 028: 清 dirty 标记 — 由 runEngine 成功完成 project g4/g5/all 时调用 */
+  async clearDirty(scopeId: string, runId: string): Promise<void> {
+    await this.deps.db.query(
+      `UPDATE mn_scopes SET dirty_at = NULL, last_run_id = $1::uuid WHERE id = $2::uuid`,
+      [runId, scopeId],
+    );
   }
 
   /** 列出此 scope 绑定的所有 meeting_id（= assets.id） */
