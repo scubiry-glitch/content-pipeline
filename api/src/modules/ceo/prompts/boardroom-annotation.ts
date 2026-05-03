@@ -14,8 +14,8 @@ const Citation = z.object({
 
 const Out = z.object({
   mode: z.enum(['synthesis', 'contrast', 'counter', 'extension']),
-  highlight: z.string().min(10).max(80),
-  body_md: z.string().min(150).max(800),
+  highlight: z.string().min(10).max(120),
+  body_md: z.string().min(150).max(1600),
   citations: z.array(Citation).min(1).max(4),
 }).strict();
 
@@ -71,7 +71,9 @@ ${concernsLines}
         ...ctx.meetings.map((m) => m.id),
       ]);
       for (const c of out.citations) {
-        if (c.type === 'meeting' && !validIds.has(c.id)) {
+        // 容错：LLM 偶尔会把 type 当 prefix 拼进 id（"meeting:xxx-uuid"）
+        const cleanId = c.id.replace(/^(meeting|asset|echo):/i, '');
+        if (c.type === 'meeting' && !validIds.has(cleanId)) {
           return `citation meeting:${c.id} 不在会议列表（LLM 编造）`;
         }
       }

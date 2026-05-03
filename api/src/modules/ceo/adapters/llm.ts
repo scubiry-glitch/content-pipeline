@@ -120,3 +120,95 @@ export function createClaudeCliCeoLLMAdapter(_deps: {
 }): CeoLLMAdapter {
   return new NullCeoLLMAdapter();
 }
+
+// ─────────────────────────────────────────────────────────────
+// claude CLI 直接 spawn 适配器
+//
+// 用 `claude -p --output-format json` 跑一次性 prompt，从 outer JSON 拿 result。
+// 适合脚本场景（如 ceo:generate-real）—— 复用本地已登录的 claude CLI 而非另配
+// ANTHROPIC_API_KEY / KIMI_API_KEY，且不会启动持久 session（每次 -p 独立）。
+// ─────────────────────────────────────────────────────────────
+
+import { spawn } from 'node:child_process';
+
+interface ClaudeCliOptions {
+  /** claude 可执行路径，默认 'claude' */
+  binPath?: string;
+  /** --model 参数，默认 undefined（用 claude 默认模型） */
+  model?: string;
+  /** 单次 spawn 超时毫秒，默认 180_000 (3 分钟) */
+  timeoutMs?: number;
+}
+
+interface ClaudeCliOuterJson {
+  result?: string;
+  session_id?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+  is_error?: boolean;
+  num_turns?: number;
+}
+
+export function createClaudeCliCeoLLMAdapterV2(opts: ClaudeCliOptions = {}): CeoLLMAdapter {
+  const binPath = opts.binPath ?? 'claude';
+  const model = opts.model ?? '';
+  const timeoutMs = opts.timeoutMs ?? 180_000;
+
+  return {
+    isAvailable() {
+      return true;
+    },
+    async invoke(input: CeoLLMInvokeInput): Promise<CeoLLMInvokeResult> {
+      const t0 = Date.now();
+      const promptText = (input.system ? `${input.system}\n\n---\n\n` : '') + input.prompt;
+      const args = ['-p', '--output-format', 'json', '--max-turns', '1'];
+      if (model) args.push('--model', model);
+
+      const proc = spawn(binPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (d) => { stdout += d.toString('utf8'); });
+      proc.stderr.on('data', (d) => { stderr += d.toString('utf8'); });
+
+      const killTimer = setTimeout(() => {
+        try { proc.kill('SIGKILL'); } catch { /* ignore */ }
+      }, timeoutMs);
+
+      proc.stdin.write(promptText);
+      proc.stdin.end();
+
+      const exitCode: number = await new Promise((resolve) => {
+        proc.on('close', (code) => resolve(code ?? -1));
+      });
+      clearTimeout(killTimer);
+
+      if (exitCode !== 0) {
+        throw new Error(`[claude-cli] exit=${exitCode}; stderr=${stderr.slice(0, 500)}`);
+      }
+
+      let outer: ClaudeCliOuterJson;
+      try {
+        outer = JSON.parse(stdout) as ClaudeCliOuterJson;
+      } catch (e) {
+        throw new Error(`[claude-cli] outer JSON parse failed: ${(e as Error).message}; stdout head=${stdout.slice(0, 200)}`);
+      }
+      if (outer.is_error) {
+        throw new Error(`[claude-cli] is_error=true; result=${(outer.result ?? '').slice(0, 300)}`);
+      }
+      const text = String(outer.result ?? '');
+      const tokensIn = outer.usage?.input_tokens ?? 0;
+      const tokensOut = outer.usage?.output_tokens ?? 0;
+      return {
+        text,
+        tokensIn,
+        tokensOut,
+        durationMs: Date.now() - t0,
+        model: 'claude-cli',
+      };
+    },
+  };
+}

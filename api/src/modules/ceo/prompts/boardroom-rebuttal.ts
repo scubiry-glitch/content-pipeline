@@ -31,7 +31,7 @@ export const boardroomRebuttalPrompt: PromptDef<OutT> = {
   label: 'Boardroom · 反方演练',
   prism: 'boardroom',
   outputSchema: Out,
-  maxTokens: 2500,
+  maxTokens: 4000,
   temperature: 0.7,
 
   systemPrompt: () =>

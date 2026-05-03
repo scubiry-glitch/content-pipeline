@@ -26,7 +26,7 @@ export const compassDriftAlertPrompt: PromptDef<OutT> = {
   label: 'Compass · 战略漂移告警',
   prism: 'compass',
   outputSchema: Out,
-  maxTokens: 1200,
+  maxTokens: 2500,
   temperature: 0.5,
 
   systemPrompt: () =>

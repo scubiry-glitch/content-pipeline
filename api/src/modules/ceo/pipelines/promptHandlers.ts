@@ -28,6 +28,21 @@ interface HandlerResult {
   error?: string;
 }
 
+/** 给所有 prompt 的 system 末尾追加的 JSON 输出硬规则
+ *
+ * 历史教训：claude-cli 输出的 JSON 字符串值里经常出现未转义的 ASCII " 或裸 `\n`，
+ * 比如 `"highlight":"美租 IRR 模型"风险敞口"虚高"` 直接打断 JSON.parse。
+ * 用中文 「」 / "" / 全角引号能完全避开此类问题。
+ */
+const JSON_ESCAPE_RULE = `
+[输出硬规则]
+- 仅输出一个 JSON 对象，不要前后任何说明文字、不要 markdown 代码围栏。
+- JSON 字符串值内部禁止出现裸 ASCII 双引号 (")。需要引用时用中文「」或""""。
+- 字符串值内部不出现真实换行符；用 \\n 转义或改成单行。
+- 仅引用我提供列表中的 ID/名字，不可编造任何 UUID/人名/会议名。
+- 仅输出 JSON, 输出完毕直接结束（不要 "以下是 JSON：" 前导文字）。
+`;
+
 /** 通用 LLM 调用 + 校验流水线 */
 async function invokeAndValidate<T>(
   deps: CeoEngineDeps,
@@ -41,7 +56,7 @@ async function invokeAndValidate<T>(
   let result: CeoLLMInvokeResult;
   try {
     result = await deps.llm.invoke({
-      system: def.systemPrompt(ctx),
+      system: def.systemPrompt(ctx) + JSON_ESCAPE_RULE,
       prompt: def.userPrompt(ctx),
       responseFormat: 'json',
       maxTokens: def.maxTokens ?? 1500,
@@ -58,7 +73,12 @@ async function invokeAndValidate<T>(
   try {
     parsed = JSON.parse(stripCodeFence(result.text));
   } catch (e) {
-    return { ok: false, error: `[LLM 输出非 JSON] ${(e as Error).message}; head=${result.text.slice(0, 120)}` };
+    // 兜底：尝试把字符串值内裸 ASCII " 自动改成 "（无侵入修复 LLM 漏转义）
+    try {
+      parsed = JSON.parse(autoFixUnescapedQuotes(stripCodeFence(result.text)));
+    } catch (e2) {
+      return { ok: false, error: `[LLM 输出非 JSON] ${(e as Error).message}; head=${result.text.slice(0, 200)}` };
+    }
   }
   let out: T;
   try {
@@ -73,9 +93,60 @@ async function invokeAndValidate<T>(
   return { ok: true, out, result };
 }
 
-/** 去掉 LLM 偶尔输出的 ```json ... ``` 代码围栏 */
+/**
+ * 兜底修复：把 JSON 字符串值内部裸 ASCII " 改成 "（U+201C）。
+ * 简单状态机扫描：跟踪当前是否在字符串里，遇到 " 时若它后面紧跟 , } ] : " 才算结尾，
+ * 否则视为字符串内的引号字符并替换为 "。仅修复一次，失败直接抛回原 JSON 错。
+ */
+function autoFixUnescapedQuotes(s: string): string {
+  const out: string[] = [];
+  let inStr = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (!inStr) {
+      out.push(ch);
+      if (ch === '"') inStr = true;
+      continue;
+    }
+    if (escape) { out.push(ch); escape = false; continue; }
+    if (ch === '\\') { out.push(ch); escape = true; continue; }
+    if (ch === '"') {
+      // 看下个非空白字符是否为 JSON 结构符
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      const next = s[j] ?? '';
+      if (next === ',' || next === '}' || next === ']' || next === ':' || next === '') {
+        out.push(ch);
+        inStr = false;
+      } else {
+        // 视为字符串内裸引号 → 改成中文引号
+        out.push('"');
+      }
+      continue;
+    }
+    out.push(ch);
+  }
+  return out.join('');
+}
+
+/** 去掉 LLM 偶尔输出的 ```json ... ``` 代码围栏（含前后空白与换行）+ 容错抓最长 JSON 子串 */
 function stripCodeFence(s: string): string {
-  return s.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  let t = s.trim();
+  // claude -p 经常输出: 前导文字 + ```json\n{...}\n``` + 后续文字
+  // 优先匹配围栏内内容
+  const fenced = t.match(/```(?:json)?\s*([\s\S]+?)```/i);
+  if (fenced && fenced[1]) {
+    t = fenced[1].trim();
+  } else {
+    t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  }
+  // 仍以非 { 开头时，截到第一个 { 之后最长的平衡 JSON
+  if (!t.startsWith('{') && !t.startsWith('[')) {
+    const i = t.indexOf('{');
+    if (i >= 0) t = t.slice(i);
+  }
+  return t.trim();
 }
 
 function inferProvider(model?: string): string {
@@ -144,8 +215,14 @@ export async function handleCompassDriftAlert(deps: CeoEngineDeps, run: PromptRu
   }
   const r = await invokeAndValidate(deps, def, ctx, run.id);
   if (!r.ok) return { ok: false, error: r.error };
+  const validLineIds = new Set(ctx.strategicLines.map((l) => l.id));
   const inserted: string[] = [];
+  const skipped: string[] = [];
   for (const a of r.out.alerts) {
+    if (!validLineIds.has(a.line_id)) {
+      skipped.push(`${a.line_name}(line_id 不存在: ${a.line_id})`);
+      continue;
+    }
     const sourceMeetingUuid = isUuid(a.source_meeting_id) ? a.source_meeting_id : null;
     const ins = await deps.db.query(
       `INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate, source_meeting_id, evidence_run_ids)
@@ -155,7 +232,10 @@ export async function handleCompassDriftAlert(deps: CeoEngineDeps, run: PromptRu
     );
     inserted.push(String(ins.rows[0]?.id));
   }
-  return { ok: true, result: { mode: 'llm', count: inserted.length, ids: inserted } };
+  if (inserted.length === 0 && skipped.length > 0) {
+    return { ok: false, error: `所有 alerts 的 line_id 都无效: ${skipped.join('; ')}` };
+  }
+  return { ok: true, result: { mode: 'llm', count: inserted.length, skipped: skipped.length } };
 }
 
 /** compass-echo → ceo_strategic_echos (batch) */

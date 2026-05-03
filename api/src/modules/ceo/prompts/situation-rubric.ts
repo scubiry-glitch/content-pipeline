@@ -25,7 +25,7 @@ export const situationRubricPrompt: PromptDef<OutT> = {
   label: 'Situation · Rubric 5 维评分',
   prism: 'situation',
   outputSchema: Out,
-  maxTokens: 1500,
+  maxTokens: 2500,
   temperature: 0.4,
 
   systemPrompt: () =>

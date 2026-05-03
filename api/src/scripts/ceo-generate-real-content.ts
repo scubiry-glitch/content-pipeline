@@ -61,12 +61,18 @@ async function main() {
   const scopeFilter = args.find((a) => a.startsWith('--scopes='))?.slice('--scopes='.length).split(',');
   const dryRun = args.includes('--dry-run');
   const skipExport = args.includes('--skip-export');
+  const useClaudeCli = args.includes('--mode=claude-cli');
+  // 当无 ALTER TABLE 权限时（DB 用户非表 owner），mn_runs 的 axis 列还是 VARCHAR(16)，
+  // 长 axis 名 INSERT 会失败 — --skip-runs-insert 跳过 mn_runs INSERT/UPDATE，仅写
+  // 业务表（ceo_strategic_lines 等）。
+  const skipRunsInsert = args.includes('--skip-runs-insert') || useClaudeCli;
 
   const { query, ensureDbPoolConnected } = await import('../db/connection.js');
   const { ensureCeoModuleSchema } = await import('../db/ensureCeoSchema.js');
   const { hasAvailableLLM, getAvailableLLMs, generateWithClaude, generateWithKimi, generateWithOpenAI } =
     await import('../services/llm.js');
-  const { createServiceLLMCeoAdapter } = await import('../modules/ceo/adapters/llm.js');
+  const { createServiceLLMCeoAdapter, createClaudeCliCeoLLMAdapterV2 } =
+    await import('../modules/ceo/adapters/llm.js');
   const { PROMPT_HANDLERS } = await import('../modules/ceo/pipelines/promptHandlers.js');
   const { handleCeoRun } = await import('../modules/ceo/pipelines/runHandlers.js');
   const { createCeoPipelineDeps } = await import('../modules/ceo/adapters/pipeline.js');
@@ -80,11 +86,18 @@ async function main() {
     console.log('[ceo-generate-real] DB_AUTO_MIGRATE=false — 跳过 schema ensure');
   }
 
-  if (!hasAvailableLLM()) {
-    console.error('[ceo-generate-real] 未配置 LLM API Key — 设置 CLAUDE_API_KEY / KIMI_API_KEY / OPENAI_API_KEY 任一');
+  if (!useClaudeCli && !hasAvailableLLM()) {
+    console.error('[ceo-generate-real] 未配置 LLM API Key — 设置 CLAUDE_API_KEY / KIMI_API_KEY / OPENAI_API_KEY 任一，\n  或加 --mode=claude-cli 复用本地 claude CLI');
     process.exit(2);
   }
-  console.log(`[ceo-generate-real] LLM available: ${JSON.stringify(getAvailableLLMs())}`);
+  if (useClaudeCli) {
+    console.log('[ceo-generate-real] mode=claude-cli (复用本地 claude CLI; 不读 API_KEY env)');
+  } else {
+    console.log(`[ceo-generate-real] LLM available: ${JSON.stringify(getAvailableLLMs())}`);
+  }
+  if (skipRunsInsert) {
+    console.log('[ceo-generate-real] --skip-runs-insert 已开 — 不写 mn_runs，仅写业务表 (ceo_*)');
+  }
 
   // 1. 选目标 scope
   const targetNames = scopeFilter && scopeFilter.length > 0 ? scopeFilter : TARGET_SCOPE_NAMES;
@@ -116,6 +129,11 @@ async function main() {
     process.exit(0);
   }
 
+  // 2a. --clean: 清掉本 scope 上次 generate-real 写的内容（保留 directors / stakeholders / brief 元数据）
+  if (args.includes('--clean')) {
+    for (const s of scopes) await cleanGeneratedContent(query, s);
+  }
+
   // 2. 前置检查 + 自动种子（directors / stakeholders / brief / reflections）
   for (const s of scopes) {
     if (s.meetingCount < 3) {
@@ -124,14 +142,16 @@ async function main() {
     await ensurePrerequisites(query, s);
   }
 
-  // 3. 构造 deps
-  const ceoLlm = createServiceLLMCeoAdapter({
-    hasAvailable: hasAvailableLLM,
-    available: getAvailableLLMs,
-    generateWithClaude,
-    generateWithKimi,
-    generateWithOpenAI,
-  });
+  // 3. 构造 deps — 选 LLM 适配器
+  const ceoLlm = useClaudeCli
+    ? createClaudeCliCeoLLMAdapterV2({})
+    : createServiceLLMCeoAdapter({
+        hasAvailable: hasAvailableLLM,
+        available: getAvailableLLMs,
+        generateWithClaude,
+        generateWithKimi,
+        generateWithOpenAI,
+      });
   const deps = createCeoPipelineDeps({
     dbQuery: (sql, params) => query(sql, params),
     llm: ceoLlm,
@@ -191,13 +211,19 @@ async function main() {
       return;
     }
     const t0 = Date.now();
-    const ins = await query(
-      `INSERT INTO mn_runs (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata)
-       VALUES ('ceo', 'project', $1, $2, 'running', 'manual', 'lite', '{}', $3::jsonb)
-       RETURNING id::text`,
-      [scope.id, axis, JSON.stringify(extraMeta ?? {})],
-    );
-    const runId = String(ins.rows[0].id);
+    let runId: string;
+    if (skipRunsInsert) {
+      // 不写 mn_runs，仍生成 UUID 让下游 SQL（INSERT ... generated_run_id）有 fk 值
+      runId = (await query(`SELECT gen_random_uuid()::text AS id`)).rows[0].id;
+    } else {
+      const ins = await query(
+        `INSERT INTO mn_runs (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata)
+         VALUES ('ceo', 'project', $1, $2, 'running', 'manual', 'lite', '{}', $3::jsonb)
+         RETURNING id::text`,
+        [scope.id, axis, JSON.stringify(extraMeta ?? {})],
+      );
+      runId = String(ins.rows[0].id);
+    }
     const run = {
       id: runId,
       axis,
@@ -216,16 +242,18 @@ async function main() {
       error = (e as Error).message;
     }
     const ms = Date.now() - t0;
-    if (ok) {
-      await query(
-        `UPDATE mn_runs SET state='succeeded', finished_at=NOW(), progress_pct=100 WHERE id=$1::uuid`,
-        [runId],
-      );
-    } else {
-      await query(
-        `UPDATE mn_runs SET state='failed', finished_at=NOW(), error_message=$2 WHERE id=$1::uuid`,
-        [runId, error ?? 'failed'],
-      );
+    if (!skipRunsInsert) {
+      if (ok) {
+        await query(
+          `UPDATE mn_runs SET state='succeeded', finished_at=NOW(), progress_pct=100 WHERE id=$1::uuid`,
+          [runId],
+        );
+      } else {
+        await query(
+          `UPDATE mn_runs SET state='failed', finished_at=NOW(), error_message=$2 WHERE id=$1::uuid`,
+          [runId, error ?? 'failed'],
+        );
+      }
     }
     const tag = `${scope.name}/${axis}${extraMeta?.expertId ? `/${extraMeta.expertId}` : ''}${extraMeta?.prismId ? `/${extraMeta.prismId}` : ''}`;
     console.log(`[${ok ? 'OK ' : 'ERR'}] ${tag} (${ms}ms)${error ? ` — ${error.slice(0, 200)}` : ''}`);
@@ -241,13 +269,18 @@ async function main() {
     handler: (deps: any, run: any) => Promise<{ ok: boolean; error?: string; result?: any }>,
   ) {
     const t0 = Date.now();
-    const ins = await query(
-      `INSERT INTO mn_runs (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata)
-       VALUES ('ceo', 'project', $1, $2, 'running', 'manual', 'lite', '{}', '{}'::jsonb)
-       RETURNING id::text`,
-      [scope.id, axis],
-    );
-    const runId = String(ins.rows[0].id);
+    let runId: string;
+    if (skipRunsInsert) {
+      runId = (await query(`SELECT gen_random_uuid()::text AS id`)).rows[0].id;
+    } else {
+      const ins = await query(
+        `INSERT INTO mn_runs (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata)
+         VALUES ('ceo', 'project', $1, $2, 'running', 'manual', 'lite', '{}', '{}'::jsonb)
+         RETURNING id::text`,
+        [scope.id, axis],
+      );
+      runId = String(ins.rows[0].id);
+    }
     const run = { id: runId, axis, scope_kind: 'project', scope_id: scope.id, metadata: null };
     let ok = false;
     let error: string | undefined;
@@ -260,12 +293,14 @@ async function main() {
       error = (e as Error).message;
     }
     const ms = Date.now() - t0;
-    await query(
-      ok
-        ? `UPDATE mn_runs SET state='succeeded', finished_at=NOW(), progress_pct=100 WHERE id=$1::uuid`
-        : `UPDATE mn_runs SET state='failed', finished_at=NOW(), error_message=$2 WHERE id=$1::uuid`,
-      ok ? [runId] : [runId, error ?? 'failed'],
-    );
+    if (!skipRunsInsert) {
+      await query(
+        ok
+          ? `UPDATE mn_runs SET state='succeeded', finished_at=NOW(), progress_pct=100 WHERE id=$1::uuid`
+          : `UPDATE mn_runs SET state='failed', finished_at=NOW(), error_message=$2 WHERE id=$1::uuid`,
+        ok ? [runId] : [runId, error ?? 'failed'],
+      );
+    }
     console.log(`[${ok ? 'OK ' : 'ERR'}] ${scope.name}/${axis} (${ms}ms)${error ? ` — ${error.slice(0, 200)}` : ''}`);
     results.push({ scope: scope.name, axis, ok, ms, error, runId });
   }
@@ -349,6 +384,26 @@ async function ensureBalconyReflectionRow(
      ON CONFLICT (user_id, week_start, prism_id) DO NOTHING`,
     [userId, weekStart, prismId, QUESTIONS[prismId]],
   );
+}
+
+async function cleanGeneratedContent(query: any, scope: ScopeRow): Promise<void> {
+  // 仅清"生成内容"类表，不动 directors / stakeholders / briefs / time_roi / formation_snapshots 等元数据
+  const targets = [
+    // echos 通过 line_id 引到 strategic_lines；drift-alert 也写这里
+    `DELETE FROM ceo_strategic_echos WHERE line_id IN (SELECT id FROM ceo_strategic_lines WHERE scope_id = $1::uuid)`,
+    `DELETE FROM ceo_strategic_lines WHERE scope_id = $1::uuid`,
+    `DELETE FROM ceo_director_concerns WHERE director_id IN (SELECT id FROM ceo_directors WHERE scope_id = $1::uuid)`,
+    `DELETE FROM ceo_rebuttal_rehearsals WHERE scope_id = $1::uuid`,
+    `DELETE FROM ceo_boardroom_annotations WHERE scope_id = $1::uuid`,
+    `DELETE FROM ceo_external_signals WHERE stakeholder_id IN (SELECT id FROM ceo_stakeholders WHERE scope_id = $1::uuid)`,
+    `DELETE FROM ceo_rubric_scores WHERE scope_id = $1::uuid`,
+    `DELETE FROM ceo_war_room_sparks WHERE scope_id = $1::uuid`,
+    // balcony-prompt 不删，仅 UPDATE prompt 列；但同 user/week/prism 唯一约束已经保证幂等
+  ];
+  for (const sql of targets) {
+    await query(sql, [scope.id]);
+  }
+  console.log(`[clean] ${scope.name}: 清掉旧生成内容`);
 }
 
 function nextSundayStart(): string {

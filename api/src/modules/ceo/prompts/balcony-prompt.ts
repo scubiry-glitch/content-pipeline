@@ -17,7 +17,7 @@ export const balconyPromptPrompt: PromptDef<OutT> = {
   label: 'Balcony · 反思 prompt',
   prism: 'balcony',
   outputSchema: Out,
-  maxTokens: 500,
+  maxTokens: 1200,
   temperature: 0.6,
 
   systemPrompt: () =>

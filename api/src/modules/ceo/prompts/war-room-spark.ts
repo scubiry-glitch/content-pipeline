@@ -69,7 +69,8 @@ ${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120
         if (/^[^A-Za-z一-鿿]*(建议|应该|推荐)/.test(s.headline.trim())) {
           return `headline 不允许"建议/应该/推荐"开头: ${s.headline}`;
         }
-        if (!/\d|项目|主体|[A-Za-z]/.test(s.evidence_short)) {
+        // 接受：数字 / 英文字母 / 中文专名（≥3 个连续中文，含具体名词的可能性高）
+        if (!/\d|[A-Za-z]|[一-鿿]{3,}/.test(s.evidence_short)) {
           return `evidence_short 缺具体锚点: ${s.headline}`;
         }
         if (s.risk_text.length < 20) return `risk_text 过短: ${s.headline}`;

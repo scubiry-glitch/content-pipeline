@@ -64,7 +64,8 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
     },
     (out) => {
       for (const s of out.signals) {
-        if (!/\d|"|"|"|'/.test(s.signal_text)) {
+        // 接受：数字、引号（中英文）、冒号"："（"X 说："等引语形态）
+        if (!/\d|["'"":：「」『』]/.test(s.signal_text)) {
           return `signal "${s.stakeholder_name}" 缺数据/引语锚点`;
         }
       }

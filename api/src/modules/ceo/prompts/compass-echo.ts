@@ -25,7 +25,7 @@ export const compassEchoPrompt: PromptDef<OutT> = {
   label: 'Compass · 战略回响',
   prism: 'compass',
   outputSchema: Out,
-  maxTokens: 1500,
+  maxTokens: 3000,
   temperature: 0.6,
 
   systemPrompt: () =>
