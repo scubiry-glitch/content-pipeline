@@ -385,6 +385,18 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
+
+  // 质量v2 Phase 5 · 高危假设派生：未验证 + 证据弱（C/D），按 confidence DESC 取 top 3。
+  // isMock=true（forceMock 或非 UUID scope 回退到 ASSUMPTIONS）时给 [], 保留下面 callout 的
+  // hardcoded fallback 文案，避免 demo 数据上跑 dynamic 让人看不懂"AS-04 / AS-02"那段叙事。
+  const highRisk = isMock
+    ? []
+    : rows
+        .filter((r) => typeof r.verificationState === 'string' && r.verificationState.startsWith('未验证'))
+        .filter((r) => r.evidenceGrade === 'C' || r.evidenceGrade === 'D')
+        .sort((a, b) => Number(b.confidence ?? 0) - Number(a.confidence ?? 0))
+        .slice(0, 3);
+
   if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   return (
@@ -460,8 +472,29 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
 
       <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
         <CalloutCard title="高危假设 · 未验证" tone="accent">
-          <b>AS-04</b> (LP 反弹) 和 <b>AS-02</b> (配额) 两条同时未验证，且共同支撑 D-06/D-07。
-          建议立刻为 AS-04 排期 LP 预沟通。
+          {isMock ? (
+            <>
+              <b>AS-04</b> (LP 反弹) 和 <b>AS-02</b> (配额) 两条同时未验证，且共同支撑 D-06/D-07。
+              建议立刻为 AS-04 排期 LP 预沟通。
+            </>
+          ) : highRisk.length === 0 ? (
+            <>当前 scope 下没有 C / D 级证据的未验证假设。</>
+          ) : highRisk.length === 1 ? (
+            <>
+              <b>{highRisk[0].id}</b> (
+              {highRisk[0].text.length > 16 ? highRisk[0].text.slice(0, 16) + '…' : highRisk[0].text}
+              ) 未验证，证据级 {highRisk[0].evidenceGrade}；建议尽快指派 verifier。
+            </>
+          ) : (
+            <>
+              <b>{highRisk[0].id}</b> (
+              {highRisk[0].text.length > 16 ? highRisk[0].text.slice(0, 16) + '…' : highRisk[0].text}
+              ) 和 <b>{highRisk[1].id}</b> (
+              {highRisk[1].text.length > 16 ? highRisk[1].text.slice(0, 16) + '…' : highRisk[1].text}
+              ) 同时未验证{highRisk.length > 2 ? `（共 ${highRisk.length} 条）` : ''}。
+              建议优先排期 {highRisk[0].id} 验证。
+            </>
+          )}
         </CalloutCard>
         <CalloutCard title="证据分布">
           A 级 1 · B 级 2 · C 级 2 · D 级 1。
