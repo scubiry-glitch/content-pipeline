@@ -2402,6 +2402,27 @@ export class RunEngine {
             } catch (e) {
               console.warn('[runEngine] multi-meeting snapshot block failed:', (e as Error).message);
             }
+
+            // 质量v2 Phase 8 · longitudinal 自动联动：内联调用 recomputeAll，不再仅依赖
+            // mn.run.completed 事件总线（实测 scope=project/topic run 完成后
+            // mn_decision_tree_snapshots / mn_belief_drift_series /
+            // mn_mental_model_hit_stats 一直 0 行 —— 事件路径在 worker 内未稳定派发）。
+            // 6m mental_model 命中率（mn_model_hitrates）由 axis 子维度直写，与本块独立。
+            if (payload.scope.kind !== 'meeting' && payload.scope.id) {
+              await writeStep('render', 0.99, '更新 longitudinal（决策树 / 信念漂移 / 命中统计）…');
+              try {
+                const { LongitudinalService } = await import('../longitudinal/index.js');
+                const ls = new LongitudinalService(this.deps);
+                const out = await ls.recomputeAll(payload.scope.id, payload.runId);
+                const beliefRows = (out as any)?.beliefDrift?.rows ?? '?';
+                const decRows = (out as any)?.decisionTree?.rows ?? '?';
+                const hitRows = (out as any)?.modelHitRate?.rows ?? '?';
+                console.log(`[runEngine] multi-meeting longitudinal · scope=${payload.scope.id.slice(0,8)} · ` +
+                  `belief=${beliefRows}, decTree=${decRows}, hitStats=${hitRows}`);
+              } catch (e) {
+                console.warn('[runEngine] multi-meeting longitudinal failed:', (e as Error).message);
+              }
+            }
           }
         }
       });
