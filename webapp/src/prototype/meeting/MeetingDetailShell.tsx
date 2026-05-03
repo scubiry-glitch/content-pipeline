@@ -8,6 +8,7 @@ import { Icon, MonoMeta, Chip } from './_atoms';
 import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MockToggleProvider, MockToggleBar, useForceMock } from './_mockToggle';
+import { useIsMobile } from '../_useIsMobile';
 import './_tokens.css';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
@@ -58,6 +59,7 @@ export function MeetingDetailShell() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
 
   const m = id && id !== MEETING.id ? { ...MEETING, id } : MEETING;
 
@@ -166,6 +168,33 @@ export function MeetingDetailShell() {
     { to: 'c', label: 'C · Threads',   sub: '人物编织' },
   ];
 
+  const viewTabsRow = (
+    <div style={{
+      display: 'flex', gap: 2, border: '1px solid var(--line)',
+      borderRadius: 6, padding: 3, background: 'var(--paper-2)',
+      ...(isMobile ? { width: '100%' } : {}),
+    }}>
+      {views.map((v) => (
+        <NavLink
+          key={v.to}
+          to={v.to}
+          title={v.sub}
+          style={({ isActive }) => ({
+            padding: isMobile ? '7px 0' : '5px 12px',
+            borderRadius: 4, fontSize: 12.5,
+            fontFamily: 'var(--sans)', textDecoration: 'none',
+            fontWeight: isActive ? 600 : 450,
+            background: isActive ? 'var(--ink)' : 'transparent',
+            color: isActive ? 'var(--paper)' : 'var(--ink-2)',
+            ...(isMobile ? { flex: 1, textAlign: 'center' } : {}),
+          })}
+        >
+          {isMobile ? v.to.toUpperCase() : v.label}
+        </NavLink>
+      ))}
+    </div>
+  );
+
   return (
     <MockToggleProvider>
     <div
@@ -177,185 +206,180 @@ export function MeetingDetailShell() {
         position: 'sticky', top: 0, zIndex: 10,
         background: 'var(--paper)',
         borderBottom: '1px solid var(--line-2)',
-        padding: '12px 28px',
-        display: 'flex', alignItems: 'center', gap: 16,
+        padding: isMobile ? '10px 14px' : '12px 28px',
+        display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 0,
       }}>
-        <button
-          onClick={() => navigate('/meeting/library')}
-          style={{
-            background: 'transparent', border: 0, cursor: 'pointer',
-            color: 'var(--ink-3)', fontFamily: 'var(--sans)', fontSize: 12.5,
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}
-        >
-          <Icon name="chevron" size={14} style={{ transform: 'rotate(180deg)' }} />
-          返回库
-        </button>
+        {/* Row 1: 返回 + title + date + (desktop: badges/share/tabs) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
+          <button
+            onClick={() => navigate('/meeting/library')}
+            style={{
+              background: 'transparent', border: 0, cursor: 'pointer',
+              color: 'var(--ink-3)', fontFamily: 'var(--sans)', fontSize: 12.5,
+              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+            }}
+          >
+            <Icon name="chevron" size={14} style={{ transform: 'rotate(180deg)' }} />
+            {!isMobile && '返回库'}
+          </button>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-          {editingTitle ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: 640 }}>
-              <input
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void saveTitle();
-                  if (e.key === 'Escape') cancelEditTitle();
-                }}
-                style={{
-                  width: 420,
-                  maxWidth: '48vw',
-                  padding: '5px 8px',
-                  borderRadius: 6,
-                  border: '1px solid var(--line)',
-                  background: 'var(--paper)',
-                  color: 'var(--ink)',
-                  fontFamily: 'var(--serif)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                }}
-              />
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, flex: 1 }}>
+            {editingTitle ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                <input
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void saveTitle();
+                    if (e.key === 'Escape') cancelEditTitle();
+                  }}
+                  style={{
+                    flex: 1,
+                    maxWidth: isMobile ? '100%' : '48vw',
+                    padding: '5px 8px',
+                    borderRadius: 6,
+                    border: '1px solid var(--line)',
+                    background: 'var(--paper)',
+                    color: 'var(--ink)',
+                    fontFamily: 'var(--serif)',
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                />
+                <button
+                  onClick={() => { void saveTitle(); }}
+                  disabled={savingTitle || !titleDraft.trim()}
+                  style={{
+                    border: '1px solid var(--line)',
+                    borderRadius: 6,
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    padding: '5px 9px',
+                    cursor: savingTitle ? 'not-allowed' : 'pointer',
+                    fontSize: 12,
+                    opacity: savingTitle ? 0.7 : 1,
+                  }}
+                >
+                  {savingTitle ? '…' : '保存'}
+                </button>
+                <button
+                  onClick={cancelEditTitle}
+                  disabled={savingTitle}
+                  style={{
+                    border: 0,
+                    background: 'transparent',
+                    color: 'var(--ink-3)',
+                    padding: '4px 6px',
+                    cursor: savingTitle ? 'not-allowed' : 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={() => { void saveTitle(); }}
-                disabled={savingTitle || !titleDraft.trim()}
-                style={{
-                  border: '1px solid var(--line)',
-                  borderRadius: 6,
-                  background: 'var(--paper-2)',
-                  color: 'var(--ink)',
-                  padding: '5px 9px',
-                  cursor: savingTitle ? 'not-allowed' : 'pointer',
-                  fontSize: 12,
-                  opacity: savingTitle ? 0.7 : 1,
-                }}
-              >
-                {savingTitle ? '保存中…' : '保存'}
-              </button>
-              <button
-                onClick={cancelEditTitle}
-                disabled={savingTitle}
+                onClick={startEditTitle}
                 style={{
                   border: 0,
                   background: 'transparent',
-                  color: 'var(--ink-3)',
-                  padding: '4px 6px',
-                  cursor: savingTitle ? 'not-allowed' : 'pointer',
-                  fontSize: 12,
+                  padding: 0,
+                  margin: 0,
+                  cursor: UUID_RE.test(id) ? 'text' : 'default',
+                  minWidth: 0,
+                  textAlign: 'left',
                 }}
+                disabled={!UUID_RE.test(id)}
+                title={UUID_RE.test(id) ? '点击编辑会议名称' : undefined}
               >
-                取消
+                <div style={{
+                  fontFamily: 'var(--serif)', fontWeight: 600,
+                  fontSize: isMobile ? 14 : 15,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  maxWidth: isMobile ? '52vw' : 520,
+                }}>
+                  {effectiveTitle}
+                </div>
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={startEditTitle}
-              style={{
-                border: 0,
-                background: 'transparent',
-                padding: 0,
-                margin: 0,
-                cursor: UUID_RE.test(id) ? 'text' : 'default',
-                maxWidth: 520,
-                textAlign: 'left',
-              }}
-              disabled={!UUID_RE.test(id)}
-              title={UUID_RE.test(id) ? '点击编辑会议名称' : undefined}
-            >
-              <div style={{
-                fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 15,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {effectiveTitle}
-              </div>
-            </button>
-          )}
-          <MonoMeta>
-            {apiDate ?? m.date}
-            {/* duration 字段后端尚未返回，避免在 API 模式下泄漏 fixture “118 分钟”。 */}
-            {!apiResponded && ` · ${m.duration}`}
-          </MonoMeta>
-        </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {runSource?.mode === 'multi-axis' && (
-            <span
-              title={`Multi-axis run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px', borderRadius: 4,
-                background: 'oklch(0.93 0.04 160)',
-                color: 'oklch(0.31 0.10 160)',
-                border: '1px solid oklch(0.80 0.08 160)',
-                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
-                letterSpacing: 0.2,
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.52 0.16 160)' }} />
-              Multi-axis
-            </span>
-          )}
-          {runSource?.mode === 'api-oneshot' && (
-            <span
-              title={`API Oneshot run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px', borderRadius: 4,
-                background: 'oklch(0.93 0.04 210)',
-                color: 'oklch(0.30 0.11 210)',
-                border: '1px solid oklch(0.80 0.08 210)',
-                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
-                letterSpacing: 0.2,
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.50 0.16 210)' }} />
-              API Oneshot
-            </span>
-          )}
-          {claudeSession?.sessionId && (
-            <span
-              title={`Claude CLI session ${claudeSession.sessionId}${claudeSession.runCount ? ` · ${claudeSession.runCount} runs` : ''}${claudeSession.lastResumedAt ? ` · last ${claudeSession.lastResumedAt}` : ''}`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px', borderRadius: 4,
-                background: 'oklch(0.93 0.04 285)',
-                color: 'oklch(0.32 0.12 285)',
-                border: '1px solid oklch(0.78 0.08 285)',
-                fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
-                letterSpacing: 0.2,
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.55 0.18 285)' }} />
-              Claude CLI
-              <span style={{ opacity: 0.6, fontWeight: 500 }}>· {claudeSession.sessionId.slice(0, 8)}…</span>
-            </span>
-          )}
-          <Chip tone="ghost">{m.id}</Chip>
-
-          <ShareButton meetingId={id} disabled={!UUID_RE.test(id)} />
-
-          <div style={{
-            display: 'flex', gap: 2, border: '1px solid var(--line)',
-            borderRadius: 6, padding: 3, background: 'var(--paper-2)',
-          }}>
-            {views.map((v) => (
-              <NavLink
-                key={v.to}
-                to={v.to}
-                title={v.sub}
-                style={({ isActive }) => ({
-                  padding: '5px 12px', borderRadius: 4, fontSize: 12.5,
-                  fontFamily: 'var(--sans)', textDecoration: 'none',
-                  fontWeight: isActive ? 600 : 450,
-                  background: isActive ? 'var(--ink)' : 'transparent',
-                  color: isActive ? 'var(--paper)' : 'var(--ink-2)',
-                })}
-              >
-                {v.label}
-              </NavLink>
-            ))}
+            )}
+            <MonoMeta style={{ flexShrink: 0 }}>
+              {apiDate ?? m.date}
+              {!apiResponded && !isMobile && ` · ${m.duration}`}
+            </MonoMeta>
           </div>
+
+          {/* Desktop-only: run badges + ID chip + share + view tabs */}
+          {!isMobile && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              {runSource?.mode === 'multi-axis' && (
+                <span
+                  title={`Multi-axis run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '3px 8px', borderRadius: 4,
+                    background: 'oklch(0.93 0.04 160)',
+                    color: 'oklch(0.31 0.10 160)',
+                    border: '1px solid oklch(0.80 0.08 160)',
+                    fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.52 0.16 160)' }} />
+                  Multi-axis
+                </span>
+              )}
+              {runSource?.mode === 'api-oneshot' && (
+                <span
+                  title={`API Oneshot run · ${runSource.runId?.slice(0, 8) ?? '-'} · ${runSource.state ?? 'unknown'}\n模型: ${runSource.modelName ?? 'unknown'}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '3px 8px', borderRadius: 4,
+                    background: 'oklch(0.93 0.04 210)',
+                    color: 'oklch(0.30 0.11 210)',
+                    border: '1px solid oklch(0.80 0.08 210)',
+                    fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.50 0.16 210)' }} />
+                  API Oneshot
+                </span>
+              )}
+              {claudeSession?.sessionId && (
+                <span
+                  title={`Claude CLI session ${claudeSession.sessionId}${claudeSession.runCount ? ` · ${claudeSession.runCount} runs` : ''}${claudeSession.lastResumedAt ? ` · last ${claudeSession.lastResumedAt}` : ''}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '3px 8px', borderRadius: 4,
+                    background: 'oklch(0.93 0.04 285)',
+                    color: 'oklch(0.32 0.12 285)',
+                    border: '1px solid oklch(0.78 0.08 285)',
+                    fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 600,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: 'oklch(0.55 0.18 285)' }} />
+                  Claude CLI
+                  <span style={{ opacity: 0.6, fontWeight: 500 }}>· {claudeSession.sessionId.slice(0, 8)}…</span>
+                </span>
+              )}
+              <Chip tone="ghost">{m.id}</Chip>
+              <ShareButton meetingId={id} disabled={!UUID_RE.test(id)} />
+              {viewTabsRow}
+            </div>
+          )}
+
+          {/* Mobile: share button only */}
+          {isMobile && (
+            <div style={{ flexShrink: 0 }}>
+              <ShareButton meetingId={id} disabled={!UUID_RE.test(id)} />
+            </div>
+          )}
         </div>
+
+        {/* Row 2 (mobile only): A/B/C tab switcher */}
+        {isMobile && viewTabsRow}
       </header>
 
       {/* R3-A · 改动一：4 徽章 status bar — 决策质量 / 必要性 / 情绪峰 / 张力峰 */}
@@ -378,6 +402,7 @@ export function MeetingDetailShell() {
 // R3-A · 改动一：单场会议 health 4 徽章
 // 决策质量 / 必要性 / 情绪峰 / 张力峰；点击徽章 → 当前视图内对应 anchor 的平滑滚动
 function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
+  const isMobile = useIsMobile();
   // 数据完全空也保留一行轻量占位，让用户知道有这个区域（避免页面突然多/少一条）
   const verdictText = (v?: 'async_ok' | 'partial' | 'needed') =>
     v === 'async_ok' ? '本可异步' : v === 'partial' ? '部分必要' : v === 'needed' ? '确有必要' : '—';
@@ -402,12 +427,12 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '8px 28px', background: 'var(--paper-2)',
+      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+      padding: isMobile ? '6px 14px' : '8px 28px', background: 'var(--paper-2)',
       borderBottom: '1px solid var(--line-2)',
       fontFamily: 'var(--mono)', fontSize: 11,
     }}>
-      <span style={{ color: 'var(--ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 8 }}>
+      <span style={{ color: 'var(--ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 4 }}>
         体征
       </span>
       <button
@@ -469,9 +494,11 @@ function MeetingHealthBadges({ health }: { health: MeetingHealth | null }) {
         张力峰 {tensionPeak > 0 ? tensionPeak.toFixed(2) : '—'}
         {tensionCount > 0 && <span style={{ opacity: 0.6, fontWeight: 500 }}>· {tensionCount}</span>}
       </button>
-      <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 10 }}>
-        来源 · GET /meetings/:id/health
-      </span>
+      {!isMobile && (
+        <span style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 10 }}>
+          来源 · GET /meetings/:id/health
+        </span>
+      )}
     </div>
   );
 }

@@ -6,7 +6,8 @@ import { GenerationParams, GenerationResult } from '../types/index.js';
 
 // 流式模式下，每次收到新数据块后重置的静默超时（ms）。
 // 只要模型在持续输出，计时器就会不断重置，不受总生成时长限制。
-const STREAM_IDLE_TIMEOUT_MS = 120_000;
+// 通过 LLM_FETCH_TIMEOUT_MS 覆盖（长文档生成建议 300000+）。
+const STREAM_IDLE_TIMEOUT_MS = parseInt(process.env.LLM_FETCH_TIMEOUT_MS ?? '', 10) || 300_000;
 
 /**
  * 用流式 SSE 读取 SiliconFlow chat/completions，并将全部 content delta 拼成字符串返回。

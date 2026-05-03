@@ -6,7 +6,7 @@
     "0. 显式 metadata.workerHint='local-mac'|'prod-tencent'|... → 直接用之 (代码内置短路)",
     "1. 纯规则计算 (g5 panorama-aggregate) → worker_id=null (target_worker=NULL，任意 worker 可拿)",
     "2. claude-cli 任务 (model_pattern='claude-cli*') → prod-TencentOpenClaw (Claude CLI 在 43.156.49.59)",
-    "3. API 模式任务 (model_pattern='api-oneshot*') → huoshanpro (LLM HTTP API); ceo → null (本地跑)",
+    "3. API 模式任务 (model_pattern='api-oneshot*') → null (本机/任意 worker 跑 LLM HTTP API); ceo → null (本地跑)",
     "4. expert-library → null (本地跑，不限定 worker)",
     "5. 兜底 → null (不限定 worker，任意 self-hosted-node 均可消费)"
   ],
@@ -34,9 +34,9 @@
     {
       "module": "mn",
       "model_pattern": "api-oneshot*",
-      "worker_id": "prod-TencentOpenClaw",
+      "worker_id": null,
       "priority": 20,
-      "notes": "会议轴 API 一次性任务 (走 HTTP 不走 CLI)；huoshanpro 停服改由 prod-TencentOpenClaw 承接"
+      "notes": "会议轴 API 一次性任务 (走 HTTP 不走 CLI)；本机 local-mac 跑，不限定 worker"
     },
     {
       "module": "ceo",

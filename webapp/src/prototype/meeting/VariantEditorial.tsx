@@ -11,6 +11,7 @@ import { useForceMock } from './_mockToggle';
 import { adaptApiAnalysis } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { ParticipantMergeModal } from './ParticipantMergeModal';
+import { useIsMobile } from '../_useIsMobile';
 
 type PFn = (id: string) => Participant;
 
@@ -23,7 +24,8 @@ function sectionHeader(num: string, title: string, sub: string) {
         textTransform: 'uppercase',
       }}>§ {num}</div>
       <h2 style={{
-        fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 30, letterSpacing: '-0.01em',
+        fontFamily: 'var(--serif)', fontWeight: 500,
+        fontSize: 'clamp(20px, 4vw, 30px)', letterSpacing: '-0.01em',
         margin: '6px 0 10px',
       }}>{title}</h2>
       <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: 620 }}>{sub}</p>
@@ -463,6 +465,7 @@ interface ApiMeetingMeta {
 export function VariantEditorial() {
   const { id } = useParams<{ id: string }>();
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [dim, setDim] = useState('minutes');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
@@ -559,128 +562,162 @@ export function VariantEditorial() {
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper)',
-      color: 'var(--ink)', overflow: 'hidden', display: 'flex',
+      color: 'var(--ink)', overflow: 'hidden',
+      display: 'flex', flexDirection: isMobile ? 'column' : 'row',
       fontFamily: 'var(--sans)',
     }}>
-      {/* ── Left rail ── */}
+      {/* ── Left rail (desktop) / Top metadata strip (mobile) ── */}
       <aside style={{
-        width: 260, flexShrink: 0, padding: '32px 24px 24px 32px',
-        borderRight: '1px solid var(--line-2)',
-        display: 'flex', flexDirection: 'column', gap: 28, overflowY: 'auto',
+        width: isMobile ? '100%' : 260,
+        flexShrink: 0,
+        padding: isMobile ? '14px 16px 10px' : '32px 24px 24px 32px',
+        borderRight: isMobile ? 'none' : '1px solid var(--line-2)',
+        borderBottom: isMobile ? '1px solid var(--line-2)' : 'none',
+        display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 28,
+        overflowY: isMobile ? 'visible' : 'auto',
       }}>
-        <div>
-          <SectionLabel>Meeting · 会议</SectionLabel>
-          <div style={{
-            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
-            marginTop: 10, letterSpacing: 0.3,
-          }}>{id ?? MEETING.id}</div>
-          <div style={{
-            fontFamily: 'var(--serif)', fontSize: 20, lineHeight: 1.25, fontWeight: 500,
-            color: 'var(--ink)', marginTop: 8, letterSpacing: '-0.005em',
-          }}>
-            {displayTitle}
+        {/* Mobile: horizontal section nav pills */}
+        {isMobile ? (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <nav style={{ display: 'flex', gap: 4, paddingBottom: 2, width: 'max-content' }}>
+              {navItems.map((n) => {
+                const active = n.id === dim;
+                return (
+                  <button key={n.id} onClick={() => setDim(n.id)} style={{
+                    padding: '5px 10px', borderRadius: 99, border: 0, cursor: 'pointer',
+                    background: active ? 'var(--ink)' : 'var(--paper-2)',
+                    color: active ? 'var(--paper)' : 'var(--ink-2)',
+                    fontFamily: 'var(--sans)', fontSize: 12, fontWeight: active ? 600 : 450,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {n.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 12, lineHeight: 1.7 }}>
-            {apiMeta?.date
-              ? apiMeta.date.slice(0, 10)
-              : `${MEETING.date} · ${MEETING.duration}`}
-            {!apiMeta?.date && <><br />{MEETING.room}</>}
-          </div>
-          {usingMock && <MockBadge style={{ marginTop: 8 }} />}
-        </div>
+        ) : (
+          <>
+            <div>
+              <SectionLabel>Meeting · 会议</SectionLabel>
+              <div style={{
+                fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
+                marginTop: 10, letterSpacing: 0.3,
+              }}>{id ?? MEETING.id}</div>
+              <div style={{
+                fontFamily: 'var(--serif)', fontSize: 20, lineHeight: 1.25, fontWeight: 500,
+                color: 'var(--ink)', marginTop: 8, letterSpacing: '-0.005em',
+              }}>
+                {displayTitle}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 12, lineHeight: 1.7 }}>
+                {apiMeta?.date
+                  ? apiMeta.date.slice(0, 10)
+                  : `${MEETING.date} · ${MEETING.duration}`}
+                {!apiMeta?.date && <><br />{MEETING.room}</>}
+              </div>
+              {usingMock && <MockBadge style={{ marginTop: 8 }} />}
+            </div>
 
-        <div>
-          <SectionLabel>Contents</SectionLabel>
-          <nav style={{ marginTop: 12, display: 'flex', flexDirection: 'column' }}>
-            {navItems.map((n) => {
-              const active = n.id === dim;
-              return (
-                <button key={n.id} onClick={() => setDim(n.id)} style={{
-                  textAlign: 'left', padding: '9px 10px', border: 0, background: 'transparent',
-                  cursor: 'pointer', borderRadius: 6, marginLeft: -10,
-                  display: 'flex', alignItems: 'baseline', gap: 10,
-                  color: active ? 'var(--ink)' : 'var(--ink-2)',
-                  fontWeight: active ? 600 : 400,
-                  fontFamily: 'var(--serif)', fontSize: 14,
-                  borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
-                }}>
-                  <span style={{
-                    fontFamily: 'var(--mono)', fontSize: 10, color: active ? 'var(--accent)' : 'var(--ink-4)',
-                    width: 18,
-                  }}>{n.num}</span>
-                  {n.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+            <div>
+              <SectionLabel>Contents</SectionLabel>
+              <nav style={{ marginTop: 12, display: 'flex', flexDirection: 'column' }}>
+                {navItems.map((n) => {
+                  const active = n.id === dim;
+                  return (
+                    <button key={n.id} onClick={() => setDim(n.id)} style={{
+                      textAlign: 'left', padding: '9px 10px', border: 0, background: 'transparent',
+                      cursor: 'pointer', borderRadius: 6, marginLeft: -10,
+                      display: 'flex', alignItems: 'baseline', gap: 10,
+                      color: active ? 'var(--ink)' : 'var(--ink-2)',
+                      fontWeight: active ? 600 : 400,
+                      fontFamily: 'var(--serif)', fontSize: 14,
+                      borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
+                    }}>
+                      <span style={{
+                        fontFamily: 'var(--mono)', fontSize: 10, color: active ? 'var(--accent)' : 'var(--ink-4)',
+                        width: 18,
+                      }}>{n.num}</span>
+                      {n.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
 
-        <div>
-          <SectionLabel>Participants · 在场</SectionLabel>
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {(apiMeta && apiMeta.participants.length > 0
-              ? apiMeta.participants
-              : EXPERTS.filter((e) => e.selected).map((e) => ({ name: e.name, role: e.field, id: undefined as string | undefined }))
-            ).map((p, i) => {
-              const pid = (p as { id?: string }).id;
-              return (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 6, background: 'var(--paper-3)',
-                    color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>{p.name.slice(0, 2)}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
-                    {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
-                  </div>
-                  {pid && id && (
-                    <button
-                      onClick={() => setMergeFor({ id: pid, name: p.name })}
-                      title="合并到项目人物"
-                      style={{
-                        flexShrink: 0, marginTop: 1,
-                        padding: '2px 6px', border: '1px solid var(--line-2)',
-                        background: 'transparent', borderRadius: 3, cursor: 'pointer',
-                        fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.3,
-                        color: 'var(--ink-3)', textTransform: 'uppercase',
-                      }}
-                    >合并→</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+            <div>
+              <SectionLabel>Participants · 在场</SectionLabel>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(apiMeta && apiMeta.participants.length > 0
+                  ? apiMeta.participants
+                  : EXPERTS.filter((e) => e.selected).map((e) => ({ name: e.name, role: e.field, id: undefined as string | undefined }))
+                ).map((p, i) => {
+                  const pid = (p as { id?: string }).id;
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 6, background: 'var(--paper-3)',
+                        color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>{p.name.slice(0, 2)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
+                        {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
+                      </div>
+                      {pid && id && (
+                        <button
+                          onClick={() => setMergeFor({ id: pid, name: p.name })}
+                          title="合并到项目人物"
+                          style={{
+                            flexShrink: 0, marginTop: 1,
+                            padding: '2px 6px', border: '1px solid var(--line-2)',
+                            background: 'transparent', borderRadius: 3, cursor: 'pointer',
+                            fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.3,
+                            color: 'var(--ink-3)', textTransform: 'uppercase',
+                          }}
+                        >合并→</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* ── Article body ── */}
-      <main style={{ flex: 1, overflowY: 'auto', padding: '48px 56px 80px', position: 'relative' }}>
+      <main style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px 48px' : '48px 56px 80px', position: 'relative' }}>
         {/* Header */}
         <div style={{ maxWidth: 720 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10, color: 'var(--ink-3)',
-            fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0.5,
-          }}>
-            <Dot color="var(--accent)" />
-            会议纪要 · 深度解析版
-            <span style={{ color: 'var(--ink-4)' }}>|</span>
-            由 3 位专家并行分析 · preset: standard
-          </div>
+          {!isMobile && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, color: 'var(--ink-3)',
+              fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0.5,
+            }}>
+              <Dot color="var(--accent)" />
+              会议纪要 · 深度解析版
+              <span style={{ color: 'var(--ink-4)' }}>|</span>
+              由 3 位专家并行分析 · preset: standard
+            </div>
+          )}
           <h1 style={{
-            fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 44, lineHeight: 1.12,
-            letterSpacing: '-0.02em', margin: '14px 0 8px',
+            fontFamily: 'var(--serif)', fontWeight: 500,
+            fontSize: isMobile ? 22 : 44,
+            lineHeight: isMobile ? 1.3 : 1.12,
+            letterSpacing: '-0.02em',
+            margin: isMobile ? '0 0 6px' : '14px 0 8px',
           }}>
             {displayTitle}
           </h1>
-          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>
             {apiMeta
               ? `参与者 ${apiMeta.participants.length} 人 · 深度解析`
-              : `参与者 6 人 · 发言 237 段 · 处理 ${MEETING.tokens} tokens · 生成用时 98 秒`}
+              : `参与者 6 人 · 发言 237 段`}
           </div>
         </div>
 
-        <div style={{ height: 1, background: 'var(--line-2)', margin: '36px 0 44px', maxWidth: 860 }} />
+        <div style={{ height: 1, background: 'var(--line-2)', margin: isMobile ? '16px 0 24px' : '36px 0 44px', maxWidth: 860 }} />
 
         {/* Dimension content */}
         {dim === 'minutes'       && <SecMinutes       a={a} P={P} />}

@@ -938,37 +938,98 @@ function FormationTab({ scopeId }: { scopeId: string }) {
   );
 }
 
-/** 盲区档案：cognitive_biases + 自认矛盾。需要选定 person_id；scope 模式下显示选人引导 */
+/** 盲区档案：cognitive_biases + 自认矛盾。scope 下先选人，再拉数据 */
 function BlindSpotsTab({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const personId = searchParams.get('personId') || '';
+
+  // 人员列表（无 personId 时加载）
+  const [people, setPeople] = useState<Array<{ id: string; canonical_name: string; role: string | null; org: string | null }>>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  useEffect(() => {
+    if (personId || !scopeId) return;
+    let cancelled = false;
+    setPeopleLoading(true);
+    meetingNotesApi.listScopePeople(scopeId)
+      .then((r) => { if (!cancelled) { setPeople(r?.items ?? []); setPeopleLoading(false); } })
+      .catch(() => { if (!cancelled) setPeopleLoading(false); });
+    return () => { cancelled = true; };
+  }, [scopeId, personId]);
+
+  // 当前人物姓名（用于 header 面包屑）
+  const selectedName = people.find((p) => p.id === personId)?.canonical_name ?? '';
+
   const [data, setData] = useState<{ biases: any[]; selfContradictions: any[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     if (!personId) return;
     let cancelled = false;
-    setLoading(true); setErr(null);
+    setLoading(true); setErr(null); setData(null);
     meetingNotesApi.getPersonBlindSpots(personId)
       .then((r) => { if (!cancelled) { setData(r); setLoading(false); } })
       .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
     return () => { cancelled = true; };
   }, [personId]);
+
+  function selectPerson(id: string) {
+    setSearchParams((prev) => { prev.set('personId', id); return prev; }, { replace: true });
+  }
+  function clearPerson() {
+    setSearchParams((prev) => { prev.delete('personId'); return prev; }, { replace: true });
+  }
+
   return (
     <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>盲区档案</h2>
-        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
-          认知偏差 (mn_cognitive_biases) + 自认矛盾派生 (mn_belief_drift_series)
-        </span>
+        {personId && selectedName && (
+          <button
+            onClick={clearPerson}
+            style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--ink-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            ← {selectedName}
+          </button>
+        )}
+        {!personId && (
+          <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+            认知偏差 + 自认矛盾派生
+          </span>
+        )}
       </div>
+
+      {/* 人员选择器：没有 personId 时显示 */}
       {!personId && (
-        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '20px 24px', fontSize: 12, color: 'var(--ink-3)' }}>
-          点选某个人物 → URL 加 <code>?personId=&lt;uuid&gt;</code> 查看其盲区档案。
-          后续可加人员选择器 UI（v1 暂用 URL 参数）。
-        </div>
+        peopleLoading ? (
+          <div style={{ color: 'var(--ink-3)', fontSize: 12 }}>加载人员列表…</div>
+        ) : people.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>该 scope 下暂无人物记录</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            {people.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => selectPerson(p.id)}
+                style={{
+                  textAlign: 'left', background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+                  borderRadius: 6, padding: '10px 12px', cursor: 'pointer', transition: 'border-color 0.15s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line-2)')}
+              >
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{p.canonical_name}</div>
+                {(p.role || p.org) && (
+                  <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+                    {[p.role, p.org].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )
       )}
+
       {personId && loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
       {personId && err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
       {personId && !loading && !err && data && (
