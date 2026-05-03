@@ -542,6 +542,24 @@ export const meetingNotesApi = {
       `/scopes/${scopeId}/mental-models/hit-rate`,
     ),
 
+  // 质量v2 Phase 2 · 4 个 R3-A 子维度 list 方法（前后端补齐 PendingSubdimTab 占位）
+  listScopeConsensusTracks: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; topic: string; meeting_id: string; consensus_score: number; divergence_persons: unknown; dominant_view: string; evidence_refs: unknown; created_at: string }> }>(
+      `/scopes/${scopeId}/consensus-tracks`,
+    ),
+  listScopeConceptDrifts: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; term: string; definition_at_meeting: unknown; drift_severity: string; first_observed_at: string; last_observed_at: string; updated_at: string }> }>(
+      `/scopes/${scopeId}/concept-drifts`,
+    ),
+  listScopeTopicLineage: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; topic: string; birth_meeting_id: string; health_state: string; last_active_at: string; lineage_chain: unknown; mention_count: number; updated_at: string }> }>(
+      `/scopes/${scopeId}/topic-lineage`,
+    ),
+  listScopeExternalExperts: (scopeId: string) =>
+    jget<{ items: Array<{ id: string; name: string; domain: string; cited_in_meetings: Array<{ meeting_id: string; by_person_id?: string; citation_text?: string }>; cite_count: number; accuracy_score: number; expert_source_url?: string; updated_at: string }> }>(
+      `/scopes/${scopeId}/external-experts`,
+    ),
+
   // Phase 15.9 · AxisPeople Commitments
   listScopeCommitments: (scopeId: string, q: { personId?: string; state?: string } = {}) => {
     const qs = new URLSearchParams(q as any).toString();

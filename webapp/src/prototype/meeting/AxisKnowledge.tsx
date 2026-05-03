@@ -672,11 +672,11 @@ export function AxisKnowledge() {
         )}
         {tab === 'evidence'        && <EvidenceLive data={aggregatedEvidence ?? knowledgeData?.evidence_grades} fallback={<Evidence />} scopeAggregated={!!aggregatedEvidence} />}
         {tab === 'counterfactuals' && <CounterfactualsLive data={knowledgeData?.counterfactuals} fallback={<Counterfactuals />} />}
-        {tab === 'consensus'       && <PendingSubdimTab title="共识 / 分歧轨迹" subDim="consensus_track" hint="跑生成中心 → knowledge/consensus_track 后写入 mn_consensus_tracks" />}
-        {tab === 'concept'         && <PendingSubdimTab title="概念辨析" subDim="concept_drift" hint="跑生成中心 → knowledge/concept_drift 后写入 mn_concept_drifts" />}
+        {tab === 'consensus'       && <ConsensusTracksTab scopeId={scopeId} hint="跑生成中心 → knowledge/consensus_track 后写入 mn_consensus_tracks" />}
+        {tab === 'concept'         && <ConceptDriftsTab scopeId={scopeId} hint="跑生成中心 → knowledge/concept_drift 后写入 mn_concept_drifts" />}
         {tab === 'lineage'         && (
           <>
-            <PendingSubdimTab title="议题谱系与健康" subDim="topic_lineage" hint="跑生成中心 → knowledge/topic_lineage 后写入 mn_topic_lineage" />
+            <TopicLineageTab scopeId={scopeId} hint="跑生成中心 → knowledge/topic_lineage 后写入 mn_topic_lineage" />
             <div style={{ padding: '0 32px 28px' }}>
               <div style={{
                 background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
@@ -690,7 +690,7 @@ export function AxisKnowledge() {
             </div>
           </>
         )}
-        {tab === 'external'        && <PendingSubdimTab title="外脑批注" subDim="external_experts" hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
+        {tab === 'external'        && <ExternalExpertsTab scopeId={scopeId} hint="跑生成中心 → knowledge/external_experts 后写入 mn_external_experts" />}
       </DimShell>
       <RegenerateOverlay open={regenOpen} onClose={() => setRegenOpen(false)}>
         <AxisRegeneratePanel initialAxis="knowledge" currentTab={tab} onClose={() => setRegenOpen(false)} />
@@ -845,8 +845,9 @@ function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: num
 
 // R3-A · 知识轴扩展 5 子维度的统一占位 tab。
 // computer 已就位（lite 派生：从 mn_mental_model_invocations / mn_judgments /
-// mn_open_questions / mn_silence_signals 推导），但 router 尚未暴露 GET 接口，
-// 也尚未接入 _live wrapper。第一版用统一空态卡片，hint 引导用户跑生成中心补齐。
+// mn_open_questions / mn_silence_signals 推导），第一版用统一空态卡片，hint
+// 引导用户跑生成中心补齐。质量v2 Phase 2 后，4 个 tab 已接 live API（数据为空时
+// 仍走该占位组件）。
 function PendingSubdimTab({ title, subDim, hint }: { title: string; subDim: string; hint: string }) {
   const isMobile = useIsMobile();
   return (
@@ -867,6 +868,170 @@ function PendingSubdimTab({ title, subDim, hint }: { title: string; subDim: stri
         <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', lineHeight: 1.6 }}>
           {hint}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// 质量v2 Phase 2 · 4 个 R3-A 子维度 live tab —— 数据可读时渲染列表，空时回落 PendingSubdimTab。
+// 列表样式参考 Judgments —— paper-2 卡片 + accent border。
+
+const LIVE_TAB_HEADER: React.CSSProperties = {
+  fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginBottom: 6,
+};
+const LIVE_TAB_SUB: React.CSSProperties = {
+  fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginBottom: 18,
+};
+const LIVE_CARD: React.CSSProperties = {
+  background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--accent)',
+  borderRadius: 5, padding: '14px 18px', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55,
+};
+
+function ConsensusTracksTab({ scopeId, hint }: { scopeId: string; hint: string }) {
+  const isMobile = useIsMobile();
+  type Row = Awaited<ReturnType<typeof meetingNotesApi.listScopeConsensusTracks>>['items'][number];
+  const [items, setItems] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!scopeId) { setLoading(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    meetingNotesApi.listScopeConsensusTracks(scopeId)
+      .then((r) => { if (!cancelled) { setItems(r?.items ?? []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  if (loading) return <AxisLoadingSkeleton rows={4} />;
+  if (items.length === 0) return <PendingSubdimTab title="共识 / 分歧轨迹" subDim="consensus_track" hint={hint} />;
+  return (
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
+      <div style={LIVE_TAB_HEADER}>共识 / 分歧轨迹</div>
+      <div style={LIVE_TAB_SUB}>knowledge / consensus_track  ·  共 {items.length} 条</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((it) => (
+          <div key={it.id} style={LIVE_CARD}>
+            <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{it.topic ?? '—'}</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontFamily: 'var(--mono)' }}>
+              meeting={it.meeting_id?.slice(0, 8)}…  · score={typeof it.consensus_score === 'number' ? it.consensus_score.toFixed(2) : '—'}
+            </div>
+            {it.dominant_view && <div>{it.dominant_view}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConceptDriftsTab({ scopeId, hint }: { scopeId: string; hint: string }) {
+  const isMobile = useIsMobile();
+  type Row = Awaited<ReturnType<typeof meetingNotesApi.listScopeConceptDrifts>>['items'][number];
+  const [items, setItems] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!scopeId) { setLoading(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    meetingNotesApi.listScopeConceptDrifts(scopeId)
+      .then((r) => { if (!cancelled) { setItems(r?.items ?? []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  if (loading) return <AxisLoadingSkeleton rows={4} />;
+  if (items.length === 0) return <PendingSubdimTab title="概念辨析" subDim="concept_drift" hint={hint} />;
+  return (
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
+      <div style={LIVE_TAB_HEADER}>概念辨析 · 漂移候选</div>
+      <div style={LIVE_TAB_SUB}>knowledge / concept_drift  ·  共 {items.length} 条</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((it) => (
+          <div key={it.id} style={LIVE_CARD}>
+            <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{it.term}</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+              severity={it.drift_severity}  ·  first {String(it.first_observed_at ?? '').slice(0, 10)}  ·  last {String(it.last_observed_at ?? '').slice(0, 10)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopicLineageTab({ scopeId, hint }: { scopeId: string; hint: string }) {
+  const isMobile = useIsMobile();
+  type Row = Awaited<ReturnType<typeof meetingNotesApi.listScopeTopicLineage>>['items'][number];
+  const [items, setItems] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!scopeId) { setLoading(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    meetingNotesApi.listScopeTopicLineage(scopeId)
+      .then((r) => { if (!cancelled) { setItems(r?.items ?? []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  if (loading) return <AxisLoadingSkeleton rows={4} />;
+  if (items.length === 0) return <PendingSubdimTab title="议题谱系与健康" subDim="topic_lineage" hint={hint} />;
+  const colorMap: Record<string, string> = { alive: '#15803d', endangered: '#d97706', dead: '#9ca3af' };
+  return (
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
+      <div style={LIVE_TAB_HEADER}>议题谱系与健康</div>
+      <div style={LIVE_TAB_SUB}>knowledge / topic_lineage  ·  共 {items.length} 条</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.slice(0, 100).map((it) => (
+          <div key={it.id} style={LIVE_CARD}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{it.topic}</span>
+              <span style={{ fontSize: 11, color: colorMap[it.health_state] ?? 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                {it.health_state}  ·  ×{it.mention_count}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+              birth={it.birth_meeting_id?.slice(0, 8)}…  ·  last {String(it.last_active_at ?? '').slice(0, 10)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExternalExpertsTab({ scopeId, hint }: { scopeId: string; hint: string }) {
+  const isMobile = useIsMobile();
+  type Row = Awaited<ReturnType<typeof meetingNotesApi.listScopeExternalExperts>>['items'][number];
+  const [items, setItems] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!scopeId) { setLoading(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    meetingNotesApi.listScopeExternalExperts(scopeId)
+      .then((r) => { if (!cancelled) { setItems(r?.items ?? []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+  if (loading) return <AxisLoadingSkeleton rows={4} />;
+  if (items.length === 0) return <PendingSubdimTab title="外脑批注" subDim="external_experts" hint={hint} />;
+  return (
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
+      <div style={LIVE_TAB_HEADER}>外脑批注</div>
+      <div style={LIVE_TAB_SUB}>knowledge / external_experts  ·  共 {items.length} 位</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((it) => (
+          <div key={it.id} style={LIVE_CARD}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{it.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+                {it.domain ?? '—'}  ·  ×{it.cite_count ?? 0}  ·  acc={typeof it.accuracy_score === 'number' ? it.accuracy_score.toFixed(2) : '—'}
+              </span>
+            </div>
+            {Array.isArray(it.cited_in_meetings) && it.cited_in_meetings[0]?.citation_text && (
+              <div style={{ fontSize: 12, color: 'var(--ink-2)', borderLeft: '2px solid var(--line-2)', paddingLeft: 10, marginTop: 4 }}>
+                "{it.cited_in_meetings[0].citation_text}"
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
