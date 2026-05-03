@@ -5,20 +5,25 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PRISM_ROOMS, type PrismRoom } from '../shared/PrismRegistry';
 import { RoomVisual } from '../shared/RoomVisual';
+import { useIsMobile } from '../../_useIsMobile';
 
 export function CEOHomePane() {
   const [hovered, setHovered] = useState<string | null>(null);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   return (
-    <div style={{ padding: '34px 44px 60px', minHeight: '100%', position: 'relative' }}>
+    <div style={{
+      padding: isMobile ? '18px 14px 40px' : '34px 44px 60px',
+      minHeight: '100%', position: 'relative',
+    }}>
       {/* 月光 */}
       <div
         style={{
           position: 'absolute',
-          top: 20,
-          right: 50,
-          width: 80,
-          height: 80,
+          top: isMobile ? 10 : 20,
+          right: isMobile ? 14 : 50,
+          width: isMobile ? 56 : 80,
+          height: isMobile ? 56 : 80,
           borderRadius: '50%',
           background:
             'radial-gradient(circle, rgba(217,184,142,0.25), transparent 70%)',
@@ -42,11 +47,12 @@ export function CEOHomePane() {
         style={{
           fontFamily: 'var(--serif)',
           fontStyle: 'italic',
-          fontSize: 38,
+          fontSize: isMobile ? 24 : 38,
           fontWeight: 500,
           margin: '4px 0 6px',
           letterSpacing: '-0.015em',
           color: '#F3ECDD',
+          lineHeight: isMobile ? 1.25 : 1.1,
         }}
       >
         欢迎回来,这是你本周的棱镜。
@@ -54,10 +60,10 @@ export function CEOHomePane() {
       <p
         style={{
           color: 'rgba(232,227,216,0.55)',
-          fontSize: 14,
+          fontSize: isMobile ? 13 : 14,
           maxWidth: 640,
           lineHeight: 1.6,
-          marginBottom: 30,
+          marginBottom: isMobile ? 18 : 30,
           fontStyle: 'italic',
         }}
       >
@@ -67,8 +73,8 @@ export function CEOHomePane() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 18,
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+          gap: isMobile ? 12 : 18,
           maxWidth: 1200,
         }}
       >
@@ -86,8 +92,8 @@ export function CEOHomePane() {
 
       <div
         style={{
-          marginTop: 30,
-          padding: '20px 24px',
+          marginTop: isMobile ? 20 : 30,
+          padding: isMobile ? '14px 14px' : '20px 24px',
           background: 'rgba(217,184,142,0.05)',
           border: '1px solid rgba(217,184,142,0.15)',
           borderRadius: 8,
@@ -97,9 +103,11 @@ export function CEOHomePane() {
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: isMobile ? 'flex-start' : 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? 6 : 0,
             justifyContent: 'space-between',
-            marginBottom: 14,
+            marginBottom: isMobile ? 12 : 14,
           }}
         >
           <div>
@@ -137,7 +145,12 @@ export function CEOHomePane() {
             本周实际 vs 你设定的权重
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
+        <div style={{
+          display: 'grid',
+          // mobile: 6 列权重条 → 3 列双行，文字仍可读，进度条仍清晰
+          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
+          gap: isMobile ? '14px 10px' : 12,
+        }}>
           {PRISM_ROOMS.map((r, i) => {
             const actual = [22, 18, 15, 20, 10, 15][i];
             const target = [20, 15, 20, 20, 10, 15][i];
@@ -204,19 +217,24 @@ export function CEOHomePane() {
       <button
         onClick={() => navigate('/ceo/internal/ceo/panorama')}
         style={{
-          marginTop: 18,
-          padding: '12px 18px',
+          marginTop: isMobile ? 14 : 18,
+          padding: isMobile ? '10px 14px' : '12px 18px',
           background: 'rgba(217,184,142,0.08)',
           border: '1px solid rgba(217,184,142,0.25)',
           borderRadius: 6,
           color: '#D9B88E',
           fontFamily: 'var(--serif)',
           fontStyle: 'italic',
-          fontSize: 14,
+          fontSize: isMobile ? 12.5 : 14,
           cursor: 'pointer',
+          textAlign: 'left',
+          width: isMobile ? '100%' : 'auto',
+          lineHeight: 1.45,
         }}
       >
-        🌐 全景画板 · Panorama → 三视图（熔炉 / 时间轴 / 冰山）
+        {isMobile
+          ? '🌐 全景画板 · Panorama →'
+          : '🌐 全景画板 · Panorama → 三视图（熔炉 / 时间轴 / 冰山）'}
       </button>
     </div>
   );
