@@ -107,6 +107,8 @@ async function main() {
   const { PROMPT_HANDLERS } = await import('../modules/ceo/pipelines/promptHandlers.js');
   const { handleCeoRun } = await import('../modules/ceo/pipelines/runHandlers.js');
   const { createCeoPipelineDeps } = await import('../modules/ceo/adapters/pipeline.js');
+  const { aggregateAttentionAlloc } = await import('../modules/ceo/aggregators/attention-alloc.js');
+  const { aggregateTimeRoi } = await import('../modules/ceo/aggregators/time-roi.js');
 
   await ensureDbPoolConnected();
   // 若 DB_AUTO_MIGRATE=false（典型生产/受限 DB 用户配置），跳过 schema ensure
@@ -501,9 +503,9 @@ async function ensureBalconyReflectionRow(
 }
 
 async function cleanGeneratedContent(query: any, scope: ScopeRow): Promise<void> {
-  // 仅清"生成内容"类表，不动 directors / stakeholders / briefs / time_roi / formation_snapshots 等元数据
+  // 仅清"生成内容"类表；保留 directors / stakeholders 元数据 + brief 行（重置 body_md/toc）
   const targets = [
-    // echos 通过 line_id 引到 strategic_lines；drift-alert 也写这里
+    // 迭代 1 表
     `DELETE FROM ceo_strategic_echos WHERE line_id IN (SELECT id FROM ceo_strategic_lines WHERE scope_id = $1::uuid)`,
     `DELETE FROM ceo_strategic_lines WHERE scope_id = $1::uuid`,
     `DELETE FROM ceo_director_concerns WHERE director_id IN (SELECT id FROM ceo_directors WHERE scope_id = $1::uuid)`,
@@ -512,12 +514,26 @@ async function cleanGeneratedContent(query: any, scope: ScopeRow): Promise<void>
     `DELETE FROM ceo_external_signals WHERE stakeholder_id IN (SELECT id FROM ceo_stakeholders WHERE scope_id = $1::uuid)`,
     `DELETE FROM ceo_rubric_scores WHERE scope_id = $1::uuid`,
     `DELETE FROM ceo_war_room_sparks WHERE scope_id = $1::uuid`,
+    // 迭代 2 新增表
+    `DELETE FROM ceo_formation_snapshots WHERE scope_id = $1::uuid`,
+    `DELETE FROM ceo_decisions WHERE scope_id = $1::uuid`,
+    // ceo_board_promises: 仅删 LLM 生成的（source_decision_id 以 'generated:' 开头）
+    `DELETE FROM ceo_board_promises WHERE brief_id IN (SELECT id FROM ceo_briefs WHERE scope_id = $1::uuid) AND source_decision_id LIKE 'generated:%'`,
+    // ceo_attention_alloc: 仅删派生计算的行（source='aggregated'），保留 demo 手填的 source='manual'
+    `DELETE FROM ceo_attention_alloc WHERE scope_id = $1::uuid AND source = 'aggregated'`,
+    // ceo_briefs: 重置 LLM 写入的 body_md/toc/page_count，保留 brief 行 metadata
+    `UPDATE ceo_briefs SET body_md = NULL, toc = '[]'::jsonb, page_count = 12, generated_run_id = NULL, generated_at = NULL WHERE scope_id = $1::uuid`,
     // balcony-prompt 不删，仅 UPDATE prompt 列；但同 user/week/prism 唯一约束已经保证幂等
   ];
   for (const sql of targets) {
     await query(sql, [scope.id]);
   }
-  console.log(`[clean] ${scope.name}: 清掉旧生成内容`);
+  // ceo_time_roi 是 user 级而非 scope 级 — 仅在第一个 scope 触发时清理一次（多 scope 重复 DELETE 也无害，但避免日志噪音）
+  // 简单起见：每个 scope clean 都执行，DELETE 0 行也 OK
+  await query(
+    `DELETE FROM ceo_time_roi WHERE metadata->>'source' = 'aggregated'`,
+  );
+  console.log(`[clean] ${scope.name}: 清掉旧生成内容（10 张表 + brief 重置 + time_roi/aggregated）`);
 }
 
 function nextSundayStart(): string {
