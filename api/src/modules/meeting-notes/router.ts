@@ -2409,6 +2409,78 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // 质量v2 Phase 1 · 4 条 sub-dim 只读路由 — 物理表已写但前端 Pending 占位
+    // 共识轨迹 (knowledge/consensus_track)
+    fastify.get('/scopes/:id/consensus-tracks', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT id, topic, meeting_id, consensus_score, divergence_persons,
+                dominant_view, evidence_refs, created_at
+           FROM mn_consensus_tracks
+          WHERE scope_id = $1
+          ORDER BY created_at DESC, consensus_score DESC NULLS LAST
+          LIMIT 200`,
+        [uuid],
+      );
+      return { items: r.rows };
+    });
+
+    // 概念漂移 (knowledge/concept_drift)
+    fastify.get('/scopes/:id/concept-drifts', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT id, term, definition_at_meeting, drift_severity,
+                first_observed_at, last_observed_at, updated_at
+           FROM mn_concept_drifts
+          WHERE scope_id = $1
+          ORDER BY last_observed_at DESC NULLS LAST`,
+        [uuid],
+      );
+      return { items: r.rows };
+    });
+
+    // 议题谱系 (knowledge/topic_lineage)
+    fastify.get('/scopes/:id/topic-lineage', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT id, topic, birth_meeting_id, health_state, last_active_at,
+                lineage_chain, mention_count, updated_at
+           FROM mn_topic_lineage
+          WHERE scope_id = $1
+          ORDER BY last_active_at DESC NULLS LAST, mention_count DESC`,
+        [uuid],
+      );
+      return { items: r.rows };
+    });
+
+    // 外脑批注 (knowledge/external_experts) — 库级表，按 scope 的 meetings 交集筛
+    // cited_in_meetings 是对象数组，每元素含 { meeting_id, by_person_id, citation_text }
+    fastify.get('/scopes/:id/external-experts', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const uuid = await resolveScopeUuid(engine.deps.db, id);
+      if (!uuid) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT ee.id, ee.name, ee.domain, ee.cited_in_meetings,
+                ee.cite_count, ee.accuracy_score, ee.expert_source_url, ee.updated_at
+           FROM mn_external_experts ee
+          WHERE EXISTS (
+            SELECT 1
+              FROM jsonb_array_elements(ee.cited_in_meetings) AS x(elem)
+              JOIN mn_scope_members sm ON sm.meeting_id::text = (x.elem->>'meeting_id')
+             WHERE sm.scope_id = $1
+          )
+          ORDER BY ee.cite_count DESC NULLS LAST, ee.accuracy_score DESC NULLS LAST`,
+        [uuid],
+      );
+      return { items: r.rows };
+    });
+
     // Phase 15.9 · AxisPeople · Commitments (mn_commitments)
     fastify.get('/scopes/:id/commitments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
