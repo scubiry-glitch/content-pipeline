@@ -14,7 +14,29 @@ import type { PromptDef, PromptCtx } from './types.js';
 const Promise = z.object({
   what: z.string().min(20).max(200),
   owner: z.string().min(2).max(40),
-  due_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'due_at 必须 YYYY-MM-DD'),
+  // due_at 容忍多种日期写法 — LLM 偶尔输出 "2026年6月15日" / "2026/06/15" / "Q2 end"
+  // 统一 preprocess 到 YYYY-MM-DD，没法解析的报错
+  due_at: z.preprocess(
+    (v) => {
+      if (typeof v !== 'string') return v;
+      const trimmed = v.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      // "2026年6月15日" / "2026年06月15日"
+      const cn = trimmed.match(/^(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日?$/);
+      if (cn) return `${cn[1]}-${cn[2].padStart(2, '0')}-${cn[3].padStart(2, '0')}`;
+      // "2026/06/15" / "2026.06.15"
+      const slash = trimmed.match(/^(\d{4})[\/\.](\d{1,2})[\/\.](\d{1,2})$/);
+      if (slash) return `${slash[1]}-${slash[2].padStart(2, '0')}-${slash[3].padStart(2, '0')}`;
+      // ISO 全字符串带时间 → 截前 10 位
+      const iso = trimmed.match(/^(\d{4}-\d{2}-\d{2})T\d{2}:/);
+      if (iso) return iso[1];
+      // 兜底：扔给 Date
+      const d = new Date(trimmed);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return v;  // 让下游 regex 拒掉
+    },
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'due_at 无法解析为 YYYY-MM-DD'),
+  ),
   // 接受 LLM 偶尔输出的 'planned'/'pending' 等近义词，统一映射到 in_progress
   status: z.preprocess(
     (v) => {

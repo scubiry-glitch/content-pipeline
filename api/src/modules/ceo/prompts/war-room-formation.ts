@@ -6,25 +6,26 @@
 import { z } from 'zod';
 import type { PromptDef, PromptCtx } from './types.js';
 
+// .passthrough() 允许 LLM 多带合理但未声明的字段（color/description/owner 等），不被 zod 拒掉
 const Node = z.object({
   id: z.string().min(1).max(40),
   label: z.string().min(2).max(40),
   role: z.string().min(2).max(30).optional().default('team-member'),
   weight: z.number().min(0).max(1).optional().default(0.5),
-}).strict();
+}).passthrough();
 
 const Link = z.object({
   source: z.string().min(1).max(40),
   target: z.string().min(1).max(40),
   kind: z.enum(['supports', 'conflicts', 'silent', 'reports']),
   temp: z.number().min(0).max(1),
-}).strict();
+}).passthrough();
 
 const Gap = z.object({
   text: z.string().min(15).max(200),
   action: z.string().min(8).max(100),
   severity: z.enum(['warn', 'critical', 'info']),
-}).strict();
+}).passthrough();
 
 const Out = z.object({
   nodes: z.array(Node).min(2).max(12),

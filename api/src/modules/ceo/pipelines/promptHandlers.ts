@@ -38,7 +38,8 @@ const JSON_ESCAPE_RULE = `
 [输出硬规则]
 - 仅输出一个 JSON 对象，不要前后任何说明文字、不要 markdown 代码围栏。
 - JSON 字符串值内部禁止出现裸 ASCII 双引号 (")。需要引用时用中文「」或""""。
-- 字符串值内部不出现真实换行符；用 \\n 转义或改成单行。
+- **字符串值内绝对不允许真实换行符**（按 Enter 键产生的）。多段文字必须写在同一行，
+  或用字面 \\n（两字符: 反斜杠 + n）转义。如出现裸换行，整条 JSON 解析会失败。
 - 仅引用我提供列表中的 ID/名字，不可编造任何 UUID/人名/会议名。
 - 仅输出 JSON, 输出完毕直接结束（不要 "以下是 JSON：" 前导文字）。
 `;
@@ -131,6 +132,10 @@ function autoFixUnescapedQuotes(s: string): string {
       }
       continue;
     }
+    // 字符串内裸控制字符（换行/回车/制表）→ 转义成 \n / \r / \t
+    if (ch === '\n') { out.push('\\', 'n'); continue; }
+    if (ch === '\r') { out.push('\\', 'r'); continue; }
+    if (ch === '\t') { out.push('\\', 't'); continue; }
     out.push(ch);
   }
   return out.join('');
