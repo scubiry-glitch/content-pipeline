@@ -30,20 +30,51 @@ for (const p of [resolve(process.cwd(), '.env'), resolve(process.cwd(), 'api', '
 
 const TARGET_SCOPE_NAMES = ['业务支持', '美租', '养老', '集团分析'];
 
-// 顺序敏感 — compass-stars 必须先跑（drift-alert / echo 依赖 strategicLines）
-const SCOPE_AXES = [
-  'compass-stars',        // 必须最先：写 ceo_strategic_lines
-  'compass-drift-alert',  // 依赖 strategic_lines
-  'compass-echo',         // 依赖 strategic_lines
-  'boardroom-concerns',   // 依赖 ceo_directors
-  'boardroom-rebuttal',   // 依赖 ceo_directors
-  'boardroom-annotation', // 依赖 expert_id 等 metadata
-  'situation-signal',     // 依赖 ceo_stakeholders
-  'situation-rubric',
-  'war-room-spark',
-  'balcony-prompt',       // 依赖 ceo_balcony_reflections 行
-  'panorama-aggregate',   // g5 规则计算，无 LLM
-] as const;
+// 全部 axis 的 DAG：deps 是同 scope 内的 axis 名，跨 scope 互不依赖（4 scope 完全并行）
+//
+// Tier 0 (无 axis 内 dep, 直接 ready):
+//   compass-stars / boardroom-concerns / boardroom-rebuttal / boardroom-annotation × N
+//   situation-signal / situation-rubric / war-room-spark / war-room-formation
+//   ceo-decisions-capture / balcony-prompt × 6
+//   tower-attention-alloc (fast) / balcony-time-roi (fast)
+//
+// Tier 1 (依赖 Tier 0):
+//   compass-drift-alert / compass-echo / compass-narrative ← compass-stars
+//   boardroom-promises ← boardroom-concerns
+//   boardroom-brief-toc ← boardroom-concerns + boardroom-rebuttal
+//
+// Tier 2 (最后):
+//   panorama-aggregate ← 全部上游
+const AXIS_DEPS: Record<string, string[]> = {
+  'compass-stars':         [],
+  'compass-drift-alert':   ['compass-stars'],
+  'compass-echo':          ['compass-stars'],
+  'compass-narrative':     ['compass-stars'],
+  'boardroom-concerns':    [],
+  'boardroom-rebuttal':    [],
+  'boardroom-annotation':  [],   // expert 维度展开后单独 deps
+  'boardroom-brief-toc':   ['boardroom-concerns', 'boardroom-rebuttal'],
+  'boardroom-promises':    ['boardroom-concerns'],
+  'situation-signal':      [],
+  'situation-rubric':      [],
+  'war-room-spark':        [],
+  'war-room-formation':    [],
+  'ceo-decisions-capture': [],
+  'balcony-prompt':        [],   // prism 维度展开后单独 deps
+  'tower-attention-alloc': [],   // 派生计算 (group=fast)
+  'balcony-time-roi':      [],   // 派生计算 (group=fast)
+  'panorama-aggregate':    [
+    'compass-stars', 'compass-echo', 'compass-narrative',
+    'boardroom-concerns', 'boardroom-rebuttal',
+    'situation-signal', 'situation-rubric',
+    'war-room-spark', 'balcony-prompt',
+  ],
+};
+
+const SCOPE_AXES = Object.keys(AXIS_DEPS) as readonly string[];
+
+// 标记哪些 axis 是"派生计算" (走 fast pool, 不消耗 LLM 名额)
+const FAST_AXES = new Set(['tower-attention-alloc', 'balcony-time-roi', 'panorama-aggregate']);
 
 // brief × expert 配对（用于 boardroom-annotation）
 const ANNOTATION_EXPERTS = [
@@ -157,34 +188,116 @@ async function main() {
     llm: ceoLlm,
   });
 
-  // 4. 跑全部 axis
+  // 4. 跑全部 axis — DAG 调度 + 并发上限（同时最多 N 条 LLM 任务，4 scope 完全并行）
+  const { runCliScheduler, defaultProgressHooks } = await import('./_lib/cli-scheduler.js');
+  const { aggregateAttentionAlloc } = await import('../modules/ceo/aggregators/attention-alloc.js');
+  const { aggregateTimeRoi } = await import('../modules/ceo/aggregators/time-roi.js');
+  const llmConcurrency = Number(
+    args.find((a) => a.startsWith('--concurrency='))?.slice('--concurrency='.length)
+      ?? process.env.CEO_CLI_CONCURRENCY ?? 10,
+  );
+  const fastConcurrency = 4;
+  console.log(`[ceo-generate-real] 调度并发: llm=${llmConcurrency}, fast=${fastConcurrency}`);
+
   const results: AxisResult[] = [];
+
+  // 聚合器调度入口（无 LLM, 只走 fast pool）
+  async function runAggregator(scope: ScopeRow, axis: string): Promise<{ ok: boolean; error?: string }> {
+    const t0 = Date.now();
+    try {
+      if (axis === 'tower-attention-alloc') {
+        await aggregateAttentionAlloc(deps, scope.id);
+      } else if (axis === 'balcony-time-roi') {
+        await aggregateTimeRoi(deps, 'system');
+      } else {
+        return { ok: false, error: `unknown aggregator axis: ${axis}` };
+      }
+      const ms = Date.now() - t0;
+      results.push({ scope: scope.name, axis, ok: true, ms, runId: 'agg-' + axis });
+      return { ok: true };
+    } catch (e) {
+      const ms = Date.now() - t0;
+      const err = (e as Error).message;
+      results.push({ scope: scope.name, axis, ok: false, ms, error: err, runId: 'agg-' + axis });
+      return { ok: false, error: err };
+    }
+  }
+
+  const tasks: any[] = [];
+
+  // 每个 scope 内：把每个 axis 转成 1 或多条 task。axis 维度的 deps 转成 task key 维度。
   for (const scope of scopes) {
+    const scopeKey = (axis: string) => `${scope.name}/${axis}`;
+    const expandDeps = (depAxes: string[]): string[] =>
+      depAxes.flatMap((d) => {
+        // boardroom-annotation 展开成 4 个 expert task → dep on annotation 时挑一个代表（取第 1 个 expert）
+        if (d === 'boardroom-annotation') return [`${scope.name}/${d}/${ANNOTATION_EXPERTS[0].expertId}`];
+        // balcony-prompt 展开成 6 prism → dep 取第 1 个 prism
+        if (d === 'balcony-prompt') return [`${scope.name}/${d}/direction`];
+        return [scopeKey(d)];
+      });
+
     for (const axis of SCOPE_AXES) {
-      // 特殊：boardroom-annotation 需要按 expert 批量（4 条）
+      const baseDeps = expandDeps(AXIS_DEPS[axis] ?? []);
+
       if (axis === 'boardroom-annotation') {
         for (const exp of ANNOTATION_EXPERTS) {
-          await runOneAxis(query, deps, scope, axis, results, {
-            expertId: exp.expertId,
-            expertName: exp.expertName,
+          tasks.push({
+            key: `${scope.name}/${axis}/${exp.expertId}`,
+            deps: baseDeps,
+            group: 'llm',
+            run: () => runOneAxis(query, deps, scope, axis, results, {
+              expertId: exp.expertId, expertName: exp.expertName,
+            }),
           });
         }
       } else if (axis === 'balcony-prompt') {
-        // balcony-prompt 需要 (userId, weekStart, prismId) — seed 一次行后跑 6 个 prism
         const weekStart = nextSundayStart();
         const userId = 'system';
         for (const prismId of ['direction', 'board', 'coord', 'team', 'ext', 'self'] as const) {
-          await ensureBalconyReflectionRow(query, userId, weekStart, prismId);
-          await runOneAxis(query, deps, scope, axis, results, { userId, weekStart, prismId });
+          tasks.push({
+            key: `${scope.name}/${axis}/${prismId}`,
+            deps: baseDeps,
+            group: 'llm',
+            run: async () => {
+              await ensureBalconyReflectionRow(query, userId, weekStart, prismId);
+              return runOneAxis(query, deps, scope, axis, results, { userId, weekStart, prismId });
+            },
+          });
         }
       } else if (axis === 'panorama-aggregate') {
-        // 走老 handleCeoRun（g5 规则计算，不需要 LLM）
-        await runOneAxisLegacy(query, deps, scope, axis, results, handleCeoRun);
+        tasks.push({
+          key: scopeKey(axis),
+          deps: baseDeps,
+          group: 'fast',
+          run: () => runOneAxisLegacy(query, deps, scope, axis, results, handleCeoRun),
+        });
+      } else if (axis === 'tower-attention-alloc' || axis === 'balcony-time-roi') {
+        // 派生计算（不走 LLM）— fast pool
+        tasks.push({
+          key: scopeKey(axis),
+          deps: baseDeps,
+          group: 'fast',
+          run: () => runAggregator(scope, axis),
+        });
       } else {
-        await runOneAxis(query, deps, scope, axis, results);
+        tasks.push({
+          key: scopeKey(axis),
+          deps: baseDeps,
+          group: 'llm',
+          run: () => runOneAxis(query, deps, scope, axis, results),
+        });
       }
     }
   }
+
+  console.log(`[ceo-generate-real] 共 ${tasks.length} 个 task (LLM=${tasks.filter((t) => t.group === 'llm').length}, fast=${tasks.filter((t) => t.group === 'fast').length})`);
+
+  await runCliScheduler(tasks, {
+    llmConcurrency,
+    fastConcurrency,
+    ...defaultProgressHooks('ceo'),
+  });
 
   // 5. 总结
   printSummary(results);
@@ -207,8 +320,9 @@ async function main() {
   ) {
     const handler = PROMPT_HANDLERS[axis];
     if (!handler) {
-      console.warn(`[${scope.name}/${axis}] PROMPT_HANDLERS 无此 axis`);
-      return;
+      const err = `PROMPT_HANDLERS 无此 axis`;
+      console.warn(`[${scope.name}/${axis}] ${err}`);
+      return { ok: false, error: err };
     }
     const t0 = Date.now();
     let runId: string;
@@ -256,8 +370,8 @@ async function main() {
       }
     }
     const tag = `${scope.name}/${axis}${extraMeta?.expertId ? `/${extraMeta.expertId}` : ''}${extraMeta?.prismId ? `/${extraMeta.prismId}` : ''}`;
-    console.log(`[${ok ? 'OK ' : 'ERR'}] ${tag} (${ms}ms)${error ? ` — ${error.slice(0, 200)}` : ''}`);
     results.push({ scope: scope.name, axis: tag, ok, ms, error, runId });
+    return { ok, error };
   }
 
   async function runOneAxisLegacy(
@@ -301,8 +415,8 @@ async function main() {
         ok ? [runId] : [runId, error ?? 'failed'],
       );
     }
-    console.log(`[${ok ? 'OK ' : 'ERR'}] ${scope.name}/${axis} (${ms}ms)${error ? ` — ${error.slice(0, 200)}` : ''}`);
     results.push({ scope: scope.name, axis, ok, ms, error, runId });
+    return { ok, error };
   }
 }
 
