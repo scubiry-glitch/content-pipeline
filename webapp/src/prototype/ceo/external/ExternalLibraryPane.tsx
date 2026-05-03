@@ -2,6 +2,7 @@
 // 来源: 07-archive/会议纪要 (20260501)/world-shell.jsx ExternalLibraryPane
 
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '../../_useIsMobile';
 
 interface AxisCard {
   axis: string;
@@ -61,8 +62,9 @@ const AXES: AxisCard[] = [
 
 export function ExternalLibraryPane() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   return (
-    <div style={{ padding: '32px 44px' }}>
+    <div style={{ padding: isMobile ? '18px 14px' : '32px 44px' }}>
       <div
         style={{
           fontFamily: 'var(--mono)',
@@ -77,10 +79,11 @@ export function ExternalLibraryPane() {
       <h1
         style={{
           fontFamily: 'var(--serif)',
-          fontSize: 34,
+          fontSize: isMobile ? 24 : 34,
           fontWeight: 500,
-          margin: '4px 0 18px',
+          margin: '4px 0 14px',
           letterSpacing: '-0.015em',
+          lineHeight: isMobile ? 1.2 : 1.1,
         }}
       >
         人物 · 项目 · 知识
@@ -88,10 +91,10 @@ export function ExternalLibraryPane() {
       <p
         style={{
           color: '#5A5146',
-          fontSize: 14,
+          fontSize: isMobile ? 13 : 14,
           maxWidth: 720,
           lineHeight: 1.6,
-          marginBottom: 24,
+          marginBottom: isMobile ? 16 : 24,
         }}
       >
         同一批会议数据的三种投射。子 tab 清单 7 / 6 / 8 已就位。
@@ -99,8 +102,8 @@ export function ExternalLibraryPane() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 18,
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+          gap: isMobile ? 12 : 18,
           maxWidth: 1100,
         }}
       >

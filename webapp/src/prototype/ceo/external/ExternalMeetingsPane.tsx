@@ -3,6 +3,7 @@
 // 与现有 /meeting/* 原型保持深链接关系，不复制其复杂功能
 
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '../../_useIsMobile';
 
 interface SummaryCard {
   t: string;
@@ -38,8 +39,12 @@ const CARDS: SummaryCard[] = [
 
 export function ExternalMeetingsPane() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   return (
-    <div style={{ padding: '32px 44px', maxWidth: 1100 }}>
+    <div style={{
+      padding: isMobile ? '18px 14px' : '32px 44px',
+      maxWidth: 1100,
+    }}>
       <div
         style={{
           fontFamily: 'var(--mono)',
@@ -54,10 +59,11 @@ export function ExternalMeetingsPane() {
       <h1
         style={{
           fontFamily: 'var(--serif)',
-          fontSize: 34,
+          fontSize: isMobile ? 24 : 34,
           fontWeight: 500,
-          margin: '4px 0 18px',
+          margin: '4px 0 14px',
           letterSpacing: '-0.015em',
+          lineHeight: isMobile ? 1.2 : 1.1,
         }}
       >
         与世界的会面
@@ -65,10 +71,10 @@ export function ExternalMeetingsPane() {
       <p
         style={{
           color: '#5A5146',
-          fontSize: 14,
+          fontSize: isMobile ? 13 : 14,
           maxWidth: 600,
           lineHeight: 1.6,
-          marginBottom: 28,
+          marginBottom: isMobile ? 18 : 28,
         }}
       >
         今天值得关注的会议 / 本周关键会面 / 最近 48 场 —— 从时间维度进入单场纪要。
@@ -80,8 +86,8 @@ export function ExternalMeetingsPane() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 14,
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+          gap: isMobile ? 10 : 14,
           maxWidth: 900,
         }}
       >
