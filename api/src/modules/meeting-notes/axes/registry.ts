@@ -209,9 +209,10 @@ export function resolveComputer(axis: string, subDim: string): ComputerFn | null
  * 但为安全起见，把 evidence_grading 单独留到最后一阶段（其他 4 个并行后再跑）。
  */
 const SEQUENTIAL_AFTER: Record<string, string[]> = {
-  // knowledge axis: evidence_grading 依赖 mn_assumptions 表（projects axis 已先跑），
-  // 单独留到 knowledge 内的 phase-2，避免与并行的其他 4 个争资源。
-  knowledge: ['evidence_grading'],
+  // knowledge axis 的 phase-2:
+  // - evidence_grading 依赖 mn_assumptions 表（projects axis 已先跑）
+  // - concept_drift 依赖 mn_mental_model_invocations（同 axis 内 mental_models 的产出）
+  knowledge: ['evidence_grading', 'concept_drift'],
 };
 
 /**
