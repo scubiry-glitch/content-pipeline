@@ -54,12 +54,57 @@ export const ATLAS_FALLBACK: AtlasData = {
   meta: { total: 6, healthy: 2, warn: 2, danger: 2, silent: 0 },
 };
 
+// pg numeric/decimal 列经常以 string 形式返回 ("0.82" 而非 0.82)，
+// 直接 .toFixed() 会抛 "is not a function"。统一在边界处强转为 number。
+function toNum(v: unknown, fallback = 0): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  return fallback;
+}
+function toNumOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function normalizeAtlas(raw: unknown): AtlasData {
+  const r = (raw ?? {}) as Partial<AtlasData>;
+  const stars: AtlasStar[] = Array.isArray(r.stars) ? r.stars.map((s: any) => ({
+    id: String(s?.id ?? ''),
+    name: String(s?.name ?? ''),
+    kind: (s?.kind ?? 'main') as AtlasStar['kind'],
+    alignmentScore: toNumOrNull(s?.alignmentScore),
+    health: (s?.health ?? 'silent') as AtlasStar['health'],
+    cx: toNum(s?.cx),
+    cy: toNum(s?.cy),
+    r: toNum(s?.r),
+    risk: toNum(s?.risk),
+  })) : ATLAS_FALLBACK.stars;
+  const dangerBoard: DangerCard[] = Array.isArray(r.dangerBoard) ? r.dangerBoard.map((c: any) => ({
+    name: String(c?.name ?? ''),
+    riskScore: toNum(c?.riskScore),
+    trend: (c?.trend ?? 'flat') as DangerCard['trend'],
+    signals: Array.isArray(c?.signals) ? c.signals : [],
+    text: String(c?.text ?? ''),
+  })) : ATLAS_FALLBACK.dangerBoard;
+  const meta = r.meta ?? ATLAS_FALLBACK.meta;
+  const legend = Array.isArray(r.legend) ? r.legend : ATLAS_FALLBACK.legend;
+  return { stars, legend, dangerBoard, meta };
+}
+
 export async function fetchProjectAtlas(scopeId?: string): Promise<AtlasData> {
   try {
     const url = scopeId ? `/api/v1/ceo/compass/atlas?scopeId=${encodeURIComponent(scopeId)}` : '/api/v1/ceo/compass/atlas';
     const res = await fetch(url);
     if (!res.ok) throw new Error(`status ${res.status}`);
-    return (await res.json()) as AtlasData;
+    return normalizeAtlas(await res.json());
   } catch {
     return ATLAS_FALLBACK;
   }
