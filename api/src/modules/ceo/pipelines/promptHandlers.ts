@@ -439,20 +439,167 @@ export async function handleWarRoomSpark(deps: CeoEngineDeps, run: PromptRunRow)
   return { ok: true, result: { mode: 'llm', count: inserted.length } };
 }
 
+// ────────────────────────────────────────────────────────────────
+// 迭代 2 · 新 5 个 handler — 替代剩余 fixture / seed 来源
+// ────────────────────────────────────────────────────────────────
+
+/** compass-narrative → 更新 ceo_briefs.body_md（一页纸战略叙事） */
+export async function handleCompassNarrative(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
+  const def = PROMPTS['compass-narrative'];
+  const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
+  if (!ctx.brief) return { ok: false, error: '无 draft brief — 先 ensurePrerequisites' };
+  if (ctx.strategicLines.length === 0) return { ok: false, error: '无战略线 — 先跑 compass-stars' };
+  const r = await invokeAndValidate(deps, def, ctx, run.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  // 把 onepager_text + decisions_needed + warning_line 一起拼到 body_md 末尾，兼容前端单字段渲染
+  const fullBody = [
+    r.out.body_md.trim(),
+    '',
+    `**一页纸**: ${r.out.onepager_text}`,
+    '',
+    `**本周该决定的事**:`,
+    ...r.out.decisions_needed.map((d: string, i: number) => `${i + 1}. ${d}`),
+    '',
+    `**⚠ 警示**: ${r.out.warning_line}`,
+  ].join('\n');
+  await deps.db.query(
+    `UPDATE ceo_briefs
+        SET body_md = $1,
+            generated_run_id = $2,
+            generated_at = NOW(),
+            updated_at = NOW()
+      WHERE id = $3::uuid`,
+    [fullBody, run.id, ctx.brief.id],
+  );
+  return { ok: true, result: { mode: 'llm', briefId: ctx.brief.id, len: fullBody.length } };
+}
+
+/** boardroom-brief-toc → 更新 ceo_briefs.toc + page_count */
+export async function handleBoardroomBriefToc(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
+  const def = PROMPTS['boardroom-brief-toc'];
+  const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
+  if (!ctx.brief) return { ok: false, error: '无 draft brief' };
+  const r = await invokeAndValidate(deps, def, ctx, run.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  // toc 序列化为 jsonb；附加 forward_pct 与 generated_summary 到 metadata
+  await deps.db.query(
+    `UPDATE ceo_briefs
+        SET toc = $1::jsonb,
+            page_count = $2,
+            generated_run_id = $3,
+            generated_at = NOW(),
+            updated_at = NOW()
+      WHERE id = $4::uuid`,
+    [JSON.stringify(r.out.toc), r.out.page_count, run.id, ctx.brief.id],
+  );
+  return {
+    ok: true,
+    result: { mode: 'llm', briefId: ctx.brief.id, chapters: r.out.toc.length, pageCount: r.out.page_count, forwardPct: r.out.forward_pct },
+  };
+}
+
+/** boardroom-promises → ceo_board_promises (CEO 主动承诺) */
+export async function handleBoardroomPromises(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
+  const def = PROMPTS['boardroom-promises'];
+  const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
+  if (!ctx.brief) return { ok: false, error: '无 draft brief — board_promises 必须挂 brief' };
+  const r = await invokeAndValidate(deps, def, ctx, run.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  const inserted: string[] = [];
+  for (const p of r.out.promises) {
+    const ins = await deps.db.query(
+      `INSERT INTO ceo_board_promises
+         (brief_id, what, owner, due_at, status, source_decision_id)
+       VALUES ($1::uuid, $2, $3, $4::date, $5, $6)
+       RETURNING id::text`,
+      [ctx.brief.id, p.what, p.owner, p.due_at, p.status ?? 'in_progress', `generated:${run.id}`],
+    );
+    inserted.push(String(ins.rows[0]?.id));
+  }
+  return { ok: true, result: { mode: 'llm', count: inserted.length, briefId: ctx.brief.id } };
+}
+
+/** war-room-formation → ceo_formation_snapshots */
+export async function handleWarRoomFormation(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
+  const def = PROMPTS['war-room-formation'];
+  const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
+  const r = await invokeAndValidate(deps, def, ctx, run.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  // 本周一开始 (Mon = 1)
+  const today = new Date();
+  const day = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (day - 1));
+  monday.setHours(0, 0, 0, 0);
+  const weekStart = monday.toISOString().slice(0, 10);
+  const formationData = {
+    nodes: r.out.nodes,
+    links: r.out.links,
+    conflict_kinds: r.out.conflict_kinds,
+    gaps: r.out.gaps,
+    generated_run_id: run.id,
+  };
+  await deps.db.query(
+    `INSERT INTO ceo_formation_snapshots (scope_id, week_start, formation_data, conflict_temp)
+     VALUES ($1::uuid, $2::date, $3::jsonb, $4)
+     ON CONFLICT (scope_id, week_start) DO UPDATE
+       SET formation_data = EXCLUDED.formation_data,
+           conflict_temp = EXCLUDED.conflict_temp,
+           computed_at = NOW()`,
+    [run.scope_id, weekStart, JSON.stringify(formationData), r.out.conflict_temp],
+  );
+  return { ok: true, result: { mode: 'llm', weekStart, nodes: r.out.nodes.length, links: r.out.links.length, gaps: r.out.gaps.length } };
+}
+
+/** ceo-decisions-capture → ceo_decisions */
+export async function handleCeoDecisionsCapture(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
+  const def = PROMPTS['ceo-decisions-capture'];
+  const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
+  const r = await invokeAndValidate(deps, def, ctx, run.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  const inserted: string[] = [];
+  for (const d of r.out.decisions) {
+    const ins = await deps.db.query(
+      `INSERT INTO ceo_decisions
+         (scope_id, title, context, options, chosen_option, rationale, reversibility, confidence, decided_at)
+       VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::date)
+       RETURNING id::text`,
+      [
+        run.scope_id,
+        d.title,
+        d.context,
+        JSON.stringify(d.options),
+        d.chosen_option,
+        d.rationale,
+        d.reversibility,
+        d.confidence,
+        d.decided_on,
+      ],
+    );
+    inserted.push(String(ins.rows[0]?.id));
+  }
+  return { ok: true, result: { mode: 'llm', count: inserted.length } };
+}
+
 function isUuid(s: string | null | undefined): s is string {
   return typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
 /** 入口表 — 给 runHandlers.ts 的 HANDLERS 合并用 */
 export const PROMPT_HANDLERS: Record<string, (deps: CeoEngineDeps, run: PromptRunRow) => Promise<HandlerResult>> = {
-  'compass-stars':        handleCompassStars,
-  'compass-drift-alert':  handleCompassDriftAlert,
-  'compass-echo':         handleCompassEcho,
-  'boardroom-rebuttal':   handleBoardroomRebuttal,
-  'boardroom-annotation': handleBoardroomAnnotation,
-  'boardroom-concerns':   handleBoardroomConcerns,
-  'situation-signal':     handleSituationSignal,
-  'situation-rubric':     handleSituationRubric,
-  'balcony-prompt':       handleBalconyPrompt,
-  'war-room-spark':       handleWarRoomSpark,
+  'compass-stars':         handleCompassStars,
+  'compass-drift-alert':   handleCompassDriftAlert,
+  'compass-echo':          handleCompassEcho,
+  'compass-narrative':     handleCompassNarrative,
+  'boardroom-rebuttal':    handleBoardroomRebuttal,
+  'boardroom-annotation':  handleBoardroomAnnotation,
+  'boardroom-concerns':    handleBoardroomConcerns,
+  'boardroom-brief-toc':   handleBoardroomBriefToc,
+  'boardroom-promises':    handleBoardroomPromises,
+  'situation-signal':      handleSituationSignal,
+  'situation-rubric':      handleSituationRubric,
+  'balcony-prompt':        handleBalconyPrompt,
+  'war-room-spark':        handleWarRoomSpark,
+  'war-room-formation':    handleWarRoomFormation,
+  'ceo-decisions-capture': handleCeoDecisionsCapture,
 };

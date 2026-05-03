@@ -15,28 +15,38 @@ import type { PromptDef, PromptCtx } from './types.js';
 import { compassStarsPrompt } from './compass-stars.js';
 import { compassDriftAlertPrompt } from './compass-drift-alert.js';
 import { compassEchoPrompt } from './compass-echo.js';
+import { compassNarrativePrompt } from './compass-narrative.js';
 import { boardroomRebuttalPrompt } from './boardroom-rebuttal.js';
 import { boardroomAnnotationPrompt } from './boardroom-annotation.js';
 import { boardroomConcernsPrompt } from './boardroom-concerns.js';
+import { boardroomBriefTocPrompt } from './boardroom-brief-toc.js';
+import { boardroomPromisesPrompt } from './boardroom-promises.js';
 import { situationSignalPrompt } from './situation-signal.js';
 import { situationRubricPrompt } from './situation-rubric.js';
 import { balconyPromptPrompt } from './balcony-prompt.js';
 import { warRoomSparkPrompt } from './war-room-spark.js';
+import { warRoomFormationPrompt } from './war-room-formation.js';
+import { ceoDecisionsCapturePrompt } from './ceo-decisions-capture.js';
 
 export type { PromptDef, PromptCtx } from './types.js';
 
 /** axis → prompt def 映射 */
 export const PROMPTS: Record<string, PromptDef<any>> = {
-  'compass-stars':       compassStarsPrompt,
-  'compass-drift-alert': compassDriftAlertPrompt,
-  'compass-echo':        compassEchoPrompt,
-  'boardroom-rebuttal':  boardroomRebuttalPrompt,
-  'boardroom-annotation': boardroomAnnotationPrompt,
-  'boardroom-concerns':  boardroomConcernsPrompt,
-  'situation-signal':    situationSignalPrompt,
-  'situation-rubric':    situationRubricPrompt,
-  'balcony-prompt':      balconyPromptPrompt,
-  'war-room-spark':      warRoomSparkPrompt,
+  'compass-stars':         compassStarsPrompt,
+  'compass-drift-alert':   compassDriftAlertPrompt,
+  'compass-echo':          compassEchoPrompt,
+  'compass-narrative':     compassNarrativePrompt,
+  'boardroom-rebuttal':    boardroomRebuttalPrompt,
+  'boardroom-annotation':  boardroomAnnotationPrompt,
+  'boardroom-concerns':    boardroomConcernsPrompt,
+  'boardroom-brief-toc':   boardroomBriefTocPrompt,
+  'boardroom-promises':    boardroomPromisesPrompt,
+  'situation-signal':      situationSignalPrompt,
+  'situation-rubric':      situationRubricPrompt,
+  'balcony-prompt':        balconyPromptPrompt,
+  'war-room-spark':        warRoomSparkPrompt,
+  'war-room-formation':    warRoomFormationPrompt,
+  'ceo-decisions-capture': ceoDecisionsCapturePrompt,
 };
 
 export const PROMPT_AXES = Object.keys(PROMPTS);
