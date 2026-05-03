@@ -1,5 +1,5 @@
 {
-  "$generated_at": "2026-05-03T10:24:23.614Z",
+  "$generated_at": "2026-05-03T09:36:06.652Z",
   "$generated_by": "ceo-snapshot-pages.ts",
   "$scopes": [
     {
@@ -30,13 +30,13 @@
       "question": "我把时间花在战略主线上了吗?",
       "metric": {
         "label": "战略对齐度",
-        "value": "0.33",
+        "value": "0.40",
         "delta": "本周"
       },
       "lines": {
-        "main": 3,
-        "branch": 2,
-        "drift": 1
+        "main": 1,
+        "branch": 0,
+        "drift": 0
       },
       "attention": {
         "main": 0,
@@ -44,15 +44,8 @@
         "firefighting": 0,
         "total": 0
       },
-      "driftAlerts": [
-        {
-          "name": "攻略类文档 · 命名漂移",
-          "delta": "35%",
-          "text": "偏离主线",
-          "severity": "warn"
-        }
-      ],
-      "alignmentScore": 0.333
+      "driftAlerts": [],
+      "alignmentScore": 0.4
     },
     "boardroom": {
       "question": "下次董事会我要带什么?",
@@ -172,7 +165,7 @@
         "completed": 5,
         "total": 7
       },
-      "sparkSeedCount": 23
+      "sparkSeedCount": 17
     },
     "situation": {
       "question": "外部世界怎么看我?",
@@ -265,10 +258,10 @@
           },
           "metric": {
             "label": "战略对齐度",
-            "value": "0.33",
+            "value": "0.40",
             "delta_vs_last_week": null,
             "target": 0.8,
-            "tooltip_explanation": "对齐度 = 0.6 × 主线时间占比 + 0.4 × (1 − drift 占比) · 当前 0.33"
+            "tooltip_explanation": "对齐度 = 0.6 × 主线时间占比 + 0.4 × (1 − drift 占比) · 当前 0.40"
           }
         },
         {

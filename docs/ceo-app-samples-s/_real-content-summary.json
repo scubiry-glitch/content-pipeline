@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-05-03T10:23:05.456Z",
+  "scopes": [
+    {
+      "id": "f6cf3f51-37e8-4099-8969-d09f6ff31a7e",
+      "name": "业务支持",
+      "meetingCount": 9
+    }
+  ],
+  "row_counts_per_table": {
+    "compass": {
+      "ceo_strategic_lines": 6,
+      "ceo_strategic_echos": -1
+    },
+    "boardroom": {
+      "ceo_directors": 0,
+      "ceo_director_concerns": -1,
+      "ceo_briefs": 1,
+      "ceo_rebuttal_rehearsals": 0,
+      "ceo_boardroom_annotations": 3
+    },
+    "situation": {
+      "ceo_stakeholders": 0,
+      "ceo_external_signals": -1,
+      "ceo_rubric_scores": 5
+    },
+    "balcony": {
+      "ceo_balcony_reflections": -1
+    },
+    "war-room": {
+      "ceo_war_room_sparks": 0
+    }
+  },
+  "note": "行数 = 4 个 scope 总和；每个棱镜实际 dashboard 拉取见 /api/v1/ceo/<prism>/dashboard"
+}

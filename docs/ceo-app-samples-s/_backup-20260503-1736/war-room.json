@@ -1,5 +1,5 @@
 {
-  "$generated_at": "2026-05-03T10:24:23.614Z",
+  "$generated_at": "2026-05-03T09:36:06.652Z",
   "$generated_by": "ceo-snapshot-pages.ts",
   "$scopes": [
     {
@@ -24,35 +24,31 @@
     }
   ],
   "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
-  "$page": "/ceo/internal/ceo/compass",
+  "$page": "/ceo/internal/ceo/war-room",
   "endpoints": {
-    "GET /api/v1/ceo/compass/dashboard": {
-      "question": "我把时间花在战略主线上了吗?",
+    "GET /api/v1/ceo/war-room/dashboard": {
+      "question": "团队健康吗? 有建设性冲突吗?",
       "metric": {
-        "label": "战略对齐度",
-        "value": "0.33",
-        "delta": "本周"
+        "label": "阵型健康",
+        "value": "72",
+        "delta": "本月"
       },
-      "lines": {
-        "main": 3,
-        "branch": 2,
-        "drift": 1
-      },
-      "attention": {
-        "main": 0,
-        "branch": 0,
-        "firefighting": 0,
+      "formationHealth": 0.72,
+      "conflictKinds": {
+        "build": 0,
+        "destructive": 0,
+        "silent": 0,
         "total": 0
       },
-      "driftAlerts": [
-        {
-          "name": "攻略类文档 · 命名漂移",
-          "delta": "35%",
-          "text": "偏离主线",
-          "severity": "warn"
-        }
-      ],
-      "alignmentScore": 0.333
+      "conflictTemp": 0,
+      "verdict": "尚无数据",
+      "sandboxStats": {
+        "draft": 0,
+        "running": 1,
+        "completed": 5,
+        "total": 7
+      },
+      "sparkSeedCount": 17
     }
   }
 }

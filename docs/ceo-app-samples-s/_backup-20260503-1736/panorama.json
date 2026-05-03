@@ -1,5 +1,5 @@
 {
-  "$generated_at": "2026-05-03T10:24:23.614Z",
+  "$generated_at": "2026-05-03T09:36:06.652Z",
   "$generated_by": "ceo-snapshot-pages.ts",
   "$scopes": [
     {
@@ -43,10 +43,10 @@
           },
           "metric": {
             "label": "战略对齐度",
-            "value": "0.33",
+            "value": "0.40",
             "delta_vs_last_week": null,
             "target": 0.8,
-            "tooltip_explanation": "对齐度 = 0.6 × 主线时间占比 + 0.4 × (1 − drift 占比) · 当前 0.33"
+            "tooltip_explanation": "对齐度 = 0.6 × 主线时间占比 + 0.4 × (1 − drift 占比) · 当前 0.40"
           }
         },
         {
