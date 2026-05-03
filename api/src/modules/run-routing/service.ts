@@ -201,5 +201,10 @@ export async function resolveTargetWorker(
   }
   const cfg = loadConfig();
   const rule = pickRule(cfg.rules, criteria);
-  return rule?.worker_id ?? null;
+  const raw = rule?.worker_id ?? null;
+  // 质量v2 · Fix A：sentinel "${WORKER_ID}" 解析为本进程的 env WORKER_ID。
+  // 把入队 run 钉到具体 worker，避免 target_worker IS NULL 让任意 worker 抢
+  // （pm2 restart 期间双进程过渡期 race 来源之一）。
+  if (raw === '${WORKER_ID}') return getWorkerId();
+  return raw;
 }

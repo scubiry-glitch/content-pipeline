@@ -228,6 +228,11 @@ export class RunEngine {
         return { recovered: 0 };
       }
       const workerId = getWorkerId();
+      // 质量v2 · Fix B：min-age 安全垫（10s）。pm2 restart 期间老进程在 SIGKILL 前
+      // 的 1.6s kill_timeout 内仍有可能 reaper / in-memory 抢拿新 queued run，
+      // 导致老代码执行（实测 Phase 8 验证时旧 pid 390917 抢拿了 108b2809）。
+      // 让新 run 至少 10s 后才被 reaper 拣选 → 老进程已确定退出，新进程独占。
+      // 代价：手动 INSERT 的 run 多 ≤10s 入队延迟（自动 enqueue 走 in-memory 不受影响）。
       const r = await this.deps.db.query(
         `SELECT id, scope_kind, scope_id::text AS scope_id, axis, sub_dims, preset,
                 strategy_spec, triggered_by, parent_run_id, metadata,
@@ -236,6 +241,7 @@ export class RunEngine {
           WHERE state = 'queued'
             AND module = 'mn'
             AND (target_worker IS NULL OR target_worker = $1)
+            AND created_at < NOW() - INTERVAL '10 seconds'
           ORDER BY created_at ASC`,
         [workerId],
       );
@@ -2277,6 +2283,11 @@ export class RunEngine {
           } catch (e) {
             console.warn('[runEngine] multi-meeting finalize · collect ids failed:', (e as Error).message);
           }
+          // 质量v2 · Phase 8 诊断 log：observe 是否进 multi-meeting finalize 路径
+          // 以及 allMeetingIds 实际内容。配合 finalize 内的 snapshot / longitudinal 块用。
+          console.log(`[runEngine] multi-meeting finalize gate · run=${payload.runId.slice(0,8)} ` +
+            `scope=${payload.scope.kind}/${(payload.scope.id ?? 'null').slice(0,8)} ` +
+            `axis=${payload.axis} meetings=${allMeetingIds.length} ids=[${allMeetingIds.slice(0,3).map(x=>x.slice(0,8)).join(',')}${allMeetingIds.length>3?',…':''}]`);
           if (allMeetingIds.length > 0) {
             await writeStep('render', 0.85, `多会议收尾 · 合成 ANALYSIS（${allMeetingIds.length} 场）…`);
             let composeOk = 0;
@@ -2335,6 +2346,7 @@ export class RunEngine {
             // 导致 scope 级 run 完成后 mn_axis_versions 拿不到 vN（前端版本对比 / 跨会聚合视图全空）。
             // 按 axis 折叠 per-meeting axes 落 snapshot，对齐 router.ts:POST /versions 的格式。
             await writeStep('render', 0.98, '生成 scope-level axis snapshot…');
+            console.log(`[runEngine] F-snap entry · run=${payload.runId.slice(0,8)} axis=${payload.axis} meetings=${allMeetingIds.length}`);
             try {
               const perMeetingAxes: Array<Record<string, any>> = [];
               for (const mid of allMeetingIds) {
@@ -2408,6 +2420,7 @@ export class RunEngine {
             // mn_decision_tree_snapshots / mn_belief_drift_series /
             // mn_mental_model_hit_stats 一直 0 行 —— 事件路径在 worker 内未稳定派发）。
             // 6m mental_model 命中率（mn_model_hitrates）由 axis 子维度直写，与本块独立。
+            console.log(`[runEngine] longitudinal gate · run=${payload.runId.slice(0,8)} scope.kind=${payload.scope.kind} scope.id=${payload.scope.id ?? 'null'}`);
             if (payload.scope.kind !== 'meeting' && payload.scope.id) {
               await writeStep('render', 0.99, '更新 longitudinal（决策树 / 信念漂移 / 命中统计）…');
               try {

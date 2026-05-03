@@ -51,6 +51,12 @@
       "notes": "专家库任务不限定 worker，self-hosted-node 本地跑"
     },
     {
+      "module": "mn",
+      "worker_id": "${WORKER_ID}",
+      "priority": 998,
+      "notes": "质量v2 Fix A · mn 兜底：钉到当前进程 WORKER_ID（避免 NULL 让 pm2 restart 期间老/新 worker 互抢）"
+    },
+    {
       "worker_id": null,
       "priority": 999,
       "notes": "兜底：其他全部不限定 worker，谁先轮询到谁跑"
