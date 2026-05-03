@@ -85,6 +85,52 @@ interface RoutingConfig {
 
 let cachedWorkerId: string | null = null;
 let cachedConfig: RoutingConfig | null = null;
+let cachedRegistryAudit: { ok: boolean; warnings: string[] } | null = null;
+
+/** 注册表一致性审计：同一 host 标识不能出现在多个 worker 的 host/host_aliases 中。
+ *  在 loadConfig 后执行一次，结果缓存。检测到冲突会打 console.warn 并把冲突项忽略。 */
+function auditWorkersRegistry(workers: Record<string, WorkerSpec>): { ok: boolean; warnings: string[] } {
+  const warnings: string[] = [];
+  const aliasOwner = new Map<string, string>(); // alias → first worker id seen
+  for (const [id, spec] of Object.entries(workers)) {
+    if (spec.enabled === false) continue;
+    const candidates = [spec.host, ...(spec.host_aliases ?? [])].filter((x): x is string => !!x && x !== 'localhost');
+    for (const c of candidates) {
+      const prev = aliasOwner.get(c);
+      if (prev && prev !== id) {
+        warnings.push(`alias "${c}" is registered to BOTH workers.${prev} and workers.${id}; auto-detect cannot disambiguate this host. Fix run-routing.json to keep aliases unique.`);
+      } else {
+        aliasOwner.set(c, id);
+      }
+    }
+  }
+  if (warnings.length > 0) {
+    for (const w of warnings) console.warn('[run-routing] registry audit · ' + w);
+  }
+  return { ok: warnings.length === 0, warnings };
+}
+
+/** 按本机 hostname / IP 在 workers 注册表里反向查找匹配的 WORKER_ID。
+ *  - 0 命中 → null（运行时走 fallback）
+ *  - 1 命中 → 返回该 id（推荐情形：注册表唯一映射）
+ *  - 2+ 命中 → null + 警告（注册表配错，多 alias 重叠） */
+function autoDetectWorkerId(): string | null {
+  const cfg = loadConfig();
+  if (!cfg.workers) return null;
+  if (!cachedRegistryAudit) cachedRegistryAudit = auditWorkersRegistry(cfg.workers);
+  const localIds = getLocalHostIdentifiers();
+  const matches: string[] = [];
+  for (const [id, spec] of Object.entries(cfg.workers)) {
+    if (spec.enabled === false) continue;
+    const candidates = [spec.host, ...(spec.host_aliases ?? [])].filter((x): x is string => !!x && x !== 'localhost');
+    if (candidates.some((c) => localIds.has(c))) matches.push(id);
+  }
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    console.warn(`[run-routing] auto-detect ambiguous: this host matches workers ${matches.join(', ')}. Set WORKER_ID env explicitly OR fix overlapping host_aliases.`);
+  }
+  return null;
+}
 
 /** 收集本机所有可用作 host 标识的字符串（hostname + 所有非 loopback IPv4）。 */
 function getLocalHostIdentifiers(): Set<string> {
@@ -111,16 +157,24 @@ function getLocalHostIdentifiers(): Set<string> {
 /**
  * 当前进程的 WORKER_ID — 一次解析后缓存。
  *
- * 质量v2 · 双胞胎 worker 防御：env 设了 WORKER_ID=X，但 run-routing.json
- * `workers.X.host` 声明 X 应该住在另一台机器（hostname / 任何非 loopback IPv4
- * 都不包含该 host）→ 拒绝冒用，降级到 host-derived id (`host-<hostname>`)，
- * 让本进程不会被路由到该 X 的任务（target_worker = X 的 run 自动绕过本机）。
+ * 解析策略（按优先级）：
+ *   1) env WORKER_ID 已设 → 用 host_aliases 校验"声明的 ID"在注册表里是否
+ *      属于本机（host_aliases 命中本机 hostname / 内网 IPv4）。命中保留 env；
+ *      不命中 → fallback 到 host-derived id，避免冒名抢任务。
+ *   2) env 未设 → 自动从 workers 注册表反查（autoDetectWorkerId）：本机的
+ *      hostname / 内网 IP 命中哪个 worker 的 host/host_aliases，就用那个 id。
+ *      唯一命中 → 用之；0 命中或多命中 → fallback。
+ *   3) 都未命中 → host-derived id (`host-<hostname>`)，仅消费 target_worker
+ *      = NULL 或 = 本机自己生成的 host-X 的 run。
+ *
+ * 注册表一致性：启动时 auditWorkersRegistry 会检查 workers.{} 里有没有
+ * alias 重复（即同一 host 标识被多个 worker 声明）。重复 → 警告，多命中
+ * 时 autoDetect 不敢猜，强制 env 显式覆盖。
  *
  * 实测背景：VM-0-11-opencloudos (IP 221.195.29.81) 与 VM-4-6-opencloudos
  * (IP 43.156.49.59) 都设了 WORKER_ID=prod-TencentOpenClaw 同时 poll DB，
- * 抢任务跑老代码。注册表里 prod-TencentOpenClaw.host="43.156.49.59"，
- * VM-0-11 启动时此处自检失败 → 自动改用 host-vm-0-11-opencloudos，
- * 不再冒充 prod-TencentOpenClaw。
+ * 抢任务跑老代码。注册表 prod-TencentOpenClaw.host_aliases 只列 VM-4-6 的
+ * 标识，VM-0-11 启动时校验失败 → fallback 到 host-vm-0-11-opencloudos。
  */
 export function getWorkerId(): string {
   if (cachedWorkerId) return cachedWorkerId;
@@ -131,7 +185,11 @@ export function getWorkerId(): string {
   })();
 
   if (env) {
+    // 模式 1：env 显式声明 → 校验声明的 ID 是否属于本机
     const cfg = loadConfig();
+    if (cfg.workers && !cachedRegistryAudit) {
+      cachedRegistryAudit = auditWorkersRegistry(cfg.workers);
+    }
     const spec = cfg.workers?.[env];
     const declared = spec?.host;
     const aliases = spec?.host_aliases ?? [];
@@ -154,8 +212,17 @@ export function getWorkerId(): string {
       }
     }
     cachedWorkerId = env;
+    console.log(`[run-routing] WORKER_ID resolved: "${env}" (env, registry-validated)`);
   } else {
-    cachedWorkerId = fallback;
+    // 模式 2：env 未设 → 从注册表反查
+    const detected = autoDetectWorkerId();
+    if (detected) {
+      cachedWorkerId = detected;
+      console.log(`[run-routing] WORKER_ID resolved: "${detected}" (auto-detected from workers registry)`);
+    } else {
+      cachedWorkerId = fallback;
+      console.log(`[run-routing] WORKER_ID resolved: "${fallback}" (fallback, no env + no registry match)`);
+    }
   }
   return cachedWorkerId;
 }

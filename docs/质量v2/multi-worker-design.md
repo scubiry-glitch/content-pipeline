@@ -14,6 +14,64 @@
 | **支持工作负载隔离** | `runtime.accept_modules` / `reject_modules` 白/黑名单；`runtime.concurrency` 控并发 |
 | **支持容灾 / 临时下线** | `enabled: false` 即可让某 worker 不参与路由（保留配置便于复活） |
 
+## 1.5 唯一性是怎么保证的（git 同步 + 一处注册）
+
+`run-routing.json` 是 **git 共享的全局拓扑表**，每台机器看到一样的 workers 注册表 + rules。但每台机器的 `WORKER_ID` 不一样。两者怎么对齐？
+
+```
+                    ┌───────────────────────────────────────────┐
+git 同步            │  run-routing.json · workers 注册表        │
+                    │  prod-cli-tencent → host_aliases          │
+                    │    ["VM-4-6-opencloudos","10.3.4.6"]      │
+                    │  prod-vm-0-11 → host_aliases              │
+                    │    ["VM-0-11-opencloudos","172.x.y.z"]    │
+                    └─────────────────┬─────────────────────────┘
+                                      │
+                                      │ 启动时拉同一份配置
+                ┌─────────────────────┴────────────────────┐
+                │                                          │
+            ┌───▼─────────────────┐               ┌────────▼──────────┐
+            │ Host A · VM-4-6     │               │ Host B · VM-0-11  │
+            │ os.hostname()       │               │ os.hostname()     │
+            │   = VM-4-6...       │               │   = VM-0-11...    │
+            │ interfaces:         │               │ interfaces:       │
+            │   10.3.4.6          │               │   172.x.y.z       │
+            └───────┬─────────────┘               └────────┬──────────┘
+                    │                                      │
+            getWorkerId() 反查 ↓                getWorkerId() 反查 ↓
+            匹配 prod-cli-tencent                匹配 prod-vm-0-11
+            的 host_aliases ✓                    的 host_aliases ✓
+                    │                                      │
+            WORKER_ID = prod-cli-tencent          WORKER_ID = prod-vm-0-11
+```
+
+`getWorkerId()` 三档解析（按优先级）：
+
+1. **env WORKER_ID 已设** → 校验 env 声明的 ID 在注册表里 host_aliases 是否包含本机标识。**命中保留**，**不命中 fallback**（防冒名）
+2. **env 未设** → 用 `os.hostname()` + 所有非 loopback IPv4 反查注册表，找唯一 host_aliases 命中的 `<id>`，命中即用之（**自动注册**）
+3. **都未命中** → `host-<hostname>` fallback（仅消费 target_worker = NULL 或 = 该 host 自己生成的 id 的 run）
+
+启动日志里能看到结果：
+
+```
+[run-routing] WORKER_ID resolved: "prod-TencentOpenClaw" (env, registry-validated)
+[run-routing] WORKER_ID resolved: "prod-vm-0-11" (auto-detected from workers registry)
+[run-routing] WORKER_ID resolved: "host-some-vm" (fallback, no env + no registry match)
+```
+
+**注册表一致性审计**：启动时也会扫一遍 `workers.{}`，如果同一 alias 出现在 2+ worker 里，打 WARN 并让 auto-detect 拒绝猜测：
+
+```
+[run-routing] registry audit · alias "VM-4-6-opencloudos" is registered to BOTH
+  workers.prod-TencentOpenClaw and workers.huoshanpro; auto-detect cannot disambiguate.
+```
+
+**结论**：
+
+- **正确做法**：所有机器都不在 `.env` 设 `WORKER_ID`，让 auto-detect 从注册表反查（注册表是唯一来源，单一改动点）
+- **过渡做法**：保留 `.env WORKER_ID`，启动时校验"声明 ID 是否真属于本机"
+- **错误做法**：两台机器 `.env` 设同一个 `WORKER_ID` → host 自检会拦下来（fallback），不会冒名抢任务
+
 ## 2. WORKER_ID 命名规范
 
 格式：`<env>-<role>-<host-tag>` 或更简短的 `<env>-<host-tag>`
