@@ -558,15 +558,18 @@ function PSilence({ meetingId }: { meetingId: string }) {
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
+  // 质量v2 Phase 7 · 保存原始 items 用于"反常沉默"callout 派生
+  type SilenceItem = { id: string; person_id: string; topic_id: string; state: string; prior_topics_spoken?: number; anomaly_score?: number; person_name?: string };
+  const [silenceItems, setSilenceItems] = useState<SilenceItem[]>([]);
 
   useEffect(() => {
-    if (forceMock) { setTopics(defaultTopics); setMatrix(defaultMatrix); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setTopics(defaultTopics); setMatrix(defaultMatrix); setPersonNames({}); setSilenceItems([]); setIsMock(true); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingSilence(meetingId)
       .then((r) => {
         if (cancelled) return;
-        const items = r?.items ?? [];
+        const items = (r?.items ?? []) as SilenceItem[];
         const stateMap: Record<string, string> = {
           'spoke': 'spoke',
           'normal_silence': 'normalSilence',
@@ -586,6 +589,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
           vals: topicSet.map((t) => grouped[pid][t] ?? 'normalSilence'),
         }));
         setTopics(topicSet); setMatrix(newMatrix); setPersonNames(names);
+        setSilenceItems(items);
         setIsMock(false); setLoading(false); reportApiSuccess();
       })
       .catch(() => setLoading(false));
@@ -660,15 +664,50 @@ function PSilence({ meetingId }: { meetingId: string }) {
       </div>
 
       <div style={{ marginTop: 26, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <CalloutCard title="今日反常沉默 · 3 处" tone="accent">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            <SilenceFinding p={P('p1')} topic="合规 / LP"
-              note="过去 4 场合规话题平均发言 5+ 次，今次 0。他可能已在会前与林雾达成默契。" />
-            <SilenceFinding p={P('p3')} topic="合规 / LP"
-              note="Wei Tan 通常会反问合规的细节，今次未问。疑似回避单笔上限讨论。" />
-            <SilenceFinding p={P('p5')} topic="估值方法"
-              note="LP 代表第一次在估值议题上表态。需要跟进沟通。" />
-          </div>
+        {/* 质量v2 Phase 7 · 反常沉默 callout 改派生自 silenceItems */}
+        <CalloutCard
+          title={`今日反常沉默 · ${isMock ? 3 : silenceItems.filter((it) => it.state === 'abnormal_silence').length} 处`}
+          tone="accent"
+        >
+          {isMock ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              <SilenceFinding p={P('p1')} topic="合规 / LP"
+                note="过去 4 场合规话题平均发言 5+ 次，今次 0。他可能已在会前与林雾达成默契。" />
+              <SilenceFinding p={P('p3')} topic="合规 / LP"
+                note="Wei Tan 通常会反问合规的细节，今次未问。疑似回避单笔上限讨论。" />
+              <SilenceFinding p={P('p5')} topic="估值方法"
+                note="LP 代表第一次在估值议题上表态。需要跟进沟通。" />
+            </div>
+          ) : (() => {
+            const abnormalFindings = silenceItems
+              .filter((it) => it.state === 'abnormal_silence')
+              .sort((a, b) => Number(b.anomaly_score ?? 0) - Number(a.anomaly_score ?? 0))
+              .slice(0, 3);
+            if (abnormalFindings.length === 0) {
+              return (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
+                  本场无反常沉默信号。
+                </div>
+              );
+            }
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                {abnormalFindings.map((it) => {
+                  const displayName = it.person_name || personNames[it.person_id] || P(it.person_id).name || it.person_id.slice(0, 8);
+                  const initials = displayName.slice(0, 2);
+                  const synthP = { id: it.person_id, name: displayName, role: '', initials, tone: 'neutral' as const, speakingPct: 0 };
+                  const prior = Number(it.prior_topics_spoken ?? 0);
+                  const score = Number(it.anomaly_score ?? 0);
+                  const note = prior > 0
+                    ? `过去 ${prior} 场该议题有发言，本场归零（anomaly=${score.toFixed(2)}）。`
+                    : `anomaly_score ${score.toFixed(2)} · 该议题反常沉默。`;
+                  return (
+                    <SilenceFinding key={it.id} p={synthP} topic={it.topic_id} note={note} />
+                  );
+                })}
+              </div>
+            );
+          })()}
         </CalloutCard>
         <CalloutCard title="批判：沉默也会误报">
           不是所有沉默都值得深究。需要和<i>议程优先级、发言机会窗口</i>一起看 ——
