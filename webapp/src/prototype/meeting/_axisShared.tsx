@@ -678,28 +678,82 @@ export function DimShell({
     </div>
   );
 
+  // tab refs（仅 mobile 用于 scrollIntoView 自动居中）
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabStrip = (
     <div style={{
       display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2,
       flexShrink: 0,
+      ...(isMobile ? {
+        // mobile: 每个 tab snap 到中央，整条 strip 占满父滚动容器
+        scrollSnapAlign: 'start' as const,
+      } : {}),
     }}>
-      {tabs.map((t) => {
+      {tabs.map((t, idx) => {
         const active = t.id === tab;
         return (
-          <button key={t.id} onClick={() => setTab(t.id)} title={t.sub} style={{
-            padding: '6px 13px', border: 0, borderRadius: 4, fontSize: 12.5,
-            background: active ? 'var(--ink)' : 'transparent',
-            color: active ? 'var(--paper)' : 'var(--ink-2)',
-            cursor: 'pointer', fontWeight: active ? 600 : 450,
-            fontFamily: 'var(--sans)', display: 'flex', alignItems: 'center', gap: 6,
-            whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
+          <button
+            key={t.id}
+            ref={(el) => { tabRefs.current[idx] = el; }}
+            data-tab-id={t.id}
+            onClick={() => setTab(t.id)}
+            title={t.sub}
+            style={{
+              padding: isMobile ? '7px 14px' : '6px 13px',
+              border: 0, borderRadius: 4, fontSize: 12.5,
+              background: active ? 'var(--ink)' : 'transparent',
+              color: active ? 'var(--paper)' : 'var(--ink-2)',
+              cursor: 'pointer', fontWeight: active ? 600 : 450,
+              fontFamily: 'var(--sans)', display: 'flex', alignItems: 'center', gap: 6,
+              whiteSpace: 'nowrap', flexShrink: 0,
+              ...(isMobile ? {
+                scrollSnapAlign: 'center' as const,
+                scrollSnapStop: 'always' as const,
+              } : {}),
+            }}>
             <Icon name={t.icon} size={12} />{t.label}
           </button>
         );
       })}
     </div>
   );
+
+  // mobile-only: 滚动容器 ref + active 自动居中 + 左右渐隐显隐
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [edgeState, setEdgeState] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const recomputeEdges = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setEdgeState({
+      left: scrollLeft > 4,
+      right: scrollLeft + clientWidth < scrollWidth - 4,
+    });
+  };
+  useEffect(() => {
+    if (!isMobile) return;
+    // active tab 自动 smooth-scroll 到中央
+    const idx = tabs.findIndex((t) => t.id === tab);
+    const btn = tabRefs.current[idx];
+    if (btn && typeof btn.scrollIntoView === 'function') {
+      btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+    // 居中后 edge state 也会变，下一帧重算
+    requestAnimationFrame(recomputeEdges);
+  }, [tab, isMobile, tabs]);
+  useEffect(() => {
+    if (!isMobile) return;
+    recomputeEdges();
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onScroll = () => recomputeEdges();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', recomputeEdges);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', recomputeEdges);
+    };
+  }, [isMobile]);
 
   const regenerateButton = (
     <button
@@ -736,13 +790,61 @@ export function DimShell({
             {axisTitle}
             <div style={{ marginLeft: 'auto', flexShrink: 0 }}>{regenerateButton}</div>
           </div>
-          {/* Row 2: tab strip (horizontal scroll) */}
-          <div style={{
-            overflowX: 'auto', overflowY: 'hidden',
-            padding: '0 14px 8px', WebkitOverflowScrolling: 'touch',
-          }}>
-            {tabStrip}
+          {/* Row 2: tab strip — snap-scroll + 自动居中 + 左右渐隐 + 位置点 */}
+          <div style={{ position: 'relative' }}>
+            <div
+              ref={scrollerRef}
+              className="mp-scroll-h"
+              style={{
+                overflowX: 'auto', overflowY: 'hidden',
+                padding: '0 14px 8px', WebkitOverflowScrolling: 'touch',
+                scrollSnapType: 'x proximity',
+              }}
+            >
+              {tabStrip}
+            </div>
+            {/* 左渐隐 */}
+            <div style={{
+              position: 'absolute', left: 0, top: 0, bottom: 8, width: 18,
+              background: 'linear-gradient(to right, var(--paper), transparent)',
+              pointerEvents: 'none',
+              opacity: edgeState.left ? 1 : 0,
+              transition: 'opacity 180ms ease',
+            }} />
+            {/* 右渐隐 */}
+            <div style={{
+              position: 'absolute', right: 0, top: 0, bottom: 8, width: 18,
+              background: 'linear-gradient(to left, var(--paper), transparent)',
+              pointerEvents: 'none',
+              opacity: edgeState.right ? 1 : 0,
+              transition: 'opacity 180ms ease',
+            }} />
           </div>
+          {/* 位置点：tabs ≥ 4 个才显，每个点对应一个 tab，激活态用 ink */}
+          {tabs.length >= 4 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 5, padding: '0 14px 6px',
+            }}>
+              {tabs.map((t, i) => {
+                const active = t.id === tab;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    aria-label={`跳到 ${t.label}`}
+                    style={{
+                      width: active ? 16 : 5, height: 5, borderRadius: 99, border: 0,
+                      background: active ? 'var(--ink)' : 'var(--ink-4)',
+                      opacity: active ? 1 : 0.45,
+                      cursor: 'pointer', padding: 0,
+                      transition: 'width 200ms ease, opacity 200ms ease, background 200ms ease',
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
           {/* Row 3: sub label + meta controls (flex wrap so popovers don't get clipped) */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
