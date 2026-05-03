@@ -70,14 +70,20 @@ async function invokeAndValidate<T>(
   await recordLlmCost(deps, runId, result);
 
   let parsed: unknown;
+  const stripped = stripCodeFence(result.text);
   try {
-    parsed = JSON.parse(stripCodeFence(result.text));
+    parsed = JSON.parse(stripped);
   } catch (e) {
-    // 兜底：尝试把字符串值内裸 ASCII " 自动改成 "（无侵入修复 LLM 漏转义）
+    // 兜底 1：字符串值内裸 ASCII " → 中文 "（修复 LLM 常见漏转义）
+    const fixed = autoFixUnescapedQuotes(stripped);
     try {
-      parsed = JSON.parse(autoFixUnescapedQuotes(stripCodeFence(result.text)));
+      parsed = JSON.parse(fixed);
     } catch (e2) {
-      return { ok: false, error: `[LLM 输出非 JSON] ${(e as Error).message}; head=${result.text.slice(0, 200)}` };
+      // 兜底 2：再加一遍粗暴清理 + 重 parse；都失败时报第二个错（更接近实际原因）
+      return {
+        ok: false,
+        error: `[LLM 输出非 JSON] e1=${(e as Error).message}; e2=${(e2 as Error).message}; head=${stripped.slice(0, 200)}`,
+      };
     }
   }
   let out: T;
