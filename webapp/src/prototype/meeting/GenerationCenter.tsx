@@ -132,6 +132,8 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     ?? (typeof it.scope === 'string' ? it.scope : undefined)
     ?? 'project';
   const scopeIdResolved = (it.scopeId as string | undefined) ?? scopeObj?.id as string | undefined;
+  const surfaces = it.surfaces as Record<string, unknown> | undefined;
+  const metadata = it.metadata as Record<string, unknown> | undefined;
   return {
     id: String(it.id ?? ''),
     state: (it.state as MockRun['state']) ?? 'queued',
@@ -151,7 +153,7 @@ function mapApiRun(it: Record<string, unknown>): MockRun {
     dependsOn: Array.isArray(it.dependsOn) ? (it.dependsOn as string[]) : (Array.isArray(it.depends_on) ? (it.depends_on as string[]) : []),
     triggerMeetingId: typeof it.triggerMeetingId === 'string' ? it.triggerMeetingId : (typeof it.trigger_meeting_id === 'string' ? it.trigger_meeting_id : undefined),
     // R5 · 粒度 1：从 surfaces.axisStats 透出 per-sub_dim 计数（后端 mapRun 已写）
-    axisStats: (it.surfaces?.axisStats ?? it.metadata?.axisStats ?? undefined) as MockRun['axisStats'],
+    axisStats: (surfaces?.axisStats ?? metadata?.axisStats ?? undefined) as MockRun['axisStats'],
     module: typeof it.module === 'string' ? it.module : undefined,
     // CEO 棱镜名常存于 metadata.prism 或顶层 prism；两条路径都吃
     prism: typeof it.prism === 'string'

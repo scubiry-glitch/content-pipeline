@@ -8,7 +8,7 @@ import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
-import { adaptApiAnalysis } from './_apiAdapters';
+import { adaptApiAnalysis, normalizeTensionMoments } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { ParticipantMergeModal } from './ParticipantMergeModal';
 import { useIsMobile } from '../_useIsMobile';
@@ -513,7 +513,7 @@ export function VariantEditorial() {
             topic: t.topic,
             intensity: t.intensity,
             summary: t.summary ?? '',
-            moments: t.moments ?? [],
+            moments: normalizeTensionMoments(t.moments),
           })) }));
           setTensionMock(false);
         }

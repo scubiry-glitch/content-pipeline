@@ -49,9 +49,9 @@ export function RunProgressPanel({ runId, tone = '#D9B88E', onCompleted, autoHid
   useEffect(() => {
     if (!runId) return;
     let cancelled = false;
-    let stopAfter: NodeJS.Timeout | null = null;
+    let stopAfter: ReturnType<typeof setTimeout> | null = null;
     let es: EventSource | null = null;
-    let pollTimer: NodeJS.Timeout | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
     const handleRow = (row: RunRow) => {
       if (cancelled) return;

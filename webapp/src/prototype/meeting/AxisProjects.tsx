@@ -179,7 +179,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
       .then((r) => {
         if (cancelled) return;
         const items = r?.items ?? [];
-        const mapped: DecisionRow[] = items.map((d) => ({
+        const mapped = items.map((d) => ({
           id: d.id.slice(0, 6),
           at: d.meeting_id ? d.meeting_id.slice(0, 12) : '',
           title: d.title,
@@ -189,7 +189,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           superseded: Boolean(d.superseded_by_id),
           supersededBy: d.superseded_by_id?.slice(0, 6),
           current: Boolean(d.is_current),
-        }));
+        })) as DecisionRow[];
         setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
       })
       .catch(() => setLoading(false));

@@ -1,5 +1,5 @@
 // 智能推荐面板 v7.5 — scene filter + purpose filter + 角度卡 + why 三问 + 张力地图
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 type SceneTag =
   | '争议话题'
@@ -129,6 +129,7 @@ export function RecommendationPanel({
   onRefresh,
   onPurposeChange,
 }: RecommendationPanelProps) {
+  const sceneScrollRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [selectedScene, setSelectedScene] = useState<SceneTag | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState('all');

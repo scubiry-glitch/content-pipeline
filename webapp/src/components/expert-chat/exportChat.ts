@@ -156,6 +156,6 @@ export async function exportChatToPdf(node: HTMLElement, meta: ExportMeta): Prom
       html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
-    })
+    } as Record<string, unknown>)
     .save();
 }

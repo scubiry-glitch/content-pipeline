@@ -13,6 +13,8 @@ import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ── Mock data ───────────────────────────────────────────────────────────────
 
 const REUSABLE_JUDGMENTS = [
@@ -511,8 +513,6 @@ export function AxisKnowledge() {
     setStickyTab(next);
     setSearchParams((p) => { const n = new URLSearchParams(p); n.set('tab', next); return n; }, { replace: true });
   };
-
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   // F7 → F9.1 · 智能 auto-pick：listScopeMeetings 后预拉 axes，选第一个 mental_models /
   // cognitive_biases / counterfactuals 任一非空的会议；都为空则用第一个（兜底）。
@@ -1018,38 +1018,46 @@ function ConceptDriftsTab({ scopeId, hint }: { scopeId: string; hint: string }) 
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={LIVE_TAB_HEADER}>概念辨析 · 漂移候选</div>
       <div style={LIVE_TAB_SUB}>knowledge / concept_drift  ·  共 {items.length} 条</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {items.map((it) => {
           const defs = Array.isArray(it.definition_at_meeting) ? it.definition_at_meeting as Array<{
             outcome: string; meeting_id: string; observed_at: string; correctly_used: boolean; model_variant?: string;
           }> : [];
+          const sevBg = it.drift_severity === 'critical' ? '#fee2e2' : it.drift_severity === 'high' ? '#fef3c7' : 'var(--paper-3)';
+          const sevFg = it.drift_severity === 'critical' ? '#b91c1c' : it.drift_severity === 'high' ? '#92400e' : 'var(--ink-3)';
           return (
-            <div key={it.id} style={LIVE_CARD}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontWeight: 600, fontSize: 14.5, color: 'var(--ink)' }}>{it.term}</span>
-                <span style={{
-                  fontSize: 10.5, fontFamily: 'var(--mono)', padding: '1px 6px', borderRadius: 3,
-                  background: it.drift_severity === 'critical' ? '#fee2e2' : it.drift_severity === 'high' ? '#fef3c7' : 'var(--paper-3)',
-                  color: it.drift_severity === 'critical' ? '#b91c1c' : it.drift_severity === 'high' ? '#92400e' : 'var(--ink-3)',
-                }}>{it.drift_severity}</span>
+            <div key={it.id} style={{ ...LIVE_CARD, padding: '16px 20px' }}>
+              {/* 概念名 行 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10, marginBottom: 12, borderBottom: '1px solid var(--line-2)' }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)', flex: 1 }}>{it.term}</span>
+                <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', padding: '2px 7px', borderRadius: 4, background: sevBg, color: sevFg }}>{it.drift_severity}</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>{defs.length} 次出现</span>
               </div>
+
+              {/* 各次出现 */}
               {defs.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {defs.map((d, i) => (
-                    <div key={i} style={{
-                      borderLeft: `2px solid ${d.correctly_used ? 'var(--teal, #0d9488)' : '#f87171'}`,
-                      paddingLeft: 10, paddingTop: 2, paddingBottom: 2,
-                    }}>
-                      <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.55 }}>{d.outcome}</div>
-                      <div style={{ fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 3 }}>
-                        {d.correctly_used ? '✓ 正确使用' : '✗ 使用偏差'}  ·  {String(d.observed_at ?? '').slice(0, 10)}  ·  {d.meeting_id?.slice(0, 8)}…
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', gap: 12, alignItems: 'start' }}>
+                      <div style={{ background: d.correctly_used ? '#0d9488' : '#f87171', borderRadius: 2, alignSelf: 'stretch', minHeight: 36 }} />
+                      <div>
+                        <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.65 }}>{d.outcome}</div>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 5, fontSize: 11, fontFamily: 'var(--mono)' }}>
+                          <span style={{ color: d.correctly_used ? '#0d9488' : '#f87171', fontWeight: 600 }}>
+                            {d.correctly_used ? '✓ 正确使用' : '✗ 使用偏差'}
+                          </span>
+                          <span style={{ color: 'var(--ink-3)' }}>·  {String(d.observed_at ?? '').slice(0, 10)}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 8 }}>
-                {defs.length} 次出现  ·  first {String(it.first_observed_at ?? '').slice(0, 10)}  ·  last {String(it.last_observed_at ?? '').slice(0, 10)}
+
+              {/* 底部时间线 */}
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-2)', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
+                <span>首次 {String(it.first_observed_at ?? '').slice(0, 10)}</span>
+                <span>最近 {String(it.last_observed_at ?? '').slice(0, 10)}</span>
               </div>
             </div>
           );

@@ -89,11 +89,11 @@ export const meetingNotesApi = {
   listMeetings: (q: { limit?: number; status?: 'active' | 'archived' | 'all' } = {}) => {
     const qs = new URLSearchParams(
       Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
-        if (v !== undefined && String(v) !== '') acc[k] = String(v);
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
         return acc;
       }, {}),
     ).toString();
-    return jget<any>(`/meetings${qs ? '?' + qs : ''}`);
+    return jget<{ items: any[]; libraryRuns?: any[] }>(`/meetings${qs ? '?' + qs : ''}`);
   },
   getMeetingAxes: (id: string) => jget<any>(`/meetings/${id}/axes`),
   getMeetingDetail: (id: string, view: 'A' | 'B' | 'C' = 'A') =>
@@ -396,16 +396,6 @@ export const meetingNotesApi = {
   getLongitudinal: (scopeId: string, kind: 'belief_drift' | 'decision_tree' | 'model_hit_rate') =>
     jget<any>(`/scopes/${scopeId}/longitudinal/${kind}`),
 
-  // Meetings
-  listMeetings: (q: { limit?: number; status?: 'active' | 'archived' | 'all' } = {}) => {
-    const qs = new URLSearchParams(
-      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
-        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
-        return acc;
-      }, {}),
-    ).toString();
-    return jget<{ items: any[]; libraryRuns: any[] }>(`/meetings${qs ? '?' + qs : ''}`);
-  },
   createMeeting: (body: { title?: string; meetingKind?: string }) =>
     jpost<{ id: string; title: string; created_at: string }>('/meetings', body),
   /** 直接导入完整 ANALYSIS JSON，跳过 LLM 流水线。

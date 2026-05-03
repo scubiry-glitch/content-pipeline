@@ -4,6 +4,20 @@
 
 import { ANALYSIS } from './_fixtures';
 
+/** API 可能返回 string[] 或 { who, text }[]，统一成 ANALYSIS 的 string[] 形态 */
+export function normalizeTensionMoments(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => {
+    if (typeof x === 'string') return x;
+    if (x && typeof x === 'object' && 'text' in (x as object)) {
+      const o = x as { who?: string; text?: string };
+      const t = o.text ?? '';
+      return o.who ? `${o.who}：${t}` : t;
+    }
+    return String(x);
+  });
+}
+
 export interface ApiMeetingMeta {
   title: string | null;
   date: string | null;
@@ -75,7 +89,7 @@ export function adaptApiAnalysis(data: any): typeof ANALYSIS {
       topic: t.topic ?? t.bias_type ?? '',
       intensity: typeof t.intensity === 'number' ? t.intensity : 0.5,
       summary: t.summary ?? t.where_excerpt ?? '',
-      moments: Array.isArray(t.moments) ? t.moments : [],
+      moments: normalizeTensionMoments(t.moments),
     })),
     newCognition: newCogBody.map((n: any) => ({
       id: n.id ?? String(Math.random()),
@@ -102,7 +116,7 @@ export function adaptApiAnalysis(data: any): typeof ANALYSIS {
       claim: v.claim ?? v.text ?? '',
       responses: Array.isArray(v.responses) ? v.responses : [],
     })),
-  };
+  } as typeof ANALYSIS;
 }
 
 /** 从 detail payload 抽 meeting metadata（title/date/participants）。 */

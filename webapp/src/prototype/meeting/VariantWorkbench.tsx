@@ -9,7 +9,7 @@ import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge, momentToText, momentSpeaker, momentBody } from './_atoms';
 import { CrossAxisLinkInline } from './_axisShared';
 import { useForceMock } from './_mockToggle';
-import { adaptApiAnalysis } from './_apiAdapters';
+import { adaptApiAnalysis, normalizeTensionMoments } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { MeetingChatDrawer } from './MeetingChatDrawer';
 
@@ -41,7 +41,7 @@ function TopBtn({ icon, children }: { icon: 'search' | 'upload'; children: strin
 
 // ── Stance card (for WBTension) ──
 function Stance({ p, stance, text, tone }: {
-  p: ReturnType<typeof P>; stance: string; text: string; tone: 'accent' | 'teal';
+  p: Participant; stance: string; text: string; tone: 'accent' | 'teal';
 }) {
   const bg = tone === 'accent' ? 'var(--accent-soft)' : 'var(--teal-soft)';
   const fg = tone === 'accent' ? 'oklch(0.3 0.1 40)' : 'oklch(0.3 0.08 200)';
@@ -744,7 +744,7 @@ export function VariantWorkbench() {
             topic: t.topic,
             intensity: t.intensity,
             summary: t.summary ?? '',
-            moments: t.moments ?? [],
+            moments: normalizeTensionMoments(t.moments),
           })) }));
           setTensionMock(false);
         }
