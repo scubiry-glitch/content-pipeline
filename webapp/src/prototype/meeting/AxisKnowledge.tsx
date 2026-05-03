@@ -146,8 +146,10 @@ function Judgments({ scopeId }: { scopeId: string }) {
         {items.map(j => (
           <div key={j.id} style={{
             background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--accent)',
-            borderRadius: 5, padding: '16px 20px',
-            display: 'grid', gridTemplateColumns: '1fr 200px 100px', gap: 18, alignItems: 'start',
+            borderRadius: 5, padding: isMobile ? '14px 14px' : '16px 20px',
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 200px 100px',
+            gap: isMobile ? 10 : 18, alignItems: 'start',
           }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -451,8 +453,11 @@ function Counterfactuals() {
         {COUNTERFACTUALS.map(c => (
           <div key={c.id} style={{
             background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderLeft: '2px solid var(--teal)',
-            borderRadius: 5, padding: '14px 18px',
-            display: 'grid', gridTemplateColumns: '1fr 220px', gap: 18, alignItems: 'center',
+            borderRadius: 5, padding: isMobile ? '12px 14px' : '14px 18px',
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 220px',
+            gap: isMobile ? 10 : 18,
+            alignItems: isMobile ? 'stretch' : 'center',
           }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -813,7 +818,11 @@ function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: num
           ? '来自 mn_evidence_grades 跨 scope 聚合 · A=4 / B=3 / C=2 / D=1 加权均值'
           : '来自 mn_evidence_grades 单 meeting · A=4 / B=3 / C=2 / D=1 加权均值'}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+        gap: isMobile ? 10 : 14,
+      }}>
         {grades.map((g) => {
           const pct = total > 0 ? ((g.n ?? 0) / total) * 100 : 0;
           return (

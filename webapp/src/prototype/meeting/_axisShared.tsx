@@ -776,7 +776,7 @@ export function DimShell({
 
   return (
     <div style={{
-      width: '100%', height: '100%', background: 'var(--paper)',
+      width: '100%', maxWidth: '100vw', height: '100%', background: 'var(--paper)',
       display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : '64px 1fr', color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
@@ -880,7 +880,10 @@ export function DimShell({
         </header>
       )}
 
-      <div style={{ overflow: 'auto' }}>{children}</div>
+      <div style={{
+        overflowY: 'auto', overflowX: 'hidden',
+        width: '100%', minWidth: 0,
+      }}>{children}</div>
     </div>
   );
 }
