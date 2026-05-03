@@ -72,8 +72,14 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp, onA
   interp?: Record<string, TensionInterp>;
   onAskAboutTension?: (t: typeof ANALYSIS.tension[number]) => void;
 }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: '100%' }}>
+    <div style={{
+      display: 'grid',
+      // mobile: 张力列表竖排在上、详情在下；不再让 260px 列把详情挤成 ~80px
+      gridTemplateColumns: isMobile ? '1fr' : '260px 1fr',
+      gap: isMobile ? 12 : 16, height: '100%',
+    }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {isMock && <div style={{ textAlign: 'right', marginBottom: 2 }}><MockBadge /></div>}
         {a.tension.map((t) => {
@@ -176,15 +182,26 @@ function WBTension({ a, selected, setSelected, isMock, P = defaultP, interp, onA
               }}>
                 {t.topic}
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 14, alignItems: 'stretch', marginBottom: 20 }}>
+              <div style={{
+                display: 'grid',
+                // mobile: 立场卡纵向堆叠 + 中间 vs 圆收成横向小徽章，避免 1/3 宽压缩
+                gridTemplateColumns: isMobile ? '1fr' : '1fr auto 1fr',
+                gap: isMobile ? 10 : 14,
+                alignItems: 'stretch', marginBottom: 20,
+              }}>
                 {p1 ? (
                   <Stance p={p1} stance={`${p1.name} 立场`} text={stanceText[0] || '（无对应引用段落）'} tone="accent" />
                 ) : <div />}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  ...(isMobile ? { padding: '4px 0' } : {}),
+                }}>
                   <div style={{
-                    width: 46, height: 46, borderRadius: 99, background: 'var(--paper-2)',
+                    width: isMobile ? 36 : 46, height: isMobile ? 36 : 46, borderRadius: 99,
+                    background: 'var(--paper-2)',
                     border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 18, color: 'var(--ink-3)',
+                    fontFamily: 'var(--serif)', fontStyle: 'italic',
+                    fontSize: isMobile ? 14 : 18, color: 'var(--ink-3)',
                   }}>vs</div>
                 </div>
                 {p2 ? (

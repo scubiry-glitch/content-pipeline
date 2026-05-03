@@ -39,6 +39,7 @@ function sectionHeader(num: string, title: string, sub: string) {
 // 3) SCQA 叙事卡(situation→complication→question→answer 四段)
 // 4) 既有 决议 / 行动项 / 风险(证据层)
 function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
+  const isMobile = useIsMobile();
   const summary: any = a.summary ?? {};
   const tldr: string | null = typeof summary.tldr === 'string' && summary.tldr.trim() ? summary.tldr : null;
   const scqa = summary.scqa && typeof summary.scqa === 'object' ? summary.scqa : null;
@@ -103,7 +104,9 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
       {/* ── L3 · SCQA 叙事 ── */}
       {scqa && (
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: 14,
           maxWidth: 760, marginBottom: 32,
         }}>
           {[
@@ -150,16 +153,26 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
         {(summary.actionItems ?? []).map((it: any) => (
           <div key={it.id} style={{
-            display: 'grid', gridTemplateColumns: '42px 100px 1fr 92px', alignItems: 'center',
-            padding: '14px 0', borderTop: '1px solid var(--line-2)', gap: 16,
+            display: 'grid',
+            // mobile: 第一行 ID + 负责人，第二行 what 跨满，第三行 due 右对齐 — 不再压缩到 109px 内列
+            gridTemplateColumns: isMobile ? '42px 1fr auto' : '42px 100px 1fr 92px',
+            gridTemplateRows: isMobile ? 'auto auto' : 'auto',
+            alignItems: 'center',
+            padding: isMobile ? '12px 0' : '14px 0',
+            borderTop: '1px solid var(--line-2)',
+            gap: isMobile ? '4px 10px' : 16,
           }}>
             <MonoMeta>{it.id}</MonoMeta>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar p={P(it.who)} size={22} />
               <span style={{ fontSize: 13 }}>{P(it.who).name}</span>
             </div>
-            <div style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--ink)' }}>{it.what}</div>
-            <MonoMeta style={{ textAlign: 'right' }}>{it.due}</MonoMeta>
+            {isMobile && <MonoMeta style={{ textAlign: 'right' }}>{it.due}</MonoMeta>}
+            <div style={{
+              fontSize: 14, lineHeight: 1.5, color: 'var(--ink)',
+              ...(isMobile ? { gridColumn: '1 / -1' } : {}),
+            }}>{it.what}</div>
+            {!isMobile && <MonoMeta style={{ textAlign: 'right' }}>{it.due}</MonoMeta>}
           </div>
         ))}
         <div style={{ height: 1, background: 'var(--line-2)' }} />
@@ -310,11 +323,16 @@ function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
 
 // ── SecFocusMap ──
 function SecFocusMap({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
+  const isMobile = useIsMobile();
   const maxR = Math.max(1, ...(a.focusMap ?? []).map((x) => x.returnsTo));
   return (
     <section>
       {sectionHeader('04', '各自关注点', '每人反复回到的主题 · 圆点尺寸为回归次数。')}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 820 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: 20, maxWidth: 820,
+      }}>
         {(a.focusMap ?? []).map((f) => {
           const p = P(f.who);
           return (
@@ -345,12 +363,17 @@ function SecFocusMap({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
 
 // ── SecConsensus ──
 function SecConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
+  const isMobile = useIsMobile();
   const cons = (a.consensus ?? []).filter((x) => x.kind === 'consensus');
   const divs = (a.consensus ?? []).filter((x) => x.kind === 'divergence');
   return (
     <section>
       {sectionHeader('05', '共识与分歧', '已对齐的默认共识 vs 仍在分岔的判断。')}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 820, marginTop: 4 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: isMobile ? 18 : 24, maxWidth: 820, marginTop: 4,
+      }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <Icon name="check" size={16} style={{ color: 'var(--accent)' }} />

@@ -737,6 +737,7 @@ function FocusNebula({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?:
 export function VariantThreads() {
   const { id } = useParams<{ id: string }>();
   const forceMock = useForceMock();
+  const isMobile = useIsMobile();
   const [view, setView] = useState<'threads' | 'consensus' | 'focus' | 'affect'>('threads');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
   const [usingMock, setUsingMock] = useState(true);
@@ -871,22 +872,33 @@ export function VariantThreads() {
   return (
     <div style={{
       width: '100%', height: '100%', background: 'var(--paper)',
-      display: 'grid', gridTemplateRows: '56px 1fr', color: 'var(--ink)',
+      display: 'grid',
+      gridTemplateRows: isMobile ? 'auto 1fr' : '56px 1fr',
+      color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
-      {/* Top */}
-      <header style={{
-        display: 'flex', alignItems: 'center', padding: '0 28px', gap: 18,
+      {/* Top — mobile: 横滑保留全部信息（标题 + 4 tab + chips），不强行换行 */}
+      <header className={isMobile ? 'mp-scroll-h' : undefined} style={{
+        display: 'flex', alignItems: 'center',
+        padding: isMobile ? '8px 14px' : '0 28px',
+        gap: isMobile ? 10 : 18,
         borderBottom: '1px solid var(--line-2)',
+        ...(isMobile ? {
+          overflowX: 'auto' as const, WebkitOverflowScrolling: 'touch' as const,
+        } : {}),
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div style={{
-            fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 600, fontSize: 22, letterSpacing: '-0.01em',
+            fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 600,
+            fontSize: isMobile ? 18 : 22, letterSpacing: '-0.01em',
           }}>Threads</div>
-          <MonoMeta>· 会议编织视图</MonoMeta>
+          {!isMobile && <MonoMeta>· 会议编织视图</MonoMeta>}
           {usingMock && <MockBadge />}
         </div>
-        <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2 }}>
+        <div style={{
+          display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 6, padding: 2,
+          flexShrink: 0,
+        }}>
           {([
             { id: 'threads',   label: '信念线' },
             { id: 'consensus', label: '共识 / 分歧图' },
@@ -898,14 +910,15 @@ export function VariantThreads() {
               background: view === v.id ? 'var(--ink)' : 'transparent',
               color: view === v.id ? 'var(--paper)' : 'var(--ink-2)',
               cursor: 'pointer', fontWeight: view === v.id ? 600 : 450,
+              whiteSpace: 'nowrap',
             }}>{v.label}</button>
           ))}
         </div>
-        <div style={{ flex: 1 }} />
+        {!isMobile && <div style={{ flex: 1 }} />}
         {/* duration / 专家配置当前接口未透传 · API 模式只显示真实可得的人数 */}
-        {usingMock && <Chip tone="ghost"><Icon name="clock" size={11} /> {MEETING.duration}</Chip>}
-        <Chip tone="ghost"><Icon name="users" size={11} /> {usingMock ? '6 人' : `${apiParticipants.length} 人`}</Chip>
-        {usingMock && <Chip tone="accent">3 experts · standard</Chip>}
+        {usingMock && <Chip tone="ghost" style={{ flexShrink: 0 }}><Icon name="clock" size={11} /> {MEETING.duration}</Chip>}
+        <Chip tone="ghost" style={{ flexShrink: 0 }}><Icon name="users" size={11} /> {usingMock ? '6 人' : `${apiParticipants.length} 人`}</Chip>
+        {usingMock && <Chip tone="accent" style={{ flexShrink: 0 }}>3 experts · standard</Chip>}
       </header>
 
       {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} P={P} participants={lanePeople} events={derivedEvents} />}
