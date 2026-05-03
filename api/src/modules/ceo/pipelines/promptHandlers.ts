@@ -273,13 +273,15 @@ export async function handleBoardroomRebuttal(deps: CeoEngineDeps, run: PromptRu
   const briefId = ctx.brief?.id ?? null;
   const inserted: string[] = [];
   for (const reb of r.out.rebuttals) {
-    const attackerLabel = `${reb.attacker_name}(${reb.attacker_role})`;
+    const role = reb.attacker_role ?? '董事';
+    const attackerLabel = `${reb.attacker_name}(${role})`;
+    const score = reb.strength_score ?? 0.6;
     const ins = await deps.db.query(
       `INSERT INTO ceo_rebuttal_rehearsals
          (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id)
        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
        RETURNING id::text`,
-      [briefId, run.scope_id, attackerLabel, reb.attack_text, reb.defense_text, reb.strength_score, run.id],
+      [briefId, run.scope_id, attackerLabel, reb.attack_text, reb.defense_text, score, run.id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }

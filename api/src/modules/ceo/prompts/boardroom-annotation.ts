@@ -26,7 +26,7 @@ export const boardroomAnnotationPrompt: PromptDef<OutT> = {
   label: 'Boardroom · 外脑批注',
   prism: 'boardroom',
   outputSchema: Out,
-  maxTokens: 1500,
+  maxTokens: 2500,
   temperature: 0.7,
 
   systemPrompt: () =>

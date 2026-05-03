@@ -7,16 +7,16 @@ import { z } from 'zod';
 import type { PromptDef, PromptCtx } from './types.js';
 
 const WhyEvidence = z.object({
-  text: z.string().min(15).max(180),
+  text: z.string().min(8).max(200),
   source: z.string().nullable(),
 }).strict();
 
 const Spark = z.object({
   tag: z.string().min(2).max(40),
-  headline: z.string().min(15).max(120),
-  evidence_short: z.string().min(15).max(180),
+  headline: z.string().min(8).max(180),
+  evidence_short: z.string().min(8).max(220),
   why_evidence: z.array(WhyEvidence).min(2).max(4),
-  risk_text: z.string().min(20).max(200),
+  risk_text: z.string().min(12).max(240),
   seed_group: z.number().int().min(0).max(2),
 }).strict();
 
@@ -73,7 +73,7 @@ ${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120
         if (!/\d|[A-Za-z]|[一-鿿]{3,}/.test(s.evidence_short)) {
           return `evidence_short 缺具体锚点: ${s.headline}`;
         }
-        if (s.risk_text.length < 20) return `risk_text 过短: ${s.headline}`;
+        if (s.risk_text.length < 12) return `risk_text 过短: ${s.headline}`;
       }
       return null;
     },

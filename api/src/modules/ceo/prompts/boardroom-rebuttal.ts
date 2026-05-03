@@ -6,18 +6,19 @@
 import { z } from 'zod';
 import type { PromptDef, PromptCtx } from './types.js';
 
+// 用 .partial() 让所有字段 optional，再用 qualityChecks 兜底校验关键字段
 const Rebuttal = z.object({
   attacker_name: z.string().min(2).max(40),
-  attacker_role: z.string().min(2).max(30),
-  attack_text: z.string().min(20).max(250),
-  defense_text: z.string().min(60).max(500),
-  strength_score: z.number().min(0).max(1),
+  attacker_role: z.string().min(2).max(30).optional(),
+  attack_text: z.string().min(20).max(300),
+  defense_text: z.string().min(40).max(600),
+  strength_score: z.number().min(0).max(1).optional(),
   score_breakdown: z.object({
-    rubric_dims_covered: z.string(),
-    if_then_bonus: z.boolean(),
-    rationale: z.string().min(20).max(300),
-  }).strict(),
-  source_meeting_id: z.string().nullable(),
+    rubric_dims_covered: z.string().optional(),
+    if_then_bonus: z.boolean().optional(),
+    rationale: z.string().min(10).max(400).optional(),
+  }).partial().optional(),
+  source_meeting_id: z.string().nullable().optional(),
 }).strict();
 
 const Out = z.object({
@@ -67,6 +68,11 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 110)}`)
 请生成 3 条 rebuttal。`,
 
   qualityChecks: [
+    (out) => {
+      // 至少 2 条 rebuttal
+      if (!out.rebuttals || out.rebuttals.length < 2) return '至少需要 2 条 rebuttal';
+      return null;
+    },
     (out, ctx) => {
       const names = new Set(ctx.directors.map((d) => d.name));
       for (const r of out.rebuttals) {
@@ -83,11 +89,12 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 110)}`)
       return null;
     },
     (out) => {
-      const scores = out.rebuttals.map((r) => r.strength_score);
-      const hasWeak = scores.some((s) => s < 0.6);
-      const hasStrong = scores.some((s) => s >= 0.7);
-      if (!hasWeak || !hasStrong) {
-        return '至少需要 1 条 strength<0.6 + 1 条 strength≥0.7（演练梯度）';
+      const scores = out.rebuttals.map((r) => r.strength_score ?? 0.6);
+      // 至少有差异（防止 LLM 全打同一分），但不强求一弱一强分布
+      const min = Math.min(...scores);
+      const max = Math.max(...scores);
+      if (out.rebuttals.length >= 2 && Math.abs(max - min) < 0.05) {
+        return 'strength_score 应有梯度（差异 ≥ 0.05），避免全同分';
       }
       return null;
     },

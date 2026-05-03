@@ -51,8 +51,9 @@ export interface PromptDef<TOut = unknown> {
   prism: 'compass' | 'boardroom' | 'tower' | 'war-room' | 'situation' | 'balcony';
   systemPrompt: (ctx: PromptCtx) => string;
   userPrompt: (ctx: PromptCtx) => string;
-  /** zod schema — strict() 严格模式禁多余字段 */
-  outputSchema: z.ZodSchema<TOut>;
+  /** zod schema — strict() 严格模式禁多余字段。
+   *  用 ZodType<TOut, ZodTypeDef, any> 让 input 类型自由（带 .optional().default() 的 schema 输入与输出不同）。 */
+  outputSchema: z.ZodType<TOut, z.ZodTypeDef, any>;
   /** 质量校验列表 — 任一返回非 null → 视为 LLM 失败 */
   qualityChecks: QualityCheck<TOut>[];
   /** LLM 调参 */

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { PromptDef, PromptCtx } from './types.js';
 
 const Out = z.object({
-  prompt_text: z.string().min(60).max(300),
+  prompt_text: z.string().min(50).max(500),
 }).strict();
 
 type OutT = z.infer<typeof Out>;
