@@ -369,8 +369,12 @@ export const meetingNotesApi = {
     }>(`/versions/${versionId}/restore`, body),
 
   // Scopes
-  listScopes: (q: { kind?: string; status?: string } = {}) => {
-    const qs = new URLSearchParams(q as any).toString();
+  listScopes: (q: { kind?: string; status?: string; dirty?: boolean } = {}) => {
+    const params: Record<string, string> = {};
+    if (q.kind) params.kind = q.kind;
+    if (q.status) params.status = q.status;
+    if (typeof q.dirty === 'boolean') params.dirty = String(q.dirty);
+    const qs = new URLSearchParams(params).toString();
     return jget<{ items: any[] }>(`/scopes${qs ? '?' + qs : ''}`);
   },
   getScope: (id: string) => jget<any>(`/scopes/${id}`),

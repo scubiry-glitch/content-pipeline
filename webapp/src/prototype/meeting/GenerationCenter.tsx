@@ -893,6 +893,112 @@ function VersionsView() {
 
 interface ScheduleRow { id: string; name: string; target: string; next: string; on: boolean; }
 
+interface DirtyScopeRow {
+  id: string;
+  name: string;
+  kind: string;
+  dirtyAt: string | null;
+  dirtyReason: string | null;
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '—';
+  const dt = Date.now() - t;
+  if (dt < 60_000) return '刚刚';
+  if (dt < 3_600_000) return `${Math.floor(dt / 60_000)} 分钟前`;
+  if (dt < 86_400_000) return `${Math.floor(dt / 3_600_000)} 小时前`;
+  return `${Math.floor(dt / 86_400_000)} 天前`;
+}
+
+function DirtyProjectsCard() {
+  const [items, setItems] = useState<DirtyScopeRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [enqueueing, setEnqueueing] = useState<string | null>(null);
+
+  const refetch = () => {
+    setLoading(true);
+    meetingNotesApi.listScopes({ kind: 'project', dirty: true })
+      .then((r) => {
+        setItems((r?.items ?? []).map((it: Record<string, unknown>) => ({
+          id: String(it.id ?? ''),
+          name: String(it.name ?? ''),
+          kind: String(it.kind ?? 'project'),
+          dirtyAt: (it.dirtyAt as string | null) ?? null,
+          dirtyReason: (it.dirtyReason as string | null) ?? null,
+        })));
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { refetch(); }, []);
+
+  async function handleRecompute(row: DirtyScopeRow) {
+    if (enqueueing) return;
+    setEnqueueing(row.id);
+    try {
+      const r = await meetingNotesApi.enqueueRun({
+        scope: { kind: 'project', id: row.id },
+        axis: 'all',
+        preset: 'standard',
+        triggeredBy: 'manual',
+      });
+      if (r.ok) {
+        // 立即从列表里移除（dirty 在 run 成功后由 runEngine 清 — 这里乐观更新）
+        setItems((prev) => prev.filter((x) => x.id !== row.id));
+      } else {
+        alert(`重算失败: ${r.reason ?? '未知原因'}`);
+      }
+    } catch (e) {
+      alert(`重算失败: ${(e as Error).message}`);
+    } finally {
+      setEnqueueing(null);
+    }
+  }
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <div style={{
+      marginBottom: 18, padding: '14px 18px',
+      background: 'oklch(0.98 0.04 75)', border: '1px solid oklch(0.85 0.10 75)',
+      borderRadius: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Icon name="bolt" size={14} />
+        <SectionLabel>{items.length} 个项目自上次重算后有变更 · 待重算</SectionLabel>
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {items.map((row) => (
+          <div key={row.id} style={{
+            display: 'grid', gridTemplateColumns: '180px 1fr 100px 80px',
+            gap: 12, alignItems: 'center', padding: '8px 10px',
+            background: 'var(--paper)', borderRadius: 5, border: '1px solid var(--line-2)',
+          }}>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 600 }}>{row.name}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {row.dirtyReason ?? '已变更'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', textAlign: 'right' }}>{formatRelative(row.dirtyAt)}</div>
+            <button
+              onClick={() => handleRecompute(row)}
+              disabled={enqueueing === row.id}
+              style={{
+                border: '1px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)',
+                padding: '5px 10px', fontSize: 11, borderRadius: 4,
+                cursor: enqueueing === row.id ? 'wait' : 'pointer',
+                opacity: enqueueing === row.id ? 0.6 : 1,
+              }}>
+              {enqueueing === row.id ? '排队中…' : '重算 ▶'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function mapApiSchedule(it: Record<string, unknown>): ScheduleRow {
   const scope = String(it.scopeKind ?? it.scope ?? 'project');
   const axis = String(it.axis ?? '—');
@@ -948,6 +1054,7 @@ function ScheduleView() {
 
   return (
     <div>
+      {!isMock && <DirtyProjectsCard />}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SectionLabel>定时与触发规则</SectionLabel>
@@ -1009,17 +1116,17 @@ function ScheduleView() {
         ))}
       </div>
 
-      <div style={{ marginTop: 22, padding: '18px 22px', background: 'var(--amber-soft)', border: '1px solid oklch(0.85 0.08 75)', borderRadius: 8 }}>
+      <div style={{ marginTop: 22, padding: '18px 22px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8 }}>
         <SectionLabel>默认触发策略</SectionLabel>
         <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {[
-            { k: 'project 层', v: '自动增量', sub: '每次新会议上传后自动触发；可在这里关闭' },
+            { k: 'project 层', v: '仅标 dirty', sub: '绑/解绑会议只标 dirty · 不自动重算 · 用户从顶部「待重算」卡主动触发（4-28 后改）' },
             { k: 'library 层', v: '手动为主', sub: '默认不自动 · 通过按钮或月度定时任务触发' },
           ].map((r, i) => (
             <div key={i}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600 }}>{r.k}</span>
-                <Chip tone={r.v === '自动增量' ? 'accent' : 'ghost'}>{r.v}</Chip>
+                <Chip tone="ghost">{r.v}</Chip>
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 5, lineHeight: 1.5 }}>{r.sub}</div>
             </div>
