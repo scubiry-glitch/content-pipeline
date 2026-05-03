@@ -11,6 +11,7 @@
 //   2. 输出 zod 严格校验 + 质量校验任一不过 → throw → handler 返回 ok:false
 //      → mn_runs.state = 'failed'，error_message 含原因。
 
+import { writeFileSync } from 'node:fs';
 import type { CeoEngineDeps, CeoLLMInvokeResult } from '../types.js';
 import { PROMPTS, loadPromptCtx, type PromptCtx, type PromptDef } from '../prompts/index.js';
 
@@ -80,7 +81,14 @@ async function invokeAndValidate<T>(
     try {
       parsed = JSON.parse(fixed);
     } catch (e2) {
-      // 兜底 2：再加一遍粗暴清理 + 重 parse；都失败时报第二个错（更接近实际原因）
+      // 诊断：CEO_DUMP_FAIL=1 时把完整 LLM 输出落盘，便于事后逐字符诊断 autoFix 漏的 case
+      if (process.env.CEO_DUMP_FAIL === '1' || process.env.CEO_DUMP_FAIL === 'true') {
+        try {
+          const path = `/tmp/ceo-llm-fail-${def.axis}-${runId.slice(0, 8)}.txt`;
+          writeFileSync(path, result.text, 'utf8');
+          console.warn(`[ceo-dump] LLM 输出已落盘: ${path}`);
+        } catch { /* ignore */ }
+      }
       return {
         ok: false,
         error: `[LLM 输出非 JSON] e1=${(e as Error).message}; e2=${(e2 as Error).message}; head=${stripped.slice(0, 200)}`,

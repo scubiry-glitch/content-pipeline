@@ -64,9 +64,11 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
     },
     (out) => {
       for (const s of out.signals) {
-        // 接受：数字、引号（中英文）、冒号"："（"X 说："等引语形态）
-        if (!/\d|["'"":：「」『』]/.test(s.signal_text)) {
-          return `signal "${s.stakeholder_name}" 缺数据/引语锚点`;
+        // 接受：数字、引号（中英文）、冒号、或长度 ≥ 30 中文字符（事实陈述够实在）
+        const hasAnchor = /\d|["'"":：「」『』]/.test(s.signal_text);
+        const cnLen = (s.signal_text.match(/[一-鿿]/g) ?? []).length;
+        if (!hasAnchor && cnLen < 30) {
+          return `signal "${s.stakeholder_name}" 既无数据/引语锚点也无足够内容 (${cnLen} 中文字)`;
         }
       }
       return null;

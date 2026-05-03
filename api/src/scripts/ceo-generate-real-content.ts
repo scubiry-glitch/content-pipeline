@@ -465,9 +465,12 @@ async function ensurePrerequisites(query: any, scope: ScopeRow) {
   }
 
   // ceo_briefs — 至少 1 个 draft（boardroom-annotation 用）
+  // 注意：原 SELECT 的 `scope_id IS NULL OR scope_id = $1::uuid` 条件下，
+  // 如果其他 scope 共享 NULL scope_id 的 brief（demo seed 留的），会误以为本 scope 已有 draft
+  // → 收紧到 scope_id = $1，每个 scope 独立判断
   const briefCount = (await query(
     `SELECT COUNT(*)::int AS n FROM ceo_briefs
-      WHERE status = 'draft' AND (scope_id IS NULL OR scope_id = $1::uuid)`,
+      WHERE status = 'draft' AND scope_id = $1::uuid`,
     [scope.id],
   )).rows[0]?.n ?? 0;
   if (briefCount < 1) {
