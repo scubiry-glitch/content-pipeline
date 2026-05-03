@@ -12,7 +12,8 @@ const TocItem = z.object({
   page_range: z.string().min(3).max(20),         // 'p.2-4'
   future_tagged: z.boolean(),
   source_concern_id: z.string().nullable(),
-}).strict();
+  // .passthrough() 允许 LLM 多带 summary / description / key_points 等合理字段
+}).passthrough();
 
 const Out = z.object({
   toc: z.array(TocItem).min(4).max(8),

@@ -136,7 +136,9 @@ interface ClaudeCliOptions {
   binPath?: string;
   /** --model 参数，默认 undefined（用 claude 默认模型） */
   model?: string;
-  /** 单次 spawn 超时毫秒，默认 180_000 (3 分钟) */
+  /** 单次 spawn 超时毫秒，默认 300_000 (5 分钟)
+   *  实测 4 scope × 10 并发时，rebuttal/spark/decisions-capture 这种 ≥2000 token
+   *  的输出在 claude-cli 队列拥塞下偶尔超过 3 分钟。给到 5 分钟基本足够。 */
   timeoutMs?: number;
 }
 
@@ -155,7 +157,7 @@ interface ClaudeCliOuterJson {
 export function createClaudeCliCeoLLMAdapterV2(opts: ClaudeCliOptions = {}): CeoLLMAdapter {
   const binPath = opts.binPath ?? 'claude';
   const model = opts.model ?? '';
-  const timeoutMs = opts.timeoutMs ?? 180_000;
+  const timeoutMs = opts.timeoutMs ?? 300_000;
 
   return {
     isAvailable() {
