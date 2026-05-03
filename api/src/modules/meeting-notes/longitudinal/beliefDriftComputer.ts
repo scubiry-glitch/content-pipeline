@@ -37,7 +37,7 @@ export class BeliefDriftComputer {
           a.created_at AS date
         FROM mn_judgments j
         JOIN mn_scope_members m ON m.meeting_id = j.abstracted_from_meeting_id
-        JOIN assets a ON a.id = j.abstracted_from_meeting_id
+        JOIN assets a ON a.id = j.abstracted_from_meeting_id::text
         WHERE m.scope_id = $1
           AND j.author_person_id IS NOT NULL
           AND j.domain IS NOT NULL
