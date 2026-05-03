@@ -116,6 +116,8 @@
       "enabled": true,
       "tags": ["llm-api", "fast-network"],
       "host": "115.190.221.164",
+      "host_aliases": [],
+      "_host_aliases_pending": "在该机跑 scripts/worker-host-info.sh，把输出的 hostname + 内网 IPv4 填进 host_aliases 数组（NAT 场景必须；非 NAT 可保持空数组，self-check 直接命中 host 即通过）",
       "ssh": { "user": "root", "port": 22 },
       "deploy": {
         "repo": "/proweb/run/Pipeline/content-pipeline/",
@@ -138,6 +140,8 @@
       "enabled": true,
       "tags": ["db-host", "self-hosted-node"],
       "host": "124.156.192.230",
+      "host_aliases": [],
+      "_host_aliases_pending": "accept_modules=[] 不接活，self-check 失败 fallback 也无害；但建议在该机跑 scripts/worker-host-info.sh 后填入以保持注册表整洁",
       "ssh": { "user": "root", "port": 22 },
       "deploy": {
         "repo": "/newdata/pipeline",
