@@ -43,10 +43,18 @@
 
 1. 写阶段 design doc（`phase-N-<topic>.md`）：背景、改动范围、改动文件、回归验证步骤
 2. 写代码
-3. 回归：`tsc --noEmit` 通过；如阶段涉及 worker 重启，restart 后跑一次 smoke run；如涉及前端，dev server 起来手验关键路径
-4. 选择性 `git add`（只提交本阶段相关文件）
-5. `git commit -m "<phase>: <topic>"`
-6. 进下一阶段
+3. **同步检查"重新生成 · 轴视图"** (`webapp/src/prototype/meeting/AxisRegeneratePanel.tsx`)：
+   - `SUB_META` 表是否覆盖本阶段动到的 sub-dim（cost / depsOn）
+   - `TAB_TO_SUBS` 路由是否把"轴 tab → sub_dim 预选"映射到正确的 axis
+   - `_axisRegistry.ts` 是否与后端 `axes/registry.ts` 的 AXIS_SUBDIMS 一致
+   - 跨模块 tab（formation / stakeholders）继续保持空 subs（panel 不接管）
+4. 回归：`tsc --noEmit` 通过；如阶段涉及 worker 重启，restart 后跑一次 smoke run；如涉及前端，dev server 起来手验关键路径
+5. 选择性 `git add`（只提交本阶段相关文件）
+6. `git commit -m "<phase>: <topic>"`
+7. 进下一阶段
+
+> 横切约束：每个 phase 调整完后必须确认 `AxisRegeneratePanel` 那张面板的"用户点 tab 上 ↻ 重算 → 预选 sub_dim 集合"行为没有错位。
+> 例：Phase 1 加 4 条新路由后，knowledge axis 的 consensus / concept / lineage / external 4 个 tab 在面板里的 `TAB_TO_SUBS.knowledge.{consensus,concept,lineage,external}` 仍然映射到对应单一 sub_dim ✓（已检查，无需改动）。
 
 ## 不做 / 边界
 

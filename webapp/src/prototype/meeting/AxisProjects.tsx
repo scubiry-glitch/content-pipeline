@@ -397,6 +397,18 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
         .sort((a, b) => Number(b.confidence ?? 0) - Number(a.confidence ?? 0))
         .slice(0, 3);
 
+  // 质量v2 Phase 6 · 证据分布派生：按 evidenceGrade 计数，给 callout 提供真实分布
+  const evidenceDist = isMock
+    ? null
+    : rows.reduce<Record<'A' | 'B' | 'C' | 'D', number>>(
+        (acc, r) => {
+          const g = r.evidenceGrade as 'A' | 'B' | 'C' | 'D';
+          if (g === 'A' || g === 'B' || g === 'C' || g === 'D') acc[g] = (acc[g] ?? 0) + 1;
+          return acc;
+        },
+        { A: 0, B: 0, C: 0, D: 0 },
+      );
+
   if (loading) return <AxisLoadingSkeleton rows={6} />;
 
   return (
@@ -497,8 +509,27 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
           )}
         </CalloutCard>
         <CalloutCard title="证据分布">
-          A 级 1 · B 级 2 · C 级 2 · D 级 1。
-          <b>D 级假设不该出现在 current 决议的支撑链里</b> —— 它是噪音级别的。
+          {evidenceDist == null ? (
+            <>
+              A 级 1 · B 级 2 · C 级 2 · D 级 1。
+              <b>D 级假设不该出现在 current 决议的支撑链里</b> —— 它是噪音级别的。
+            </>
+          ) : (() => {
+            const { A, B, C, D } = evidenceDist;
+            const ab = A + B, cd = C + D;
+            return (
+              <>
+                A 级 {A} · B 级 {B} · C 级 {C} · D 级 {D}。
+                {D > 0 ? (
+                  <> <b>D 级假设不应支撑当前决议</b> —— 是噪音级别的。</>
+                ) : cd > ab && (cd > 0) ? (
+                  <> 证据弱项偏多，建议为 C / D 级假设排期升级。</>
+                ) : ab > 0 && D === 0 && C === 0 ? (
+                  <> 整体证据扎实，无 C / D 级假设。</>
+                ) : null}
+              </>
+            );
+          })()}
         </CalloutCard>
         <CalloutCard title="机制价值">
           这张表让团队习惯把<i>"我觉得"</i>翻译成可证伪的陈述。
