@@ -68,6 +68,7 @@
       "enabled": true,
       "tags": ["dev", "fallback"],
       "host": "localhost",
+      "host_aliases": ["YimengdeMacBook-Pro.local", "192.168.75.220"],
       "deploy": {
         "api_dir": "/Users/scubiry/Documents/Scubiry/lab/pipeline/api"
       },
@@ -78,7 +79,7 @@
         }
       },
       "health": { "url": "http://localhost:3006/health" },
-      "notes": "本地 PM2 跑的 content-pipeline-api (开发环境 / 兜底，能消费任意 module)"
+      "notes": "本地 macOS PM2 跑的 content-pipeline-api (开发 / 兜底，能消费任意 module)。host=localhost 让 self-check 跳过比对；aliases 提供给 auto-detect 路径用 (.env WORKER_ID 不设时按 hostname / LAN IP 反查)"
     },
 
     "prod-TencentOpenClaw": {
