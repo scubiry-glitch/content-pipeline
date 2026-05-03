@@ -13,6 +13,10 @@ import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 import { PersonLLMProfileModal } from './PersonLLMProfileModal';
+import {
+  SILENCE_INTRO,
+  SILENCE_FALSE_POSITIVE_CRITIQUE,
+} from '../../i18n/commentary';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -613,8 +617,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
         {isMock && <MockBadge />}
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, maxWidth: 680 }}>
-        反常的沉默 = 这个议题他过去总会参与，但这次没有。可能是让步、回避、不适、不同意却不便说。
-        <b> 最危险的信息往往藏在没说的话里。</b>
+        {SILENCE_INTRO}
       </div>
 
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
@@ -710,8 +713,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
           })()}
         </CalloutCard>
         <CalloutCard title="批判：沉默也会误报">
-          不是所有沉默都值得深究。需要和<i>议程优先级、发言机会窗口</i>一起看 ——
-          如果议题只谈了 3 分钟，没人来得及说话，那不是信号，那是噪声。
+          {SILENCE_FALSE_POSITIVE_CRITIQUE}
         </CalloutCard>
       </div>
 

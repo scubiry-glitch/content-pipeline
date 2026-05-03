@@ -14,6 +14,11 @@ import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock, useMockToggle } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
+import {
+  ASSUMPTIONS_INTRO,
+  ASSUMPTIONS_MECHANISM_VALUE,
+  RISKS_LAGGING_CRITIQUE,
+} from '../../i18n/commentary';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -420,8 +425,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
         {isMock && <MockBadge />}
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 20, maxWidth: 700 }}>
-        把决议背后的 <b>未经验证的信念</b> 明摆出来，并给每一条安排一个 verifier 和 deadline。
-        这就是<i>"把会议室里的自信变成可验证的 bet"</i>。
+        {ASSUMPTIONS_INTRO}
       </div>
 
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -532,8 +536,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
           })()}
         </CalloutCard>
         <CalloutCard title="机制价值">
-          这张表让团队习惯把<i>"我觉得"</i>翻译成可证伪的陈述。
-          3 个月后回头看，被证伪的假设是最有价值的学习材料。
+          {ASSUMPTIONS_MECHANISM_VALUE}
         </CalloutCard>
       </div>
     </div>
@@ -771,8 +774,7 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
           建议下次会议前 15 分钟做一次 triage，否则它们会出现在<i>未来事故复盘</i>的第一行。
         </CalloutCard>
         <CalloutCard title="批判：热度是滞后指标">
-          到它变热的时候，往往已经晚了。配合<i>假设清单</i>一起读 ——
-          每个孤儿风险背后都有一条快要崩掉的假设。
+          {RISKS_LAGGING_CRITIQUE}
         </CalloutCard>
       </div>
 
