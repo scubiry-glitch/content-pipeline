@@ -30,6 +30,7 @@
     "ceo:generate-samples-s": "tsx src/scripts/ceo-generate-samples-s.ts",
     "ceo:seed-from-samples-s": "tsx src/scripts/ceo-seed-from-samples-s.ts",
     "ceo:generate-real": "tsx src/scripts/ceo-generate-real-content.ts",
+    "ceo:snapshot-pages": "tsx src/scripts/ceo-snapshot-pages.ts",
     "setup:production": "tsx src/scripts/setup-production.ts",
     "worker": "tsx src/worker.ts",
     "test": "vitest run",
