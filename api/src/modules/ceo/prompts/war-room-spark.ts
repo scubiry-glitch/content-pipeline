@@ -31,8 +31,8 @@ export const warRoomSparkPrompt: PromptDef<OutT> = {
   label: 'War-Room · 灵光火花',
   prism: 'war-room',
   outputSchema: Out,
-  maxTokens: 2500,
-  temperature: 0.85,
+  maxTokens: 4000,
+  temperature: 0.8,
 
   systemPrompt: () =>
     `你是 CEO 的灵感点子手。从近 90 天数据里找"非显而易见"的 spark — 反直觉关联 / 跨项目嫁接 / 二阶机会。

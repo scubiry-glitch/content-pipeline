@@ -1,0 +1,57 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/situation",
+  "endpoints": {
+    "GET /api/v1/ceo/situation/dashboard": {
+      "question": "外部世界怎么看我?",
+      "metric": {
+        "label": "覆盖度",
+        "value": "0/6",
+        "delta": "缺客户"
+      },
+      "coverage": {
+        "covered": 0,
+        "total": 5,
+        "missing": [
+          "客户",
+          "监管",
+          "LP/投资人",
+          "媒体",
+          "同行"
+        ],
+        "$kind_required": [
+          "customer",
+          "regulator",
+          "investor",
+          "press",
+          "partner"
+        ]
+      },
+      "coveredKinds": [],
+      "missingKinds": [
+        "customer",
+        "regulator",
+        "investor",
+        "press",
+        "partner",
+        "employee"
+      ],
+      "topHeat": [],
+      "signalCount": 0,
+      "horizon": {
+        "near_7d": 0,
+        "mid_30d": 0,
+        "far_90d": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/tower",
+  "endpoints": {
+    "GET /api/v1/ceo/tower/dashboard": {
+      "question": "谁欠谁什么? 卡在哪?",
+      "metric": {
+        "label": "责任清晰度",
+        "value": "100%",
+        "delta": "本周"
+      },
+      "responsibilityClarity": 1,
+      "commitmentStats": {
+        "proposed": 152,
+        "in_progress": 209,
+        "overdue": 37,
+        "done": 6,
+        "total": 216
+      },
+      "topBlockers": [
+        {
+          "name": "五一期间搞清楚 124 个商机中哪些是资管报的、有垫返的、有联返的、有建群的",
+          "days": 728,
+          "text": "说话人 3 → ?",
+          "warn": true,
+          "ownerPersonId": "38456161-ee3c-4dd2-ae5f-5c23baf6e12a"
+        },
+        {
+          "name": "节后 5 月 8 号开运营官和总监复盘会，9 号做云管家培训通关",
+          "days": 725,
+          "text": "说话人 4 → ?",
+          "warn": true,
+          "ownerPersonId": "61a3bf78-e698-4127-9c37-e1e3577fb7dc"
+        },
+        {
+          "name": "三方协议争取五月八号前定稿",
+          "days": 725,
+          "text": "说话人2 → ?",
+          "warn": true,
+          "ownerPersonId": "563ae98e-c084-47ce-b03e-ec6215906358"
+        },
+        {
+          "name": "5月十11号那周去华泰进行现场培训",
+          "days": 720,
+          "text": "说话人2 → ?",
+          "warn": true,
+          "ownerPersonId": "563ae98e-c084-47ce-b03e-ec6215906358"
+        },
+        {
+          "name": "5 月份必须达成 24 单",
+          "days": 702,
+          "text": "说话人 3 → ?",
+          "warn": true,
+          "ownerPersonId": "38456161-ee3c-4dd2-ae5f-5c23baf6e12a"
+        }
+      ]
+    }
+  }
+}

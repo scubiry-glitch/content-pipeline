@@ -1,0 +1,39 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/war-room",
+  "endpoints": {
+    "GET /api/v1/ceo/war-room/dashboard": {
+      "question": "团队健康吗? 有建设性冲突吗?",
+      "metric": {
+        "label": "阵型健康",
+        "value": "72",
+        "delta": "本月"
+      },
+      "formationHealth": 0.72,
+      "conflictKinds": {
+        "build": 0,
+        "destructive": 0,
+        "silent": 0,
+        "total": 0
+      },
+      "conflictTemp": 0,
+      "verdict": "尚无数据",
+      "sandboxStats": {
+        "draft": 0,
+        "running": 1,
+        "completed": 5,
+        "total": 7
+      },
+      "sparkSeedCount": 23
+    }
+  }
+}

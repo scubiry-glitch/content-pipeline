@@ -1,0 +1,118 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/brain",
+  "endpoints": {
+    "GET /api/v1/ceo/brain/overview": {
+      "byModule": {
+        "ceo": {
+          "queued": 0,
+          "running": 0,
+          "succeeded": 13,
+          "failed": 32,
+          "$axis_breakdown": {
+            "g2": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 3,
+              "failed": 0
+            },
+            "g3": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 3,
+              "failed": 10,
+              "$sub_kinds": {
+                "g3-sandbox": {
+                  "succeeded": 2
+                }
+              }
+            },
+            "g5": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 4,
+              "failed": 0
+            },
+            "compass-stars": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 0,
+              "failed": 1
+            },
+            "g4": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 3,
+              "failed": 0
+            },
+            "g1": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 0,
+              "failed": 21
+            }
+          }
+        },
+        "mn": {
+          "queued": 0,
+          "running": 0,
+          "succeeded": 155,
+          "failed": 53,
+          "$axis_breakdown": {
+            "all": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 79,
+              "failed": 53
+            },
+            "people": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 10,
+              "failed": 0
+            },
+            "knowledge": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 36,
+              "failed": 0
+            },
+            "meta": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 18,
+              "failed": 0
+            },
+            "projects": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 11,
+              "failed": 0
+            },
+            "tension": {
+              "queued": 0,
+              "running": 0,
+              "succeeded": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "recentLlmCalls": 9788,
+      "$cost_window": {
+        "tokens_14d": 36537352,
+        "ms_14d": 67660207,
+        "usd_estimate_14d": 182.69
+      }
+    }
+  }
+}

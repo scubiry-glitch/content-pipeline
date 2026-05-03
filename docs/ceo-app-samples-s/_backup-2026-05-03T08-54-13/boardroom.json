@@ -1,0 +1,43 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/boardroom",
+  "endpoints": {
+    "GET /api/v1/ceo/boardroom/dashboard?scopes=...": {
+      "question": "下次董事会我要带什么?",
+      "metric": {
+        "label": "前瞻占比",
+        "value": "0%",
+        "delta": "本季"
+      },
+      "concernsByStatus": {
+        "pending": 0,
+        "answered": 0,
+        "superseded": 0
+      },
+      "topConcerns": [],
+      "forwardPct": 0,
+      "promiseStats": {
+        "total": 0,
+        "done": 0,
+        "in_progress": 0,
+        "late": 0
+      },
+      "appliedScopes": [
+        {
+          "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+          "name": "美租",
+          "kind": "project"
+        }
+      ]
+    }
+  }
+}

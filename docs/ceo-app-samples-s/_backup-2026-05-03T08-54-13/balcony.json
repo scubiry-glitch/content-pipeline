@@ -1,0 +1,47 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/balcony",
+  "endpoints": {
+    "GET /api/v1/ceo/balcony/dashboard": {
+      "question": "我还是我想成为的那个 CEO 吗?",
+      "metric": {
+        "label": "本周 ROI",
+        "value": "0.61",
+        "delta": "本周"
+      },
+      "weeklyRoi": 0.611,
+      "prismScores": {
+        "direction": 0.333,
+        "board": 0,
+        "coord": 1,
+        "team": 0.72,
+        "ext": 0,
+        "self": 0.611
+      },
+      "weakest": {
+        "prism": "board",
+        "score": 0
+      },
+      "strongest": {
+        "prism": "coord",
+        "score": 1
+      },
+      "moodEnum": [
+        "clear",
+        "cloudy",
+        "conflicted",
+        "grateful",
+        "spent"
+      ]
+    }
+  }
+}

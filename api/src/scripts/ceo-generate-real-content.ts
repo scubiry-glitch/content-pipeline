@@ -107,8 +107,8 @@ async function main() {
   const { PROMPT_HANDLERS } = await import('../modules/ceo/pipelines/promptHandlers.js');
   const { handleCeoRun } = await import('../modules/ceo/pipelines/runHandlers.js');
   const { createCeoPipelineDeps } = await import('../modules/ceo/adapters/pipeline.js');
-  const { aggregateAttentionAlloc } = await import('../modules/ceo/aggregators/attention-alloc.js');
-  const { aggregateTimeRoi } = await import('../modules/ceo/aggregators/time-roi.js');
+  // 注：aggregateAttentionAlloc / aggregateTimeRoi 在调度器处再单独 import (line ~195)，
+  // 避免重复声明错误（tsx esbuild 严格 const 重声明检查）
 
   await ensureDbPoolConnected();
   // 若 DB_AUTO_MIGRATE=false（典型生产/受限 DB 用户配置），跳过 schema ensure

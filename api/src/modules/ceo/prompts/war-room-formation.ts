@@ -9,8 +9,8 @@ import type { PromptDef, PromptCtx } from './types.js';
 const Node = z.object({
   id: z.string().min(1).max(40),
   label: z.string().min(2).max(40),
-  role: z.string().min(2).max(30),
-  weight: z.number().min(0).max(1),
+  role: z.string().min(2).max(30).optional().default('team-member'),
+  weight: z.number().min(0).max(1).optional().default(0.5),
 }).strict();
 
 const Link = z.object({

@@ -1,0 +1,267 @@
+{
+  "$generated_at": "2026-05-03T08:54:13.037Z",
+  "$generated_by": "ceo-snapshot-pages.ts",
+  "$scopes": [
+    {
+      "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+      "name": "美租",
+      "kind": "project"
+    }
+  ],
+  "$note": "页面快照备份；与 docs/ceo-app-samples-s 同结构，可作为 ceo:seed-from-samples-s --dir=<this> 还原",
+  "$page": "/ceo/internal/ceo/panorama",
+  "endpoints": {
+    "GET /api/v1/ceo/panorama": {
+      "prisms": [
+        {
+          "id": "direction",
+          "icon": "🧭",
+          "label": "方向",
+          "color": "#7BA7C4",
+          "tint": "rgba(123,167,196,0.07)",
+          "room": "Compass",
+          "sector": {
+            "source": "历史纪要",
+            "step": "跨会联动",
+            "output": "一页纸摘要",
+            "app": "战略对齐度 / 破坏浣熊"
+          },
+          "metric": {
+            "label": "战略对齐度",
+            "value": "0.33",
+            "delta_vs_last_week": null,
+            "target": 0.8,
+            "tooltip_explanation": "对齐度 = 0.6 × 主线时间占比 + 0.4 × (1 − drift 占比) · 当前 0.33"
+          }
+        },
+        {
+          "id": "board",
+          "icon": "🏛️",
+          "label": "董事会",
+          "color": "#C8A15C",
+          "tint": "rgba(200,161,92,0.07)",
+          "room": "Boardroom",
+          "sector": {
+            "source": "专家库",
+            "step": "外脑批注",
+            "output": "外脑批注资产",
+            "app": "董事关切雷达 / 预读包"
+          },
+          "metric": {
+            "label": "前瞻占比",
+            "value": "0%",
+            "delta_vs_last_week": null,
+            "target": "60%",
+            "tooltip_explanation": "前瞻占比 = 前瞻议题 / 全部议题 (来自 ceo_briefs.toc.future_tagged) · 当前 0%"
+          }
+        },
+        {
+          "id": "coord",
+          "icon": "🎯",
+          "label": "协调",
+          "color": "#7FD6A0",
+          "tint": "rgba(127,214,160,0.07)",
+          "room": "Tower",
+          "sector": {
+            "source": "会议原材料",
+            "step": "实体 & 承诺抽取",
+            "output": "承诺清单",
+            "app": "责任盘点 / 会后 10 分钟卡"
+          },
+          "metric": {
+            "label": "责任清晰度",
+            "value": "100%",
+            "delta_vs_last_week": null,
+            "target": "85%",
+            "tooltip_explanation": "责任清晰度 = 三要素齐 (owner+due+criteria) 的承诺 / 全部承诺 · 当前 100%"
+          }
+        },
+        {
+          "id": "team",
+          "icon": "⚔️",
+          "label": "团队",
+          "color": "#E6A6A6",
+          "tint": "rgba(230,166,166,0.07)",
+          "room": "War Room",
+          "sector": {
+            "source": "会议原材料",
+            "step": "矛盾识别",
+            "output": "盲区档案",
+            "app": "阵型 / 兵棋推演"
+          },
+          "metric": {
+            "label": "阵型健康",
+            "value": "72",
+            "delta_vs_last_week": null,
+            "target": 80,
+            "tooltip_explanation": "阵型健康 = ceo_formation_snapshots 综合分（0–100） · 当前 72"
+          }
+        },
+        {
+          "id": "ext",
+          "icon": "🌐",
+          "label": "各方",
+          "color": "#A8A0D9",
+          "tint": "rgba(168,160,217,0.07)",
+          "room": "Situation",
+          "sector": {
+            "source": "内容库 assets",
+            "step": "Rubric 评分",
+            "output": "Rubric 矩阵",
+            "app": "利益相关方热力图"
+          },
+          "metric": {
+            "label": "覆盖度",
+            "value": "0/5",
+            "delta_vs_last_week": null,
+            "target": "5/5",
+            "tooltip_explanation": "覆盖度 = DISTINCT(stakeholder.kind) ⊇ {customer/regulator/investor/press/partner} · 当前 0/5"
+          }
+        },
+        {
+          "id": "self",
+          "icon": "🧘",
+          "label": "个人",
+          "color": "#D9B88E",
+          "tint": "rgba(217,184,142,0.07)",
+          "room": "Balcony",
+          "sector": {
+            "source": "历史纪要",
+            "step": "棱镜聚合",
+            "output": "六棱镜指标",
+            "app": "时间 ROI / 阳台时光"
+          },
+          "metric": {
+            "label": "本周 ROI",
+            "value": "0.61",
+            "delta_vs_last_week": null,
+            "target": 0.75,
+            "tooltip_explanation": "本周 ROI = deep_focus_hours / target_focus_hours (ceo_time_roi) · 当前 0.61"
+          }
+        }
+      ],
+      "stepGroups": [
+        {
+          "id": "g1",
+          "label": "ASR & 实体",
+          "sub": "转写 · diarize · 承诺抽取",
+          "members": "01·02",
+          "runCount": 21,
+          "stageCounts": {
+            "L1": 0,
+            "L2": 0
+          }
+        },
+        {
+          "id": "g2",
+          "label": "评分 & 信念",
+          "sub": "Rubric · 信念提取",
+          "members": "03·04·05",
+          "runCount": 3,
+          "stageCounts": {
+            "L1": 0,
+            "L2": 0
+          }
+        },
+        {
+          "id": "g3",
+          "label": "矛盾 & 专家",
+          "sub": "自认/外识 · 互补专家匹配",
+          "members": "06·07·08",
+          "runCount": 13,
+          "stageCounts": {
+            "L1": 0,
+            "L2": 0
+          },
+          "$sub_kinds": {
+            "g3-sandbox": 2
+          }
+        },
+        {
+          "id": "g4",
+          "label": "跨会 & 批注",
+          "sub": "rehash · 外脑批注生成",
+          "members": "09·10",
+          "runCount": 3,
+          "stageCounts": {
+            "L1": 0,
+            "L2": 0
+          }
+        },
+        {
+          "id": "g5",
+          "label": "棱镜聚合",
+          "sub": "六面指标合成",
+          "members": "11",
+          "runCount": 4,
+          "stageCounts": {
+            "L1": 0,
+            "L2": 0
+          }
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-rec",
+          "label": "会议原材料",
+          "sub": "录音 / 录像 / 文档"
+        },
+        {
+          "id": "src-hist",
+          "label": "历史纪要",
+          "sub": "信念 · 决策链"
+        },
+        {
+          "id": "src-exp",
+          "label": "专家库",
+          "sub": "S 级 · 心智模型"
+        },
+        {
+          "id": "src-lib",
+          "label": "内容库 assets",
+          "sub": "RSS · 手动 · 深度分析"
+        }
+      ],
+      "outputs": [
+        "承诺清单",
+        "角色轨迹",
+        "发言图谱",
+        "沉默信号",
+        "情绪热力图",
+        "张力清单",
+        "决策链",
+        "假设清单",
+        "开放问题",
+        "风险热度",
+        "会议健康度报告",
+        "一页纸摘要",
+        "心智模型命中",
+        "互补专家组",
+        "盲区档案",
+        "Rubric 矩阵",
+        "心智模型命中率",
+        "共识轨迹",
+        "概念漂移",
+        "议题谱系",
+        "外部专家注释",
+        "转写",
+        "rehash 指数",
+        "外脑批注",
+        "六棱镜指标"
+      ],
+      "meta": {
+        "sourceCount": 4,
+        "stepGroupCount": 5,
+        "outputCount": 25,
+        "prismCount": 6
+      },
+      "appliedScopes": [
+        {
+          "id": "c0c7a625-02a0-4f21-9a61-748a11a23842",
+          "name": "美租",
+          "kind": "project"
+        }
+      ]
+    }
+  }
+}

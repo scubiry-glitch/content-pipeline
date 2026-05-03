@@ -15,7 +15,19 @@ const Promise = z.object({
   what: z.string().min(20).max(200),
   owner: z.string().min(2).max(40),
   due_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'due_at 必须 YYYY-MM-DD'),
-  status: z.enum(['done', 'in_progress', 'late', 'dropped']).optional().default('in_progress'),
+  // 接受 LLM 偶尔输出的 'planned'/'pending' 等近义词，统一映射到 in_progress
+  status: z.preprocess(
+    (v) => {
+      if (typeof v !== 'string') return 'in_progress';
+      const s = v.toLowerCase();
+      if (['done', 'in_progress', 'late', 'dropped'].includes(s)) return s;
+      if (['planned', 'pending', 'todo', 'scheduled', 'in-progress', 'active'].includes(s)) return 'in_progress';
+      if (['cancelled', 'canceled', 'abandoned'].includes(s)) return 'dropped';
+      if (['overdue', 'delayed'].includes(s)) return 'late';
+      return 'in_progress';
+    },
+    z.enum(['done', 'in_progress', 'late', 'dropped']),
+  ),
   linked_concern_topic: z.string().nullable(),
   rationale: z.string().min(20).max(240),
 }).strict();

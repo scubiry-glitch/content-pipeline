@@ -16,9 +16,9 @@ const TocItem = z.object({
 
 const Out = z.object({
   toc: z.array(TocItem).min(4).max(8),
-  page_count: z.number().int().min(8).max(40),
-  forward_pct: z.number().min(0).max(1),
-  generated_summary: z.string().min(40).max(280),
+  page_count: z.number().int().min(8).max(40).optional().default(16),
+  forward_pct: z.number().min(0).max(1).optional().default(0.3),
+  generated_summary: z.string().min(40).max(400).optional().default(''),
 }).strict();
 
 type OutT = z.infer<typeof Out>;
