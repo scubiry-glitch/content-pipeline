@@ -6,6 +6,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import './_tokens.css';
 import { PersonDrawerProvider } from './shared/PersonDrawerProvider';
 import { PersonDrawer } from './shared/PersonDrawer';
+import { useIsMobile } from '../_useIsMobile';
 
 type Mode = 'external' | 'internal';
 type ExtTab = 'meetings' | 'library';
@@ -45,6 +46,7 @@ export function WorldShell() {
       className={`ceo-proto ${isExternal ? '' : 'ceo-proto-internal'}`}
       style={{
         width: '100%',
+        maxWidth: '100vw',
         minHeight: '100vh',
         height: '100vh',
         background: themeBg,
@@ -103,6 +105,7 @@ interface SwitcherProps {
 
 function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
   const isEx = mode === 'external';
+  const isMobile = useIsMobile();
   return (
     <div
       style={{
@@ -120,19 +123,20 @@ function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
     >
       <div
         style={{
-          padding: '12px 20px',
+          padding: isMobile ? '8px 10px' : '12px 20px',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: isMobile ? 8 : 10,
           borderRight: isEx
             ? '1px solid rgba(0,0,0,0.06)'
             : '1px solid rgba(217,184,142,0.1)',
+          flexShrink: 0,
         }}
       >
         <div
           style={{
-            width: 30,
-            height: 30,
+            width: isMobile ? 26 : 30,
+            height: isMobile ? 26 : 30,
             borderRadius: 7,
             background: isEx ? '#D64545' : '#D9B88E',
             color: isEx ? '#FAF7F0' : '#0F0E15',
@@ -141,29 +145,33 @@ function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
             justifyContent: 'center',
             fontFamily: 'var(--serif)',
             fontStyle: 'italic',
-            fontSize: 15,
+            fontSize: isMobile ? 13 : 15,
             fontWeight: 600,
+            flexShrink: 0,
           }}
         >
           M
         </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: isEx ? '#1F1B16' : '#F3ECDD' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: isMobile ? 12 : 13, color: isEx ? '#1F1B16' : '#F3ECDD' }}>
             Minutes
           </div>
-          <div
-            style={{
-              fontSize: 10,
-              color: isEx ? '#7A6E5E' : 'rgba(232,227,216,0.55)',
-              fontFamily: 'var(--mono)',
-            }}
-          >
-            v0.5 · {isEx ? '外部世界' : '内部世界'}
-          </div>
+          {/* mobile: 副标题省略，节省空间 */}
+          {!isMobile && (
+            <div
+              style={{
+                fontSize: 10,
+                color: isEx ? '#7A6E5E' : 'rgba(232,227,216,0.55)',
+                fontFamily: 'var(--mono)',
+              }}
+            >
+              v0.5 · {isEx ? '外部世界' : '内部世界'}
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, minWidth: isMobile ? 4 : 0 }} />
 
       <div
         onClick={onSwitch}
@@ -172,12 +180,13 @@ function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSwitch()}
         style={{
           alignSelf: 'center',
-          margin: '0 20px',
+          margin: isMobile ? '0 6px' : '0 20px',
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
-          width: 360,
-          height: 44,
+          width: isMobile ? 168 : 360,
+          height: isMobile ? 36 : 44,
+          flexShrink: 0,
           borderRadius: 99,
           background: isEx
             ? 'linear-gradient(90deg, #FFF5D9 0%, #EBDBAE 100%)'
@@ -266,27 +275,35 @@ function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ padding: '12px 22px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div
-          style={{
-            fontSize: 11,
-            color: isEx ? '#7A6E5E' : 'rgba(232,227,216,0.55)',
-            fontFamily: 'var(--mono)',
-            letterSpacing: 0.3,
-          }}
-        >
-          {isEx ? '09:42 · 周六' : '晚安 · 本周已亮灯'}
-        </div>
+      <div style={{
+        padding: isMobile ? '8px 10px' : '12px 22px',
+        display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12,
+        flexShrink: 0,
+      }}>
+        {/* mobile: 时间 / 问候语隐藏，节省横向空间，仅保留 🦉 入口 */}
+        {!isMobile && (
+          <div
+            style={{
+              fontSize: 11,
+              color: isEx ? '#7A6E5E' : 'rgba(232,227,216,0.55)',
+              fontFamily: 'var(--mono)',
+              letterSpacing: 0.3,
+            }}
+          >
+            {isEx ? '09:42 · 周六' : '晚安 · 本周已亮灯'}
+          </div>
+        )}
         <button
           style={{
-            width: 30,
-            height: 30,
+            width: isMobile ? 28 : 30,
+            height: isMobile ? 28 : 30,
             borderRadius: 99,
             border: 0,
             cursor: 'pointer',
             background: isEx ? 'rgba(0,0,0,0.05)' : 'rgba(217,184,142,0.15)',
             color: isEx ? '#1F1B16' : '#D9B88E',
-            fontSize: 14,
+            fontSize: isMobile ? 13 : 14,
+            flexShrink: 0,
           }}
         >
           🦉
@@ -307,16 +324,22 @@ interface SubNavProps {
 function SubNav({ items, active, tone, ink, mode }: SubNavProps) {
   const navigate = useNavigate();
   const isEx = mode === 'external';
+  const isMobile = useIsMobile();
   return (
     <div
+      className={isMobile ? 'ceo-scroll-h' : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 2,
-        padding: '10px 22px',
+        padding: isMobile ? '6px 12px' : '10px 22px',
         borderBottom: isEx
           ? '1px solid rgba(0,0,0,0.06)'
           : '1px solid rgba(217,184,142,0.1)',
+        ...(isMobile ? {
+          overflowX: 'auto' as const,
+          WebkitOverflowScrolling: 'touch' as const,
+        } : {}),
       }}
     >
       {items.map((it) => {
@@ -326,7 +349,7 @@ function SubNav({ items, active, tone, ink, mode }: SubNavProps) {
             key={it.id}
             onClick={() => navigate(it.path)}
             style={{
-              padding: '7px 14px',
+              padding: isMobile ? '6px 10px' : '7px 14px',
               border: 0,
               borderRadius: 6,
               cursor: 'pointer',
@@ -337,27 +360,32 @@ function SubNav({ items, active, tone, ink, mode }: SubNavProps) {
                 : 'transparent',
               color: isActive ? ink : isEx ? '#7A6E5E' : 'rgba(232,227,216,0.55)',
               fontFamily: 'var(--serif)',
-              fontSize: 14,
+              fontSize: isMobile ? 13 : 14,
               fontWeight: isActive ? 600 : 500,
               fontStyle: isActive ? 'normal' : 'italic',
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: isMobile ? 6 : 8,
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             {it.label}
-            <span
-              style={{
-                fontFamily: 'var(--mono)',
-                fontSize: 9.5,
-                letterSpacing: 0.3,
-                opacity: 0.7,
-                fontStyle: 'normal',
-                fontWeight: 400,
-              }}
-            >
-              {it.sub}
-            </span>
+            {/* mobile: 副标题（如"与世界的会面"）隐藏，只保留 emoji + 主标签 */}
+            {!isMobile && (
+              <span
+                style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 9.5,
+                  letterSpacing: 0.3,
+                  opacity: 0.7,
+                  fontStyle: 'normal',
+                  fontWeight: 400,
+                }}
+              >
+                {it.sub}
+              </span>
+            )}
             {isActive && (
               <span
                 style={{
@@ -366,6 +394,7 @@ function SubNav({ items, active, tone, ink, mode }: SubNavProps) {
                   borderRadius: 99,
                   background: tone,
                   marginLeft: 4,
+                  flexShrink: 0,
                 }}
               />
             )}

@@ -55,3 +55,12 @@
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+
+/* mobile: hide horizontal scrollbar visually but keep scrollable
+   用法：父元素加 inline style overflowX:auto，并加 className="ceo-scroll-h" */
+.ceo-proto .ceo-scroll-h::-webkit-scrollbar {
+  display: none;
+}
+.ceo-proto .ceo-scroll-h {
+  scrollbar-width: none;
+}
