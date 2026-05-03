@@ -1018,15 +1018,42 @@ function ConceptDriftsTab({ scopeId, hint }: { scopeId: string; hint: string }) 
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={LIVE_TAB_HEADER}>概念辨析 · 漂移候选</div>
       <div style={LIVE_TAB_SUB}>knowledge / concept_drift  ·  共 {items.length} 条</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {items.map((it) => (
-          <div key={it.id} style={LIVE_CARD}>
-            <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{it.term}</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
-              severity={it.drift_severity}  ·  first {String(it.first_observed_at ?? '').slice(0, 10)}  ·  last {String(it.last_observed_at ?? '').slice(0, 10)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {items.map((it) => {
+          const defs = Array.isArray(it.definition_at_meeting) ? it.definition_at_meeting as Array<{
+            outcome: string; meeting_id: string; observed_at: string; correctly_used: boolean; model_variant?: string;
+          }> : [];
+          return (
+            <div key={it.id} style={LIVE_CARD}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 14.5, color: 'var(--ink)' }}>{it.term}</span>
+                <span style={{
+                  fontSize: 10.5, fontFamily: 'var(--mono)', padding: '1px 6px', borderRadius: 3,
+                  background: it.drift_severity === 'critical' ? '#fee2e2' : it.drift_severity === 'high' ? '#fef3c7' : 'var(--paper-3)',
+                  color: it.drift_severity === 'critical' ? '#b91c1c' : it.drift_severity === 'high' ? '#92400e' : 'var(--ink-3)',
+                }}>{it.drift_severity}</span>
+              </div>
+              {defs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                  {defs.map((d, i) => (
+                    <div key={i} style={{
+                      borderLeft: `2px solid ${d.correctly_used ? 'var(--teal, #0d9488)' : '#f87171'}`,
+                      paddingLeft: 10, paddingTop: 2, paddingBottom: 2,
+                    }}>
+                      <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.55 }}>{d.outcome}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 3 }}>
+                        {d.correctly_used ? '✓ 正确使用' : '✗ 使用偏差'}  ·  {String(d.observed_at ?? '').slice(0, 10)}  ·  {d.meeting_id?.slice(0, 8)}…
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 8 }}>
+                {defs.length} 次出现  ·  first {String(it.first_observed_at ?? '').slice(0, 10)}  ·  last {String(it.last_observed_at ?? '').slice(0, 10)}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
