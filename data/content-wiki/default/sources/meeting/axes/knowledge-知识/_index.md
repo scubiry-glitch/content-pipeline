@@ -3,7 +3,7 @@ type: index
 subtype: axes/knowledge
 app: meeting-notes
 generatedBy: meeting-axes-generator
-lastEditedAt: "2026-05-03T08:07:46.673Z"
+lastEditedAt: "2026-05-03T08:50:08.777Z"
 ---
 
 # 知识轴 · knowledge
