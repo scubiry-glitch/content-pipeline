@@ -1,0 +1,16 @@
+# rsync 排除：本机 → 远端代码树（scp 模式）
+# 路径相对于仓库根目录
+.git/
+node_modules/
+api/node_modules/
+webapp/node_modules/
+**/.env
+**/.env.*
+.next/
+dist/
+build/
+coverage/
+.turbo/
+*.log
+.DS_Store
+.claude/

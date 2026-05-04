@@ -1,6 +1,7 @@
 /**
  * 从 api/config/run-routing.json 输出可 SSH 同步的 worker 行（TSV）。
- * 列：worker_id \t user@host \t repo \t pm2_app \t worker_log \t ssh_port
+ * 列：worker_id \t user@host \t repo \t pm2_app \t worker_log \t ssh_port \t sync_mode
+ * sync_mode：deploy.sync_mode，git（默认）| scp
  *
  * 入选条件：enabled !== false、有 ssh、有 deploy.repo、host 存在且非 localhost。
  * pm2_app / worker_log 缺省为 "-"（由 shell 侧解释为「跳过」）。
@@ -26,5 +27,7 @@ for (const [id, spec] of Object.entries(workers)) {
   const repo = String(spec.deploy.repo).replace(/\/+$/, '');
   const pm2 = spec.deploy.pm2_app != null && spec.deploy.pm2_app !== '' ? String(spec.deploy.pm2_app) : '-';
   const log = spec.deploy.worker_log != null && spec.deploy.worker_log !== '' ? String(spec.deploy.worker_log) : '-';
-  process.stdout.write([id, `${user}@${host}`, repo, pm2, log, String(port)].join('\t') + '\n');
+  const rawMode = spec.deploy.sync_mode;
+  const syncMode = rawMode === 'scp' ? 'scp' : 'git';
+  process.stdout.write([id, `${user}@${host}`, repo, pm2, log, String(port), syncMode].join('\t') + '\n');
 }

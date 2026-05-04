@@ -65,6 +65,8 @@ export interface WorkerSpec {
     worker_log?: string;
     /** 运维一键同步：远端 pm2 进程名；缺省则只 git pull + 下发 run-routing.json，不 restart */
     pm2_app?: string;
+    /** 一键同步代码方式：git=远端 git pull；scp=本机 rsync 工作区（与 deploy 写入的 .pipeline-deploy-rev 比较） */
+    sync_mode?: 'git' | 'scp';
     claude_cwd_base?: string;
   };
   claude_cli?: { bin?: string; creds?: string };

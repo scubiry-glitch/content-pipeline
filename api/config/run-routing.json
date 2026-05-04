@@ -124,7 +124,9 @@
         "repo": "/proweb/run/Pipeline/content-pipeline/",
         "api_dir": "/proweb/run/Pipeline/content-pipeline/api",
         "worker_log": "/tmp/worker-llm.log",
-        "pm2_app": "content-pipeline-api"
+        "pm2_app": "content-pipeline-api",
+        "sync_mode": "scp",
+        "_sync_mode_comment": "火山机 git 拉 GitHub 不稳时用 scp：本机维护 git 真源，脚本比较本机 HEAD 与远端 .pipeline-deploy-rev 再 rsync；其余 worker 默认 sync_mode=git"
       },
       "runtime": {
         "concurrency": 4,
