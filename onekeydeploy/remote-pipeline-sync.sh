@@ -10,7 +10,7 @@
 #   git  — 远端 cd repo && git pull；若未 --force 且远端 git HEAD == 本机 HEAD，跳过 pull
 #   scp  — 本机 rsync 仓库根 → 远端 repo/；若未 --force 且远端 .pipeline-deploy-rev == 本机 HEAD，跳过 rsync
 #
-# 文档：docs/质量v2/multi-worker-design.md §3.4.1
+# 文档：onekeydeploy/multi-worker-design.md §3.4.1
 #
 # 用法（在仓库根执行）：
 #   cd /path/to/pipeline && bash onekeydeploy/remote-pipeline-sync.sh
