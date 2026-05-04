@@ -8,11 +8,11 @@ slug: PB业务
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.077Z"
+lastEditedAt: "2026-05-04T15:44:57.407Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.077Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.407Z\"}"
 entityType: concept
-updatedAt: "2026-05-01T06:09:17.077Z"
+updatedAt: "2026-05-04T15:44:57.407Z"
 ---
 
 # PB业务

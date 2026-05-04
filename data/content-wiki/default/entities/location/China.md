@@ -9,11 +9,11 @@ slug: China
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.099Z"
+lastEditedAt: "2026-05-04T15:44:57.439Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.099Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.439Z\"}"
 entityType: location
-updatedAt: "2026-05-01T06:09:17.099Z"
+updatedAt: "2026-05-04T15:44:57.439Z"
 ---
 
 # China

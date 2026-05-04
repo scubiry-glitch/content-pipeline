@@ -10,11 +10,11 @@ slug: Finra
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.083Z"
+lastEditedAt: "2026-05-04T15:44:57.414Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.083Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.414Z\"}"
 entityType: organization
-updatedAt: "2026-05-01T06:09:17.083Z"
+updatedAt: "2026-05-04T15:44:57.414Z"
 ---
 
 # Finra

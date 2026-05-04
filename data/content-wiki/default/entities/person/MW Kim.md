@@ -6,11 +6,11 @@ slug: MW Kim
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.101Z"
+lastEditedAt: "2026-05-04T15:44:57.441Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.101Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.441Z\"}"
 entityType: person
-updatedAt: "2026-05-01T06:09:17.101Z"
+updatedAt: "2026-05-04T15:44:57.441Z"
 ---
 
 # MW Kim

@@ -33,9 +33,8 @@ export class LLMRouter {
     { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'writing', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'content_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
-    // expert_library 使用 volcano-engine (DeepSeek V3，非推理模型，适合角色扮演/对话)
-    // kimi-for-coding 是推理模型，会泄漏内部 reasoning_content，不适用于 chat
-    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
+    // expert_library: 用户指定 siliconflow + DeepSeek-V4-Flash（MN_ONESHOT_MODEL 控制具体 model）。
+    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'volcano-engine' },
     { taskType: 'summarization', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'tagging', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'siliconflow' },

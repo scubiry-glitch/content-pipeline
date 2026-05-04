@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Chip, MonoMeta, StatTile, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay } from './_axisShared';
+import { MeetingPicker } from './_meetingPicker';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -323,17 +324,21 @@ export function AxisMeta() {
   const [searchParams] = useSearchParams();
   const scope = useMeetingScope();
   const forceMock = useForceMock();
+  // URL ?scopeId 优先（直链场景），否则用 ScopePill 选中的 scope
+  const urlScopeId = searchParams.get('scopeId') ?? undefined;
+  const scopeId = urlScopeId ?? scope.effectiveScopeId;
+  const scopeKind = urlScopeId ? 'project' : (scope.kindId === 'all' ? 'project' : scope.kindId);
   // 解析顺序：URL ?meetingId 显式指定 → 当前 scope 下首场会议（API 拉取）→ fixture
   const [autoMeetingId, setAutoMeetingId] = useState<string | null>(null);
   useEffect(() => {
     if (forceMock || searchParams.get('meetingId')) { setAutoMeetingId(null); return; }
     let cancelled = false;
     meetingNotesApi
-      .listScopeMeetings(scope.effectiveScopeId)
+      .listScopeMeetings(scopeId)
       .then((r) => { if (!cancelled) setAutoMeetingId(r?.meetingIds?.[0] ?? null); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [searchParams, scope.effectiveScopeId, forceMock]);
+  }, [searchParams, scopeId, forceMock]);
   const meetingId = searchParams.get('meetingId') ?? autoMeetingId ?? MEETING.id;
   const [isMock, setIsMock] = useState(true);
   useEffect(() => {
@@ -352,6 +357,12 @@ export function AxisMeta() {
   return (
     <>
       <DimShell axis="会议本身" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock}>
+        <MeetingPicker
+          scopeId={scopeId}
+          autoMeetingId={autoMeetingId}
+          scopeKind={scopeKind}
+          scopeOverridden={!!urlScopeId}
+        />
         {tab === 'quality'   && <Quality meetingId={meetingId} />}
         {tab === 'necessity' && <Necessity meetingId={meetingId} />}
         {tab === 'emotion'   && <Emotion meetingId={meetingId} />}

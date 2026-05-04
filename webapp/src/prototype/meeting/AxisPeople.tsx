@@ -6,6 +6,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
+import { MeetingPicker } from './_meetingPicker';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -801,8 +802,7 @@ export function AxisPeople() {
   const urlScopeKind = searchParams.get('scopeKind') ?? undefined;
   const version = searchParams.get('version') ?? undefined;
   const scopeId = urlScopeId ?? scope.effectiveScopeId;
-  const _scopeKind = urlScopeKind ?? (urlScopeId ? 'project' : scope.kindId === 'all' ? 'project' : scope.kindId);
-  void _scopeKind;
+  const scopeKind = urlScopeKind ?? (urlScopeId ? 'project' : scope.kindId === 'all' ? 'project' : scope.kindId);
 
   // 双向同步 scopeId ↔ URL（ScopePill 切换 → 更新 URL；URL 有 ?scopeId → 同步到 context）
   useScopeUrlSync(setSearchParams, urlScopeId);
@@ -858,6 +858,12 @@ export function AxisPeople() {
   return (
     <>
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
+        <MeetingPicker
+          scopeId={scopeId}
+          autoMeetingId={autoMeetingId}
+          scopeKind={scopeKind}
+          scopeOverridden={!!urlScopeId}
+        />
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
         {tab === 'trajectory'  && <PTrajectory scopeId={scopeId} />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}

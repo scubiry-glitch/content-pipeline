@@ -67,7 +67,10 @@ async function kimiRequest(path: string, body: any, apiKey: string, baseURL: str
       'X-Client-Version': '1.24.0',
     },
     family: 4, // 强制使用 IPv4，解决 Node.js fetch 超时问题
-    timeout: 180000, // 3分钟 socket 超时（外层 withTimeout 会更早终止，此处作为兜底）
+    timeout: (() => {
+      const v = Number(process.env.LLM_FETCH_TIMEOUT_MS);
+      return Number.isFinite(v) && v > 0 ? v : 180000;
+    })(), // socket 超时；reasoning 模型大输出可能 >3min，由 LLM_FETCH_TIMEOUT_MS 覆盖
   };
 
   return new Promise((resolve, reject) => {
@@ -223,10 +226,13 @@ export async function generateWithKimi(
 
   try {
     const messages = [];
-    if (options.systemPrompt) {
+    // Kimi 严格校验：user 消息不能为空。调用方有时只传 systemPrompt（如 oneshotRunner
+    // 把整段 prompt 当 system，user 传 ''），这种情况下把 system 折进 user。
+    const userContent = (prompt && prompt.length > 0) ? prompt : (options.systemPrompt || '');
+    if (options.systemPrompt && userContent !== options.systemPrompt) {
       messages.push({ role: 'system', content: options.systemPrompt });
     }
-    messages.push({ role: 'user', content: prompt });
+    messages.push({ role: 'user', content: userContent });
 
     const body: Record<string, unknown> = {
       model,

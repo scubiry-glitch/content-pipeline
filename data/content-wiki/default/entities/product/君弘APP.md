@@ -8,11 +8,11 @@ slug: 君弘APP
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.078Z"
+lastEditedAt: "2026-05-04T15:44:57.409Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.078Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.409Z\"}"
 entityType: product
-updatedAt: "2026-05-01T06:09:17.078Z"
+updatedAt: "2026-05-04T15:44:57.409Z"
 ---
 
 # 君弘APP

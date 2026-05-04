@@ -6,11 +6,11 @@ slug: Akash Lal
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.075Z"
+lastEditedAt: "2026-05-04T15:44:57.405Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.075Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.405Z\"}"
 entityType: person
-updatedAt: "2026-05-01T06:09:17.075Z"
+updatedAt: "2026-05-04T15:44:57.405Z"
 ---
 
 # Akash Lal

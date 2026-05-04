@@ -6,6 +6,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Chip, MonoMeta, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
+import { MeetingPicker } from './_meetingPicker';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
@@ -618,24 +619,12 @@ export function AxisKnowledge() {
   return (
     <>
       <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
-        {/* F10 · 数据源指示条：scope/meeting 来自哪里，让用户能 verify 自己看的是哪份数据 */}
-        <div style={{
-          padding: '8px 28px', background: 'var(--paper-2)',
-          borderBottom: '1px solid var(--line-2)',
-          fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)',
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        }}>
-          <span>
-            scope={scopeKind} ·
-            id=<code style={{ color: 'var(--ink-2)' }}>{scopeId?.slice(0, 8) ?? '—'}…</code>
-            {scopeIdFromUrl && <span style={{ color: '#b91c1c', marginLeft: 4 }}>(URL 覆盖)</span>}
-          </span>
-          <span>
-            meeting=<code style={{ color: 'var(--ink-2)' }}>{meetingId?.slice(0, 8) ?? '—'}…</code>
-            {searchParams.get('meetingId') && <span style={{ color: '#b91c1c', marginLeft: 4 }}>(URL 显式)</span>}
-            {!searchParams.get('meetingId') && autoMeetingId && <span style={{ color: '#065f46', marginLeft: 4 }}>(auto-pick)</span>}
-          </span>
-        </div>
+        <MeetingPicker
+          scopeId={scopeId}
+          autoMeetingId={autoMeetingId}
+          scopeKind={scopeKind}
+          scopeOverridden={!!scopeIdFromUrl}
+        />
         {/* R4 · 改动三：tabs 重组 + 合并段
             - cognition = Judgments（沉淀） + 简短提示"新认知摘要"
             - mental_models tab = MentalModelsLive (激活) 上方 + model_hitrate 占位下方

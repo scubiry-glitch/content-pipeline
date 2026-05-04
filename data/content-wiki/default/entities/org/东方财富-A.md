@@ -9,15 +9,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.012Z"
+lastEditedAt: "2026-05-04T15:44:57.304Z"
 sources:
   - asset_45e274ae
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.012Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.304Z\"}"
 entityType: company
 domains:
   - 金融
-updatedAt: "2026-05-01T06:09:17.012Z"
+updatedAt: "2026-05-04T15:44:57.304Z"
 ---
 
 # 东方财富-A

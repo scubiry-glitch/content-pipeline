@@ -16,18 +16,18 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.090Z"
+lastEditedAt: "2026-05-04T15:44:57.425Z"
 sources:
   - asset_ef529243
   - asset_14abe195
   - asset_88c1be9c
   - asset_5776be74
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.090Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.425Z\"}"
 entityType: company
 domains:
   - 金融科技/在线经纪
-updatedAt: "2026-05-01T06:09:17.090Z"
+updatedAt: "2026-05-04T15:44:57.425Z"
 ---
 
 # UP Fintech

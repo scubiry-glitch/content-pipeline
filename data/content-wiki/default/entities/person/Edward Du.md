@@ -6,11 +6,11 @@ slug: Edward Du
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.089Z"
+lastEditedAt: "2026-05-04T15:44:57.423Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.089Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.423Z\"}"
 entityType: person
-updatedAt: "2026-05-01T06:09:17.089Z"
+updatedAt: "2026-05-04T15:44:57.423Z"
 ---
 
 # Edward Du

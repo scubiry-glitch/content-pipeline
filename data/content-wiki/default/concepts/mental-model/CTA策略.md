@@ -9,15 +9,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.061Z"
+lastEditedAt: "2026-05-04T15:44:57.387Z"
 sources:
   - asset_3723246d
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.061Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.387Z\"}"
 entityType: concept
 domains:
   - 资产管理/金融
-updatedAt: "2026-05-01T06:09:17.061Z"
+updatedAt: "2026-05-04T15:44:57.387Z"
 ---
 
 # CTA策略

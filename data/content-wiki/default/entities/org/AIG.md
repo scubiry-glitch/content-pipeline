@@ -6,11 +6,11 @@ slug: AIG
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:16.986Z"
+lastEditedAt: "2026-05-04T15:44:57.272Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:16.986Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.272Z\"}"
 entityType: company
-updatedAt: "2026-05-01T06:09:16.986Z"
+updatedAt: "2026-05-04T15:44:57.272Z"
 ---
 
 # AIG

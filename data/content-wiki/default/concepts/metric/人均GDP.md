@@ -6,11 +6,11 @@ slug: 人均GDP
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.025Z"
+lastEditedAt: "2026-05-04T15:44:57.314Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.025Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.314Z\"}"
 entityType: metric
-updatedAt: "2026-05-01T06:09:17.025Z"
+updatedAt: "2026-05-04T15:44:57.314Z"
 ---
 
 # 人均GDP

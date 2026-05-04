@@ -13,18 +13,18 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.063Z"
+lastEditedAt: "2026-05-04T15:44:57.389Z"
 sources:
   - asset_3723246d
   - asset_7c1996ff
   - asset_5a213333
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-01T06:09:17.063Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.389Z\"}"
 entityType: organization
 domains:
   - 资产管理/金融
   - 资产管理
-updatedAt: "2026-05-01T06:09:17.063Z"
+updatedAt: "2026-05-04T15:44:57.389Z"
 ---
 
 # WFOE PFM

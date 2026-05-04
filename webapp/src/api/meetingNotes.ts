@@ -384,7 +384,17 @@ export const meetingNotesApi = {
   deleteScope: (id: string) => jdelete<{ success: boolean }>(`/scopes/${id}`),
   bindMeeting: (scopeId: string, meetingId: string, reason?: string) =>
     jpost<any>(`/scopes/${scopeId}/bindings`, { meetingId, reason }),
-  listScopeMeetings: (scopeId: string) => jget<{ meetingIds: string[] }>(`/scopes/${scopeId}/meetings`),
+  listScopeMeetings: (scopeId: string) => jget<{
+    meetingIds: string[];
+    items?: Array<{
+      id: string;
+      title: string;
+      meeting_kind: string | null;
+      occurred_at: string | null;
+      created_at: string;
+      archived: boolean;
+    }>;
+  }>(`/scopes/${scopeId}/meetings`),
 
   // Crosslinks
   listCrossLinks: (axis: string, itemId: string, scopeId?: string) => {

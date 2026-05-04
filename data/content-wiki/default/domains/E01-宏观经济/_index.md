@@ -6,7 +6,7 @@ slug: E01
 taxonomy_code: E01
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-01T06:09:17.110Z"
+lastEditedAt: "2026-05-04T15:44:57.452Z"
 factCount: 2
 entityCount: 2
 domain: 宏观经济
