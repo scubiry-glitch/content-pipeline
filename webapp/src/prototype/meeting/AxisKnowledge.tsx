@@ -9,7 +9,7 @@ import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab, AxisLoadingSkel
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock, useMockToggle } from './_mockToggle';
+import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 
@@ -102,7 +102,6 @@ type JudgmentRow = typeof REUSABLE_JUDGMENTS[number];
 function Judgments({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const [items, setItems] = useState<JudgmentRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
@@ -124,7 +123,7 @@ function Judgments({ scopeId }: { scopeId: string }) {
           domain: j.domain ?? '—',
           author: j.author_name ?? '—',
         }));
-        setItems(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setItems(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -196,7 +195,6 @@ type MentalModelRow = typeof MENTAL_MODELS[number];
 function MentalModels({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const [rows, setRows] = useState<MentalModelRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
@@ -217,7 +215,7 @@ function MentalModels({ scopeId }: { scopeId: string }) {
           outcome: `命中率 ${(Number(m.hit_rate ?? 0) * 100).toFixed(0)}% · ${m.hits}/${m.invocations} · flag=${m.flag}`,
           expert: '—',
         }));
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -350,7 +348,6 @@ type BiasRow = typeof COGNITIVE_BIASES[number];
 function Biases({ meetingId }: { meetingId: string }) {
   const isMobile = useIsMobile();
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const [rows, setRows] = useState<BiasRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
@@ -375,7 +372,7 @@ function Biases({ meetingId }: { meetingId: string }) {
             mitigation: b.mitigation_strategy,
           };
         });
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };

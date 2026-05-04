@@ -11,7 +11,7 @@ import { DimShell, CalloutCard, RegenerateOverlay, useStickyTab, AxisLoadingSkel
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock, useMockToggle } from './_mockToggle';
+import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 import {
@@ -171,7 +171,6 @@ type DecisionRow = typeof DECISION_CHAIN[number];
 
 function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<DecisionRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -195,7 +194,7 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           supersededBy: d.superseded_by_id?.slice(0, 6),
           current: Boolean(d.is_current),
         })) as DecisionRow[];
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -350,7 +349,6 @@ type AssumptionRow = typeof ASSUMPTIONS[number];
 
 function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<AssumptionRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -385,7 +383,7 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
             confidence: Number(a.confidence ?? 0.5),
           };
         });
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -547,7 +545,6 @@ type OpenQuestionRow = typeof OPEN_QUESTIONS[number];
 
 function OpenQuestions({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<OpenQuestionRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -577,7 +574,7 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
           };
         });
         setRows(mapped);
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -665,7 +662,6 @@ type RiskRow = typeof RISKS[number];
 
 function RiskHeat({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<RiskRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -689,7 +685,7 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
           meetings: Math.max(1, Math.round(Number(x.mention_count ?? 1) / 2)),
           trend: (x.trend as 'up' | 'flat' | 'down') ?? 'flat',
         }));
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };

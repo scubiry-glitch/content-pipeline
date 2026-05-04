@@ -9,7 +9,7 @@ import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyT
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
-import { useForceMock, useMockToggle } from './_mockToggle';
+import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
 import { PersonLLMProfileModal } from './PersonLLMProfileModal';
@@ -128,7 +128,6 @@ type CommitmentRow = typeof COMMITMENTS[number];
 
 function PCommitments({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [items, setItems] = useState<CommitmentRow[]>([]);
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
@@ -161,7 +160,7 @@ function PCommitments({ scopeId }: { scopeId: string }) {
             progress: Math.min(1, Number(c.progress ?? 0) / 100),
           };
         });
-        setItems(mapped); setPersonNames(names); setIsMock(false); setLoading(false); reportApiSuccess();
+        setItems(mapped); setPersonNames(names); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -287,7 +286,6 @@ interface TrajectoryRow {
 
 function PTrajectory({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<TrajectoryRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -326,7 +324,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
             m: (p.occurred_at ?? '').slice(0, 7) || '?',
           })),
         }));
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -429,7 +427,6 @@ interface SpeechRow { who: string; claims: number; speechHighEntropy: number; be
 
 function PSpeech({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const [rows, setRows] = useState<SpeechRow[]>([]);
   const [isMock, setIsMock] = useState(() => forceMock);
@@ -448,7 +445,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
           speechHighEntropy: Number(it.entropy ?? 0),
           beingFollowedUp: Number(it.followedUp ?? 0),
         }));
-        setRows(mapped); setIsMock(false); setLoading(false); reportApiSuccess();
+        setRows(mapped); setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
@@ -546,7 +543,6 @@ function PSpeech({ meetingId }: { meetingId: string }) {
 
 function PSilence({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
-  const { reportApiSuccess } = useMockToggle();
   const isMobile = useIsMobile();
   const defaultTopics = ['推理层', '训练层', '估值方法', '合规 / LP', '退出路径', '地缘 / 政策', '技术路线'];
   const defaultMatrix = [
@@ -594,7 +590,7 @@ function PSilence({ meetingId }: { meetingId: string }) {
         }));
         setTopics(topicSet); setMatrix(newMatrix); setPersonNames(names);
         setSilenceItems(items);
-        setIsMock(false); setLoading(false); reportApiSuccess();
+        setIsMock(false); setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => { cancelled = true; };
