@@ -94,8 +94,9 @@
         "node_bin": "/root/.nvm/versions/node/v22.22.0/bin/node",
         "tsx_bin": "/proweb/run/pipeline/node_modules/.bin/tsx",
         "worker_log": "/tmp/worker-mn.log",
+        "pm2_app": "mn-worker",
         "claude_cwd_base": "/proweb/wiki",
-        "rebuild_dist": ["api"]
+        "rebuild_dist": ["webapp"]
       },
       "claude_cli": {
         "bin": "/root/.local/bin/claude",
@@ -128,7 +129,7 @@
         "pm2_app": "content-pipeline-api",
         "sync_mode": "scp",
         "_sync_mode_comment": "火山机 git 拉 GitHub 不稳时用 scp：本机维护 git 真源，脚本比较本机 HEAD 与远端 .pipeline-deploy-rev 再 rsync；其余 worker 默认 sync_mode=git",
-        "rebuild_dist": ["api", "webapp"]
+        "rebuild_dist": ["webapp"]
       },
       "runtime": {
         "concurrency": 4,
@@ -154,7 +155,7 @@
         "api_dir": "/newdata/pipeline/api",
         "worker_log": "/tmp/worker-self.log",
         "pm2_app": "pipeline-api",
-        "rebuild_dist": ["api"]
+        "rebuild_dist": ["webapp"]
       },
       "runtime": {
         "comment": "暂无路由进来的任务；只跑该机自己 node 应用本地任务，不参与全局 mn/ceo 调度",
