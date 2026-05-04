@@ -12,11 +12,11 @@
 #
 # 文档：docs/质量v2/multi-worker-design.md §3.4.1
 #
-# 用法：
-#   cd /path/to/pipeline && bash scripts/remote-pipeline-sync.sh
-#   bash scripts/remote-pipeline-sync.sh --only huoshanpro
-#   bash scripts/remote-pipeline-sync.sh --force     # 跳过「版本一致则省略」短路
-#   bash scripts/remote-pipeline-sync.sh --dry-run
+# 用法（在仓库根执行）：
+#   cd /path/to/pipeline && bash onekeydeploy/remote-pipeline-sync.sh
+#   bash onekeydeploy/remote-pipeline-sync.sh --only huoshanpro
+#   bash onekeydeploy/remote-pipeline-sync.sh --force     # 跳过「版本一致则省略」短路
+#   bash onekeydeploy/remote-pipeline-sync.sh --dry-run
 #
 # 依赖：node、OpenSSH ssh/scp；sync_mode=scp 时需本机 rsync。路径勿含空格。
 #

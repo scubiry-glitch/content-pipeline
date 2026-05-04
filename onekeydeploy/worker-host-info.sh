@@ -3,9 +3,9 @@
 # diag-worker-host.sh — 一键收集本机 worker 注册必备信息
 #
 # 用法（对方机器上跑）：
-#   curl -fsSL <repo-url>/scripts/diag-worker-host.sh | bash
+#   curl -fsSL <repo-url>/onekeydeploy/worker-host-info.sh | bash
 #   # 或 git pull 后:
-#   bash scripts/diag-worker-host.sh
+#   bash onekeydeploy/worker-host-info.sh
 #
 # 输出格式适合直接贴给运维 / Claude，便于补 host_aliases 到
 # api/config/run-routing.json 的 workers.{} 注册表里。

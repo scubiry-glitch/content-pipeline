@@ -1,7 +1,7 @@
 # 多 Worker 注册 / 路由设计
 
 > 适用：未来 1-N 台 mn-worker / ceo-worker / expert-worker 接入流水线
-> 配套代码：`api/src/modules/run-routing/service.ts`（host 自检）、`api/config/run-routing.json`（注册表）、`scripts/remote-pipeline-sync.sh`（开发机一键同步）
+> 配套代码：`api/src/modules/run-routing/service.ts`（host 自检）、`api/config/run-routing.json`（注册表）、`onekeydeploy/remote-pipeline-sync.sh`（开发机一键同步）
 > 前置：commit `5d24678 (worker host 自检防双胞胎)`
 
 ## 1. 设计目标
@@ -101,6 +101,7 @@ git 同步            │  run-routing.json · workers 注册表        │
    - 公网 IP（如有）
    - 内网 IP（`ip -4 addr show | grep inet`）
    - hostname（`hostname`）
+   - 或在目标机执行 `bash onekeydeploy/worker-host-info.sh` 一键收集（输出可贴进 `host_aliases`）
 3. 确认能 SSH 登录
 4. 确认仓库已 deploy 在目标机
 
@@ -175,27 +176,27 @@ pm2 save
 pm2 startup -u root --hp /root                     # 自启（首次）
 ```
 
-### 3.4.1 开发机一键同步（`scripts/remote-pipeline-sync.sh`）
+### 3.4.1 开发机一键同步（`onekeydeploy/remote-pipeline-sync.sh`）
 
 在**已能 SSH 各节点**的前提下，可在主仓库根目录执行：
 
 ```bash
-bash scripts/remote-pipeline-sync.sh              # 按 run-routing 里所有可 SSH 的 worker 依次执行
-bash scripts/remote-pipeline-sync.sh --only huoshanpro
-bash scripts/remote-pipeline-sync.sh --dry-run   # 只打印将执行的 ssh/scp
-bash scripts/remote-pipeline-sync.sh --skip-config   # 不下发 run-routing.json，仅代码同步 + pm2（若配了 pm2_app）
-bash scripts/remote-pipeline-sync.sh --force    # 不做「版本已一致则跳过」短路（仍执行 git pull / rsync）
-RUN_ROUTING_JSON=/abs/path/run-routing.json bash scripts/remote-pipeline-sync.sh
+bash onekeydeploy/remote-pipeline-sync.sh              # 按 run-routing 里所有可 SSH 的 worker 依次执行
+bash onekeydeploy/remote-pipeline-sync.sh --only huoshanpro
+bash onekeydeploy/remote-pipeline-sync.sh --dry-run   # 只打印将执行的 ssh/scp
+bash onekeydeploy/remote-pipeline-sync.sh --skip-config   # 不下发 run-routing.json，仅代码同步 + pm2（若配了 pm2_app）
+bash onekeydeploy/remote-pipeline-sync.sh --force    # 不做「版本已一致则跳过」短路（仍执行 git pull / rsync）
+RUN_ROUTING_JSON=/abs/path/run-routing.json bash onekeydeploy/remote-pipeline-sync.sh
 ```
 
-**入选条件**（由 `scripts/parse-run-routing-remote-hosts.mjs` 解析）：`workers.{id}` 同时满足 `enabled !== false`、存在 `ssh` 与 `deploy.repo`、`host` 存在且**不是** `localhost`。
+**入选条件**（由 `onekeydeploy/parse-run-routing-remote-hosts.mjs` 解析）：`workers.{id}` 同时满足 `enabled !== false`、存在 `ssh` 与 `deploy.repo`、`host` 存在且**不是** `localhost`。
 
 **`deploy.sync_mode`（每台独立，缺省 `git`）**
 
 | 值 | 代码同步 | 版本比较（未加 `--force` 时） |
 |---|---|---|
 | `git` | 远端 `cd repo && git pull` | 本机 `git rev-parse HEAD` 与远端同路径 `git rev-parse HEAD` 一致则 **跳过 pull** |
-| `scp` | 本机 `rsync` 仓库根 → 远端 `repo/`（排除见 `scripts/rsync-remote-code-excludes.txt`） | 本机 HEAD 与远端 `{repo}/.pipeline-deploy-rev` 一致则 **跳过 rsync**；成功后脚本写入该文件 |
+| `scp` | 本机 `rsync` 仓库根 → 远端 `repo/`（排除见 `onekeydeploy/rsync-remote-code-excludes.txt`） | 本机 HEAD 与远端 `{repo}/.pipeline-deploy-rev` 一致则 **跳过 rsync**；成功后脚本写入该文件 |
 
 `scp` 模式用于远端访问 GitHub 不稳、或希望**以本机工作区为真源**推代码的场景；本机应先自行 `git pull` / `commit` 保持预期 HEAD。配置里含任一台 `sync_mode=scp` 时，本机需安装 **rsync**；若工作区有未提交变更会 **WARN**（仍会同步磁盘文件）。
 
@@ -228,7 +229,7 @@ git add api/config/run-routing.json
 git commit -m "feat(routing): 注册 <WORKER_ID> (<host>) worker"
 git push
 # 通知所有现有 worker 节点 git pull 拉新配置（不需要重启，配置在轮询时重新加载）
-# 或：在开发机 bash scripts/remote-pipeline-sync.sh（见 §3.4.1；含 pm2_app 的节点会 restart）
+# 或：在开发机 bash onekeydeploy/remote-pipeline-sync.sh（见 §3.4.1；含 pm2_app 的节点会 restart）
 ```
 
 > 路由配置**有 in-process 缓存**（`cachedConfig`）。如果你想"立即生效"而不等下次进程启动，调一次 `reloadRoutingConfig()` 或重启该 worker。
@@ -347,7 +348,7 @@ VM-0-11-opencloudos (221.195.29.81) 的处理见 [`ops-vm-0-11-decommission.md`]
 | 已实现：host 自检防冒名 | commit `5d24678` | ✓ |
 | 已实现：mn 兜底钉 `${WORKER_ID}` | commit `759ee00` | ✓ |
 | 已实现：reaper 10s min-age | commit `759ee00` | ✓ |
-| 已实现：开发机一键同步 `remote-pipeline-sync.sh` | §3.4.1、`deploy.pm2_app`、`deploy.sync_mode` git/scp | ✓ |
+| 已实现：开发机一键同步 `onekeydeploy/remote-pipeline-sync.sh` | §3.4.1、`deploy.pm2_app`、`deploy.sync_mode` git/scp | ✓ |
 | Tag-based routing（rules 按 tag 匹配多 worker） | 真要做水平扩容时 | 中 |
 | Active health check + 自动 failover | 当前 1 台主 worker 不冗余还能扛；上 3+ 台后做 | 中 |
 | pm2 优雅停机 + drain（kill_timeout=30s + SIGTERM hook） | 升级频率上来后做 | 中 |

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 
 const routingPath = process.argv[2];
 if (!routingPath) {
-  console.error('usage: node scripts/parse-run-routing-remote-hosts.mjs <path/to/run-routing.json>');
+  console.error('usage: node onekeydeploy/parse-run-routing-remote-hosts.mjs <path/to/run-routing.json>');
   process.exit(1);
 }
 
