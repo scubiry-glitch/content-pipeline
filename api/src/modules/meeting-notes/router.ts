@@ -19,7 +19,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // P1 闸门 #3 阈值：scope 下所有 meetings.content 总字数 < 此值即拒绝重算
 // （避免用户点了重算才发现 transcript 没上传，silent succeeded 空集覆盖）
-const MIN_TRANSCRIPT_CHARS = parseInt(process.env.MN_MIN_TRANSCRIPT_CHARS ?? '2000', 10);
+// 使用函数而非模块级常量，避免 esbuild/tsx 将 import 提升导致 dotenv 尚未加载时求值
+function getMinTranscriptChars() { return parseInt(process.env.MN_MIN_TRANSCRIPT_CHARS ?? '2000', 10); }
 
 function safeJson(s: string): any {
   try { return JSON.parse(s); } catch { return null; }
@@ -2770,13 +2771,13 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           [meetingIds],
         );
         const totalChars = sumLen.rows[0]?.total ?? 0;
-        if (totalChars < MIN_TRANSCRIPT_CHARS) {
+        if (totalChars < getMinTranscriptChars()) {
           reply.status(400);
           return {
             error: 'Bad Request',
             code: 'INSUFFICIENT_TRANSCRIPT',
-            message: `scope 下 ${meetingIds.length} 场会议 transcript 共 ${totalChars} 字符，不足 ${MIN_TRANSCRIPT_CHARS}。请先上传完整文本到 assets.content（或调小 MN_MIN_TRANSCRIPT_CHARS）。`,
-            detail: { totalChars, meetingCount: meetingIds.length, requiredMin: MIN_TRANSCRIPT_CHARS },
+            message: `scope 下 ${meetingIds.length} 场会议 transcript 共 ${totalChars} 字符，不足 ${getMinTranscriptChars()}。请先上传完整文本到 assets.content（或调小 MN_MIN_TRANSCRIPT_CHARS）。`,
+            detail: { totalChars, meetingCount: meetingIds.length, requiredMin: getMinTranscriptChars() },
           };
         }
       }

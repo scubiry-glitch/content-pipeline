@@ -21,6 +21,7 @@ module.exports = {
         DASHBOARD_LLM_API_KEY: process.env.DASHBOARD_LLM_API_KEY,
         DASHBOARD_LLM_BASE_URL: process.env.DASHBOARD_LLM_BASE_URL,
         TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+        MN_MIN_TRANSCRIPT_CHARS: process.env.MN_MIN_TRANSCRIPT_CHARS,
       },
       env_production: {
         NODE_ENV: 'production',
