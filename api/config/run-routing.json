@@ -96,7 +96,6 @@
         "worker_log": "/tmp/worker-mn.log",
         "pm2_app": "mn-worker",
         "claude_cwd_base": "/proweb/wiki",
-        "rebuild_dist": ["webapp"]
       },
       "claude_cli": {
         "bin": "/root/.local/bin/claude",

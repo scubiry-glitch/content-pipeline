@@ -39,7 +39,7 @@ RSYNC_EXCLUDES="$SCRIPT_DIR/rsync-remote-code-excludes.txt"
 
 readonly LOG_GREP_PATTERN='WORKER_ID resolved|twin-worker'
 
-SSH_BASE=( -o BatchMode=yes -o ConnectTimeout=25 -o ConnectionAttempts=1 )
+SSH_BASE=( -n -o BatchMode=yes -o ConnectTimeout=25 -o ConnectionAttempts=1 )
 SCP_BASE=( -o BatchMode=yes -o ConnectTimeout=25 -o ConnectionAttempts=1 )
 
 DRY_RUN=0

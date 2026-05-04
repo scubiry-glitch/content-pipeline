@@ -9,10 +9,10 @@ module.exports = {
     {
       name: 'content-pipeline-api',
       script: './api/src/server.ts',
-      interpreter: './node_modules/.bin/tsx',
+      interpreter: './api/node_modules/.bin/tsx',
       instances: 1,
       exec_mode: 'fork',
-      cwd: '/Users/scubiry/Documents/Scubiry/lab/pipeline',
+      cwd: __dirname,
       env: {
         NODE_ENV: 'development',
         KIMI_API_KEY: process.env.KIMI_API_KEY,
@@ -30,11 +30,7 @@ module.exports = {
       error_file: './api/logs/err.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
-      watch: true,
-      ignore_watch: ['node_modules', 'logs', '*.log'],
-      watch_options: {
-        followSymlinks: false,
-      },
+      watch: false,
       max_memory_restart: '1G',
       restart_delay: 3000,
       max_restarts: 10,
