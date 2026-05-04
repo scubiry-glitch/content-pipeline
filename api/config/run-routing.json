@@ -95,7 +95,7 @@
         "tsx_bin": "/proweb/run/pipeline/node_modules/.bin/tsx",
         "worker_log": "/tmp/worker-mn.log",
         "pm2_app": "mn-worker",
-        "claude_cwd_base": "/proweb/wiki",
+        "claude_cwd_base": "/proweb/wiki"
       },
       "claude_cli": {
         "bin": "/root/.local/bin/claude",

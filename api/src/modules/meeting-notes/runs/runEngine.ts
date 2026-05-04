@@ -579,8 +579,8 @@ export class RunEngine {
     //   runMode='multi-axis'   → model=null         → 兜底 local-mac
     // metadata.workerHint 短路所有规则（显式声明）
     const { resolveTargetWorker } = await import('../../run-routing/service.js');
-    const targetWorker = await resolveTargetWorker(this.deps.db, {
-      module: 'mn',
+    const _routingCriteria = {
+      module: 'mn' as const,
       scopeId: scopeNorm.id ?? null,
       axis: req.axis,
       model:
@@ -588,7 +588,9 @@ export class RunEngine {
         : runMode === 'api-oneshot' ? 'api-oneshot'
         : null,
       workerHint: (initialMeta as any).workerHint ?? null,
-    });
+    };
+    const targetWorker = await resolveTargetWorker(this.deps.db, _routingCriteria);
+    console.log('[runEngine.enqueue] routing decision:', JSON.stringify(_routingCriteria), '→ target_worker:', targetWorker);
 
     // workspace_id 显式注入；不传时由 mn_runs 的 DEFAULT (default ws) 兜底
     const ins = req.workspaceId
@@ -649,6 +651,17 @@ export class RunEngine {
     // 代价：API 起的 run 最多延迟 60s 才被 worker pickup；可接受（claude 自己 spawn + TTFB 也是这个量级）。
     if (this.executorDisabled) {
       return { ok: true, runId };
+    }
+    // 路由保护：若 target_worker 已钉到非本机 WORKER_ID，不要本机 in-memory pickup（否则绕过 routing）。
+    // 让远端 worker 自己通过 60s reaper 从 DB 拉。
+    if (targetWorker) {
+      const { getWorkerId } = await import('../../run-routing/service.js');
+      const localWorkerId = getWorkerId();
+      if (targetWorker !== localWorkerId) {
+        console.log(`[runEngine.enqueue] target_worker=${targetWorker} ≠ local=${localWorkerId} → skip in-memory enqueue, remote reaper will pick up`);
+        await this.deps.eventBus.publish('mn.run.enqueued', { runId });
+        return { ok: true, runId };
+      }
     }
     this.queue.enqueue({
       id: runId,

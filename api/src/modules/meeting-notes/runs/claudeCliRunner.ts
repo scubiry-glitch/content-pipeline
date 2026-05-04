@@ -281,7 +281,11 @@ export async function runClaudeCliMode(
   const modelFlag = CLAUDE_MODEL && CLAUDE_MODEL.trim() ? ` --model '${CLAUDE_MODEL.replace(/'/g, "'\\''")}'` : '';
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
-  const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag} --output-format json --max-turns 1 < '${promptFile}'`;
+  // --no-session-persistence: 不写 session 到 ~/.claude/projects/，避免下一次 -p 自动续接被截断的会话。
+  // (注: --bare 会要求 ANTHROPIC_API_KEY 环境变量, 本机 OAuth 登录场景会 401, 故不用)
+  // 仅在 fresh run 时加（resumeSessionId 模式下需要 session 持久化才能续接）。
+  const isolationFlags = ctx.resumeSessionId ? '' : ' --no-session-persistence';
+  const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
   // ─ 决定 cwd ─
   // 默认（env 未配置）继承 worker 进程的 cwd（一般 = repo/api），保留旧行为。
