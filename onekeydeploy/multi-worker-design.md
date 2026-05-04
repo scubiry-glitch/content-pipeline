@@ -121,7 +121,8 @@ git 同步            │  run-routing.json · workers 注册表        │
     "api_dir": "<api 目录>",
     "worker_log": "/tmp/mn-worker-out.log",
     "pm2_app": "mn-worker",
-    "sync_mode": "git"
+    "sync_mode": "git",
+    "rebuild_dist": ["api"]
   },
   "runtime": {
     "concurrency": 1,
@@ -184,7 +185,8 @@ pm2 startup -u root --hp /root                     # 自启（首次）
 bash onekeydeploy/remote-pipeline-sync.sh              # 按 run-routing 里所有可 SSH 的 worker 依次执行
 bash onekeydeploy/remote-pipeline-sync.sh --only huoshanpro
 bash onekeydeploy/remote-pipeline-sync.sh --dry-run   # 只打印将执行的 ssh/scp
-bash onekeydeploy/remote-pipeline-sync.sh --skip-config   # 不下发 run-routing.json，仅代码同步 + pm2（若配了 pm2_app）
+bash onekeydeploy/remote-pipeline-sync.sh --skip-config   # 不下发 run-routing.json，仍做代码同步 + dist 构建 + pm2（按配置）
+bash onekeydeploy/remote-pipeline-sync.sh --skip-build    # 跳过远端 npm run build（不刷新 dist）
 bash onekeydeploy/remote-pipeline-sync.sh --force    # 不做「版本已一致则跳过」短路（仍执行 git pull / rsync）
 RUN_ROUTING_JSON=/abs/path/run-routing.json bash onekeydeploy/remote-pipeline-sync.sh
 ```
@@ -200,7 +202,9 @@ RUN_ROUTING_JSON=/abs/path/run-routing.json bash onekeydeploy/remote-pipeline-sy
 
 `scp` 模式用于远端访问 GitHub 不稳、或希望**以本机工作区为真源**推代码的场景；本机应先自行 `git pull` / `commit` 保持预期 HEAD。配置里含任一台 `sync_mode=scp` 时，本机需安装 **rsync**；若工作区有未提交变更会 **WARN**（仍会同步磁盘文件）。
 
-**每台顺序**：① 按 `sync_mode` 同步代码 → ② **scp** 本机 `api/config/run-routing.json` → 远端 `{deploy.repo}/api/config/`（可用 `--skip-config` 跳过）→ ③ 若配置了 `deploy.pm2_app` 则 `pm2 restart` + 可选 `worker_log` grep。
+**`deploy.rebuild_dist`（可选）**：字符串数组，元素只能是 `api`、`webapp`。一键脚本在 **pm2 restart 之前** 于远端依次执行 `cd {repo}/api|webapp && npm run build`（生成/更新 **dist**，与仓库根 `npm run build:api` / `build:webapp` 一致）。未配置则跳过构建；应急可用 **`--skip-build`** 跳过整步。
+
+**每台顺序**：① 按 `sync_mode` 同步代码 → ② **scp** 本机 `api/config/run-routing.json` → 远端 `{deploy.repo}/api/config/`（可用 `--skip-config` 跳过）→ ③ 按 `rebuild_dist` 远端 **`npm run build`** → ④ 若配置了 `deploy.pm2_app` 则 **`pm2 restart`** + 可选 `worker_log` grep。
 
 **与 §3.6 的关系**：各节点仅 `git pull` 时，路由会在后续 `loadConfig` 路径读到磁盘新文件；但进程内仍有 **in-process 缓存**（见 §3.6 块引用 / `cachedConfig`）。本脚本在配置了 `deploy.pm2_app` 时会 **restart**，保证立刻读新 JSON。未配置 `pm2_app` 的条目（例如 **nohup** 跑的 `prod-TencentOpenClaw`）脚本**不会**替你做 pm2，需仍按该机 SOP 手动停启。下发 `run-routing.json` 的 **scp** 适合「工作区已改路由尚未 `git push`」仍要让远端与当前文件一致；若规范是「先 push 再各机 pull」，可用 `--skip-config` 只做代码同步与 pm2。
 
@@ -335,9 +339,9 @@ SELECT worker_id, COUNT(*) AS n,
 | WORKER_ID | host | 内网 IP | accept_modules | tags | 备注 |
 |---|---|---|---|---|---|
 | `local-mac` | localhost | - | （全部） | dev, fallback | 开发机 |
-| `prod-TencentOpenClaw` | 43.156.49.59 | 10.3.4.6 | `["mn"]`（`MN_WORKER_ONLY`） | claude-cli | 主 Claude CLI worker（多为 nohup；`deploy.pm2_app` 未设，一键脚本只对其 pull+scp） |
-| `huoshanpro` | 115.190.221.164 | - | `["ceo","mn"]` | llm-api | 火山云 LLM HTTP；`deploy.pm2_app`: `content-pipeline-api`；`sync_mode`: **`scp`**（本机 rsync + `.pipeline-deploy-rev`） |
-| `TencentNodeDB` | 124.156.192.230 | - | `[]`（拒绝） | db-host | DB 同主机；`deploy.pm2_app`: `pipeline-api`（仅运维同步代码/配置，不接全局 mn/ceo） |
+| `prod-TencentOpenClaw` | 43.156.49.59 | 10.3.4.6 | `["mn"]`（`MN_WORKER_ONLY`） | claude-cli | 主 Claude CLI worker（多为 nohup；无 `pm2_app` 时一键脚本仍 **pull/scp + `rebuild_dist` api**；不替你做 pm2） |
+| `huoshanpro` | 115.190.221.164 | - | `["ceo","mn"]` | llm-api | `pm2_app` `content-pipeline-api`；`sync_mode` **`scp`**；`rebuild_dist` **`api`+`webapp`** |
+| `TencentNodeDB` | 124.156.192.230 | - | `[]`（拒绝） | db-host | `pipeline-api`；`rebuild_dist` **`api`**；不接全局 mn/ceo 调度 |
 
 VM-0-11-opencloudos (221.195.29.81) 的处理见 [`ops-vm-0-11-decommission.md`](./ops-vm-0-11-decommission.md)。处理完后回来更新这张表。
 
@@ -348,7 +352,7 @@ VM-0-11-opencloudos (221.195.29.81) 的处理见 [`ops-vm-0-11-decommission.md`]
 | 已实现：host 自检防冒名 | commit `5d24678` | ✓ |
 | 已实现：mn 兜底钉 `${WORKER_ID}` | commit `759ee00` | ✓ |
 | 已实现：reaper 10s min-age | commit `759ee00` | ✓ |
-| 已实现：开发机一键同步 `onekeydeploy/remote-pipeline-sync.sh` | §3.4.1、`deploy.pm2_app`、`deploy.sync_mode` git/scp | ✓ |
+| 已实现：开发机一键同步 `onekeydeploy/remote-pipeline-sync.sh` | §3.4.1、`pm2_app`、`sync_mode`、`rebuild_dist` + `--skip-build` | ✓ |
 | Tag-based routing（rules 按 tag 匹配多 worker） | 真要做水平扩容时 | 中 |
 | Active health check + 自动 failover | 当前 1 台主 worker 不冗余还能扛；上 3+ 台后做 | 中 |
 | pm2 优雅停机 + drain（kill_timeout=30s + SIGTERM hook） | 升级频率上来后做 | 中 |

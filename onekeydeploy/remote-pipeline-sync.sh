@@ -4,7 +4,8 @@
 #   对含 ssh + deploy.repo 且 host≠localhost 的条目依次：
 #   ① 同步代码（每台 deploy.sync_mode：git | scp，见下）
 #   ② 下发本机 run-routing.json（可 --skip-config）
-#   ③ pm2 restart + 可选日志 grep（deploy.pm2_app 未设则跳过）
+#   ③ 远端 dist：deploy.rebuild_dist 所列 workspace（api / webapp）各执行 npm run build（可 --skip-build）
+#   ④ pm2 restart + 可选日志 grep（deploy.pm2_app 未设则跳过）
 #
 # sync_mode（run-routing.json deploy.sync_mode，缺省 git）：
 #   git  — 远端 cd repo && git pull；若未 --force 且远端 git HEAD == 本机 HEAD，跳过 pull
@@ -17,6 +18,7 @@
 #   bash onekeydeploy/remote-pipeline-sync.sh --only huoshanpro
 #   bash onekeydeploy/remote-pipeline-sync.sh --force     # 跳过「版本一致则省略」短路
 #   bash onekeydeploy/remote-pipeline-sync.sh --dry-run
+#   bash onekeydeploy/remote-pipeline-sync.sh --skip-build   # 不执行远端 npm run build
 #
 # 依赖：node、OpenSSH ssh/scp；sync_mode=scp 时需本机 rsync。路径勿含空格。
 #
@@ -43,16 +45,18 @@ SCP_BASE=( -o BatchMode=yes -o ConnectTimeout=25 -o ConnectionAttempts=1 )
 DRY_RUN=0
 ONLY_FILTER=""
 SKIP_CONFIG=0
+SKIP_BUILD=0
 FORCE=0
 
 usage() {
-  sed -n '1,28p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '1,35p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --skip-config) SKIP_CONFIG=1 ;;
+    --skip-build) SKIP_BUILD=1 ;;
     --force) FORCE=1 ;;
     --only)
       ONLY_FILTER="${2:-}"
@@ -112,12 +116,61 @@ remote_deploy_rev() {
   ssh "${SSH_BASE[@]}" -p "$port" "$ssh_target" "bash -lc \"cat $repo/.pipeline-deploy-rev 2>/dev/null\"" 2>/dev/null | tr -d '\r\n' || true
 }
 
+# 远端 npm run build（仅 api / webapp）；rebuild_csv 形如 api 或 api,webapp
+remote_rebuild_dist() {
+  local port="$1" ssh_target="$2" repo="$3" rebuild_csv="$4"
+  local parts p ws
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "$SKIP_BUILD" -eq 1 ]]; then
+      dim "  ③ （--skip-build）跳过 npm run build"
+    elif [[ -z "$rebuild_csv" || "$rebuild_csv" == "-" ]]; then
+      dim "  ③ （未配置 deploy.rebuild_dist）跳过 dist 构建"
+    else
+      IFS=',' read -ra parts <<< "$rebuild_csv"
+      for p in "${parts[@]}"; do
+        ws="${p//[[:space:]]/}"
+        [[ -z "$ws" ]] && continue
+        if [[ "$ws" != "api" && "$ws" != "webapp" ]]; then
+          warn "忽略非法 rebuild_dist：$ws（仅 api、webapp）"
+          continue
+        fi
+        dim "  ③ ssh … cd $repo/$ws && npm run build"
+      done
+    fi
+    return 0
+  fi
+
+  if [[ "$SKIP_BUILD" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ -z "$rebuild_csv" || "$rebuild_csv" == "-" ]]; then
+    return 0
+  fi
+
+  IFS=',' read -ra parts <<< "$rebuild_csv"
+  for p in "${parts[@]}"; do
+    ws="${p//[[:space:]]/}"
+    [[ -z "$ws" ]] && continue
+    if [[ "$ws" != "api" && "$ws" != "webapp" ]]; then
+      warn "忽略非法 rebuild_dist：$ws（仅 api、webapp）"
+      continue
+    fi
+    if ! ssh "${SSH_BASE[@]}" -p "$port" "$ssh_target" "bash -lc \"set -euo pipefail; cd $repo/$ws && npm run build\""; then
+      return 1
+    fi
+    ok "远端 npm run build ($ws) → dist"
+  done
+  return 0
+}
+
 main() {
   bold "═══ remote-pipeline-sync · $(date '+%Y-%m-%d %H:%M:%S %Z') ═══"
   dim "  本机仓库: $REPO_ROOT"
   dim "  配置源: $ROUTING_JSON"
   [[ "$DRY_RUN" -eq 1 ]] && warn "dry-run：不实际执行 ssh/scp/rsync"
   [[ "$SKIP_CONFIG" -eq 1 ]] && warn "已 --skip-config：不下发 run-routing.json"
+  [[ "$SKIP_BUILD" -eq 1 ]] && warn "已 --skip-build：跳过远端 npm run build（dist）"
   [[ "$FORCE" -eq 1 ]] && warn "已 --force：不跳过版本已一致的代码同步步骤"
   echo
 
@@ -142,7 +195,7 @@ main() {
   fi
 
   local ok_n=0 fail_n=0
-  local id ssh_target repo pm2_app logfile port sync_mode
+  local id ssh_target repo pm2_app logfile port sync_mode rebuild_csv
   local total matched
 
   total=$(node "$PARSER" "$ROUTING_JSON" | wc -l | tr -d ' ')
@@ -152,9 +205,10 @@ main() {
   fi
 
   matched=0
-  while IFS=$'\t' read -r id ssh_target repo pm2_app logfile port sync_mode || [[ -n "${id:-}" ]]; do
+  while IFS=$'\t' read -r id ssh_target repo pm2_app logfile port sync_mode rebuild_csv || [[ -n "${id:-}" ]]; do
     [[ -z "${id:-}" ]] && continue
     [[ "${sync_mode:-}" != "scp" ]] && sync_mode=git
+    [[ -z "${rebuild_csv:-}" || "$rebuild_csv" == "" ]] && rebuild_csv="-"
 
     if [[ -n "$ONLY_FILTER" && "$id" != "$ONLY_FILTER" && "$ssh_target" != "$ONLY_FILTER" ]]; then
       continue
@@ -162,7 +216,7 @@ main() {
     matched=$((matched + 1))
 
     bold "▌$id ($ssh_target) port=$port  sync_mode=$sync_mode"
-    dim "  repo=$repo  pm2=${pm2_app:--}  log=${logfile:--}"
+    dim "  repo=$repo  pm2=${pm2_app:--}  log=${logfile:--}  rebuild_dist=${rebuild_csv:--}"
 
     local step_ok=1
 
@@ -178,12 +232,13 @@ main() {
       else
         dim "  ② （--skip-config）跳过 run-routing scp"
       fi
+      remote_rebuild_dist "$port" "$ssh_target" "$repo" "$rebuild_csv"
       if [[ -n "$pm2_app" && "$pm2_app" != "-" ]]; then
         local dr="pm2 restart $pm2_app --update-env"
         [[ -n "$logfile" && "$logfile" != "-" ]] && dr+="; tail -80 $logfile | grep -E '$LOG_GREP_PATTERN'"
-        dim "  ③ ssh … $dr"
+        dim "  ④ ssh … $dr"
       else
-        dim "  ③ （无 deploy.pm2_app）跳过 pm2"
+        dim "  ④ （无 deploy.pm2_app）跳过 pm2"
       fi
       ok "dry-run"
       ok_n=$((ok_n + 1))
@@ -235,7 +290,15 @@ main() {
       fi
     fi
 
-    # --- ③ pm2 ---
+    # --- ③ 远端 dist（npm run build）---
+    if [[ "$step_ok" -eq 1 ]]; then
+      if ! remote_rebuild_dist "$port" "$ssh_target" "$repo" "$rebuild_csv"; then
+        fail "远端 npm run build（dist）失败"
+        step_ok=0
+      fi
+    fi
+
+    # --- ④ pm2 ---
     if [[ "$step_ok" -eq 1 ]]; then
       if [[ -n "$pm2_app" && "$pm2_app" != "-" ]]; then
         local tail_cmd="pm2 restart $pm2_app --update-env"

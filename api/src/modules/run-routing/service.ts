@@ -67,6 +67,8 @@ export interface WorkerSpec {
     pm2_app?: string;
     /** 一键同步代码方式：git=远端 git pull；scp=本机 rsync 工作区（与 deploy 写入的 .pipeline-deploy-rev 比较） */
     sync_mode?: 'git' | 'scp';
+    /** 一键部署：在远端 repo 下对各 workspace 执行 npm run build（api→dist、tsc；webapp→dist） */
+    rebuild_dist?: ('api' | 'webapp')[];
     claude_cwd_base?: string;
   };
   claude_cli?: { bin?: string; creds?: string };
