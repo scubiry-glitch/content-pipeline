@@ -282,9 +282,15 @@ export async function runClaudeCliMode(
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
   // --no-session-persistence: 不写 session 到 ~/.claude/projects/，避免下一次 -p 自动续接被截断的会话。
+  // --disallowed-tools '...': 禁用所有内置工具, 强制单 turn 直接输出 JSON。
+  //   不禁工具时 sonnet 在严格 schema 下会选择调 Read/Bash 等, 命中 max-turns 1 切断
+  //   (stop_reason=tool_use, num_turns=2, error_max_turns)。bare 模式可以禁但要 API_KEY env.
   // (注: --bare 会要求 ANTHROPIC_API_KEY 环境变量, 本机 OAuth 登录场景会 401, 故不用)
   // 仅在 fresh run 时加（resumeSessionId 模式下需要 session 持久化才能续接）。
-  const isolationFlags = ctx.resumeSessionId ? '' : ' --no-session-persistence';
+  const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,SlashCommand,TodoWrite,KillShell,BashOutput";
+  const isolationFlags = ctx.resumeSessionId
+    ? ` --disallowed-tools '${NO_TOOLS}'`
+    : ` --no-session-persistence --disallowed-tools '${NO_TOOLS}'`;
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
   // ─ 决定 cwd ─
