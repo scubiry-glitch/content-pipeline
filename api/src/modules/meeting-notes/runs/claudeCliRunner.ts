@@ -505,6 +505,9 @@ export async function runClaudeCliMode(
     await hooks.recordCliRaw(truncate(JSON.stringify(inner).slice(0, 200_000), 200_000));
     throw new Error(`claude CLI output malformed: ${v.reason}`);
   }
+  // 成功路径也记录 cliRaw (debug schema 字段缺失 / 数量下限未达成等问题)
+  // truncate 200KB; 单次会议典型 30-60KB, 留 buffer
+  await hooks.recordCliRaw(truncate(JSON.stringify(inner), 200_000));
 
   // scope mode：跳过 meeting 字段构造
   if (promptKind === 'scope') {

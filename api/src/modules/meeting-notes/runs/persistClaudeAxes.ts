@@ -279,7 +279,12 @@ async function persistPeopleStats(
     if (!personId) continue;
 
     // role_trajectory_points: 一行 = 一个 (person, meeting, scope=null) trajectory point
-    const traj = Array.isArray(stat?.roleTrajectory) ? stat.roleTrajectory : [];
+    // 兼容两种 schema：(老) roleTrajectory: [{m, role}]; (新, 单场会议简化) roleThisMeeting: string
+    const traj: Array<{ role?: string; confidence?: number }> =
+      Array.isArray(stat?.roleTrajectory) ? stat.roleTrajectory
+      : (typeof stat?.roleThisMeeting === 'string' && stat.roleThisMeeting.trim().length > 0
+          ? [{ role: stat.roleThisMeeting, confidence: 0.7 }]
+          : []);
     for (const t of traj) {
       try {
         await deps.db.query(
