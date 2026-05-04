@@ -978,6 +978,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return engine.getMeetingAxes(id);
     });
     // Phase 15.1 · Speech metrics (#6 · 新路由 · 无破坏性)
+    // 注：mn_speech_quality 实际 schema (002-people-axis.sql) 仅有 entropy_pct /
+    // followed_up_count / quality_score / sample_quotes；qa_ratio / term_density 从未落库。
+    // 前端如需这两个指标，应在 axes 计算阶段写入或扩 schema；这里返回 null 兜底，避免 500。
     fastify.get('/meetings/:id/speech-metrics', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) return { items: [] };
@@ -985,8 +988,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         `SELECT person_id AS "personId",
                 entropy_pct AS entropy,
                 followed_up_count AS "followedUp",
-                qa_ratio AS "qaRatio",
-                term_density AS "termDensity"
+                NULL::numeric AS "qaRatio",
+                NULL::numeric AS "termDensity",
+                quality_score AS "qualityScore"
            FROM mn_speech_quality
           WHERE meeting_id = $1
           ORDER BY quality_score DESC NULLS LAST`,
@@ -1309,7 +1313,21 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/scopes/:id/meetings', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
-      return { meetingIds: await engine.scopes.listMeetings(id) };
+      const meetingIds = await engine.scopes.listMeetings(id);
+      if (meetingIds.length === 0) return { meetingIds, items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT a.id::text AS id,
+                COALESCE(a.title, a.metadata->>'title', 'Untitled') AS title,
+                a.metadata->>'meeting_kind' AS meeting_kind,
+                COALESCE(a.metadata->>'occurred_at', a.metadata->'analysis'->>'date') AS occurred_at,
+                a.created_at,
+                COALESCE((a.metadata->>'archived')::boolean, false) AS archived
+           FROM assets a
+          WHERE a.id::text = ANY($1::text[])
+          ORDER BY COALESCE(a.metadata->>'occurred_at', a.metadata->'analysis'->>'date', a.created_at::text) DESC`,
+        [meetingIds],
+      );
+      return { meetingIds, items: r.rows };
     });
 
     /**

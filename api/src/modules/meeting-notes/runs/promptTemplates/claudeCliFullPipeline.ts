@@ -288,18 +288,23 @@ const AXES_SCHEMA_SPEC = `
       due: 'YYYY-MM-DD', state: 'on-track' | 'at-risk' | 'done' | 'slipped',
       progress: number   // 0-1
     }],
+    // peopleStats: 每个参与人本次会议级指标 (跨会议汇总如 fulfillment/avgLatency/
+    //   followThroughGrade 由 API 后续从 DB 历史聚合, Claude 只填本次能算出的字段)
+    // 数量下限: 与 participants 数组等长, 即每位参与人必须 1 条
     peopleStats: [{
-      who: 'p1', fulfillment: number, avgLatency: '+2.4d' | '-0.3d' | '—',
-      claims: number, followThroughGrade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | ... ,
-      roleTrajectory: [{ m: 'M-2025-11', role: '提出者' | '质疑者' | '决策者' | '执行者' | '旁观者' }],
-      speechHighEntropy: number,    // 0-1, 高质量发言占比
-      beingFollowedUp: number,
-      silentOnTopics: string[]
+      who: 'p1',
+      speechHighEntropy: number,            // 0-1, 本次会议中高密度/高信息发言占比
+      beingFollowedUp: number,              // 本次会议中, 该人物提出的点被他人接续/追问的次数
+      silentOnTopics: string[],             // 本次会议中, 主要议题里该人物未发言的 topic 关键词
+      roleThisMeeting:                      // 本次会议中该人物的主导角色 (单值, 取最显著)
+        '提出者' | '质疑者' | '决策者' | '执行者' | '旁观者'
     }]
   },
 
   knowledge: {
     axis: 'knowledge',
+    // 数量下限: ≥6 条; 不允许返回空数组. 如果转写中没有显式 "判断", 必须从对话推断
+    // (e.g. "30个月极限回款" 是一个 reusable judgment, generalityScore 看 domain 适用范围).
     reusableJudgments: [{
       id: 'J-01', text: string, abstractedFrom: string,
       generalityScore: number,  // 0-1
@@ -379,6 +384,10 @@ const AXES_SCHEMA_SPEC = `
       verifyDue: 'YYYY-MM-DD' | '持续' | '—',
       confidence: number
     }],
+    // 数量下限: ≥4 条; 不允许返回空数组. 提取所有"提出但未给最终答案"的问题, 包括:
+    // - 显式问句 ("...怎么办？" "...是不是合理值？")
+    // - 隐式悬置 (有人提出某假设但没人确认/反驳, 留在 open 状态)
+    // - 已 assign 但未 due 的待办相关 question
     openQuestions: [{
       id: 'Q-01', text: string, raisedAt: string, by: 'p3',
       timesRaised: number, lastRaised: string,
