@@ -63,6 +63,8 @@ export interface WorkerSpec {
     node_bin?: string;
     tsx_bin?: string;
     worker_log?: string;
+    /** 运维一键同步：远端 pm2 进程名；缺省则只 git pull + 下发 run-routing.json，不 restart */
+    pm2_app?: string;
     claude_cwd_base?: string;
   };
   claude_cli?: { bin?: string; creds?: string };

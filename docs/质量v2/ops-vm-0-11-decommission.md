@@ -160,6 +160,8 @@ git pull
 pm2 restart mn-worker --update-env
 ```
 
+> **可选 · 一键脚本**：若在 `api/config/run-routing.json` 已为该机配置 `ssh`、`deploy.repo` 与 `deploy.pm2_app`（如 `mn-worker`），可在**主仓库开发机**执行 `bash scripts/remote-pipeline-sync.sh --only prod-vm-0-11`（`--only` 也可写 `root@221.195.29.81`）代替本小节手写 SSH。行为与顺序见 [`multi-worker-design.md`](./multi-worker-design.md) §3.4.1。主 VM 上 **nohup** 跑的 `prod-TencentOpenClaw` 若未配 `pm2_app`，脚本不会替你做 pm2，**B.7 仍须按原步骤手工处理**。
+
 ### B.7 主 VM 拉新配置 + 重启
 
 ```bash

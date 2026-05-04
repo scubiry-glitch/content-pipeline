@@ -123,7 +123,8 @@
       "deploy": {
         "repo": "/proweb/run/Pipeline/content-pipeline/",
         "api_dir": "/proweb/run/Pipeline/content-pipeline/api",
-        "worker_log": "/tmp/worker-llm.log"
+        "worker_log": "/tmp/worker-llm.log",
+        "pm2_app": "content-pipeline-api"
       },
       "runtime": {
         "concurrency": 4,
@@ -147,7 +148,8 @@
       "deploy": {
         "repo": "/newdata/pipeline",
         "api_dir": "/newdata/pipeline/api",
-        "worker_log": "/tmp/worker-self.log"
+        "worker_log": "/tmp/worker-self.log",
+        "pm2_app": "pipeline-api"
       },
       "runtime": {
         "comment": "暂无路由进来的任务；只跑该机自己 node 应用本地任务，不参与全局 mn/ceo 调度",

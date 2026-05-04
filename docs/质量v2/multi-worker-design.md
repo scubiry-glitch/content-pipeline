@@ -1,7 +1,7 @@
 # 多 Worker 注册 / 路由设计
 
 > 适用：未来 1-N 台 mn-worker / ceo-worker / expert-worker 接入流水线
-> 配套代码：`api/src/modules/run-routing/service.ts`（host 自检）、`api/config/run-routing.json`（注册表）
+> 配套代码：`api/src/modules/run-routing/service.ts`（host 自检）、`api/config/run-routing.json`（注册表）、`scripts/remote-pipeline-sync.sh`（开发机一键同步）
 > 前置：commit `5d24678 (worker host 自检防双胞胎)`
 
 ## 1. 设计目标
@@ -118,7 +118,8 @@ git 同步            │  run-routing.json · workers 注册表        │
   "deploy": {
     "repo": "<目标机器仓库路径>",
     "api_dir": "<api 目录>",
-    "worker_log": "/tmp/mn-worker-out.log"
+    "worker_log": "/tmp/mn-worker-out.log",
+    "pm2_app": "mn-worker"
   },
   "runtime": {
     "concurrency": 1,
@@ -173,6 +174,24 @@ pm2 save
 pm2 startup -u root --hp /root                     # 自启（首次）
 ```
 
+### 3.4.1 开发机一键同步（`scripts/remote-pipeline-sync.sh`）
+
+在**已能 SSH 各节点**的前提下，可在主仓库根目录执行：
+
+```bash
+bash scripts/remote-pipeline-sync.sh              # 按 run-routing 里所有可 SSH 的 worker 依次执行
+bash scripts/remote-pipeline-sync.sh --only huoshanpro
+bash scripts/remote-pipeline-sync.sh --dry-run   # 只打印将执行的 ssh/scp
+bash scripts/remote-pipeline-sync.sh --skip-config   # 不下发 run-routing.json，仅 git pull + pm2（若配了 pm2_app）
+RUN_ROUTING_JSON=/abs/path/run-routing.json bash scripts/remote-pipeline-sync.sh
+```
+
+**入选条件**（由 `scripts/parse-run-routing-remote-hosts.mjs` 解析）：`workers.{id}` 同时满足 `enabled !== false`、存在 `ssh` 与 `deploy.repo`、`host` 存在且**不是** `localhost`。
+
+**每台顺序**：`git pull` → **scp 本机当前 `api/config/run-routing.json` → 远端 `{deploy.repo}/api/config/run-routing.json`** → 若配置了 `deploy.pm2_app` 则 `pm2 restart <pm2_app> --update-env` 并可选 `tail` `deploy.worker_log`（grep `WORKER_ID resolved|twin-worker`）。
+
+**与 §3.6 的关系**：各节点仅 `git pull` 时，路由会在后续 `loadConfig` 路径读到磁盘新文件；但进程内仍有 **in-process 缓存**（见 §3.6 块引用 / `cachedConfig`）。本脚本在配置了 `deploy.pm2_app` 时会 **restart**，保证立刻读新 JSON。未配置 `pm2_app` 的条目（例如 **nohup** 跑的 `prod-TencentOpenClaw`）脚本**不会**替你做 pm2，需仍按该机 SOP 手动停启。**scp** 适合「工作区已改 `run-routing.json` 尚未 `git push`」仍要让远端与当前文件一致；若规范是「先 push 再各机 pull」，可用 `--skip-config` 只拉代码、不下发文件。
+
 ### 3.5 验证
 
 ```bash
@@ -198,6 +217,7 @@ git add api/config/run-routing.json
 git commit -m "feat(routing): 注册 <WORKER_ID> (<host>) worker"
 git push
 # 通知所有现有 worker 节点 git pull 拉新配置（不需要重启，配置在轮询时重新加载）
+# 或：在开发机 bash scripts/remote-pipeline-sync.sh（见 §3.4.1；含 pm2_app 的节点会 restart）
 ```
 
 > 路由配置**有 in-process 缓存**（`cachedConfig`）。如果你想"立即生效"而不等下次进程启动，调一次 `reloadRoutingConfig()` 或重启该 worker。
@@ -303,9 +323,9 @@ SELECT worker_id, COUNT(*) AS n,
 | WORKER_ID | host | 内网 IP | accept_modules | tags | 备注 |
 |---|---|---|---|---|---|
 | `local-mac` | localhost | - | （全部） | dev, fallback | 开发机 |
-| `prod-TencentOpenClaw` | 43.156.49.59 | 10.3.4.6 | （全部） | claude-cli | 主 worker，已加 host_aliases 自检 |
-| `huoshanpro` | 115.190.221.164 | - | （全部） | api-oneshot | 火山云专跑 LLM HTTP |
-| `TencentNodeDB` | 124.156.192.230 | - | `[]`（拒绝） | db-host | DB 同主机，不参与全局调度 |
+| `prod-TencentOpenClaw` | 43.156.49.59 | 10.3.4.6 | `["mn"]`（`MN_WORKER_ONLY`） | claude-cli | 主 Claude CLI worker（多为 nohup；`deploy.pm2_app` 未设，一键脚本只对其 pull+scp） |
+| `huoshanpro` | 115.190.221.164 | - | `["ceo","mn"]` | llm-api | 火山云 LLM HTTP；`deploy.pm2_app`: `mn-worker` |
+| `TencentNodeDB` | 124.156.192.230 | - | `[]`（拒绝） | db-host | DB 同主机；`deploy.pm2_app`: `pipeline-api`（仅运维同步代码/配置，不接全局 mn/ceo） |
 
 VM-0-11-opencloudos (221.195.29.81) 的处理见 [`ops-vm-0-11-decommission.md`](./ops-vm-0-11-decommission.md)。处理完后回来更新这张表。
 
@@ -316,6 +336,7 @@ VM-0-11-opencloudos (221.195.29.81) 的处理见 [`ops-vm-0-11-decommission.md`]
 | 已实现：host 自检防冒名 | commit `5d24678` | ✓ |
 | 已实现：mn 兜底钉 `${WORKER_ID}` | commit `759ee00` | ✓ |
 | 已实现：reaper 10s min-age | commit `759ee00` | ✓ |
+| 已实现：开发机一键同步 `remote-pipeline-sync.sh` | §3.4.1、`deploy.pm2_app` | ✓ |
 | Tag-based routing（rules 按 tag 匹配多 worker） | 真要做水平扩容时 | 中 |
 | Active health check + 自动 failover | 当前 1 台主 worker 不冗余还能扛；上 3+ 台后做 | 中 |
 | pm2 优雅停机 + drain（kill_timeout=30s + SIGTERM hook） | 升级频率上来后做 | 中 |
