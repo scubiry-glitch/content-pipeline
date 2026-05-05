@@ -175,24 +175,37 @@ interface TreeData { root: TreeNode; nodes: TreeNode[]; }
 
 // 返回 null：形态不识别 → 保留 mock
 // 返回对象（含空 nodes）：形态合法 → 切换到 API · 渲染空树
+function remapApiTreeNode(n: any, currentId?: string, pendingIds?: string[]): TreeNode {
+  return {
+    id: n.id,
+    parent: n.parent ?? undefined,
+    branch: n.title ?? n.branch,
+    label: n.title ?? n.label,
+    decided: n.decided === true ? '已决' : typeof n.decided === 'string' ? n.decided : undefined,
+    meeting: n.meeting_id ?? n.meeting,
+    date: n.date ? String(n.date).slice(0, 7) : undefined,
+    current: n.current ?? n.id === currentId,
+    pending: n.pending ?? (pendingIds ?? []).includes(n.id),
+  };
+}
+
 function adaptDecisionTree(r: unknown): TreeData | null {
   if (!r || typeof r !== 'object') return null;
   const obj = r as Record<string, unknown>;
   // New shape: { nodes: [...], edges: [...], current?, pending?: [...] }
+  // Also handles decisionTreeBuilder shape: { rootDecisionId, nodes, computedAt }
   if (Array.isArray(obj.nodes)) {
-    const nodes = obj.nodes as TreeNode[];
-    if (nodes.length === 0) {
-      // API 返回空树 · 给一个占位 root 让渲染不崩
+    const rawNodes = obj.nodes as any[];
+    if (rawNodes.length === 0) {
       return { root: { id: '__empty__', label: '暂无决策链路' }, nodes: [] };
     }
-    const pending = (obj.pending as string[] | undefined) ?? [];
+    const pendingIds = (obj.pending as string[] | undefined) ?? [];
     const currentId = obj.current as string | undefined;
-    const root = nodes.find(n => !n.parent) ?? nodes[0];
-    const rest = nodes.filter(n => n.id !== root.id).map(n => ({
-      ...n,
-      current: n.current ?? n.id === currentId,
-      pending: n.pending ?? pending.includes(n.id),
-    }));
+    const rootRaw = rawNodes.find((n: any) => !n.parent) ?? rawNodes[0];
+    const root = remapApiTreeNode(rootRaw, currentId, pendingIds);
+    const rest = rawNodes
+      .filter((n: any) => n.id !== rootRaw.id)
+      .map((n: any) => remapApiTreeNode(n, currentId, pendingIds));
     return { root, nodes: rest };
   }
   // Legacy shape: { root, nodes }
@@ -202,7 +215,7 @@ function adaptDecisionTree(r: unknown): TreeData | null {
   return null;
 }
 
-function DecisionTree({ scopeId }: { scopeId: string }) {
+export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; embedded?: boolean }) {
   const forceMock = useForceMock();
   const [tree, setTree] = useState<TreeData>(DECISION_TREE_DATA);
   const [isMock, setIsMock] = useState(true);
@@ -221,25 +234,54 @@ function DecisionTree({ scopeId }: { scopeId: string }) {
   }, [scopeId, forceMock]);
 
   const allNodes = [tree.root, ...tree.nodes];
-  const W = 860, H = 360;
-  const pos: Record<string, { x: number; y: number }> = {
-    'R':  { x: 80,  y: H / 2 },
-    'N1': { x: 240, y: H / 2 },
-    'N2': { x: 420, y: H / 2 - 110 },
-    'N3': { x: 420, y: H / 2 },
-    'N4': { x: 420, y: H / 2 + 110 },
-    'N5': { x: 620, y: H / 2 + 110 },
-  };
-  // 对新 shape 里未在 pos 中的节点，粗略平铺
-  allNodes.forEach((n, i) => {
-    if (!pos[n.id]) pos[n.id] = { x: 80 + (i % 5) * 180, y: 60 + Math.floor(i / 5) * 100 };
+
+  // ── 动态树形布局 ─────────────────────────────────────────────────────────────
+  // 1. 构建 parent→children 映射
+  const children: Record<string, string[]> = {};
+  allNodes.forEach(n => {
+    const parent = (n as TreeNode).parent;
+    if (parent) {
+      if (!children[parent]) children[parent] = [];
+      children[parent].push(n.id);
+    }
+  });
+  // 2. BFS 分配深度（x 轴）
+  const depth: Record<string, number> = { [tree.root.id]: 0 };
+  const bfsQ = [tree.root.id];
+  while (bfsQ.length) {
+    const cur = bfsQ.shift()!;
+    (children[cur] ?? []).forEach(c => { depth[c] = (depth[cur] ?? 0) + 1; bfsQ.push(c); });
+  }
+  // 3. 按深度分组，分配 y 序号
+  const byDepth: Record<number, string[]> = {};
+  allNodes.forEach(n => {
+    const d = depth[n.id] ?? 0;
+    if (!byDepth[d]) byDepth[d] = [];
+    byDepth[d].push(n.id);
+  });
+  const maxDepth = Math.max(...Object.keys(byDepth).map(Number));
+  const maxCount = Math.max(...Object.values(byDepth).map(a => a.length));
+  const NODE_W = 170, NODE_H = 60, X_GAP = 200, Y_GAP = 80;
+  const W = Math.max(860, (maxDepth + 1) * X_GAP + NODE_W + 40);
+  const H = Math.max(360, maxCount * Y_GAP + NODE_H + 40);
+  const pos: Record<string, { x: number; y: number }> = {};
+  Object.entries(byDepth).forEach(([d, ids]) => {
+    const depth_num = Number(d);
+    ids.forEach((id, i) => {
+      pos[id] = {
+        x: 80 + depth_num * X_GAP,
+        y: (H / 2) + (i - (ids.length - 1) / 2) * Y_GAP,
+      };
+    });
   });
 
+  const rootLabel = tree.root.label && tree.root.id !== '__empty__' ? tree.root.label : '';
+
   return (
-    <div style={{ padding: '22px 32px 36px' }}>
+    <div style={{ padding: embedded ? 0 : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
-          项目决策树 · AI 基础设施方向
+          项目决策树{rootLabel ? ` · ${rootLabel}` : ''}
         </h3>
         {isMock && <MockBadge />}
       </div>

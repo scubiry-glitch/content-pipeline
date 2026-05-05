@@ -19,6 +19,7 @@ import {
   ASSUMPTIONS_MECHANISM_VALUE,
   RISKS_LAGGING_CRITIQUE,
 } from '../../i18n/commentary';
+import { DecisionTree } from './LongitudinalView';
 
 // ── Mock data ───────────────────────────────────────────────────────────────
 
@@ -310,37 +311,9 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
 }
 
 function DecisionTreeSection({ scopeId }: { scopeId: string }) {
-  const [data, setData] = useState<{ rootId?: string; nodes?: any; computedAt?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    meetingNotesApi.getLongitudinal(scopeId, 'decision_tree')
-      .then((r: any) => { if (!cancelled) { setData(r); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setData(null); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [scopeId]);
   return (
-    <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line-2)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
-        <SectionLabel>决策树</SectionLabel>
-        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
-          mn_decision_tree_snapshots · 项目所有分岔点 + 未来待决
-        </span>
-      </div>
-      {loading ? (
-        <div style={{ color: 'var(--ink-3)', fontSize: 12 }}>加载中…</div>
-      ) : !data || !data.nodes ? (
-        <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 20px', fontSize: 12, color: 'var(--ink-3)' }}>
-          本 scope 暂无决策树快照 · 跑生成中心 → longitudinal/decision_tree 触发
-        </div>
-      ) : (
-        <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6, padding: '14px 18px', overflow: 'auto' }}>
-          <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
-            {JSON.stringify(data.nodes, null, 2).slice(0, 1500)}
-          </pre>
-        </div>
-      )}
+    <div style={{ marginTop: 28, paddingTop: 18, borderTop: '1px solid var(--line-2)' }}>
+      <DecisionTree scopeId={scopeId} embedded />
     </div>
   );
 }
