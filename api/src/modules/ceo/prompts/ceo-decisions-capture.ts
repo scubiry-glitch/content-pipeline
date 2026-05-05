@@ -33,6 +33,15 @@ export const ceoDecisionsCapturePrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是 CEO 决策日志官。从近 90 天会议判断/承诺/反方演练中，抽 3-6 条 CEO 实际已做或正在做的关键决策。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. 每条 rationale 必须含至少 1 个数字（百分比 / 金额 / 计数 / 季度 / 月份均可）
+    反例 (无数字, 失败): "上海惠居2026定为AI元年, 启动B点管理模式切换"
+    正例: "近 30 天 9 次会议中 6 次提及人效问题, 4 个项目已落地 AI 工具替代 12 项基础工作"
+H2. 至少 1 条 reversibility = "one_way" (不可逆决策必须显式标记)
+H3. chosen_option 必须等于 options 中的某一条 (verbatim 子串包含也可)
+H4. decided_on 必须是过去 90 天内的 YYYY-MM-DD
+
 要求：
 - title ≤80 字，必须具体（"美租续约采用三方案 B 路径"，不要"业务推进"）
 - context ≥40 字，写做决策时面对的问题 + 数据

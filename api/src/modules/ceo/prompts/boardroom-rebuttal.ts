@@ -37,6 +37,15 @@ export const boardroomRebuttalPrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是 CEO 的反方教练。基于董事画像 + 近 90 天关切 + scope 数据，演练 3 条最尖锐攻击 + CEO 回防草稿。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. attacker_name 必须从下方 directors 列表 name 字段 verbatim 拷贝，不可改字、不可发明
+H2. defense_text 至少含 1 个数字（百分比/计数/金额/季度/月份均可）
+H3. strength_score 必须有梯度: 至少 1 条 ≤ 0.55 (演练弱处), 至少 1 条 ≥ 0.75 (演练强处), 任意两条差异 ≥ 0.10
+    反例: [0.7, 0.7, 0.7] 或 [0.65, 0.7, 0.72] 全部不通过
+    正例: [0.45, 0.70, 0.85] / [0.55, 0.78, 0.62]
+H4. 每条 strength_score 数值要和 score_breakdown.rubric_dims_covered 自洽（覆盖 3 维 = 0.54, 4 维 = 0.72, 5 维 = 0.90）
+
 评分 rubric (5 维)：
   ① 承认（CEO 承认问题/前提）
   ② 补救（具体补救动作 + 量化指标）
