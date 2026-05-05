@@ -20,6 +20,9 @@ export interface PromptRunRow {
   axis: string;
   scope_kind: string;
   scope_id: string | null;
+  /** mn_runs.workspace_id — 显式带到所有 INSERT, 不依赖 042 trigger 兜底
+   *  (defense-in-depth: scope_id=null 或父行链断时, trigger 不触发会撞 043 NOT NULL) */
+  workspace_id: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -213,10 +216,10 @@ export async function handleCompassStars(deps: CeoEngineDeps, run: PromptRunRow)
   const inserted: string[] = [];
   for (const star of r.out.stars) {
     const ins = await deps.db.query(
-      `INSERT INTO ceo_strategic_lines (scope_id, name, kind, alignment_score, description)
-       VALUES ($1::uuid, $2, $3, $4, $5)
+      `INSERT INTO ceo_strategic_lines (scope_id, name, kind, alignment_score, description, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid)
        RETURNING id::text`,
-      [run.scope_id, star.name, star.kind, star.alignment_score, star.description],
+      [run.scope_id, star.name, star.kind, star.alignment_score, star.description, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -242,10 +245,10 @@ export async function handleCompassDriftAlert(deps: CeoEngineDeps, run: PromptRu
     }
     const sourceMeetingUuid = isUuid(a.source_meeting_id) ? a.source_meeting_id : null;
     const ins = await deps.db.query(
-      `INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate, source_meeting_id, evidence_run_ids)
-       VALUES ($1::uuid, $2, $3, 'refute', $4::uuid, ARRAY[$5]::text[])
+      `INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate, source_meeting_id, evidence_run_ids, workspace_id)
+       VALUES ($1::uuid, $2, $3, 'refute', $4::uuid, ARRAY[$5]::text[], $6::uuid)
        RETURNING id::text`,
-      [a.line_id, a.hypothesis_text, a.fact_text, sourceMeetingUuid, run.id],
+      [a.line_id, a.hypothesis_text, a.fact_text, sourceMeetingUuid, run.id, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -268,10 +271,10 @@ export async function handleCompassEcho(deps: CeoEngineDeps, run: PromptRunRow):
   for (const e of r.out.echos) {
     const sourceMeetingUuid = isUuid(e.source_meeting_id) ? e.source_meeting_id : null;
     const ins = await deps.db.query(
-      `INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate, source_meeting_id, evidence_run_ids)
-       VALUES ($1::uuid, $2, $3, $4, $5::uuid, ARRAY[$6]::text[])
+      `INSERT INTO ceo_strategic_echos (line_id, hypothesis_text, fact_text, fate, source_meeting_id, evidence_run_ids, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4, $5::uuid, ARRAY[$6]::text[], $7::uuid)
        RETURNING id::text`,
-      [e.line_id, e.hypothesis_text, e.fact_text, e.fate, sourceMeetingUuid, run.id],
+      [e.line_id, e.hypothesis_text, e.fact_text, e.fate, sourceMeetingUuid, run.id, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -295,10 +298,10 @@ export async function handleBoardroomRebuttal(deps: CeoEngineDeps, run: PromptRu
     const score = reb.strength_score ?? 0.6;
     const ins = await deps.db.query(
       `INSERT INTO ceo_rebuttal_rehearsals
-         (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+         (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id, workspace_id)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::uuid)
        RETURNING id::text`,
-      [briefId, run.scope_id, attackerLabel, reb.attack_text, reb.defense_text, score, run.id],
+      [briefId, run.scope_id, attackerLabel, reb.attack_text, reb.defense_text, score, run.id, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -324,10 +327,10 @@ export async function handleBoardroomAnnotation(deps: CeoEngineDeps, run: Prompt
   const briefId = ctx.brief?.id ?? null;
   const ins = await deps.db.query(
     `INSERT INTO ceo_boardroom_annotations
-       (brief_id, scope_id, expert_id, expert_name, mode, highlight, body_md, citations, generated_run_id)
-     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9)
+       (brief_id, scope_id, expert_id, expert_name, mode, highlight, body_md, citations, generated_run_id, workspace_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::uuid)
      RETURNING id::text`,
-    [briefId, run.scope_id, expertId, expertName, r.out.mode, r.out.highlight, r.out.body_md, JSON.stringify(r.out.citations), run.id],
+    [briefId, run.scope_id, expertId, expertName, r.out.mode, r.out.highlight, r.out.body_md, JSON.stringify(r.out.citations), run.id, run.workspace_id],
   );
   return { ok: true, result: { mode: 'llm', annotationId: String(ins.rows[0]?.id) } };
 }
@@ -346,10 +349,10 @@ export async function handleBoardroomConcerns(deps: CeoEngineDeps, run: PromptRu
     const sourceMeetingUuid = isUuid(c.source_meeting_id) ? c.source_meeting_id : null;
     const ins = await deps.db.query(
       `INSERT INTO ceo_director_concerns
-         (director_id, topic, status, raised_count, source_meeting_id)
-       VALUES ($1::uuid, $2, 'pending', $3, $4::uuid)
+         (director_id, topic, status, raised_count, source_meeting_id, workspace_id)
+       VALUES ($1::uuid, $2, 'pending', $3, $4::uuid, $5::uuid)
        RETURNING id::text`,
-      [c.director_id, c.topic, c.raised_count, sourceMeetingUuid],
+      [c.director_id, c.topic, c.raised_count, sourceMeetingUuid, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -369,10 +372,10 @@ export async function handleSituationSignal(deps: CeoEngineDeps, run: PromptRunR
   for (const s of r.out.signals) {
     const ins = await deps.db.query(
       `INSERT INTO ceo_external_signals
-         (stakeholder_id, signal_text, source_url, sentiment, ref_asset_id)
-       VALUES ($1::uuid, $2, $3, $4, $5)
+         (stakeholder_id, signal_text, source_url, sentiment, ref_asset_id, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid)
        RETURNING id::text`,
-      [s.stakeholder_id, s.signal_text, s.source_url, s.sentiment, s.ref_asset_id],
+      [s.stakeholder_id, s.signal_text, s.source_url, s.sentiment, s.ref_asset_id, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -389,9 +392,9 @@ export async function handleSituationRubric(deps: CeoEngineDeps, run: PromptRunR
   for (const s of r.out.scores) {
     await deps.db.query(
       `INSERT INTO ceo_rubric_scores
-         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
-      [run.scope_id, stakeholderId, s.dimension, s.score, run.id, s.evidence_text],
+         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text, workspace_id)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid)`,
+      [run.scope_id, stakeholderId, s.dimension, s.score, run.id, s.evidence_text, run.workspace_id],
     );
   }
   return { ok: true, result: { mode: 'llm', dimensions: r.out.scores.length } };
@@ -440,10 +443,10 @@ export async function handleWarRoomSpark(deps: CeoEngineDeps, run: PromptRunRow)
   for (const s of r.out.sparks) {
     const ins = await deps.db.query(
       `INSERT INTO ceo_war_room_sparks
-         (scope_id, tag, headline, evidence_short, why_evidence, risk_text, seed_group, generated_run_id)
-       VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6, $7, $8)
+         (scope_id, tag, headline, evidence_short, why_evidence, risk_text, seed_group, generated_run_id, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::uuid)
        RETURNING id::text`,
-      [run.scope_id, s.tag, s.headline, s.evidence_short, JSON.stringify(s.why_evidence), s.risk_text, s.seed_group, run.id],
+      [run.scope_id, s.tag, s.headline, s.evidence_short, JSON.stringify(s.why_evidence), s.risk_text, s.seed_group, run.id, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -520,10 +523,10 @@ export async function handleBoardroomPromises(deps: CeoEngineDeps, run: PromptRu
   for (const p of r.out.promises) {
     const ins = await deps.db.query(
       `INSERT INTO ceo_board_promises
-         (brief_id, what, owner, due_at, status, source_decision_id)
-       VALUES ($1::uuid, $2, $3, $4::date, $5, $6)
+         (brief_id, what, owner, due_at, status, source_decision_id, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4::date, $5, $6, $7::uuid)
        RETURNING id::text`,
-      [ctx.brief.id, p.what, p.owner, p.due_at, p.status ?? 'in_progress', `generated:${run.id}`],
+      [ctx.brief.id, p.what, p.owner, p.due_at, p.status ?? 'in_progress', `generated:${run.id}`, run.workspace_id],
     );
     inserted.push(String(ins.rows[0]?.id));
   }
@@ -551,13 +554,13 @@ export async function handleWarRoomFormation(deps: CeoEngineDeps, run: PromptRun
     generated_run_id: run.id,
   };
   await deps.db.query(
-    `INSERT INTO ceo_formation_snapshots (scope_id, week_start, formation_data, conflict_temp)
-     VALUES ($1::uuid, $2::date, $3::jsonb, $4)
+    `INSERT INTO ceo_formation_snapshots (scope_id, week_start, formation_data, conflict_temp, workspace_id)
+     VALUES ($1::uuid, $2::date, $3::jsonb, $4, $5::uuid)
      ON CONFLICT (scope_id, week_start) DO UPDATE
        SET formation_data = EXCLUDED.formation_data,
            conflict_temp = EXCLUDED.conflict_temp,
            computed_at = NOW()`,
-    [run.scope_id, weekStart, JSON.stringify(formationData), r.out.conflict_temp],
+    [run.scope_id, weekStart, JSON.stringify(formationData), r.out.conflict_temp, run.workspace_id],
   );
   return { ok: true, result: { mode: 'llm', weekStart, nodes: r.out.nodes.length, links: r.out.links.length, gaps: r.out.gaps.length } };
 }
@@ -572,8 +575,8 @@ export async function handleCeoDecisionsCapture(deps: CeoEngineDeps, run: Prompt
   for (const d of r.out.decisions) {
     const ins = await deps.db.query(
       `INSERT INTO ceo_decisions
-         (scope_id, title, context, options, chosen_option, rationale, reversibility, confidence, decided_at)
-       VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::date)
+         (scope_id, title, context, options, chosen_option, rationale, reversibility, confidence, decided_at, workspace_id)
+       VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::date, $10::uuid)
        RETURNING id::text`,
       [
         run.scope_id,
@@ -585,6 +588,7 @@ export async function handleCeoDecisionsCapture(deps: CeoEngineDeps, run: Prompt
         d.reversibility,
         d.confidence,
         d.decided_on,
+        run.workspace_id,
       ],
     );
     inserted.push(String(ins.rows[0]?.id));
