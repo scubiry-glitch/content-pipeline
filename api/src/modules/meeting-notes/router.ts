@@ -985,15 +985,18 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
-        `SELECT person_id AS "personId",
-                entropy_pct AS entropy,
-                followed_up_count AS "followedUp",
+        `SELECT sq.person_id AS "personId",
+                p.canonical_name AS "personName",
+                p.role AS "personRole",
+                sq.entropy_pct AS entropy,
+                sq.followed_up_count AS "followedUp",
                 NULL::numeric AS "qaRatio",
                 NULL::numeric AS "termDensity",
-                quality_score AS "qualityScore"
-           FROM mn_speech_quality
-          WHERE meeting_id = $1
-          ORDER BY quality_score DESC NULLS LAST`,
+                sq.quality_score AS "qualityScore"
+           FROM mn_speech_quality sq
+           LEFT JOIN mn_people p ON p.id = sq.person_id
+          WHERE sq.meeting_id = $1
+          ORDER BY sq.quality_score DESC NULLS LAST`,
         [id],
       );
       return { items: r.rows };

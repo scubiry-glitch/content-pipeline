@@ -446,7 +446,7 @@ export const meetingNotesApi = {
 
   // Phase 15.1 · Speech metrics (#6 · 新路由 · 无破坏性)
   getSpeechMetrics: (meetingId: string) =>
-    jget<{ items: Array<{ personId: string; entropy: number; followedUp: number; qaRatio?: number; termDensity?: number }> } | null>(
+    jget<{ items: Array<{ personId: string; personName?: string | null; personRole?: string | null; entropy: number; followedUp: number; qaRatio?: number; termDensity?: number }> } | null>(
       `/meetings/${meetingId}/speech-metrics`,
     ),
 

@@ -8,7 +8,7 @@ import { Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
 import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyTab, AxisLoadingSkeleton, useScopeUrlSync } from './_axisShared';
 import { MeetingPicker } from './_meetingPicker';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
-import { PARTICIPANTS, P, MEETING } from './_fixtures';
+import { PARTICIPANTS, P, MEETING, pickPerson } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
@@ -424,7 +424,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
 
 // ── P3 · 发言质量 ───────────────────────────────────────────────────────────
 
-interface SpeechRow { who: string; claims: number; speechHighEntropy: number; beingFollowedUp: number; }
+interface SpeechRow { who: string; role?: string; claims: number; speechHighEntropy: number; beingFollowedUp: number; }
 
 function PSpeech({ meetingId }: { meetingId: string }) {
   const forceMock = useForceMock();
@@ -441,7 +441,8 @@ function PSpeech({ meetingId }: { meetingId: string }) {
         if (cancelled) return;
         const items = r?.items ?? [];
         const mapped: SpeechRow[] = items.map((it) => ({
-          who: String(it.personId),
+          who: pickPerson(it.personId, it.personName),
+          role: it.personRole ?? undefined,
           claims: 0,
           speechHighEntropy: Number(it.entropy ?? 0),
           beingFollowedUp: Number(it.followedUp ?? 0),
@@ -495,7 +496,7 @@ function PSpeech({ meetingId }: { meetingId: string }) {
               <Avatar p={p} size={26} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{p.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{p.role}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{p.role || s.role || ''}</div>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
