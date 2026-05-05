@@ -15,10 +15,19 @@ import { OnePagerPaper } from './OnePagerPaper';
 import { ArchivesTabs } from './ArchivesTabs';
 import { useForceMock } from '../../../../meeting/_mockToggle';
 
+interface AstroApi { stars: Array<{ id: string; name: string; kind: 'main'|'branch'|'drift'; alignment_score: number | null; cx: number; cy: number; r: number }>; }
+interface PieApi { totalHours: number; segments: Array<{ kind: string; label: string; hours: number; pct: number; color: string }>; verdict: string; }
+interface DriftApi { items: Array<{ name: string; drift_pct: number; weeks_off_ic: number; text: string; severity: 'danger'|'warn'|'info' }> }
+interface AtlasApi { active?: number; danger?: number; warn?: number; healthy?: number; counts?: { active: number; danger: number; warn: number; healthy: number } }
+
 export function Compass() {
   const navigate = useNavigate();
   const forceMock = useForceMock();
   const [alignment, setAlignment] = useState<number | null>(null);
+  const [astroData, setAstroData] = useState<AstroApi | null>(null);
+  const [pieData, setPieData] = useState<PieApi | null>(null);
+  const [driftData, setDriftData] = useState<DriftApi | null>(null);
+  const [atlasData, setAtlasData] = useState<AtlasApi | null>(null);
   const [loading, setLoading] = useState(true);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
@@ -29,23 +38,72 @@ export function Compass() {
       return;
     }
     let cancelled = false;
-    // 多 scope 时直接 fetch (ceoApi.compass.dashboard 当前只支持单 scope)
-    fetch(`/api/v1/ceo/compass/dashboard${buildScopeQuery(scopeIds)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) {
-          setAlignment(d.alignmentScore ?? null);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const q = buildScopeQuery(scopeIds);
+    Promise.all([
+      fetch(`/api/v1/ceo/compass/dashboard${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/compass/astrolabe${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/compass/time-pie${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/compass/drift-radar${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/compass/atlas${q}`).then((r) => r.json()).catch(() => null),
+    ]).then(([dash, astro, pie, drift, atlas]) => {
+      if (cancelled) return;
+      if (dash?.alignmentScore != null) setAlignment(dash.alignmentScore);
+      if (astro) setAstroData(astro as AstroApi);
+      if (pie) setPieData(pie as PieApi);
+      if (drift) setDriftData(drift as DriftApi);
+      if (atlas) setAtlasData(atlas as AtlasApi);
+      setLoading(false);
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey, forceMock]);
+
+  // ─── adapters: API → fixture shape ───────────────────────────────
+  const astroNodes = (() => {
+    if (forceMock || !astroData?.stars || astroData.stars.length === 0) return undefined; // fixture default
+    return astroData.stars.map((s) => ({
+      name: s.name,
+      kind: s.kind,
+      share: Math.round((s.alignment_score ?? 0.5) * 100),
+      cx: s.cx,
+      cy: s.cy,
+      r: s.r,
+    }));
+  })();
+  const piePropsApi = (() => {
+    if (forceMock || !pieData?.segments) return undefined;
+    const find = (kind: string) => pieData.segments.find((s) => s.kind === kind)?.pct ?? 0;
+    return {
+      total: Math.round(pieData.totalHours ?? 0),
+      main: Math.round(find('main')),
+      branch: Math.round(find('branch')),
+      firefighting: Math.round(find('firefighting')),
+      warning: pieData.verdict || '',
+    };
+  })();
+  const driftCards = (() => {
+    if (forceMock || !driftData?.items) return undefined;
+    return driftData.items.slice(0, 6).map((d) => ({
+      name: d.name,
+      delta: `${d.drift_pct >= 0 ? '+' : ''}${d.drift_pct.toFixed(0)}% ${d.severity === 'danger' ? '↑' : d.severity === 'warn' ? '→' : '↓'}`,
+      text: d.text,
+      warn: d.severity !== 'danger',
+    }));
+  })();
+  const atlasStats = (() => {
+    if (forceMock || !atlasData) return undefined;
+    const c = atlasData.counts ?? atlasData;
+    return {
+      active: Number(c.active ?? 0),
+      danger: Number(c.danger ?? 0),
+      warn: Number(c.warn ?? 0),
+      healthy: Number(c.healthy ?? 0),
+    };
+  })();
 
   return (
     <div
@@ -192,22 +250,22 @@ export function Compass() {
       >
         {/* ① 战略星盘 */}
         <Block num="① astrolabe" title="战略星盘 · 主线 / 支线 / 漂移" meta="指针 = 本周注意力实际朝向" tall>
-          <Astrolabe />
+          <Astrolabe nodes={astroNodes} />
           <Legend />
         </Block>
 
         {/* ② 时间分配饼 */}
-        <Block num="② time pie" title="时间分配 · 战略主线 vs 救火" meta="本周 · 38h 实测">
-          <TimePie />
+        <Block num="② time pie" title="时间分配 · 战略主线 vs 救火" meta={piePropsApi ? `本周 · ${piePropsApi.total}h 实测` : '本周 · 38h 实测'}>
+          <TimePie {...(piePropsApi ?? {})} />
         </Block>
 
         {/* ③ 漂移雷达 */}
         <Block num="③ drift radar" title="本周漂移 · 偏离了哪些主线" meta="基于 belief-drift 轴">
-          <DriftRadar />
+          <DriftRadar cards={driftCards} />
         </Block>
 
         {/* ④ Project Atlas */}
-        <ProjectAtlasCard />
+        <ProjectAtlasCard stats={atlasStats} />
 
         {/* ⑤ 战略回响 Sankey — 接 ceo_strategic_echos 真数据 */}
         <Block num="⑤ strategic echo" title="战略回响 · 假设 ↔ 现实" meta="hypothesis ↔ fact ↔ fate" spanFull>

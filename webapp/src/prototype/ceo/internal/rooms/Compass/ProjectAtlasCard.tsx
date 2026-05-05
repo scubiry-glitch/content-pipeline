@@ -5,7 +5,11 @@
 import { useNavigate } from 'react-router-dom';
 import { ATLAS_STATS } from './_compassFixtures';
 
-export function ProjectAtlasCard() {
+interface Props {
+  stats?: { active: number; danger: number; warn: number; healthy: number };
+}
+
+export function ProjectAtlasCard({ stats = ATLAS_STATS }: Props) {
   const navigate = useNavigate();
   return (
     <a
@@ -66,10 +70,10 @@ export function ProjectAtlasCard() {
         </div>
         <div style={{ display: 'flex', gap: 24 }}>
           {[
-            { v: ATLAS_STATS.active, k: '活跃项目', color: '#3E6E8C' },
-            { v: ATLAS_STATS.danger, k: '危险', color: '#B05A4A' },
-            { v: ATLAS_STATS.warn, k: '预警', color: '#B89348' },
-            { v: ATLAS_STATS.healthy, k: '健康', color: '#6A9A5C' },
+            { v: stats.active, k: '活跃项目', color: '#3E6E8C' },
+            { v: stats.danger, k: '危险', color: '#B05A4A' },
+            { v: stats.warn, k: '预警', color: '#B89348' },
+            { v: stats.healthy, k: '健康', color: '#6A9A5C' },
           ].map((s) => (
             <div key={s.k} style={{ textAlign: 'left' }}>
               <span
