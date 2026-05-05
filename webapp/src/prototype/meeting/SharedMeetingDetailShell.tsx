@@ -70,7 +70,10 @@ export function SharedMeetingDetailShell() {
         setMeetingId(m.meetingId ?? '');
         if (m.title) setApiTitle(String(m.title));
         if (m.date) setApiDate(String(m.date).slice(0, 10));
-        setApiDetail(m);
+        // Variants 读 data.analysis 才是真正内容; 内部 /meetings/:id/detail 返回
+        // { analysis: {...} }, 而 /shared/:token 直接把 meeting body 摊平为 res.meeting.
+        // 这里包一层对齐, 让 SharedMeetingDetail 的 C 视图复用同一个 Variants.
+        setApiDetail({ analysis: m });
         setApiState('ok');
       })
       .catch(() => setApiState('error'));
