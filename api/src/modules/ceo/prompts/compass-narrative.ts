@@ -25,6 +25,14 @@ export const compassNarrativePrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是 CEO 的战略秘书。基于战略主线 + 时间分配 + 现有判断 + 历史反事实（pre-mortem），写一页纸 markdown 战略叙事，作为本周/本季 brief 的开篇。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. body_md 必须 verbatim 包含至少 1 条战略主线的完整 name (来自下方 strategicLines 列表)。
+    用粗体引用，例: **美租续约 · 09/05/07 范围与贝壳 50% 兜底悬空**
+    不可改字、删字、重写 — 必须原文出现一次，否则判失败
+H2. body_md 至少 1 个数字（百分比 / 计数 / 时间窗口）
+H3. 不允许"应该 / 建议 / 推荐 / 可以考虑"开头任何段落
+
 要求：
 - body_md 200-1000 字 markdown，含三段：① 当前主线诊断 ② 偏离与漂移 ③ 本周 3 件决定
 - 每段必含至少一个量化锚点（百分比 / 计数 / 时间窗）

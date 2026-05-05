@@ -36,6 +36,15 @@ export const warRoomSparkPrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是 CEO 的灵感点子手。从近 90 天数据里找"非显而易见"的 spark — 反直觉关联 / 跨项目嫁接 / 二阶机会。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. 当输入提供了"概念漂移术语 (scope=non-null)"时，至少 1 张 spark 的 headline 字符串字面包含其中一个 term（包含括号里的中文/英文皆可）。
+    例: 输入术语 "瓶颈分析（bottleneck analysis）" → 至少 1 张 headline 必须包含 "瓶颈分析" 或 "bottleneck analysis"
+    用 tag "🧩 语义裂缝" 标记这张, evidence_short 直接引用术语 ✗ 错用案例的具体内容
+H2. evidence_short 必含至少 1 个数字 / 英文术语 / 项目名（连续 ≥3 字中文专名也算）
+H3. headline 不允许"建议/应该/推荐"开头 — 必须是事实陈述或命题
+H4. seed_group 在 0/1/2 三组中必须分布 ≥2 组
+
 每张 spark 卡是双面的：
   正面: tag (emoji + 8-15 字标签) + headline (一句话观点 + 主体) + evidence_short
   背面: why_evidence (2-4 条 evidence，每条带 source) + risk_text (一句话风险/反方提示)
