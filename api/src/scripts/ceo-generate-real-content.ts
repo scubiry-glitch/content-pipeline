@@ -453,10 +453,13 @@ async function main() {
 // ─── 前置数据保证 ────────────────────────────────────────────
 
 async function ensurePrerequisites(query: any, scope: ScopeRow) {
-  // ceo_directors — 至少 3 位
+  // ceo_directors — 至少 3 位 (本 scope 内, 不再认 NULL-scope 全局 demo seeds 顶替)
+  // 历史 bug: 旧检查 `scope_id IS NULL OR scope_id = $1` 在 default ws 有 NULL-scope demo seeds
+  //   时会满足 count >= 3, 跳过 INSERT, 导致非 default ws scope 永远没有自己的 directors
+  //   → handler 通过 OR scope_id IS NULL 读到 demo seeds, 跨 ws 串数据.
+  // 修法: 收紧到 scope_id = $1, 同时配合 prompts/index.ts 去掉 IS NULL fallback.
   const dirCount = (await query(
-    `SELECT COUNT(*)::int AS n FROM ceo_directors
-      WHERE scope_id IS NULL OR scope_id = $1::uuid`,
+    `SELECT COUNT(*)::int AS n FROM ceo_directors WHERE scope_id = $1::uuid`,
     [scope.id],
   )).rows[0]?.n ?? 0;
   if (dirCount < 3) {
@@ -473,9 +476,9 @@ async function ensurePrerequisites(query: any, scope: ScopeRow) {
     );
   }
 
-  // ceo_stakeholders — 至少 4 位
+  // ceo_stakeholders — 至少 4 位 (同 directors, scope_id 严格匹配)
   const skCount = (await query(
-    `SELECT COUNT(*)::int AS n FROM ceo_stakeholders WHERE scope_id IS NULL OR scope_id = $1::uuid`,
+    `SELECT COUNT(*)::int AS n FROM ceo_stakeholders WHERE scope_id = $1::uuid`,
     [scope.id],
   )).rows[0]?.n ?? 0;
   if (skCount < 3) {

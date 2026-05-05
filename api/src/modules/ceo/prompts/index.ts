@@ -166,7 +166,7 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
   try {
     const r = await db.query(
       `SELECT id::text AS id, name, role, weight FROM ceo_directors
-        WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+        WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         ORDER BY weight DESC NULLS LAST LIMIT 12`,
       [scopeId],
     );
@@ -186,7 +186,7 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     const r = await db.query(
       `SELECT id::text AS id, board_session, version, toc, page_count
          FROM ceo_briefs
-        WHERE status = 'draft' AND ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+        WHERE status = 'draft' AND ($1::uuid IS NULL OR scope_id = $1::uuid)
         ORDER BY version DESC LIMIT 1`,
       [scopeId],
     );
@@ -208,7 +208,7 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
   try {
     const r = await db.query(
       `SELECT id::text AS id, name, kind, description FROM ceo_strategic_lines
-        WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+        WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
           AND status = 'active'
         ORDER BY established_at DESC LIMIT 10`,
       [scopeId],
@@ -228,7 +228,7 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
   try {
     const r = await db.query(
       `SELECT id::text AS id, name, kind, heat FROM ceo_stakeholders
-        WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+        WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         ORDER BY heat DESC NULLS LAST LIMIT 12`,
       [scopeId],
     );
