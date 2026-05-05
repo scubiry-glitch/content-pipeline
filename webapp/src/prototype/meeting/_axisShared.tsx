@@ -779,7 +779,9 @@ export function DimShell({
   return (
     <div style={{
       width: '100%', maxWidth: '100vw', height: '100%', background: 'var(--paper)',
-      display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : 'auto 1fr', color: 'var(--ink)',
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      gridTemplateRows: isMobile ? 'auto 1fr' : 'auto 1fr', color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
       {isMobile ? (

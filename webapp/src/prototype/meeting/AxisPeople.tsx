@@ -221,8 +221,11 @@ function PCommitments({ scopeId }: { scopeId: string }) {
                   const s = stateStyle[c.state];
                   return (
                     <div key={c.id} style={{
-                      display: 'grid', gridTemplateColumns: '88px 1fr 80px 120px 70px',
-                      alignItems: 'center', gap: 12, padding: '10px 0',
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr' : '88px 1fr 80px 120px 70px',
+                      alignItems: isMobile ? 'start' : 'center',
+                      gap: isMobile ? 4 : 12,
+                      padding: isMobile ? '12px 0' : '10px 0',
                       borderTop: i === 0 ? 'none' : '1px solid var(--line-2)',
                     }}>
                       <MonoMeta>{c.id}</MonoMeta>
@@ -370,18 +373,23 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
         一个从"决策者"漂到"质疑者"的人，可能是在主动让位，也可能是在失去主导权。
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {!isMobile && (
         <div style={{
           display: 'grid', gridTemplateColumns: '200px 1fr 100px', padding: '8px 14px',
           fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', letterSpacing: 0.3, textTransform: 'uppercase',
         }}>
           <span>PARTICIPANT</span><span>TRAJECTORY ({monthRange})</span><span style={{ textAlign: 'right' }}>DRIFT</span>
         </div>
+        )}
         {rows.map(s => {
           const p = isMock ? P(s.who) : { id: s.who, name: s.name, role: s.role ?? '', initials: s.name.slice(0, 2), tone: 'neutral' as const, speakingPct: 0 };
           const drift = s.points.length > 1 && s.points[0].role !== s.points[s.points.length - 1].role;
           return (
             <div key={s.who} style={{
-              display: 'grid', gridTemplateColumns: '200px 1fr 100px', alignItems: 'center', gap: 14,
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : '200px 1fr 100px',
+              alignItems: isMobile ? 'start' : 'center',
+              gap: isMobile ? 8 : 14,
               padding: '14px 14px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1511,7 +1519,7 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
         );
       })()}
 
-      {rows && rows.length > 0 && (
+      {rows && rows.length > 0 && !isMobile && (
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 100px 80px 140px',
           padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
@@ -1526,8 +1534,11 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
         const isMergeTargetable = mergeSourceId && mergeSourceId !== p.id;
         return (
           <div key={p.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr 100px 80px 140px',
-            alignItems: 'center', gap: 10, padding: '12px 14px',
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 100px 80px 140px',
+            alignItems: isMobile ? 'start' : 'center',
+            gap: isMobile ? 6 : 10,
+            padding: '12px 14px',
             borderBottom: '1px solid var(--line-2)',
             background: isMergeSource
               ? '#fef3c7'
