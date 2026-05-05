@@ -436,6 +436,20 @@ export const meetingNotesApi = {
     jdelete<{ ok: boolean }>(`/meetings/${meetingId}/shares/${shareId}`),
   getSharedMeeting: (token: string) =>
     fetch(`/api/v1/meeting-notes/shared/${token}`).then((r) => r.ok ? r.json() : Promise.reject(r)),
+  /**
+   * 把分享的会议 fork 到当前用户工作区(asset-only):
+   * 复制 metadata + transcript;不复制 axis 数据,B 拿到副本后需在自己 ws 重跑引擎。
+   * 同 share 在同 ws 二次导入返回原副本(alreadyImported=true)。
+   * 错误:401 未登录 / 403 无 ws / 404 token 失效或源会议已删 / 410 链接过期
+   */
+  importSharedMeeting: (token: string) =>
+    jpost<{
+      meetingId: string;
+      sourceMeetingId: string;
+      sourceWorkspaceId: string;
+      shareId: string;
+      alreadyImported?: boolean;
+    }>(`/shared/${token}/import`),
   unbindScope: (scopeId: string, meetingId: string) =>
     jdelete<{ success: boolean }>(`/scopes/${scopeId}/bindings/${meetingId}`),
 

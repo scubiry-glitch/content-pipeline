@@ -4,9 +4,11 @@
 //   · 隐藏「返回库」按钮、「分享」按钮、Mock 开关
 
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useAuth } from '../../contexts/AuthContext';
+import { ImportConfirm, importErrorMessage } from './ImportConfirm';
 import './_tokens.css';
 
 export type MeetingShellContext = {
@@ -34,12 +36,30 @@ const views = [
 
 export function SharedMeetingDetailShell() {
   const { token = '' } = useParams();
+  const navigate = useNavigate();
+  const { user, currentWorkspace } = useAuth();
 
   const [apiTitle, setApiTitle] = useState<string | null>(null);
   const [apiDate, setApiDate] = useState<string | null>(null);
   const [apiDetail, setApiDetail] = useState<any | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('loading');
   const [meetingId, setMeetingId] = useState<string>('');
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const onImport = async () => {
+    if (importing) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const r = await meetingNotesApi.importSharedMeeting(token);
+      navigate(`/meeting/${r.meetingId}/a`);
+    } catch (e: any) {
+      setImportError(importErrorMessage(e));
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) { setApiState('error'); return; }
@@ -104,6 +124,21 @@ export function SharedMeetingDetailShell() {
             只读分享
           </span>
 
+          {user && (
+            <button
+              onClick={() => setShowImport(true)}
+              title={currentWorkspace ? `复制到工作区:${currentWorkspace.name}` : '需要先选择一个工作区'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+                border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)',
+                fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500,
+              }}
+            >
+              📥 添加到我的工作区
+            </button>
+          )}
+
           <div style={{
             display: 'flex', gap: 2, border: '1px solid var(--line)',
             borderRadius: 6, padding: 3, background: 'var(--paper-2)',
@@ -136,6 +171,17 @@ export function SharedMeetingDetailShell() {
           health: null,
         } satisfies MeetingShellContext} />
       </main>
+
+      {showImport && (
+        <ImportConfirm
+          targetWorkspaceName={currentWorkspace?.name ?? '当前工作区'}
+          meetingTitle={apiTitle ?? '会议'}
+          importing={importing}
+          error={importError}
+          onCancel={() => { setShowImport(false); setImportError(null); }}
+          onConfirm={onImport}
+        />
+      )}
       {/* MockToggleBar 不渲染 — 分享视图不需要 */}
     </div>
   );

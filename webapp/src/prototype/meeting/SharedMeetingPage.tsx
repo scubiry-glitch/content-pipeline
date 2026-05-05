@@ -4,13 +4,19 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { useAuth } from '../../contexts/AuthContext';
+import { ImportConfirm, importErrorMessage } from './ImportConfirm';
 import './_tokens.css';
 
 export function SharedMeetingPage() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
+  const { user, currentWorkspace } = useAuth();
   const [state, setState] = useState<'loading' | 'ok' | 'expired' | 'error'>('loading');
   const [data, setData] = useState<any>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setState('error'); return; }
@@ -21,6 +27,19 @@ export function SharedMeetingPage() {
         else setState('error');
       });
   }, [token]);
+
+  const onImport = async () => {
+    if (importing) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const r = await meetingNotesApi.importSharedMeeting(token);
+      navigate(`/meeting/${r.meetingId}/a`);
+    } catch (e: any) {
+      setImportError(importErrorMessage(e));
+      setImporting(false);
+    }
+  };
 
   if (state === 'loading') {
     return (
@@ -87,6 +106,20 @@ export function SharedMeetingPage() {
           }}>
             只读分享
           </span>
+          {user && (
+            <button
+              onClick={() => setShowImport(true)}
+              title={currentWorkspace ? `复制到工作区:${currentWorkspace.name}` : '需要先选择一个工作区'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+                border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)',
+                fontFamily: 'var(--sans)', fontSize: 12.5, fontWeight: 500,
+              }}
+            >
+              📥 添加到我的工作区
+            </button>
+          )}
           <button
             onClick={() => navigate(`/meeting/shared/${token}/detail`)}
             style={{
@@ -100,6 +133,17 @@ export function SharedMeetingPage() {
           </button>
         </div>
       </header>
+
+      {showImport && (
+        <ImportConfirm
+          targetWorkspaceName={currentWorkspace?.name ?? '当前工作区'}
+          meetingTitle={title}
+          importing={importing}
+          error={importError}
+          onCancel={() => { setShowImport(false); setImportError(null); }}
+          onConfirm={onImport}
+        />
+      )}
 
       <main style={{ maxWidth: 760, margin: '32px auto', padding: '0 24px' }}>
 
@@ -190,6 +234,19 @@ export function SharedMeetingPage() {
               ))}
             </div>
           </Section>
+        )}
+
+        {/* S1 协作提示 — 仅登录用户可见 */}
+        {user && (
+          <div style={{
+            marginTop: 36, padding: '10px 14px', borderRadius: 6,
+            background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+            fontFamily: 'var(--serif)', fontSize: 12.5, lineHeight: 1.65, color: 'var(--ink-3)',
+          }}>
+            💡 想跟原作者一起协作编辑这场会议?让对方在 ta 的工作区设置里把你 (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{user.email}</span>
+            ) 加为成员,切到 ta 的工作区即可直接编辑原版。导入是另一种选择 — 复制一份独立加工。
+          </div>
         )}
 
       </main>
