@@ -619,12 +619,17 @@ export function AxisKnowledge() {
   return (
     <>
       <DimShell axis="知识" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
-        <MeetingPicker
-          scopeId={scopeId}
-          autoMeetingId={autoMeetingId}
-          scopeKind={scopeKind}
-          scopeOverridden={!!scopeIdFromUrl}
-        />
+        {/* MeetingPicker 只对消费 meetingId 的 tab 有意义。
+            混合 tab（cognition/mental_models/evidence）有 meeting 级子组件 → 保留。
+            纯 scope tab（consensus/concept/lineage/external）按 scope 聚合 → 隐藏，避免误导。 */}
+        {(tab === 'cognition' || tab === 'mental_models' || tab === 'evidence' || tab === 'counterfactuals') && (
+          <MeetingPicker
+            scopeId={scopeId}
+            autoMeetingId={autoMeetingId}
+            scopeKind={scopeKind}
+            scopeOverridden={!!scopeIdFromUrl}
+          />
+        )}
         {/* R4 · 改动三：tabs 重组 + 合并段
             - cognition = Judgments（沉淀） + 简短提示"新认知摘要"
             - mental_models tab = MentalModelsLive (激活) 上方 + model_hitrate 占位下方
