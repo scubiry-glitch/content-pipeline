@@ -407,16 +407,11 @@ async function main() {
           await ensureDbPoolConnected();
           await ensureRuntimePerformanceIndexes();
           // meeting-notes / CEO 模块迁移与全量 init 解耦（mn_runs.axis=g3 等依赖顺序）
-          try {
-            await ensureMeetingNotesModuleSchema(query);
-          } catch (err) {
-            console.warn('[Server] ensureMeetingNotesModuleSchema warning:', (err as Error).message);
-          }
-          try {
-            await ensureCeoModuleSchema(query);
-          } catch (err) {
-            console.warn('[Server] ensureCeoModuleSchema warning:', (err as Error).message);
-          }
+          // 失败必须直接抛 → 外层 catch 走 process.exit(1)。
+          // Why: 早先这里包了 try/console.warn，结果 028 因 schema 权限失败被静默吞掉，
+          //      mn_scopes.dirty_at 缺列，bindMeeting 全部 500。静默 warning ≠ 安全降级。
+          await ensureMeetingNotesModuleSchema(query);
+          await ensureCeoModuleSchema(query);
         }
         // 账号体系基础表幂等建表 + 种子（与 DB_AUTO_MIGRATE 解耦：始终保证 auth 可用）
         try {
