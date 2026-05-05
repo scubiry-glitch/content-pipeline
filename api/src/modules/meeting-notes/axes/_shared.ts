@@ -7,6 +7,7 @@
 import type { MeetingNotesDeps } from '../types.js';
 import { applyDecoratorStack, getCurrentStrategy, getCurrentExpertPersona } from './decoratorStack.js';
 import { chunkedContent } from '../parse/claimExtractor.js';
+import { emitProgress } from '../runs/runStreamRegistry.js';
 
 export interface ScopeDecisionRef {
   label: string;   // D01, D02, ...（短标签，供 LLM 引用）
@@ -143,10 +144,29 @@ export async function callExpertOrLLM(
   // 全局前缀：保留原文细节、避免套话
   const fullSystem = GLOBAL_DIRECTIVE + personaSection + decorated;
 
+  // Fix-B · 当 runEngine 顶层注入了 runId 且 env 启用 token stream 时，构造 onProgress
+  // 把每次 LLM 调用的 token / snippet 通过 SSE 推到 /runs/:id/stream。仅 siliconFlow
+  // 这种实现了 stream 路径的 provider 会真正调到这个回调；其它 provider 静默忽略。
+  const ctxRunId = strategy?.runId;
+  const tokenStreamEnabled = strategy?.tokenStreamEnabled === true;
+  const axisLabel = strategy?.currentAxis ?? 'axes';
+  const onProgress = (ctxRunId && tokenStreamEnabled)
+    ? (tokensSoFar: number, snippet: string) => {
+        // 不带 ratio：让前端继续沿用最近一次 step 级 ratio 驱动进度条，
+        // 避免 56 次 LLM 调用里每一次的局部 0..1 互相覆盖把整体进度抹平。
+        emitProgress(ctxRunId, {
+          tokensSoFar,
+          message: `生成中 · ${axisLabel} · ${tokensSoFar} tokens`,
+          snippet,
+        });
+      }
+    : undefined;
+
   return deps.llm.completeWithSystem(fullSystem, userPrompt, {
     temperature: options?.temperature ?? 0.2,
     maxTokens: options?.maxTokens ?? 2000,
     responseFormat: 'json',
+    ...(onProgress ? { onProgress } : {}),
   });
 }
 

@@ -7,7 +7,9 @@ import { EventEmitter } from 'node:events';
 
 export interface ProgressPayload {
   tokensSoFar: number;
-  ratio: number;
+  /** 整体进度 0..1。Step 级事件（runEngine.writeStep）填整体进度；token 流事件可省略，
+   *  让前端继续沿用最近一次 step 级 ratio，避免 56 次 LLM 调用各自的 0..1 互相覆盖。 */
+  ratio?: number;
   message: string;
   /** 最新输出的尾部片段（≤150字符），用于前端实时预览 */
   snippet: string;

@@ -1543,6 +1543,8 @@ function FlowProcessing({
   const [sseTokens, setSseTokens] = useState<number | null>(null);
   const [sseMessage, setSseMessage] = useState<string | null>(null);
   const [sseSnippet, setSseSnippet] = useState<string | null>(null);
+  // Fix-A · multi-axis 累计 token 远超 oneshot 的 16k 上限，需要用 ratio 直接驱动进度条
+  const [sseRatio, setSseRatio] = useState<number | null>(null);
   // Phase 15.6 · getRun 扩 tokens/cost/currentStep
   const [realTokens, setRealTokens] = useState<{ input: number; output: number } | null>(null);
   const [realCostUsd, setRealCostUsd] = useState<number | null>(null);
@@ -1707,11 +1709,13 @@ function FlowProcessing({
         setSseTokens(data.tokensSoFar);
         setSseMessage(data.message);
         setSseSnippet(data.snippet ?? null);
+        setSseRatio(typeof data.ratio === 'number' ? data.ratio : null);
       },
       onTerminal: () => {
         setSseTokens(null);
         setSseMessage(null);
         setSseSnippet(null);
+        setSseRatio(null);
       },
     });
     return stop;
@@ -2132,11 +2136,11 @@ function FlowProcessing({
                       ? <>{sseMessage}</>
                       : <>解析进行中 · 约 <b>48 秒</b> 后可进入多维视图</>}
               </div>
-              {sseTokens != null && realState !== 'failed' && realState !== 'cancelled' && (
+              {(sseRatio != null || sseTokens != null) && realState !== 'failed' && realState !== 'cancelled' && (
                 <div style={{ marginTop: 4, height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden', width: '100%' }}>
                   <div style={{
                     height: '100%',
-                    width: `${Math.min(100, (sseTokens / 16384) * 100)}%`,
+                    width: `${Math.min(100, sseRatio != null ? sseRatio * 100 : ((sseTokens ?? 0) / 16384) * 100)}%`,
                     background: 'var(--teal)',
                     borderRadius: 2,
                     transition: 'width 0.4s ease',

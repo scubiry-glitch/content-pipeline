@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { meetingNotesRoutes as ingestRoutes } from './ingest/routes.js';
 import { createMeetingChatRoutes } from './meetingChat.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, requireSuperAdmin } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
 import { assertRowInWorkspace, currentWorkspaceId, requireWorkspaceId } from '../../db/repos/withWorkspace.js';
@@ -3317,6 +3317,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/runs/_diagnostics', { preHandler: authenticate }, async () => {
       return engine.getRunDiagnostics();
+    });
+
+    /**
+     * Fix-① · POST /runs/_admin/reap-orphans —— 手动清理"从未起步"的孤儿 run
+     *
+     * 触发场景：API 进程在 dispatchPlan 写完后、第一次 LLM 调用前重启 →
+     *   mn_runs 里残留 state='running' last_heartbeat_at IS NULL，前端永远轮 progressPct 不变。
+     * 默认条件 staleMin=2min；运行中的健康 run 早就 heartbeat 落库，不会被误杀。
+     * 必须 super_admin（防止前端用户误操作清空全公司任务）。
+     * 必须在 /runs/:id 之前注册。
+     */
+    fastify.post('/runs/_admin/reap-orphans', { preHandler: requireSuperAdmin }, async (request) => {
+      const body = (request.body ?? {}) as { staleMin?: number };
+      const staleMin = typeof body.staleMin === 'number' && body.staleMin >= 0 ? body.staleMin : 2;
+      const result = await engine.reapOrphans({ staleMin });
+      return { success: true, staleMin, ...result };
     });
 
     fastify.get('/runs/:id', { preHandler: authenticate }, async (request, reply) => {

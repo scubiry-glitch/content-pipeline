@@ -34,7 +34,7 @@ import { renderMultiDim } from './renderMultiDim.js';
 import { composeAnalysisFromAxes, persistAnalysisToAsset } from './composeAnalysis.js';
 import { autoMatchAndBindScopes } from './scopeMatcher.js';
 import { parseMeeting } from '../parse/meetingParser.js';
-import { emitTerminal } from './runStreamRegistry.js';
+import { emitProgress, emitTerminal } from './runStreamRegistry.js';
 import { resolveWorkspaceSlug } from '../../../lib/wikiRoot.js';
 
 interface QueuePayload {
@@ -156,6 +156,9 @@ export class RunEngine {
   /** F3 · heartbeat 间隔（ms）。zombie 检测用 5 min × 2 = 10 min 安全裕度。 */
   private static readonly HEARTBEAT_MS = 30_000;
 
+  /** Fix-③ · 本进程启动时间。startup fast-reap 用它判定哪些 running 行是上一代孤儿。 */
+  private readonly processStartedAt: Date = new Date();
+
   /** API-only 模式：不执行 run（不消费内存队列、不从 DB 拉 queued）。
    *  专门用来让 dev API 进程（tsx watch 容易抖动）不再持有 claude 子进程，
    *  把执行权交给 worker 进程（npm run worker:mn）。
@@ -182,6 +185,13 @@ export class RunEngine {
     // - cleanupZombieRuns: started_at < NOW() - zombieTimeoutMin 的 running 标 failed
     // - recoverQueuedRuns: state='queued' 的 run 全部重 enqueue 到 in-memory，让 worker 接管
     const zombieMin = opts.zombieTimeoutMin ?? 30;
+    // Fix-③ · 启动时一次性 fast-reap：本进程刚起，任何 module='mn' state='running' 且
+    // started_at 早于本进程启动时间 ≥30s 的行，按定义就是上一代孤儿。比 cleanupZombieRuns
+    // 那条 30/45min 心跳超时路径快得多，避免前端在重启后还要苦等几十分钟。
+    // 只跑一次（不进 setInterval），避免误判同进程内并发起的新 run。
+    this.reapPriorOrphans().catch((e) =>
+      console.warn('[RunEngine] startup fast-reap failed:', (e as Error).message),
+    );
     const initialReap = () => {
       // 先按 cliPid 精确扫一遍：API 重启后立即收掉孤儿 claude 进程组 + 标 run failed，
       // 不用等 15min heartbeat 超时；零误杀（pgid 验证）。
@@ -500,6 +510,92 @@ export class RunEngine {
       console.log(`[RunEngine] zombie cleanup: failed=${failedRuns} cancelled=${cancelledQueued}`);
     }
     return { failedRuns, cancelledQueued };
+  }
+
+  /**
+   * Fix-① · 手动清理"从未起步"的孤儿 run。
+   *
+   * 场景：API 进程在 dispatchPlan 落库后、第一次 LLM 调用前死/重启 → 行残留 state='running'
+   * last_heartbeat_at IS NULL，cleanupZombieRuns 的 fallback 阈值 = zombieMin（默认 30min）太长，
+   * 前端会一直轮询同一 progressPct。
+   *
+   * 本方法只清"显然没起步"的行：last_heartbeat_at IS NULL AND started_at < NOW() - staleMin。
+   * 默认 staleMin=2，比 zombieMin 激进得多但安全（运行中的 run 早就有 heartbeat 写入）。
+   */
+  async reapOrphans(opts: { staleMin?: number } = {}): Promise<{ failedRuns: number; ids: string[] }> {
+    const staleMin = opts.staleMin ?? 2;
+    const myHost = osHostname();
+    try {
+      const r = await this.deps.db.query(
+        `UPDATE mn_runs
+            SET state = 'failed', finished_at = NOW(),
+                error_message = COALESCE(error_message, 'orphan-reap: never-started run after process restart'),
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'currentStep', '失败 · 进程重启前未发起 LLM 调用',
+                  'currentStepKey', 'orphan',
+                  'orphanDetectedAt', NOW()::text,
+                  'staleSeconds', EXTRACT(EPOCH FROM (NOW() - started_at))
+                )
+          WHERE state = 'running'
+            AND module = 'mn'
+            AND last_heartbeat_at IS NULL
+            AND started_at IS NOT NULL
+            AND started_at < NOW() - ($1::int * INTERVAL '1 minute')
+            AND (metadata->>'apiHost' = $2::text OR NOT (metadata ? 'apiHost'))
+          RETURNING id`,
+        [staleMin, myHost],
+      );
+      const ids = (r.rows ?? []).map((row: any) => row.id as string);
+      if (ids.length > 0) {
+        console.log(`[RunEngine] orphan reap: failed=${ids.length} ids=${ids.join(',')}`);
+      }
+      return { failedRuns: ids.length, ids };
+    } catch (e) {
+      console.warn('[RunEngine] reapOrphans failed:', (e as Error).message);
+      return { failedRuns: 0, ids: [] };
+    }
+  }
+
+  /**
+   * Fix-③ · 启动时一次性"前代孤儿"扫描。
+   *
+   * 语义："本进程刚起，DB 里所有 module='mn' state='running' 且 started_at 早于本进程
+   * 启动时间 30s 以上的行 —— 一定是上一代进程留下的孤儿（in-memory queue 已经清空，
+   * 它们再也不会被本进程接管）"。比 cleanupZombieRuns 的 heartbeat 30-45min 阈值快几十倍。
+   *
+   * apiHost 过滤同 cleanupZombieRuns，避免误杀其他机器在跑的 run。
+   * 30s 缓冲：兼容 startup race（execute() 先于 RunEngine 构造完成的极端情况）。
+   */
+  async reapPriorOrphans(): Promise<{ failedRuns: number; ids: string[] }> {
+    const myHost = osHostname();
+    try {
+      const r = await this.deps.db.query(
+        `UPDATE mn_runs
+            SET state = 'failed', finished_at = NOW(),
+                error_message = COALESCE(error_message, 'startup-reap: previous process restarted while running'),
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                  'currentStep', '失败 · 上一代进程重启',
+                  'currentStepKey', 'startup-orphan',
+                  'orphanDetectedAt', NOW()::text,
+                  'processStartedAt', $2::text
+                )
+          WHERE state = 'running'
+            AND module = 'mn'
+            AND started_at IS NOT NULL
+            AND started_at < ($2::timestamptz - INTERVAL '30 seconds')
+            AND (metadata->>'apiHost' = $1::text OR NOT (metadata ? 'apiHost'))
+          RETURNING id`,
+        [myHost, this.processStartedAt.toISOString()],
+      );
+      const ids = (r.rows ?? []).map((row: any) => row.id as string);
+      if (ids.length > 0) {
+        console.log(`[RunEngine] startup fast-reap: failed=${ids.length} ids=${ids.join(',')}`);
+      }
+      return { failedRuns: ids.length, ids };
+    } catch (e) {
+      console.warn('[RunEngine] reapPriorOrphans failed:', (e as Error).message);
+      return { failedRuns: 0, ids: [] };
+    }
   }
 
   /** 入队一条 run 并立即触发 drain（异步） */
@@ -1030,6 +1126,13 @@ export class RunEngine {
       } catch (e) {
         console.warn('[runEngine] step progress write failed:', (e as Error)?.message);
       }
+      // Fix-A · 同步推 SSE，前端不必等 3s 轮询；snippet=''（multi-axis 还没接 token 流）
+      emitProgress(payload.runId, {
+        tokensSoFar: counter.input + counter.output,
+        ratio: pct / 100,
+        message: currentStep,
+        snippet: '',
+      });
     };
 
     /** Persist progress + tokens + currentStep to mn_runs.metadata. */
@@ -1053,6 +1156,13 @@ export class RunEngine {
         // Progress writes are advisory; never break the run for a write error.
         console.warn('[runEngine] progress write failed:', (e as Error)?.message);
       }
+      // Fix-A · 同步推 SSE
+      emitProgress(payload.runId, {
+        tokensSoFar: counter.input + counter.output,
+        ratio: pct / 100,
+        message: currentStep,
+        snippet: '',
+      });
     };
 
     /** 把 dispatchPlan 落到 mn_runs.metadata（不动 progress）。 */
@@ -1963,6 +2073,11 @@ export class RunEngine {
         preset: payload.preset,
         expertPersonaByAxis,
         bypassKindSkip: isManualMeetingRun,
+        // Fix-B · 把 runId + token-stream flag 注入 AsyncLocalStorage，让 axes/_shared
+        // 的 callExpertOrLLM 拿到后就能给 LLM 调用挂 onProgress 回调，把 token / snippet
+        // 转发到 emitProgress(runId, ...)。env 关闭时 callExpertOrLLM 不构造 onProgress，零开销。
+        runId: payload.runId,
+        tokenStreamEnabled: process.env.MN_MULTIAXIS_TOKEN_STREAM === '1',
       };
       await strategyStorage.run(strategyCtx, async () => {
       await llmUsageStorage.run(counter, async () => {

@@ -518,6 +518,11 @@ export class MeetingNotesEngine {
     return this.runEngine.getDiagnostics();
   }
 
+  /** Fix-① · 清理 last_heartbeat_at IS NULL 且 started_at 已早于 staleMin 的"从未起步"孤儿 run */
+  async reapOrphans(opts: { staleMin?: number } = {}) {
+    return this.runEngine.reapOrphans(opts);
+  }
+
   async listAxisVersions(scope: ScopeRef, axis: AxisName): Promise<AxisVersionRef[]> {
     const rows = await this.versionStore.listVersions(scope.kind, scope.id ?? null, axis);
     return rows.map((r) => ({

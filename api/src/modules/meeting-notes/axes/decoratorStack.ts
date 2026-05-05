@@ -36,6 +36,17 @@ export interface StrategyContext {
    * 自动批跑（triggeredBy='auto' / 'schedule'）保持原行为。
    */
   bypassKindSkip?: boolean;
+  /**
+   * Fix-B · 当前 run 的 id，用于 callExpertOrLLM 在每次 LLM 调用时把 token 流
+   * 经 emitProgress 推到 /runs/:id/stream。runEngine 在顶层 strategyStorage.run()
+   * 注入；axis computer 无需感知。
+   */
+  runId?: string;
+  /**
+   * Fix-B · 是否启用 token-level 流式输出。仅当后端 provider 实际支持 stream 且
+   * env MN_MULTIAXIS_TOKEN_STREAM=1 时为 true；其他场景 callExpertOrLLM 不传 onProgress。
+   */
+  tokenStreamEnabled?: boolean;
 }
 
 export const strategyStorage = new AsyncLocalStorage<StrategyContext>();
