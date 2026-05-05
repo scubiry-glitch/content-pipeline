@@ -98,6 +98,10 @@ async function main() {
   const skipExport = args.includes('--skip-export');
   const useClaudeCli = args.includes('--mode=claude-cli');
   const wsSlug = args.find((a) => a.startsWith('--workspace='))?.slice('--workspace='.length) ?? 'default';
+  // --axes=axis1,axis2,boardroom-annotation/lp-coach-v1,balcony-prompt/team
+  // 用于"只重跑这些 axis"的 retry 模式 — 已成功的 axis 不动, 上游依赖也不重跑.
+  // 注意: 子任务键形如 "boardroom-annotation/<expertId>"、"balcony-prompt/<prismId>".
+  const axisFilter = args.find((a) => a.startsWith('--axes='))?.slice('--axes='.length).split(',').map((s) => s.trim()).filter(Boolean);
   // 当无 ALTER TABLE 权限时（DB 用户非表 owner），mn_runs 的 axis 列还是 VARCHAR(16)，
   // 长 axis 名 INSERT 会失败 — --skip-runs-insert 跳过 mn_runs INSERT/UPDATE，仅写
   // 业务表（ceo_strategic_lines 等）。
@@ -238,7 +242,8 @@ async function main() {
       if (axis === 'tower-attention-alloc') {
         await aggregateAttentionAlloc(deps, scope.id);
       } else if (axis === 'balcony-time-roi') {
-        await aggregateTimeRoi(deps, 'system');
+        // 显式传 wsId, 否则 aggregator 自动 fallback 到 default ws (跨 ws bug)
+        await aggregateTimeRoi(deps, 'system', wsId);
       } else {
         return { ok: false, error: `unknown aggregator axis: ${axis}` };
       }
@@ -321,9 +326,29 @@ async function main() {
     }
   }
 
-  console.log(`[ceo-generate-real] 共 ${tasks.length} 个 task (LLM=${tasks.filter((t) => t.group === 'llm').length}, fast=${tasks.filter((t) => t.group === 'fast').length})`);
+  // --axes 过滤: 只跑指定 axis. 保留 filter 内 task 的内部 deps (这样 panorama-aggregate
+  // 仍会等本轮 compass-narrative 完成); 清掉指向 filter 外 task 的 deps (假设上轮已成功).
+  let scheduledTasks = tasks;
+  if (axisFilter && axisFilter.length > 0) {
+    const wanted = new Set(axisFilter);
+    const matched = tasks.filter((t) => {
+      const tail = String(t.key).split('/').slice(1).join('/');
+      return wanted.has(tail);
+    });
+    const matchedKeys = new Set(matched.map((t) => t.key));
+    scheduledTasks = matched.map((t) => ({
+      ...t,
+      deps: (t.deps as string[]).filter((d) => matchedKeys.has(d)),
+    }));
+    console.log(`[ceo-generate-real] --axes 过滤生效: ${scheduledTasks.length}/${tasks.length} task 命中 (${axisFilter.join(', ')})`);
+    if (scheduledTasks.length === 0) {
+      console.error('[ceo-generate-real] --axes 没匹配到任何 task');
+      process.exit(4);
+    }
+  }
+  console.log(`[ceo-generate-real] 共 ${scheduledTasks.length} 个 task (LLM=${scheduledTasks.filter((t) => t.group === 'llm').length}, fast=${scheduledTasks.filter((t) => t.group === 'fast').length})`);
 
-  await runCliScheduler(tasks, {
+  await runCliScheduler(scheduledTasks, {
     llmConcurrency,
     fastConcurrency,
     ...defaultProgressHooks('ceo'),

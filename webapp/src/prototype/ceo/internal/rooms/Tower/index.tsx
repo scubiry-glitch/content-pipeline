@@ -19,25 +19,32 @@ interface DashboardData {
   topBlockers: Array<{ name: string; days: number; text: string; warn: boolean }>;
 }
 
+interface PostMeetingApi {
+  last_meeting: { id: string; title: string; date: string; duration_min: number | null } | null;
+  unresolved_items: Array<{ id: string; what: string; raised_by: string | null; owner_name: string | null; since_days: number }>;
+}
+
 export function Tower() {
   const navigate = useNavigate();
   const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const [postMeeting, setPostMeeting] = useState<PostMeetingApi | null>(null);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
     if (forceMock) return;
     let cancelled = false;
-    fetch(`/api/v1/ceo/tower/dashboard${buildScopeQuery(scopeIds)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) setDash(d);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    const q = buildScopeQuery(scopeIds);
+    Promise.all([
+      fetch(`/api/v1/ceo/tower/dashboard${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/tower/post-meeting${q}`).then((r) => r.json()).catch(() => null),
+    ]).then(([d, pm]) => {
+      if (cancelled) return;
+      if (d) setDash(d);
+      if (pm) setPostMeeting(pm as PostMeetingApi);
+    }).catch(() => {});
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey, forceMock]);
 
@@ -178,8 +185,8 @@ export function Tower() {
           <BlockerList items={dash?.topBlockers ?? (forceMock ? BLOCKERS.map((b) => ({ name: b.name, days: parseInt(b.days), text: b.text, warn: !!b.warn })) : [])} />
         </Block>
 
-        <Block num="③ post-meeting card" title="会后 10 分钟卡 · 上次未关闭项" meta={POST_MEETING.title}>
-          <PostMeetingCard />
+        <Block num="③ post-meeting card" title="会后 10 分钟卡 · 上次未关闭项" meta={postMeeting?.last_meeting?.title ?? (forceMock ? POST_MEETING.title : '近期无会议')}>
+          <PostMeetingCard api={postMeeting} forceMock={forceMock} />
         </Block>
 
         <Block num="④ rhythm pulse" title="节奏脉搏 · 这周对吗" meta="滚动 8 周">
@@ -248,21 +255,52 @@ function BlockerList({ items }: { items: Array<{ name: string; days: number; tex
   );
 }
 
-function PostMeetingCard() {
+interface PostMeetingApi {
+  last_meeting: { id: string; title: string; date: string; duration_min: number | null } | null;
+  unresolved_items: Array<{ id: string; what: string; raised_by: string | null; owner_name: string | null; since_days: number }>;
+}
+
+function PostMeetingCard({ api, forceMock }: { api: PostMeetingApi | null; forceMock: boolean }) {
+  // 有 API 数据走 API; 否则 forceMock 时用 fixture, 真空状态时显示空提示
+  if (!forceMock && api) {
+    const meeting = api.last_meeting;
+    const items = api.unresolved_items ?? [];
+    if (!meeting) {
+      return <div style={{ fontSize: 12, color: 'rgba(232,239,242,0.45)', padding: '12px', fontStyle: 'italic' }}>近 30 天无录入会议</div>;
+    }
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(232,239,242,0.5)', padding: '6px 0', borderBottom: '1px solid rgba(95,163,158,0.18)', marginBottom: 10 }}>
+          <span>
+            <b style={{ color: '#5FA39E' }}>{meeting.title}</b> · {meeting.date?.slice(5, 10)} · {meeting.duration_min ?? '?'} min
+          </span>
+          <span>{items.length} 项未闭</span>
+        </div>
+        {items.length === 0 && <div style={{ fontSize: 12, color: 'rgba(232,239,242,0.45)', fontStyle: 'italic' }}>无未关闭项</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {items.slice(0, 5).map((it) => {
+            const due = it.since_days >= 7;
+            return (
+              <div key={it.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0', fontSize: 12.5, color: 'rgba(232,239,242,0.85)' }}>
+                <span style={{ width: 12, height: 12, marginTop: 3, borderRadius: 3, border: due ? '1.5px solid #C49B4D' : '1.5px solid rgba(95,163,158,0.4)', flexShrink: 0 }} />
+                <div style={{ flex: 1, lineHeight: 1.5 }}>
+                  {it.what}
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: due ? '#C49B4D' : 'rgba(232,239,242,0.5)', marginTop: 2, letterSpacing: 0.2 }}>
+                    RSP: {it.owner_name ?? it.raised_by ?? '?'} · {it.since_days} 天前
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // forceMock 路径
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          fontFamily: 'var(--mono)',
-          fontSize: 10,
-          color: 'rgba(232,239,242,0.5)',
-          padding: '6px 0',
-          borderBottom: '1px solid rgba(95,163,158,0.18)',
-          marginBottom: 10,
-        }}
-      >
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(232,239,242,0.5)', padding: '6px 0', borderBottom: '1px solid rgba(95,163,158,0.18)', marginBottom: 10 }}>
         <span>
           <b style={{ color: '#5FA39E' }}>{POST_MEETING.title}</b> · {POST_MEETING.date} · {POST_MEETING.duration}
         </span>
@@ -270,38 +308,11 @@ function PostMeetingCard() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {POST_MEETING.items.map((it, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 8,
-              padding: '6px 0',
-              fontSize: 12.5,
-              color: 'rgba(232,239,242,0.85)',
-            }}
-          >
-            <span
-              style={{
-                width: 12,
-                height: 12,
-                marginTop: 3,
-                borderRadius: 3,
-                border: it.due ? '1.5px solid #C49B4D' : '1.5px solid rgba(95,163,158,0.4)',
-                flexShrink: 0,
-              }}
-            />
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0', fontSize: 12.5, color: 'rgba(232,239,242,0.85)' }}>
+            <span style={{ width: 12, height: 12, marginTop: 3, borderRadius: 3, border: it.due ? '1.5px solid #C49B4D' : '1.5px solid rgba(95,163,158,0.4)', flexShrink: 0 }} />
             <div style={{ flex: 1, lineHeight: 1.5 }}>
               {it.text}
-              <div
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 9.5,
-                  color: it.due ? '#C49B4D' : 'rgba(232,239,242,0.5)',
-                  marginTop: 2,
-                  letterSpacing: 0.2,
-                }}
-              >
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: it.due ? '#C49B4D' : 'rgba(232,239,242,0.5)', marginTop: 2, letterSpacing: 0.2 }}>
                 {it.who}
               </div>
             </div>
