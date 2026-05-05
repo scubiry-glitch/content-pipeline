@@ -3,20 +3,20 @@ type: index
 subtype: axes/knowledge
 app: meeting-notes
 generatedBy: meeting-axes-generator
-lastEditedAt: "2026-05-05T03:32:55.937Z"
+lastEditedAt: "2026-05-05T19:18:02.417Z"
 ---
 
 # 知识轴 · knowledge
 
-10 个 deliverable, 合计 1467 行.
+10 个 deliverable, 合计 1471 行.
 
 ## Deliverables
 
 - [[认知偏误|认知偏误]] (200 行)
-- [[概念漂移|概念漂移]] (51 行)
+- [[概念漂移|概念漂移]] (52 行)
 - [[共识轨迹|共识轨迹]] (145 行)
 - [[反事实|反事实]] (200 行)
-- [[证据等级|证据等级]] (33 行)
+- [[证据等级|证据等级]] (36 行)
 - [[外部专家注释|外部专家注释]] (38 行)
 - [[心智模型|心智模型]] (200 行)
 - [[心智模型命中率|心智模型命中率]] (200 行)

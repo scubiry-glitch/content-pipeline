@@ -197,6 +197,8 @@
   },
   "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
+    "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7/_index.md",
+    "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7",
     "default/sources/meeting/meeting-chats/ed0235de-1777648817.md",
     "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
     "default/entities/58同城.md",
@@ -230,8 +232,6 @@
     "default/sources/document/tavily_ndo30n.md",
     "default/domains/E02-金融科技/_金融_房地产.md",
     "default/entities/location/宁波市.md",
-    "default/entities/location/大中华区.md",
-    "default/concepts/counterfactual",
-    "default/entities/project"
+    "default/concepts/counterfactual"
   ]
 }
