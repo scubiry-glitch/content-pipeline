@@ -11,6 +11,7 @@ import { RhythmsTabs } from './RhythmsTabs';
 import { BLOCKERS, POST_MEETING } from './_towerFixtures';
 import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -20,11 +21,13 @@ interface DashboardData {
 
 export function Tower() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
+    if (forceMock) return;
     let cancelled = false;
     fetch(`/api/v1/ceo/tower/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
@@ -36,7 +39,7 @@ export function Tower() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
+  }, [scopeKey, forceMock]);
 
   return (
     <div
@@ -171,8 +174,8 @@ export function Tower() {
           <CommitmentKanban />
         </Block>
 
-        <Block num="② blocker radar" title="卡点雷达 · 超期/无人接" meta={`${(dash?.topBlockers.length ?? BLOCKERS.length)} 个红点`}>
-          <BlockerList items={dash?.topBlockers ?? BLOCKERS.map((b) => ({ name: b.name, days: parseInt(b.days), text: b.text, warn: !!b.warn }))} />
+        <Block num="② blocker radar" title="卡点雷达 · 超期/无人接" meta={`${(dash?.topBlockers.length ?? (forceMock ? BLOCKERS.length : 0))} 个红点`}>
+          <BlockerList items={dash?.topBlockers ?? (forceMock ? BLOCKERS.map((b) => ({ name: b.name, days: parseInt(b.days), text: b.text, warn: !!b.warn })) : [])} />
         </Block>
 
         <Block num="③ post-meeting card" title="会后 10 分钟卡 · 上次未关闭项" meta={POST_MEETING.title}>

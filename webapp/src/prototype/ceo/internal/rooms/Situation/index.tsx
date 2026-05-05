@@ -9,6 +9,7 @@ import { RubricMatrix } from './RubricMatrix';
 import { BLINDSPOTS, HORIZON_TABS } from './_situationFixtures';
 import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -18,12 +19,14 @@ interface DashboardData {
 
 export function Situation() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
   const [horizon, setHorizon] = useState<string>(HORIZON_TABS[0].id);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
+    if (forceMock) return;
     let cancelled = false;
     fetch(`/api/v1/ceo/situation/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
@@ -35,7 +38,7 @@ export function Situation() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
+  }, [scopeKey, forceMock]);
 
   return (
     <div
@@ -180,7 +183,7 @@ export function Situation() {
 
         <Block num="④ blindspot alarms" title="盲点警报" meta="自动检测">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {BLINDSPOTS.map((b, i) => (
+            {(forceMock ? BLINDSPOTS : []).map((b, i) => (
               <div
                 key={i}
                 style={{
@@ -244,7 +247,7 @@ export function Situation() {
             })}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {(HORIZON_TABS.find((t) => t.id === horizon)?.items ?? []).map((it, i) => (
+            {(forceMock ? (HORIZON_TABS.find((t) => t.id === horizon)?.items ?? []) : []).map((it, i) => (
               <div
                 key={i}
                 style={{

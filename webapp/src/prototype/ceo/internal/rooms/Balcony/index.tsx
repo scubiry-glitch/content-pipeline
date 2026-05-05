@@ -16,6 +16,7 @@ import {
 } from './_balconyFixtures';
 import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface DashboardData {
   metric?: { label?: string; value?: string; delta?: string };
@@ -54,6 +55,7 @@ const PRISM_LABEL_ZH: Record<string, string> = {
 
 export function Balcony() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dash, setDash] = useState<DashboardData | null>(null);
   const [drawer, setDrawer] = useState<DrawerApiData>({});
@@ -61,6 +63,7 @@ export function Balcony() {
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
+    if (forceMock) return;
     let cancelled = false;
     fetch(`/api/v1/ceo/balcony/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
@@ -70,11 +73,12 @@ export function Balcony() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
+  }, [scopeKey, forceMock]);
 
   // 抽屉打开时再拉 5 个 d-block 数据 (lazy)
   useEffect(() => {
     if (!drawerOpen) return;
+    if (forceMock) return;
     let cancelled = false;
     Promise.all([
       fetch('/api/v1/ceo/balcony/roi-trend?weeks=8').then((r) => r.json()).catch(() => null),
@@ -95,7 +99,7 @@ export function Balcony() {
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerOpen, dash?.prismScores]);
+  }, [drawerOpen, dash?.prismScores, forceMock]);
 
   return (
     <div
@@ -235,7 +239,7 @@ export function Balcony() {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, textAlign: 'left' }}>
-          {REFLECTIONS.map((r, i) => (
+          {(forceMock ? REFLECTIONS : []).map((r, i) => (
             <div
               key={i}
               style={{

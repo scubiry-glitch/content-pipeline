@@ -10,6 +10,7 @@ import { ConflictThermo } from './ConflictThermo';
 import { FormationAnalysis } from './FormationAnalysis';
 import { useGlobalScope, GlobalScopeFilter } from '../../../shared/GlobalScopeFilter';
 import { buildScopeQuery } from '../../../_apiAdapters';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface DashboardData {
   metric: { label: string; value: string; delta: string };
@@ -21,11 +22,13 @@ interface DashboardData {
 
 export function WarRoom() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
+    if (forceMock) return;
     let cancelled = false;
     fetch(`/api/v1/ceo/war-room/dashboard${buildScopeQuery(scopeIds)}`)
       .then((r) => r.json())
@@ -37,7 +40,7 @@ export function WarRoom() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
+  }, [scopeKey, forceMock]);
 
   return (
     <div

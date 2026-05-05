@@ -13,15 +13,21 @@ import { ProjectAtlasCard } from './ProjectAtlasCard';
 import { StrategicEchoSankey } from './StrategicEchoSankey';
 import { OnePagerPaper } from './OnePagerPaper';
 import { ArchivesTabs } from './ArchivesTabs';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 export function Compass() {
   const navigate = useNavigate();
+  const forceMock = useForceMock();
   const [alignment, setAlignment] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
 
   useEffect(() => {
+    if (forceMock) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     // 多 scope 时直接 fetch (ceoApi.compass.dashboard 当前只支持单 scope)
     fetch(`/api/v1/ceo/compass/dashboard${buildScopeQuery(scopeIds)}`)
@@ -39,7 +45,7 @@ export function Compass() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey]);
+  }, [scopeKey, forceMock]);
 
   return (
     <div
