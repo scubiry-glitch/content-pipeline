@@ -29,6 +29,12 @@ for (const p of [resolve(process.cwd(), '.env'), resolve(process.cwd(), 'api', '
 
 type Json = Record<string, unknown>;
 
+// 默认 workspace id, runCeoSamplesSeed() 进事务后查一次缓存到这里. 用在 seed* INSERT
+// 里没有 scope_id / parent 链可派生 workspace 的几张表 (ceo_boardroom_annotations
+// / ceo_attention_alloc / ceo_rubric_scores / ceo_balcony_reflections /
+// ceo_time_roi / ceo_war_room_sparks / ceo_sandbox_runs).
+let defaultWsId: string | null = null;
+
 function isObj(v: unknown): v is Json {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
@@ -169,8 +175,8 @@ async function seedBoardroom(client: PoolClient, boardroom: Json) {
     const bodyMd = (row.body as string) ?? (row.body_md as string) ?? '';
     const mode = (row.mode as string) ?? 'synthesis';
     await client.query(
-      `INSERT INTO ceo_boardroom_annotations (expert_id, expert_name, mode, highlight, body_md, citations)
-       SELECT $1, $2, $3, $4, $5, $6::jsonb
+      `INSERT INTO ceo_boardroom_annotations (expert_id, expert_name, mode, highlight, body_md, citations, workspace_id)
+       SELECT $1, $2, $3, $4, $5, $6::jsonb, $7::uuid
        WHERE NOT EXISTS (SELECT 1 FROM ceo_boardroom_annotations a WHERE a.expert_id = $1 AND a.highlight = $4)`,
       [
         expertId,
@@ -179,6 +185,7 @@ async function seedBoardroom(client: PoolClient, boardroom: Json) {
         highlight,
         bodyMd,
         normCitations(row.citations),
+        defaultWsId,
       ],
     );
   }
@@ -252,13 +259,13 @@ async function seedCompass(client: PoolClient, compass: Json, sourceTag: string)
       const kind = seg.kind as string;
       const hours = Number(seg.hours ?? 0);
       await client.query(
-        `INSERT INTO ceo_attention_alloc (week_start, project_id, hours, kind, source)
-         SELECT $1::date, NULL, $2, $3, $4
+        `INSERT INTO ceo_attention_alloc (week_start, project_id, hours, kind, source, workspace_id)
+         SELECT $1::date, NULL, $2, $3, $4, $5::uuid
          WHERE NOT EXISTS (
            SELECT 1 FROM ceo_attention_alloc a
            WHERE a.week_start = $1::date AND a.kind = $3 AND a.source = $4
          )`,
-        [weekStart, hours, kind, sourceTag],
+        [weekStart, hours, kind, sourceTag, defaultWsId],
       );
     }
   }
@@ -327,13 +334,13 @@ async function seedSituation(client: PoolClient, situation: Json) {
       if (!isObj(cell)) continue;
       const c = cell as Json;
       await client.query(
-        `INSERT INTO ceo_rubric_scores (stakeholder_id, dimension, score, evidence_text, evidence_run_id)
-         SELECT $1::uuid, $2, $3, $4, $5
+        `INSERT INTO ceo_rubric_scores (stakeholder_id, dimension, score, evidence_text, evidence_run_id, workspace_id)
+         SELECT $1::uuid, $2, $3, $4, $5, $6::uuid
          WHERE NOT EXISTS (
            SELECT 1 FROM ceo_rubric_scores z
            WHERE z.stakeholder_id = $1::uuid AND z.dimension = $2 AND z.scope_id IS NULL
          )`,
-        [sid, dim, Number(c.value ?? 0), (c.evidence_text as string) ?? null, (c.evidence_run_id as string) ?? null],
+        [sid, dim, Number(c.value ?? 0), (c.evidence_text as string) ?? null, (c.evidence_run_id as string) ?? null, defaultWsId],
       );
     }
   }
@@ -346,8 +353,8 @@ async function seedBalcony(client: PoolClient, balcony: Json) {
     (findEndpoint(ep, 'balcony/reflections') as Json | undefined);
   for (const row of asArr<Json>(refEp?.items)) {
     await client.query(
-      `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question, prompt)
-       VALUES ($1, $2::date, $3, $4, $5)
+      `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question, prompt, workspace_id)
+       VALUES ($1, $2::date, $3, $4, $5, $6::uuid)
        ON CONFLICT (user_id, week_start, prism_id) DO UPDATE SET
          question = EXCLUDED.question, prompt = EXCLUDED.prompt`,
       [
@@ -356,6 +363,7 @@ async function seedBalcony(client: PoolClient, balcony: Json) {
         row.prism_id as string,
         row.question as string,
         (row.prompt as string) ?? null,
+        defaultWsId,
       ],
     );
   }
@@ -363,8 +371,8 @@ async function seedBalcony(client: PoolClient, balcony: Json) {
   const roiEp = ep['GET /api/v1/ceo/balcony/roi?userId=system'] as Json | undefined;
   if (roiEp && roiEp.week_start) {
     await client.query(
-      `INSERT INTO ceo_time_roi (user_id, week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi)
-       VALUES ($1, $2::date, $3, $4, $5, $6, $7)
+      `INSERT INTO ceo_time_roi (user_id, week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi, workspace_id)
+       VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8::uuid)
        ON CONFLICT (user_id, week_start) DO UPDATE SET
          total_hours = EXCLUDED.total_hours,
          deep_focus_hours = EXCLUDED.deep_focus_hours,
@@ -379,6 +387,7 @@ async function seedBalcony(client: PoolClient, balcony: Json) {
         Number(roiEp.meeting_hours ?? 0),
         Number(roiEp.target_focus_hours ?? 0),
         roiEp.weekly_roi != null ? Number(roiEp.weekly_roi) : null,
+        defaultWsId,
       ],
     );
   }
@@ -434,8 +443,8 @@ async function seedWarRoom(client: PoolClient, warRoom: Json, sourceTag: string)
     for (const row of asArr<Json>(val.items)) {
       const why = Array.isArray(row.why_evidence) ? row.why_evidence : [];
       await client.query(
-        `INSERT INTO ceo_war_room_sparks (tag, headline, evidence_short, why_evidence, risk_text, seed_group)
-         SELECT $1, $2, $3, $4::jsonb, $5, $6::smallint
+        `INSERT INTO ceo_war_room_sparks (tag, headline, evidence_short, why_evidence, risk_text, seed_group, workspace_id)
+         SELECT $1, $2, $3, $4::jsonb, $5, $6::smallint, $7::uuid
          WHERE NOT EXISTS (SELECT 1 FROM ceo_war_room_sparks s WHERE s.headline = $2)`,
         [
           row.tag as string,
@@ -444,6 +453,7 @@ async function seedWarRoom(client: PoolClient, warRoom: Json, sourceTag: string)
           JSON.stringify(why),
           (row.risk_text as string) ?? null,
           Number(row.seed_group ?? 0),
+          defaultWsId,
         ],
       );
     }
@@ -459,17 +469,17 @@ async function seedWarRoom(client: PoolClient, warRoom: Json, sourceTag: string)
     const completedAt = val.completed_at ? new Date(val.completed_at as string) : null;
     if (completedAt) {
       await client.query(
-        `INSERT INTO ceo_sandbox_runs (topic_text, status, branches, evaluation, created_by, completed_at)
-         SELECT $1, $2, $3::jsonb, $4::jsonb, $6, $5::timestamptz
+        `INSERT INTO ceo_sandbox_runs (topic_text, status, branches, evaluation, created_by, completed_at, workspace_id)
+         SELECT $1, $2, $3::jsonb, $4::jsonb, $6, $5::timestamptz, $7::uuid
          WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs r WHERE r.topic_text = $1)`,
-        [topic, status, branchesJson, evalJson, completedAt, sourceTag],
+        [topic, status, branchesJson, evalJson, completedAt, sourceTag, defaultWsId],
       );
     } else {
       await client.query(
-        `INSERT INTO ceo_sandbox_runs (topic_text, status, branches, created_by)
-         SELECT $1, $2, $3::jsonb, $4
+        `INSERT INTO ceo_sandbox_runs (topic_text, status, branches, created_by, workspace_id)
+         SELECT $1, $2, $3::jsonb, $4, $5::uuid
          WHERE NOT EXISTS (SELECT 1 FROM ceo_sandbox_runs r WHERE r.topic_text = $1)`,
-        [topic, status, branchesJson, sourceTag],
+        [topic, status, branchesJson, sourceTag, defaultWsId],
       );
     }
   }
@@ -516,6 +526,9 @@ export async function runCeoSamplesSeed(opts?: CeoSamplesRunOpts): Promise<void>
   const client = await getClient();
   try {
     await client.query('BEGIN');
+    const wsr = await client.query(`SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1`);
+    if (!wsr.rows[0]) throw new Error('default workspace (slug=default) not found — run setupAuthSchema first');
+    defaultWsId = wsr.rows[0].id as string;
     await seedBoardroom(client, boardroom);
     await seedCompass(client, compass, sourceTag);
     await seedSituation(client, situation);

@@ -483,6 +483,15 @@ async function ensurePrerequisites(query: any, scope: ScopeRow) {
   }
 }
 
+let defaultWsIdCache: string | null = null;
+async function getDefaultWsId(query: any): Promise<string> {
+  if (defaultWsIdCache) return defaultWsIdCache;
+  const r = await query(`SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1`);
+  if (!r.rows[0]) throw new Error('default workspace (slug=default) not found');
+  defaultWsIdCache = r.rows[0].id as string;
+  return defaultWsIdCache;
+}
+
 async function ensureBalconyReflectionRow(
   query: any,
   userId: string,
@@ -497,11 +506,12 @@ async function ensureBalconyReflectionRow(
     ext:       '哪一类外部信号你这周躲开了，没正视？',
     self:      '本周你做的最满意 / 最遗憾的一个决定？',
   };
+  const wsId = await getDefaultWsId(query);
   await query(
-    `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question)
-     VALUES ($1, $2::date, $3, $4)
+    `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question, workspace_id)
+     VALUES ($1, $2::date, $3, $4, $5::uuid)
      ON CONFLICT (user_id, week_start, prism_id) DO NOTHING`,
-    [userId, weekStart, prismId, QUESTIONS[prismId]],
+    [userId, weekStart, prismId, QUESTIONS[prismId], wsId],
   );
 }
 

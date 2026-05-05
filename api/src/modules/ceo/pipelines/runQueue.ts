@@ -51,7 +51,7 @@ export class CeoRunQueue {
         // 路由过滤：只拿 target_worker IS NULL（无路由 = 任意 worker）或 = 本进程的 WORKER_ID
         // 老 mn_runs 行 target_worker = NULL → 兼容
         const r = await this.deps.db.query(
-          `SELECT id::text, axis, scope_kind, scope_id::text, metadata
+          `SELECT id::text, axis, scope_kind, scope_id::text, workspace_id::text, metadata
              FROM mn_runs
             WHERE module = 'ceo' AND state = 'queued'
               AND (target_worker IS NULL OR target_worker = $1)

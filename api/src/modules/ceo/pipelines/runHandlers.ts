@@ -77,6 +77,8 @@ export interface CeoRunRow {
   axis: CeoAxis | string;
   scope_kind: string;
   scope_id: string | null;
+  /** mn_runs.workspace_id — 用于 scope_id 为 null 时给 ceo_* INSERT 兜底 ws */
+  workspace_id: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -93,10 +95,11 @@ async function handleG5(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   ]);
 
   // 写 ceo_prisms
+  // scope_id 为 null 时, inherit_ws_from_scope trigger 不会触发 → 显式带 mn_runs.workspace_id
   const r = await deps.db.query(
     `INSERT INTO ceo_prisms
-      (scope_id, week_start, alignment, board_score, coord, team, ext, self, computed_at, metadata)
-     VALUES ($1, DATE_TRUNC('week', NOW())::date, $2, $3, $4, $5, $6, $7, NOW(), $8::jsonb)
+      (scope_id, week_start, alignment, board_score, coord, team, ext, self, computed_at, metadata, workspace_id)
+     VALUES ($1, DATE_TRUNC('week', NOW())::date, $2, $3, $4, $5, $6, $7, NOW(), $8::jsonb, $9::uuid)
      ON CONFLICT (scope_id, week_start) DO UPDATE
        SET alignment = EXCLUDED.alignment,
            board_score = EXCLUDED.board_score,
@@ -116,6 +119,7 @@ async function handleG5(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
       ext,
       self,
       JSON.stringify({ ranBy: 'g5-prism-aggregator', runId: run.id }),
+      run.workspace_id,
     ],
   );
 
@@ -295,10 +299,10 @@ async function handleG3(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
 
   const ins = await deps.db.query(
     `INSERT INTO ceo_rebuttal_rehearsals
-       (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id)
-     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+       (brief_id, scope_id, attacker, attack_text, defense_text, strength_score, generated_run_id, workspace_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::uuid)
      RETURNING id::text`,
-    [briefId, run.scope_id, attacker, attackText, defenseText, strength, run.id],
+    [briefId, run.scope_id, attacker, attackText, defenseText, strength, run.id, run.workspace_id],
   );
   return { ok: true, result: { rebuttalId: ins.rows[0]?.id, mode } };
 }
@@ -382,8 +386,8 @@ async function handleG4Annotations(
 
   const ins = await deps.db.query(
     `INSERT INTO ceo_boardroom_annotations
-       (brief_id, scope_id, expert_id, expert_name, mode, highlight, body_md, citations, generated_run_id)
-     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9)
+       (brief_id, scope_id, expert_id, expert_name, mode, highlight, body_md, citations, generated_run_id, workspace_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::uuid)
      RETURNING id::text`,
     [
       briefId,
@@ -395,6 +399,7 @@ async function handleG4Annotations(
       bodyMd,
       JSON.stringify(citations),
       run.id,
+      run.workspace_id,
     ],
   );
 
@@ -620,9 +625,9 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
     for (const dim of RUBRIC_DIMENSIONS) {
       await deps.db.query(
         `INSERT INTO ceo_rubric_scores
-           (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text)
-         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
-        [run.scope_id, stakeholderId, dim, 0.6, run.id, '[stub g2] LLM 未配置时的中性兜底'],
+           (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text, workspace_id)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid)`,
+        [run.scope_id, stakeholderId, dim, 0.6, run.id, '[stub g2] LLM 未配置时的中性兜底', run.workspace_id],
       );
     }
     await recordStubProvider(deps, run.id);
@@ -680,9 +685,9 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   for (const dim of RUBRIC_DIMENSIONS) {
     await deps.db.query(
       `INSERT INTO ceo_rubric_scores
-         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
-      [run.scope_id, stakeholderId, dim, scores[dim], run.id, mode === 'llm' ? null : '[stub g2]'],
+         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text, workspace_id)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid)`,
+      [run.scope_id, stakeholderId, dim, scores[dim], run.id, mode === 'llm' ? null : '[stub g2]', run.workspace_id],
     );
   }
   return { ok: true, result: { mode, dimensions: RUBRIC_DIMENSIONS.length, scores } };
