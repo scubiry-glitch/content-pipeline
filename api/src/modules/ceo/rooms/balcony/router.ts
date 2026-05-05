@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
+import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
 import {
   getBalconyDashboard,
   listReflections,
@@ -19,22 +20,22 @@ export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function balconyRoutes(fastify: FastifyInstance) {
     fastify.get('/dashboard', async (request) => {
       const { userId } = (request.query ?? {}) as { userId?: string };
-      return getBalconyDashboard(engine.deps, userId);
+      return getBalconyDashboard(engine.deps, userId, currentWorkspaceId(request));
     });
 
     fastify.get('/reflections', async (request) => {
       const { userId, weekStart } = (request.query ?? {}) as { userId?: string; weekStart?: string };
-      return listReflections(engine.deps, { userId, weekStart });
+      return listReflections(engine.deps, { userId, weekStart, workspaceId: currentWorkspaceId(request) });
     });
 
     fastify.post('/reflections', async (request) => {
       const body = (request.body ?? {}) as Record<string, any>;
-      return upsertReflection(engine.deps, body);
+      return upsertReflection(engine.deps, { ...body, workspaceId: currentWorkspaceId(request) });
     });
 
     fastify.get('/roi', async (request) => {
       const { userId, weekStart } = (request.query ?? {}) as { userId?: string; weekStart?: string };
-      return getTimeRoi(engine.deps, { userId, weekStart });
+      return getTimeRoi(engine.deps, { userId, weekStart, workspaceId: currentWorkspaceId(request) });
     });
 
     // ─── samples-s 对齐：drawer 6 d-block 对应 5 个新 endpoint ───
@@ -43,6 +44,7 @@ export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
       return getRoiTrend(engine.deps, {
         userId: q.userId,
         weeks: q.weeks ? Number(q.weeks) : 8,
+        workspaceId: currentWorkspaceId(request),
       });
     });
 
@@ -51,6 +53,7 @@ export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
       return getReflectionsHistory(engine.deps, {
         userId: q.userId,
         weeks: q.weeks ? Number(q.weeks) : 12,
+        workspaceId: currentWorkspaceId(request),
       });
     });
 
@@ -66,7 +69,7 @@ export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
 
     fastify.get('/self-promises', async (request) => {
       const q = (request.query ?? {}) as { userId?: string };
-      return getSelfPromises(engine.deps, { userId: q.userId });
+      return getSelfPromises(engine.deps, { userId: q.userId, workspaceId: currentWorkspaceId(request) });
     });
   };
 }

@@ -19,6 +19,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export async function getLink(
   deps: CeoEngineDeps,
   personId: string,
+  workspaceId?: string | null,
 ): Promise<PersonAgentLink | null> {
   if (!UUID_RE.test(personId)) return null;
   const r = await deps.db.query(
@@ -26,8 +27,9 @@ export async function getLink(
             default_task_type, created_at, last_invoked_at, invoke_count
        FROM ceo_person_agent_links
       WHERE person_id = $1::uuid
+        AND ($2::uuid IS NULL OR workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       LIMIT 1`,
-    [personId],
+    [personId, workspaceId ?? null],
   );
   return (r.rows[0] as PersonAgentLink | undefined) ?? null;
 }
@@ -40,6 +42,7 @@ export async function bindExpert(
     overrides?: Record<string, unknown>;
     taskType?: 'analysis' | 'evaluation' | 'generation';
     createdBy?: string;
+    workspaceId?: string | null;
   },
 ): Promise<{ ok: boolean; link?: PersonAgentLink; error?: string }> {
   if (!UUID_RE.test(personId)) return { ok: false, error: 'invalid person_id' };
@@ -48,8 +51,8 @@ export async function bindExpert(
   }
   const r = await deps.db.query(
     `INSERT INTO ceo_person_agent_links
-       (person_id, expert_id, custom_persona_overrides, default_task_type, created_by)
-     VALUES ($1::uuid, $2, $3::jsonb, $4, $5)
+       (person_id, expert_id, custom_persona_overrides, default_task_type, created_by, workspace_id)
+     VALUES ($1::uuid, $2, $3::jsonb, $4, $5, $6)
      ON CONFLICT (person_id) DO UPDATE
        SET expert_id = EXCLUDED.expert_id,
            custom_persona_overrides = EXCLUDED.custom_persona_overrides,
@@ -63,6 +66,7 @@ export async function bindExpert(
       body.overrides ? JSON.stringify(body.overrides) : null,
       body.taskType ?? 'analysis',
       body.createdBy ?? null,
+      body.workspaceId ?? null,
     ],
   );
   return { ok: true, link: r.rows[0] as PersonAgentLink };
@@ -86,12 +90,13 @@ export async function invoke(
     question: string;
     taskType?: 'analysis' | 'evaluation' | 'generation';
     depth?: 'quick' | 'standard' | 'deep';
+    workspaceId?: string | null;
   },
 ): Promise<{ ok: boolean; result?: unknown; error?: string }> {
   if (!UUID_RE.test(personId)) return { ok: false, error: 'invalid person_id' };
   if (!body.question || !body.question.trim()) return { ok: false, error: 'question required' };
 
-  const link = await getLink(deps, personId);
+  const link = await getLink(deps, personId, body.workspaceId);
   if (!link) return { ok: false, error: 'person 未绑定 expert' };
 
   // 拉 person 上下文

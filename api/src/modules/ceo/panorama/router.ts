@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../CeoEngine.js';
+import { currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
 import { getPanoramaData } from './service.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,7 +22,7 @@ export function createPanoramaRouter(engine: CeoEngine): FastifyPluginAsync {
       if (typeof q.scopeId === 'string' && UUID_RE.test(q.scopeId) && !ids.includes(q.scopeId)) {
         ids.push(q.scopeId);
       }
-      return getPanoramaData(engine.deps, ids.length > 0 ? ids : undefined);
+      return getPanoramaData(engine.deps, ids.length > 0 ? ids : undefined, currentWorkspaceId(request));
     });
   };
 }

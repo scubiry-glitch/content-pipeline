@@ -32,7 +32,15 @@ const ADMIN_HOURS = 5;
 export async function aggregateTimeRoi(
   deps: CeoEngineDeps,
   userId: string = 'system',
+  workspaceId?: string | null,
 ): Promise<{ inserted: number; weeks: string[] }> {
+  // 调用方未给 workspaceId 时, 兜底取 default workspace —— 该 aggregator 跑在
+  // 后台脚本里 (ceo-generate-real-content), 没有 request 上下文.
+  let wsId = workspaceId ?? null;
+  if (!wsId) {
+    const ws = await deps.db.query(`SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1`);
+    wsId = ws.rows[0]?.id ?? null;
+  }
   // 拉近 12 周所有会议（不限 scope —— time_roi 是用户级而非 scope 级）
   const r = await deps.db.query(
     `SELECT a.created_at,
@@ -71,8 +79,8 @@ export async function aggregateTimeRoi(
     const weeklyRoi = Number((deepFocus / TARGET_FOCUS_HOURS).toFixed(3));
     await deps.db.query(
       `INSERT INTO ceo_time_roi
-         (user_id, week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi, metadata)
-       VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8::jsonb)
+         (user_id, week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi, metadata, workspace_id)
+       VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8::jsonb, $9)
        ON CONFLICT (user_id, week_start) DO UPDATE
          SET total_hours = EXCLUDED.total_hours,
              deep_focus_hours = EXCLUDED.deep_focus_hours,
@@ -89,6 +97,7 @@ export async function aggregateTimeRoi(
         TARGET_FOCUS_HOURS,
         weeklyRoi,
         JSON.stringify({ source: 'aggregated', admin_hours: ADMIN_HOURS, computed_from: 'meeting_durations' }),
+        wsId,
       ],
     );
     weeks.push(week);

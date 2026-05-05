@@ -267,20 +267,22 @@ export async function getPostMeeting(
  */
 export async function getDeficit(
   deps: CeoEngineDeps,
-  filter: { userId?: string },
+  filter: { userId?: string; workspaceId?: string | null },
 ): Promise<{
   weekStart: string;
   energyGauge: { value: number; label: string; color: string };
   metrics: Array<{ key: string; actual: number; budget: number; unit: string; status: string; delta: string }>;
 }> {
   const userId = filter.userId ?? 'system';
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours
        FROM ceo_time_roi
       WHERE user_id = $1
+        AND ($2::uuid IS NULL OR workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY week_start DESC
       LIMIT 1`,
-    [userId],
+    [userId, wsId],
   );
   const row = r.rows[0];
   const weekStart = row?.week_start ? String(row.week_start).slice(0, 10) : new Date().toISOString().slice(0, 10);

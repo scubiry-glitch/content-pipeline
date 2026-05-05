@@ -189,10 +189,11 @@ const FALLBACK_DAYS: PersonalRhythmDay[] = [
 
 export async function getPersonalRhythm(
   deps: CeoEngineDeps,
-  filter: { userId?: string; weekStart?: string },
+  filter: { userId?: string; weekStart?: string; workspaceId?: string | null },
 ): Promise<PersonalRhythm> {
   const userId = filter.userId ?? 'system';
   const weekStart = filter.weekStart ?? thisMonday();
+  const wsId = filter.workspaceId ?? null;
 
   // 拉本周 ceo_time_roi
   let roiRow: any = null;
@@ -201,8 +202,9 @@ export async function getPersonalRhythm(
       `SELECT total_hours, deep_focus_hours, meeting_hours, target_focus_hours, weekly_roi
          FROM ceo_time_roi
         WHERE user_id = $1 AND week_start = $2
+          AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
         LIMIT 1`,
-      [userId, weekStart],
+      [userId, weekStart, wsId],
     );
     roiRow = r.rows[0] ?? null;
   } catch {
@@ -216,9 +218,10 @@ export async function getPersonalRhythm(
       `SELECT total_hours, deep_focus_hours, meeting_hours
          FROM ceo_time_roi
         WHERE user_id = $1 AND week_start < $2
+          AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
         ORDER BY week_start DESC
         LIMIT 1`,
-      [userId, weekStart],
+      [userId, weekStart, wsId],
     );
     lastWeekRoi = r.rows[0] ?? null;
   } catch {

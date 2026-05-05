@@ -90,6 +90,7 @@ export async function listFormationGaps(
 export async function getWarRoomDashboard(
   deps: CeoEngineDeps,
   scopeId?: string,
+  workspaceId?: string | null,
 ): Promise<{
   question: string;
   metric: { label: string; value: string; delta: string };
@@ -102,6 +103,7 @@ export async function getWarRoomDashboard(
 }> {
   const formationHealth = await computeFormationHealth(deps, scopeId);
   const conflictKinds = await classifyConflicts(deps, scopeId);
+  const wsId = workspaceId ?? null;
   const conflictTemp =
     conflictKinds.total > 0
       ? Number((conflictKinds.build / conflictKinds.total).toFixed(3))
@@ -115,11 +117,14 @@ export async function getWarRoomDashboard(
     else verdict = '警告 — 团队回避真问题';
   }
 
-  // Sandbox 统计
+  // Sandbox 统计 (按 workspace 过滤)
   const sandboxStats = { draft: 0, running: 0, completed: 0, total: 0 };
   try {
     const r = await deps.db.query(
-      `SELECT status, COUNT(*)::int AS n FROM ceo_sandbox_runs GROUP BY status`,
+      `SELECT status, COUNT(*)::int AS n FROM ceo_sandbox_runs
+        WHERE ($1::uuid IS NULL OR workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
+        GROUP BY status`,
+      [wsId],
     );
     for (const row of r.rows) {
       const s = String(row.status);
@@ -133,10 +138,14 @@ export async function getWarRoomDashboard(
     /* table missing — keep zeros */
   }
 
-  // Spark 种子数
+  // Spark 种子数 (按 workspace 过滤)
   let sparkSeedCount = 0;
   try {
-    const r = await deps.db.query(`SELECT COUNT(*)::int AS n FROM ceo_war_room_sparks`);
+    const r = await deps.db.query(
+      `SELECT COUNT(*)::int AS n FROM ceo_war_room_sparks
+        WHERE ($1::uuid IS NULL OR workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`,
+      [wsId],
+    );
     sparkSeedCount = Number(r.rows[0]?.n ?? 0);
   } catch {
     /* ignore */

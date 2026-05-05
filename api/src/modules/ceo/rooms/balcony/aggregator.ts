@@ -16,14 +16,16 @@ const FALLBACK_PRISMS: Record<PrismKind, number> = {
 export async function computeWeeklyRoi(
   deps: CeoEngineDeps,
   userId?: string,
+  workspaceId?: string | null,
 ): Promise<number> {
   const r = await deps.db.query(
     `SELECT deep_focus_hours, target_focus_hours, weekly_roi
        FROM ceo_time_roi
       WHERE ($1::text IS NULL OR user_id = $1)
+        AND ($2::uuid IS NULL OR workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY week_start DESC
       LIMIT 1`,
-    [userId ?? null],
+    [userId ?? null, workspaceId ?? null],
   );
   if (r.rows.length === 0) return 0.6; // 默认温和值
   const row = r.rows[0];
@@ -36,12 +38,15 @@ export async function computeWeeklyRoi(
 
 export async function computePrismScores(
   deps: CeoEngineDeps,
+  workspaceId?: string | null,
 ): Promise<Record<PrismKind, number>> {
   const r = await deps.db.query(
     `SELECT alignment, board_score, coord, team, ext, self
        FROM ceo_prisms
+      WHERE ($1::uuid IS NULL OR workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY computed_at DESC
       LIMIT 1`,
+    [workspaceId ?? null],
   );
   if (r.rows.length === 0) return { ...FALLBACK_PRISMS };
   const row = r.rows[0];

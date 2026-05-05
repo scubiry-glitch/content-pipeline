@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
+import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
 import {
   getTowerDashboard,
   listCommitmentsByStatus,
@@ -44,7 +45,11 @@ export function createTowerRouter(engine: CeoEngine): FastifyPluginAsync {
 
     fastify.get('/personal-rhythm', async (request) => {
       const q = (request.query ?? {}) as { userId?: string; weekStart?: string };
-      return getPersonalRhythm(engine.deps, { userId: q.userId, weekStart: q.weekStart });
+      return getPersonalRhythm(engine.deps, {
+        userId: q.userId,
+        weekStart: q.weekStart,
+        workspaceId: currentWorkspaceId(request),
+      });
     });
 
     // ─── samples-s 对齐 ─────────────────────────────────────────
@@ -55,7 +60,7 @@ export function createTowerRouter(engine: CeoEngine): FastifyPluginAsync {
 
     fastify.get('/deficit', async (request) => {
       const { userId } = (request.query ?? {}) as { userId?: string };
-      return getDeficit(engine.deps, { userId });
+      return getDeficit(engine.deps, { userId, workspaceId: currentWorkspaceId(request) });
     });
 
     // ─── 输入接入层 (Phase 1) ─────────────────────────────────

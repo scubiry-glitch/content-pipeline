@@ -168,6 +168,7 @@ const OUTPUTS: string[] = (() => {
 export async function getPanoramaData(
   deps: CeoEngineDeps,
   scopeIds?: string[] | string,
+  workspaceId?: string | null,
 ): Promise<PanoramaData> {
   // 多 scope 兼容：单 scope 字符串包成数组；多 scope 时取第一个做单 scope 聚合
   const scopeIdArr = Array.isArray(scopeIds)
@@ -184,7 +185,7 @@ export async function getPanoramaData(
     computeResponsibilityClarity(deps, primaryScope),
     computeFormationHealth(deps, primaryScope),
     computeCoverage(deps, primaryScope),
-    computeWeeklyRoi(deps),
+    computeWeeklyRoi(deps, undefined, workspaceId),
   ]);
 
   const metricByPrism: Record<PrismKind, { label: string; value: string; rawValue: number }> = {

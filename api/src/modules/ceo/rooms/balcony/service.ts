@@ -25,16 +25,18 @@ function thisWeekStart(): string {
 
 export async function listReflections(
   deps: CeoEngineDeps,
-  filter: { userId?: string; weekStart?: string },
+  filter: { userId?: string; weekStart?: string; workspaceId?: string | null },
 ): Promise<{ items: any[]; weekStart: string }> {
   const userId = filter.userId ?? 'system';
   const weekStart = filter.weekStart ?? thisWeekStart();
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT id::text, user_id, week_start, prism_id, question, prompt, user_answer, mood, answered_at
        FROM ceo_balcony_reflections
       WHERE user_id = $1 AND week_start = $2
+        AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY prism_id`,
-    [userId, weekStart],
+    [userId, weekStart, wsId],
   );
 
   if (r.rows.length === 0) {
@@ -48,11 +50,11 @@ export async function listReflections(
     const seeded = [];
     for (const t of picks) {
       const ins = await deps.db.query(
-        `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question, workspace_id)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (user_id, week_start, prism_id) DO UPDATE SET question = EXCLUDED.question
          RETURNING id::text, user_id, week_start, prism_id, question, prompt, user_answer, mood, answered_at`,
-        [userId, weekStart, t.prism, t.question],
+        [userId, weekStart, t.prism, t.question, wsId],
       );
       seeded.push(ins.rows[0]);
     }
@@ -85,10 +87,11 @@ function weekOfYear(weekStart: string): number {
 
 export async function upsertReflection(
   deps: CeoEngineDeps,
-  body: { userId?: string; weekStart?: string; prismId?: PrismKind; userAnswer?: string; mood?: string },
+  body: { userId?: string; weekStart?: string; prismId?: PrismKind; userAnswer?: string; mood?: string; workspaceId?: string | null },
 ): Promise<{ ok: boolean; id?: string }> {
   const userId = body.userId ?? 'system';
   const weekStart = body.weekStart ?? thisWeekStart();
+  const wsId = body.workspaceId ?? null;
   if (!body.prismId) return { ok: false };
   const r = await deps.db.query(
     `UPDATE ceo_balcony_reflections
@@ -96,8 +99,9 @@ export async function upsertReflection(
             mood = $5,
             answered_at = NOW()
       WHERE user_id = $1 AND week_start = $2 AND prism_id = $3
+        AND ($6::uuid IS NULL OR workspace_id = $6)
       RETURNING id::text`,
-    [userId, weekStart, body.prismId, body.userAnswer ?? null, body.mood ?? null],
+    [userId, weekStart, body.prismId, body.userAnswer ?? null, body.mood ?? null, wsId],
   );
   if (r.rows.length === 0) return { ok: false };
   return { ok: true, id: r.rows[0].id };
@@ -105,17 +109,19 @@ export async function upsertReflection(
 
 export async function getTimeRoi(
   deps: CeoEngineDeps,
-  filter: { userId?: string; weekStart?: string },
+  filter: { userId?: string; weekStart?: string; workspaceId?: string | null },
 ): Promise<any> {
   const userId = filter.userId ?? 'system';
   const weekStart = filter.weekStart ?? thisWeekStart();
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT id::text, user_id, week_start, total_hours, deep_focus_hours,
             meeting_hours, target_focus_hours, weekly_roi
        FROM ceo_time_roi
       WHERE user_id = $1 AND week_start = $2
+        AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       LIMIT 1`,
-    [userId, weekStart],
+    [userId, weekStart, wsId],
   );
   if (r.rows.length > 0) return r.rows[0];
   // 兜底：当前周占位
@@ -135,6 +141,7 @@ const MOOD_ENUM = ['clear', 'cloudy', 'conflicted', 'grateful', 'spent'] as cons
 export async function getBalconyDashboard(
   deps: CeoEngineDeps,
   userId?: string,
+  workspaceId?: string | null,
 ): Promise<{
   question: string;
   metric: { label: string; value: string; delta: string };
@@ -144,8 +151,8 @@ export async function getBalconyDashboard(
   strongest: { prism: PrismKind; score: number };
   moodEnum: readonly string[];
 }> {
-  const weeklyRoi = await computeWeeklyRoi(deps, userId);
-  const prismScores = await computePrismScores(deps);
+  const weeklyRoi = await computeWeeklyRoi(deps, userId, workspaceId);
+  const prismScores = await computePrismScores(deps, workspaceId);
 
   const entries = (Object.entries(prismScores) as Array<[PrismKind, number]>);
   entries.sort((a, b) => a[1] - b[1]);
@@ -173,7 +180,7 @@ export async function getBalconyDashboard(
  */
 export async function getRoiTrend(
   deps: CeoEngineDeps,
-  filter: { userId?: string; weeks?: number },
+  filter: { userId?: string; weeks?: number; workspaceId?: string | null },
 ): Promise<{
   weekStart: string;
   metrics: {
@@ -186,14 +193,16 @@ export async function getRoiTrend(
 }> {
   const userId = filter.userId ?? 'system';
   const weeks = filter.weeks ?? 8;
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT week_start::text AS week_start, weekly_roi, deep_focus_hours,
             meeting_hours, target_focus_hours
        FROM ceo_time_roi
       WHERE user_id = $1
+        AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY week_start DESC
       LIMIT $2`,
-    [userId, weeks],
+    [userId, weeks, wsId],
   );
   const rows = r.rows.reverse(); // 旧 → 新
   const cur = rows[rows.length - 1];
@@ -233,13 +242,14 @@ export async function getRoiTrend(
  */
 export async function getReflectionsHistory(
   deps: CeoEngineDeps,
-  filter: { userId?: string; weeks?: number },
+  filter: { userId?: string; weeks?: number; workspaceId?: string | null },
 ): Promise<{
   items: Array<{ weekStart: string; total: number; answered: number; rate: number }>;
   summary: { total_weeks: number; answered_weeks: number; avg_rate: number };
 }> {
   const userId = filter.userId ?? 'system';
   const weeks = filter.weeks ?? 12;
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT week_start::text AS week_start,
             COUNT(*)::int AS total,
@@ -247,9 +257,10 @@ export async function getReflectionsHistory(
        FROM ceo_balcony_reflections
       WHERE user_id = $1
         AND week_start > (NOW()::date - ($2::int * 7) * INTERVAL '1 day')
+        AND ($3::uuid IS NULL OR workspace_id = $3 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       GROUP BY week_start
       ORDER BY week_start`,
-    [userId, weeks],
+    [userId, weeks, wsId],
   );
   const items = r.rows.map((row) => {
     const total = Number(row.total);
@@ -350,7 +361,7 @@ export async function getEchos(
  */
 export async function getSelfPromises(
   deps: CeoEngineDeps,
-  filter: { userId?: string },
+  filter: { userId?: string; workspaceId?: string | null },
 ): Promise<{
   items: Array<{
     id: string;
@@ -363,13 +374,15 @@ export async function getSelfPromises(
   summary: { kept_count: number; partial_count: number; broken_count: number; kept_rate: number };
 }> {
   const userId = filter.userId ?? 'system';
+  const wsId = filter.workspaceId ?? null;
   const r = await deps.db.query(
     `SELECT id::text, prism_id, mood, user_answer, week_start::text AS week_start
        FROM ceo_balcony_reflections
       WHERE user_id = $1 AND user_answer IS NOT NULL
+        AND ($2::uuid IS NULL OR workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
       ORDER BY week_start DESC
       LIMIT 30`,
-    [userId],
+    [userId, wsId],
   );
   // 简化分类: mood='clear'→kept, 'grateful'→kept, 'tense'/'tired'/'restless'→broken, 其他→partial
   const items = r.rows.map((row) => {

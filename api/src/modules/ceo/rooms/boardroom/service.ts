@@ -33,7 +33,9 @@ export async function listDirectors(
       `SELECT d.id::text, d.name, d.role, d.weight, d.scope_id::text,
               l.expert_id, ep.name AS expert_name
          FROM ceo_directors d
-         LEFT JOIN ceo_person_agent_links l ON l.person_id = d.id
+         LEFT JOIN ceo_person_agent_links l
+           ON l.person_id = d.id
+          AND (l.workspace_id = d.workspace_id OR l.workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
          LEFT JOIN expert_profiles ep ON ep.expert_id = l.expert_id
         WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
         ORDER BY d.weight DESC, d.name`,
@@ -46,7 +48,9 @@ export async function listDirectors(
       `SELECT d.id::text, d.name, d.role, d.weight, d.scope_id::text,
               l.expert_id, NULL::text AS expert_name
          FROM ceo_directors d
-         LEFT JOIN ceo_person_agent_links l ON l.person_id = d.id
+         LEFT JOIN ceo_person_agent_links l
+           ON l.person_id = d.id
+          AND (l.workspace_id = d.workspace_id OR l.workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
         WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
         ORDER BY d.weight DESC, d.name`,
       [ids],
