@@ -929,11 +929,55 @@ function BeliefThreadTab({ scopeId }: { scopeId: string }) {
 }
 
 /** 阵型：调 CEO War Room API */
+// formation_data 结构来自 api/src/modules/ceo/prompts/war-room-formation.ts:
+// { nodes:[{id,label,role,weight}], links:[{source,target,kind,temp}],
+//   conflict_kinds:{[k]:n}, gaps:[{text,action,severity}], conflict_temp:0..1 }
+type FormationGap = { text: string; action: string; severity: 'critical' | 'warn' | 'info' };
+type FormationNode = { id: string; label: string; role?: string; weight?: number };
+type FormationLink = { source: string; target: string; kind: 'supports' | 'conflicts' | 'silent' | 'reports'; temp: number };
+type FormationData = {
+  nodes?: FormationNode[];
+  links?: FormationLink[];
+  conflict_kinds?: Record<string, number>;
+  gaps?: FormationGap[];
+};
+
+const SEV_COLOR: Record<FormationGap['severity'], { bg: string; border: string; ink: string; tag: string }> = {
+  critical: { bg: 'oklch(0.97 0.03 25)', border: 'oklch(0.85 0.10 25)', ink: 'oklch(0.40 0.14 25)', tag: '严重' },
+  warn:     { bg: 'oklch(0.97 0.04 70)', border: 'oklch(0.85 0.12 70)', ink: 'oklch(0.45 0.13 70)', tag: '警告' },
+  info:     { bg: 'var(--paper-2)',       border: 'var(--line-2)',       ink: 'var(--ink-3)',       tag: '提示' },
+};
+
+const LINK_KIND_LABEL: Record<FormationLink['kind'], string> = {
+  supports: '支持', conflicts: '冲突', silent: '沉默', reports: '汇报',
+};
+const LINK_KIND_COLOR: Record<FormationLink['kind'], string> = {
+  supports: 'oklch(0.55 0.10 145)',
+  conflicts: 'oklch(0.50 0.16 25)',
+  silent: 'var(--ink-4)',
+  reports: 'var(--ink-3)',
+};
+
+function ConflictTempBar({ value }: { value: number }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  // 0 → 中性灰, 1 → 深红，线性插值通过 oklch
+  const fill = `oklch(${0.65 - pct * 0.0025} ${0.04 + pct * 0.0014} 25)`;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220 }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--line-2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: fill, transition: 'width 240ms ease' }} />
+      </div>
+      <MonoMeta style={{ fontSize: 11, color: 'var(--ink-2)', minWidth: 36, textAlign: 'right' }}>{value.toFixed(2)}</MonoMeta>
+    </div>
+  );
+}
+
 function FormationTab({ scopeId }: { scopeId: string }) {
   const isMobile = useIsMobile();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setErr(null);
@@ -945,39 +989,182 @@ function FormationTab({ scopeId }: { scopeId: string }) {
     return () => { cancelled = true; };
   }, [scopeId]);
   const snapshot = data?.snapshot;
-  const conflictTemp = snapshot?.conflict_temp;
-  const formationData = snapshot?.formation_data;
+  const conflictTemp = snapshot?.conflict_temp == null ? null : Number(snapshot.conflict_temp);
+  const weekStart: string | undefined = snapshot?.week_start;
+  const weekLabel = weekStart ? new Date(weekStart).toISOString().slice(0, 10) : null;
+  const fd: FormationData | null = (snapshot?.formation_data as FormationData) ?? null;
+  const gaps = fd?.gaps ?? [];
+  const nodes = fd?.nodes ?? [];
+  const links = fd?.links ?? [];
+  const kinds = fd?.conflict_kinds ?? {};
+  const kindEntries = Object.entries(kinds).sort((a, b) => b[1] - a[1]);
+  const nodeLabel = (id: string) => nodes.find((n) => n.id === id)?.label ?? id;
+
   return (
-    <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
-      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <h2 style={{ margin: 0, fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>阵型</h2>
-        <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-3)' }}>
-          来源 GET /api/v1/ceo/war-room/formation · ceo_formation_snapshots
-        </span>
+    <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: 0, letterSpacing: '-0.005em' }}>
+          阵型快照
+        </h3>
+        {weekLabel && (
+          <MonoMeta style={{ fontSize: 11, color: 'var(--ink-3)' }}>WEEK {weekLabel}</MonoMeta>
+        )}
       </div>
-      {loading && <div style={{ color: 'var(--ink-3)' }}>加载中…</div>}
-      {err && <div style={{ color: 'oklch(0.45 0.16 25)' }}>{err}</div>}
-      {!loading && !err && (
-        <>
-          {conflictTemp !== undefined && conflictTemp !== null && (
-            <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ink-2)' }}>
-              冲突温度 <strong style={{ fontFamily: 'var(--serif)', fontSize: 18, color: 'oklch(0.40 0.14 25)' }}>
-                {Number(conflictTemp).toFixed(2)}
-              </strong>
+      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 640 }}>
+        来源 <code style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>ceo_formation_snapshots</code> ·
+        团队动力学 90 天观察 · gaps 是阵型缺口与可执行动作。
+      </div>
+
+      {loading && <AxisLoadingSkeleton rows={4} />}
+      {err && (
+        <div style={{ padding: '10px 14px', background: 'oklch(0.97 0.03 25)', border: '1px solid oklch(0.85 0.10 25)', color: 'oklch(0.40 0.14 25)', borderRadius: 4, fontSize: 12.5 }}>
+          加载失败：{err}
+        </div>
+      )}
+      {!loading && !err && !fd && (
+        <div style={{ padding: '14px 18px', background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, fontSize: 12.5, color: 'var(--ink-3)', maxWidth: 560 }}>
+          本 scope 暂无阵型快照 · 在 <code style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>/ceo/internal/ceo/war-room</code> 触发 war-room-formation 后回看
+        </div>
+      )}
+
+      {!loading && !err && fd && (
+        <div style={{ display: 'grid', gap: 18 }}>
+          {/* 顶部 strip：冲突温度 + 节点/关系/缺口计数 */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 1fr) auto',
+            gap: 16, alignItems: 'center',
+            padding: '14px 18px', background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
+          }}>
+            <div>
+              <SectionLabel>冲突温度</SectionLabel>
+              <div style={{ marginTop: 8 }}>
+                {conflictTemp == null ? (
+                  <MonoMeta style={{ color: 'var(--ink-4)' }}>—</MonoMeta>
+                ) : (
+                  <ConflictTempBar value={conflictTemp} />
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 18, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+              <span>节点 <strong style={{ color: 'var(--ink)', fontSize: 14 }}>{nodes.length}</strong></span>
+              <span>关系 <strong style={{ color: 'var(--ink)', fontSize: 14 }}>{links.length}</strong></span>
+              <span>缺口 <strong style={{ color: 'var(--ink)', fontSize: 14 }}>{gaps.length}</strong></span>
+            </div>
+          </div>
+
+          {/* 阵型缺口 */}
+          {gaps.length > 0 && (
+            <div>
+              <SectionLabel>阵型缺口 · {gaps.length}</SectionLabel>
+              <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                {gaps.map((g, i) => {
+                  const c = SEV_COLOR[g.severity] ?? SEV_COLOR.warn;
+                  return (
+                    <div key={i} style={{
+                      padding: '12px 14px', borderRadius: 6,
+                      background: c.bg, border: `1px solid ${c.border}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{
+                          fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.4,
+                          textTransform: 'uppercase', color: c.ink,
+                          padding: '2px 6px', border: `1px solid ${c.border}`, borderRadius: 3,
+                        }}>{c.tag}</span>
+                      </div>
+                      <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink)' }}>{g.text}</div>
+                      <div style={{ marginTop: 8, fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 12.5, color: c.ink }}>
+                        → {g.action}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
-          <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 18px' }}>
-            {formationData ? (
-              <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)' }}>
-                {JSON.stringify(formationData, null, 2).slice(0, 1200)}
-              </pre>
-            ) : (
-              <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                本 scope 暂无阵型快照 · 在 /ceo/internal/ceo/war-room 触发后回看
+
+          {/* 冲突主题 chips */}
+          {kindEntries.length > 0 && (
+            <div>
+              <SectionLabel>冲突主题</SectionLabel>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {kindEntries.map(([k, n]) => (
+                  <span key={k} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'var(--paper-2)', border: '1px solid var(--line-2)',
+                    fontSize: 12, color: 'var(--ink-2)',
+                  }}>
+                    {k}
+                    <MonoMeta style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>×{n}</MonoMeta>
+                  </span>
+                ))}
               </div>
-            )}
-          </div>
-        </>
+            </div>
+          )}
+
+          {/* 节点/关系折叠区 */}
+          {(nodes.length > 0 || links.length > 0) && (
+            <div>
+              <button
+                onClick={() => setShowDetail((s) => !s)}
+                style={{
+                  background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                  fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0.3,
+                  color: 'var(--ink-3)', textTransform: 'uppercase',
+                }}>
+                {showDetail ? '▾' : '▸'} 节点 / 关系明细
+              </button>
+              {showDetail && (
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginTop: 12 }}>
+                  <div style={{ border: '1px solid var(--line-2)', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 12px', background: 'var(--paper-2)', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 0.3, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+                      节点 · {nodes.length}
+                    </div>
+                    {nodes.map((n) => (
+                      <div key={n.id} style={{
+                        display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8,
+                        padding: '8px 12px', borderTop: '1px solid var(--line-2)', fontSize: 12.5,
+                      }}>
+                        <div>
+                          <div style={{ color: 'var(--ink)' }}>{n.label}</div>
+                          {n.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{n.role}</div>}
+                        </div>
+                        {n.weight != null && (
+                          <MonoMeta style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>w={Number(n.weight).toFixed(2)}</MonoMeta>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ border: '1px solid var(--line-2)', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 12px', background: 'var(--paper-2)', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 0.3, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+                      关系 · {links.length}
+                    </div>
+                    {links.map((l, i) => (
+                      <div key={i} style={{
+                        display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8,
+                        padding: '8px 12px', borderTop: '1px solid var(--line-2)', fontSize: 12.5,
+                      }}>
+                        <div>
+                          <span style={{ color: 'var(--ink)' }}>{nodeLabel(l.source)}</span>
+                          <span style={{
+                            margin: '0 8px', fontFamily: 'var(--mono)', fontSize: 10,
+                            padding: '1px 6px', borderRadius: 3,
+                            color: LINK_KIND_COLOR[l.kind],
+                            border: `1px solid ${LINK_KIND_COLOR[l.kind]}`,
+                          }}>
+                            {LINK_KIND_LABEL[l.kind]}
+                          </span>
+                          <span style={{ color: 'var(--ink)' }}>{nodeLabel(l.target)}</span>
+                        </div>
+                        <MonoMeta style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>t={Number(l.temp).toFixed(2)}</MonoMeta>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
