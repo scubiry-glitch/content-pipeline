@@ -9,6 +9,7 @@ import type { IconName } from './_atoms';
 import { MeetingScopeProvider, useMeetingScope } from './_scopeContext';
 import { MockToggleProvider, MockToggleBar } from './_mockToggle';
 import { ScopePill } from './_axisShared';
+import { WorkspacePill } from '../../components/WorkspacePill';
 import './_tokens.css';
 
 interface NavItem {
@@ -100,6 +101,9 @@ export function MeetingShell() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 15 }}>Minutes</div>
             <MonoMeta>会议纪要 v2</MonoMeta>
+            <div style={{ marginTop: 4 }}>
+              <WorkspacePill tone="light" size="xs" />
+            </div>
           </div>
         )}
         {isMobile && (

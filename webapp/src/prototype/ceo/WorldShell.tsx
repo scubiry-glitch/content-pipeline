@@ -7,6 +7,7 @@ import './_tokens.css';
 import { PersonDrawerProvider } from './shared/PersonDrawerProvider';
 import { PersonDrawer } from './shared/PersonDrawer';
 import { useIsMobile } from '../_useIsMobile';
+import { WorkspacePill } from '../../components/WorkspacePill';
 
 type Mode = 'external' | 'internal';
 type ExtTab = 'meetings' | 'library';
@@ -280,6 +281,7 @@ function WorldSwitcher({ mode, onSwitch }: SwitcherProps) {
         display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12,
         flexShrink: 0,
       }}>
+        <WorkspacePill tone={isEx ? 'light' : 'dark'} size="xs" />
         {/* mobile: 时间 / 问候语隐藏，节省横向空间，仅保留 🦉 入口 */}
         {!isMobile && (
           <div
