@@ -47,11 +47,23 @@ export const warRoomSparkPrompt: PromptDef<OutT> = {
 - risk_text 不能是空话（"需要关注" / "值得思考"）— 必须给出具体反方意见或量化条件
 - 至少 3 张，最多 8 张；按 seed_group 分配（0/1/2 平均分）
 - tag 格式建议: "🔮 跨项目人才嫁接" / "⚡ 节奏窗口" / "🧩 隐藏 KPI"
+- 若输入提供了"概念漂移术语"（同一个词在不同项目/会议被不同人按不同含义使用），至少 1 张 spark 必须以漂移术语为根：
+    headline 须包含该术语本身，evidence_short 须引用至少两种用法的对照，tag 建议用 "🧩 语义裂缝"
 
 仅输出 JSON：{"sparks":[{tag,headline,evidence_short,why_evidence:[{text,source}],risk_text,seed_group},...]}`,
 
-  userPrompt: (ctx) =>
-    `Scope: ${ctx.scopeName ?? '(综合)'}
+  userPrompt: (ctx) => {
+    const driftBlock = ctx.conceptDrifts.length > 0
+      ? `\n\n概念漂移术语（${ctx.conceptDrifts.length}，按严重度排序）：\n${
+          ctx.conceptDrifts.slice(0, 8).map((d) => {
+            const defs = d.definitions.length > 0
+              ? d.definitions.map((x) => `"${x.defText.slice(0, 80)}"`).join(' VS ')
+              : '(无具体定义片段)';
+            return `- [${d.severity}] ${d.term} ｜ 用法分歧: ${defs}`;
+          }).join('\n')
+        }`
+      : '';
+    return `Scope: ${ctx.scopeName ?? '(综合)'}
 会议样本：
 ${ctx.meetings.slice(0, 12).map((m) => `- [${m.id}] ${m.title}`).join('\n')}
 
@@ -59,9 +71,10 @@ ${ctx.meetings.slice(0, 12).map((m) => `- [${m.id}] ${m.title}`).join('\n')}
 ${ctx.judgments.slice(0, 35).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n')}
 
 近 90 天 commitments：
-${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120)}`).join('\n')}
+${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120)}`).join('\n')}${driftBlock}
 
-请输出 5-7 张 spark 卡。`,
+请输出 5-7 张 spark 卡。`;
+  },
 
   qualityChecks: [
     (out) => {
@@ -80,6 +93,17 @@ ${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120
     (out) => {
       const groups = new Set(out.sparks.map((s) => s.seed_group));
       if (groups.size < 2) return 'seed_group 应至少分布在 2 组（0/1/2）';
+      return null;
+    },
+    // ctx 提供了概念漂移时，至少 1 张 spark 的 headline 命中某个 term
+    (out, ctx) => {
+      if (!ctx.conceptDrifts || ctx.conceptDrifts.length === 0) return null;
+      const terms = ctx.conceptDrifts.slice(0, 8).map((d) => d.term).filter((t) => t && t.length >= 2);
+      if (terms.length === 0) return null;
+      const hit = out.sparks.some((s) => terms.some((t) => s.headline.includes(t)));
+      if (!hit) {
+        return `ctx 提供了 ${terms.length} 个概念漂移术语（${terms.slice(0, 3).join(' / ')}），至少 1 张 spark 的 headline 必须命中其中一个`;
+      }
       return null;
     },
   ],

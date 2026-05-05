@@ -33,6 +33,27 @@ export interface PromptCtx {
   strategicLines: { id: string; name: string; kind: 'main' | 'branch' | 'drift'; description: string | null }[];
   /** scope 下利益相关方（situation-signal 用） */
   stakeholders: { id: string; name: string; kind: string; heat: number }[];
+  /** 知识轴 · 概念漂移（mn_concept_drifts，severity in ['med','high','critical']）
+   *  scopeId == null 表示跨 scope 全局漂移；war-room-spark 用它做"语义裂缝"输入 */
+  conceptDrifts: {
+    term: string;
+    severity: 'med' | 'high' | 'critical';
+    scopeId: string | null;
+    firstObservedAt: string | null;
+    lastObservedAt: string | null;
+    /** 各会议给出的定义片段（最多 3 条，用于让 LLM 看到分歧点）*/
+    definitions: { meetingId: string | null; defText: string }[];
+  }[];
+  /** 知识轴 · 反事实（mn_counterfactuals，current_validity='unclear' 且 next_check 已到/即将到）
+   *  compass-narrative 用它在"漂移段"引用"6 个月前拒绝的 X 现在如何" */
+  counterfactuals: {
+    id: string;
+    rejectedPath: string;
+    trackingNote: string | null;
+    nextCheckAt: string | null;
+    currentValidity: 'valid' | 'invalid' | 'unclear';
+    meetingId: string | null;
+  }[];
   /** runId — 写表时挂 generated_run_id */
   runId: string;
   /** axis-specific extra fields — handler 可通过 metadata 注入 */

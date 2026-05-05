@@ -232,6 +232,94 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     stakeholders = [];
   }
 
+  // conceptDrifts — 知识轴 mn_concept_drifts，只取 med/high/critical
+  // scopeId 给定 → 取 scope 内 + 全局（scope_id IS NULL）；scopeId null → 仅全局
+  let conceptDrifts: PromptCtx['conceptDrifts'] = [];
+  try {
+    const r = await db.query(
+      `SELECT id::text AS id,
+              term,
+              drift_severity,
+              scope_id::text AS scope_id_text,
+              first_observed_at,
+              last_observed_at,
+              definition_at_meeting
+         FROM mn_concept_drifts
+        WHERE drift_severity IN ('med','high','critical')
+          AND ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+        ORDER BY CASE drift_severity
+                   WHEN 'critical' THEN 0
+                   WHEN 'high'     THEN 1
+                   WHEN 'med'      THEN 2
+                   ELSE 3 END,
+                 last_observed_at DESC NULLS LAST
+        LIMIT 15`,
+      [scopeId],
+    );
+    conceptDrifts = (r.rows as any[]).map((row) => {
+      const defs = Array.isArray(row.definition_at_meeting) ? row.definition_at_meeting : [];
+      return {
+        term: String(row.term),
+        severity: row.drift_severity as 'med' | 'high' | 'critical',
+        scopeId: row.scope_id_text ? String(row.scope_id_text) : null,
+        firstObservedAt: row.first_observed_at ? new Date(row.first_observed_at).toISOString() : null,
+        lastObservedAt: row.last_observed_at ? new Date(row.last_observed_at).toISOString() : null,
+        definitions: defs.slice(0, 3).map((d: any) => ({
+          meetingId: d?.meeting_id ? String(d.meeting_id) : null,
+          defText: String(d?.def_text ?? '').slice(0, 160),
+        })),
+      };
+    });
+  } catch {
+    conceptDrifts = [];
+  }
+
+  // counterfactuals — mn_counterfactuals 通过 mn_scope_members JOIN 到 scope
+  // 优先取 next_validity_check_at 已到/临近，其次 unclear|invalid 状态
+  let counterfactuals: PromptCtx['counterfactuals'] = [];
+  try {
+    const r = await db.query(
+      scopeId
+        ? `SELECT cf.id::text AS id,
+                  cf.rejected_path,
+                  cf.tracking_note,
+                  cf.next_validity_check_at,
+                  cf.current_validity,
+                  cf.meeting_id::text AS meeting_id
+             FROM mn_counterfactuals cf
+             JOIN mn_scope_members sm ON sm.meeting_id::text = cf.meeting_id::text
+            WHERE sm.scope_id::text = $1::text
+              AND cf.current_validity IN ('unclear','invalid')
+            ORDER BY (cf.next_validity_check_at <= NOW()) DESC NULLS LAST,
+                     cf.next_validity_check_at ASC NULLS LAST,
+                     cf.created_at DESC
+            LIMIT 25`
+        : `SELECT id::text AS id,
+                  rejected_path,
+                  tracking_note,
+                  next_validity_check_at,
+                  current_validity,
+                  meeting_id::text AS meeting_id
+             FROM mn_counterfactuals
+            WHERE current_validity IN ('unclear','invalid')
+            ORDER BY (next_validity_check_at <= NOW()) DESC NULLS LAST,
+                     next_validity_check_at ASC NULLS LAST,
+                     created_at DESC
+            LIMIT 25`,
+      scopeId ? [scopeId] : [],
+    );
+    counterfactuals = (r.rows as any[]).map((row) => ({
+      id: String(row.id),
+      rejectedPath: String(row.rejected_path ?? '').slice(0, 240),
+      trackingNote: row.tracking_note ? String(row.tracking_note).slice(0, 240) : null,
+      nextCheckAt: row.next_validity_check_at ? new Date(row.next_validity_check_at).toISOString() : null,
+      currentValidity: (row.current_validity ?? 'unclear') as 'valid' | 'invalid' | 'unclear',
+      meetingId: row.meeting_id ? String(row.meeting_id) : null,
+    }));
+  } catch {
+    counterfactuals = [];
+  }
+
   return {
     scopeId,
     scopeName,
@@ -242,6 +330,8 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     brief,
     strategicLines,
     stakeholders,
+    conceptDrifts,
+    counterfactuals,
     runId,
     extra: extra ?? {},
   };
