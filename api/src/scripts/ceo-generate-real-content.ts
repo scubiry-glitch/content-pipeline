@@ -93,6 +93,7 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const skipExport = args.includes('--skip-export');
   const useClaudeCli = args.includes('--mode=claude-cli');
+  const wsSlug = args.find((a) => a.startsWith('--workspace='))?.slice('--workspace='.length) ?? 'default';
   // 当无 ALTER TABLE 权限时（DB 用户非表 owner），mn_runs 的 axis 列还是 VARCHAR(16)，
   // 长 axis 名 INSERT 会失败 — --skip-runs-insert 跳过 mn_runs INSERT/UPDATE，仅写
   // 业务表（ceo_strategic_lines 等）。
@@ -132,7 +133,11 @@ async function main() {
     console.log('[ceo-generate-real] --skip-runs-insert 已开 — 不写 mn_runs，仅写业务表 (ceo_*)');
   }
 
-  // 1. 选目标 scope
+  // 0. 解析目标 workspace
+  const wsId = await resolveWsIdBySlug(query, wsSlug);
+  console.log(`[ceo-generate-real] workspace: slug=${wsSlug} id=${wsId.slice(0, 8)}…`);
+
+  // 1. 选目标 scope (限定在 wsId 内, 避免跨 workspace 串数据)
   const targetNames = scopeFilter && scopeFilter.length > 0 ? scopeFilter : TARGET_SCOPE_NAMES;
   const placeholders = targetNames.map((_, i) => `$${i + 1}`).join(',');
   const scopeRes = await query(
@@ -141,9 +146,10 @@ async function main() {
        FROM mn_scopes s
       WHERE s.status = 'active'
         AND s.kind = 'project'
+        AND s.workspace_id = $${targetNames.length + 1}::uuid
         AND s.name IN (${placeholders})
       ORDER BY meeting_count DESC NULLS LAST`,
-    targetNames,
+    [...targetNames, wsId],
   );
   const scopes: ScopeRow[] = (scopeRes.rows as any[]).map((r) => ({
     id: String(r.id),
@@ -151,7 +157,7 @@ async function main() {
     meetingCount: Number(r.meeting_count ?? 0),
   }));
   if (scopes.length === 0) {
-    console.error(`[ceo-generate-real] 没找到目标 scope: ${targetNames.join(', ')}`);
+    console.error(`[ceo-generate-real] 没找到目标 scope (ws=${wsSlug}): ${targetNames.join(', ')}`);
     process.exit(3);
   }
   console.log(`[ceo-generate-real] target scopes (${scopes.length}):`);
@@ -483,13 +489,18 @@ async function ensurePrerequisites(query: any, scope: ScopeRow) {
   }
 }
 
-let defaultWsIdCache: string | null = null;
-async function getDefaultWsId(query: any): Promise<string> {
-  if (defaultWsIdCache) return defaultWsIdCache;
-  const r = await query(`SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1`);
-  if (!r.rows[0]) throw new Error('default workspace (slug=default) not found');
-  defaultWsIdCache = r.rows[0].id as string;
-  return defaultWsIdCache;
+// main() 解析 --workspace=<slug> 后通过 resolveWsIdBySlug 设置；ensureBalconyReflectionRow
+// 等子流程从这里读，避免再到处穿参。
+let currentWsIdCache: string | null = null;
+async function resolveWsIdBySlug(query: any, slug: string): Promise<string> {
+  const r = await query(`SELECT id FROM workspaces WHERE slug = $1 LIMIT 1`, [slug]);
+  if (!r.rows[0]) throw new Error(`workspace slug='${slug}' not found`);
+  currentWsIdCache = r.rows[0].id as string;
+  return currentWsIdCache;
+}
+function getCurrentWsIdOrThrow(): string {
+  if (!currentWsIdCache) throw new Error('wsId 尚未解析 — main() 必须先调用 resolveWsIdBySlug');
+  return currentWsIdCache;
 }
 
 async function ensureBalconyReflectionRow(
@@ -506,7 +517,7 @@ async function ensureBalconyReflectionRow(
     ext:       '哪一类外部信号你这周躲开了，没正视？',
     self:      '本周你做的最满意 / 最遗憾的一个决定？',
   };
-  const wsId = await getDefaultWsId(query);
+  const wsId = getCurrentWsIdOrThrow();
   await query(
     `INSERT INTO ceo_balcony_reflections (user_id, week_start, prism_id, question, workspace_id)
      VALUES ($1, $2::date, $3, $4, $5::uuid)
