@@ -49,7 +49,16 @@ export async function ensureCeoModuleSchema(
   for (const name of FILES) {
     const path = join(migrationsDir, name);
     const sql = readFileSync(path, 'utf8');
-    await runSql(sql);
+    try {
+      await runSql(sql);
+    } catch (e: any) {
+      // 42501 insufficient_privilege: 同 ensureMeetingNotesModuleSchema, 降级为 warning.
+      if (e?.code === '42501') {
+        console.warn(`[DB] CEO migration ${name} skipped (insufficient_privilege): ${e.message}`);
+        continue;
+      }
+      throw e;
+    }
   }
   console.log(`[DB] CEO 模块表结构已就绪（共 ${FILES.length} 个 migration）`);
 }

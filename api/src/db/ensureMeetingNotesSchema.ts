@@ -73,7 +73,19 @@ export async function ensureMeetingNotesModuleSchema(
   for (const name of FILES) {
     const path = join(migrationsDir, name);
     const sql = readFileSync(path, 'utf8');
-    await runSql(sql);
+    try {
+      await runSql(sql);
+    } catch (e: any) {
+      // 42501 = insufficient_privilege (e.g. "must be owner of table"). 通常意味着
+      // 表/列已被 superuser 提前迁移好, 当前 DB role (pipeline_app) 不是 owner 但
+      // ALTER 实际是 no-op (ADD COLUMN IF NOT EXISTS). 降级为 warning, 不阻塞启动.
+      // 其他错误(语法 / 数据完整性 / 真缺列) 仍 throw, 由外层 catch + process.exit.
+      if (e?.code === '42501') {
+        console.warn(`[DB] meeting-notes migration ${name} skipped (insufficient_privilege): ${e.message}`);
+        continue;
+      }
+      throw e;
+    }
   }
   console.log(`[DB] meeting-notes 模块表结构已就绪（共 ${FILES.length} 个 migration）`);
 }
