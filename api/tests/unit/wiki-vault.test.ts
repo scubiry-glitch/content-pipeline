@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readdir, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { initWorkspaceVault, isPathInWorkspaceVault } from '../../src/lib/wikiVault.js';
+import { initWorkspaceVault, isPathInWorkspaceVault, archiveWorkspaceVault } from '../../src/lib/wikiVault.js';
 
 let tmpRoot: string;
 let originalWikiRoot: string | undefined;
@@ -106,5 +106,56 @@ describe('isPathInWorkspaceVault', () => {
 
   it('非法 slug (路径穿越) → false (resolveWikiRoot 抛错被 catch)', () => {
     expect(isPathInWorkspaceVault('data/content-wiki/abc', '../etc')).toBe(false);
+  });
+});
+
+describe('archiveWorkspaceVault', () => {
+  it('归档已存在的 vault 到 .trash/<slug>-<timestamp>/', async () => {
+    process.env.WIKI_ROOT = join(tmpRoot, 'data', 'content-wiki', 'archive-ws');
+    // 先 init 让目录存在
+    const init = await initWorkspaceVault('archive-ws', 'Archive Test');
+    expect(init.ok).toBe(true);
+    const originalRoot = init.root!;
+    // 归档
+    const ar = await archiveWorkspaceVault('archive-ws');
+    expect(ar.ok).toBe(true);
+    expect(ar.archivedTo).toBeDefined();
+    expect(ar.archivedTo).toMatch(/\.trash\/archive-ws-/);
+    // 原目录消失
+    await expect(stat(originalRoot)).rejects.toThrow();
+    // 归档目标存在 + 含 index.md
+    const stats = await stat(ar.archivedTo!);
+    expect(stats.isDirectory()).toBe(true);
+    const indexBody = await readFile(join(ar.archivedTo!, 'index.md'), 'utf8');
+    expect(indexBody).toContain('Archive Test');
+  });
+
+  it('vault 不存在 → ok=true, reason=not-found (幂等)', async () => {
+    process.env.WIKI_ROOT = join(tmpRoot, 'data', 'content-wiki', 'never-existed');
+    const ar = await archiveWorkspaceVault('never-existed');
+    expect(ar.ok).toBe(true);
+    expect(ar.reason).toBe('not-found');
+    expect(ar.archivedTo).toBeUndefined();
+  });
+
+  it('非法 slug → ok=false, error', async () => {
+    // 清掉 env, 让 resolveWikiRoot 走 slug 校验路径
+    delete process.env.WIKI_ROOT;
+    delete process.env.MN_CLAUDE_WIKI_ROOT;
+    delete process.env.CONTENT_LIBRARY_WIKI_ROOT;
+    const ar = await archiveWorkspaceVault('../etc/passwd');
+    expect(ar.ok).toBe(false);
+    expect(ar.error).toBeDefined();
+  });
+
+  it('两次归档同 slug, 第二次无事可做', async () => {
+    process.env.WIKI_ROOT = join(tmpRoot, 'data', 'content-wiki', 'twice-archive');
+    await initWorkspaceVault('twice-archive', 'V1');
+    const a1 = await archiveWorkspaceVault('twice-archive');
+    expect(a1.ok).toBe(true);
+    expect(a1.archivedTo).toBeDefined();
+    const a2 = await archiveWorkspaceVault('twice-archive');
+    expect(a2.ok).toBe(true);
+    expect(a2.reason).toBe('not-found');
   });
 });

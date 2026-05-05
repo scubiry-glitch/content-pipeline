@@ -9,8 +9,8 @@
 //   - GET /content-library/wiki/files / /wiki/preview 用 isPathInWorkspaceVault
 //     校验 caller 自带的 query.wikiRoot 是否在当前 ws 范围内
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve, isAbsolute, relative } from 'node:path';
+import { mkdir, writeFile, rename, access } from 'node:fs/promises';
+import { resolve, isAbsolute, relative, dirname } from 'node:path';
 import { resolveWikiRoot } from './wikiRoot.js';
 
 // 与 wikiRoot.ts 同款 REPO_ROOT 推导 — 让相对路径解析与 resolveWikiRoot 行为一致
@@ -48,6 +48,43 @@ export async function initWorkspaceVault(
       // EEXIST → 已有 index.md, OK
     }
     return { ok: true, root };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * 把 ws 的 vault 归档到 .trash/<slug>-<timestamp>/ — 用于 DELETE /workspaces/:id 后清理.
+ *
+ * 设计:
+ *   - 不 hard delete (用户的访谈 / 抽取数据可能未来想恢复)
+ *   - .trash 与所有 ws vault 同级 (data/content-wiki/.trash/), 不会被 router 看到
+ *     (路由只列以 slug 命名的子目录, .trash 开头的一律不暴露)
+ *   - 失败不抛, 返回 ok=false 给上层 console.warn
+ *   - 幂等: vault 不存在 → ok=true (无事可做)
+ */
+export async function archiveWorkspaceVault(
+  slug: string,
+): Promise<{ ok: boolean; archivedTo?: string; error?: string; reason?: 'not-found' }> {
+  let root: string;
+  try {
+    root = resolveWikiRoot({ workspaceSlug: slug, strict: true });
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+  try {
+    await access(root);
+  } catch {
+    // vault 目录本来不存在 — 没事干, 视为成功
+    return { ok: true, reason: 'not-found' };
+  }
+  const trashDir = resolve(dirname(root), '.trash');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const archivedTo = resolve(trashDir, `${slug}-${ts}`);
+  try {
+    await mkdir(trashDir, { recursive: true });
+    await rename(root, archivedTo);
+    return { ok: true, archivedTo };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
