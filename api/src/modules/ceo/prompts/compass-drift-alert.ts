@@ -42,8 +42,11 @@ export const compassDriftAlertPrompt: PromptDef<OutT> = {
 漂移的硬证据（按优先级使用）：
 1. **已被推翻的反事实**（current_validity='invalid'）— 这是"决策被事实证伪"的硬信号，severity 默认 high；
    fact_text 必须引用 rejected_path 关键词
-2. **概念漂移术语**（critical/high）— 这是"语义层漂移"，意味着团队对核心概念已有分歧；
-   通常对应 medium severity；fact_text 须含术语本身 + 至少两种用法之一的描述
+2. **概念漂移术语**（critical/high，含具体 usage 列表）— 每条术语下方有 ✓/✗ 标记的真实使用案例：
+   - ✗ = 该次使用被判定为错误/失配，是漂移的最强信号
+   - ✓ = 正确使用，但当 misuse>0 或 usage 数过多（>15）时同样是"过度负载"信号
+   fact_text 必须引用 outcome 字段的具体内容（项目名/数字/事件），禁止编造"团队 A 觉得 / 团队 B 觉得"这种没有
+   出处的对照；如果有 ✗ 案例，至少 1 条 alert 的 fact_text 须直接引述该 outcome
 3. judgments 中的 disagreement / build 类，作为补充
 
 仅输出 JSON：{"alerts":[{line_id,line_name,hypothesis_text,fact_text,severity,source_meeting_id},...]}`,
@@ -59,12 +62,15 @@ export const compassDriftAlertPrompt: PromptDef<OutT> = {
         }`
       : '';
     const driftBlock = ctx.conceptDrifts.length > 0
-      ? `\n\n概念漂移术语（${ctx.conceptDrifts.length}，high/critical 优先）：\n${
+      ? `\n\n概念漂移术语（${ctx.conceptDrifts.length}，high/critical 优先；usage=总使用次数, misuse=用错次数）：\n${
           ctx.conceptDrifts.slice(0, 8).map((d) => {
-            const defs = d.definitions.length > 0
-              ? d.definitions.slice(0, 2).map((x) => `"${x.defText.slice(0, 70)}"`).join(' VS ')
-              : '(无定义片段)';
-            return `- [${d.severity}] ${d.term} ｜ ${defs}`;
+            const lines = [`- [${d.severity}] ${d.term} (usage=${d.usageCount}, misuse=${d.misuseCount})`];
+            for (const u of d.usages.slice(0, 3)) {
+              const tag = u.correctlyUsed ? '✓' : '✗';
+              const mid = u.meetingId ? u.meetingId.slice(0, 8) : '?';
+              lines.push(`    ${tag} [meeting=${mid}] ${u.outcome.slice(0, 160)}`);
+            }
+            return lines.join('\n');
           }).join('\n')
         }`
       : '';

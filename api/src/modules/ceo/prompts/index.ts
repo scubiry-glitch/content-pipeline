@@ -257,16 +257,26 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
       [scopeId],
     );
     conceptDrifts = (r.rows as any[]).map((row) => {
-      const defs = Array.isArray(row.definition_at_meeting) ? row.definition_at_meeting : [];
+      const defs: any[] = Array.isArray(row.definition_at_meeting) ? row.definition_at_meeting : [];
+      const usageCount = defs.length;
+      const misuses = defs.filter((d) => d?.correctly_used === false);
+      const correct = defs.filter((d) => d?.correctly_used !== false);
+      // 优先暴露错误用法，再补充正确用法到 3 条
+      const picked = [...misuses.slice(0, 2), ...correct.slice(0, Math.max(0, 3 - Math.min(2, misuses.length)))].slice(0, 3);
       return {
         term: String(row.term),
         severity: row.drift_severity as 'med' | 'high' | 'critical',
         scopeId: row.scope_id_text ? String(row.scope_id_text) : null,
         firstObservedAt: row.first_observed_at ? new Date(row.first_observed_at).toISOString() : null,
         lastObservedAt: row.last_observed_at ? new Date(row.last_observed_at).toISOString() : null,
-        definitions: defs.slice(0, 3).map((d: any) => ({
+        usageCount,
+        misuseCount: misuses.length,
+        usages: picked.map((d: any) => ({
           meetingId: d?.meeting_id ? String(d.meeting_id) : null,
-          defText: String(d?.def_text ?? '').slice(0, 160),
+          observedAt: d?.observed_at ? String(d.observed_at) : null,
+          outcome: String(d?.outcome ?? '').slice(0, 220),
+          correctlyUsed: d?.correctly_used !== false,
+          modelVariant: d?.model_variant ? String(d.model_variant) : null,
         })),
       };
     });

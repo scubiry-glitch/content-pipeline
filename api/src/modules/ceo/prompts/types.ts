@@ -34,15 +34,28 @@ export interface PromptCtx {
   /** scope 下利益相关方（situation-signal 用） */
   stakeholders: { id: string; name: string; kind: string; heat: number }[];
   /** 知识轴 · 概念漂移（mn_concept_drifts，severity in ['med','high','critical']）
-   *  scopeId == null 表示跨 scope 全局漂移；war-room-spark 用它做"语义裂缝"输入 */
+   *  scopeId == null 表示跨 scope 全局漂移；war-room-spark 用它做"语义裂缝"输入。
+   *  注意：mn_concept_drifts.definition_at_meeting jsonb 里实际字段是
+   *  {source, outcome, meeting_id, observed_at, model_variant, correctly_used}，
+   *  不是 schema 注释里说的 {def_text, by_person_id}（迁移文档与实际数据不符）。 */
   conceptDrifts: {
     term: string;
     severity: 'med' | 'high' | 'critical';
     scopeId: string | null;
     firstObservedAt: string | null;
     lastObservedAt: string | null;
-    /** 各会议给出的定义片段（最多 3 条，用于让 LLM 看到分歧点）*/
-    definitions: { meetingId: string | null; defText: string }[];
+    /** 该术语被用过的总次数 */
+    usageCount: number;
+    /** 其中"用错/失配"次数（correctly_used=false） */
+    misuseCount: number;
+    /** 实际使用案例（最多 3 条，优先 misuse=true 的） */
+    usages: {
+      meetingId: string | null;
+      observedAt: string | null;
+      outcome: string;
+      correctlyUsed: boolean;
+      modelVariant: string | null;
+    }[];
   }[];
   /** 知识轴 · 反事实（mn_counterfactuals，current_validity='unclear' 且 next_check 已到/即将到）
    *  compass-narrative 用它在"漂移段"引用"6 个月前拒绝的 X 现在如何" */

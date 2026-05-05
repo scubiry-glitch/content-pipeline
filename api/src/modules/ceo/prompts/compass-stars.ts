@@ -35,7 +35,7 @@ export const compassStarsPrompt: PromptDef<OutT> = {
   label: 'Compass · 战略主线生成',
   prism: 'compass',
   outputSchema: Out,
-  maxTokens: 1500,
+  maxTokens: 3500,
   temperature: 0.6,
   citationDomains: ['meeting'],
 
