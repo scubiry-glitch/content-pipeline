@@ -777,7 +777,7 @@ export function DimShell({
   return (
     <div style={{
       width: '100%', maxWidth: '100vw', height: '100%', background: 'var(--paper)',
-      display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : '64px 1fr', color: 'var(--ink)',
+      display: 'grid', gridTemplateRows: isMobile ? 'auto 1fr' : 'auto 1fr', color: 'var(--ink)',
       fontFamily: 'var(--sans)', overflow: 'hidden',
     }}>
       {isMobile ? (
@@ -866,16 +866,46 @@ export function DimShell({
           </div>
         </header>
       ) : (
+        // Desktop: 两行布局 — Row1 标题 + 跨轴/RunBadge,Row2 tab strip + 当前 sub label
+        // 单行布局在 6-tab 轴(项目轴)上 tabs 拥挤,拆两行后给 tabs 整行空间
         <header style={{
-          display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
+          display: 'flex', flexDirection: 'column',
           borderBottom: '1px solid var(--line-2)',
         }}>
-          {axisTitle}
-          <div style={{ marginLeft: 18 }}>{tabStrip}</div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            {subLabel && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{subLabel}</span>}
-            <CrossAxisLink axis={axis} />
-            <RunBadge axis={axis} onRegenerate={onOpenRegenerate} />
+          {/* Row 1: 轴标题 · ScopePill · 跨轴 / RunBadge
+              ScopePill 从 MeetingShell header 收编进来,axis 页面桌面端外层 header 已隐藏,
+              避免 3 row 堆叠 */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '10px 28px 8px',
+            minHeight: 52,
+          }}>
+            {axisTitle}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+              <ScopePill />
+              <CrossAxisLink axis={axis} />
+              <RunBadge axis={axis} onRegenerate={onOpenRegenerate} />
+            </div>
+          </div>
+          {/* Row 2: tab strip 整行 + 当前 sub label */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '0 28px 10px',
+            minWidth: 0,
+          }}>
+            <div style={{ minWidth: 0, overflowX: 'auto' }} className="mp-scroll-h">
+              {tabStrip}
+            </div>
+            {subLabel && (
+              <span style={{
+                fontSize: 12, color: 'var(--ink-3)',
+                fontFamily: 'var(--sans)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                minWidth: 0,
+              }}>
+                {subLabel}
+              </span>
+            )}
           </div>
         </header>
       )}

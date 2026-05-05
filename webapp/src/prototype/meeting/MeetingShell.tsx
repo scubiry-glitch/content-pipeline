@@ -65,6 +65,10 @@ export function MeetingShell() {
   }, {});
 
   const onDetailPage = /^\/meeting\/[^/]+\/(a|b|c)/.test(location.pathname);
+  // Axis 聚合页面 (/meeting/axes/people|projects|knowledge|meta|longitudinal) 自带 DimShell header,
+  // 桌面端隐藏外层 MeetingShell header 避免 3 row 堆叠。Mobile 仍保留(承载 hamburger)。
+  const onAxisPage = /^\/meeting\/(axes\/|longitudinal)/.test(location.pathname);
+  const hideShellHeader = onDetailPage || (onAxisPage && !isMobile);
   const isCollapsed = !isMobile && collapsed;
 
   const sidebar = (
@@ -241,7 +245,7 @@ export function MeetingShell() {
       )}
 
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {!onDetailPage && (
+        {!hideShellHeader && (
           <header style={{
             borderBottom: '1px solid var(--line-2)',
             background: 'var(--paper)',
