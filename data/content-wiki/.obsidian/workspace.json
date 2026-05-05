@@ -197,6 +197,14 @@
   },
   "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
+    "default/sources/meeting/meeting-chats/2a30e464-1778016110.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778016091.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778015090.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778015072.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778015058.md",
+    "default/sources/meeting/scopes/topic/AI-0ed73afe/_index.md",
+    "default/sources/meeting/scopes/topic/AI-0ed73afe",
+    "default/sources/meeting/per-meeting",
     "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7/_index.md",
     "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7",
     "default/sources/meeting/meeting-chats/ed0235de-1777648817.md",
@@ -210,7 +218,6 @@
     "default/sources/meeting/scopes/client/左海-af17d047/_index.md",
     "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
     "default/sources/meeting/meeting-chats/6050f222-1777947618.md",
-    "default/sources/meeting/per-meeting",
     "default/domains/E08-房地产/E08.RESID-住宅.md",
     "default/concepts/technology/Poptek软件.md",
     "default/concepts/mental-model/熵增（应用于组织管理）.md",
@@ -225,13 +232,6 @@
     "default/meeting-chats/d4833343-1777385717.md",
     "default/sources/meeting/meeting-chats",
     "default/meeting-chats/eff87d6c-1777385719.md",
-    "default/sources/meeting/axes/people-人物/承诺兑现.md",
-    "default/meeting-chats",
-    "default/sources/meeting/axes/people-人物/沉默信号.md",
-    "default/sources/document/tavily_y36tfn.md",
-    "default/sources/document/tavily_ndo30n.md",
-    "default/domains/E02-金融科技/_金融_房地产.md",
-    "default/entities/location/宁波市.md",
-    "default/concepts/counterfactual"
+    "default/meeting-chats"
   ]
 }

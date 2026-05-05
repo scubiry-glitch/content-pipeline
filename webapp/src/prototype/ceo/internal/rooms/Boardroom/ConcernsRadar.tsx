@@ -3,12 +3,20 @@
 // 来源: 07-archive/会议纪要 (20260501)/boardroom.html .radar block
 
 import { DIRECTOR_CARDS, type DirectorCard } from './_boardroomFixtures';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface Props {
   cards?: DirectorCard[];
 }
 
-export function ConcernsRadar({ cards = DIRECTOR_CARDS }: Props) {
+export function ConcernsRadar({ cards }: Props) {
+  const forceMock = useForceMock();
+  // 父组件没传 → forceMock 时回退 fixture, 否则空 (API 真实空状态)
+  const display = cards && cards.length > 0
+    ? cards
+    : (forceMock ? DIRECTOR_CARDS : []);
+  // 保持下方代码用 cards 变量名最少改动
+  cards = display;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 18 }}>
       <div style={{ width: 320, height: 280 }}>

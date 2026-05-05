@@ -1707,13 +1707,38 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       if (!profile || typeof profile !== 'object' || !profile.content) {
         return { cached: false };
       }
+
+      // 缓存陈旧度：自 generatedAt 之后该人物出现在多少场新会议（4 张轴表 union 去重）
+      let meetingsSinceCache: number | null = null;
+      const generatedAt: string | null = profile.generatedAt ?? null;
+      if (generatedAt) {
+        try {
+          const sc = await db.query(
+            `SELECT COUNT(DISTINCT meeting_id)::int AS c FROM (
+               SELECT meeting_id FROM mn_speech_quality        WHERE person_id = $1 AND created_at > $2::timestamptz
+               UNION
+               SELECT meeting_id FROM mn_commitments           WHERE person_id = $1 AND created_at > $2::timestamptz
+               UNION
+               SELECT meeting_id FROM mn_role_trajectory_points WHERE person_id = $1 AND COALESCE(occurred_at, created_at) > $2::timestamptz
+               UNION
+               SELECT meeting_id FROM mn_silence_signals       WHERE person_id = $1 AND created_at > $2::timestamptz
+             ) u`,
+            [id, generatedAt],
+          );
+          meetingsSinceCache = sc.rows[0]?.c ?? 0;
+        } catch (e) {
+          request.log.warn({ err: e, personId: id }, 'meetingsSinceCache count failed (non-fatal)');
+        }
+      }
+
       return {
         cached: true,
         personName: r.rows[0].canonical_name,
         content: profile.content,
         model: profile.model ?? null,
-        generatedAt: profile.generatedAt ?? null,
+        generatedAt,
         sources: profile.sources ?? null,
+        meetingsSinceCache,
       };
     });
 
@@ -2078,7 +2103,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.post('/people/:id/import-as-expert', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
-      const body = (request.body ?? {}) as { domainCode?: string; level?: 'senior' | 'domain'; expertIdSlug?: string };
+      const body = (request.body ?? {}) as { domainCode?: string; level?: 'senior' | 'domain'; expertIdSlug?: string; dryRun?: boolean };
+      const dryRun = body.dryRun === true;
       if (!body.domainCode || !body.level) {
         reply.status(400);
         return { error: 'BAD_REQUEST', message: 'domainCode 和 level 必填' };
@@ -2180,7 +2206,48 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         ? parsed.method
         : { frameworks: [], reasoning: '', analysis_steps: [] };
 
-      // 6) UPSERT (与 expertSeed.ts 同一套字段)
+      const finalName = (typeof parsed.name === 'string' && parsed.name.trim()) ? parsed.name.trim() : canonicalName;
+      const finalAntiPatterns = Array.isArray(parsed.anti_patterns) ? parsed.anti_patterns.filter((s: any) => typeof s === 'string') : [];
+      const finalSignaturePhrases = Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases.filter((s: any) => typeof s === 'string') : [];
+
+      // 6) 检查目标 expert_id 是否已存在 —— 用于前端 preview 区分 create / overwrite
+      const existing = await db.query(
+        `SELECT expert_id, name, domain, display_metadata, updated_at
+           FROM expert_profiles WHERE expert_id = $1`,
+        [expert_id],
+      );
+      const existsRow = existing.rows[0] ?? null;
+
+      // 7) Dry-run：返回会写入什么，但不真写
+      if (dryRun) {
+        return {
+          ok: true,
+          dryRun: true,
+          willOverwrite: !!existsRow,
+          existing: existsRow ? {
+            expert_id: existsRow.expert_id,
+            name: existsRow.name,
+            domain: existsRow.domain,
+            display_metadata: existsRow.display_metadata,
+            updated_at: existsRow.updated_at,
+          } : null,
+          preview: {
+            expert_id,
+            name: finalName,
+            domain,
+            persona,
+            method,
+            signature_phrases: finalSignaturePhrases,
+            anti_patterns: finalAntiPatterns,
+            display_metadata: dm,
+          },
+          domainCode: body.domainCode,
+          domainName,
+          level: body.level,
+        };
+      }
+
+      // 8) 实写 UPSERT
       await db.query(
         `INSERT INTO expert_profiles
            (expert_id, name, domain, persona, method, emm, constraints_config, output_schema,
@@ -2201,20 +2268,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
            updated_at = NOW()`,
         [
           expert_id,
-          (typeof parsed.name === 'string' && parsed.name.trim()) ? parsed.name.trim() : canonicalName,
+          finalName,
           domain,
           JSON.stringify(persona),
           JSON.stringify(method),
           null,
           JSON.stringify({ must_conclude: false, allow_assumption: true }),
           JSON.stringify({ format: 'markdown', sections: [] }),
-          Array.isArray(parsed.anti_patterns) ? parsed.anti_patterns.filter((s: any) => typeof s === 'string') : [],
-          Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases.filter((s: any) => typeof s === 'string') : [],
+          finalAntiPatterns,
+          finalSignaturePhrases,
           JSON.stringify(dm),
         ],
       );
 
-      // 7) 在 mn_people.metadata 里记一笔 import 痕迹（方便人查"这个人导出过哪个专家"）
+      // 9) 在 mn_people.metadata 里记一笔 import 痕迹（方便人查"这个人导出过哪个专家"）
       try {
         await db.query(
           `UPDATE mn_people
@@ -2227,13 +2294,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
             domainCode: body.domainCode,
             level: body.level,
             exportedAt: new Date().toISOString(),
+            wasOverwrite: !!existsRow,
           })],
         );
       } catch (e) {
         request.log.warn({ err: e, personId: id }, 'expert export trace persist failed (non-fatal)');
       }
 
-      return { ok: true, expert_id, domainCode: body.domainCode, domainName, level: body.level };
+      return {
+        ok: true,
+        dryRun: false,
+        wasOverwrite: !!existsRow,
+        expert_id,
+        domainCode: body.domainCode,
+        domainName,
+        level: body.level,
+      };
     });
 
     /**

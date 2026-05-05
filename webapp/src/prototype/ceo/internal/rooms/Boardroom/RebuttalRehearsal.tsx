@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { REBUTTALS, type RebuttalCard } from './_boardroomFixtures';
 import { EnqueueRunButton } from '../../../shared/EnqueueRunButton';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface Props {
   rebuttals?: RebuttalCard[];
@@ -18,10 +19,12 @@ interface ApiRebuttal {
   strength_score: number;
 }
 
-export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
+export function RebuttalRehearsal({ rebuttals }: Props) {
+  const forceMock = useForceMock();
   const [apiData, setApiData] = useState<ApiRebuttal[] | null>(null);
 
   useEffect(() => {
+    if (forceMock) return;
     let cancelled = false;
     fetch('/api/v1/ceo/boardroom/rebuttals')
       .then((r) => r.json())
@@ -33,9 +36,9 @@ export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [forceMock]);
 
-  // 优先 API 数据；为空时用 fixture
+  // forceMock=true → fixture; 否则只显示 API 数据 (空就空)
   const display = apiData
     ? apiData.map((r) => ({
         attacker: r.attacker,
@@ -43,7 +46,9 @@ export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
         defense: r.defense_text,
         strength: Number(r.strength_score),
       }))
-    : rebuttals;
+    : forceMock
+    ? (rebuttals ?? REBUTTALS)
+    : [];
 
   return (
     <div>
@@ -64,7 +69,11 @@ export function RebuttalRehearsal({ rebuttals = REBUTTALS }: Props) {
             letterSpacing: 0.3,
           }}
         >
-          {apiData ? `LIVE · 共 ${apiData.length} 条` : 'FIXTURE · 演示数据'}
+          {apiData
+            ? `LIVE · 共 ${apiData.length} 条`
+            : forceMock
+            ? 'FIXTURE · 演示数据'
+            : '暂无反方演练'}
         </span>
         <EnqueueRunButton
           axis="boardroom-rebuttal"

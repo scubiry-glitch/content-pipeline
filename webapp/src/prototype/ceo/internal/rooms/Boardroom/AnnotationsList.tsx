@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ANNOTATIONS } from './_boardroomFixtures';
 import { BindExpertModal } from './BindExpertModal';
 import { RunProgressPanel } from '../../../shared/RunProgressPanel';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface RealAnnotation {
   id: string;
@@ -36,6 +37,7 @@ const MODE_COLOR: Record<string, string> = {
 };
 
 export function AnnotationsList() {
+  const forceMock = useForceMock();
   const [modalOpen, setModalOpen] = useState(false);
   // 已绑定到本 Boardroom 的 expert_id 集合（含原"createdExpertIds"语义；
   // 现在主要来源是 BindExpertModal 选了已有专家，少数走"+ 仍要新建"分支）
@@ -46,6 +48,10 @@ export function AnnotationsList() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const fetchAnnotations = useCallback(async () => {
+    if (forceMock) {
+      setItems([]);
+      return;
+    }
     try {
       const res = await fetch('/api/v1/ceo/boardroom/annotations?limit=10');
       if (!res.ok) {
@@ -57,7 +63,7 @@ export function AnnotationsList() {
     } catch {
       setItems([]);
     }
-  }, []);
+  }, [forceMock]);
 
   useEffect(() => {
     void fetchAnnotations();
@@ -104,6 +110,7 @@ export function AnnotationsList() {
         expert_id: a.expert_id,
       }));
     }
+    if (!forceMock) return [];  // API 空 + 非 mock → 空
     return ANNOTATIONS.map((a, i) => ({
       kind: 'fixture' as const,
       id: `fx-${i}`,
@@ -116,7 +123,7 @@ export function AnnotationsList() {
       citations: [],
       expert_id: '',
     }));
-  }, [items, useReal]);
+  }, [items, useReal, forceMock]);
 
   return (
     <div>
@@ -145,7 +152,9 @@ export function AnnotationsList() {
         >
           {useReal
             ? `LIVE · ${items!.length} 条批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`
-            : `fixture · ${ANNOTATIONS.length} 条批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`}
+            : forceMock
+            ? `fixture · ${ANNOTATIONS.length} 条批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`
+            : `暂无批注${boundExpertIds.length > 0 ? ` · 已绑定 ${boundExpertIds.length} 位专家` : ''}`}
         </span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button

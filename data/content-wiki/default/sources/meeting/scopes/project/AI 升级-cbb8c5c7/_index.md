@@ -5,7 +5,7 @@ canonical_name: AI 升级
 slug: ai-0c0mu
 app: meeting-notes
 generatedBy: meeting-scope-generator
-lastEditedAt: "2026-05-05T19:46:38.346Z"
+lastEditedAt: "2026-05-05T20:15:19.036Z"
 factCount: 91
 entityCount: 3
 ---

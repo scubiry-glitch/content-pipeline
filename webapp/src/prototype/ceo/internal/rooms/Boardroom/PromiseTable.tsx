@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { PROMISES } from './_boardroomFixtures';
 import { useSelectedScopes } from '../../../shared/ScopePicker';
 import { PersonChip } from '../../../shared/PersonChip';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface ApiPromise {
   id: string;
@@ -49,10 +50,17 @@ const SOURCE_TONE: Record<'mn' | 'ceo', { bg: string; ink: string; label: string
 
 export function PromiseTable() {
   const scopeIds = useSelectedScopes();
+  const forceMock = useForceMock();
   const [items, setItems] = useState<ApiPromise[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (forceMock) {
+      // 强制 mock 模式: 跳过 API, 直接 fixture
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     const q = scopeIds.length > 0 ? `?scopes=${scopeIds.join(',')}` : '';
     fetch(`/api/v1/ceo/boardroom/promises${q}`)
@@ -68,25 +76,25 @@ export function PromiseTable() {
     return () => {
       cancelled = true;
     };
-  }, [scopeIds.join(',')]);
+  }, [scopeIds.join(','), forceMock]);
 
-  // API 空时回退 fixture (做演示)
+  // forceMock=true → 用 fixture; 否则只显示 API 真实数据 (空就空)
   const display: Array<{ what: string; owner: string; status: string; source: 'mn' | 'ceo'; person_id?: string | null; person_role?: string | null; statusText?: string }> =
-    items && items.length > 0
-      ? items.map((p) => ({
+    forceMock
+      ? PROMISES.map((p) => ({
+          what: p.what,
+          owner: p.owner,
+          status: p.status,
+          source: 'ceo' as const,
+          statusText: p.statusText,
+        }))
+      : (items ?? []).map((p) => ({
           what: p.what,
           owner: p.owner ?? '—',
           status: p.status,
           source: p.source,
           person_id: p.person_id,
           person_role: p.person_role,
-        }))
-      : PROMISES.map((p) => ({
-          what: p.what,
-          owner: p.owner,
-          status: p.status,
-          source: 'ceo' as const,
-          statusText: p.statusText,
         }));
 
   return (

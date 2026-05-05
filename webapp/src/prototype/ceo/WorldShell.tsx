@@ -8,6 +8,9 @@ import { PersonDrawerProvider } from './shared/PersonDrawerProvider';
 import { PersonDrawer } from './shared/PersonDrawer';
 import { useIsMobile } from '../_useIsMobile';
 import { WorkspacePill } from '../../components/WorkspacePill';
+// 复用 meeting prototype 的 mock 开关 (右下角 pill, Alt+M 切换);
+// CEO 各房间 fixture 兜底改成"只有 forceMock=true 时显示", 默认 API 空就空.
+import { MockToggleProvider, MockToggleBar } from '../meeting/_mockToggle';
 
 type Mode = 'external' | 'internal';
 type ExtTab = 'meetings' | 'library';
@@ -41,8 +44,10 @@ export function WorldShell() {
   };
 
   return (
+    <MockToggleProvider>
     <PersonDrawerProvider>
     <PersonDrawer />
+    <MockToggleBar />
     <div
       className={`ceo-proto ${isExternal ? '' : 'ceo-proto-internal'}`}
       style={{
@@ -96,6 +101,7 @@ export function WorldShell() {
       )}
     </div>
     </PersonDrawerProvider>
+    </MockToggleProvider>
   );
 }
 
