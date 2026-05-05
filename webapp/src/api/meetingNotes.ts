@@ -434,8 +434,9 @@ export const meetingNotesApi = {
     jget<{ shares: Array<{ id: string; share_token: string; mode: string; targets: string[]; created_at: string; expires_at: string | null }> }>(`/meetings/${meetingId}/shares`),
   deleteShare: (meetingId: string, shareId: string) =>
     jdelete<{ ok: boolean }>(`/meetings/${meetingId}/shares/${shareId}`),
-  getSharedMeeting: (token: string) =>
-    fetch(`/api/v1/meeting-notes/shared/${token}`).then((r) => r.ok ? r.json() : Promise.reject(r)),
+  getSharedMeeting: (token: string, view?: 'A' | 'B' | 'C') =>
+    fetch(`/api/v1/meeting-notes/shared/${token}${view ? `?view=${view}` : ''}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(r)),
   /**
    * 把分享的会议 fork 到当前用户工作区(asset-only):
    * 复制 metadata + transcript;不复制 axis 数据,B 拿到副本后需在自己 ws 重跑引擎。

@@ -4,7 +4,7 @@
 //   · 隐藏「返回库」按钮、「分享」按钮、Mock 开关
 
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Icon, MonoMeta, Chip } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,7 +15,7 @@ export type MeetingShellContext = {
   shellTitle: string;
   meetingDetail: any | null;
   detailState: 'loading' | 'ok' | 'error' | 'skipped';
-  health: null;
+  health: any | null;
 };
 
 export function useMeetingShellTitleShared(fallback?: string): string {
@@ -42,11 +42,19 @@ export function SharedMeetingDetailShell() {
   const [apiTitle, setApiTitle] = useState<string | null>(null);
   const [apiDate, setApiDate] = useState<string | null>(null);
   const [apiDetail, setApiDetail] = useState<any | null>(null);
+  const [apiHealth, setApiHealth] = useState<any | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('loading');
   const [meetingId, setMeetingId] = useState<string>('');
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // 当前 url 末段对应的 view (a/b/c → A/B/C); 默认 A
+  const location = useLocation();
+  const currentView: 'A' | 'B' | 'C' = (() => {
+    const seg = (location.pathname.split('/').pop() ?? '').toLowerCase();
+    return seg === 'b' ? 'B' : seg === 'c' ? 'C' : 'A';
+  })();
 
   const onImport = async () => {
     if (importing) return;
@@ -64,20 +72,21 @@ export function SharedMeetingDetailShell() {
   useEffect(() => {
     if (!token) { setApiState('error'); return; }
     setApiState('loading');
-    meetingNotesApi.getSharedMeeting(token)
+    meetingNotesApi.getSharedMeeting(token, currentView)
       .then((res: any) => {
         const m = res?.meeting ?? {};
         setMeetingId(m.meetingId ?? '');
         if (m.title) setApiTitle(String(m.title));
         if (m.date) setApiDate(String(m.date).slice(0, 10));
         // Variants 读 data.analysis 才是真正内容; 内部 /meetings/:id/detail 返回
-        // { analysis: {...} }, 而 /shared/:token 直接把 meeting body 摊平为 res.meeting.
+        // { analysis: {...} }, 而 /shared/:token 把 meeting body 摊平为 res.meeting.
         // 这里包一层对齐, 让 SharedMeetingDetail 的 C 视图复用同一个 Variants.
         setApiDetail({ analysis: m });
+        setApiHealth(res?.health ?? null);  // C 视图情绪温度曲线 / 顶部 4 徽章用
         setApiState('ok');
       })
       .catch(() => setApiState('error'));
-  }, [token]);
+  }, [token, currentView]);
 
   const effectiveTitle = apiTitle ?? (apiState === 'loading' ? '加载中…' : '—');
 
@@ -171,7 +180,7 @@ export function SharedMeetingDetailShell() {
           shellTitle: effectiveTitle,
           meetingDetail: apiDetail,
           detailState: apiState,
-          health: null,
+          health: apiHealth,
         } satisfies MeetingShellContext} />
       </main>
 
