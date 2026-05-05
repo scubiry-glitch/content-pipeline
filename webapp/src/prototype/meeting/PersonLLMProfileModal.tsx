@@ -3,7 +3,7 @@
 // 调 POST /people/:id/llm-profile 把该人物的全部历史轨迹（承诺/角色/发言/沉默/偏差
 // + 原文片段）丢给 LLM，生成 markdown 画像。结果可选 persist 到 mn_people.metadata。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { EXPERT_DOMAINS } from '../../config/expertDomains';
 import { Icon } from './_atoms';
@@ -28,6 +28,8 @@ type Result = {
   usage: { inputTokens?: number; outputTokens?: number } | null;
   /** true=来自 mn_people.metadata 缓存，false=本次现场生成 */
   fromCache: boolean;
+  /** 自 generatedAt 之后又参与了多少场新会议（仅 fromCache=true 有效） */
+  meetingsSinceCache?: number | null;
 };
 
 export function PersonLLMProfileModal({
@@ -50,30 +52,81 @@ export function PersonLLMProfileModal({
   // 写入专家库相关：domain + level 用户手选，提升准确率
   const [exportDomainCode, setExportDomainCode] = useState<string>('S');
   const [exportLevel, setExportLevel] = useState<'senior' | 'domain'>('senior');
-  const [exporting, setExporting] = useState(false);
-  const [exported, setExported] = useState<{ expert_id: string; domainName: string; level: string } | null>(null);
+  // phase: idle = 未开始 / previewing = 正在 dry-run / preview = preview 已就绪等用户确认 / confirming = 正在真写 / done = 写入完成
+  type ExportPhase = 'idle' | 'previewing' | 'preview' | 'confirming' | 'done';
+  const [exportPhase, setExportPhase] = useState<ExportPhase>('idle');
+  const [exportPreview, setExportPreview] = useState<{
+    willOverwrite: boolean;
+    existing: { expert_id: string; name: string; domain: string[] | null; updated_at: string } | null;
+    preview: {
+      expert_id: string; name: string; domain: string[];
+      signature_phrases: string[]; anti_patterns: string[];
+      display_metadata: any;
+    };
+    domainName: string;
+  } | null>(null);
+  const [exported, setExported] = useState<{ expert_id: string; domainName: string; level: string; wasOverwrite: boolean } | null>(null);
   const [exportErr, setExportErr] = useState<string | null>(null);
 
-  async function exportToExpertLibrary() {
-    setExporting(true);
+  function exportErrMsg(e: any) {
+    const code = (e as { code?: string }).code;
+    return code === 'NO_PROFILE' ? '请先点"保存到人物 metadata"再导入。'
+      : code === 'NO_JSON_BLOCK' ? '画像里没有结构化 JSON 区块，请点"重新生成"再试。'
+      : code === 'JSON_PARSE_FAIL' ? `LLM 生成的 JSON 不合法：${e?.message ?? ''}`
+      : e?.message ?? String(e);
+  }
+
+  async function previewExport() {
+    setExportPhase('previewing');
+    setExportErr(null);
+    try {
+      const r = await meetingNotesApi.importPersonAsExpert(personId, {
+        domainCode: exportDomainCode,
+        level: exportLevel,
+        dryRun: true,
+      });
+      if (r.dryRun === false) {
+        // 不该走到这里（我们传的是 dryRun:true），保险一下
+        setExported({ expert_id: r.expert_id, domainName: r.domainName, level: r.level, wasOverwrite: r.wasOverwrite });
+        setExportPhase('done');
+        return;
+      }
+      setExportPreview({
+        willOverwrite: r.willOverwrite,
+        existing: r.existing ? {
+          expert_id: r.existing.expert_id, name: r.existing.name,
+          domain: r.existing.domain, updated_at: r.existing.updated_at,
+        } : null,
+        preview: r.preview,
+        domainName: r.domainName,
+      });
+      setExportPhase('preview');
+    } catch (e: any) {
+      setExportErr(exportErrMsg(e));
+      setExportPhase('idle');
+    }
+  }
+
+  async function confirmExport() {
+    setExportPhase('confirming');
     setExportErr(null);
     try {
       const r = await meetingNotesApi.importPersonAsExpert(personId, {
         domainCode: exportDomainCode,
         level: exportLevel,
       });
-      setExported({ expert_id: r.expert_id, domainName: r.domainName, level: r.level });
+      if (r.dryRun === true) return; // 不会发生
+      setExported({ expert_id: r.expert_id, domainName: r.domainName, level: r.level, wasOverwrite: r.wasOverwrite });
+      setExportPhase('done');
     } catch (e: any) {
-      const code = (e as { code?: string }).code;
-      setExportErr(
-        code === 'NO_PROFILE' ? '请先点"保存到人物 metadata"再导入。'
-          : code === 'NO_JSON_BLOCK' ? '画像里没有结构化 JSON 区块，请点"重新生成"再试。'
-          : code === 'JSON_PARSE_FAIL' ? `LLM 生成的 JSON 不合法：${e?.message ?? ''}`
-          : e?.message ?? String(e),
-      );
-    } finally {
-      setExporting(false);
+      setExportErr(exportErrMsg(e));
+      setExportPhase('preview');
     }
+  }
+
+  function cancelExportPreview() {
+    setExportPreview(null);
+    setExportPhase('idle');
   }
 
   async function generate(persist: boolean) {
@@ -98,7 +151,16 @@ export function PersonLLMProfileModal({
     }
   }
 
+  // React 18 StrictMode 在 dev 下会 mount → unmount → mount 双跑 effect。
+  // 上一版只用 cancelled 标志能跳过重复 setState，但 fetch 已经发出去，
+  // 后端会真的跑两遍 LLM（10-30 秒 + 双倍 token）。
+  // 这里用 ref 锁住 (personId|scopeId) 这个键：同一个键的第二次 effect 直接 return。
+  const inflightKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const key = `${personId}|${scopeId ?? ''}`;
+    if (inflightKeyRef.current === key) return;
+    inflightKeyRef.current = key;
+
     let cancelled = false;
     (async () => {
       setState('loading');
@@ -115,6 +177,7 @@ export function PersonLLMProfileModal({
             promptChars: null,
             usage: null,
             fromCache: true,
+            meetingsSinceCache: cached.meetingsSinceCache,
           });
           setState('ok');
           setPersisted(true);
@@ -202,6 +265,16 @@ export function PersonLLMProfileModal({
                   <span>📌 上次保存于 {new Date(result.generatedAt).toLocaleString('zh-CN')}（缓存版，未消耗 token）</span>
                 </div>
               )}
+              {result.fromCache && (result.meetingsSinceCache ?? 0) > 0 && (
+                <div style={{
+                  marginBottom: 8, padding: '6px 10px',
+                  background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4,
+                  fontSize: 11.5, color: '#991b1b',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span>⚠️ 上次保存后该人物又参与了 {result.meetingsSinceCache} 场新会议未纳入画像，建议点"重新生成"</span>
+                </div>
+              )}
               <div style={{
                 marginBottom: 12, padding: '8px 12px',
                 background: 'var(--paper-2)', borderRadius: 4,
@@ -239,19 +312,86 @@ export function PersonLLMProfileModal({
                   fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
                   textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8,
                 }}>导入到专家库</div>
-                {exported ? (
+                {exportPhase === 'done' && exported ? (
                   <div style={{
                     padding: '10px 12px', borderRadius: 4,
                     background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0',
                     fontSize: 12.5, lineHeight: 1.6,
                   }}>
-                    ✓ 已写入专家库：<code style={{ fontFamily: 'var(--mono)' }}>{exported.expert_id}</code>
+                    ✓ {exported.wasOverwrite ? '已覆盖更新' : '已新建'}专家库条目：<code style={{ fontFamily: 'var(--mono)' }}>{exported.expert_id}</code>
                     （{exported.domainName} · {exported.level === 'senior' ? '特级专家' : '领域专家'}）
                     <div style={{ marginTop: 6 }}>
                       <a href="/expert-library" target="_blank" rel="noreferrer" style={{
                         color: '#059669', textDecoration: 'underline',
                       }}>打开专家库 →</a>
                     </div>
+                  </div>
+                ) : exportPhase === 'preview' && exportPreview ? (
+                  <div>
+                    {exportPreview.willOverwrite ? (
+                      <div style={{
+                        padding: '8px 10px', marginBottom: 10,
+                        background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4,
+                        fontSize: 12.5, color: '#854d0e', lineHeight: 1.55,
+                      }}>
+                        ⚠️ 该 expert_id 已存在，确认后会**覆盖**已有专家：
+                        <div style={{ marginTop: 4, fontFamily: 'var(--mono)', fontSize: 11 }}>
+                          existing: {exportPreview.existing?.name} · 上次更新 {exportPreview.existing?.updated_at && new Date(exportPreview.existing.updated_at).toLocaleString('zh-CN')}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '8px 10px', marginBottom: 10,
+                        background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4,
+                        fontSize: 12.5, color: '#065f46',
+                      }}>
+                        ✓ 将**新建**专家
+                      </div>
+                    )}
+                    <div style={{
+                      padding: '10px 12px', marginBottom: 10,
+                      background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 4,
+                      fontSize: 12, lineHeight: 1.7, color: 'var(--ink-2)',
+                    }}>
+                      <div><b>expert_id:</b> <code style={{ fontFamily: 'var(--mono)' }}>{exportPreview.preview.expert_id}</code></div>
+                      <div><b>name:</b> {exportPreview.preview.name}</div>
+                      <div><b>domain:</b> {exportPreview.preview.domain.join(', ')}</div>
+                      <div><b>title:</b> {exportPreview.preview.display_metadata?.profile?.title ?? '—'}</div>
+                      <div><b>signature_phrases:</b> {(exportPreview.preview.signature_phrases || []).slice(0, 3).join(' / ') || '—'}{exportPreview.preview.signature_phrases.length > 3 ? ` +${exportPreview.preview.signature_phrases.length - 3}` : ''}</div>
+                      <div><b>anti_patterns:</b> {(exportPreview.preview.anti_patterns || []).slice(0, 3).join(' / ') || '—'}</div>
+                    </div>
+                    {exportErr && (
+                      <div style={{
+                        padding: '8px 10px', marginBottom: 10,
+                        background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4,
+                        fontSize: 12, color: '#991b1b', lineHeight: 1.5,
+                      }}>{exportErr}</div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={confirmExport}
+                        disabled={exportPhase !== 'preview'}
+                        style={{
+                          padding: '8px 16px', borderRadius: 4, fontSize: 12.5,
+                          border: '1px solid #1A1410',
+                          background: '#1A1410', color: '#F0E8D6',
+                          cursor: 'pointer', fontWeight: 500,
+                        }}
+                      >确认{exportPreview.willOverwrite ? '覆盖' : '写入'}</button>
+                      <button
+                        onClick={cancelExportPreview}
+                        style={{
+                          padding: '8px 14px', borderRadius: 4, fontSize: 12.5,
+                          border: '1px solid var(--line)',
+                          background: 'var(--paper)', color: 'var(--ink-2)',
+                          cursor: 'pointer',
+                        }}
+                      >取消</button>
+                    </div>
+                  </div>
+                ) : exportPhase === 'confirming' ? (
+                  <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--ink-2)' }}>
+                    写入中…
                   </div>
                 ) : (
                   <>
@@ -308,17 +448,17 @@ export function PersonLLMProfileModal({
                       }}>{exportErr}</div>
                     )}
                     <button
-                      onClick={exportToExpertLibrary}
-                      disabled={exporting || (!result.fromCache && !persisted)}
+                      onClick={previewExport}
+                      disabled={exportPhase === 'previewing' || (!result.fromCache && !persisted)}
                       style={{
                         padding: '8px 16px', borderRadius: 4, fontSize: 12.5,
                         border: '1px solid #1A1410',
-                        background: exporting || (!result.fromCache && !persisted) ? 'var(--paper-3)' : '#1A1410',
-                        color: exporting || (!result.fromCache && !persisted) ? 'var(--ink-3)' : '#F0E8D6',
-                        cursor: exporting || (!result.fromCache && !persisted) ? 'not-allowed' : 'pointer',
+                        background: exportPhase === 'previewing' || (!result.fromCache && !persisted) ? 'var(--paper-3)' : '#1A1410',
+                        color: exportPhase === 'previewing' || (!result.fromCache && !persisted) ? 'var(--ink-3)' : '#F0E8D6',
+                        cursor: exportPhase === 'previewing' || (!result.fromCache && !persisted) ? 'not-allowed' : 'pointer',
                         fontWeight: 500,
                       }}
-                    >{exporting ? '写入中…' : '写入专家库'}</button>
+                    >{exportPhase === 'previewing' ? '生成预览中…' : '预览写入'}</button>
                   </>
                 )}
               </div>
