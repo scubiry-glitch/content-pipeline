@@ -15,7 +15,7 @@ import { assertRowInWorkspace, currentWorkspaceId, requireWorkspaceId } from '..
 import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
 import { generate as llmGenerate } from '../../services/llm.js';
 import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
-import { writeAuditEvent } from '../../services/auth/audit.js';
+import { writeAuditEvent, type AuditEvent } from '../../services/auth/audit.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -771,7 +771,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           {
             db: engine.deps.db,
             audit: (input) => writeAuditEvent({
-              event: input.event as any, // S3.2 待扩展 enum;当前 enum 没有时 audit.write 会 warn 但不抛
+              event: input.event as AuditEvent,
               userId: input.userId,
               request,
               metadata: input.metadata,

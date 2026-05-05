@@ -17,7 +17,10 @@ export type AuditEvent =
   | 'password.reset'
   | 'user.create'
   | 'user.disable'
-  | 'workspace.delete';
+  | 'workspace.delete'
+  // 会议跨 ws 操作 (043 加进 CHECK 约束)
+  | 'meeting.shared'
+  | 'meeting.imported';
 
 export interface WriteAuditInput {
   event: AuditEvent;
