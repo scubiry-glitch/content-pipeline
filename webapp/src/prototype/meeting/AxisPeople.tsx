@@ -859,12 +859,17 @@ export function AxisPeople() {
   return (
     <>
       <DimShell axis="人物" tabs={tabs} tab={tab} setTab={setTab} onOpenRegenerate={() => setRegenOpen(true)} mock={isMock} version={version}>
-        <MeetingPicker
-          scopeId={scopeId}
-          autoMeetingId={autoMeetingId}
-          scopeKind={scopeKind}
-          scopeOverridden={!!urlScopeId}
-        />
+        {/* MeetingPicker 只对 meeting 级数据有意义（speech / silence）。
+            scope 级 tab（commitments / trajectory / belief / formation / blind_spots / manage）
+            按 scope 聚合，挂会议下拉是误导。 */}
+        {(tab === 'speech' || tab === 'silence') && (
+          <MeetingPicker
+            scopeId={scopeId}
+            autoMeetingId={autoMeetingId}
+            scopeKind={scopeKind}
+            scopeOverridden={!!urlScopeId}
+          />
+        )}
         {tab === 'commitments' && <PCommitments scopeId={scopeId} />}
         {tab === 'trajectory'  && <PTrajectory scopeId={scopeId} />}
         {tab === 'speech'      && <PSpeech meetingId={meetingId} />}
