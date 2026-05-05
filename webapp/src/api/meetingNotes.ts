@@ -310,6 +310,32 @@ export const meetingNotesApi = {
     >(`/people/${targetId}/merge`, body),
 
   /**
+   * 读取上次"保存到人物 metadata"时持久化的画像，没有则 cached:false。
+   * Modal 打开时先调这个，命中就直接展示，不必再跑一次 LLM。
+   */
+  getPersonLLMProfile: (id: string) =>
+    jget<
+      | { cached: false }
+      | {
+          cached: true;
+          personName: string;
+          content: string;
+          model: string | null;
+          generatedAt: string | null;
+          sources: {
+            meetings: number;
+            commitments: number;
+            roleTrajectory: number;
+            speechRows: number;
+            silenceRows: number;
+            biases: number;
+            segments: number;
+            scopeId: string | null;
+          } | null;
+        }
+    >(`/people/${id}/llm-profile`),
+
+  /**
    * 基于该人物历史会议轨迹（承诺 / 角色 / 发言 / 沉默 / 偏差 + 原文片段）
    * 喂 LLM 生成一份 markdown 人物画像。AxisPeople · manage tab 的"AI 画像"按钮调用。
    * 后端如果没找到任何历史会议返回 409 NO_HISTORY；LLM 不可达返回 503 LLM_UNAVAILABLE。
@@ -338,6 +364,23 @@ export const meetingNotesApi = {
       `/people/${id}/llm-profile${body.scopeId ? `?scopeId=${encodeURIComponent(body.scopeId)}` : ''}`,
       { persist: body.persist ?? false },
     ),
+
+  /**
+   * 把已"保存到人物 metadata"的画像里的 ```json``` 区块抽出来，
+   * 合并用户选择的 domainCode + level，UPSERT 进 expert_profiles 表。
+   * 必须先持久化画像 (POST /llm-profile {persist:true}) 才能调用。
+   */
+  importPersonAsExpert: (
+    id: string,
+    body: { domainCode: string; level: 'senior' | 'domain'; expertIdSlug?: string },
+  ) =>
+    jpost<{
+      ok: true;
+      expert_id: string;
+      domainCode: string;
+      domainName: string;
+      level: 'senior' | 'domain';
+    }>(`/people/${id}/import-as-expert`, body),
 
   /**
    * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。

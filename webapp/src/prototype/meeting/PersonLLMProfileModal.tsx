@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { meetingNotesApi } from '../../api/meetingNotes';
+import { EXPERT_DOMAINS } from '../../config/expertDomains';
 import { Icon } from './_atoms';
 
 type Sources = {
@@ -20,11 +21,13 @@ type Sources = {
 
 type Result = {
   content: string;
-  model: string;
-  generatedAt: string;
-  sources: Sources;
-  promptChars: number;
+  model: string | null;
+  generatedAt: string | null;
+  sources: Sources | null;
+  promptChars: number | null;
   usage: { inputTokens?: number; outputTokens?: number } | null;
+  /** true=来自 mn_people.metadata 缓存，false=本次现场生成 */
+  fromCache: boolean;
 };
 
 export function PersonLLMProfileModal({
@@ -44,12 +47,41 @@ export function PersonLLMProfileModal({
   const [persisting, setPersisting] = useState(false);
   const [persisted, setPersisted] = useState(false);
 
-  async function run(persist: boolean) {
+  // 写入专家库相关：domain + level 用户手选，提升准确率
+  const [exportDomainCode, setExportDomainCode] = useState<string>('S');
+  const [exportLevel, setExportLevel] = useState<'senior' | 'domain'>('senior');
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState<{ expert_id: string; domainName: string; level: string } | null>(null);
+  const [exportErr, setExportErr] = useState<string | null>(null);
+
+  async function exportToExpertLibrary() {
+    setExporting(true);
+    setExportErr(null);
+    try {
+      const r = await meetingNotesApi.importPersonAsExpert(personId, {
+        domainCode: exportDomainCode,
+        level: exportLevel,
+      });
+      setExported({ expert_id: r.expert_id, domainName: r.domainName, level: r.level });
+    } catch (e: any) {
+      const code = (e as { code?: string }).code;
+      setExportErr(
+        code === 'NO_PROFILE' ? '请先点"保存到人物 metadata"再导入。'
+          : code === 'NO_JSON_BLOCK' ? '画像里没有结构化 JSON 区块，请点"重新生成"再试。'
+          : code === 'JSON_PARSE_FAIL' ? `LLM 生成的 JSON 不合法：${e?.message ?? ''}`
+          : e?.message ?? String(e),
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function generate(persist: boolean) {
     if (persist) setPersisting(true);
-    else { setState('loading'); setErrMsg(null); }
+    else { setState('loading'); setErrMsg(null); setPersisted(false); }
     try {
       const r = await meetingNotesApi.generatePersonLLMProfile(personId, { scopeId, persist });
-      setResult(r);
+      setResult({ ...r, fromCache: false });
       setState('ok');
       if (persist) setPersisted(true);
     } catch (e: any) {
@@ -67,7 +99,33 @@ export function PersonLLMProfileModal({
   }
 
   useEffect(() => {
-    run(false);
+    let cancelled = false;
+    (async () => {
+      setState('loading');
+      setErrMsg(null);
+      try {
+        const cached = await meetingNotesApi.getPersonLLMProfile(personId);
+        if (cancelled) return;
+        if (cached.cached) {
+          setResult({
+            content: cached.content,
+            model: cached.model,
+            generatedAt: cached.generatedAt,
+            sources: cached.sources,
+            promptChars: null,
+            usage: null,
+            fromCache: true,
+          });
+          setState('ok');
+          setPersisted(true);
+          return;
+        }
+      } catch {
+        // GET 缓存失败不阻塞主流程，掉到现场生成
+      }
+      if (!cancelled) generate(false);
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId, scopeId]);
 
@@ -125,7 +183,7 @@ export function PersonLLMProfileModal({
             }}>
               {errMsg}
               <div style={{ marginTop: 10 }}>
-                <button onClick={() => run(false)} style={{
+                <button onClick={() => generate(false)} style={{
                   padding: '6px 12px', border: '1px solid #fecaca', background: '#fff',
                   color: '#991b1b', borderRadius: 4, fontSize: 12, cursor: 'pointer',
                 }}>重试</button>
@@ -134,19 +192,33 @@ export function PersonLLMProfileModal({
           )}
           {state === 'ok' && result && (
             <>
+              {result.fromCache && result.generatedAt && (
+                <div style={{
+                  marginBottom: 8, padding: '6px 10px',
+                  background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 4,
+                  fontSize: 11.5, color: '#854d0e',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span>📌 上次保存于 {new Date(result.generatedAt).toLocaleString('zh-CN')}（缓存版，未消耗 token）</span>
+                </div>
+              )}
               <div style={{
                 marginBottom: 12, padding: '8px 12px',
                 background: 'var(--paper-2)', borderRadius: 4,
                 fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)',
                 display: 'flex', flexWrap: 'wrap', gap: 14,
               }}>
-                <span>model: {result.model}</span>
-                <span>prompt: {result.promptChars} 字</span>
-                <span>会议: {result.sources.meetings}</span>
-                <span>承诺: {result.sources.commitments}</span>
-                <span>角色: {result.sources.roleTrajectory}</span>
-                <span>发言: {result.sources.speechRows}</span>
-                <span>原文段: {result.sources.segments}</span>
+                {result.model && <span>model: {result.model}</span>}
+                {result.promptChars != null && <span>prompt: {result.promptChars} 字</span>}
+                {result.sources && (
+                  <>
+                    <span>会议: {result.sources.meetings}</span>
+                    <span>承诺: {result.sources.commitments}</span>
+                    <span>角色: {result.sources.roleTrajectory}</span>
+                    <span>发言: {result.sources.speechRows}</span>
+                    <span>原文段: {result.sources.segments}</span>
+                  </>
+                )}
                 {result.usage && (
                   <span>tokens: {result.usage.inputTokens ?? '?'}↓/{result.usage.outputTokens ?? '?'}↑</span>
                 )}
@@ -156,6 +228,100 @@ export function PersonLLMProfileModal({
                 fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.7,
                 color: 'var(--ink)', background: 'transparent',
               }}>{result.content}</pre>
+
+              {/* 写入专家库面板：必须先持久化画像才能导入 */}
+              <div style={{
+                marginTop: 18, padding: '14px 14px',
+                border: '1px solid var(--line)', borderRadius: 6,
+                background: 'var(--paper-2)',
+              }}>
+                <div style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
+                  textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8,
+                }}>导入到专家库</div>
+                {exported ? (
+                  <div style={{
+                    padding: '10px 12px', borderRadius: 4,
+                    background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0',
+                    fontSize: 12.5, lineHeight: 1.6,
+                  }}>
+                    ✓ 已写入专家库：<code style={{ fontFamily: 'var(--mono)' }}>{exported.expert_id}</code>
+                    （{exported.domainName} · {exported.level === 'senior' ? '特级专家' : '领域专家'}）
+                    <div style={{ marginTop: 6 }}>
+                      <a href="/expert-library" target="_blank" rel="noreferrer" style={{
+                        color: '#059669', textDecoration: 'underline',
+                      }}>打开专家库 →</a>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 10, lineHeight: 1.55 }}>
+                      LLM 已生成结构化档案；为提升分类准确率，下方两项请手选：
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        领域
+                        <select
+                          value={exportDomainCode}
+                          onChange={(e) => setExportDomainCode(e.target.value)}
+                          style={{
+                            padding: '5px 8px', fontSize: 12,
+                            border: '1px solid var(--line)', borderRadius: 4,
+                            background: 'var(--paper)',
+                          }}
+                        >
+                          {EXPERT_DOMAINS.map((d) => (
+                            <option key={d.code} value={d.code}>{d.icon} {d.code} · {d.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        等级
+                        <select
+                          value={exportLevel}
+                          onChange={(e) => setExportLevel(e.target.value as 'senior' | 'domain')}
+                          style={{
+                            padding: '5px 8px', fontSize: 12,
+                            border: '1px solid var(--line)', borderRadius: 4,
+                            background: 'var(--paper)',
+                          }}
+                        >
+                          <option value="senior">特级专家 (S-)</option>
+                          <option value="domain">领域专家 ({exportDomainCode}-)</option>
+                        </select>
+                      </label>
+                    </div>
+                    {!result.fromCache && !persisted && (
+                      <div style={{
+                        padding: '6px 10px', marginBottom: 10,
+                        background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4,
+                        fontSize: 11.5, color: '#854d0e',
+                      }}>
+                        请先点上方"保存到人物 metadata"，再回来导入专家库。
+                      </div>
+                    )}
+                    {exportErr && (
+                      <div style={{
+                        padding: '8px 10px', marginBottom: 10,
+                        background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4,
+                        fontSize: 12, color: '#991b1b', lineHeight: 1.5,
+                      }}>{exportErr}</div>
+                    )}
+                    <button
+                      onClick={exportToExpertLibrary}
+                      disabled={exporting || (!result.fromCache && !persisted)}
+                      style={{
+                        padding: '8px 16px', borderRadius: 4, fontSize: 12.5,
+                        border: '1px solid #1A1410',
+                        background: exporting || (!result.fromCache && !persisted) ? 'var(--paper-3)' : '#1A1410',
+                        color: exporting || (!result.fromCache && !persisted) ? 'var(--ink-3)' : '#F0E8D6',
+                        cursor: exporting || (!result.fromCache && !persisted) ? 'not-allowed' : 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >{exporting ? '写入中…' : '写入专家库'}</button>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -166,19 +332,22 @@ export function PersonLLMProfileModal({
         }}>
           {state === 'ok' && result && (
             <>
+              {!result.fromCache && (
+                <button
+                  onClick={() => generate(true)}
+                  disabled={persisting || persisted}
+                  title="把当前画像写到 mn_people.metadata.llm_profile"
+                  style={{
+                    padding: '7px 14px', borderRadius: 4, fontSize: 12,
+                    border: '1px solid var(--line)', cursor: persisting || persisted ? 'default' : 'pointer',
+                    background: persisted ? 'var(--paper-3)' : 'var(--paper)',
+                    color: persisted ? 'var(--ink-3)' : 'var(--ink)',
+                  }}
+                >{persisted ? '✓ 已保存到人物 metadata' : persisting ? '保存中…' : '保存到人物 metadata'}</button>
+              )}
               <button
-                onClick={() => run(true)}
-                disabled={persisting || persisted}
-                title="把当前画像写到 mn_people.metadata.llm_profile"
-                style={{
-                  padding: '7px 14px', borderRadius: 4, fontSize: 12,
-                  border: '1px solid var(--line)', cursor: persisting || persisted ? 'default' : 'pointer',
-                  background: persisted ? 'var(--paper-3)' : 'var(--paper)',
-                  color: persisted ? 'var(--ink-3)' : 'var(--ink)',
-                }}
-              >{persisted ? '✓ 已保存到人物 metadata' : persisting ? '保存中…' : '保存到人物 metadata'}</button>
-              <button
-                onClick={() => run(false)}
+                onClick={() => generate(false)}
+                title={result.fromCache ? '重新跑 LLM 生成新版本，覆盖前需手动点保存' : '丢弃当前结果重新生成'}
                 style={{
                   padding: '7px 14px', borderRadius: 4, fontSize: 12,
                   border: '1px solid var(--line)', background: 'var(--paper)',

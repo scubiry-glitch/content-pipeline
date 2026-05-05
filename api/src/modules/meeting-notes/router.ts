@@ -13,7 +13,7 @@ import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
 import { assertRowInWorkspace, currentWorkspaceId, requireWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
-import { generate as llmGenerate } from '../../services/llm.js';
+import { getLLMRouter } from '../../providers/index.js';
 import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
 import { writeAuditEvent, type AuditEvent } from '../../services/auth/audit.js';
 import { createRateLimiter } from '../../utils/inMemoryRateLimit.js';
@@ -1688,6 +1688,36 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     /**
+     * GET /people/:id/llm-profile
+     *   读取上次"保存到人物 metadata"时持久化在 mn_people.metadata.llm_profile 的画像。
+     *   没有 scopeId —— 持久化是按人物维度，不区分 scope。
+     *   返回 { cached: true, content, model, generatedAt, sources } 或 { cached: false }。
+     */
+    fastify.get('/people/:id/llm-profile', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const db = engine.deps.db;
+      const r = await db.query(
+        `SELECT canonical_name, metadata->'llm_profile' AS profile
+           FROM mn_people WHERE id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      const profile = r.rows[0].profile;
+      if (!profile || typeof profile !== 'object' || !profile.content) {
+        return { cached: false };
+      }
+      return {
+        cached: true,
+        personName: r.rows[0].canonical_name,
+        content: profile.content,
+        model: profile.model ?? null,
+        generatedAt: profile.generatedAt ?? null,
+        sources: profile.sources ?? null,
+      };
+    });
+
+    /**
      * POST /people/:id/llm-profile?scopeId=...
      *   汇集该人物在历史会议中的全部"轨迹原料"（承诺 / 发言质量 / 角色 / 沉默信号 +
      *   原文转写中以本人为说话人的段落），喂给 LLM 生成一份人物画像 markdown。
@@ -1723,7 +1753,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       // 3) 收集本人参与过的 meetingIds（4 张表 union），可选与 scope 求交
       const meetingsRes = await db.query(
         `SELECT DISTINCT m.id::text AS id, m.title, m.created_at,
-                COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date') AS date
+                COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date') AS date,
+                COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date', m.created_at::text) AS sort_key
            FROM (
              SELECT meeting_id FROM mn_speech_quality        WHERE person_id = $1
              UNION
@@ -1737,7 +1768,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           WHERE ($2::uuid IS NULL OR mids.meeting_id IN (
                   SELECT meeting_id::uuid FROM mn_scope_members WHERE scope_id = $2::uuid
                 ))
-          ORDER BY COALESCE(m.metadata->>'occurred_at', m.metadata->'analysis'->>'date', m.created_at::text) DESC
+          ORDER BY sort_key DESC
           LIMIT 10`,
         [id, scopeUuid],
       );
@@ -1892,38 +1923,96 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         lines.push(``);
       }
 
-      const systemPrompt = `你是一位资深的组织行为分析师 + 决策心智建模师。基于一位成员在多场内部会议中的承诺轨迹、发言质量数据、角色演化、沉默信号和原文发言片段，生成一份"人物画像"。
+      const systemPrompt = `你是一位资深的组织行为分析师 + 决策心智建模师 + 专家档案构建师。基于一位成员在多场内部会议中的承诺轨迹、发言质量数据、角色演化、沉默信号和原文发言片段，生成一份"人物画像 + 可直接灌入专家库的档案"。
 
-输出 markdown，结构固定（缺料的 section 写"原料不足"，不要编造）：
+整体语气：**欣赏式 + 建设性**。把对方当作值得深度建模的"专家原型"来写——
+- 优先识别长处、独特视角、为团队创造价值的方式；
+- 把弱点改写成"适用边界 / 在什么场景需要补位"，而非缺陷指控；
+- 履约不稳定 → 描述"在什么类型任务上节奏更可控"；认知偏差 → 描述"在什么决策上需要互补视角"；沉默 → 描述"擅长观察什么、什么时候介入更高效"。
+- 即使原料里只有少量信号，也要尽量挖掘一处亮点。
+- 不要使用"短板 / 问题 / 失约 / 缺陷 / 不足 / 差"这类负向词；改用"成长边界 / 适合场景 / 互补需求 / 节奏特征"等。
+
+输出 markdown，结构固定（缺料的 section 写"原料不足，建议补充：xxx"，不要编造细节）：
 
 # {人物姓名}
 
 ## 1. 决策风格 & 思维模式
-（关注因果链 / 第一性原理 / 类比 / 对照实验 / 经验主义 等。引用 1-2 条最有代表性的发言或承诺作支撑。）
+（识别长处：因果链 / 第一性原理 / 类比 / 对照实验 / 经验主义 / 框架思维 等。引用 1-2 条最有代表性的发言或承诺。）
 
 ## 2. 反复出现的关注点（focus areas）
-（topic-level，不是 keyword-level。说明每个关注点最早出现在哪场会议，是否有信念漂移。）
+（topic-level。说明每个关注点最早出现在哪场会议；如有视角演化，描述为"思考逐步深入"而非"立场漂移"。）
 
-## 3. 承诺履约模式
-（on_track / at_risk / done / slipped 的比例和原因猜测；典型守信 / 典型失约的案例各 1-2 个。）
+## 3. 承诺与节奏特征
+（描述他在什么类型任务上节奏更稳、推进力更强；典型守信案例 1-2 个；如有 slipped，框为"在 X 类型任务上更适合搭档式推进"。）
 
-## 4. 沟通风格
-（话题分散度 entropy 高低 → 收敛/发散；被跟进频次 → 影响力；沉默信号 → 主动观察 vs 被动逃避。）
+## 4. 沟通风格 & 在团队中的独特价值
+（话题分散度 entropy → 收敛型 / 发散型思考者；被跟进频次 → 在团队里的牵引力；沉默信号 → 观察型贡献者 / 介入时机选择。落到"对老板和团队的实际价值"。）
 
-## 5. 信念漂移 / 认知盲点
-（基于历史 cognitive_biases 总结。如果数据不足直接写"原料不足"。）
+## 5. 互补视角需求
+（基于 cognitive_biases 数据，描述这个人在做什么类型决策时，搭配什么互补视角能产生 1+1>2 效果。原料不足直接写"原料不足"。不要写"盲点"二字。）
 
 ## 6. 协作建议
-（给老板用：跟此人开会、布置任务、读他建议时该注意什么。3-5 条。）
+（给老板用：跟此人开会、布置任务、读他建议时如何最大化他的产出。3-5 条，全部正向描述："适合 X / 在 Y 时给他更多空间 / 用 Z 方式跟进效率最高"。）
 
-避免泛泛而谈，每个论断必须能映射回原料中的某条承诺/发言/事件。引用时用「会议名」+ 摘要的形式。`;
+## 7. 专家库档案（结构化 JSON，可直接用于创建专家）
+
+下面这块 \`\`\`json ... \`\`\` 必须是合法 JSON（半角双引号、无尾逗号、可被 JSON.parse 解析），后端会从这里抽取并 POST 到 \`/api/v1/expert-library/experts\`：
+
+\`\`\`json
+{
+  "expert_id": "<从姓名生成 kebab-case slug，例如 wang-yongbang>",
+  "name": "<人物姓名>",
+  "domain": ["<3-5 个领域标签，从历史关注点抽取>"],
+  "persona": {
+    "style": "<一句话思考风格，例如 系统性分析 + 案例验证>",
+    "tone": "<一句话沟通调性，例如 克制、精准、追问到位>",
+    "bias": ["<3-5 个正向价值标签，例如 长期价值 / 数据可验证 / 责任明确>"],
+    "cognition": {
+      "decisionStyle": "<例如 先框架后数据 / 先共识后落地>",
+      "riskAttitude": "<例如 X 类决策偏稳，Y 类敢押大注>",
+      "timeHorizon": "<例如 季度→年度复合视角>"
+    },
+    "voice": {
+      "disagreementStyle": "<例如 先承认对方逻辑再补另一面>",
+      "praiseStyle": "<例如 对方法论的赞赏多于对结果的祝贺>"
+    },
+    "blindSpots": {
+      "informationCutoff": "<原料覆盖的最近会议日期>",
+      "explicitLimitations": ["<2-3 条互补视角需求，正向措辞>"]
+    }
+  },
+  "method": {
+    "frameworks": ["<2-4 个他用过的分析框架>"],
+    "reasoning": "<核心推理路径一句话>",
+    "analysis_steps": ["<3-5 步典型推进路径>"]
+  },
+  "signature_phrases": ["<2-4 句他在原料里实际说过的代表性短句，必须真实出现>"],
+  "anti_patterns": ["<2-3 条他不会做的事；语气中性偏正面，例如 不会在缺数据时拍板>"],
+  "display_metadata": {
+    "profile": {
+      "title": "<一行身份概括，例如 信托公司战略合伙人 / 长期主义实践者>",
+      "background": "<2-3 句背景，从角色 / 组织 + 关注点提炼，正向措辞>",
+      "personality": "<一行性格速写，例如 克制、深思、对承诺有强自我约束>"
+    },
+    "philosophy": {
+      "core": ["<2-3 条他奉行的原则，从 bias 升级而来>"]
+    }
+  }
+}
+\`\`\`
+
+约束：
+- 每条断言必须能映射回原料中的某条承诺/发言/事件；引用用「会议名」+ 摘要的形式
+- JSON 部分**必须是合法 JSON**（双引号、无尾逗号、无 # 注释），所有"<...>"占位符替换为真实内容
+- signature_phrases 必须从原料里真实摘取，不许编造
+- 整体语气贯穿欣赏式：把这个人当作"值得为他建一个专家智能体"的对象来描摹`;
 
       const userPrompt = lines.join('\n');
 
       // 7) 调 LLM
       let result: { content: string; model: string; usage?: any };
       try {
-        result = await llmGenerate(userPrompt, 'analysis', {
+        result = await getLLMRouter().generate(userPrompt, 'analysis', {
           systemPrompt,
           temperature: 0.5,
           maxTokens: 2400,
@@ -1975,6 +2064,176 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         sources,
         promptChars: userPrompt.length,
       };
+    });
+
+    /**
+     * POST /people/:id/import-as-expert
+     *   把 mn_people.metadata.llm_profile.content 里的 ```json``` 区块读出来，
+     *   合并用户在前端选择的 domainCode + level，写到 expert_profiles。
+     *   前置条件：必须先在画像 modal 里点过"保存到人物 metadata"。
+     *
+     *   body: { domainCode: string, level: 'senior' | 'domain', expertIdSlug?: string }
+     *   返回: { ok: true, expert_id }
+     */
+    fastify.post('/people/:id/import-as-expert', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const body = (request.body ?? {}) as { domainCode?: string; level?: 'senior' | 'domain'; expertIdSlug?: string };
+      if (!body.domainCode || !body.level) {
+        reply.status(400);
+        return { error: 'BAD_REQUEST', message: 'domainCode 和 level 必填' };
+      }
+      if (body.level !== 'senior' && body.level !== 'domain') {
+        reply.status(400);
+        return { error: 'BAD_LEVEL', message: 'level 只能是 senior 或 domain' };
+      }
+      // 与 webapp/src/config/expertDomains.ts 对齐
+      const DOMAIN_NAMES: Record<string, string> = {
+        S: '特级专家',
+        E01: '宏观经济', E02: '金融科技', E03: '新能源', E04: '医疗健康',
+        E05: '消费零售', E06: '半导体', E07: '人工智能', E08: '房地产',
+        E09: '文化传媒', E10: '先进制造', E11: 'ESG可持续', E12: '跨境出海',
+      };
+      const domainName = DOMAIN_NAMES[body.domainCode];
+      if (!domainName) {
+        reply.status(400);
+        return { error: 'BAD_DOMAIN_CODE', message: `未知 domainCode: ${body.domainCode}` };
+      }
+
+      const db = engine.deps.db;
+
+      // 1) 读持久化的画像
+      const r = await db.query(
+        `SELECT canonical_name, metadata->'llm_profile' AS profile
+           FROM mn_people WHERE id = $1`,
+        [id],
+      );
+      if (r.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      const persisted = r.rows[0].profile;
+      if (!persisted || typeof persisted !== 'object' || !persisted.content) {
+        reply.status(409);
+        return { error: 'NO_PROFILE', message: '请先在画像 modal 里点"保存到人物 metadata"，再导入专家库。' };
+      }
+
+      // 2) 抽 ```json ... ``` 区块
+      const m = String(persisted.content).match(/```json\s*\n([\s\S]+?)\n```/);
+      if (!m) {
+        reply.status(422);
+        return { error: 'NO_JSON_BLOCK', message: '画像里没找到 ```json``` 区块。请在画像 modal 里点"重新生成"再保存一次。' };
+      }
+      let parsed: any;
+      try {
+        parsed = JSON.parse(m[1]);
+      } catch (e: any) {
+        reply.status(422);
+        return {
+          error: 'JSON_PARSE_FAIL',
+          message: `专家档案 JSON 解析失败：${e?.message ?? String(e)}`,
+          rawHead: m[1].slice(0, 240),
+        };
+      }
+
+      // 3) expert_id 拼装：S-<slug>（特级）或 <Exx>-<slug>（领域）
+      const canonicalName: string = r.rows[0].canonical_name;
+      const fallbackSlug = canonicalName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || `person-${id.slice(0, 8)}`;
+      const rawSlug = (body.expertIdSlug?.trim()
+        || (typeof parsed.expert_id === 'string' ? parsed.expert_id.replace(/^[SE]\d*-/, '') : '')
+        || fallbackSlug
+      ).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+      const expertIdPrefix = body.level === 'senior' ? 'S' : body.domainCode;
+      const expert_id = `${expertIdPrefix}-${rawSlug}`;
+
+      // 4) display_metadata
+      const dm = {
+        code: expert_id,
+        level: body.level,
+        domainCode: body.domainCode,
+        domainName,
+        profile: parsed.display_metadata?.profile ?? {
+          title: parsed.persona?.tone ?? '',
+          background: '',
+          personality: parsed.persona?.style ?? '',
+        },
+        philosophy: parsed.display_metadata?.philosophy ?? {
+          core: Array.isArray(parsed.persona?.bias) ? parsed.persona.bias : [],
+          quotes: Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases : [],
+        },
+        achievements: [],
+        reviewDimensions: [],
+        status: 'active',
+        totalReviews: 0,
+        acceptanceRate: 0,
+        avgResponseTime: 0,
+      };
+
+      // 5) domain[] 兜底：把 domainName 塞首位，避免 LLM 给的 domain 不准
+      const llmDomain: string[] = Array.isArray(parsed.domain) ? parsed.domain.filter((s: any) => typeof s === 'string') : [];
+      const domain = [domainName, ...llmDomain.filter((d) => d !== domainName)].slice(0, 6);
+
+      const persona = parsed.persona && typeof parsed.persona === 'object'
+        ? parsed.persona
+        : { style: '', tone: '', bias: [] };
+      const method = parsed.method && typeof parsed.method === 'object'
+        ? parsed.method
+        : { frameworks: [], reasoning: '', analysis_steps: [] };
+
+      // 6) UPSERT (与 expertSeed.ts 同一套字段)
+      await db.query(
+        `INSERT INTO expert_profiles
+           (expert_id, name, domain, persona, method, emm, constraints_config, output_schema,
+            anti_patterns, signature_phrases, display_metadata, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+         ON CONFLICT (expert_id) DO UPDATE SET
+           name = EXCLUDED.name,
+           domain = EXCLUDED.domain,
+           persona = EXCLUDED.persona,
+           method = EXCLUDED.method,
+           emm = EXCLUDED.emm,
+           constraints_config = EXCLUDED.constraints_config,
+           output_schema = EXCLUDED.output_schema,
+           anti_patterns = EXCLUDED.anti_patterns,
+           signature_phrases = EXCLUDED.signature_phrases,
+           display_metadata = EXCLUDED.display_metadata,
+           is_active = true,
+           updated_at = NOW()`,
+        [
+          expert_id,
+          (typeof parsed.name === 'string' && parsed.name.trim()) ? parsed.name.trim() : canonicalName,
+          domain,
+          JSON.stringify(persona),
+          JSON.stringify(method),
+          null,
+          JSON.stringify({ must_conclude: false, allow_assumption: true }),
+          JSON.stringify({ format: 'markdown', sections: [] }),
+          Array.isArray(parsed.anti_patterns) ? parsed.anti_patterns.filter((s: any) => typeof s === 'string') : [],
+          Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases.filter((s: any) => typeof s === 'string') : [],
+          JSON.stringify(dm),
+        ],
+      );
+
+      // 7) 在 mn_people.metadata 里记一笔 import 痕迹（方便人查"这个人导出过哪个专家"）
+      try {
+        await db.query(
+          `UPDATE mn_people
+              SET metadata = COALESCE(metadata, '{}'::jsonb)
+                || jsonb_build_object('expert_export', $2::jsonb),
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [id, JSON.stringify({
+            expert_id,
+            domainCode: body.domainCode,
+            level: body.level,
+            exportedAt: new Date().toISOString(),
+          })],
+        );
+      } catch (e) {
+        request.log.warn({ err: e, personId: id }, 'expert export trace persist failed (non-fatal)');
+      }
+
+      return { ok: true, expert_id, domainCode: body.domainCode, domainName, level: body.level };
     });
 
     /**
