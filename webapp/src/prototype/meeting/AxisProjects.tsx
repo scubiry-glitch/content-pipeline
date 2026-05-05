@@ -794,11 +794,18 @@ function RiskRewardScatter({ rows }: { rows: Array<{ id: string; text: string; s
   const yFor = (v: number) => H - padB - v * (H - padB - padT);
   return (
     <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line-2)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 4, flexWrap: 'wrap' }}>
         <SectionLabel>风险 × 收益散点</SectionLabel>
-        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
-          v1 lite · 收益维度暂从 trend 派生 (up=0.7 / down=0.25 / flat=0.5)
+        <span
+          style={{ fontSize: 11.5, color: 'var(--ink-3)' }}
+          title={'横轴 = 风险（严重度 × 热度），纵轴 = 收益。\n收益还没人工评分，暂用风险趋势近似：\n  上升 → 0.7（潜在机会）\n  下降 → 0.25\n  持平 → 0.5\n接入正式收益评分后会替换。'}
+        >
+          收益值是占位估算 · 鼠标悬停看说明
         </span>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginBottom: 12, maxWidth: 640, lineHeight: 1.55 }}>
+        横轴风险（严重度 × 热度），纵轴收益。<b>收益尚未人工评分</b>，暂用风险趋势近似：
+        上升 → 0.7、下降 → 0.25、持平 → 0.5。
       </div>
       {points.length === 0 ? (
         <div style={{ background: 'var(--paper-2)', border: '1px dashed var(--line-2)', borderRadius: 6, padding: '16px 20px', fontSize: 12, color: 'var(--ink-3)' }}>
