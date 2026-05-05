@@ -35,6 +35,7 @@ import { composeAnalysisFromAxes, persistAnalysisToAsset } from './composeAnalys
 import { autoMatchAndBindScopes } from './scopeMatcher.js';
 import { parseMeeting } from '../parse/meetingParser.js';
 import { emitTerminal } from './runStreamRegistry.js';
+import { resolveWorkspaceSlug } from '../../../lib/wikiRoot.js';
 
 interface QueuePayload {
   runId: string;
@@ -953,6 +954,21 @@ export class RunEngine {
     }
     await this.deps.eventBus.publish('mn.run.started', { runId: payload.runId });
 
+    // Per-ws wiki vault 路径派生 — 一次 SELECT, 后续所有 wiki 写入都基于此 slug
+    // (本函数内 12 处 resolveWikiRoot 调用统一传 { workspaceSlug: runWikiSlug })
+    let runWikiSlug = 'default';
+    try {
+      const wsRow = await this.deps.db.query(
+        `SELECT workspace_id::text AS workspace_id FROM mn_runs WHERE id = $1::uuid`,
+        [payload.runId],
+      );
+      runWikiSlug = await resolveWorkspaceSlug(
+        (wsRow.rows[0] as { workspace_id?: string } | undefined)?.workspace_id ?? null,
+      );
+    } catch (e) {
+      console.warn(`[RunEngine] resolve runWikiSlug failed: ${(e as Error).message}; fallback default`);
+    }
+
     // F3 · 每 30s 更新一次 heartbeat；execute 退出时清掉 timer 防泄漏
     const heartbeatTimer = setInterval(() => {
       this.deps.db.query(
@@ -1302,7 +1318,7 @@ export class RunEngine {
           try {
             const { WikiGenerator } = await import('../../content-library/wiki/wikiGenerator.js');
             const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
-            const wikiRoot = resolveWikiRoot();
+            const wikiRoot = resolveWikiRoot({ workspaceSlug: runWikiSlug });
             const wg = new WikiGenerator(this.deps.db as any);
             const result = await wg.generate({
               wikiRoot,
@@ -1326,7 +1342,7 @@ export class RunEngine {
             const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
             const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
             const ag = new MeetingAxesGenerator(this.deps);
-            const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+            const r = await ag.generate({ wikiRoot: resolveWikiRoot({ workspaceSlug: runWikiSlug }), limitPerAxis: 200 });
             wikiResultStats.axesFiles = r.filesWritten;
             console.log(`[runEngine] MeetingAxesGenerator: ${r.filesWritten} files (${r.durationMs}ms)`);
           } catch (e) {
@@ -1345,7 +1361,7 @@ export class RunEngine {
               `SELECT scope_id::text AS scope_id FROM mn_scope_members WHERE meeting_id::text = $1`,
               [payload.meetingId!],
             );
-            const wikiRoot = resolveWikiRoot();
+            const wikiRoot = resolveWikiRoot({ workspaceSlug: runWikiSlug });
             let totalFiles = 0;
             for (const row of scopesR.rows) {
               const r = await sg.generate({ wikiRoot, scopeId: row.scope_id });
@@ -1735,7 +1751,7 @@ export class RunEngine {
           try {
             const { WikiGenerator } = await import('../../content-library/wiki/wikiGenerator.js');
             const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
-            const wikiRoot = resolveWikiRoot();
+            const wikiRoot = resolveWikiRoot({ workspaceSlug: runWikiSlug });
             const wg = new WikiGenerator(this.deps.db as any);
             const result = await wg.generate({
               wikiRoot,
@@ -1759,7 +1775,7 @@ export class RunEngine {
             const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
             const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
             const ag = new MeetingAxesGenerator(this.deps);
-            const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+            const r = await ag.generate({ wikiRoot: resolveWikiRoot({ workspaceSlug: runWikiSlug }), limitPerAxis: 200 });
             wikiResultStats.axesFiles = r.filesWritten;
           } catch (e) {
             console.warn('[runEngine] MeetingAxesGenerator failed:', (e as Error).message);
@@ -1775,7 +1791,7 @@ export class RunEngine {
               `SELECT scope_id::text AS scope_id FROM mn_scope_members WHERE meeting_id::text = $1`,
               [payload.meetingId!],
             );
-            const wikiRoot = resolveWikiRoot();
+            const wikiRoot = resolveWikiRoot({ workspaceSlug: runWikiSlug });
             let totalFiles = 0;
             for (const row of scopesR.rows) {
               const r = await sg.generate({ wikiRoot, scopeId: row.scope_id });
@@ -2361,7 +2377,7 @@ export class RunEngine {
               const { MeetingAxesGenerator } = await import('../wiki/meetingAxesGenerator.js');
               const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
               const ag = new MeetingAxesGenerator(this.deps);
-              const r = await ag.generate({ wikiRoot: resolveWikiRoot(), limitPerAxis: 200 });
+              const r = await ag.generate({ wikiRoot: resolveWikiRoot({ workspaceSlug: runWikiSlug }), limitPerAxis: 200 });
               console.log(`[runEngine] multi-meeting MeetingAxesGenerator: ${r.filesWritten} files (${r.durationMs}ms)`);
             } catch (e) {
               console.warn('[runEngine] multi-meeting MeetingAxesGenerator failed:', (e as Error).message);
@@ -2372,7 +2388,7 @@ export class RunEngine {
               const { MeetingScopeGenerator } = await import('../wiki/meetingScopeGenerator.js');
               const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
               const sg = new MeetingScopeGenerator(this.deps);
-              const wikiRoot = resolveWikiRoot();
+              const wikiRoot = resolveWikiRoot({ workspaceSlug: runWikiSlug });
               // 拿当前 run 涉及的所有 scopes（任一会议属于哪些 scope 都重生一遍 _index.md）
               const scopesR = await this.deps.db.query(
                 `SELECT DISTINCT scope_id::text AS scope_id

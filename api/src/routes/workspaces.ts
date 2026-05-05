@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
 import { writeAuditEvent } from '../services/auth/audit.js';
+import { initWorkspaceVault, archiveWorkspaceVault } from '../lib/wikiVault.js';
 
 type Role = 'owner' | 'admin' | 'member';
 
@@ -115,6 +116,11 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
         `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
         [ws.id, userId]
       );
+      // 初始化 per-ws wiki vault 骨架 — best-effort, 失败不阻塞 ws 创建
+      const vaultRes = await initWorkspaceVault(ws.slug, ws.name);
+      if (!vaultRes.ok) {
+        console.warn(`[ws] init wiki vault for ${ws.slug} failed: ${vaultRes.error}`);
+      }
       reply.status(201);
       return { id: ws.id, name: ws.name, slug: ws.slug, ownerId: userId, role: 'owner' as Role, createdAt: ws.created_at };
     } catch (e: any) {
@@ -244,12 +250,24 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
 
     // 防护 3: 删除会导致用户没任何 workspace? 简化处理: 不主动阻止, 让 UI 引导
     await query(`DELETE FROM workspaces WHERE id = $1`, [id]);
+    // wiki vault 归档到 .trash/<slug>-<timestamp>/ — best-effort, 不阻塞 DELETE
+    // 之所以归档而非 hard delete: 防护 2 已确保 DB 子表为空, 但 vault 文件可能含
+    // 用户手写笔记 / Obsidian 反链, 软归档让恢复一行 mv 即可.
+    const archiveRes = await archiveWorkspaceVault(wsRow.rows[0].slug);
+    if (!archiveRes.ok) {
+      console.warn(`[ws] archive vault for ${wsRow.rows[0].slug} failed: ${archiveRes.error}`);
+    }
     await writeAuditEvent({
       event: 'workspace.delete',
       userId: request.auth?.user?.id ?? null,
       email: request.auth?.user?.email ?? null,
       request,
-      metadata: { workspaceId: id, slug: wsRow.rows[0].slug },
+      metadata: {
+        workspaceId: id,
+        slug: wsRow.rows[0].slug,
+        vaultArchivedTo: archiveRes.ok ? archiveRes.archivedTo ?? null : null,
+        vaultArchiveReason: archiveRes.reason ?? null,
+      },
     });
     return { ok: true };
   });

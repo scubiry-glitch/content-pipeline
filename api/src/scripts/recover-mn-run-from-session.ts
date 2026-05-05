@@ -23,6 +23,7 @@ import { persistAnalysisToAsset } from '../modules/meeting-notes/runs/composeAna
 import { persistClaudeAxes } from '../modules/meeting-notes/runs/persistClaudeAxes.js';
 import { persistClaudeFacts } from '../modules/meeting-notes/runs/persistClaudeFacts.js';
 import { persistClaudeWiki } from '../modules/meeting-notes/runs/persistClaudeWiki.js';
+import { resolveWikiRoot, resolveWorkspaceSlug } from '../lib/wikiRoot.js';
 import { ensurePersonByName } from '../modules/meeting-notes/parse/participantExtractor.js';
 
 function parseArgs(argv: string[]): Record<string, string> {
@@ -54,9 +55,9 @@ async function main(): Promise<void> {
     process.exit(3);
   }
 
-  // 1. 找出 run 的 meetingId（assetId）
+  // 1. 找出 run 的 meetingId（assetId） + workspace_id (用于 wiki vault 路径)
   const r = await query(
-    `SELECT id, scope_kind, scope_id::text AS scope_id, state, metadata
+    `SELECT id, scope_kind, scope_id::text AS scope_id, state, metadata, workspace_id::text AS workspace_id
        FROM mn_runs WHERE id = $1`,
     [runId],
   );
@@ -70,7 +71,9 @@ async function main(): Promise<void> {
     process.exit(5);
   }
   const meetingId = String(run.scope_id);
-  console.log(`[recover] run=${runId} meetingId=${meetingId} state=${run.state}`);
+  const wsSlug = await resolveWorkspaceSlug(run.workspace_id ?? null);
+  const wikiRoot = resolveWikiRoot({ workspaceSlug: wsSlug });
+  console.log(`[recover] run=${runId} meetingId=${meetingId} state=${run.state} ws=${wsSlug}`);
 
   // 2. 构建 deps（同 server.ts，但只用 meeting-notes 必需）
   const mnDb = createMeetingNotesDBAdapter(query);
@@ -143,7 +146,7 @@ async function main(): Promise<void> {
 
   // 3f. wikiMarkdown → wiki vault .md
   try {
-    await persistClaudeWiki(deps, meetingId, inner.wikiMarkdown ?? {}, undefined, inner.meeting?.title);
+    await persistClaudeWiki(deps, meetingId, inner.wikiMarkdown ?? {}, wikiRoot, inner.meeting?.title);
     console.log(`[recover] persistClaudeWiki done`);
   } catch (e) {
     console.warn(`[recover] persistClaudeWiki failed:`, (e as Error).message);
