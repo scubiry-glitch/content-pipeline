@@ -320,6 +320,68 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     counterfactuals = [];
   }
 
+  // topicLineages — 知识轴 mn_topic_lineage，scope 内 + 全局，按 mention_count + alive 优先
+  let topicLineages: PromptCtx['topicLineages'] = [];
+  try {
+    const r = await db.query(
+      `SELECT topic,
+              scope_id::text AS scope_id_text,
+              health_state,
+              mention_count,
+              last_active_at,
+              birth_meeting_id::text AS birth_meeting_id
+         FROM mn_topic_lineage
+        WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+          AND mention_count >= 2
+        ORDER BY CASE health_state
+                   WHEN 'alive'      THEN 0
+                   WHEN 'endangered' THEN 1
+                   WHEN 'dead'       THEN 2
+                   ELSE 3 END,
+                 mention_count DESC,
+                 last_active_at DESC NULLS LAST
+        LIMIT 12`,
+      [scopeId],
+    );
+    topicLineages = (r.rows as any[]).map((row) => ({
+      topic: String(row.topic),
+      scopeId: row.scope_id_text ? String(row.scope_id_text) : null,
+      healthState: row.health_state as 'alive' | 'endangered' | 'dead',
+      mentionCount: Number(row.mention_count ?? 0),
+      lastActiveAt: row.last_active_at ? new Date(row.last_active_at).toISOString() : null,
+      birthMeetingId: row.birth_meeting_id ? String(row.birth_meeting_id) : null,
+    }));
+  } catch {
+    topicLineages = [];
+  }
+
+  // consensusTracks — 知识轴 mn_consensus_tracks，scope 内 + 全局
+  // 取最近 90 天内、按 (topic 优先 high consensus) → (低 consensus 视为 drift 候选)
+  let consensusTracks: PromptCtx['consensusTracks'] = [];
+  try {
+    const r = await db.query(
+      `SELECT topic,
+              consensus_score,
+              dominant_view,
+              meeting_id::text AS meeting_id
+         FROM mn_consensus_tracks
+        WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
+          AND created_at > NOW() - INTERVAL '90 days'
+        ORDER BY ABS(consensus_score - 0.5) DESC,  -- 极端两侧（很共识 / 很分裂）优先
+                 created_at DESC
+        LIMIT 15`,
+      [scopeId],
+    );
+    consensusTracks = (r.rows as any[]).map((row) => ({
+      topic: String(row.topic),
+      consensusScore: Number(row.consensus_score ?? 0.5),
+      dominantView: row.dominant_view ? String(row.dominant_view).slice(0, 240) : null,
+      meetingId: String(row.meeting_id),
+    }));
+  } catch {
+    consensusTracks = [];
+  }
+
   return {
     scopeId,
     scopeName,
@@ -332,6 +394,8 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     stakeholders,
     conceptDrifts,
     counterfactuals,
+    topicLineages,
+    consensusTracks,
     runId,
     extra: extra ?? {},
   };

@@ -48,17 +48,61 @@ export const compassStarsPrompt: PromptDef<OutT> = {
 - description 必须含至少一个量化数据点（百分比/数量/时间窗）
 - name 要具体（"美租续约 · 三方案对齐"，不要"业务推进"）
 - drift 类必含"应该…但实际…"句式
+
+战略线候选必须基于以下脊柱（按优先级）：
+1. **议题谱系**（mn_topic_lineage）— 跨多次会议反复出现且 health=alive 的 topic，
+   是 main 线的天然候选；mention_count 越高越可信。每条 main 战略线的 name 或
+   description 必须包含至少一条 alive 谱系的 topic 关键词。
+2. **共识轨迹**（mn_consensus_tracks）— consensus_score ≥ 0.7 的 topic 适合做
+   main / branch；consensus_score ≤ 0.35 的"分裂主题"是 drift 的硬证据，
+   生成 drift 时必须引用其中至少一条 + dominant_view 反面。
+3. judgments + meetings 作为补充上下文；不要凭这两条单独发明主线。
+
 仅输出 JSON：{"stars":[{name,kind,description,alignment_score,evidence_meetings:[{meeting_id,title}]},...]}`,
 
-  userPrompt: (ctx) =>
-    `Scope: ${ctx.scopeName ?? '(未命名)'} (id: ${ctx.scopeId ?? 'null'})
+  userPrompt: (ctx) => {
+    const aliveLineages = ctx.topicLineages.filter((t) => t.healthState === 'alive');
+    const lineageBlock = aliveLineages.length > 0
+      ? `\n\n议题谱系（${aliveLineages.length} 条 alive，按 mention_count 降序）：\n${
+          aliveLineages.slice(0, 10).map((t) => {
+            const last = t.lastActiveAt ? t.lastActiveAt.slice(0, 10) : '?';
+            return `- [mention=${t.mentionCount} | last=${last}] ${t.topic}`;
+          }).join('\n')
+        }`
+      : '';
+    const endangered = ctx.topicLineages.filter((t) => t.healthState === 'endangered');
+    const endBlock = endangered.length > 0
+      ? `\n\n濒危谱系（${endangered.length} 条 endangered，可能是 drift 的早期信号）：\n${
+          endangered.slice(0, 5).map((t) => `- [mention=${t.mentionCount}] ${t.topic}`).join('\n')
+        }`
+      : '';
+    const consensusHigh = ctx.consensusTracks.filter((c) => c.consensusScore >= 0.7);
+    const consensusLow = ctx.consensusTracks.filter((c) => c.consensusScore <= 0.35);
+    const consHighBlock = consensusHigh.length > 0
+      ? `\n\n已高度共识主题（${consensusHigh.length}，consensus≥0.7，main/branch 候选）：\n${
+          consensusHigh.slice(0, 6).map((c) => {
+            const view = c.dominantView ? ` ｜ 主流观点: ${c.dominantView.slice(0, 80)}` : '';
+            return `- [score=${c.consensusScore.toFixed(2)}] ${c.topic}${view}`;
+          }).join('\n')
+        }`
+      : '';
+    const consLowBlock = consensusLow.length > 0
+      ? `\n\n分裂主题（${consensusLow.length}，consensus≤0.35，drift 候选 — 优先生成）：\n${
+          consensusLow.slice(0, 6).map((c) => {
+            const view = c.dominantView ? ` ｜ 一种说法: ${c.dominantView.slice(0, 80)}` : '';
+            return `- [score=${c.consensusScore.toFixed(2)}] ${c.topic}${view}`;
+          }).join('\n')
+        }`
+      : '';
+    return `Scope: ${ctx.scopeName ?? '(未命名)'} (id: ${ctx.scopeId ?? 'null'})
 本 scope 绑定会议（${ctx.meetings.length} 条）：
 ${meetingsBlock(ctx)}
 
 近 90 天 judgments 摘录（${ctx.judgments.length} 条）：
-${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n')}
+${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n')}${lineageBlock}${endBlock}${consHighBlock}${consLowBlock}
 
-请生成 5-6 条战略线（至少 1 条 main + 至少 1 条 drift）。`,
+请生成 5-6 条战略线（至少 1 条 main + 至少 1 条 drift）。`;
+  },
 
   qualityChecks: [
     (out) => {
@@ -72,5 +116,36 @@ ${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
       return null;
     },
     requireLength<OutT>((o) => o.stars.map((s) => s.description).join('\n'), 100, 1500),
+    // 有 alive 谱系时，至少 1 条 main 必须命中其中一个 topic 关键词
+    (out, ctx) => {
+      const alive = (ctx.topicLineages ?? []).filter((t) => t.healthState === 'alive');
+      if (alive.length === 0) return null;
+      const topics = alive.map((t) => t.topic).filter((t) => t && t.length >= 2);
+      if (topics.length === 0) return null;
+      const mainStars = out.stars.filter((s) => s.kind === 'main');
+      const hit = mainStars.some((s) =>
+        topics.some((t) => s.name.includes(t) || s.description.includes(t)),
+      );
+      if (!hit) {
+        return `存在 ${alive.length} 条 alive 议题谱系（${topics.slice(0, 3).join(' / ')}），但没有任何 main 战略线引用 — name 或 description 必须命中至少 1 条`;
+      }
+      return null;
+    },
+    // 有低共识主题（drift 候选）时，至少 1 条 drift 必须命中其中一个 topic
+    (out, ctx) => {
+      const low = (ctx.consensusTracks ?? []).filter((c) => c.consensusScore <= 0.35);
+      if (low.length === 0) return null;
+      const topics = low.map((c) => c.topic).filter((t) => t && t.length >= 2);
+      if (topics.length === 0) return null;
+      const driftStars = out.stars.filter((s) => s.kind === 'drift');
+      if (driftStars.length === 0) return null; // drift 数量另一条已校验
+      const hit = driftStars.some((s) =>
+        topics.some((t) => s.name.includes(t) || s.description.includes(t)),
+      );
+      if (!hit) {
+        return `存在 ${low.length} 条分裂主题（${topics.slice(0, 3).join(' / ')}），但没有任何 drift 战略线引用 — name 或 description 必须命中至少 1 条`;
+      }
+      return null;
+    },
   ],
 };

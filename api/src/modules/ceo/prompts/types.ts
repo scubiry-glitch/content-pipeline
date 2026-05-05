@@ -54,6 +54,24 @@ export interface PromptCtx {
     currentValidity: 'valid' | 'invalid' | 'unclear';
     meetingId: string | null;
   }[];
+  /** 知识轴 · 议题谱系（mn_topic_lineage）— 跨会议反复出现的同一主题
+   *  compass-stars 用它做"主线候选脊柱"（mention_count 高 + alive 的更可能是真主线） */
+  topicLineages: {
+    topic: string;
+    scopeId: string | null;
+    healthState: 'alive' | 'endangered' | 'dead';
+    mentionCount: number;
+    lastActiveAt: string | null;
+    birthMeetingId: string | null;
+  }[];
+  /** 知识轴 · 共识轨迹（mn_consensus_tracks）— 已收敛/分裂的主题在最近会议的态势
+   *  compass-stars 用它做"已稳定的主线 vs 还在分裂的 drift"判断 */
+  consensusTracks: {
+    topic: string;
+    consensusScore: number;
+    dominantView: string | null;
+    meetingId: string;
+  }[];
   /** runId — 写表时挂 generated_run_id */
   runId: string;
   /** axis-specific extra fields — handler 可通过 metadata 注入 */
