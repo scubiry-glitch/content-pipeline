@@ -91,11 +91,13 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
         if (idx === undefined) return g;
         const r = results[idx];
         if (r.status !== 'fulfilled' || !r.value?.items?.length) return g;
-        const instances: ScopeInstance[] = r.value.items.map((s: { id?: string; name?: string; label?: string; meetingsCount?: number; n?: number; lastUpdate?: string }) => ({
-          id: s.id ?? '',
-          label: s.name ?? s.label ?? s.id ?? '',
-          meta: `${s.meetingsCount ?? s.n ?? '?'} meetings${s.lastUpdate ? ` · ${s.lastUpdate}` : ''}`,
-        }));
+        const instances: ScopeInstance[] = r.value.items.map((s: { id?: string; name?: string; label?: string; meetingsCount?: number; n?: number; lastUpdate?: string }) => {
+          const cnt = s.meetingsCount ?? s.n;
+          const meta = cnt != null
+            ? `${cnt} 场会议${s.lastUpdate ? ` · ${s.lastUpdate}` : ''}`
+            : (s.lastUpdate ?? '');
+          return { id: s.id ?? '', label: s.name ?? s.label ?? s.id ?? '', meta };
+        });
         return { ...g, instances };
       }));
       setLoading(false);

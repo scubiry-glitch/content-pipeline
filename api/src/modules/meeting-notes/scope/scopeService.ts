@@ -25,6 +25,8 @@ export interface ScopeRow {
   lastRunId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 绑定到该 scope 的会议数（LEFT JOIN mn_scope_members；只在 list() 路径返回） */
+  meetingsCount?: number;
 }
 
 export interface CreateScopeInput {
@@ -49,7 +51,7 @@ export interface UpdateScopeInput {
 }
 
 function mapScope(row: Record<string, any>): ScopeRow {
-  return {
+  const out: ScopeRow = {
     id: row.id,
     kind: row.kind,
     slug: row.slug,
@@ -65,6 +67,8 @@ function mapScope(row: Record<string, any>): ScopeRow {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+  if (row.meetings_count != null) out.meetingsCount = Number(row.meetings_count);
+  return out;
 }
 
 export class ScopeService {
@@ -81,12 +85,26 @@ export class ScopeService {
     if (filter.status)      { params.push(filter.status);      where.push(`status = $${params.length}`); }
     if (filter.dirty === true)  { where.push(`dirty_at IS NOT NULL`); }
     if (filter.dirty === false) { where.push(`dirty_at IS NULL`); }
-    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    // 列加 s. 前缀，避免和 LEFT JOIN 子查询里的同名列歧义
+    const safeWhere = where
+      .map((w) => w.replace(/\b(workspace_id|kind|status|dirty_at)\b/g, 's.$1'))
+      .join(' AND ');
+    const safeClause = safeWhere ? `WHERE ${safeWhere}` : '';
     const orderBy = filter.dirty === true
-      ? 'ORDER BY dirty_at DESC'
-      : 'ORDER BY created_at DESC';
+      ? 'ORDER BY s.dirty_at DESC'
+      : 'ORDER BY s.created_at DESC';
+    // 附带 meetings_count（绑定到该 scope 的会议数）— ScopePill instance row 用
     const r = await this.deps.db.query(
-      `SELECT * FROM mn_scopes ${clause} ${orderBy}`,
+      `SELECT s.*,
+              COALESCE(m.cnt, 0) AS meetings_count
+         FROM mn_scopes s
+         LEFT JOIN (
+           SELECT scope_id, COUNT(*)::int AS cnt
+             FROM mn_scope_members
+            GROUP BY scope_id
+         ) m ON m.scope_id = s.id
+         ${safeClause}
+         ${orderBy}`,
       params,
     );
     return r.rows.map(mapScope);
