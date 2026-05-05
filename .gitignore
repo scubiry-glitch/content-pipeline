@@ -52,6 +52,15 @@ test-*.mjs
 /tmp/
 *.tmp
 
+# Playwright MCP session snapshots（每次跑都变，不入库）
+.playwright-mcp/
+
+# 仓库根目录的截图（手工调试 / 设计预览，按需保留在本地，不入库）
+/m-*.png
+/d-*.png
+/login-*.png
+/people-*.png
+
 # VM-specific PM2 configs（各机器不同，不入库）
 mn-worker.config.cjs
 **/mn-worker.config.cjs
