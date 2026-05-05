@@ -9,6 +9,7 @@ import { MEETING } from './_fixtures';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { MockToggleProvider, MockToggleBar, useForceMock } from './_mockToggle';
 import { useIsMobile } from '../_useIsMobile';
+import { AxisVersionPanel } from './AxisVersionPanel';
 import './_tokens.css';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
@@ -368,6 +369,7 @@ export function MeetingDetailShell() {
                 </span>
               )}
               <Chip tone="ghost">{m.id}</Chip>
+              <VersionsButton meetingId={id} disabled={!UUID_RE.test(id)} />
               <ShareButton meetingId={id} disabled={!UUID_RE.test(id)} />
               {viewTabsRow}
             </div>
@@ -527,6 +529,37 @@ type ShareRecord = {
   created_at: string;
   expires_at: string | null;
 };
+
+function VersionsButton({ meetingId, disabled }: { meetingId: string; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => !disabled && setOpen(true)}
+        disabled={disabled}
+        title={disabled ? '' : '查看本场会议的版本历史 / 回滚（每次重跑 oneshot/CLI 都会写一版 vN）'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          border: '1px solid var(--line)', background: 'var(--paper)', borderRadius: 5,
+          padding: '5px 10px', fontSize: 11.5,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          color: disabled ? 'var(--ink-4)' : 'var(--ink-2)', fontFamily: 'var(--sans)',
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        <span style={{ fontSize: 13, lineHeight: 1 }}>📚</span> 版本
+      </button>
+      {open && (
+        <AxisVersionPanel
+          axis="all"
+          scopeKind="meeting"
+          scopeIdOverride={meetingId}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
 
 function ShareButton({ meetingId, disabled }: { meetingId: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);

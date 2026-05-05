@@ -30,14 +30,20 @@ type RestoreState =
 export function AxisVersionPanel({
   axis,
   scopeKind,
+  scopeIdOverride,
   onClose,
 }: {
   axis: string;
-  scopeKind: 'project' | 'library';
+  scopeKind: 'project' | 'library' | 'meeting';
+  /** scopeKind='meeting' 时由调用方传入 meetingId；scopeKind='project' 时可用于 URL ?scopeId 直链场景覆盖 ScopePill */
+  scopeIdOverride?: string;
   onClose?: () => void;
 }) {
   const meetingScope = useMeetingScope();
-  const scopeId = scopeKind === 'library' ? null : meetingScope.effectiveScopeId;
+  const scopeId =
+    scopeKind === 'library'  ? null :
+    scopeKind === 'meeting'  ? (scopeIdOverride ?? null) :
+    (scopeIdOverride ?? meetingScope.effectiveScopeId);
 
   const [versions, setVersions] = useState<VersionRow[] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);

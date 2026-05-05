@@ -33,7 +33,7 @@ export interface WikiFrontmatter {
 
   // ownership 层
   app?: 'meeting-notes' | 'knowledge-library' | 'manual';
-  generatedBy?: 'claude-cli' | 'wiki-generator' | 'manual-edit' | 'meeting-axes-generator' | 'meeting-scope-generator';
+  generatedBy?: 'claude-cli' | 'API Oneshot' | 'wiki-generator' | 'manual-edit' | 'meeting-axes-generator' | 'meeting-scope-generator';
   firstCreatedBy?: string;
   firstCreatedAt?: string;
   lastEditedBy?: string;
@@ -65,7 +65,7 @@ export interface WikiFrontmatter {
 export interface WikiBlockMeta {
   id: string;
   app: 'meeting-notes' | 'knowledge-library' | 'manual';
-  via?: 'claude-cli' | 'wiki-generator' | 'manual-edit';
+  via?: 'claude-cli' | 'API Oneshot' | 'wiki-generator' | 'manual-edit';
   meetingId?: string;
   addedAt: string;
 }

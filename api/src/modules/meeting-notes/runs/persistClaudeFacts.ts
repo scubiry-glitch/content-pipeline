@@ -8,8 +8,19 @@
 // 把 SPO 渲染成 obsidian 风格的 entities/<subject>.md 和 sources/<asset_id>.md。所以这里写完之后
 // 用户在 /content-library/wiki 点 generate 就能看到这场会议的 facts 进入 wiki。
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MeetingNotesDeps } from '../types.js';
 import { isValidTaxonomyCode } from '../../content-library/wiki/wikiFrontmatter.js';
+
+// SOURCE_TAG 默认 'claude_cli'；通过 AsyncLocalStorage 让 api-oneshot 调用方覆盖成 'API Oneshot'
+const sourceStorage = new AsyncLocalStorage<string>();
+function SOURCE_TAG(): string {
+  return sourceStorage.getStore() ?? 'claude_cli';
+}
+/** 调用方包一层即可让本次 facts 落库改用别的 source 标签 */
+export function withFactsSource<T>(sourceTag: string, fn: () => Promise<T>): Promise<T> {
+  return sourceStorage.run(sourceTag, fn);
+}
 
 export interface ClaudeFact {
   /** 三元组主语; runtime 校验空字符串后跳过 */
@@ -23,7 +34,6 @@ export interface ClaudeFact {
   [k: string]: unknown;
 }
 
-const SOURCE_TAG = 'claude_cli';
 const TAXONOMY_FALLBACK = 'E99.OTHER';
 
 /**
@@ -34,15 +44,16 @@ export async function persistClaudeFacts(
   meetingId: string,
   facts: ClaudeFact[],
 ): Promise<{ inserted: number; deleted: number }> {
-  // 1) 先 DELETE 同一 meeting 之前 claude_cli 写的行
+  // 1) 先 DELETE 同一 meeting 之前由 claude_cli / API Oneshot 写的行
+  //   维持「最近一次 LLM 自动跑覆盖之前所有自动 facts」的语义
   let deleted = 0;
   try {
     const r = await deps.db.query(
       `DELETE FROM content_facts
         WHERE asset_id = $1
-          AND context->>'source' = $2
+          AND context->>'source' = ANY($2::text[])
         RETURNING id`,
-      [meetingId, SOURCE_TAG],
+      [meetingId, ['claude_cli', 'API Oneshot']],
     );
     deleted = (r as any).rowCount ?? r.rows?.length ?? 0;
   } catch (e: any) {
@@ -63,7 +74,7 @@ export async function persistClaudeFacts(
     const taxonomy_code = rawCode && isValidTaxonomyCode(rawCode) ? rawCode : TAXONOMY_FALLBACK;
     const context = {
       meetingId,
-      source: SOURCE_TAG,
+      source: SOURCE_TAG(),
       quote: typeof f?.context?.quote === 'string' ? f.context.quote : null,
       taxonomy_code,
     };

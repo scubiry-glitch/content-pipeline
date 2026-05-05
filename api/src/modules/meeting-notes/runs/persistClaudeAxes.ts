@@ -12,6 +12,7 @@
 //   4. 失败容忍：单条 INSERT 出错只 console.warn，不中断整批；persistAxes 整体只在 connection error
 //      时上抛，由 runEngine 决定是否 mark run as failed。
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MeetingNotesDeps } from '../types.js';
 
 // ============================================================
@@ -44,7 +45,16 @@ interface AxesRoot {
   };
 }
 
-const SOURCE = 'claude_cli';
+// SOURCE 默认 'claude_cli'；通过 AsyncLocalStorage 让 api-oneshot 等调用方覆盖成
+// 'API Oneshot'（与前端展示一致），各 helper 不必加参数，重跑只清自己 source 的旧行。
+const sourceStorage = new AsyncLocalStorage<string>();
+function SOURCE(): string {
+  return sourceStorage.getStore() ?? 'claude_cli';
+}
+/** 调用方包一层即可让本次 persist 落库改用别的 source 标签 */
+export function withPersistSource<T>(sourceTag: string, fn: () => Promise<T>): Promise<T> {
+  return sourceStorage.run(sourceTag, fn);
+}
 
 /** 中文 verification_state → DB 枚举 */
 function mapVerificationState(v: unknown): string {
@@ -168,34 +178,41 @@ export async function persistClaudeAxes(
   const db = deps.db;
   const meetingIdUuid = meetingIdStr; // PG 会自动从 text 转成 uuid（INSERT 时显式 ::uuid 安全）
 
-  // ── 0. 先把所有相关 mn_* 表里 source='claude_cli' 的旧行删掉，避免重跑数据翻倍 ──
+  // ── 0. 把所有 LLM 自动生成器（claude-cli + API Oneshot）的旧行删掉 ──
+  //   两个模式以前共用 source='claude_cli'，现在各自独立 source；为了维持
+  //   「同一场会议最近一次跑覆盖之前所有自动产物」的语义（页面不出现来自
+  //   两个模式的重复行），cleanup 同时清掉两个 source。手工录入 / 其他 LLM
+  //   抽取（'manual_import'/'human_edit'/'llm_extracted' 等）不动。
+  //   历史快照在 mn_axis_versions 里另存（versionStore.snapshot），需要回看
+  //   旧版本走 GET /versions/meeting/all 或顶栏 📚 版本 入口。
+  const AUTO_SOURCES = ['claude_cli', 'API Oneshot'];
   const cleanupQueries = [
-    `DELETE FROM mn_commitments        WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_role_trajectory_points WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_speech_quality     WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_silence_signals    WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_decisions          WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_assumptions        WHERE meeting_id = $1::uuid AND source = $2`,
+    `DELETE FROM mn_commitments        WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_role_trajectory_points WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_speech_quality     WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_silence_signals    WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_decisions          WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_assumptions        WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
     // mn_open_questions 没有 meeting_id 列；按 first_raised_meeting_id 清理
-    `DELETE FROM mn_open_questions     WHERE first_raised_meeting_id = $1::uuid AND source = $2`,
+    `DELETE FROM mn_open_questions     WHERE first_raised_meeting_id = $1::uuid AND source = ANY($2::text[])`,
     // mn_risks 也没有 meeting_id；按 metadata.firstRaisedMeetingId 清理（claude-cli 模式我们写在 metadata 里）
-    `DELETE FROM mn_risks              WHERE metadata->>'firstRaisedMeetingId' = $1 AND source = $2`,
-    `DELETE FROM mn_judgments          WHERE abstracted_from_meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_mental_model_invocations WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_cognitive_biases   WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_counterfactuals    WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_evidence_grades    WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_decision_quality   WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_meeting_necessity  WHERE meeting_id = $1::uuid AND source = $2`,
-    `DELETE FROM mn_affect_curve       WHERE meeting_id = $1::uuid AND source = $2`,
+    `DELETE FROM mn_risks              WHERE metadata->>'firstRaisedMeetingId' = $1 AND source = ANY($2::text[])`,
+    `DELETE FROM mn_judgments          WHERE abstracted_from_meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_mental_model_invocations WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_cognitive_biases   WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_counterfactuals    WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_evidence_grades    WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_decision_quality   WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_meeting_necessity  WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
+    `DELETE FROM mn_affect_curve       WHERE meeting_id = $1::uuid AND source = ANY($2::text[])`,
     // tension/consensus/focus_map: meeting_id 是 VARCHAR(50)
-    `DELETE FROM mn_tensions           WHERE meeting_id = $1 AND source = $2`,
-    `DELETE FROM mn_consensus_items    WHERE meeting_id = $1 AND source = $2`,
-    `DELETE FROM mn_focus_map          WHERE meeting_id = $1 AND source = $2`,
+    `DELETE FROM mn_tensions           WHERE meeting_id = $1 AND source = ANY($2::text[])`,
+    `DELETE FROM mn_consensus_items    WHERE meeting_id = $1 AND source = ANY($2::text[])`,
+    `DELETE FROM mn_focus_map          WHERE meeting_id = $1 AND source = ANY($2::text[])`,
   ];
   for (const q of cleanupQueries) {
     try {
-      await db.query(q, [meetingIdUuid, SOURCE]);
+      await db.query(q, [meetingIdUuid, AUTO_SOURCES]);
     } catch (e: any) {
       console.warn('[persistClaudeAxes] cleanup failed:', q.slice(0, 60), '—', e?.message);
     }
@@ -259,7 +276,7 @@ async function persistCommitments(
           mapCommitState(it?.state),
           clampNumber(Number(it?.progress) * 100, 0, 100, 0), // claude 0-1, DB 0-100
           JSON.stringify({ src_id: it?.id ?? null }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -300,7 +317,7 @@ async function persistPeopleStats(
             meetingIdUuid,
             String(t?.role ?? '').slice(0, 60) || 'unknown',
             clampNumber(t?.confidence ?? 0.6, 0, 1, 0.6),
-            SOURCE,
+            SOURCE(),
           ],
         );
       } catch (e: any) {
@@ -329,7 +346,7 @@ async function persistPeopleStats(
             Math.max(0, Math.floor(followed)),
             clampNumber(entropy01 * 60 + Math.min(40, followed), 0, 100, 0),
             JSON.stringify([]),
-            SOURCE,
+            SOURCE(),
           ],
         );
       } catch (e: any) {
@@ -347,7 +364,7 @@ async function persistPeopleStats(
           `INSERT INTO mn_silence_signals
              (meeting_id, person_id, topic_id, state, prior_topics_spoken, anomaly_score, source)
            VALUES ($1::uuid, $2::uuid, $3, 'abnormal_silence', 0, $4, $5)`,
-          [meetingIdUuid, personId, t.slice(0, 80), 70, SOURCE],
+          [meetingIdUuid, personId, t.slice(0, 80), 70, SOURCE()],
         );
       } catch (e: any) {
         console.warn('[persistClaudeAxes] silence_signals insert failed:', e?.message);
@@ -379,7 +396,7 @@ async function persistDecisions(
           !it?.superseded,
           String(it?.basedOn ?? '') || null,
           JSON.stringify({ src_id: it?.id ?? null, supersededBy: it?.supersededBy ?? null }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -412,7 +429,7 @@ async function persistAssumptions(
           [], // underpins_decision_ids 跨会议难解析
           clampNumber(it?.confidence, 0, 1, 0.5),
           JSON.stringify({ src_id: it?.id ?? null, underpinsRaw: it?.underpins ?? [] }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -448,7 +465,7 @@ async function persistOpenQuestions(
           ownerId,
           toTs(it?.due),
           JSON.stringify({ src_id: it?.id ?? null, note: it?.note ?? null }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -484,7 +501,7 @@ async function persistRisks(
             action: it?.action ?? null,
             meetings: Number(it?.meetings) || 1,
           }),
-          SOURCE,
+          SOURCE(),
           meetingIdStr, // for workspace_id subquery
         ],
       );
@@ -518,7 +535,7 @@ async function persistJudgments(
           [meetingIdUuid], // linked_meeting_ids 至少包含当前会议自己, 否则
                            //   getMeetingAxes 的 WHERE $1 = ANY(linked_meeting_ids) 永远查不到
           JSON.stringify({ src_id: it?.id ?? null, abstractedFrom: it?.abstractedFrom ?? null, author: it?.author ?? null }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -550,7 +567,7 @@ async function persistMentalModels(
           String(it?.outcome ?? '') || null,
           String(it?.expert ?? '').slice(0, 80) || null,
           clampNumber(0.7, 0, 1, 0.7),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -582,7 +599,7 @@ async function persistEvidenceGrades(
              weighted_score = EXCLUDED.weighted_score,
              source = EXCLUDED.source,
              computed_at = NOW()`,
-      [meetingIdUuid, a, b, c, d, Number(weighted.toFixed(2)), SOURCE],
+      [meetingIdUuid, a, b, c, d, Number(weighted.toFixed(2)), SOURCE()],
     );
   } catch (e: any) {
     console.warn('[persistClaudeAxes] evidence_grades upsert failed:', e?.message);
@@ -611,7 +628,7 @@ async function persistCognitiveBiases(
           mapSeverity(it?.severity, false),
           Boolean(it?.mitigated),
           String(it?.mitigation ?? '') || null,
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -641,7 +658,7 @@ async function persistCounterfactuals(
           byPersonId,
           String(it?.trackingNote ?? '') || null,
           toTs(it?.validityCheckAt),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -682,7 +699,7 @@ async function persistDecisionQuality(
         dims.traceable ?? 0,
         dims.falsifiable ?? 0,
         dims.aligned ?? 0,
-        SOURCE,
+        SOURCE(),
       ],
     );
   } catch (e: any) {
@@ -714,7 +731,7 @@ async function persistMeetingNecessity(
         mapVerdict(block.verdict),
         Number.isFinite(suggestedDur) && suggestedDur > 0 ? Math.floor(suggestedDur) : null,
         JSON.stringify(reasons),
-        SOURCE,
+        SOURCE(),
       ],
     );
   } catch (e: any) {
@@ -753,7 +770,7 @@ async function persistAffectCurve(
         JSON.stringify(samples),
         JSON.stringify([]), // tension_peaks 由后续触发器/聚合计算
         JSON.stringify([]),
-        SOURCE,
+        SOURCE(),
       ],
     );
   } catch (e: any) {
@@ -791,7 +808,7 @@ async function persistTensions(
           clampNumber(it?.intensity, 0, 1, 0),
           String(it?.summary ?? '') || null,
           JSON.stringify({ moments }),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {
@@ -823,7 +840,7 @@ async function persistConsensus(
           String(it?.text ?? '').trim() || '(empty)',
           supportedBy,
           i,
-          SOURCE,
+          SOURCE(),
         ],
       );
       itemId = r.rows[0]?.id ?? null;
@@ -846,7 +863,7 @@ async function persistConsensus(
             String(side?.reason ?? '') || null,
             resolvePersonIds(side?.by, pmap),
             s,
-            SOURCE,
+            SOURCE(),
           ],
         );
       } catch (e: any) {
@@ -883,7 +900,7 @@ async function persistFocusMap(
           personId,
           themes,
           Math.max(0, Number(it?.returnsTo) || 0),
-          SOURCE,
+          SOURCE(),
         ],
       );
     } catch (e: any) {

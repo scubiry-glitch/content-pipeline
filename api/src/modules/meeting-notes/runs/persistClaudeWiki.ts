@@ -14,10 +14,24 @@
 //
 // 兼容旧契约 (entityName + appendMarkdown): 仍走老 "必须 content_entities 命中 + 文件存在才追加" 路径
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MeetingNotesDeps } from '../types.js';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+
+// generatedBy 默认 'claude-cli'；通过 AsyncLocalStorage 让 api-oneshot 调用方覆盖成 'API Oneshot'，
+// 与前端展示 / mn_runs.metadata.mode 标签保持一致。
+// 影响范围：frontmatter (generatedBy/firstCreatedBy/lastEditedBy) + blockMeta.via + block 头注释
+type GeneratorLabel = 'claude-cli' | 'API Oneshot';
+const generatedByStorage = new AsyncLocalStorage<GeneratorLabel>();
+function generatedByLabel(): GeneratorLabel {
+  return generatedByStorage.getStore() ?? 'claude-cli';
+}
+/** 调用方包一层即可让本次 wiki 写入改用别的 generatedBy 标签 */
+export function withWikiGeneratedBy<T>(label: GeneratorLabel, fn: () => Promise<T>): Promise<T> {
+  return generatedByStorage.run(label, fn);
+}
 import {
   parseFrontmatter,
   renderFrontmatter,
@@ -225,11 +239,12 @@ async function handleNewEntityUpdate(
   }
 
   const filePath = resolveEntityPath(wikiRoot, upd.type, upd.subtype, upd.canonicalName);
+  const gen = generatedByLabel();
   const blockMeta: WikiBlockMeta = {
-    id: blockId, app: 'meeting-notes', via: 'claude-cli', meetingId, addedAt: now,
+    id: blockId, app: 'meeting-notes', via: gen, meetingId, addedAt: now,
   };
   // 顶部 ## 标题让用户在 obsidian 看清楚来源；包在 <!-- block:xxx --> 注释里
-  const blockBody = `## Claude CLI · meeting ${meetingId} · ${now.slice(0, 10)}\n\n${upd.blockContent.trim()}`;
+  const blockBody = `## ${gen} · meeting ${meetingId} · ${now.slice(0, 10)}\n\n${upd.blockContent.trim()}`;
 
   if (!existsSync(filePath)) {
     // 创建
@@ -240,10 +255,10 @@ async function handleNewEntityUpdate(
       aliases: upd.aliases ?? [],
       slug: slugify(upd.canonicalName),
       app: 'meeting-notes',
-      generatedBy: 'claude-cli',
-      firstCreatedBy: 'claude-cli',
+      generatedBy: gen,
+      firstCreatedBy: gen,
       firstCreatedAt: now,
-      lastEditedBy: 'claude-cli',
+      lastEditedBy: gen,
       lastEditedAt: now,
       blocks: [blockMeta],
     };
@@ -275,7 +290,7 @@ async function handleNewEntityUpdate(
     const updatedFm: WikiFrontmatter = {
       ...frontmatter,
       blocks,
-      lastEditedBy: 'claude-cli',
+      lastEditedBy: gen,
       lastEditedAt: now,
     };
     await writeFile(filePath, `${renderFrontmatter(updatedFm)}\n\n${newBody.trimStart()}`, 'utf8');
@@ -324,7 +339,8 @@ async function handleLegacyEntityUpdate(
     const cur = await readFile(entityPath, 'utf8');
     const { frontmatter, body } = parseFrontmatter(cur);
     const blockId = `meeting-${meetingId.slice(0, 8)}`;
-    const blockBody = `## Claude CLI · meeting ${meetingId}\n\n${appendMd}`;
+    const gen = generatedByLabel();
+    const blockBody = `## ${gen} · meeting ${meetingId}\n\n${appendMd}`;
     const alreadyHasBlock = hasBlock(body, blockId);
     const newBody = upsertBlock(body, blockId, blockBody);
 
@@ -332,12 +348,12 @@ async function handleLegacyEntityUpdate(
       // 有 frontmatter：更新 blocks + lastEditedAt 后写回
       const blocks = ((frontmatter.blocks ?? []) as WikiBlockMeta[]).filter((b) => b?.id !== blockId);
       blocks.push({
-        id: blockId, app: 'meeting-notes', via: 'claude-cli',
+        id: blockId, app: 'meeting-notes', via: gen,
         meetingId, addedAt: new Date().toISOString(),
       });
       const updatedFm: WikiFrontmatter = {
         ...frontmatter, blocks,
-        lastEditedBy: 'claude-cli', lastEditedAt: new Date().toISOString(),
+        lastEditedBy: gen, lastEditedAt: new Date().toISOString(),
       };
       await writeFile(entityPath, `${renderFrontmatter(updatedFm)}\n\n${newBody.trimStart()}`, 'utf8');
     } else {

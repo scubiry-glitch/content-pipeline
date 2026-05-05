@@ -1544,17 +1544,35 @@ export class RunEngine {
           }
         });
 
+        // 落版本号（mn_axis_versions），允许后续重跑时仍然能查到本次产物
+        // 注：claude-cli / api-oneshot 模式下 persistClaudeAxes 是「同 meeting 全清重写」，
+        // 没有 snapshot 之前每次重跑都把上一次结果擦掉。这里在 finalize 前抓一次完整 axes。
+        try {
+          const snapshot = await this.getMeetingAxes(payload.meetingId);
+          await this.versionStore.snapshot({
+            runId: payload.runId,
+            scopeKind: payload.scope.kind,
+            scopeId: payload.scope.id ?? null,
+            axis: 'all',
+            data: snapshot,
+          });
+        } catch (e) {
+          console.warn('[runEngine] claude-cli versionStore.snapshot failed:', (e as Error).message);
+        }
+
         await writeStep('render', 1.0, 'CLI 模式生成完成');
         // 跳过 multi-axis 流程，fall-through 到下面的 success-finalize
       } else if (payload.mode === 'api-oneshot' && payload.meetingId) {
         // ─── api-oneshot 模式 ──────────────────────────────────
         // 与 claude-cli 同拓扑（一次出 16 轴 JSON），通道换成 services/llm.ts 直连 API。
-        // 不依赖 claude 二进制 / 没有 session 概念。Wiki frontmatter 复用 'claude-cli' 标签
-        // （persistClaudeWiki 写死，不改）—— v2 再加 generator 参数区分。
+        // 不依赖 claude 二进制 / 没有 session 概念。
+        // mn_* / content_facts 落库 source = 'API Oneshot'（与前端展示一致），
+        // wiki frontmatter generatedBy / via / 块头同步成 'API Oneshot'。
+        const ONESHOT_TAG = 'API Oneshot';
         const { runOneshotMode } = await import('./oneshotRunner.js');
-        const { persistClaudeAxes } = await import('./persistClaudeAxes.js');
-        const { persistClaudeFacts } = await import('./persistClaudeFacts.js');
-        const { persistClaudeWiki } = await import('./persistClaudeWiki.js');
+        const { persistClaudeAxes, withPersistSource } = await import('./persistClaudeAxes.js');
+        const { persistClaudeFacts, withFactsSource } = await import('./persistClaudeFacts.js');
+        const { persistClaudeWiki, withWikiGeneratedBy } = await import('./persistClaudeWiki.js');
         const { buildScopePrompt, buildMeetingDigest } = await import('./promptTemplates/claudeCliScope.js');
         const { ensurePersonByName } = await import('../parse/participantExtractor.js');
 
@@ -1680,29 +1698,29 @@ export class RunEngine {
           }
 
           await writeStep('render', 0.55, '写入 mn_* 轴表');
-          await persistClaudeAxes(this.deps, payload.meetingId!, {
+          await withPersistSource(ONESHOT_TAG, () => persistClaudeAxes(this.deps, payload.meetingId!, {
             meeting: oneshotResult.meeting,
             participants: oneshotResult.participants,
             analysis: oneshotResult.analysis as any,
             axes: oneshotResult.axes as any,
-          }, cliPersonMap);
+          }, cliPersonMap));
 
           await writeStep('render', 0.65, '写入 content_facts');
           try {
-            await persistClaudeFacts(this.deps, payload.meetingId!, oneshotResult.facts ?? []);
+            await withFactsSource(ONESHOT_TAG, () => persistClaudeFacts(this.deps, payload.meetingId!, oneshotResult.facts ?? []));
           } catch (e) {
             console.warn('[runEngine] persistClaudeFacts failed:', (e as Error).message);
           }
 
           await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
           try {
-            await persistClaudeWiki(
+            await withWikiGeneratedBy(ONESHOT_TAG, () => persistClaudeWiki(
               this.deps,
               payload.meetingId!,
               oneshotResult.wikiMarkdown ?? {},
               undefined,
               (oneshotResult as any)?.meeting?.title,
-            );
+            ));
           } catch (e) {
             console.warn('[runEngine] persistClaudeWiki failed:', (e as Error).message);
           }
@@ -1895,6 +1913,20 @@ export class RunEngine {
             }
           }
         });
+
+        // 落版本号（mn_axis_versions），见 claude-cli 分支同名注释
+        try {
+          const snapshot = await this.getMeetingAxes(payload.meetingId);
+          await this.versionStore.snapshot({
+            runId: payload.runId,
+            scopeKind: payload.scope.kind,
+            scopeId: payload.scope.id ?? null,
+            axis: 'all',
+            data: snapshot,
+          });
+        } catch (e) {
+          console.warn('[runEngine] api-oneshot versionStore.snapshot failed:', (e as Error).message);
+        }
 
         await writeStep('render', 1.0, 'API Oneshot 模式生成完成');
         // 跳过 multi-axis 流程，fall-through 到下面的 success-finalize
