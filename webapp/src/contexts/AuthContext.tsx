@@ -35,7 +35,7 @@ interface AuthContextValue {
   loading: boolean;
   via: 'session' | 'api-key' | null;
   sessionExpiresAt: Date | null;
-  login(email: string, password: string): Promise<void>;
+  login(email: string, password: string, opts?: { rememberMe?: boolean }): Promise<void>;
   logout(): Promise<void>;
   switchWorkspace(workspaceId: string): Promise<void>;
   refresh(): Promise<void>;
@@ -161,8 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.id, via]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    await authClient.post('/auth/login', { email, password });
+  const login = useCallback(async (email: string, password: string, opts?: { rememberMe?: boolean }) => {
+    await authClient.post('/auth/login', { email, password, rememberMe: opts?.rememberMe ?? true });
     await refresh();
   }, [refresh]);
 

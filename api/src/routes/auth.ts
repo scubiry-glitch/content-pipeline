@@ -12,6 +12,7 @@ import {
   refreshSession,
   SESSION_COOKIE_NAME,
   SESSION_TTL_DAYS,
+  SESSION_TTL_DAYS_SHORT,
 } from '../services/auth/sessions.js';
 import { authenticate } from '../middleware/auth.js';
 import {
@@ -30,16 +31,28 @@ import {
 interface LoginBody {
   email?: string;
   password?: string;
+  rememberMe?: boolean;
 }
 
-function setSessionCookie(reply: FastifyReply, token: string, expiresAt: Date) {
+function setSessionCookie(
+  reply: FastifyReply,
+  token: string,
+  expiresAt: Date,
+  opts?: { persistent?: boolean }
+) {
+  // persistent=false → 浏览器关闭即失效（不写 expires/maxAge），但后端 session 仍按 expiresAt 失效
+  const persistent = opts?.persistent !== false;
   reply.setCookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    expires: expiresAt,
-    maxAge: SESSION_TTL_DAYS * 24 * 60 * 60,
+    ...(persistent
+      ? {
+          expires: expiresAt,
+          maxAge: Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000)),
+        }
+      : {}),
   });
 }
 
@@ -137,15 +150,18 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     const ip = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
     const ua = request.headers['user-agent'] || '';
+    // rememberMe undefined / true → 30d 持久 cookie；false → 1d session cookie
+    const remember = body.rememberMe !== false;
     const { token, expiresAt } = await createSession({
       userId: user.id,
       userAgent: ua,
       ip,
       currentWorkspaceId: firstWs,
+      ttlDays: remember ? SESSION_TTL_DAYS : SESSION_TTL_DAYS_SHORT,
     });
 
     await query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [user.id]);
-    setSessionCookie(reply, token, expiresAt);
+    setSessionCookie(reply, token, expiresAt, { persistent: remember });
 
     await writeAuditEvent({
       event: 'login.success',

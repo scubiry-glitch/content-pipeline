@@ -3,6 +3,7 @@ import { query } from '../../db/connection.js';
 
 export const SESSION_COOKIE_NAME = 'cp_session';
 export const SESSION_TTL_DAYS = 30;
+export const SESSION_TTL_DAYS_SHORT = 1;
 
 export interface SessionUser {
   id: string;
@@ -40,10 +41,12 @@ export async function createSession(opts: {
   userAgent?: string;
   ip?: string;
   currentWorkspaceId?: string | null;
-}): Promise<{ token: string; expiresAt: Date }> {
+  ttlDays?: number;
+}): Promise<{ token: string; expiresAt: Date; ttlDays: number }> {
   const token = generateSessionToken();
   const tokenHash = sha256(token);
-  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const ttlDays = opts.ttlDays && opts.ttlDays > 0 ? opts.ttlDays : SESSION_TTL_DAYS;
+  const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
 
   await query(
     `INSERT INTO auth_sessions (user_id, token_hash, user_agent, ip, current_workspace_id, expires_at)
@@ -51,7 +54,7 @@ export async function createSession(opts: {
     [opts.userId, tokenHash, opts.userAgent || null, opts.ip || null, opts.currentWorkspaceId || null, expiresAt]
   );
 
-  return { token, expiresAt };
+  return { token, expiresAt, ttlDays };
 }
 
 export async function resolveSession(token: string): Promise<ResolvedSession | null> {
