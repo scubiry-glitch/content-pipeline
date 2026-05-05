@@ -1025,8 +1025,15 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
   const IW = W - PAD.L - PAD.R;
   const IH = H - PAD.T - PAD.B;
   const midY = PAD.T + IH / 2;
-  const MIN = 118;
-  const maxT = Math.max(MIN, ...samples.map((s) => Number(s.t ?? 0)));
+  // x 轴最大时间：取 samples / tensionPeaks / insightPoints 三组里的最大 t,
+  // 加 5% padding 保证最右边有点空间; 至少 1 分钟避免除零.
+  // (之前固定 MIN=118 让短会议样本全挤到最左 ~2% 宽度看不清.)
+  const allTs: number[] = [
+    ...samples.map((s) => Number(s.t ?? 0)),
+    ...normTensionPeaks.map((tp) => tp.t),
+    ...normInsightPoints.map((ip) => ip.t),
+  ].filter((n) => Number.isFinite(n));
+  const maxT = Math.max(1, ...allTs) * 1.05;
   const xFor = (t: number) => PAD.L + (t / maxT) * IW;
   const yForValence = (v: number) => midY - v * (IH / 2 - 12);
 
