@@ -14,6 +14,7 @@ import { createBrainRouter } from './brain/router.js';
 import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
 import { getRecommendedScopes, getDefaultScopes } from './recommendation/service.js';
 import { ceoWorkspaceGuard } from './workspaceGuard.js';
+import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
@@ -30,7 +31,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
     // GET /api/v1/ceo/recommended-scopes?limit=3&minScore=1
     fastify.get('/recommended-scopes', async (request) => {
       const q = (request.query ?? {}) as { limit?: string; minScore?: string };
-      return getRecommendedScopes(engine.deps, {
+      return getRecommendedScopes(engine.deps, currentWorkspaceId(request), {
         limit: q.limit ? Number(q.limit) : undefined,
         minScore: q.minScore ? Number(q.minScore) : undefined,
       });
@@ -38,8 +39,8 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
 
     // 默认 scope — 优先 CEO_PREFERRED_SCOPES 名字精确匹配，回退动态评分
     // GET /api/v1/ceo/default-scopes
-    fastify.get('/default-scopes', async () => {
-      return getDefaultScopes(engine.deps);
+    fastify.get('/default-scopes', async (request) => {
+      return getDefaultScopes(engine.deps, currentWorkspaceId(request));
     });
 
     // 批量分析填充 — 对一组 scope 入队 g2/g3/g4/g5 全部任务

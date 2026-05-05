@@ -11,6 +11,7 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeForwardPct } from './aggregator.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 interface ScopeFilter {
   scopeIds?: string[];
@@ -22,6 +23,7 @@ function scopeIdsParam(ids?: string[]): string[] | null {
 
 export async function listDirectors(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: ScopeFilter,
 ): Promise<{ items: any[] }> {
   const ids = scopeIdsParam(filter.scopeIds);
@@ -38,8 +40,9 @@ export async function listDirectors(
           AND (l.workspace_id = d.workspace_id OR l.workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
          LEFT JOIN expert_profiles ep ON ep.expert_id = l.expert_id
         WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+          AND ${wsFilterClause(2, 'd.workspace_id')}
         ORDER BY d.weight DESC, d.name`,
-      [ids],
+      [ids, workspaceId],
     );
     rows = r.rows;
   } catch {
@@ -52,8 +55,9 @@ export async function listDirectors(
            ON l.person_id = d.id
           AND (l.workspace_id = d.workspace_id OR l.workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
         WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+          AND ${wsFilterClause(2, 'd.workspace_id')}
         ORDER BY d.weight DESC, d.name`,
-      [ids],
+      [ids, workspaceId],
     ).catch(() => ({ rows: [] as any[] }));
     rows = r.rows;
   }
@@ -71,6 +75,7 @@ export async function listDirectors(
 
 export async function listConcerns(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { directorId?: string; status?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
@@ -88,6 +93,8 @@ export async function listConcerns(
     params.push(ids);
     where.push(`d.scope_id = ANY($${params.length}::uuid[])`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length, 'c.workspace_id'));
   const r = await deps.db.query(
     `SELECT c.id::text, c.director_id::text, c.topic, c.status,
             c.raised_count, c.raised_at, c.source_meeting_id::text,
@@ -95,7 +102,7 @@ export async function listConcerns(
             d.name AS director_name, d.role AS director_role
        FROM ceo_director_concerns c
        LEFT JOIN ceo_directors d ON d.id = c.director_id
-       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       WHERE ${where.join(' AND ')}
        ORDER BY c.raised_at DESC
        LIMIT 50`,
     params,
@@ -105,6 +112,7 @@ export async function listConcerns(
 
 export async function listBriefs(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeIds?: string[]; session?: string },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
@@ -118,11 +126,13 @@ export async function listBriefs(
     params.push(filter.session);
     where.push(`board_session = $${params.length}`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length));
   const r = await deps.db.query(
     `SELECT id::text, scope_id::text, board_session, version, toc, page_count,
             status, generated_run_id, generated_at, read_at, updated_at
        FROM ceo_briefs
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      WHERE ${where.join(' AND ')}
       ORDER BY updated_at DESC
       LIMIT 30`,
     params,
@@ -138,6 +148,7 @@ export async function listBriefs(
  */
 export async function listPromises(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { briefId?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
   const ids = scopeIdsParam(filter.scopeIds);
@@ -149,8 +160,9 @@ export async function listPromises(
               source_decision_id, 'ceo' AS source, NULL::text AS person_id, NULL::text AS person_role
          FROM ceo_board_promises
         WHERE brief_id = $1::uuid
+          AND ${wsFilterClause(2)}
         ORDER BY status, due_at NULLS LAST`,
-      [filter.briefId],
+      [filter.briefId, workspaceId],
     );
     return { items: r.rows };
   }
@@ -169,9 +181,10 @@ export async function listPromises(
          FROM mn_commitments c
          JOIN mn_people p ON c.person_id = p.id
         WHERE ($1::uuid[] IS NULL OR c.scope_id = ANY($1::uuid[]))
+          AND ${wsFilterClause(2, 'c.workspace_id')}
         ORDER BY c.due_at NULLS LAST
         LIMIT 50`,
-      [ids],
+      [ids, workspaceId],
     );
     items.push(...mn.rows);
   } catch {
@@ -187,9 +200,10 @@ export async function listPromises(
          FROM ceo_board_promises p
          LEFT JOIN ceo_briefs b ON b.id = p.brief_id
         WHERE ($1::uuid[] IS NULL OR b.scope_id = ANY($1::uuid[]))
+          AND ${wsFilterClause(2, 'p.workspace_id')}
         ORDER BY p.status, p.due_at NULLS LAST
         LIMIT 30`,
-      [ids],
+      [ids, workspaceId],
     );
     items.push(...ceo.rows);
   } catch {
@@ -201,6 +215,7 @@ export async function listPromises(
 
 export async function listRebuttals(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { briefId?: string; scopeIds?: string[] },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
@@ -215,11 +230,13 @@ export async function listRebuttals(
       where.push(`scope_id = ANY($${params.length}::uuid[])`);
     }
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length));
   const r = await deps.db.query(
     `SELECT id::text, brief_id::text, scope_id::text, attacker, attack_text,
             defense_text, strength_score, generated_run_id, created_at
        FROM ceo_rebuttal_rehearsals
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      WHERE ${where.join(' AND ')}
       ORDER BY strength_score DESC NULLS LAST, created_at DESC
       LIMIT 20`,
     params,
@@ -230,6 +247,7 @@ export async function listRebuttals(
 /** Boardroom dashboard: 关切雷达 + 最新预读包 + 承诺状态 + forward_pct */
 export async function getBoardroomDashboard(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeIds?: string[],
 ): Promise<{
   question: string;
@@ -254,8 +272,9 @@ export async function getBoardroomDashboard(
        FROM ceo_director_concerns c
        LEFT JOIN ceo_directors d ON d.id = c.director_id
       WHERE ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+        AND ${wsFilterClause(2, 'c.workspace_id')}
       GROUP BY c.status`,
-    [ids],
+    [ids, workspaceId],
   );
   const concernsByStatus = { pending: 0, answered: 0, superseded: 0 };
   for (const r of cs.rows) {
@@ -269,10 +288,11 @@ export async function getBoardroomDashboard(
        LEFT JOIN ceo_directors d ON d.id = c.director_id
       WHERE c.status = 'pending'
         AND ($1::uuid[] IS NULL OR d.scope_id = ANY($1::uuid[]))
+        AND ${wsFilterClause(2, 'c.workspace_id')}
       GROUP BY d.id, d.name, d.role
       ORDER BY cnt DESC, last_raised DESC NULLS LAST
       LIMIT 5`,
-    [ids],
+    [ids, workspaceId],
   );
   const topConcerns = top.rows.map((r) => ({
     name: r.name ?? '匿名董事',
@@ -284,23 +304,25 @@ export async function getBoardroomDashboard(
   }));
 
   // forwardPct 当前用 brief.toc 算，scope 多选时取并集 (单 scope 兼容: 用 ids[0])
-  const forwardPct = await computeForwardPct(deps, ids?.[0]);
+  const forwardPct = await computeForwardPct(deps, workspaceId, ids?.[0]);
 
   // promiseStats: union mn + ceo (映射 mn.state → in_progress/done/late/proposed)
   const mnPs = await deps.db.query(
     `SELECT c.state AS status, COUNT(*)::int AS n
        FROM mn_commitments c
       WHERE ($1::uuid[] IS NULL OR c.scope_id = ANY($1::uuid[]))
+        AND ${wsFilterClause(2, 'c.workspace_id')}
       GROUP BY c.state`,
-    [ids],
+    [ids, workspaceId],
   ).catch(() => ({ rows: [] as any[] }));
   const ceoPs = await deps.db.query(
     `SELECT p.status, COUNT(*)::int AS n
        FROM ceo_board_promises p
        LEFT JOIN ceo_briefs b ON b.id = p.brief_id
       WHERE ($1::uuid[] IS NULL OR b.scope_id = ANY($1::uuid[]))
+        AND ${wsFilterClause(2, 'p.workspace_id')}
       GROUP BY p.status`,
-    [ids],
+    [ids, workspaceId],
   ).catch(() => ({ rows: [] as any[] }));
 
   const promiseStats = { total: 0, done: 0, in_progress: 0, late: 0 };
@@ -319,8 +341,10 @@ export async function getBoardroomDashboard(
   if (ids && ids.length > 0) {
     try {
       const sc = await deps.db.query(
-        `SELECT id::text, name, kind FROM mn_scopes WHERE id = ANY($1::uuid[])`,
-        [ids],
+        `SELECT id::text, name, kind FROM mn_scopes
+          WHERE id = ANY($1::uuid[])
+            AND ${wsFilterClause(2)}`,
+        [ids, workspaceId],
       );
       appliedScopes = sc.rows.map((row) => ({
         id: String(row.id),
@@ -351,14 +375,16 @@ export async function getBoardroomDashboard(
 
 export async function createDirector(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: { name?: string; role?: string | null; weight?: number; scopeId?: string | null; metadata?: Record<string, any> },
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   if (!body.name) return { ok: false, error: 'name required' };
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const r = await deps.db.query(
-    `INSERT INTO ceo_directors (scope_id, name, role, weight, metadata)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO ceo_directors (scope_id, name, role, weight, metadata, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id::text`,
-    [body.scopeId ?? null, body.name, body.role ?? null, body.weight ?? 1.0, body.metadata ?? {}],
+    [body.scopeId ?? null, body.name, body.role ?? null, body.weight ?? 1.0, body.metadata ?? {}, workspaceId],
   );
   return { ok: true, id: r.rows[0].id };
 }
@@ -395,14 +421,16 @@ export async function deleteDirector(
 
 export async function createConcern(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: { directorId?: string; topic?: string; sourceMeetingId?: string | null },
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   if (!body.directorId || !body.topic) return { ok: false, error: 'directorId and topic required' };
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const r = await deps.db.query(
-    `INSERT INTO ceo_director_concerns (director_id, topic, source_meeting_id)
-     VALUES ($1, $2, $3)
+    `INSERT INTO ceo_director_concerns (director_id, topic, source_meeting_id, workspace_id)
+     VALUES ($1, $2, $3, $4)
      RETURNING id::text`,
-    [body.directorId, body.topic, body.sourceMeetingId ?? null],
+    [body.directorId, body.topic, body.sourceMeetingId ?? null, workspaceId],
   );
   return { ok: true, id: r.rows[0].id };
 }

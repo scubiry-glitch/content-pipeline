@@ -4,6 +4,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
+import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
 import {
   listStrategicLines,
   listStrategicEchos,
@@ -26,55 +27,65 @@ export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.addHook('preHandler', ceoWorkspaceGuard);
 
     fastify.get('/dashboard', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getCompassDashboard(engine.deps, scopeId);
+      return getCompassDashboard(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/lines', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, kind } = (request.query ?? {}) as { scopeId?: string; kind?: string };
-      return listStrategicLines(engine.deps, { scopeId, kind });
+      return listStrategicLines(engine.deps, wsId, { scopeId, kind });
     });
 
     fastify.get('/echos', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { lineId } = (request.query ?? {}) as { lineId?: string };
-      return listStrategicEchos(engine.deps, { lineId });
+      return listStrategicEchos(engine.deps, wsId, { lineId });
     });
 
     fastify.get('/attention', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, weekStart } = (request.query ?? {}) as { scopeId?: string; weekStart?: string };
-      return getAttentionAlloc(engine.deps, { scopeId, weekStart });
+      return getAttentionAlloc(engine.deps, wsId, { scopeId, weekStart });
     });
 
     fastify.post('/recompute', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return recomputeAlignment(engine.deps, scopeId);
+      return recomputeAlignment(engine.deps, wsId, scopeId);
     });
 
     // Project Atlas 子房间 — 项目星图 + 危险榜
     fastify.get('/atlas', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getProjectAtlas(engine.deps, scopeId);
+      return getProjectAtlas(engine.deps, wsId, scopeId);
     });
 
     // ─── samples-s 对齐：5 个新 GET endpoint ───────────────────
     fastify.get('/astrolabe', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getAstrolabe(engine.deps, scopeId);
+      return getAstrolabe(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/time-pie', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getTimePie(engine.deps, scopeId);
+      return getTimePie(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/drift-radar', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getDriftRadar(engine.deps, scopeId);
+      return getDriftRadar(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/one-pager', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      const data = await getOnePager(engine.deps, scopeId);
+      const data = await getOnePager(engine.deps, wsId, scopeId);
       if (!data) {
         reply.code(404);
         return { error: 'no-brief-available' };
@@ -83,15 +94,17 @@ export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
     });
 
     fastify.get('/archives', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, tab } = (request.query ?? {}) as { scopeId?: string; tab?: string };
       const t = tab === 'drift' ? 'drift' : 'main';
-      return getArchives(engine.deps, t, scopeId);
+      return getArchives(engine.deps, wsId, t, scopeId);
     });
 
     // ─── 输入接入层 (Phase 1) ─────────────────────────────────
     fastify.post('/lines', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as Record<string, any>;
-      const r = await createStrategicLine(engine.deps, body);
+      const r = await createStrategicLine(engine.deps, wsId, body);
       if (!r.ok) { reply.code(400); }
       return r;
     });

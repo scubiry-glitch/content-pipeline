@@ -3,6 +3,7 @@
 // fallback: 工作日 9-12 / 14-18 高活跃度的合成图（演示用）
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export interface HeatmapCell {
   day: number;     // 0..6 (周一=0)
@@ -32,6 +33,7 @@ const FALLBACK_PATTERN = (day: number, hour: number): number => {
 
 export async function getTeamHeatmap(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeIds?: string[]; weekStart?: string },
 ): Promise<{ weekStart: string; cells: HeatmapCell[]; source: 'real' | 'fallback' | 'mixed'; counts: { meetings: number; commitments: number } }> {
   const cells: HeatmapCell[] = [];
@@ -58,6 +60,8 @@ export async function getTeamHeatmap(
          WHERE scope_id = ANY($${params.length}::uuid[])
       )`;
     }
+    params.push(workspaceId);
+    const wsClause = `AND ${wsFilterClause(params.length)}`;
     const r = await deps.db.query(
       `SELECT
           (EXTRACT(DOW FROM created_at)::int + 6) % 7 AS day,
@@ -67,6 +71,7 @@ export async function getTeamHeatmap(
         WHERE type = 'meeting_minutes'
           AND created_at > NOW() - INTERVAL '8 weeks'
           ${scopeClause}
+          ${wsClause}
         GROUP BY day, hour`,
       params,
     );
@@ -84,6 +89,8 @@ export async function getTeamHeatmap(
       params.push(filter.scopeIds);
       scopeClause = `AND scope_id = ANY($${params.length}::uuid[])`;
     }
+    params.push(workspaceId);
+    const wsClause = `AND ${wsFilterClause(params.length)}`;
     const r = await deps.db.query(
       `SELECT
           (EXTRACT(DOW FROM due_at)::int + 6) % 7 AS day,
@@ -93,6 +100,7 @@ export async function getTeamHeatmap(
         WHERE due_at IS NOT NULL
           AND due_at > NOW() - INTERVAL '8 weeks'
           ${scopeClause}
+          ${wsClause}
         GROUP BY day, hour`,
       params,
     );
@@ -112,7 +120,9 @@ export async function getTeamHeatmap(
          FROM mn_runs
         WHERE module = 'ceo'
           AND created_at > NOW() - INTERVAL '8 weeks'
+          AND ${wsFilterClause(1)}
         GROUP BY day, hour`,
+      [workspaceId],
     );
     accumulate(r.rows, 0.3);
   } catch {

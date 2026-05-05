@@ -86,11 +86,11 @@ export interface CeoRunRow {
 async function handleG5(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
   const scopeId = run.scope_id ?? null;
   const [alignment, forward, coord, team, ext, self] = await Promise.all([
-    computeAlignmentScore(deps, scopeId ?? undefined),
-    computeForwardPct(deps, scopeId ?? undefined),
-    computeResponsibilityClarity(deps, scopeId ?? undefined),
-    computeFormationHealth(deps, scopeId ?? undefined),
-    computeCoverage(deps, scopeId ?? undefined).then((c) => c.covered / Math.max(c.total, 1)),
+    computeAlignmentScore(deps, run.workspace_id, scopeId ?? undefined),
+    computeForwardPct(deps, run.workspace_id, scopeId ?? undefined),
+    computeResponsibilityClarity(deps, run.workspace_id, scopeId ?? undefined),
+    computeFormationHealth(deps, run.workspace_id, scopeId ?? undefined),
+    computeCoverage(deps, run.workspace_id, scopeId ?? undefined).then((c) => c.covered / Math.max(c.total, 1)),
     computeWeeklyRoi(deps),
   ]);
 

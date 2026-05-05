@@ -4,9 +4,11 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeFormationHealth, classifyConflicts } from './aggregator.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export async function getFormationSnapshot(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; weekStart?: string },
 ): Promise<{ snapshot: any | null; computedAt: string | null }> {
   const where: string[] = [];
@@ -19,9 +21,11 @@ export async function getFormationSnapshot(
     params.push(filter.weekStart);
     where.push(`week_start = $${params.length}`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length));
   const sql = `SELECT id::text, scope_id::text, week_start, formation_data, conflict_temp, computed_at
                  FROM ceo_formation_snapshots
-                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                WHERE ${where.join(' AND ')}
                 ORDER BY week_start DESC
                 LIMIT 1`;
   const r = await deps.db.query(sql, params);
@@ -31,6 +35,7 @@ export async function getFormationSnapshot(
 
 export async function listFormationGaps(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ items: Array<{ text: string; action: string; severity: 'warn' | 'info' | 'critical' }> }> {
   // 优先读 ceo_formation_snapshots.formation_data->>'gaps'（M1 war-room-formation
@@ -42,9 +47,11 @@ export async function listFormationGaps(
       params.push(scopeId);
       where.push(`scope_id = $${params.length}::uuid`);
     }
+    params.push(workspaceId);
+    where.push(wsFilterClause(params.length));
     const r = await deps.db.query(
       `SELECT formation_data FROM ceo_formation_snapshots
-        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        WHERE ${where.join(' AND ')}
         ORDER BY week_start DESC, computed_at DESC LIMIT 1`,
       params,
     );
@@ -89,8 +96,8 @@ export async function listFormationGaps(
 
 export async function getWarRoomDashboard(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
-  workspaceId?: string | null,
 ): Promise<{
   question: string;
   metric: { label: string; value: string; delta: string };
@@ -101,9 +108,8 @@ export async function getWarRoomDashboard(
   sandboxStats: { draft: number; running: number; completed: number; total: number };
   sparkSeedCount: number;
 }> {
-  const formationHealth = await computeFormationHealth(deps, scopeId);
-  const conflictKinds = await classifyConflicts(deps, scopeId);
-  const wsId = workspaceId ?? null;
+  const formationHealth = await computeFormationHealth(deps, workspaceId, scopeId);
+  const conflictKinds = await classifyConflicts(deps, workspaceId, scopeId);
   const conflictTemp =
     conflictKinds.total > 0
       ? Number((conflictKinds.build / conflictKinds.total).toFixed(3))
@@ -122,9 +128,9 @@ export async function getWarRoomDashboard(
   try {
     const r = await deps.db.query(
       `SELECT status, COUNT(*)::int AS n FROM ceo_sandbox_runs
-        WHERE ($1::uuid IS NULL OR workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
+        WHERE ${wsFilterClause(1)}
         GROUP BY status`,
-      [wsId],
+      [workspaceId],
     );
     for (const row of r.rows) {
       const s = String(row.status);
@@ -143,8 +149,8 @@ export async function getWarRoomDashboard(
   try {
     const r = await deps.db.query(
       `SELECT COUNT(*)::int AS n FROM ceo_war_room_sparks
-        WHERE ($1::uuid IS NULL OR workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`,
-      [wsId],
+        WHERE ${wsFilterClause(1)}`,
+      [workspaceId],
     );
     sparkSeedCount = Number(r.rows[0]?.n ?? 0);
   } catch {

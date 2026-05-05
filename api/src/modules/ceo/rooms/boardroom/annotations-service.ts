@@ -5,6 +5,7 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { enqueueCeoRun } from '../../pipelines/runQueue.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export interface Annotation {
   id: string;
@@ -22,6 +23,7 @@ export interface Annotation {
 
 export async function listAnnotations(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { briefId?: string; scopeIds?: string[]; limit?: number },
 ): Promise<{ items: Annotation[]; source: 'real' | 'empty' }> {
   const limit = Math.max(1, Math.min(filter.limit ?? 20, 100));
@@ -32,12 +34,14 @@ export async function listAnnotations(
        FROM ceo_boardroom_annotations
       WHERE ($1::uuid IS NULL OR brief_id = $1::uuid)
         AND ($2::uuid[] IS NULL OR scope_id = ANY($2::uuid[]))
+        AND ${wsFilterClause(4)}
       ORDER BY created_at DESC
       LIMIT $3`,
     [
       filter.briefId ?? null,
       filter.scopeIds && filter.scopeIds.length > 0 ? filter.scopeIds : null,
       limit,
+      workspaceId,
     ],
   );
 

@@ -2,6 +2,7 @@
 // coverage = 已覆盖 stakeholder kind / 5 (customer/regulator/investor/press/partner)
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export const REQUIRED_KINDS = ['customer', 'regulator', 'investor', 'press', 'partner'] as const;
 const KIND_LABELS: Record<string, string> = {
@@ -14,13 +15,15 @@ const KIND_LABELS: Record<string, string> = {
 
 export async function computeCoverage(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ covered: number; total: number; missing: string[] }> {
   const r = await deps.db.query(
     `SELECT DISTINCT kind
        FROM ceo_stakeholders
-      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)`,
-    [scopeId ?? null],
+      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}`,
+    [scopeId ?? null, workspaceId],
   );
   const present = new Set(r.rows.map((row) => row.kind));
   const missing = REQUIRED_KINDS.filter((k) => !present.has(k)).map((k) => KIND_LABELS[k] ?? k);
@@ -34,6 +37,7 @@ export async function computeCoverage(
 /** 信号 horizon 切片 — 7d/30d/90d 数量 */
 export async function computeHorizon(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ near_7d: number; mid_30d: number; far_90d: number }> {
   const result = { near_7d: 0, mid_30d: 0, far_90d: 0 };
@@ -45,8 +49,9 @@ export async function computeHorizon(
          SUM(CASE WHEN captured_at > NOW() - INTERVAL '90 days' THEN 1 ELSE 0 END)::int AS far_90d
        FROM ceo_external_signals s
        LEFT JOIN ceo_stakeholders h ON h.id = s.stakeholder_id
-       WHERE ($1::uuid IS NULL OR h.scope_id = $1::uuid)`,
-      [scopeId ?? null],
+       WHERE ($1::uuid IS NULL OR h.scope_id = $1::uuid)
+         AND ${wsFilterClause(2, 's.workspace_id')}`,
+      [scopeId ?? null, workspaceId],
     );
     const row = r.rows[0];
     if (row) {
@@ -61,6 +66,7 @@ export async function computeHorizon(
 /** 4 条规则触发的盲点检测 */
 export async function computeBlindspots(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   items: Array<{
@@ -76,7 +82,7 @@ export async function computeBlindspots(
 
   // Rule 1: 缺失 stakeholder kind 但近 30 天 director_concerns 中 0 提及
   try {
-    const cov = await computeCoverage(deps, scopeId);
+    const cov = await computeCoverage(deps, workspaceId, scopeId);
     if (cov.missing.length > 0) {
       items.push({
         id: 'blind-coverage',
@@ -97,9 +103,10 @@ export async function computeBlindspots(
          LEFT JOIN ceo_stakeholders h ON h.id = rs.stakeholder_id
         WHERE h.kind = 'investor'
           AND ($1::uuid IS NULL OR rs.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 'rs.workspace_id')}
         GROUP BY rs.dimension
         HAVING AVG(rs.score) < 0.5`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     for (const row of r.rows) {
       items.push({
@@ -120,7 +127,9 @@ export async function computeBlindspots(
          FROM ceo_external_signals s
          LEFT JOIN ceo_stakeholders h ON h.id = s.stakeholder_id
         WHERE h.kind = 'partner'
-          AND s.captured_at > NOW() - INTERVAL '14 days'`,
+          AND s.captured_at > NOW() - INTERVAL '14 days'
+          AND ${wsFilterClause(1, 's.workspace_id')}`,
+      [workspaceId],
     );
     const avg = r.rows[0]?.avg_sent;
     if (avg != null && Number(avg) < -0.2) {
@@ -144,7 +153,9 @@ export async function computeBlindspots(
         WHERE h.kind = 'employee'
           AND s.sentiment >= 0.5
           AND (s.signal_text ILIKE '%加班%' OR s.signal_text ILIKE '%疲劳%' OR s.signal_text ILIKE '%累%')
+          AND ${wsFilterClause(1, 's.workspace_id')}
         LIMIT 1`,
+      [workspaceId],
     );
     if (r.rows.length > 0) {
       items.push({

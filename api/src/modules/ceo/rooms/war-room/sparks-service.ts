@@ -3,6 +3,7 @@
 // 每次 list 取一组 4 张（按 seed 切组），不在前端持久化
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export interface SparkCard {
   id: string;
@@ -18,6 +19,7 @@ const TOTAL_GROUPS = 3;
 
 export async function listSparks(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeIds?: string[]; seed?: number; limit?: number },
 ): Promise<{ items: SparkCard[]; seedGroup: number }> {
   const seed = Math.abs(filter.seed ?? 0);
@@ -30,9 +32,10 @@ export async function listSparks(
        FROM ceo_war_room_sparks
       WHERE seed_group = $1
         AND ($2::uuid[] IS NULL OR scope_id IS NULL OR scope_id = ANY($2::uuid[]))
+        AND ${wsFilterClause(4)}
       ORDER BY created_at DESC
       LIMIT $3`,
-    [seedGroup, filter.scopeIds && filter.scopeIds.length > 0 ? filter.scopeIds : null, limit],
+    [seedGroup, filter.scopeIds && filter.scopeIds.length > 0 ? filter.scopeIds : null, limit, workspaceId],
   );
 
   // 不足时回补其他组
@@ -44,9 +47,10 @@ export async function listSparks(
          FROM ceo_war_room_sparks
         WHERE seed_group <> $1
           AND ($2::text[] IS NULL OR id::text <> ALL($2::text[]))
+          AND ${wsFilterClause(4)}
         ORDER BY created_at DESC
         LIMIT $3`,
-      [seedGroup, existingIds.length > 0 ? existingIds : null, need],
+      [seedGroup, existingIds.length > 0 ? existingIds : null, need, workspaceId],
     );
     r = { ...r, rows: [...r.rows, ...fallback.rows] };
   }

@@ -19,40 +19,45 @@ export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.addHook('preHandler', ceoWorkspaceGuard);
 
     fastify.get('/dashboard', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getWarRoomDashboard(engine.deps, scopeId, currentWorkspaceId(request));
+      return getWarRoomDashboard(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/formation', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, weekStart } = (request.query ?? {}) as {
         scopeId?: string;
         weekStart?: string;
       };
-      return getFormationSnapshot(engine.deps, { scopeId, weekStart });
+      return getFormationSnapshot(engine.deps, wsId, { scopeId, weekStart });
     });
 
     fastify.get('/gaps', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return listFormationGaps(engine.deps, scopeId);
+      return listFormationGaps(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/sparks', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const q = (request.query ?? {}) as { seed?: string; limit?: string; scopes?: string };
       const seed = q.seed ? Number(q.seed) : 0;
       const limit = q.limit ? Number(q.limit) : 4;
       const scopeIds = q.scopes
         ? q.scopes.split(',').map((s) => s.trim()).filter(Boolean)
         : undefined;
-      return listSparks(engine.deps, { seed, limit, scopeIds });
+      return listSparks(engine.deps, wsId, { seed, limit, scopeIds });
     });
 
     // ─── Sandbox 兵棋推演 ──────────────────────────────────────
     fastify.get('/sandbox', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const q = (request.query ?? {}) as { scopes?: string; status?: string; limit?: string };
       const scopeIds = q.scopes
         ? q.scopes.split(',').map((s) => s.trim()).filter(Boolean)
         : undefined;
-      return listSandboxRuns(engine.deps, {
+      return listSandboxRuns(engine.deps, wsId, {
         scopeIds,
         status: (q.status as any) ?? undefined,
         limit: q.limit ? Number(q.limit) : undefined,
@@ -70,6 +75,7 @@ export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
     });
 
     fastify.post('/sandbox', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as {
         topicText?: string;
         scopeId?: string | null;
@@ -80,14 +86,19 @@ export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
         reply.code(400);
         return { error: 'topicText-required' };
       }
-      const created = await createSandboxRun(engine.deps, {
-        topicText: body.topicText.trim(),
-        scopeId: body.scopeId ?? null,
-        sourceSparkId: body.sourceSparkId ?? null,
-        seedBranches: body.seedBranches,
-        createdBy: 'system',
-      });
-      return created;
+      try {
+        const created = await createSandboxRun(engine.deps, wsId, {
+          topicText: body.topicText.trim(),
+          scopeId: body.scopeId ?? null,
+          sourceSparkId: body.sourceSparkId ?? null,
+          seedBranches: body.seedBranches,
+          createdBy: 'system',
+        });
+        return created;
+      } catch (e) {
+        reply.code(400);
+        return { error: (e as Error).message };
+      }
     });
 
     fastify.post('/sandbox/:id/run', async (request, reply) => {

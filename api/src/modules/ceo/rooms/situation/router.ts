@@ -3,6 +3,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
+import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
 import {
   listStakeholders,
   listSignals,
@@ -22,46 +23,54 @@ export function createSituationRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.addHook('preHandler', ceoWorkspaceGuard);
 
     fastify.get('/dashboard', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getSituationDashboard(engine.deps, scopeId);
+      return getSituationDashboard(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/stakeholders', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, kind } = (request.query ?? {}) as { scopeId?: string; kind?: string };
-      return listStakeholders(engine.deps, { scopeId, kind });
+      return listStakeholders(engine.deps, wsId, { scopeId, kind });
     });
 
     fastify.get('/signals', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { stakeholderId } = (request.query ?? {}) as { stakeholderId?: string };
-      return listSignals(engine.deps, { stakeholderId });
+      return listSignals(engine.deps, wsId, { stakeholderId });
     });
 
     fastify.get('/rubric', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return getRubricMatrix(engine.deps, scopeId);
+      return getRubricMatrix(engine.deps, wsId, scopeId);
     });
 
     // ─── samples-s 对齐 ─────────────────────────────────────────
     fastify.get('/blindspots', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return listBlindspots(engine.deps, scopeId);
+      return listBlindspots(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/observers', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
-      return listObservers(engine.deps, scopeId);
+      return listObservers(engine.deps, wsId, scopeId);
     });
 
     fastify.get('/horizon', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { scopeId, range } = (request.query ?? {}) as { scopeId?: string; range?: string };
       const r = range === 'mid' ? 'mid' : range === 'far' ? 'far' : 'near';
-      return getHorizon(engine.deps, r, scopeId);
+      return getHorizon(engine.deps, wsId, r, scopeId);
     });
 
     // ─── 输入接入层 (Phase 1) ─────────────────────────────────
     fastify.post('/stakeholders', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as Record<string, any>;
-      const r = await createStakeholder(engine.deps, body);
+      const r = await createStakeholder(engine.deps, wsId, body);
       if (!r.ok) { reply.code(400); }
       return r;
     });
@@ -82,8 +91,9 @@ export function createSituationRouter(engine: CeoEngine): FastifyPluginAsync {
     });
 
     fastify.post('/signals', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as Record<string, any>;
-      const r = await createSignal(engine.deps, body);
+      const r = await createSignal(engine.deps, wsId, body);
       if (!r.ok) { reply.code(400); }
       return r;
     });

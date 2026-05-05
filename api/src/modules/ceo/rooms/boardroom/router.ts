@@ -7,6 +7,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
+import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
 import {
   listDirectors,
   listConcerns,
@@ -46,47 +47,54 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
     fastify.addHook('preHandler', ceoWorkspaceGuard);
 
     fastify.get('/dashboard', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return getBoardroomDashboard(engine.deps, scopeIds);
+      return getBoardroomDashboard(engine.deps, wsId, scopeIds);
     });
 
     fastify.get('/directors', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listDirectors(engine.deps, { scopeIds });
+      return listDirectors(engine.deps, wsId, { scopeIds });
     });
 
     fastify.get('/concerns', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { directorId, status } = (request.query ?? {}) as {
         directorId?: string;
         status?: string;
       };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listConcerns(engine.deps, { directorId, status, scopeIds });
+      return listConcerns(engine.deps, wsId, { directorId, status, scopeIds });
     });
 
     fastify.get('/briefs', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { session } = (request.query ?? {}) as { session?: string };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listBriefs(engine.deps, { scopeIds, session });
+      return listBriefs(engine.deps, wsId, { scopeIds, session });
     });
 
     fastify.get('/promises', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { briefId } = (request.query ?? {}) as { briefId?: string };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listPromises(engine.deps, { briefId, scopeIds });
+      return listPromises(engine.deps, wsId, { briefId, scopeIds });
     });
 
     fastify.get('/rebuttals', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { briefId } = (request.query ?? {}) as { briefId?: string };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listRebuttals(engine.deps, { briefId, scopeIds });
+      return listRebuttals(engine.deps, wsId, { briefId, scopeIds });
     });
 
     // ─── 外脑批注 (③ AnnotationsList LLM-backed) ───
     fastify.get('/annotations', async (request) => {
+      const wsId = currentWorkspaceId(request);
       const { briefId, limit } = (request.query ?? {}) as { briefId?: string; limit?: string };
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
-      return listAnnotations(engine.deps, {
+      return listAnnotations(engine.deps, wsId, {
         briefId,
         scopeIds,
         limit: limit ? Number(limit) : undefined,
@@ -95,8 +103,9 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
 
     // ─── 输入接入层 (Phase 1) ─────────────────────────────────
     fastify.post('/directors', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as Record<string, any>;
-      const r = await createDirector(engine.deps, body);
+      const r = await createDirector(engine.deps, wsId, body);
       if (!r.ok) { reply.code(400); }
       return r;
     });
@@ -117,8 +126,9 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
     });
 
     fastify.post('/concerns', async (request, reply) => {
+      const wsId = currentWorkspaceId(request);
       const body = (request.body ?? {}) as Record<string, any>;
-      const r = await createConcern(engine.deps, body);
+      const r = await createConcern(engine.deps, wsId, body);
       if (!r.ok) { reply.code(400); }
       return r;
     });

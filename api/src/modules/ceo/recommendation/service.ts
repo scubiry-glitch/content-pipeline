@@ -11,6 +11,7 @@
 //   - 会议数 → 原始素材量，权重最低（多不如精）
 
 import type { CeoEngineDeps } from '../types.js';
+import { wsFilterClause } from '../shared/wsFilter.js';
 
 // 部署侧偏好 — 用户/环境固化的默认 scope 名字 (按出现顺序就是 UI 上的默认勾选顺序)
 // 通过 CEO_PREFERRED_SCOPES 环境变量覆盖（逗号分隔），未设置则用代码中的列表
@@ -45,6 +46,7 @@ const WEIGHTS = {
 
 export async function getRecommendedScopes(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   options: { limit?: number; minScore?: number } = {},
 ): Promise<{ items: RecommendedScope[] }> {
   const limit = Math.max(1, Math.min(10, options.limit ?? 3));
@@ -59,19 +61,26 @@ export async function getRecommendedScopes(
               COALESCE((SELECT COUNT(DISTINCT j.id)
                           FROM mn_judgments j
                           JOIN mn_scope_members sm ON sm.meeting_id = j.abstracted_from_meeting_id
-                         WHERE sm.scope_id = s.id), 0)::int AS judgments,
+                         WHERE sm.scope_id = s.id
+                           AND ${wsFilterClause(1, 'j.workspace_id')}), 0)::int AS judgments,
               COALESCE((SELECT COUNT(DISTINCT c.id)
                           FROM mn_commitments c
                           JOIN mn_scope_members sm ON sm.meeting_id = c.meeting_id
-                         WHERE sm.scope_id = s.id), 0)::int AS commitments,
+                         WHERE sm.scope_id = s.id
+                           AND ${wsFilterClause(1, 'c.workspace_id')}), 0)::int AS commitments,
               COALESCE((SELECT COUNT(*) FROM ceo_strategic_lines
-                          WHERE scope_id = s.id), 0)::int AS strategic_lines,
+                          WHERE scope_id = s.id
+                            AND ${wsFilterClause(1)}), 0)::int AS strategic_lines,
               COALESCE((SELECT COUNT(*) FROM ceo_directors
-                          WHERE scope_id = s.id), 0)::int AS directors,
+                          WHERE scope_id = s.id
+                            AND ${wsFilterClause(1)}), 0)::int AS directors,
               COALESCE((SELECT COUNT(*) FROM ceo_stakeholders
-                          WHERE scope_id = s.id), 0)::int AS stakeholders
+                          WHERE scope_id = s.id
+                            AND ${wsFilterClause(1)}), 0)::int AS stakeholders
          FROM mn_scopes s
-        WHERE s.status = 'active'`,
+        WHERE s.status = 'active'
+          AND ${wsFilterClause(1, 's.workspace_id')}`,
+      [workspaceId],
     );
     rows = r.rows;
   } catch (e) {
@@ -120,6 +129,7 @@ export async function getRecommendedScopes(
  */
 export async function getDefaultScopes(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   options: { fallbackLimit?: number } = {},
 ): Promise<{ items: RecommendedScope[]; mode: 'preferred' | 'recommended' | 'empty' }> {
   if (PREFERRED_SCOPE_NAMES.length > 0) {
@@ -128,8 +138,9 @@ export async function getDefaultScopes(
         `SELECT s.id::text AS id, s.name, s.kind
            FROM mn_scopes s
           WHERE s.status = 'active'
-            AND s.name = ANY($1::text[])`,
-        [PREFERRED_SCOPE_NAMES],
+            AND s.name = ANY($1::text[])
+            AND ${wsFilterClause(2, 's.workspace_id')}`,
+        [PREFERRED_SCOPE_NAMES, workspaceId],
       );
       const found = new Map<string, { id: string; name: string; kind: string }>(
         r.rows.map((row: any) => [String(row.name), { id: String(row.id), name: String(row.name), kind: String(row.kind) }]),
@@ -153,6 +164,6 @@ export async function getDefaultScopes(
     }
   }
   // 回退: 动态评分
-  const r = await getRecommendedScopes(deps, { limit: options.fallbackLimit ?? 3 });
+  const r = await getRecommendedScopes(deps, workspaceId, { limit: options.fallbackLimit ?? 3 });
   return { items: r.items, mode: r.items.length > 0 ? 'recommended' : 'empty' };
 }

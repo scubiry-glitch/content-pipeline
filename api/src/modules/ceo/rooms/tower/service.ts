@@ -3,6 +3,7 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeResponsibilityClarity } from './aggregator.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 /**
  * 列承诺 — 优先 mn_commitments + JOIN mn_people / assets；表不存在则空
@@ -14,6 +15,7 @@ import { computeResponsibilityClarity } from './aggregator.js';
  */
 export async function listCommitmentsByStatus(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; status?: string },
 ): Promise<{ items: any[]; source: 'mn' | 'empty' }> {
   try {
@@ -30,6 +32,8 @@ export async function listCommitmentsByStatus(
       params.push(states);
       where.push(`c.state = ANY($${params.length}::text[])`);
     }
+    params.push(workspaceId);
+    where.push(wsFilterClause(params.length, 'c.workspace_id'));
     const r = await deps.db.query(
       `SELECT c.id::text, c.meeting_id::text AS source_meeting_id,
               c.text AS what, c.due_at, c.state, c.created_at,
@@ -41,7 +45,7 @@ export async function listCommitmentsByStatus(
          FROM mn_commitments c
          LEFT JOIN mn_people p ON p.id = c.person_id
          LEFT JOIN assets a ON a.id = c.meeting_id
-        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        WHERE ${where.join(' AND ')}
         ORDER BY c.due_at NULLS LAST, c.created_at DESC
         LIMIT 100`,
       params,
@@ -69,6 +73,7 @@ export async function listCommitmentsByStatus(
 
 export async function listBlockers(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   _scopeId?: string,
 ): Promise<{
   items: Array<{ name: string; days: number; text: string; warn: boolean; ownerPersonId: string | null }>;
@@ -84,8 +89,10 @@ export async function listBlockers(
          LEFT JOIN mn_people p ON p.id = c.person_id
         WHERE c.state IN ('on_track','at_risk')
           AND COALESCE(c.due_at, c.created_at) < NOW() - INTERVAL '14 days'
+          AND ${wsFilterClause(1, 'c.workspace_id')}
         ORDER BY days_late DESC NULLS LAST
         LIMIT 8`,
+      [workspaceId],
     );
     return {
       items: r.rows.map((row) => ({
@@ -103,6 +110,7 @@ export async function listBlockers(
 
 export async function getRhythmPulse(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; weeks?: number },
 ): Promise<{
   weeks: Array<{ weekStart: string; mainHours: number; firefightingHours: number }>;
@@ -114,9 +122,10 @@ export async function getRhythmPulse(
        FROM ceo_attention_alloc
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND week_start >= (DATE_TRUNC('week', NOW())::date - ($2::int * 7) * INTERVAL '1 day')
+        AND ${wsFilterClause(3)}
       GROUP BY week_start, kind
       ORDER BY week_start`,
-    [filter.scopeId ?? null, weeks],
+    [filter.scopeId ?? null, weeks, workspaceId],
   );
 
   const buckets = new Map<string, { main: number; firefighting: number }>();
@@ -136,6 +145,7 @@ export async function getRhythmPulse(
 
 export async function getTowerDashboard(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   question: string;
@@ -144,8 +154,8 @@ export async function getTowerDashboard(
   commitmentStats: { proposed: number; in_progress: number; overdue: number; done: number; total: number };
   topBlockers: Array<{ name: string; days: number; text: string; warn: boolean; ownerPersonId: string | null }>;
 }> {
-  const responsibilityClarity = await computeResponsibilityClarity(deps, scopeId);
-  const blockers = await listBlockers(deps, scopeId);
+  const responsibilityClarity = await computeResponsibilityClarity(deps, workspaceId, scopeId);
+  const blockers = await listBlockers(deps, workspaceId, scopeId);
 
   let stats = { proposed: 0, in_progress: 0, overdue: 0, done: 0, total: 0 };
   try {
@@ -153,7 +163,9 @@ export async function getTowerDashboard(
       `SELECT state, COUNT(*)::int AS n,
               SUM(CASE WHEN state IN ('on_track','at_risk') AND due_at < NOW() THEN 1 ELSE 0 END)::int AS overdue_n
          FROM mn_commitments
+        WHERE ${wsFilterClause(1)}
         GROUP BY state`,
+      [workspaceId],
     );
     for (const row of r.rows) {
       const s = row.state as string;
@@ -171,7 +183,9 @@ export async function getTowerDashboard(
     try {
       const p = await deps.db.query(
         `SELECT COUNT(*)::int AS n FROM mn_commitments
-          WHERE state IN ('on_track','at_risk') AND due_at IS NULL`,
+          WHERE state IN ('on_track','at_risk') AND due_at IS NULL
+            AND ${wsFilterClause(1)}`,
+        [workspaceId],
       );
       stats.proposed = Number(p.rows[0]?.n ?? 0);
     } catch { /* ignore */ }
@@ -199,6 +213,7 @@ export async function getTowerDashboard(
  */
 export async function getPostMeeting(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   last_meeting: { id: string; title: string; date: string; duration_min: number | null } | null;
@@ -217,9 +232,10 @@ export async function getPostMeeting(
       `SELECT m.id::text, m.title, m.meeting_at::text AS date, m.duration_minutes
          FROM mn_meetings m
         WHERE ($1::uuid IS NULL OR m.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 'm.workspace_id')}
         ORDER BY m.meeting_at DESC
         LIMIT 1`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     if (m.rows[0]) {
       last = {
@@ -242,9 +258,10 @@ export async function getPostMeeting(
            FROM mn_judgments j
            LEFT JOIN mn_people p ON p.id = j.person_id
           WHERE j.meeting_id = $1::uuid
+            AND ${wsFilterClause(2, 'j.workspace_id')}
           ORDER BY j.created_at DESC
           LIMIT 5`,
-        [last.id],
+        [last.id, workspaceId],
       );
       for (const row of r.rows) {
         unresolved.push({
@@ -279,7 +296,7 @@ export async function getDeficit(
     `SELECT week_start, total_hours, deep_focus_hours, meeting_hours, target_focus_hours
        FROM ceo_time_roi
       WHERE user_id = $1
-        AND ($2::uuid IS NULL OR workspace_id = $2 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))
+        AND ${wsFilterClause(2)}
       ORDER BY week_start DESC
       LIMIT 1`,
     [userId, wsId],
@@ -359,6 +376,7 @@ function isoWeekStart(input?: string): string {
 
 export async function upsertAttentionAlloc(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: {
     weekStart?: string;
     kind?: string;
@@ -375,6 +393,7 @@ export async function upsertAttentionAlloc(
   if (typeof body.hours !== 'number' || body.hours < 0) {
     return { ok: false, error: 'hours must be a non-negative number' };
   }
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const weekStart = isoWeekStart(body.weekStart);
   // 同一 (week, scope|user|project, kind) 视为同一行 → 先删后插实现 upsert
   // (表无 UNIQUE 约束，避免误判 NULL，因此手动按业务键去重)
@@ -384,12 +403,13 @@ export async function upsertAttentionAlloc(
         AND kind = $2
         AND COALESCE(scope_id::text,'') = COALESCE($3::text,'')
         AND COALESCE(user_id,'') = COALESCE($4,'')
-        AND COALESCE(project_id::text,'') = COALESCE($5::text,'')`,
-    [weekStart, body.kind, body.scopeId ?? null, body.userId ?? null, body.projectId ?? null],
+        AND COALESCE(project_id::text,'') = COALESCE($5::text,'')
+        AND workspace_id = $6`,
+    [weekStart, body.kind, body.scopeId ?? null, body.userId ?? null, body.projectId ?? null, workspaceId],
   );
   const r = await deps.db.query(
-    `INSERT INTO ceo_attention_alloc (week_start, kind, hours, scope_id, user_id, project_id, source)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO ceo_attention_alloc (week_start, kind, hours, scope_id, user_id, project_id, source, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id::text`,
     [
       weekStart,
@@ -399,6 +419,7 @@ export async function upsertAttentionAlloc(
       body.userId ?? null,
       body.projectId ?? null,
       body.source ?? 'manual',
+      workspaceId,
     ],
   );
   return { ok: true, id: r.rows[0].id };

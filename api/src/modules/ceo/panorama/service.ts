@@ -13,6 +13,7 @@ import { computeFormationHealth } from '../rooms/war-room/aggregator.js';
 import { computeCoverage } from '../rooms/situation/aggregator.js';
 import { computeWeeklyRoi } from '../rooms/balcony/aggregator.js';
 import { ALL_PRODUCES, ALL_CONSUMES } from '../../meeting-notes/axes/registry.js';
+import { wsFilterClause } from '../shared/wsFilter.js';
 
 export interface PanoramaData {
   prisms: Array<{
@@ -179,13 +180,14 @@ export async function getPanoramaData(
   const primaryScope = scopeIdArr[0];
 
   // 6 房间指标并行计算
+  const wsId = workspaceId ?? null;
   const [alignment, forwardPct, respClarity, formHealth, cov, roi] = await Promise.all([
-    computeAlignmentScore(deps, primaryScope),
-    computeForwardPct(deps, primaryScope),
-    computeResponsibilityClarity(deps, primaryScope),
-    computeFormationHealth(deps, primaryScope),
-    computeCoverage(deps, primaryScope),
-    computeWeeklyRoi(deps, undefined, workspaceId),
+    computeAlignmentScore(deps, wsId, primaryScope),
+    computeForwardPct(deps, wsId, primaryScope),
+    computeResponsibilityClarity(deps, wsId, primaryScope),
+    computeFormationHealth(deps, wsId, primaryScope),
+    computeCoverage(deps, wsId, primaryScope),
+    computeWeeklyRoi(deps, undefined, wsId),
   ]);
 
   const metricByPrism: Record<PrismKind, { label: string; value: string; rawValue: number }> = {
@@ -207,9 +209,10 @@ export async function getPanoramaData(
          FROM ceo_prisms
         WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
           AND week_start = (DATE_TRUNC('week', NOW())::date - INTERVAL '7 days')::date
+          AND ${wsFilterClause(2)}
         ORDER BY computed_at DESC
         LIMIT 1`,
-      [primaryScope ?? null],
+      [primaryScope ?? null, wsId],
     );
     const last = r.rows[0];
     if (last) {
@@ -252,7 +255,9 @@ export async function getPanoramaData(
          FROM mn_runs
         WHERE module = 'ceo'
           AND axis IN ('g1','g2','g3','g4','g5')
+          AND ${wsFilterClause(1)}
         GROUP BY axis`,
+      [wsId],
     );
     const cnt = new Map<string, number>();
     for (const row of r.rows) cnt.set(row.axis, Number(row.n));
@@ -268,7 +273,9 @@ export async function getPanoramaData(
          FROM mn_runs
         WHERE module = 'ceo' AND axis = 'g3'
           AND metadata ? 'kind'
+          AND ${wsFilterClause(1)}
         GROUP BY metadata->>'kind'`,
+      [wsId],
     );
     if (r.rows.length > 0) {
       const g3 = stepGroups.find((g) => g.id === 'g3');
@@ -290,7 +297,9 @@ export async function getPanoramaData(
       `SELECT stage, COUNT(*)::int AS n
          FROM mn_runs
         WHERE module = 'mn' AND stage IS NOT NULL
+          AND ${wsFilterClause(1)}
         GROUP BY stage`,
+      [wsId],
     );
     let l1 = 0;
     let l2 = 0;
@@ -309,8 +318,10 @@ export async function getPanoramaData(
   if (scopeIdArr.length > 0) {
     try {
       const r = await deps.db.query(
-        `SELECT id::text, name, kind FROM mn_scopes WHERE id = ANY($1::uuid[])`,
-        [scopeIdArr],
+        `SELECT id::text, name, kind FROM mn_scopes
+          WHERE id = ANY($1::uuid[])
+            AND ${wsFilterClause(2)}`,
+        [scopeIdArr, wsId],
       );
       appliedScopes = r.rows.map((row) => ({
         id: String(row.id),

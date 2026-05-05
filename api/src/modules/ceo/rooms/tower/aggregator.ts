@@ -3,9 +3,11 @@
 // 无主 = owner_name IS NULL OR owner_name = '' OR owner_name LIKE '挂名%'
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export async function computeResponsibilityClarity(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<number> {
   try {
@@ -15,8 +17,9 @@ export async function computeResponsibilityClarity(
           COUNT(*)::int AS total
          FROM mn_commitments
         WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
-          AND status IN ('open','in_progress','proposed')`,
-      [scopeId ?? null],
+          AND status IN ('open','in_progress','proposed')
+          AND ${wsFilterClause(2)}`,
+      [scopeId ?? null, workspaceId],
     );
     const total = Number(r.rows[0]?.total ?? 0);
     const unowned = Number(r.rows[0]?.unowned ?? 0);

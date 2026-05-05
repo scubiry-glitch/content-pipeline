@@ -2,9 +2,11 @@
 // alignment_score = 0.6 × 主线时间占比 + 0.4 × (1 - drift_count / total_decisions)
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export async function computeAlignmentScore(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<number> {
   // 1. 主线时间占比 = main_hours / total_hours (本周)
@@ -13,8 +15,9 @@ export async function computeAlignmentScore(
        FROM ceo_attention_alloc
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND week_start = (DATE_TRUNC('week', NOW())::date)
+        AND ${wsFilterClause(2)}
       GROUP BY kind`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   let mainH = 0;
   let totalH = 0;
@@ -33,8 +36,9 @@ export async function computeAlignmentScore(
         COUNT(*)::int AS total_n
        FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
-        AND status = 'active'`,
-    [scopeId ?? null],
+        AND status = 'active'
+        AND ${wsFilterClause(2)}`,
+    [scopeId ?? null, workspaceId],
   );
   const driftN = Number(lc.rows[0]?.drift_n ?? 0);
   const totalN = Number(lc.rows[0]?.total_n ?? 0);

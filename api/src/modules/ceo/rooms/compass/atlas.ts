@@ -3,6 +3,7 @@
 // 把 alignment_score → 健康色 / kind → 距中心远近 / 名字长度 → 半径
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export interface AtlasStar {
   id: string;
@@ -97,6 +98,7 @@ function layoutStars(
 
 export async function getProjectAtlas(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   stars: AtlasStar[];
@@ -108,8 +110,9 @@ export async function getProjectAtlas(
     `SELECT id::text, name, kind, alignment_score, status, description
        FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}
       ORDER BY kind, alignment_score DESC NULLS LAST`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const stars = layoutStars(r.rows);
 

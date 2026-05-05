@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CeoEngineDeps } from '../../types.js';
 import { enqueueCeoRun } from '../../pipelines/runQueue.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export type SandboxStatus = 'pending' | 'running' | 'completed' | 'failed' | 'archived';
 
@@ -28,6 +29,7 @@ export interface SandboxRun {
 
 export async function listSandboxRuns(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeIds?: string[]; status?: SandboxStatus; limit?: number },
 ): Promise<{ items: SandboxRun[]; total: number }> {
   const limit = Math.max(1, Math.min(filter.limit ?? 50, 200));
@@ -39,12 +41,14 @@ export async function listSandboxRuns(
       WHERE ($1::uuid[] IS NULL OR scope_id = ANY($1::uuid[]))
         AND ($2::text IS NULL OR status = $2)
         AND status <> 'archived'
+        AND ${wsFilterClause(4)}
       ORDER BY created_at DESC
       LIMIT $3`,
     [
       filter.scopeIds && filter.scopeIds.length > 0 ? filter.scopeIds : null,
       filter.status ?? null,
       limit,
+      workspaceId,
     ],
   );
   return {
@@ -72,6 +76,7 @@ export async function getSandboxRun(
  */
 export async function createSandboxRun(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   payload: {
     topicText: string;
     scopeId?: string | null;
@@ -80,10 +85,11 @@ export async function createSandboxRun(
     createdBy?: string;
   },
 ): Promise<SandboxRun> {
+  if (!workspaceId) throw new Error('workspace required for write');
   const id = randomUUID();
   await deps.db.query(
-    `INSERT INTO ceo_sandbox_runs (id, scope_id, topic_text, source_spark_id, status, branches, created_by)
-     VALUES ($1::uuid, $2::uuid, $3, $4::uuid, 'pending', $5::jsonb, $6)`,
+    `INSERT INTO ceo_sandbox_runs (id, scope_id, topic_text, source_spark_id, status, branches, created_by, workspace_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4::uuid, 'pending', $5::jsonb, $6, $7)`,
     [
       id,
       payload.scopeId ?? null,
@@ -91,6 +97,7 @@ export async function createSandboxRun(
       payload.sourceSparkId ?? null,
       JSON.stringify(payload.seedBranches ?? defaultSeedBranches(payload.topicText)),
       payload.createdBy ?? 'system',
+      workspaceId,
     ],
   );
   const created = await getSandboxRun(deps, id);

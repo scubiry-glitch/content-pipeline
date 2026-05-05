@@ -2,9 +2,11 @@
 // forward_pct = 预读包 toc 中 future-tagged 章节字数 / 总字数
 
 import type { CeoEngineDeps } from '../../types.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 export async function computeForwardPct(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<number> {
   // 取最新 brief，看 toc jsonb 里 future_tagged 章节占比
@@ -13,9 +15,10 @@ export async function computeForwardPct(
        FROM ceo_briefs
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND status IN ('draft','sent')
+        AND ${wsFilterClause(2)}
       ORDER BY updated_at DESC
       LIMIT 1`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   if (r.rows.length === 0) return 0;
   const toc = r.rows[0].toc;

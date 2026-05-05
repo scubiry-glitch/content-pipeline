@@ -5,6 +5,7 @@
 import type { CeoEngineDeps, PrismKind } from '../../types.js';
 import { computeWeeklyRoi, computePrismScores } from './aggregator.js';
 import { enqueueCeoRun } from '../../pipelines/runQueue.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 const REFLECTION_TEMPLATES: Array<{ prism: PrismKind; question: string }> = [
   { prism: 'direction', question: '你这周做的决定里，哪一个 是在承诺而非选择?' },
@@ -282,9 +283,10 @@ export async function getReflectionsHistory(
  */
 export async function getSilenceSignals(
   deps: CeoEngineDeps,
-  filter: { days?: number },
+  filter: { days?: number; workspaceId?: string | null },
 ): Promise<{ items: any[] }> {
   const days = filter.days ?? 30;
+  const wsId = filter.workspaceId ?? null;
   try {
     const r = await deps.db.query(
       `SELECT s.id::text, s.meeting_id::text, s.person_id::text,
@@ -294,9 +296,10 @@ export async function getSilenceSignals(
          LEFT JOIN mn_people p ON p.id = s.person_id
         WHERE s.state = 'abnormal_silence'
           AND s.computed_at > NOW() - ($1::int * INTERVAL '1 day')
+          AND ${wsFilterClause(2, 's.workspace_id')}
         ORDER BY s.anomaly_score DESC
         LIMIT 5`,
-      [days],
+      [days, wsId],
     );
     return {
       items: r.rows.map((row) => ({
@@ -321,9 +324,10 @@ export async function getSilenceSignals(
  */
 export async function getEchos(
   deps: CeoEngineDeps,
-  filter: { weeks?: number },
+  filter: { weeks?: number; workspaceId?: string | null },
 ): Promise<{ items: any[] }> {
   const weeks = filter.weeks ?? 6;
+  const wsId = filter.workspaceId ?? null;
   try {
     const r = await deps.db.query(
       `SELECT e.id::text, e.line_id::text, e.hypothesis_text, e.fact_text, e.fate,
@@ -331,9 +335,10 @@ export async function getEchos(
          FROM ceo_strategic_echos e
          LEFT JOIN ceo_strategic_lines l ON l.id = e.line_id
         WHERE e.updated_at > NOW() - ($1::int * 7) * INTERVAL '1 day'
+          AND ${wsFilterClause(2, 'e.workspace_id')}
         ORDER BY e.updated_at DESC
         LIMIT 8`,
-      [weeks],
+      [weeks, wsId],
     );
     return {
       items: r.rows.map((row) => {

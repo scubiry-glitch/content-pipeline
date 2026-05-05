@@ -3,6 +3,7 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeAlignmentScore } from './aggregator.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 interface StrategicLineRow {
   id: string;
@@ -16,6 +17,7 @@ interface StrategicLineRow {
 
 export async function listStrategicLines(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; kind?: string },
 ): Promise<{ items: StrategicLineRow[] }> {
   const where: string[] = [];
@@ -28,9 +30,11 @@ export async function listStrategicLines(
     params.push(filter.kind);
     where.push(`kind = $${params.length}`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length));
   const sql = `SELECT id::text, scope_id::text, name, kind, alignment_score, status, description
                  FROM ceo_strategic_lines
-                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                WHERE ${where.join(' AND ')}
                 ORDER BY kind, name`;
   const r = await deps.db.query(sql, params);
   return { items: r.rows };
@@ -38,6 +42,7 @@ export async function listStrategicLines(
 
 export async function listStrategicEchos(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { lineId?: string },
 ): Promise<{ items: any[] }> {
   if (!filter.lineId) {
@@ -48,14 +53,16 @@ export async function listStrategicEchos(
             evidence_run_ids, source_meeting_id::text, updated_at
        FROM ceo_strategic_echos
       WHERE line_id = $1
+        AND ${wsFilterClause(2)}
       ORDER BY updated_at DESC`,
-    [filter.lineId],
+    [filter.lineId, workspaceId],
   );
   return { items: r.rows };
 }
 
 export async function getAttentionAlloc(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; weekStart?: string },
 ): Promise<{ weekStart: string | null; items: any[]; total: number }> {
   const where: string[] = [];
@@ -71,9 +78,11 @@ export async function getAttentionAlloc(
     // 默认本周一
     where.push(`week_start = (DATE_TRUNC('week', NOW())::date)`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length));
   const sql = `SELECT id::text, week_start, project_id::text, hours, kind
                  FROM ceo_attention_alloc
-                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                WHERE ${where.join(' AND ')}
                 ORDER BY hours DESC`;
   const r = await deps.db.query(sql, params);
   const total = r.rows.reduce((acc, row) => acc + Number(row.hours), 0);
@@ -87,6 +96,7 @@ export async function getAttentionAlloc(
 /** Compass dashboard: 聚合战略线 + 漂移 + 时间分配 + alignment_score */
 export async function getCompassDashboard(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   question: string;
@@ -100,8 +110,9 @@ export async function getCompassDashboard(
     `SELECT kind, COUNT(*)::int AS n
        FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}
       GROUP BY kind`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const counts: Record<string, number> = { main: 0, branch: 0, drift: 0 };
   for (const r of lineCounts.rows) counts[r.kind] = r.n;
@@ -111,8 +122,9 @@ export async function getCompassDashboard(
        FROM ceo_attention_alloc
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND week_start = (DATE_TRUNC('week', NOW())::date)
+        AND ${wsFilterClause(2)}
       GROUP BY kind`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const attention = { main: 0, branch: 0, firefighting: 0, total: 0 };
   for (const r of att.rows) {
@@ -127,9 +139,10 @@ export async function getCompassDashboard(
       WHERE kind = 'drift'
         AND ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND status = 'active'
+        AND ${wsFilterClause(2)}
       ORDER BY alignment_score ASC NULLS FIRST
       LIMIT 5`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const driftAlerts = driftRows.rows.map((r) => {
     const score = r.alignment_score == null ? null : Number(r.alignment_score);
@@ -145,7 +158,7 @@ export async function getCompassDashboard(
     };
   });
 
-  const alignmentScore = await computeAlignmentScore(deps, scopeId);
+  const alignmentScore = await computeAlignmentScore(deps, workspaceId, scopeId);
 
   // 上周 alignment 对比 — 用于 metric.delta
   let deltaLabel = '本周';
@@ -154,8 +167,9 @@ export async function getCompassDashboard(
       `SELECT alignment FROM ceo_prisms
         WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
           AND week_start = (DATE_TRUNC('week', NOW())::date - INTERVAL '7 days')::date
+          AND ${wsFilterClause(2)}
         ORDER BY computed_at DESC LIMIT 1`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     const prev = r.rows[0]?.alignment;
     if (prev != null) {
@@ -183,9 +197,10 @@ export async function getCompassDashboard(
 
 export async function recomputeAlignment(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ scopeId: string | null; alignmentScore: number }> {
-  const score = await computeAlignmentScore(deps, scopeId);
+  const score = await computeAlignmentScore(deps, workspaceId, scopeId);
   return { scopeId: scopeId ?? null, alignmentScore: score };
 }
 
@@ -198,6 +213,7 @@ export async function recomputeAlignment(
  */
 export async function getAstrolabe(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   polaris: { label: string; alignment: number; cx: number; cy: number; r: number };
@@ -214,14 +230,15 @@ export async function getAstrolabe(
     scope_id: string | null;
   }>;
 }> {
-  const alignment = await computeAlignmentScore(deps, scopeId);
+  const alignment = await computeAlignmentScore(deps, workspaceId, scopeId);
   const r = await deps.db.query(
     `SELECT id::text, name, kind, alignment_score, scope_id::text, status, established_at
        FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND status = 'active'
+        AND ${wsFilterClause(2)}
       ORDER BY kind, established_at`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
 
   const CENTER = { cx: 300, cy: 200 };
@@ -288,6 +305,7 @@ export async function getAstrolabe(
  */
 export async function getTimePie(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   weekStart: string;
@@ -306,8 +324,9 @@ export async function getTimePie(
        FROM ceo_attention_alloc
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND week_start = (DATE_TRUNC('week', NOW())::date)
+        AND ${wsFilterClause(2)}
       GROUP BY kind`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const buckets = { main: 0, branch: 0, firefighting: 0 };
   for (const row of cur.rows) {
@@ -331,8 +350,9 @@ export async function getTimePie(
          FROM ceo_attention_alloc
         WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
           AND week_start = (DATE_TRUNC('week', NOW())::date - INTERVAL '7 days')::date
+          AND ${wsFilterClause(2)}
         GROUP BY kind`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     const pb = { main: 0, branch: 0, firefighting: 0 };
     for (const row of prev.rows) if (row.kind in pb) (pb as any)[row.kind] = Number(row.h);
@@ -366,6 +386,7 @@ export async function getTimePie(
  */
 export async function getDriftRadar(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   items: Array<{
@@ -386,9 +407,10 @@ export async function getDriftRadar(
       WHERE kind = 'drift'
         AND status = 'active'
         AND ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}
       ORDER BY alignment_score ASC NULLS FIRST
       LIMIT 8`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const items = r.rows.map((row) => {
     const score = row.alignment_score == null ? 0 : Number(row.alignment_score);
@@ -416,7 +438,10 @@ export async function getDriftRadar(
         WHERE aa.kind = 'firefighting'
           AND s.kind = 'drift'
           AND aa.week_start = (DATE_TRUNC('week', NOW())::date)
+          AND ${wsFilterClause(1, 'aa.workspace_id')}
+          AND ${wsFilterClause(1, 's.workspace_id')}
         GROUP BY s.name`,
+      [workspaceId],
     );
     for (const row of a.rows) if (row.name) attention_eaten[String(row.name)] = Number(row.h);
   } catch {
@@ -431,6 +456,7 @@ export async function getDriftRadar(
  */
 export async function getOnePager(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   id: string;
@@ -458,15 +484,16 @@ export async function getOnePager(
        FROM ceo_briefs
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
         AND status IN ('sent','draft')
+        AND ${wsFilterClause(2)}
       ORDER BY status = 'sent' DESC, version DESC, updated_at DESC
       LIMIT 1`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const row = r.rows[0];
   if (!row) return null;
 
-  const alignmentScore = await computeAlignmentScore(deps, scopeId);
-  const pie = await getTimePie(deps, scopeId);
+  const alignmentScore = await computeAlignmentScore(deps, workspaceId, scopeId);
+  const pie = await getTimePie(deps, workspaceId, scopeId);
   const mainSeg = pie.segments.find((s) => s.kind === 'main');
   const fireSeg = pie.segments.find((s) => s.kind === 'firefighting');
   const mainSharePct = mainSeg?.pct ?? 0;
@@ -479,8 +506,9 @@ export async function getOnePager(
       `SELECT alignment FROM ceo_prisms
         WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
           AND week_start = (DATE_TRUNC('week', NOW())::date - INTERVAL '7 days')::date
+          AND ${wsFilterClause(2)}
         ORDER BY computed_at DESC LIMIT 1`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     const p = prev.rows[0]?.alignment;
     if (p != null) {
@@ -497,7 +525,10 @@ export async function getOnePager(
   let meetingCount = 0;
   try {
     const m = await deps.db.query(
-      `SELECT COUNT(*)::int AS n FROM mn_meetings WHERE meeting_at > NOW() - INTERVAL '7 days'`,
+      `SELECT COUNT(*)::int AS n FROM mn_meetings
+        WHERE meeting_at > NOW() - INTERVAL '7 days'
+          AND ${wsFilterClause(1)}`,
+      [workspaceId],
     );
     meetingCount = Number(m.rows[0]?.n ?? 0);
   } catch { /* ignore */ }
@@ -530,6 +561,7 @@ export async function getOnePager(
  */
 export async function getArchives(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   tab: 'main' | 'drift',
   scopeId?: string,
 ): Promise<{ items: any[] }> {
@@ -541,9 +573,11 @@ export async function getArchives(
          LEFT JOIN ceo_strategic_lines l ON l.id = e.line_id
         WHERE e.fate = 'refute'
           AND ($1::uuid IS NULL OR l.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 'e.workspace_id')}
+          AND ${wsFilterClause(2, 'l.workspace_id')}
         ORDER BY e.updated_at DESC
         LIMIT 30`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     return {
       items: r.rows.map((row) => ({
@@ -561,8 +595,9 @@ export async function getArchives(
             established_at::text AS established_at
        FROM ceo_strategic_lines
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}
       ORDER BY kind, established_at`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   return {
     items: r.rows.map((row) => ({
@@ -585,6 +620,7 @@ const STRATEGIC_STATUSES = ['active', 'paused', 'retired'];
 
 export async function createStrategicLine(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: {
     name?: string;
     kind?: string;
@@ -602,11 +638,13 @@ export async function createStrategicLine(
   if (body.status && !STRATEGIC_STATUSES.includes(body.status)) {
     return { ok: false, error: 'status must be active|paused|retired' };
   }
+  // 写入必须有归属 ws — admin/api-key (workspaceId=null) 写入路径不允许 (会触发 NOT NULL)
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const score = body.alignmentScore != null ? Math.max(0, Math.min(1, body.alignmentScore)) : null;
   const r = await deps.db.query(
     `INSERT INTO ceo_strategic_lines
-       (scope_id, name, kind, alignment_score, status, description, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (scope_id, name, kind, alignment_score, status, description, metadata, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id::text`,
     [
       body.scopeId ?? null,
@@ -616,6 +654,7 @@ export async function createStrategicLine(
       body.status ?? 'active',
       body.description ?? null,
       body.metadata ?? {},
+      workspaceId,
     ],
   );
   return { ok: true, id: r.rows[0].id };

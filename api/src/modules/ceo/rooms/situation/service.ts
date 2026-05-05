@@ -3,11 +3,13 @@
 
 import type { CeoEngineDeps } from '../../types.js';
 import { computeCoverage, computeHorizon, computeBlindspots, REQUIRED_KINDS } from './aggregator.js';
+import { wsFilterClause } from '../../shared/wsFilter.js';
 
 const STAKEHOLDER_KINDS = ['customer', 'regulator', 'investor', 'press', 'partner', 'employee'] as const;
 
 export async function listStakeholders(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { scopeId?: string; kind?: string },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
@@ -20,6 +22,8 @@ export async function listStakeholders(
     params.push(filter.kind);
     where.push(`h.kind = $${params.length}`);
   }
+  params.push(workspaceId);
+  where.push(wsFilterClause(params.length, 'h.workspace_id'));
   const r = await deps.db.query(
     `SELECT h.id::text, h.scope_id::text, h.name, h.kind, h.heat,
             h.last_signal_at, h.description, h.escalation_path,
@@ -31,7 +35,7 @@ export async function listStakeholders(
             ) AS last_signal_summary
        FROM ceo_stakeholders h
        LEFT JOIN ceo_external_signals s ON s.stakeholder_id = h.id
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      WHERE ${where.join(' AND ')}
       GROUP BY h.id
       ORDER BY h.heat DESC, h.last_signal_at DESC NULLS LAST`,
     params,
@@ -41,6 +45,7 @@ export async function listStakeholders(
 
 export async function listSignals(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   filter: { stakeholderId?: string },
 ): Promise<{ items: any[] }> {
   if (!filter.stakeholderId) {
@@ -51,8 +56,10 @@ export async function listSignals(
          FROM ceo_external_signals s
          LEFT JOIN ceo_stakeholders h ON h.id = s.stakeholder_id
         WHERE s.captured_at > NOW() - INTERVAL '7 days'
+          AND ${wsFilterClause(1, 's.workspace_id')}
         ORDER BY s.captured_at DESC
         LIMIT 30`,
+      [workspaceId],
     );
     return { items: r.rows };
   }
@@ -60,15 +67,17 @@ export async function listSignals(
     `SELECT id::text, signal_text, source_url, sentiment, captured_at, ref_asset_id
        FROM ceo_external_signals
       WHERE stakeholder_id = $1::uuid
+        AND ${wsFilterClause(2)}
       ORDER BY captured_at DESC
       LIMIT 30`,
-    [filter.stakeholderId],
+    [filter.stakeholderId, workspaceId],
   );
   return { items: r.rows };
 }
 
 export async function getRubricMatrix(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   dimensions: string[];
@@ -79,9 +88,10 @@ export async function getRubricMatrix(
        FROM ceo_rubric_scores rs
        LEFT JOIN ceo_stakeholders h ON h.id = rs.stakeholder_id
       WHERE ($1::uuid IS NULL OR rs.scope_id = $1::uuid)
+        AND ${wsFilterClause(2, 'rs.workspace_id')}
       GROUP BY h.name, h.kind, rs.dimension
       ORDER BY h.name`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
   const dimSet = new Set<string>();
   const grouped = new Map<string, { kind: string; scores: Record<string, number> }>();
@@ -103,6 +113,7 @@ export async function getRubricMatrix(
 
 export async function getSituationDashboard(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{
   question: string;
@@ -114,12 +125,13 @@ export async function getSituationDashboard(
   signalCount: number;
   horizon: { near_7d: number; mid_30d: number; far_90d: number };
 }> {
-  const coverage = await computeCoverage(deps, scopeId);
+  const coverage = await computeCoverage(deps, workspaceId, scopeId);
 
   const present = await deps.db.query(
     `SELECT DISTINCT kind FROM ceo_stakeholders
-      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)`,
-    [scopeId ?? null],
+      WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}`,
+    [scopeId ?? null, workspaceId],
   );
   const coveredKinds = present.rows.map((r) => String(r.kind));
   const missingKinds = STAKEHOLDER_KINDS.filter((k) => !coveredKinds.includes(k));
@@ -128,9 +140,10 @@ export async function getSituationDashboard(
     `SELECT name, kind, heat
        FROM ceo_stakeholders
       WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+        AND ${wsFilterClause(2)}
       ORDER BY heat DESC
       LIMIT 5`,
-    [scopeId ?? null],
+    [scopeId ?? null, workspaceId],
   );
 
   // signalCount (近 7 天) + horizon
@@ -140,12 +153,13 @@ export async function getSituationDashboard(
       `SELECT COUNT(*)::int AS n FROM ceo_external_signals s
          LEFT JOIN ceo_stakeholders h ON h.id = s.stakeholder_id
         WHERE s.captured_at > NOW() - INTERVAL '7 days'
-          AND ($1::uuid IS NULL OR h.scope_id = $1::uuid)`,
-      [scopeId ?? null],
+          AND ($1::uuid IS NULL OR h.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 's.workspace_id')}`,
+      [scopeId ?? null, workspaceId],
     );
     signalCount = Number(r.rows[0]?.n ?? 0);
   } catch { /* ignore */ }
-  const horizon = await computeHorizon(deps, scopeId);
+  const horizon = await computeHorizon(deps, workspaceId, scopeId);
 
   const missing = missingKinds[0] ?? '';
   return {
@@ -175,9 +189,10 @@ export async function getSituationDashboard(
 
 export async function listBlindspots(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ items: any[] }> {
-  return computeBlindspots(deps, scopeId);
+  return computeBlindspots(deps, workspaceId, scopeId);
 }
 
 /**
@@ -186,6 +201,7 @@ export async function listBlindspots(
  */
 export async function listObservers(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   scopeId?: string,
 ): Promise<{ items: any[] }> {
   const items: any[] = [];
@@ -198,9 +214,10 @@ export async function listObservers(
         WHERE c.status = 'pending'
           AND c.raised_count >= 2
           AND ($1::uuid IS NULL OR d.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 'c.workspace_id')}
         ORDER BY c.raised_count DESC, c.raised_at DESC
         LIMIT 4`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     for (const row of r.rows) {
       items.push({
@@ -236,6 +253,7 @@ export async function listObservers(
  */
 export async function getHorizon(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   range: 'near' | 'mid' | 'far',
   scopeId?: string,
 ): Promise<{
@@ -255,9 +273,10 @@ export async function getHorizon(
          LEFT JOIN ceo_stakeholders h ON h.id = s.stakeholder_id
         WHERE s.captured_at >= NOW() - INTERVAL '${days} days'
           AND ($1::uuid IS NULL OR h.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 's.workspace_id')}
         ORDER BY s.captured_at
         LIMIT 30`,
-      [scopeId ?? null],
+      [scopeId ?? null, workspaceId],
     );
     for (const row of r.rows) {
       const sent = Number(row.sentiment ?? 0);
@@ -293,6 +312,7 @@ const STAKEHOLDER_KINDS_WRITE = ['customer', 'regulator', 'investor', 'press', '
 
 export async function createStakeholder(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: {
     name?: string;
     kind?: string;
@@ -307,10 +327,11 @@ export async function createStakeholder(
   if (!body.kind || !STAKEHOLDER_KINDS_WRITE.includes(body.kind)) {
     return { ok: false, error: 'kind must be one of ' + STAKEHOLDER_KINDS_WRITE.join('|') };
   }
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const heat = typeof body.heat === 'number' ? Math.max(0, Math.min(1, body.heat)) : 0;
   const r = await deps.db.query(
-    `INSERT INTO ceo_stakeholders (scope_id, name, kind, heat, description, escalation_path, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO ceo_stakeholders (scope_id, name, kind, heat, description, escalation_path, metadata, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id::text`,
     [
       body.scopeId ?? null,
@@ -320,6 +341,7 @@ export async function createStakeholder(
       body.description ?? null,
       body.escalationPath ?? {},
       body.metadata ?? {},
+      workspaceId,
     ],
   );
   return { ok: true, id: r.rows[0].id };
@@ -371,6 +393,7 @@ export async function deleteStakeholder(
 
 export async function createSignal(
   deps: CeoEngineDeps,
+  workspaceId: string | null,
   body: {
     stakeholderId?: string;
     signalText?: string;
@@ -384,12 +407,13 @@ export async function createSignal(
   if (!body.stakeholderId || !body.signalText) {
     return { ok: false, error: 'stakeholderId and signalText required' };
   }
+  if (!workspaceId) return { ok: false, error: 'workspace required for write' };
   const sentiment = body.sentiment != null ? Math.max(-1, Math.min(1, body.sentiment)) : null;
   const captured = body.capturedAt ?? null;
   const r = await deps.db.query(
     `INSERT INTO ceo_external_signals
-       (stakeholder_id, signal_text, source_url, sentiment, captured_at, ref_asset_id, metadata)
-     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, NOW()), $6, $7)
+       (stakeholder_id, signal_text, source_url, sentiment, captured_at, ref_asset_id, metadata, workspace_id)
+     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, NOW()), $6, $7, $8)
      RETURNING id::text`,
     [
       body.stakeholderId,
@@ -399,6 +423,7 @@ export async function createSignal(
       captured,
       body.refAssetId ?? null,
       body.metadata ?? {},
+      workspaceId,
     ],
   );
   // 同步刷新 stakeholder.last_signal_at + 简单 heat 增量 (max-clamp 1.0)

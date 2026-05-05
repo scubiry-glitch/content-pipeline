@@ -62,12 +62,18 @@ export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
 
     fastify.get('/silence-signals', async (request) => {
       const q = (request.query ?? {}) as { days?: string };
-      return getSilenceSignals(engine.deps, { days: q.days ? Number(q.days) : 30 });
+      return getSilenceSignals(engine.deps, {
+        days: q.days ? Number(q.days) : 30,
+        workspaceId: currentWorkspaceId(request),
+      });
     });
 
     fastify.get('/echos', async (request) => {
       const q = (request.query ?? {}) as { weeks?: string };
-      return getEchos(engine.deps, { weeks: q.weeks ? Number(q.weeks) : 6 });
+      return getEchos(engine.deps, {
+        weeks: q.weeks ? Number(q.weeks) : 6,
+        workspaceId: currentWorkspaceId(request),
+      });
     });
 
     fastify.get('/self-promises', async (request) => {
