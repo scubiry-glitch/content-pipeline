@@ -3,7 +3,7 @@
 // 16 个 computer 统一入口。MeetingNotesEngine.computeAxis 通过此表分发。
 
 import type { MeetingNotesDeps } from '../types.js';
-import type { ComputeArgs, ComputeResult } from './_shared.js';
+import type { ComputeArgs, ComputeResult, ScopeDecisionRef } from './_shared.js';
 
 import { computeCommitments } from './people/commitmentsComputer.js';
 import { computeRoleTrajectory } from './people/roleTrajectoryComputer.js';
@@ -220,6 +220,32 @@ const SEQUENTIAL_AFTER: Record<string, string[]> = {
  * Opt-6 (O7)：同 axis 内独立 subDim 并行；SEQUENTIAL_AFTER 列表里的 subDim
  * 在 phase-1 全部完成后再跑（保留显式依赖顺序）。
  */
+async function loadScopeDecisionHistory(
+  deps: MeetingNotesDeps,
+  scopeId: string,
+  excludeMeetingId: string,
+): Promise<ScopeDecisionRef[]> {
+  try {
+    const r = await deps.db.query(
+      `SELECT d.id, d.title, a.created_at
+         FROM mn_decisions d
+         LEFT JOIN assets a ON a.id = d.meeting_id
+         WHERE d.scope_id = $1 AND d.meeting_id != $2
+         ORDER BY a.created_at ASC
+         LIMIT 20`,
+      [scopeId, excludeMeetingId],
+    );
+    return r.rows.map((row: any, i: number) => ({
+      label: `D${String(i + 1).padStart(2, '0')}`,
+      id: row.id,
+      title: row.title,
+      date: row.created_at ? String(row.created_at).slice(0, 10) : '?',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function runAxisAll(
   deps: MeetingNotesDeps,
   axis: string,
@@ -231,11 +257,23 @@ export async function runAxisAll(
   const phase1 = dims.filter((sd) => !tail.has(sd));
   const phase2 = dims.filter((sd) => tail.has(sd));
 
+  // projects 轴：decision_provenance 需要本 scope 历史决策，统一在轴入口加载一次
+  let enrichedArgs = args;
+  if (
+    axis === 'projects' &&
+    dims.includes('decision_provenance') &&
+    args.scopeId &&
+    args.meetingId
+  ) {
+    const history = await loadScopeDecisionHistory(deps, args.scopeId, args.meetingId);
+    enrichedArgs = { ...args, scopeDecisionHistory: history };
+  }
+
   const runOne = async (sd: string): Promise<ComputeResult> => {
     const fn = resolveComputer(axis, sd);
     if (!fn) return { subDim: sd, created: 0, updated: 0, skipped: 0, errors: 0 };
     try {
-      return await fn(deps, args);
+      return await fn(deps, enrichedArgs);
     } catch (e) {
       return {
         subDim: sd,

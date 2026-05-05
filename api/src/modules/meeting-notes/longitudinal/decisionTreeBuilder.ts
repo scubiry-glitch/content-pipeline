@@ -31,7 +31,7 @@ export class DecisionTreeBuilder {
       [scopeId],
     );
 
-    const nodes: TreeNode[] = r.rows.map((row: any) => {
+    const rawNodes: TreeNode[] = r.rows.map((row: any) => {
       const basedOn: string[] = row.based_on_ids ?? [];
       return {
         id: row.id,
@@ -46,8 +46,18 @@ export class DecisionTreeBuilder {
       };
     });
 
-    // 找 root 候选：no parent 且 is_current
-    const root = nodes.find((n) => n.parent === null && n.current) ?? nodes[0] ?? null;
+    // Fallback：若所有节点都没有 based_on_ids，按时间顺序自动串线性链
+    // 每条决策的 parent = 按时间排在前一条的决策（不管 meeting）
+    const hasAnyParent = rawNodes.some((n) => n.parent !== null);
+    const nodes: TreeNode[] = hasAnyParent
+      ? rawNodes
+      : rawNodes.map((n, i) => ({
+          ...n,
+          parent: i === 0 ? null : rawNodes[i - 1].id,
+        }));
+
+    // 找 root 候选：no parent
+    const root = nodes.find((n) => n.parent === null) ?? nodes[0] ?? null;
 
     await this.deps.db.query(
       `INSERT INTO mn_decision_tree_snapshots

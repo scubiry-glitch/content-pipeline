@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
+                "file": "default/sources/meeting/会议纪要-续约沟通-2fcd4400/_index.md",
                 "mode": "source",
                 "source": false
               },
@@ -156,35 +156,55 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
+                "file": "default/entities/58同城.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "_index 的大纲"
+              "title": "58同城 的大纲"
+            }
+          },
+          {
+            "id": "82dfd203cda984a9",
+            "type": "leaf",
+            "state": {
+              "type": "claudian-view",
+              "state": {},
+              "icon": "bot",
+              "title": "Claudian"
             }
           }
         ],
-        "currentTab": 4
+        "currentTab": 5
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 478.5
   },
   "left-ribbon": {
     "hiddenItems": {
       "switcher:打开快速切换": false,
-      "graph:查看关系图谱": false,
       "canvas:新建白板": false,
       "daily-notes:打开/创建今天的日记": false,
       "templates:插入模板": false,
       "command-palette:打开命令面板": false,
-      "bases:新建数据库": false
+      "bases:新建数据库": false,
+      "markdown-importer:打开 Markdown 格式转换器": false,
+      "templater-obsidian:Templater": false,
+      "claudian:Open Claudian": false
     }
   },
   "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
+    "default/sources/meeting/meeting-chats/ed0235de-1777648817.md",
+    "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
+    "default/entities/58同城.md",
+    "default/sources/meeting/上海汇聚 AI 项目 · 两轮 · 管理模式 A→B 点规划-db866879/_index.md",
+    "default/domains/E02-金融科技/_金融_长租公寓.md",
+    "未命名 1.base",
+    "未命名.base",
+    "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
     "default/sources/meeting/scopes/client/左海-af17d047/_index.md",
     "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
     "default/sources/meeting/meeting-chats/6050f222-1777947618.md",
@@ -196,12 +216,10 @@
     "default/concepts/technology/智能验房（Ingoing_Outgoing Report）.md",
     "default/entities/person/说话人5.md",
     "default/entities/person/说话人4.md",
-    "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
     "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222",
     "default/concepts/bias",
     "default/concepts/judgment/中小企业分散市场的工具切入策略.md",
     "default/concepts/judgment",
-    "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
     "default/meeting-chats/d4833343-1777385717.md",
     "default/sources/meeting/meeting-chats",
     "default/meeting-chats/eff87d6c-1777385719.md",
@@ -213,13 +231,7 @@
     "default/domains/E02-金融科技/_金融_房地产.md",
     "default/entities/location/宁波市.md",
     "default/entities/location/大中华区.md",
-    "default/entities/event/《1940投资顾问法案》.md",
-    "default/entities/event/中美战略与经济对话.md",
-    "default/domains/E09-文化传媒/_index.md",
-    "default/domains/E99-其他/_index.md",
     "default/concepts/counterfactual",
-    "default/entities/project",
-    "default/concepts/regulation",
-    "default/concepts/demographic"
+    "default/entities/project"
   ]
 }

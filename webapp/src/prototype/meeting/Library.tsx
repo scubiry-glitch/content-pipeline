@@ -938,14 +938,15 @@ export function Library() {
     });
     return () => { cancelled = true; };
   }, [forceMock, showArchived, scopeReloadTick]);
-  // forceMock → fixture；API ok → API 结果；loading → 空列表（避免闪 mock）；error → fixture
-  const meetingsDisplay = forceMock || apiState === 'error'
+  // 严格 API 模式：forceMock=true → fixture；否则一律走 API（loading/error/empty 都展示空，不再 fallback 到 mock）
+  const meetingsDisplay = forceMock
     ? MEETINGS
-    : apiState === 'loading'
-      ? []
-      : (apiMeetings ?? []);
-  const isMock = forceMock || apiState === 'error';
+    : apiState === 'ok'
+      ? (apiMeetings ?? [])
+      : [];
+  const isMock = forceMock;
   const isLoading = !forceMock && apiState === 'loading';
+  const isApiError = !forceMock && apiState === 'error';
 
   // 树结构：API 模式按 parent_scope_id 拼成多级树（支持二级项目），
   // 节点 count 用 apiMeetings.scope_bindings 实时聚合；否则回 GROUP_TREES fixture
@@ -990,8 +991,9 @@ export function Library() {
       sortDeep(roots);
       return roots;
     }
-    return GROUP_TREES[groupBy];
-  }, [apiScopes, groupBy, apiMeetings]);
+    // 严格 API 模式：API 没返回 scope 时给空树，避免误把 fixture 当成真实分组结构
+    return forceMock ? GROUP_TREES[groupBy] : [];
+  }, [apiScopes, groupBy, apiMeetings, forceMock]);
 
   const allGroupIds = useMemo(() => {
     const collect = (nodes: TreeNode[]): string[] =>
@@ -1602,7 +1604,11 @@ export function Library() {
                 textAlign: 'center', color: 'var(--ink-3)', fontSize: 13,
                 background: 'var(--paper-2)', borderRadius: 6, border: '1px dashed var(--line)',
               }}>
-                {isLoading ? '加载中…' : '这个分组里还没有会议纪要'}
+                {isLoading
+                  ? '加载中…'
+                  : isApiError
+                    ? 'API 请求失败 · 请检查后端服务（已禁用 mock 兜底）'
+                    : '这个分组里还没有会议纪要'}
               </div>
             )}
           </div>

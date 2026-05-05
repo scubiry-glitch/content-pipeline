@@ -510,8 +510,9 @@ export function VariantEditorial() {
   const isMobile = useIsMobile();
   const [dim, setDim] = useState('minutes');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
-  const [usingMock, setUsingMock] = useState(true);
-  const [tensionMock, setTensionMock] = useState(true);
+  // 默认与 forceMock 同步：API 模式下初值为 false，避免在 API 加载完成前误把 fixture 标成 mock 数据回填到 UI
+  const [usingMock, setUsingMock] = useState(forceMock);
+  const [tensionMock, setTensionMock] = useState(forceMock);
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
@@ -590,7 +591,7 @@ export function VariantEditorial() {
     { id: 'cross_view',    label: '六、观点对位',    num: '06' },
   ];
 
-  // 默认 API 优先：UUID id 在 API 加载期间不渲染 fixture 内容，避免用户看到 mock 数据闪现
+  // 严格 API 模式：loading / error / skipped(非 UUID id) 都不渲染 fixture，避免误把 mock 当真实数据
   if (apiState === 'loading') {
     return (
       <div style={{
@@ -598,6 +599,19 @@ export function VariantEditorial() {
         color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: 'var(--sans)', fontSize: 13,
       }}>加载中…</div>
+    );
+  }
+  if (!forceMock && (apiState === 'error' || apiState === 'skipped')) {
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: 'var(--paper)',
+        color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--sans)', fontSize: 13, padding: 24, textAlign: 'center',
+      }}>
+        {apiState === 'error'
+          ? 'API 请求失败 · 请检查后端服务（已禁用 mock 兜底）'
+          : '该会议不存在或 id 不是 UUID（API 模式下不再回退到 fixture）'}
+      </div>
     );
   }
 

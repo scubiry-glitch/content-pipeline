@@ -135,7 +135,8 @@ function PCommitments({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setItems(COMMITMENTS); setPersonNames({}); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(scopeId)) { setItems([]); setPersonNames({}); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeCommitments(scopeId)
@@ -293,7 +294,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
   const [loading, setLoading] = useState(() => !forceMock);
 
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) {
+    if (forceMock) {
       setRows(PEOPLE_STATS.map(s => ({
         who: s.who, name: P(s.who).name, role: P(s.who).role,
         points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
@@ -301,6 +302,7 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
       setIsMock(true); setLoading(false);
       return;
     }
+    if (!UUID_RE.test(scopeId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getScopeRoleTrajectory(scopeId)
@@ -451,7 +453,8 @@ function PSpeech({ meetingId }: { meetingId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(meetingId)) { setRows(PEOPLE_STATS); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setRows(PEOPLE_STATS); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(meetingId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getSpeechMetrics(meetingId)
@@ -851,11 +854,12 @@ export function AxisPeople() {
   // 这里只判一次 isMock 给 DimShell 顶部 badge 用
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(meetingId)) { setIsMock(true); return; }
+    if (forceMock) { setIsMock(true); return; }
+    if (!UUID_RE.test(meetingId)) { setIsMock(false); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)
-      .then((r) => { if (!cancelled) setIsMock(!r?.people); })
+      .then((r) => { if (!cancelled) setIsMock(false); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [meetingId, forceMock]);

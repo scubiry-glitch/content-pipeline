@@ -8,12 +8,21 @@ import type { MeetingNotesDeps } from '../types.js';
 import { applyDecoratorStack, getCurrentStrategy, getCurrentExpertPersona } from './decoratorStack.js';
 import { chunkedContent } from '../parse/claimExtractor.js';
 
+export interface ScopeDecisionRef {
+  label: string;   // D01, D02, ...（短标签，供 LLM 引用）
+  id: string;
+  title: string;
+  date: string;
+}
+
 export interface ComputeArgs {
   meetingId?: string;
   scopeId?: string | null;
   scopeKind?: 'library' | 'project' | 'client' | 'topic' | 'meeting';
   /** 强制删掉旧数据再写（PR4 run engine 会设为 true 以保证 run 幂等） */
   replaceExisting?: boolean;
+  /** 轴重算时由 registry 预加载，供 decision_provenance 解析 based_on_ids */
+  scopeDecisionHistory?: ScopeDecisionRef[];
 }
 
 export interface ComputeResult {

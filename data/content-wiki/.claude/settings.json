@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for dir in concepts domains entities sources; do echo \"=== $dir ===\"; find /Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/default/$dir -maxdepth 1 -type d | tail -n +2 | while read d; do count=$\\(find \"$d\" -type f -name \"*.md\" | wc -l\\); echo \"$\\(basename \"$d\"\\): $count files\"; done; done)",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\"; head -20 {}')",
+      "Bash(xargs -I {} sh -c 'echo \"=== $\\(basename {}\\) ===\"; head -40 {}')",
+      "Bash(xargs -I {} sh -c 'echo \"{}:\" && find \"{}\" -type f | wc -l')"
+    ]
+  }
+}

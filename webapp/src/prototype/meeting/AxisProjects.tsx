@@ -177,7 +177,8 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) { setRows(DECISION_CHAIN); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setRows(DECISION_CHAIN); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(scopeId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeDecisions(scopeId)
@@ -327,7 +328,8 @@ function AssumptionLedger({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) { setRows(ASSUMPTIONS); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setRows(ASSUMPTIONS); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(scopeId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeAssumptions(scopeId)
@@ -523,7 +525,8 @@ function OpenQuestions({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) { setRows(OPEN_QUESTIONS); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setRows(OPEN_QUESTIONS); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(scopeId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeOpenQuestions(scopeId)
@@ -640,7 +643,8 @@ function RiskHeat({ scopeId }: { scopeId: string }) {
   const [isMock, setIsMock] = useState(() => forceMock);
   const [loading, setLoading] = useState(() => !forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(scopeId)) { setRows(RISKS); setIsMock(true); setLoading(false); return; }
+    if (forceMock) { setRows(RISKS); setIsMock(true); setLoading(false); return; }
+    if (!UUID_RE.test(scopeId)) { setRows([]); setIsMock(false); setLoading(false); return; }
     setLoading(true); setIsMock(false);
     let cancelled = false;
     meetingNotesApi.listScopeRisks(scopeId)
@@ -846,7 +850,8 @@ export function AxisProjects() {
   };
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(meetingId)) { setIsMock(true); return; }
+    if (forceMock) { setIsMock(true); return; }
+    if (!UUID_RE.test(meetingId)) { setIsMock(false); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)

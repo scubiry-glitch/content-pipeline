@@ -553,7 +553,8 @@ export function AxisKnowledge() {
   const [knowledgeData, setKnowledgeData] = useState<any>(null);
   const [isMock, setIsMock] = useState(() => forceMock);
   useEffect(() => {
-    if (forceMock || !UUID_RE.test(meetingId)) { setKnowledgeData(null); setIsMock(true); return; }
+    if (forceMock) { setKnowledgeData(null); setIsMock(true); return; }
+    if (!UUID_RE.test(meetingId)) { setKnowledgeData(null); setIsMock(false); return; }
     setIsMock(false);
     let cancelled = false;
     meetingNotesApi.getMeetingAxes(meetingId)

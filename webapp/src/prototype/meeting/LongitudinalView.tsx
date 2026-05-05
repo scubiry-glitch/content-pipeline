@@ -202,10 +202,17 @@ function adaptDecisionTree(r: unknown): TreeData | null {
     const pendingIds = (obj.pending as string[] | undefined) ?? [];
     const currentId = obj.current as string | undefined;
     const rootRaw = rawNodes.find((n: any) => !n.parent) ?? rawNodes[0];
-    const root = remapApiTreeNode(rootRaw, currentId, pendingIds);
-    const rest = rawNodes
-      .filter((n: any) => n.id !== rootRaw.id)
-      .map((n: any) => remapApiTreeNode(n, currentId, pendingIds));
+    const allMapped = rawNodes.map((n: any) => remapApiTreeNode(n, currentId, pendingIds));
+    // DB 数据质量问题：多个节点 current=true 时，只保留最新一条（按 date 降序）
+    const currentNodes = allMapped.filter(n => n.current);
+    if (currentNodes.length > 1) {
+      const latestCurrent = [...currentNodes].sort((a, b) =>
+        (b.date ?? '').localeCompare(a.date ?? ''),
+      )[0];
+      allMapped.forEach(n => { if (n.current && n.id !== latestCurrent.id) n.current = false; });
+    }
+    const root = allMapped.find(n => n.id === rootRaw.id) ?? allMapped[0];
+    const rest = allMapped.filter(n => n.id !== root.id);
     return { root, nodes: rest };
   }
   // Legacy shape: { root, nodes }
@@ -235,7 +242,7 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
 
   const allNodes = [tree.root, ...tree.nodes];
 
-  // ── 动态树形布局 ─────────────────────────────────────────────────────────────
+  // ── 动态树形布局（纵向：根在上，时间向下）────────────────────────────────────
   // 1. 构建 parent→children 映射
   const children: Record<string, string[]> = {};
   allNodes.forEach(n => {
@@ -245,14 +252,14 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
       children[parent].push(n.id);
     }
   });
-  // 2. BFS 分配深度（x 轴）
+  // 2. BFS 分配深度（y 轴，从上往下）
   const depth: Record<string, number> = { [tree.root.id]: 0 };
   const bfsQ = [tree.root.id];
   while (bfsQ.length) {
     const cur = bfsQ.shift()!;
     (children[cur] ?? []).forEach(c => { depth[c] = (depth[cur] ?? 0) + 1; bfsQ.push(c); });
   }
-  // 3. 按深度分组，分配 y 序号
+  // 3. 按深度分组
   const byDepth: Record<number, string[]> = {};
   allNodes.forEach(n => {
     const d = depth[n.id] ?? 0;
@@ -261,16 +268,18 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
   });
   const maxDepth = Math.max(...Object.keys(byDepth).map(Number));
   const maxCount = Math.max(...Object.values(byDepth).map(a => a.length));
-  const NODE_W = 170, NODE_H = 60, X_GAP = 200, Y_GAP = 80;
-  const W = Math.max(860, (maxDepth + 1) * X_GAP + NODE_W + 40);
-  const H = Math.max(360, maxCount * Y_GAP + NODE_H + 40);
+  const NODE_W = 220, NODE_H = 52, X_GAP = 260, Y_GAP = 96;
+  const colsW = maxCount * X_GAP + NODE_W;
+  const W = Math.max(colsW + 40, 300);
+  const H = (maxDepth + 1) * Y_GAP + NODE_H + 60;
+  const centerX = W / 2;
   const pos: Record<string, { x: number; y: number }> = {};
   Object.entries(byDepth).forEach(([d, ids]) => {
     const depth_num = Number(d);
     ids.forEach((id, i) => {
       pos[id] = {
-        x: 80 + depth_num * X_GAP,
-        y: (H / 2) + (i - (ids.length - 1) / 2) * Y_GAP,
+        x: centerX + (i - (ids.length - 1) / 2) * X_GAP,
+        y: 50 + depth_num * Y_GAP,
       };
     });
   });
@@ -288,15 +297,17 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 700 }}>
         每个节点是一次会议上的分岔决定。红点 = 当前待决节点。整棵树可时间回溯。
       </div>
-      <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px', overflowX: 'auto' }}>
+      <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px', overflowX: 'auto', overflowY: 'auto', maxHeight: 640 }}>
         <svg width={W} height={H} style={{ display: 'block', minWidth: W }}>
           {tree.nodes.map(n => {
             if (!n.parent) return null;
             const p1 = pos[n.parent], p2 = pos[n.id];
             if (!p1 || !p2) return null;
+            const cy1 = p1.y + NODE_H / 2, cy2 = p2.y - NODE_H / 2;
+            const mid = (cy1 + cy2) / 2;
             return (
               <path key={n.id}
-                d={`M ${p1.x + 40} ${p1.y} C ${(p1.x + p2.x) / 2} ${p1.y}, ${(p1.x + p2.x) / 2} ${p2.y}, ${p2.x - 40} ${p2.y}`}
+                d={`M ${p1.x} ${cy1} C ${p1.x} ${mid}, ${p2.x} ${mid}, ${p2.x} ${cy2}`}
                 fill="none" stroke={n.pending ? 'var(--accent)' : 'var(--ink-3)'}
                 strokeWidth="1.4" strokeDasharray={n.pending ? '4 3' : ''} opacity="0.55"
               />
@@ -305,31 +316,40 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
           {allNodes.map(n => {
             const p = pos[n.id];
             const { current, pending } = (n as { current?: boolean; pending?: boolean });
+            const hw = NODE_W / 2, hh = NODE_H / 2;
             return (
               <g key={n.id}>
-                <rect x={p.x - 80} y={p.y - 26} width={160} height={52} rx={5}
+                <rect x={p.x - hw} y={p.y - hh} width={NODE_W} height={NODE_H} rx={5}
                   fill={current ? 'var(--accent-soft)' : 'var(--paper)'}
                   stroke={current ? 'oklch(0.6 0.13 40)' : pending ? 'var(--accent)' : 'var(--line-2)'}
                   strokeDasharray={pending ? '4 3' : ''}
                   strokeWidth={current ? 1.5 : 1} />
-                <text x={p.x} y={p.y - 9} textAnchor="middle" fontFamily="var(--mono)" fontSize="9" fill="var(--ink-4)">
-                  {(n as { date?: string }).date || ''} · {n.meeting || ''}
+                <text x={p.x} y={p.y - 10} textAnchor="middle" fontFamily="var(--mono)" fontSize="9" fill="var(--ink-4)">
+                  {(() => {
+                    const d = ((n as { date?: string }).date || '').slice(0, 7);
+                    return d;
+                  })()}
                 </text>
-                <text x={p.x} y={p.y + 5} textAnchor="middle" fontFamily="var(--serif)" fontSize="12" fontWeight="600" fill="var(--ink)">
-                  {(n as { branch?: string }).branch || (n as { label?: string }).label || ''}
+                <text x={p.x} y={p.y + 5} textAnchor="middle" fontFamily="var(--serif)" fontSize="11.5" fontWeight="600" fill="var(--ink)">
+                  {(() => { const t = (n as { branch?: string }).branch || (n as { label?: string }).label || ''; return t.length > 18 ? t.slice(0, 17) + '…' : t; })()}
                 </text>
-                <text x={p.x} y={p.y + 18} textAnchor="middle" fontFamily="var(--sans)" fontSize="10" fill="var(--ink-2)">
-                  {(n as { decided?: string }).decided ? `→ ${(n as { decided?: string }).decided}` : ''}
-                </text>
-                {current && <circle cx={p.x + 70} cy={p.y - 18} r={5} fill="var(--accent)" stroke="var(--paper)" strokeWidth={2} />}
+                {current && <circle cx={p.x + hw - 8} cy={p.y - hh + 8} r={5} fill="var(--accent)" stroke="var(--paper)" strokeWidth={2} />}
               </g>
             );
           })}
         </svg>
       </div>
-      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--ink-3)' }}>
-        <b style={{ color: 'var(--ink)' }}>当前节点</b>: M-2026-04 · 「精选推理层 · 上限 6000 万」 · 下一分支待 M-2026-05 LP 沟通会决定
-      </div>
+      {(() => {
+        const cur = allNodes.find(n => (n as { current?: boolean }).current);
+        if (!cur) return null;
+        const branch = (cur as { branch?: string }).branch || (cur as { label?: string }).label || '';
+        const date = (cur as { date?: string }).date || '';
+        return (
+          <div style={{ marginTop: 16, fontSize: 12, color: 'var(--ink-3)' }}>
+            <b style={{ color: 'var(--ink)' }}>当前节点</b>: {date && `${date} · `}「{branch}」
+          </div>
+        );
+      })()}
     </div>
   );
 }

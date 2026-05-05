@@ -740,9 +740,10 @@ export function VariantThreads() {
   const isMobile = useIsMobile();
   const [view, setView] = useState<'threads' | 'consensus' | 'focus' | 'affect'>('threads');
   const [a, setA] = useState<typeof ANALYSIS>(ANALYSIS);
-  const [usingMock, setUsingMock] = useState(true);
-  const [consensusMock, setConsensusMock] = useState(true);
-  const [focusMapMock, setFocusMapMock] = useState(true);
+  // 与 forceMock 同步：API 模式下初值为 false，避免 API 数据未到达前 UI 把 fixture 当真实数据
+  const [usingMock, setUsingMock] = useState(forceMock);
+  const [consensusMock, setConsensusMock] = useState(forceMock);
+  const [focusMapMock, setFocusMapMock] = useState(forceMock);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
   // 复用 Shell 已经抓的 detail，避免重复 fetch
@@ -866,6 +867,19 @@ export function VariantThreads() {
         color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: 'var(--sans)', fontSize: 13,
       }}>加载中…</div>
+    );
+  }
+  if (!forceMock && (apiState === 'error' || apiState === 'skipped')) {
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: 'var(--paper)',
+        color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--sans)', fontSize: 13, padding: 24, textAlign: 'center',
+      }}>
+        {apiState === 'error'
+          ? 'API 请求失败 · 请检查后端服务（已禁用 mock 兜底）'
+          : '该会议不存在或 id 不是 UUID（API 模式下不再回退到 fixture）'}
+      </div>
     );
   }
 
