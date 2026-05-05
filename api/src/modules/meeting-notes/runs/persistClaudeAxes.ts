@@ -431,10 +431,13 @@ async function persistOpenQuestions(
     const ownerId = resolvePersonId(it?.owner, pmap);
     try {
       await deps.db.query(
+        // workspace_id: trigger 037 期望从 scope_id 反查, 但本表 INSERT 不带 scope_id;
+        // 走 subquery 从 assets.workspace_id 显式注入, 避开 NOT NULL 违规.
         `INSERT INTO mn_open_questions
            (text, category, status, times_raised, first_raised_meeting_id, last_raised_meeting_id,
-            owner_person_id, due_at, metadata, source)
-         VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid, $7::uuid, $8::timestamptz, $9::jsonb, $10)`,
+            owner_person_id, due_at, metadata, source, workspace_id)
+         VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid, $7::uuid, $8::timestamptz, $9::jsonb, $10,
+                 (SELECT workspace_id FROM assets WHERE id = $5::text))`,
         [
           String(it?.text ?? '').trim() || '(empty question)',
           mapCategory(it?.category),
@@ -463,9 +466,11 @@ async function persistRisks(
   for (const it of rows) {
     try {
       await deps.db.query(
+        // workspace_id: 同 mn_open_questions, 用 subquery 从 meeting 关联的 asset 取
         `INSERT INTO mn_risks
-           (text, severity, mention_count, heat_score, trend, action_taken, metadata, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+           (text, severity, mention_count, heat_score, trend, action_taken, metadata, source, workspace_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8,
+                 (SELECT workspace_id FROM assets WHERE id = $9::text))`,
         [
           String(it?.text ?? '').trim() || '(empty risk)',
           mapSeverity(it?.severity, true),
@@ -480,6 +485,7 @@ async function persistRisks(
             meetings: Number(it?.meetings) || 1,
           }),
           SOURCE,
+          meetingIdStr, // for workspace_id subquery
         ],
       );
     } catch (e: any) {
@@ -509,7 +515,8 @@ async function persistJudgments(
           String(it?.domain ?? '').slice(0, 80) || null,
           clampNumber(it?.generalityScore, 0, 1, 0.5),
           Math.max(0, Number(it?.reuseCount) || 0),
-          [], // linked_meeting_ids 跨会议 M-YYYY-MM-DD 难解析；只关联自己时为空数组
+          [meetingIdUuid], // linked_meeting_ids 至少包含当前会议自己, 否则
+                           //   getMeetingAxes 的 WHERE $1 = ANY(linked_meeting_ids) 永远查不到
           JSON.stringify({ src_id: it?.id ?? null, abstractedFrom: it?.abstractedFrom ?? null, author: it?.author ?? null }),
           SOURCE,
         ],
