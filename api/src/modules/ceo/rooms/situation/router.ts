@@ -2,6 +2,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import {
   listStakeholders,
   listSignals,
@@ -18,6 +19,8 @@ import {
 
 export function createSituationRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function situationRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getSituationDashboard(engine.deps, scopeId);

@@ -6,6 +6,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import {
   listDirectors,
   listConcerns,
@@ -42,6 +43,8 @@ function parseScopeIds(query: Record<string, unknown>): string[] | undefined {
 
 export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function boardroomRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const scopeIds = parseScopeIds((request.query ?? {}) as Record<string, unknown>);
       return getBoardroomDashboard(engine.deps, scopeIds);

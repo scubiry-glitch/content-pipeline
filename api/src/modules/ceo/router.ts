@@ -13,9 +13,12 @@ import { createPanoramaRouter } from './panorama/router.js';
 import { createBrainRouter } from './brain/router.js';
 import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
 import { getRecommendedScopes, getDefaultScopes } from './recommendation/service.js';
+import { ceoWorkspaceGuard } from './workspaceGuard.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/health', async () => engine.health());
 
     fastify.get('/dashboard', async (request) => {

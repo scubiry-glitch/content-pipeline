@@ -4,6 +4,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import {
   getBalconyDashboard,
   listReflections,
@@ -18,6 +19,8 @@ import {
 
 export function createBalconyRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function balconyRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const { userId } = (request.query ?? {}) as { userId?: string };
       return getBalconyDashboard(engine.deps, userId, currentWorkspaceId(request));

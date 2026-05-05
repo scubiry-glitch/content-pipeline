@@ -4,10 +4,13 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import { getLink, bindExpert, invoke } from './service.js';
 
 export function createPeopleAgentsRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function peopleAgentsRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/:personId/expert', async (request, reply) => {
       const { personId } = request.params as { personId: string };
       const link = await getLink(engine.deps, personId, currentWorkspaceId(request));

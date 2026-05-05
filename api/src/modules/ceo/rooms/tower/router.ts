@@ -4,6 +4,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import {
   getTowerDashboard,
   listCommitmentsByStatus,
@@ -17,6 +18,8 @@ import { getTeamHeatmap, getPersonalRhythm } from './heatmap-service.js';
 
 export function createTowerRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function towerRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getTowerDashboard(engine.deps, scopeId);

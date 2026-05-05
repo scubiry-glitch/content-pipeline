@@ -3,6 +3,7 @@
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import {
   listStrategicLines,
   listStrategicEchos,
@@ -22,6 +23,8 @@ import { getProjectAtlas } from './atlas.js';
 
 export function createCompassRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function compassRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getCompassDashboard(engine.deps, scopeId);

@@ -4,6 +4,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../../CeoEngine.js';
 import { currentWorkspaceId } from '../../../../db/repos/withWorkspace.js';
+import { ceoWorkspaceGuard } from '../../workspaceGuard.js';
 import { getWarRoomDashboard, getFormationSnapshot, listFormationGaps } from './service.js';
 import { listSparks } from './sparks-service.js';
 import {
@@ -15,6 +16,8 @@ import {
 
 export function createWarRoomRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function warRoomRoutes(fastify: FastifyInstance) {
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
     fastify.get('/dashboard', async (request) => {
       const { scopeId } = (request.query ?? {}) as { scopeId?: string };
       return getWarRoomDashboard(engine.deps, scopeId, currentWorkspaceId(request));
