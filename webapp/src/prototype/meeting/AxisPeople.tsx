@@ -944,8 +944,9 @@ function FormationTab({ scopeId }: { scopeId: string }) {
       .catch((e) => { if (!cancelled) { setErr(String(e?.message ?? e)); setLoading(false); } });
     return () => { cancelled = true; };
   }, [scopeId]);
-  const conflictTemp = data?.conflict_temp;
-  const formationData = data?.formation_data;
+  const snapshot = data?.snapshot;
+  const conflictTemp = snapshot?.conflict_temp;
+  const formationData = snapshot?.formation_data;
   return (
     <div style={{ padding: isMobile ? '14px 14px' : '24px 28px' }}>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
