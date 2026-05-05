@@ -340,11 +340,14 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
     counterfactuals = [];
   }
 
-  // topicLineages — 知识轴 mn_topic_lineage，scope 内 + 全局，按 mention_count + alive 优先
+  // topicLineages — 知识轴 mn_topic_lineage，scope 内 + 全局
+  // 同一 topic 在 scope-bound + scope=NULL 都存在时, 按 (topic) 去重保留 scope-bound 那条
+  // (mn 把 scope 内主题同时写到 NULL 全局表里，不去重会让 LLM 看重复条目)
   let topicLineages: PromptCtx['topicLineages'] = [];
   try {
     const r = await db.query(
-      `SELECT topic,
+      `SELECT DISTINCT ON (topic)
+              topic,
               scope_id::text AS scope_id_text,
               health_state,
               mention_count,
@@ -353,24 +356,29 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
          FROM mn_topic_lineage
         WHERE ($1::uuid IS NULL OR scope_id IS NULL OR scope_id = $1::uuid)
           AND mention_count >= 2
-        ORDER BY CASE health_state
-                   WHEN 'alive'      THEN 0
-                   WHEN 'endangered' THEN 1
-                   WHEN 'dead'       THEN 2
-                   ELSE 3 END,
-                 mention_count DESC,
-                 last_active_at DESC NULLS LAST
-        LIMIT 12`,
+        ORDER BY topic,
+                 -- 优先选 scope-bound 行 (NULLS LAST 把 NULL 排到后面)
+                 scope_id NULLS LAST,
+                 last_active_at DESC NULLS LAST`,
       [scopeId],
     );
-    topicLineages = (r.rows as any[]).map((row) => ({
-      topic: String(row.topic),
-      scopeId: row.scope_id_text ? String(row.scope_id_text) : null,
-      healthState: row.health_state as 'alive' | 'endangered' | 'dead',
-      mentionCount: Number(row.mention_count ?? 0),
-      lastActiveAt: row.last_active_at ? new Date(row.last_active_at).toISOString() : null,
-      birthMeetingId: row.birth_meeting_id ? String(row.birth_meeting_id) : null,
-    }));
+    topicLineages = (r.rows as any[])
+      .map((row) => ({
+        topic: String(row.topic),
+        scopeId: row.scope_id_text ? String(row.scope_id_text) : null,
+        healthState: row.health_state as 'alive' | 'endangered' | 'dead',
+        mentionCount: Number(row.mention_count ?? 0),
+        lastActiveAt: row.last_active_at ? new Date(row.last_active_at).toISOString() : null,
+        birthMeetingId: row.birth_meeting_id ? String(row.birth_meeting_id) : null,
+      }))
+      // 二次排序: alive 优先 → mention_count 高优先
+      .sort((a, b) => {
+        const ord: Record<string, number> = { alive: 0, endangered: 1, dead: 2 };
+        const dh = (ord[a.healthState] ?? 3) - (ord[b.healthState] ?? 3);
+        if (dh !== 0) return dh;
+        return b.mentionCount - a.mentionCount;
+      })
+      .slice(0, 12);
   } catch {
     topicLineages = [];
   }
