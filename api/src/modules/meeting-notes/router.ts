@@ -738,9 +738,17 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { ok: true };
     });
 
-    /** GET /shared/:token — 公开只读，无需 auth；凭 share_token 访问会议摘要 */
+    /** GET /shared/:token?view=A|B|C — 公开只读，无需 auth；凭 share_token 访问会议摘要
+     *  - view 默认 A; 前端 SharedMeetingDetailShell 在切 a/b/c tab 时各自带 view 拉一次
+     *  - 同时附带 health 数据 (quality/necessity/affect/tension)，让 C 视图情绪温度曲线
+     *    在共享场景下也能渲染（不必另外 401 调 /meetings/:id/health）。
+     */
     fastify.get('/shared/:token', async (request, reply) => {
       const { token } = request.params as { token: string };
+      const q = request.query as { view?: string };
+      const viewRaw = (q.view ?? 'A').toUpperCase();
+      const view: 'A' | 'B' | 'C' = (viewRaw === 'B' || viewRaw === 'C') ? viewRaw : 'A';
+
       const shareRow = await engine.deps.db.query(
         `SELECT id, meeting_id, mode, targets, expires_at
          FROM mn_meeting_shares
@@ -752,9 +760,84 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       if (share.expires_at && new Date(share.expires_at) < new Date()) {
         return reply.code(410).send({ error: 'Link expired' });
       }
-      const detail = await engine.getMeetingDetail(share.meeting_id, 'A').catch(() => null);
+      const detail = await engine.getMeetingDetail(share.meeting_id, view).catch(() => null);
       if (!detail) return reply.code(404).send({ error: 'Meeting not found' });
-      return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: detail };
+
+      // health: 复用 /meetings/:id/health 同款 4-query 聚合 + samples 短名归一化
+      const db = engine.deps.db;
+      const mid = share.meeting_id;
+      let health: unknown = null;
+      try {
+        const [qR, nR, aR, tR] = await Promise.all([
+          db.query(
+            `SELECT meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, computed_at
+               FROM mn_decision_quality WHERE meeting_id = $1`, [mid]),
+          db.query(
+            `SELECT meeting_id, verdict, suggested_duration_min, reasons, computed_at
+               FROM mn_meeting_necessity WHERE meeting_id = $1`, [mid]),
+          db.query(
+            `SELECT meeting_id, samples, tension_peaks, insight_points, computed_at
+               FROM mn_affect_curve WHERE meeting_id = $1`, [mid]),
+          db.query(
+            `SELECT MAX(intensity)::float AS peak, COUNT(*)::int AS count
+               FROM mn_tensions WHERE meeting_id = $1`, [mid]),
+        ]);
+        type RawSample = { t?: number; v?: number; i?: number; t_sec?: number; valence?: number; intensity?: number; tag?: string };
+        const rawSamples: RawSample[] = Array.isArray(aR.rows[0]?.samples) ? (aR.rows[0].samples as RawSample[]) : [];
+        const normSamples = rawSamples.map((s) => ({
+          t:   Number(s.t ?? s.t_sec ?? 0) / (s.t !== undefined ? 1 : 60),
+          v:   Number(s.v ?? s.valence ?? 0),
+          i:   Number(s.i ?? s.intensity ?? 0),
+          tag: typeof s.tag === 'string' ? s.tag : undefined,
+        }));
+        let affectPeak: { valence: number; intensity: number; tag?: string } | null = null;
+        for (const s of normSamples) {
+          if (!affectPeak || Math.abs(s.v) > Math.abs(affectPeak.valence)) {
+            affectPeak = { valence: s.v, intensity: s.i, tag: s.tag };
+          }
+        }
+        let quality: unknown = null;
+        if (qR.rows[0]) {
+          const row = qR.rows[0];
+          const notes = (row.notes ?? {}) as Record<string, string>;
+          const dimMeta = [
+            { id: 'clarity', label: '清晰度' }, { id: 'actionable', label: '可执行' },
+            { id: 'traceable', label: '可追溯' }, { id: 'falsifiable', label: '可证伪' },
+            { id: 'aligned', label: '对齐度' },
+          ] as const;
+          quality = {
+            overall: Number(row.overall ?? 0),
+            dims: dimMeta.map(({ id: dimId, label }) => ({
+              id: dimId, label,
+              score: Number((row as Record<string, unknown>)[dimId] ?? 0),
+              note: notes[dimId] ?? '',
+            })),
+            computedAt: row.computed_at,
+          };
+        }
+        health = {
+          quality,
+          necessity: nR.rows[0] ? {
+            verdict: nR.rows[0].verdict,
+            suggestedDurationMin: nR.rows[0].suggested_duration_min,
+            reasons: nR.rows[0].reasons ?? [],
+            computedAt: nR.rows[0].computed_at,
+          } : null,
+          affect: aR.rows[0] ? {
+            samples: normSamples,
+            tensionPeaks: aR.rows[0].tension_peaks ?? null,
+            insightPoints: aR.rows[0].insight_points ?? null,
+            peak: affectPeak,
+            computedAt: aR.rows[0].computed_at,
+          } : null,
+          tension: tR.rows[0] ? {
+            peakIntensity: Number(tR.rows[0].peak ?? 0),
+            count: Number(tR.rows[0].count ?? 0),
+          } : { peakIntensity: 0, count: 0 },
+        };
+      } catch {/* 失败不阻塞 share 主体 */}
+
+      return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: detail, health };
     });
 
     /**
