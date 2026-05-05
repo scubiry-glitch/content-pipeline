@@ -1082,7 +1082,7 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
     <div id="affect-section" style={{
       padding: isMobile ? '16px 14px 22px' : '22px 56px 26px',
       display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
+      gridTemplateColumns: '1fr',  // 主图横向铺满页面宽度；图例/标注列表移到主图下方
       gap: isMobile ? 18 : 26,
       overflow: 'auto',
     }}>
@@ -1306,7 +1306,11 @@ function AffectiveTrace({ isMock }: { isMock: boolean }) {
           )}
         </div>
       </div>
-      <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <aside style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: 12,
+      }}>
         {peak && (
           <div style={{
             background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 6,
