@@ -16,6 +16,11 @@ import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
 import { generate as llmGenerate } from '../../services/llm.js';
 import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
 import { writeAuditEvent, type AuditEvent } from '../../services/auth/audit.js';
+import { createRateLimiter } from '../../utils/inMemoryRateLimit.js';
+
+// 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
+// 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
+const importRateLimiter = createRateLimiter({ max: 60, windowMs: 60 * 60 * 1000 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -765,6 +770,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
       const userIdRaw = request.auth?.user?.id;
       const userId = typeof userIdRaw === 'string' && userIdRaw !== 'api-key' ? userIdRaw : null;
+
+      // 限速:per user (退到 IP 若 api-key 无 user) 60/h
+      const rateKey = userId ?? `ip:${request.ip ?? 'unknown'}`;
+      const rl = importRateLimiter.tryConsume(rateKey);
+      if (!rl.allowed) {
+        return reply
+          .code(429)
+          .header('Retry-After', String(rl.retryAfterSec))
+          .send({ error: 'Too Many Requests', message: 'Import rate limit exceeded; try again later', retryAfterSec: rl.retryAfterSec });
+      }
 
       try {
         const result = await importSharedMeeting(
