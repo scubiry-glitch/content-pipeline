@@ -47,10 +47,14 @@ export const warRoomSparkPrompt: PromptDef<OutT> = {
 - risk_text 不能是空话（"需要关注" / "值得思考"）— 必须给出具体反方意见或量化条件
 - 至少 3 张，最多 8 张；按 seed_group 分配（0/1/2 平均分）
 - tag 格式建议: "🔮 跨项目人才嫁接" / "⚡ 节奏窗口" / "🧩 隐藏 KPI"
-- 若输入提供了"概念漂移术语"（每条带 usage/misuse 计数 + ✓/✗ 真实使用案例），至少 1 张 spark 必须以漂移术语为根：
-    headline 须包含该术语本身，evidence_short 必须直接引用至少 1 条 outcome 案例的具体内容（项目名/数字/事件），
-    禁止编造"团队 A vs 团队 B"这种无具体来源的对照；tag 建议用 "🧩 语义裂缝"
-    优先选 misuse>0 的术语，因为有 ✗ 标记的具体错用案例更有说服力
+- 输入会提供"概念漂移术语"（每条带 usage/misuse 计数 + ✓/✗ 真实使用案例 + scope 标记）：
+    * **scope 绑定的漂移术语**（ctx 标 scope=non-null）：至少 1 张 spark 必须以其为根，headline 含术语本身，
+      evidence_short 直接引用至少 1 条 outcome 案例的具体内容（项目名/数字/事件）
+    * **跨 scope 全局漂移**（scope=NULL）：实际使用在其他业务，仅在你判断对本 scope 真有威胁/启发时才用，
+      不要为凑数硬扯
+    * 优先选 misuse>0 的术语（✗ 标记的具体错用案例最有说服力）
+    * 禁止编造"团队 A vs 团队 B"这种无具体来源的对照
+    tag 建议用 "🧩 语义裂缝"
 
 仅输出 JSON：{"sparks":[{tag,headline,evidence_short,why_evidence:[{text,source}],risk_text,seed_group},...]}`,
 
@@ -100,14 +104,19 @@ ${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120
       if (groups.size < 2) return 'seed_group 应至少分布在 2 组（0/1/2）';
       return null;
     },
-    // ctx 提供了概念漂移时，至少 1 张 spark 的 headline 命中某个 term
+    // ctx 提供了 *本 scope 绑定* 的概念漂移时，至少 1 张 spark headline 命中其 term
+    // NULL-scope 全局漂移不强制 — 它们的使用案例在其他业务，强行牵入会编造
     (out, ctx) => {
       if (!ctx.conceptDrifts || ctx.conceptDrifts.length === 0) return null;
-      const terms = ctx.conceptDrifts.slice(0, 8).map((d) => d.term).filter((t) => t && t.length >= 2);
+      const terms = ctx.conceptDrifts
+        .filter((d) => d.scopeId !== null)
+        .slice(0, 8)
+        .map((d) => d.term)
+        .filter((t) => t && t.length >= 2);
       if (terms.length === 0) return null;
       const hit = out.sparks.some((s) => terms.some((t) => s.headline.includes(t)));
       if (!hit) {
-        return `ctx 提供了 ${terms.length} 个概念漂移术语（${terms.slice(0, 3).join(' / ')}），至少 1 张 spark 的 headline 必须命中其中一个`;
+        return `ctx 提供了 ${terms.length} 个 scope 内概念漂移术语（${terms.slice(0, 3).join(' / ')}），至少 1 张 spark 的 headline 必须命中其中一个`;
       }
       return null;
     },

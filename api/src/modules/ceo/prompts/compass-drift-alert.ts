@@ -42,12 +42,15 @@ export const compassDriftAlertPrompt: PromptDef<OutT> = {
 漂移的硬证据（按优先级使用）：
 1. **已被推翻的反事实**（current_validity='invalid'）— 这是"决策被事实证伪"的硬信号，severity 默认 high；
    fact_text 必须引用 rejected_path 关键词
-2. **概念漂移术语**（critical/high，含具体 usage 列表）— 每条术语下方有 ✓/✗ 标记的真实使用案例：
-   - ✗ = 该次使用被判定为错误/失配，是漂移的最强信号
-   - ✓ = 正确使用，但当 misuse>0 或 usage 数过多（>15）时同样是"过度负载"信号
+2. **本 scope 内的概念漂移术语**（critical/high；ctx 中标记 scope=non-null 的）— 每条术语下方有 ✓/✗ 标记的
+   真实使用案例：
+   - ✗ = 错误/失配使用，漂移的最强信号
+   - ✓ + (misuse>0 或 usage>15) = 过度负载信号
    fact_text 必须引用 outcome 字段的具体内容（项目名/数字/事件），禁止编造"团队 A 觉得 / 团队 B 觉得"这种没有
-   出处的对照；如果有 ✗ 案例，至少 1 条 alert 的 fact_text 须直接引述该 outcome
-3. judgments 中的 disagreement / build 类，作为补充
+   出处的对照；至少 1 条 alert 的 fact_text 须直接引述该 outcome
+3. **跨 scope 的全局漂移术语**（ctx 中 scope=NULL 的）— 这些术语在其他业务出现，与本 scope 战略线
+   可能没有直接关系；**仅在你判断它实际威胁本 scope 战略线时才引用**，不要为了凑数硬扯
+4. judgments 中的 disagreement / build 类，作为补充
 
 仅输出 JSON：{"alerts":[{line_id,line_name,hypothesis_text,fact_text,severity,source_meeting_id},...]}`,
 
@@ -101,16 +104,19 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
       }
       return null;
     },
-    // 有 invalid CF 或 high/critical drift 时，alerts 不能为空（这是硬证据，不该忽略）
+    // "硬证据"定义：① invalid 反事实 ② scope 内 (非 NULL-scope) 的 high/critical 概念漂移
+    // 全局 (NULL scope) 漂移术语的实际使用案例可能与本 scope 战略线无关，不算硬证据 —
+    // 这避免逼 LLM 编造跨 scope 的牵强联系。
     (out, ctx) => {
       const invalidCount = ctx.counterfactuals?.filter((c) => c.currentValidity === 'invalid').length ?? 0;
-      const highDriftCount = ctx.conceptDrifts?.filter((d) => d.severity === 'high' || d.severity === 'critical').length ?? 0;
-      if ((invalidCount > 0 || highDriftCount > 0) && out.alerts.length === 0) {
-        return `ctx 含 ${invalidCount} 条已推翻反事实 + ${highDriftCount} 条 high/critical 概念漂移，alerts 不能为空`;
+      const scopeBoundHighDrift = ctx.conceptDrifts?.filter((d) =>
+        (d.severity === 'high' || d.severity === 'critical') && d.scopeId !== null,
+      ).length ?? 0;
+      if ((invalidCount > 0 || scopeBoundHighDrift > 0) && out.alerts.length === 0) {
+        return `ctx 含 ${invalidCount} 条已推翻反事实 + ${scopeBoundHighDrift} 条 scope 内 high/critical 概念漂移，alerts 不能为空`;
       }
       return null;
     },
-    // 当存在 high/critical drift 或 invalid CF 时，至少 1 条 alert 必须命中其中一条 evidence
     (out, ctx) => {
       const fragments: string[] = [];
       for (const c of (ctx.counterfactuals ?? [])) {
@@ -120,7 +126,8 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
         }
       }
       for (const d of (ctx.conceptDrifts ?? [])) {
-        if (d.severity === 'high' || d.severity === 'critical') {
+        // 只把 scope 绑定的高漂移术语当硬证据；NULL-scope 全局漂移仅作软参考
+        if ((d.severity === 'high' || d.severity === 'critical') && d.scopeId !== null) {
           if (d.term && d.term.length >= 2) fragments.push(d.term);
         }
       }
@@ -129,7 +136,7 @@ ${ctx.judgments.slice(0, 25).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
         fragments.some((f) => a.fact_text.includes(f) || a.hypothesis_text.includes(f)),
       );
       if (!hit) {
-        return `存在硬证据（${fragments.slice(0, 3).join(' / ')}），但 alerts 全部未引用 — fact_text 或 hypothesis_text 必须命中至少 1 条`;
+        return `存在 scope 内硬证据（${fragments.slice(0, 3).join(' / ')}），但 alerts 全部未引用 — fact_text 或 hypothesis_text 必须命中至少 1 条`;
       }
       return null;
     },
