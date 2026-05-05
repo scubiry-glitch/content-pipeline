@@ -332,6 +332,8 @@ export const meetingNotesApi = {
             segments: number;
             scopeId: string | null;
           } | null;
+          /** 自 generatedAt 之后该人物又参与了多少场新会议；null=后端未能计算 */
+          meetingsSinceCache: number | null;
         }
     >(`/people/${id}/llm-profile`),
 
@@ -372,15 +374,44 @@ export const meetingNotesApi = {
    */
   importPersonAsExpert: (
     id: string,
-    body: { domainCode: string; level: 'senior' | 'domain'; expertIdSlug?: string },
+    body: { domainCode: string; level: 'senior' | 'domain'; expertIdSlug?: string; dryRun?: boolean },
   ) =>
-    jpost<{
-      ok: true;
-      expert_id: string;
-      domainCode: string;
-      domainName: string;
-      level: 'senior' | 'domain';
-    }>(`/people/${id}/import-as-expert`, body),
+    jpost<
+      | {
+          ok: true;
+          dryRun: true;
+          willOverwrite: boolean;
+          existing: {
+            expert_id: string;
+            name: string;
+            domain: string[] | null;
+            display_metadata: any;
+            updated_at: string;
+          } | null;
+          preview: {
+            expert_id: string;
+            name: string;
+            domain: string[];
+            persona: any;
+            method: any;
+            signature_phrases: string[];
+            anti_patterns: string[];
+            display_metadata: any;
+          };
+          domainCode: string;
+          domainName: string;
+          level: 'senior' | 'domain';
+        }
+      | {
+          ok: true;
+          dryRun: false;
+          wasOverwrite: boolean;
+          expert_id: string;
+          domainCode: string;
+          domainName: string;
+          level: 'senior' | 'domain';
+        }
+    >(`/people/${id}/import-as-expert`, body),
 
   /**
    * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。
