@@ -41,7 +41,8 @@ interface ScopeContextValue {
   setInstance: (kindId: string, instanceId: string) => void;
 }
 
-const DEFAULT_KINDS: ScopeKindGroup[] = [
+// MOCK_KINDS: 仅 forceMock=true 时使用. API 模式下用 EMPTY_KINDS, 不再回退 mock.
+const MOCK_KINDS: ScopeKindGroup[] = [
   { id: 'all',     label: '全库', kind: 'LIBRARY', instances: [] },
   { id: 'project', label: '项目', kind: 'PROJECT', instances: [
     { id: 'p-ai-q2', label: 'AI 基础设施 · Q2 加配', meta: '11 meetings · 42 days' },
@@ -58,25 +59,34 @@ const DEFAULT_KINDS: ScopeKindGroup[] = [
   ]},
 ];
 
+// API 模式初始: 保留 group 骨架, instances 一律空, 等 listScopes 真实数据填充.
+const EMPTY_KINDS: ScopeKindGroup[] = [
+  { id: 'all',     label: '全库', kind: 'LIBRARY', instances: [] },
+  { id: 'project', label: '项目', kind: 'PROJECT', instances: [] },
+  { id: 'client',  label: '客户', kind: 'CLIENT',  instances: [] },
+  { id: 'topic',   label: '主题', kind: 'TOPIC',   instances: [] },
+];
+
 const LIBRARY_META = '48 meetings · 14 projects · 9 people';
 
 const ScopeCtx = createContext<ScopeContextValue | null>(null);
 
 export function MeetingScopeProvider({ children }: { children: ReactNode }) {
-  const [kinds, setKinds] = useState<ScopeKindGroup[]>(DEFAULT_KINDS);
+  const forceMock = useForceMock();
+  const [kinds, setKinds] = useState<ScopeKindGroup[]>(forceMock ? MOCK_KINDS : EMPTY_KINDS);
   const [loading, setLoading] = useState(false);
   const [kindId, setKindId] = useState<string>('all');
   const [instanceIds, setInstanceIds] = useState<Record<string, string>>({
-    project: DEFAULT_KINDS[1].instances[0].id,
-    client:  DEFAULT_KINDS[2].instances[0].id,
-    topic:   DEFAULT_KINDS[3].instances[0].id,
+    project: forceMock ? MOCK_KINDS[1].instances[0].id : '',
+    client:  forceMock ? MOCK_KINDS[2].instances[0].id : '',
+    topic:   forceMock ? MOCK_KINDS[3].instances[0].id : '',
   });
 
-  const forceMock = useForceMock();
-
-  // 用 listScopes({kind}) 增量替换 fixture。失败或 forceMock 就保留 DEFAULT_KINDS。
+  // 用 listScopes({kind}) 增量填充. forceMock 用 MOCK_KINDS 不发请求;
+  // API 模式失败的 group 保持空 (不再回退 mock).
   useEffect(() => {
-    if (forceMock) { setKinds(DEFAULT_KINDS); return; }
+    if (forceMock) { setKinds(MOCK_KINDS); return; }
+    setKinds(EMPTY_KINDS); // 切换到 API 模式时立刻清掉残留 mock
     let cancelled = false;
     setLoading(true);
     Promise.allSettled([
@@ -90,7 +100,10 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
         const idx = { project: 0, client: 1, topic: 2 }[g.id as 'project' | 'client' | 'topic'];
         if (idx === undefined) return g;
         const r = results[idx];
-        if (r.status !== 'fulfilled' || !r.value?.items?.length) return g;
+        // API 失败/空数据 → 保持 instances=[](API 模式不再回退 mock).
+        if (r.status !== 'fulfilled' || !Array.isArray(r.value?.items)) {
+          return { ...g, instances: [] };
+        }
         const instances: ScopeInstance[] = r.value.items.map((s: { id?: string; name?: string; label?: string; meetingsCount?: number; n?: number; lastUpdate?: string }) => {
           const cnt = s.meetingsCount ?? s.n;
           const meta = cnt != null
@@ -114,7 +127,8 @@ export function MeetingScopeProvider({ children }: { children: ReactNode }) {
     const group = kinds.find((g) => g.id === kindId) ?? kinds[0];
     // 默认聚合：第一个 project（API 加载后即为真实 DB scope）→ 各 axis 页面 effectiveScopeId 用它
     const projectGroup = kinds.find((g) => g.id === 'project');
-    const firstProjectId = projectGroup?.instances[0]?.id ?? 'p-ai-q2';
+    // API 模式无 project 时返回空字符串, 调用方用 UUID_RE.test 等判断不发请求.
+    const firstProjectId = projectGroup?.instances[0]?.id ?? '';
     if (group.id === 'all') {
       return {
         kindId: 'all', instanceId: 'all', effectiveScopeId: firstProjectId,
@@ -141,10 +155,10 @@ export function useMeetingScope(): ScopeContextValue {
     // 不强依赖 Provider — 降级为 LIBRARY all，便于单独测试某个轴页
     return {
       kindId: 'all', instanceId: 'all',
-      effectiveScopeId: DEFAULT_KINDS[1].instances[0]?.id ?? 'p-ai-q2',
+      effectiveScopeId: MOCK_KINDS[1].instances[0]?.id ?? 'p-ai-q2',
       kind: 'LIBRARY',
       label: '全库', meta: LIBRARY_META,
-      kinds: DEFAULT_KINDS, loading: false,
+      kinds: MOCK_KINDS, loading: false,
       setKind: () => {}, setInstance: () => {},
     };
   }
