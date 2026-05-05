@@ -898,7 +898,10 @@ export function ContentLibraryBatchOps() {
       const res = await fetch(`${API}/wiki/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wikiRoot: './data/content-wiki/default' }),
+        credentials: 'include',
+        // ws auth 走 cookie; body.wikiRoot 仅 admin 路径生效, session 用户传会被 403,
+        // 这里不传让 server 按当前 ws slug 自动派生 vault 路径
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();

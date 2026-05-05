@@ -135,7 +135,7 @@ export function ContentLibraryWiki() {
   // 加载已有 wiki 列表
   const loadWikis = async () => {
     try {
-      const res = await fetch(`${API_BASE}/wiki/list?rootDir=${encodeURIComponent(rootDir)}`);
+      const res = await fetch(`${API_BASE}/wiki/list?rootDir=${encodeURIComponent(rootDir)}`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setWikis(data.wikis || []);
@@ -150,7 +150,7 @@ export function ContentLibraryWiki() {
     setActiveWiki(wikiRoot);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/wiki/files?wikiRoot=${encodeURIComponent(wikiRoot)}`);
+      const res = await fetch(`${API_BASE}/wiki/files?wikiRoot=${encodeURIComponent(wikiRoot)}`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files || []);
@@ -169,7 +169,7 @@ export function ContentLibraryWiki() {
     setActiveFile(relPath);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/wiki/preview?wikiRoot=${encodeURIComponent(wikiRoot)}&path=${encodeURIComponent(relPath)}`);
+      const res = await fetch(`${API_BASE}/wiki/preview?wikiRoot=${encodeURIComponent(wikiRoot)}&path=${encodeURIComponent(relPath)}`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setContent(data.content || '');
@@ -196,6 +196,7 @@ export function ContentLibraryWiki() {
       const res = await fetch(`${API_BASE}/wiki/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(body),
       });
       if (res.ok) {

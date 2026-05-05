@@ -27,6 +27,7 @@ import {
 import { resolveWikiRoot, resolveWorkspaceSlug, DEFAULT_WIKI_ROOT_ABS } from '../../lib/wikiRoot.js';
 import { isPathInWorkspaceVault } from '../../lib/wikiVault.js';
 import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
+import { authenticate } from '../../middleware/auth.js';
 import { dirname } from 'node:path';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
@@ -998,7 +999,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // ============================================================
 
     // 生成 wiki · wikiRoot 用 lib/wikiRoot 统一解析 (env: MN_CLAUDE_WIKI_ROOT > CONTENT_LIBRARY_WIKI_ROOT > WIKI_ROOT)
-    fastify.post('/wiki/generate', async (request, reply) => {
+    fastify.post('/wiki/generate', { preHandler: authenticate }, async (request, reply) => {
       const body = (request.body || {}) as any;
       // body.wikiRoot 仅 admin (api-key, wsId=null) 可用; session 用户强制写到自己 ws 的 vault
       const wsId = currentWorkspaceId(request);
@@ -1017,7 +1018,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // 列出当前 ws 的 vault (admin 看全局 wiki 父目录)
-    fastify.get('/wiki/list', async (request, reply) => {
+    fastify.get('/wiki/list', { preHandler: authenticate }, async (request, reply) => {
       const wsId = currentWorkspaceId(request);
       if (wsId === null) {
         // admin: 列 data/content-wiki/ 父目录下所有 vaults (老行为)
@@ -1035,7 +1036,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // 列出 wiki 下的文件 — 校验 wikiRoot 在当前 ws 范围内
-    fastify.get('/wiki/files', async (request, reply) => {
+    fastify.get('/wiki/files', { preHandler: authenticate }, async (request, reply) => {
       const q = request.query as any;
       const wikiRoot = q.wikiRoot;
       if (!wikiRoot) {
@@ -1055,7 +1056,7 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     });
 
     // 读取单个 markdown 文件 — 校验 wikiRoot 在当前 ws 范围内
-    fastify.get('/wiki/preview', async (request, reply) => {
+    fastify.get('/wiki/preview', { preHandler: authenticate }, async (request, reply) => {
       const q = request.query as any;
       const wikiRoot = q.wikiRoot;
       const relPath = q.path;
