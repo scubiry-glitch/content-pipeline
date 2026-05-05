@@ -27,7 +27,6 @@ import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { readClaudeSessionMessages } from './runs/claudeSessionFiles.js';
 import { renderFrontmatter } from '../content-library/wiki/wikiFrontmatter.js';
 import { resolveWikiSubPath, resolveWikiRoot, resolveWorkspaceSlug } from '../../lib/wikiRoot.js';
-import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { relative } from 'node:path';
 
 const CLAUDE_BIN = process.env.CLAUDE_CLI_BIN ?? 'claude';
@@ -358,7 +357,17 @@ export function createMeetingChatRoutes(engine: MeetingNotesEngine): FastifyPlug
       const unix = Math.floor(now.getTime() / 1000);
       const idShort = id.slice(0, 8);
       const fileName = `${idShort}-${unix}.md`;
-      const wsSlug = await resolveWorkspaceSlug(currentWorkspaceId(request));
+      // wiki vault 路径必须按 meeting 所属 ws 派生 — 不依赖 request.auth, 因为
+      // 1) X-API-Key admin 路径下 currentWorkspaceId=null, 之前会落到 default vault
+      // 2) 即使 session 用户, 防止 cookie/proxy 异常导致 wsId 拿不到
+      // assets.id 即 meetingId, 含 workspace_id 列 (032+037 已加).
+      // 父 preHandler 已确保 session 用户跨 ws 访问会 404, 所以这里直接信任 meeting 自己的 ws.
+      const meetingWsRow = await engine.deps.db.query(
+        `SELECT workspace_id::text AS workspace_id FROM assets WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      const meetingWsId = (meetingWsRow.rows[0] as { workspace_id?: string | null } | undefined)?.workspace_id ?? null;
+      const wsSlug = await resolveWorkspaceSlug(meetingWsId);
       const wikiDir = resolveWikiSubPath({ workspaceSlug: wsSlug }, 'sources/meeting/meeting-chats');
       const filePath = join(wikiDir, fileName);
 

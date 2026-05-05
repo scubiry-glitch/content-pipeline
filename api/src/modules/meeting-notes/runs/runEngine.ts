@@ -1404,11 +1404,12 @@ export class RunEngine {
 
           await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
           try {
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
             await persistClaudeWiki(
               this.deps,
               payload.meetingId!,
               cliResult.wikiMarkdown ?? {},
-              undefined,
+              resolveWikiRoot({ workspaceSlug: runWikiSlug }),
               (cliResult as any)?.meeting?.title,
             );
           } catch (e) {
@@ -1840,11 +1841,12 @@ export class RunEngine {
 
           await writeStep('render', 0.75, '写入 wiki sources/.md + entities/concepts');
           try {
+            const { resolveWikiRoot } = await import('./persistClaudeWiki.js');
             await withWikiGeneratedBy(ONESHOT_TAG, () => persistClaudeWiki(
               this.deps,
               payload.meetingId!,
               oneshotResult.wikiMarkdown ?? {},
-              undefined,
+              resolveWikiRoot({ workspaceSlug: runWikiSlug }),
               (oneshotResult as any)?.meeting?.title,
             ));
           } catch (e) {
