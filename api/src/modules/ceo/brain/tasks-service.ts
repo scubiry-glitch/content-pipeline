@@ -5,7 +5,7 @@ import type { CeoEngineDeps } from '../types.js';
 
 export async function listCrossModuleTasks(
   deps: CeoEngineDeps,
-  filter: { state?: string; module?: string; limit?: number; ids?: string[] },
+  filter: { state?: string; module?: string; limit?: number; ids?: string[]; workspaceId?: string | null },
 ): Promise<{ items: any[] }> {
   const where: string[] = [];
   const params: any[] = [];
@@ -20,6 +20,13 @@ export async function listCrossModuleTasks(
   if (filter.ids && filter.ids.length > 0) {
     params.push(filter.ids);
     where.push(`id = ANY($${params.length}::uuid[])`);
+  }
+  // ws 隔离: 非 admin (api-key=null) 必须只看到当前 ws + is_shared ws 的行
+  if (filter.workspaceId !== undefined && filter.workspaceId !== null) {
+    params.push(filter.workspaceId);
+    where.push(
+      `(workspace_id = $${params.length} OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`,
+    );
   }
   const limitN = Math.max(1, Math.min(filter.limit ?? 30, 100));
 
@@ -76,12 +83,22 @@ function bumpBucket(b: StateBucket, state: string, n: number): void {
   }
 }
 
-export async function getBrainOverview(deps: CeoEngineDeps): Promise<{
+export async function getBrainOverview(
+  deps: CeoEngineDeps,
+  workspaceId?: string | null,
+): Promise<{
   byModule: Record<string, ModuleBucket>;
   recentLlmCalls: number;
   $cost_window: CostWindow;
 }> {
   const byModule: Record<string, ModuleBucket> = {};
+
+  // ws 过滤片段 — admin (workspaceId === null) 看全库; 普通用户只看当前 ws + is_shared
+  const wsClause =
+    workspaceId == null
+      ? ''
+      : `AND (workspace_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE is_shared))`;
+  const wsParams = workspaceId == null ? [] : [workspaceId];
 
   // (module, axis, state) 三维分组
   try {
@@ -89,7 +106,9 @@ export async function getBrainOverview(deps: CeoEngineDeps): Promise<{
       `SELECT module, axis, state, COUNT(*)::int AS n
          FROM mn_runs
         WHERE created_at > NOW() - INTERVAL '14 days'
+          ${wsClause}
         GROUP BY module, axis, state`,
+      wsParams,
     );
     for (const row of r.rows) {
       const m = row.module ?? 'mn';
@@ -113,7 +132,9 @@ export async function getBrainOverview(deps: CeoEngineDeps): Promise<{
         WHERE module = 'ceo' AND axis = 'g3'
           AND created_at > NOW() - INTERVAL '14 days'
           AND metadata ? 'kind'
+          ${wsClause}
         GROUP BY state, metadata->>'kind'`,
+      wsParams,
     );
     if (r.rows.length > 0) {
       const ceoMod = ensureModule(byModule, 'ceo');
@@ -136,7 +157,9 @@ export async function getBrainOverview(deps: CeoEngineDeps): Promise<{
     const r = await deps.db.query(
       `SELECT COALESCE(SUM((metadata->>'llmCalls')::int), 0)::int AS n
          FROM mn_runs
-        WHERE created_at > NOW() - INTERVAL '7 days'`,
+        WHERE created_at > NOW() - INTERVAL '7 days'
+          ${wsClause}`,
+      wsParams,
     );
     recentLlmCalls = Number(r.rows[0]?.n ?? 0);
   } catch {
@@ -150,7 +173,9 @@ export async function getBrainOverview(deps: CeoEngineDeps): Promise<{
       `SELECT COALESCE(SUM(cost_tokens), 0)::bigint AS tokens,
               COALESCE(SUM(cost_ms), 0)::bigint AS ms
          FROM mn_runs
-        WHERE created_at > NOW() - INTERVAL '14 days'`,
+        WHERE created_at > NOW() - INTERVAL '14 days'
+          ${wsClause}`,
+      wsParams,
     );
     const tokens = Number(r.rows[0]?.tokens ?? 0);
     const ms = Number(r.rows[0]?.ms ?? 0);

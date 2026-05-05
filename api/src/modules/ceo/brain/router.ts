@@ -4,10 +4,16 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { CeoEngine } from '../CeoEngine.js';
 import { listCrossModuleTasks, getBrainOverview } from './tasks-service.js';
+import { ceoWorkspaceGuard } from '../workspaceGuard.js';
+import { currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
 
 export function createBrainRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function brainRoutes(fastify: FastifyInstance) {
-    fastify.get('/overview', async () => getBrainOverview(engine.deps));
+    fastify.addHook('preHandler', ceoWorkspaceGuard);
+
+    fastify.get('/overview', async (request) =>
+      getBrainOverview(engine.deps, currentWorkspaceId(request)),
+    );
 
     fastify.get('/tasks', async (request) => {
       const { state, module: moduleFilter, limit, ids } = (request.query ?? {}) as {
@@ -24,6 +30,7 @@ export function createBrainRouter(engine: CeoEngine): FastifyPluginAsync {
         module: moduleFilter,
         limit: limit ? Number(limit) : 30,
         ids: idArr,
+        workspaceId: currentWorkspaceId(request),
       });
     });
   };
