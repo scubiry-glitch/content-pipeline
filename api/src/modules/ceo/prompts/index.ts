@@ -108,17 +108,23 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
   try {
     const meetingIds = meetings.map((m) => m.id);
     if (meetingIds.length > 0) {
+      // mn_judgments 列名: abstracted_from_meeting_id (不是 meeting_id);
+      // 没有 kind 列, 用 domain (如"销售流程管理"/"产品策略/定价") 替代;
+      // linked_meeting_ids[] 也算关联 (一个 judgment 可被多个会议引用)
       const r = await db.query(
-        `SELECT kind, text, created_at
+        `SELECT COALESCE(NULLIF(domain, ''), 'general') AS kind, text, created_at
            FROM mn_judgments
           WHERE created_at > NOW() - INTERVAL '90 days'
-            AND meeting_id::text = ANY($1::text[])
+            AND (
+              abstracted_from_meeting_id::text = ANY($1::text[])
+              OR linked_meeting_ids::text[] && $1::text[]
+            )
           ORDER BY created_at DESC
           LIMIT 80`,
         [meetingIds],
       );
       judgments = (r.rows as any[]).map((row) => ({
-        kind: String(row.kind ?? ''),
+        kind: String(row.kind ?? 'general'),
         text: String(row.text ?? ''),
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
       }));
@@ -132,18 +138,22 @@ export async function loadPromptCtx(db: DbHandle, args: LoadCtxArgs): Promise<Pr
   try {
     const meetingIds = meetings.map((m) => m.id);
     if (meetingIds.length > 0) {
+      // mn_commitments 列名: text/state/person_id (不是 what/status/owner_name)
+      // owner_name 通过 JOIN mn_people.canonical_name 取
       const r = await db.query(
-        `SELECT what AS text, due_at, status, owner_name
-           FROM mn_commitments
-          WHERE meeting_id::text = ANY($1::text[])
-          ORDER BY created_at DESC
+        `SELECT c.text, c.due_at, c.state AS status,
+                p.canonical_name AS owner_name
+           FROM mn_commitments c
+           LEFT JOIN mn_people p ON p.id = c.person_id
+          WHERE c.meeting_id::text = ANY($1::text[])
+          ORDER BY c.created_at DESC
           LIMIT 30`,
         [meetingIds],
       );
       commitments = (r.rows as any[]).map((row) => ({
         text: String(row.text ?? ''),
         dueAt: row.due_at ? new Date(row.due_at).toISOString() : null,
-        status: String(row.status ?? 'in_progress'),
+        status: String(row.status ?? 'on_track'),
         ownerName: row.owner_name ? String(row.owner_name) : undefined,
       }));
     }
