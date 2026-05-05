@@ -685,11 +685,16 @@ export function AxisKnowledge() {
   );
 }
 
-// ── F7 · Live wrappers：有数据 → 渲染真实；无数据 → fallback 到原 mock 组件 ──
+// ── F7 · Live wrappers：有数据 → 渲染真实；无数据 + forceMock → fallback；
+//      无数据 + 真实 API 模式 → 走 PendingSubdimTab(空态)，不再 silently 拿 mock 充数 ──
 
 function MentalModelsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
   const isMobile = useIsMobile();
-  if (!data || data.length === 0) return <>{fallback}</>;
+  const forceMock = useForceMock();
+  if (!data || data.length === 0) {
+    if (forceMock) return <>{fallback}</>;
+    return <PendingSubdimTab title="心智模型激活" subDim="mental_models" hint="该 scope 还没有 mental_models 数据;在生成中心跑 knowledge/mental_models 后展示" />;
+  }
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -723,7 +728,11 @@ function MentalModelsLive({ data, fallback }: { data: any[] | undefined; fallbac
 
 function BiasesLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
   const isMobile = useIsMobile();
-  if (!data || data.length === 0) return <>{fallback}</>;
+  const forceMock = useForceMock();
+  if (!data || data.length === 0) {
+    if (forceMock) return <>{fallback}</>;
+    return <PendingSubdimTab title="认知偏差" subDim="cognitive_biases" hint="该 scope 还没有 cognitive_biases 数据;在生成中心跑 knowledge/cognitive_biases 后展示" />;
+  }
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
@@ -756,7 +765,11 @@ function BiasesLive({ data, fallback }: { data: any[] | undefined; fallback: Rea
 
 function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fallback: ReactNode }) {
   const isMobile = useIsMobile();
-  if (!data || data.length === 0) return <>{fallback}</>;
+  const forceMock = useForceMock();
+  if (!data || data.length === 0) {
+    if (forceMock) return <>{fallback}</>;
+    return <PendingSubdimTab title="反事实 / 未走的路" subDim="counterfactuals" hint="该 scope 还没有 counterfactuals 数据;在生成中心跑 knowledge/counterfactuals 后展示" />;
+  }
   return (
     <div style={{ padding: isMobile ? '14px 14px 24px' : '22px 32px 36px' }}>
       <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>
@@ -790,9 +803,12 @@ function CounterfactualsLive({ data, fallback }: { data: any[] | undefined; fall
 
 function EvidenceLive({ data, fallback, scopeAggregated }: { data: { dist_a: number; dist_b: number; dist_c: number; dist_d: number; weighted_score: number } | undefined | null; fallback: ReactNode; scopeAggregated?: boolean }) {
   const isMobile = useIsMobile();
-  if (!data) return <>{fallback}</>;
-  const total = (data.dist_a ?? 0) + (data.dist_b ?? 0) + (data.dist_c ?? 0) + (data.dist_d ?? 0);
-  if (total === 0) return <>{fallback}</>;
+  const forceMock = useForceMock();
+  const total = data ? (data.dist_a ?? 0) + (data.dist_b ?? 0) + (data.dist_c ?? 0) + (data.dist_d ?? 0) : 0;
+  if (!data || total === 0) {
+    if (forceMock) return <>{fallback}</>;
+    return <PendingSubdimTab title="证据层级" subDim="evidence_grades" hint="该 scope 还没有 evidence_grades 数据;在生成中心跑 knowledge/evidence_grades 后展示" />;
+  }
   const grades = [
     { k: 'A', n: data.dist_a, label: '硬数据', color: 'oklch(0.7 0.14 145)' },
     { k: 'B', n: data.dist_b, label: '类比/案例', color: 'oklch(0.78 0.12 95)' },

@@ -308,12 +308,8 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
         if (cancelled) return;
         const items = r?.items ?? [];
         if (items.length === 0) {
-          // API 返回空：降级到 mock 演示数据
-          setRows(PEOPLE_STATS.map(s => ({
-            who: s.who, name: P(s.who).name, role: P(s.who).role,
-            points: s.roleTrajectory.map(r => ({ role: r.role, m: r.m })),
-          })));
-          setIsMock(true); setLoading(false);
+          // API 返回空:不再降级到 mock,真实数据缺失就是空,让用户看到空态
+          setRows([]); setIsMock(false); setLoading(false);
           return;
         }
         const mapped: TrajectoryRow[] = items.map(it => ({
@@ -331,6 +327,28 @@ function PTrajectory({ scopeId }: { scopeId: string }) {
     return () => { cancelled = true; };
   }, [scopeId, forceMock]);
   if (loading) return <AxisLoadingSkeleton rows={6} />;
+
+  // 真实 API + 空数据 → 空态(避免静默用 mock 充数)
+  if (!isMock && rows.length === 0) {
+    return (
+      <div style={{ padding: isMobile ? '14px 14px 24px' : '24px 32px 36px' }}>
+        <h3 style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, margin: '0 0 6px' }}>
+          角色画像演化
+        </h3>
+        <div style={{
+          background: 'var(--paper-2)', border: '1px dashed var(--line-2)',
+          borderRadius: 8, padding: '40px 28px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 14, color: 'var(--ink-2)', marginBottom: 10, fontFamily: 'var(--serif)' }}>
+            数据待生成
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', lineHeight: 1.6 }}>
+            该 scope 还没有 role_trajectory 数据;在生成中心跑 people/role_trajectory 后展示
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const allMonths = rows.flatMap(r => r.points.map(p => p.m)).sort();
   const monthRange = allMonths.length > 0
