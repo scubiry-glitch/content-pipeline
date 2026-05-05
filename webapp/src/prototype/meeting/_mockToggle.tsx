@@ -75,9 +75,9 @@ export function MockToggleBar() {
         style={{
           position: 'fixed', right: 12, bottom: 12, zIndex: 60,
           width: 30, height: 30, borderRadius: 99,
-          background: forceMock ? 'var(--amber)' : 'var(--teal)',
-          color: 'var(--paper)', border: 0, cursor: 'pointer',
-          fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+          background: forceMock ? 'var(--amber, #D6A36A)' : 'var(--teal, #4B8E96)',
+          color: 'var(--paper, #FAF7F0)', border: 0, cursor: 'pointer',
+          fontFamily: 'var(--mono, "JetBrains Mono", ui-monospace, monospace)', fontSize: 11, fontWeight: 700,
           boxShadow: '0 4px 12px -4px rgba(0,0,0,0.25)',
         }}
       >
@@ -90,10 +90,10 @@ export function MockToggleBar() {
     <div
       style={{
         position: 'fixed', right: 12, bottom: 12, zIndex: 60,
-        background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 99,
+        background: 'var(--paper, #FAF7F0)', border: '1px solid var(--line, rgba(0,0,0,0.08))', borderRadius: 99,
         boxShadow: '0 6px 18px -6px rgba(0,0,0,0.18)',
         padding: 4, display: 'flex', alignItems: 'center', gap: 2,
-        fontFamily: 'var(--sans)', fontSize: 11.5,
+        fontFamily: 'var(--sans, Inter, system-ui, sans-serif)', fontSize: 11.5,
       }}
     >
       <button
@@ -101,15 +101,15 @@ export function MockToggleBar() {
         title="使用真实 API"
         style={{
           border: 0, cursor: 'pointer', padding: '5px 11px', borderRadius: 99,
-          background: !forceMock ? 'var(--teal)' : 'transparent',
-          color: !forceMock ? 'var(--paper)' : 'var(--ink-2)',
-          fontWeight: !forceMock ? 600 : 500, fontFamily: 'var(--sans)',
+          background: !forceMock ? 'var(--teal, #4B8E96)' : 'transparent',
+          color: !forceMock ? 'var(--paper, #FAF7F0)' : 'var(--ink-2, #5A5146)',
+          fontWeight: !forceMock ? 600 : 500, fontFamily: 'var(--sans, Inter, system-ui, sans-serif)',
           display: 'flex', alignItems: 'center', gap: 5,
         }}
       >
         <span style={{
           width: 6, height: 6, borderRadius: 99,
-          background: !forceMock ? 'var(--paper)' : 'var(--teal)',
+          background: !forceMock ? 'var(--paper, #FAF7F0)' : 'var(--teal, #4B8E96)',
         }} />
         API
       </button>
@@ -118,22 +118,22 @@ export function MockToggleBar() {
         title="强制 Mock · 忽略所有 API 响应；用于 UI demo / 离线"
         style={{
           border: 0, cursor: 'pointer', padding: '5px 11px', borderRadius: 99,
-          background: forceMock ? 'var(--amber)' : 'transparent',
-          color: forceMock ? 'var(--paper)' : 'var(--ink-2)',
-          fontWeight: forceMock ? 600 : 500, fontFamily: 'var(--sans)',
+          background: forceMock ? 'var(--amber, #D6A36A)' : 'transparent',
+          color: forceMock ? 'var(--paper, #FAF7F0)' : 'var(--ink-2, #5A5146)',
+          fontWeight: forceMock ? 600 : 500, fontFamily: 'var(--sans, Inter, system-ui, sans-serif)',
           display: 'flex', alignItems: 'center', gap: 5,
         }}
       >
         <span style={{
           width: 6, height: 6, borderRadius: 99,
-          background: forceMock ? 'var(--paper)' : 'var(--amber)',
+          background: forceMock ? 'var(--paper, #FAF7F0)' : 'var(--amber, #D6A36A)',
         }} />
         Mock
       </button>
-      <div style={{ width: 1, height: 16, background: 'var(--line-2)', margin: '0 4px' }} />
+      <div style={{ width: 1, height: 16, background: 'var(--line-2, rgba(0,0,0,0.06))', margin: '0 4px' }} />
       <span
         title="Alt+M 切换"
-        style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--ink-4)', padding: '0 4px', letterSpacing: 0.3 }}
+        style={{ fontFamily: 'var(--mono, "JetBrains Mono", ui-monospace, monospace)', fontSize: 9.5, color: 'var(--ink-4, #8A7C6A)', padding: '0 4px', letterSpacing: 0.3 }}
       >
         ⌥M
       </span>
@@ -142,7 +142,7 @@ export function MockToggleBar() {
         title="收起"
         style={{
           border: 0, background: 'transparent', cursor: 'pointer',
-          color: 'var(--ink-4)', padding: '3px 6px', fontSize: 12,
+          color: 'var(--ink-4, #8A7C6A)', padding: '3px 6px', fontSize: 12,
         }}
       >
         ×
