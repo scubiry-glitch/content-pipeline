@@ -11,9 +11,11 @@ import { createMeetingChatRoutes } from './meetingChat.js';
 import { authenticate } from '../../middleware/auth.js';
 import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
-import { assertRowInWorkspace, currentWorkspaceId } from '../../db/repos/withWorkspace.js';
+import { assertRowInWorkspace, currentWorkspaceId, requireWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
 import { generate as llmGenerate } from '../../services/llm.js';
+import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
+import { writeAuditEvent } from '../../services/auth/audit.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -748,6 +750,46 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const detail = await engine.getMeetingDetail(share.meeting_id, 'A').catch(() => null);
       if (!detail) return reply.code(404).send({ error: 'Meeting not found' });
       return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: detail };
+    });
+
+    /**
+     * POST /shared/:token/import — 把分享的会议 fork 到当前用户工作区
+     * v1: asset-only — 只复制 assets 行(白名单 metadata),不复制 axis 数据
+     *     B 拿到副本后在自己 ws 重跑引擎重新生成所有 axis / scope / person
+     * 幂等: 同 (shareId, target ws) 二次导入返回原副本 + alreadyImported=true
+     */
+    fastify.post('/shared/:token/import', { preHandler: authenticate }, async (request, reply) => {
+      const { token } = request.params as { token: string };
+      const wsId = requireWorkspaceId(request, reply);
+      if (!wsId) return; // requireWorkspaceId 已写 403
+
+      const userIdRaw = request.auth?.user?.id;
+      const userId = typeof userIdRaw === 'string' && userIdRaw !== 'api-key' ? userIdRaw : null;
+
+      try {
+        const result = await importSharedMeeting(
+          {
+            db: engine.deps.db,
+            audit: (input) => writeAuditEvent({
+              event: input.event as any, // S3.2 待扩展 enum;当前 enum 没有时 audit.write 会 warn 但不抛
+              userId: input.userId,
+              request,
+              metadata: input.metadata,
+            }),
+          },
+          { shareToken: token, targetWorkspaceId: wsId, userId },
+        );
+        reply.code(result.alreadyImported ? 200 : 201);
+        return result;
+      } catch (err) {
+        if (err instanceof ImportSharedMeetingError) {
+          if (err.code === 'NOT_FOUND') return reply.code(404).send({ error: 'Not Found', message: err.message });
+          if (err.code === 'EXPIRED') return reply.code(410).send({ error: 'Link expired', message: err.message });
+          if (err.code === 'BAD_INPUT') return reply.code(400).send({ error: 'Bad Request', message: err.message });
+        }
+        request.log.error({ err, token, wsId }, 'shared import failed');
+        return reply.code(500).send({ error: 'Internal Error' });
+      }
     });
 
     // --------------------------------------------------------
