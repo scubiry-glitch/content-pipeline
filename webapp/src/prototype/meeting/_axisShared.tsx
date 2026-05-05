@@ -391,7 +391,9 @@ export function ScopePill() {
                 const kTone = KIND_TONE[k.kind];
                 return (
                   <button key={k.id} onClick={() => {
-                    setOpen(false);
+                    // 只有 'all'（全库）没下一级 instance 要选，立即关。
+                    // project / client / topic 等还要选具体实例，保留面板打开等用户继续。
+                    if (k.id === 'all') setOpen(false);
                     scope.setKind(k.id);
                     fireToast(k.id, k.id === 'all' ? '全库' : (k.instances.find((i) => i.id === scope.instanceId)?.label ?? k.label));
                   }} style={{
