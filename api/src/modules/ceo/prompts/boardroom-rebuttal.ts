@@ -7,6 +7,8 @@ import { z } from 'zod';
 import type { PromptDef, PromptCtx } from './types.js';
 
 // 用 .partial() 让所有字段 optional，再用 qualityChecks 兜底校验关键字段
+// .passthrough() 允许 LLM 多带合理但未声明的字段 (attacker_weight / attack_angle 等),
+// 不被 .strict() 直接拒掉
 const Rebuttal = z.object({
   attacker_name: z.string().min(2).max(40),
   attacker_role: z.string().min(2).max(30).optional(),
@@ -17,9 +19,9 @@ const Rebuttal = z.object({
     rubric_dims_covered: z.string().optional(),
     if_then_bonus: z.boolean().optional(),
     rationale: z.string().min(10).max(400).optional(),
-  }).partial().optional(),
+  }).partial().passthrough().optional(),
   source_meeting_id: z.string().nullable().optional(),
-}).strict();
+}).passthrough();
 
 const Out = z.object({
   rebuttals: z.array(Rebuttal).min(2).max(5),
