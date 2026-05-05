@@ -50,12 +50,11 @@ CREATE INDEX IF NOT EXISTS idx_mn_tensions_intensity
 CREATE INDEX IF NOT EXISTS idx_mn_tensions_scope
   ON mn_tensions(scope_id) WHERE scope_id IS NOT NULL;
 
--- 4) 扩展 mn_runs.axis CHECK 约束以接受 'tension'
-ALTER TABLE mn_runs
-  DROP CONSTRAINT IF EXISTS mn_runs_axis_check;
-ALTER TABLE mn_runs
-  ADD CONSTRAINT mn_runs_axis_check
-  CHECK (axis IN ('people', 'projects', 'knowledge', 'meta', 'tension', 'longitudinal', 'all'));
+-- 4) (已废弃) 扩展 mn_runs.axis CHECK 约束以接受 'tension'
+-- 原 ADD CONSTRAINT enum 已被 022-runs-axis-relax.sql 的 regex CHECK 完全取代。
+-- 现网 mn_runs.axis 已落入 g1-g5 + CEO 语义化值（compass-echo 等），重跑这段
+-- 会立刻 violation 失败。保留文件历史，但停止再执行。后续若重建库，022 会负责
+-- 重新创建 regex 形式的 mn_runs_axis_check。
 
 -- ============================================================
 -- Rollback (manual):

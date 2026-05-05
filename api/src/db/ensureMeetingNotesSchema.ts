@@ -28,7 +28,9 @@ const FILES = [
   '018-library-list-perf.sql',
   '019-scope-hierarchy.sql',
   '020-runs-module.sql',
-  '021-runs-axis-ceo.sql',
+  // 021-runs-axis-ceo.sql 故意跳过：它的 enum CHECK 已被 022 的 regex CHECK 取代。
+  // 现有数据里 mn_runs.axis 已有 CEO 语义化值（如 compass-echo / panorama-aggregate），
+  // 重跑 021 的 ADD CONSTRAINT enum 会立刻 violation 失败。文件保留作 history。
   '022-runs-axis-relax.sql',
   '023-knowledge-axis-extension.sql',
   '024-runs-dag.sql',
