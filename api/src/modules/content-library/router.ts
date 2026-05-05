@@ -25,6 +25,7 @@ import {
   listZepSyncJobs,
 } from './zepSyncJob.js';
 import { resolveWikiRoot, resolveWorkspaceSlug, DEFAULT_WIKI_ROOT_ABS } from '../../lib/wikiRoot.js';
+import { isPathInWorkspaceVault } from '../../lib/wikiVault.js';
 import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { dirname } from 'node:path';
 
@@ -999,8 +1000,13 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // 生成 wiki · wikiRoot 用 lib/wikiRoot 统一解析 (env: MN_CLAUDE_WIKI_ROOT > CONTENT_LIBRARY_WIKI_ROOT > WIKI_ROOT)
     fastify.post('/wiki/generate', async (request, reply) => {
       const body = (request.body || {}) as any;
-      // body.wikiRoot 显式 override 优先 (兼容 admin 脚本); 否则按当前 ws 写到 data/content-wiki/<slug>
-      const wsSlug = await resolveWorkspaceSlug(currentWorkspaceId(request));
+      // body.wikiRoot 仅 admin (api-key, wsId=null) 可用; session 用户强制写到自己 ws 的 vault
+      const wsId = currentWorkspaceId(request);
+      const wsSlug = await resolveWorkspaceSlug(wsId);
+      if (body.wikiRoot && wsId !== null) {
+        reply.code(403);
+        return { error: 'Forbidden', message: 'wikiRoot override 仅 admin 路径允许' };
+      }
       const wikiRoot = resolveWikiRoot({ override: body.wikiRoot, workspaceSlug: wsSlug });
       return engine.wikiGenerator.generate({
         wikiRoot,
@@ -1010,34 +1016,60 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
       });
     });
 
-    // 列出所有已生成的 wiki · rootDir 是装多个 wiki 的父目录, 默认是 wikiRoot 的 parent
+    // 列出当前 ws 的 vault (admin 看全局 wiki 父目录)
     fastify.get('/wiki/list', async (request, reply) => {
-      const query = request.query as any;
-      const rootDir = query.rootDir || process.env.CONTENT_LIBRARY_WIKI_ROOT_DIR || dirname(DEFAULT_WIKI_ROOT_ABS);
-      const wikis = await engine.wikiGenerator.listWikis(rootDir);
-      return { rootDir, wikis };
+      const wsId = currentWorkspaceId(request);
+      if (wsId === null) {
+        // admin: 列 data/content-wiki/ 父目录下所有 vaults (老行为)
+        const q = request.query as any;
+        const rootDir = q.rootDir || process.env.CONTENT_LIBRARY_WIKI_ROOT_DIR || dirname(DEFAULT_WIKI_ROOT_ABS);
+        const wikis = await engine.wikiGenerator.listWikis(rootDir);
+        return { rootDir, wikis };
+      }
+      // 普通用户: 只能看到自己 ws 的 vault, 不暴露其他 ws 存在
+      const wsSlug = await resolveWorkspaceSlug(wsId);
+      const wsVault = resolveWikiRoot({ workspaceSlug: wsSlug });
+      const wikis = await engine.wikiGenerator.listWikis(dirname(wsVault));
+      const filtered = wikis.filter((w) => w.name === wsSlug);
+      return { rootDir: dirname(wsVault), wikis: filtered };
     });
 
-    // 列出 wiki 下的文件
+    // 列出 wiki 下的文件 — 校验 wikiRoot 在当前 ws 范围内
     fastify.get('/wiki/files', async (request, reply) => {
-      const query = request.query as any;
-      const wikiRoot = query.wikiRoot;
+      const q = request.query as any;
+      const wikiRoot = q.wikiRoot;
       if (!wikiRoot) {
         reply.code(400);
         return { error: 'wikiRoot query parameter required' };
+      }
+      const wsId = currentWorkspaceId(request);
+      if (wsId !== null) {
+        const wsSlug = await resolveWorkspaceSlug(wsId);
+        if (!isPathInWorkspaceVault(String(wikiRoot), wsSlug)) {
+          reply.code(404);
+          return { error: 'Not Found' };
+        }
       }
       const files = await engine.wikiGenerator.listFiles(String(wikiRoot));
       return { wikiRoot, files };
     });
 
-    // 读取单个 markdown 文件
+    // 读取单个 markdown 文件 — 校验 wikiRoot 在当前 ws 范围内
     fastify.get('/wiki/preview', async (request, reply) => {
-      const query = request.query as any;
-      const wikiRoot = query.wikiRoot;
-      const relPath = query.path;
+      const q = request.query as any;
+      const wikiRoot = q.wikiRoot;
+      const relPath = q.path;
       if (!wikiRoot || !relPath) {
         reply.code(400);
         return { error: 'wikiRoot and path query parameters required' };
+      }
+      const wsId = currentWorkspaceId(request);
+      if (wsId !== null) {
+        const wsSlug = await resolveWorkspaceSlug(wsId);
+        if (!isPathInWorkspaceVault(String(wikiRoot), wsSlug)) {
+          reply.code(404);
+          return { error: 'Not Found' };
+        }
       }
       const content = await engine.wikiGenerator.readMarkdown(String(wikiRoot), String(relPath));
       if (content === null) {

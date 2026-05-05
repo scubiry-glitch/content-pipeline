@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
 import { writeAuditEvent } from '../services/auth/audit.js';
+import { initWorkspaceVault } from '../lib/wikiVault.js';
 
 type Role = 'owner' | 'admin' | 'member';
 
@@ -115,6 +116,11 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
         `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
         [ws.id, userId]
       );
+      // 初始化 per-ws wiki vault 骨架 — best-effort, 失败不阻塞 ws 创建
+      const vaultRes = await initWorkspaceVault(ws.slug, ws.name);
+      if (!vaultRes.ok) {
+        console.warn(`[ws] init wiki vault for ${ws.slug} failed: ${vaultRes.error}`);
+      }
       reply.status(201);
       return { id: ws.id, name: ws.name, slug: ws.slug, ownerId: userId, role: 'owner' as Role, createdAt: ws.created_at };
     } catch (e: any) {
