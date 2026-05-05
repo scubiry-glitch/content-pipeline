@@ -288,8 +288,8 @@ export function DecisionTree({ scopeId, embedded = false }: { scopeId: string; e
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 18, maxWidth: 700 }}>
         每个节点是一次会议上的分岔决定。红点 = 当前待决节点。整棵树可时间回溯。
       </div>
-      <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px' }}>
-        <svg width={W} height={H}>
+      <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '18px', overflowX: 'auto' }}>
+        <svg width={W} height={H} style={{ display: 'block', minWidth: W }}>
           {tree.nodes.map(n => {
             if (!n.parent) return null;
             const p1 = pos[n.parent], p2 = pos[n.id];

@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
+                "file": "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
                 "mode": "source",
                 "source": false
               },
@@ -156,7 +156,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
+                "file": "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222/_index.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -183,8 +183,11 @@
       "bases:新建数据库": false
     }
   },
-  "active": "21a5035915820f6c",
+  "active": "5e7e97c03da9616a",
   "lastOpenFiles": [
+    "default/sources/meeting/scopes/client/左海-af17d047/_index.md",
+    "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
+    "default/sources/meeting/meeting-chats/6050f222-1777947618.md",
     "default/sources/meeting/per-meeting",
     "default/domains/E08-房地产/E08.RESID-住宅.md",
     "default/concepts/technology/Poptek软件.md",
@@ -214,12 +217,9 @@
     "default/entities/event/中美战略与经济对话.md",
     "default/domains/E09-文化传媒/_index.md",
     "default/domains/E99-其他/_index.md",
-    "default/domains/E11-ESG可持续/_index.md",
-    "default/domains/E07-人工智能/_index.md",
     "default/concepts/counterfactual",
     "default/entities/project",
     "default/concepts/regulation",
-    "default/concepts/demographic",
-    "default/concepts/business-model"
+    "default/concepts/demographic"
   ]
 }

@@ -3,12 +3,12 @@ type: index
 subtype: axes
 app: meeting-notes
 generatedBy: meeting-axes-generator
-lastEditedAt: "2026-05-04T15:45:02.173Z"
+lastEditedAt: "2026-05-05T03:32:59.963Z"
 ---
 
 # 跨会议 4 轴聚合
 
-共 2982 行数据 · 4 轴 · 21 个 deliverable
+共 3015 行数据 · 4 轴 · 21 个 deliverable
 
 ## 轴入口
 

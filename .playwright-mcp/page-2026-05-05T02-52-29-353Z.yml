@@ -1,0 +1,37 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: /auth/login
+    - generic [ref=e7]: v2.0
+  - generic [ref=e8]:
+    - generic [ref=e9]: M
+    - generic [ref=e10]:
+      - heading "会议纪要" [level=1] [ref=e11]
+      - generic [ref=e12]: Minutes · 三轴视图
+  - generic [ref=e14]: §01 登录到您的工作区
+  - generic [ref=e15]:
+    - generic [ref=e16]: 邮箱
+    - textbox "xx@abc.com" [active] [ref=e17]
+    - generic [ref=e18]: 密码
+    - textbox "••••••••" [ref=e19]
+    - generic [ref=e20]: 登录后前往
+    - button "M 会议纪要 Minutes · 三轴视图" [ref=e22] [cursor=pointer]:
+      - generic [ref=e23]: M
+      - generic [ref=e24]:
+        - text: 会议纪要
+        - generic [ref=e25]: Minutes · 三轴视图
+      - img [ref=e27]
+    - generic [ref=e29]:
+      - generic [ref=e30] [cursor=pointer]:
+        - img [ref=e32]
+        - checkbox "30 天免登录" [checked]
+        - generic [ref=e34]: 30 天免登录
+      - generic [ref=e35]: 30 d · persistent
+    - button "登录 → 会议纪要" [ref=e36] [cursor=pointer]
+  - generic [ref=e37]:
+    - generic [ref=e38]: 或
+    - button "oauth 使用 Google 登录（未配置）" [disabled] [ref=e39]:
+      - generic [ref=e40]: oauth
+      - text: 使用 Google 登录（未配置）
+  - generic [ref=e41]:
+    - generic [ref=e42]: scubiry · pipeline
+    - generic [ref=e43]: ready
