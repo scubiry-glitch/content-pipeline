@@ -17,10 +17,21 @@ interface DashboardData {
   signalCount: number;
 }
 
+interface BlindspotApi { kind: string; text: string }
+interface HorizonEvent { date: string; kind: string; title: string }
+
+const HORIZON_TAB_TO_RANGE: Record<string, 'near' | 'mid' | 'far'> = {
+  now: 'near',
+  q3: 'mid',
+  long: 'far',
+};
+
 export function Situation() {
   const navigate = useNavigate();
   const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
+  const [blindspots, setBlindspots] = useState<BlindspotApi[] | null>(null);
+  const [horizonEvents, setHorizonEvents] = useState<HorizonEvent[] | null>(null);
   const [horizon, setHorizon] = useState<string>(HORIZON_TABS[0].id);
   const { scopeIds } = useGlobalScope();
   const scopeKey = scopeIds.join(',');
@@ -28,17 +39,32 @@ export function Situation() {
   useEffect(() => {
     if (forceMock) return;
     let cancelled = false;
-    fetch(`/api/v1/ceo/situation/dashboard${buildScopeQuery(scopeIds)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) setDash(d);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    const q = buildScopeQuery(scopeIds);
+    Promise.all([
+      fetch(`/api/v1/ceo/situation/dashboard${q}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/v1/ceo/situation/blindspots${q}`).then((r) => r.json()).catch(() => null),
+    ]).then(([d, b]) => {
+      if (cancelled) return;
+      if (d) setDash(d);
+      if (b?.items) setBlindspots(b.items as BlindspotApi[]);
+    }).catch(() => {});
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey, forceMock]);
+
+  // 切换 horizon tab 时重新拉对应 range 的事件
+  useEffect(() => {
+    if (forceMock) return;
+    const range = HORIZON_TAB_TO_RANGE[horizon] ?? 'near';
+    let cancelled = false;
+    const sep = scopeIds.length === 0 ? '?' : '&';
+    fetch(`/api/v1/ceo/situation/horizon${buildScopeQuery(scopeIds)}${sep}range=${range}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setHorizonEvents((d?.events as HorizonEvent[]) ?? []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, forceMock, horizon]);
 
   return (
     <div
@@ -183,7 +209,7 @@ export function Situation() {
 
         <Block num="④ blindspot alarms" title="盲点警报" meta="自动检测">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(forceMock ? BLINDSPOTS : []).map((b, i) => (
+            {(forceMock ? BLINDSPOTS : (blindspots ?? [])).map((b, i) => (
               <div
                 key={i}
                 style={{
@@ -247,22 +273,31 @@ export function Situation() {
             })}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {(forceMock ? (HORIZON_TABS.find((t) => t.id === horizon)?.items ?? []) : []).map((it, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '8px 12px',
-                  background: 'rgba(255,200,87,0.05)',
-                  borderLeft: '2px solid rgba(255,200,87,0.4)',
-                  fontSize: 12.5,
-                  color: 'rgba(253,243,212,0.85)',
-                  fontFamily: 'var(--serif)',
-                  fontStyle: 'italic',
-                }}
-              >
-                {it}
-              </div>
-            ))}
+            {(() => {
+              if (forceMock) {
+                const items = HORIZON_TABS.find((t) => t.id === horizon)?.items ?? [];
+                return items.map((it, i) => (
+                  <div key={i} style={{ padding: '8px 12px', background: 'rgba(255,200,87,0.05)', borderLeft: '2px solid rgba(255,200,87,0.4)', fontSize: 12.5, color: 'rgba(253,243,212,0.85)', fontFamily: 'var(--serif)', fontStyle: 'italic' }}>
+                    {it}
+                  </div>
+                ));
+              }
+              if (!horizonEvents || horizonEvents.length === 0) {
+                return (
+                  <div style={{ padding: '12px', fontSize: 12, color: 'rgba(253,243,212,0.5)', fontFamily: 'var(--serif)', fontStyle: 'italic' }}>
+                    暂无 {horizon === 'now' ? '本周' : horizon === 'q3' ? '近 30 天' : '90 天内'} 事件
+                  </div>
+                );
+              }
+              return horizonEvents.map((e, i) => (
+                <div key={i} style={{ padding: '8px 12px', background: 'rgba(255,200,87,0.05)', borderLeft: '2px solid rgba(255,200,87,0.4)', fontSize: 12.5, color: 'rgba(253,243,212,0.85)', fontFamily: 'var(--serif)', fontStyle: 'italic' }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,200,87,0.7)', marginRight: 8 }}>
+                    {(e.date ?? '').slice(0, 10)} · {e.kind}
+                  </span>
+                  {e.title}
+                </div>
+              ));
+            })()}
           </div>
         </Block>
       </main>

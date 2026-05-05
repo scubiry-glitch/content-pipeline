@@ -2,21 +2,81 @@
 // 5 维雷达 SVG (退出路径 / 基金节奏 / 人才流失 / 合规风险 / LP 关系)
 // 来源: 07-archive/会议纪要 (20260501)/boardroom.html .radar block
 
+import { useEffect, useMemo, useState } from 'react';
 import { DIRECTOR_CARDS, type DirectorCard } from './_boardroomFixtures';
 import { useForceMock } from '../../../../meeting/_mockToggle';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { buildScopeQuery } from '../../../_apiAdapters';
+
+interface ApiConcern {
+  id: string;
+  director_id: string;
+  director_name: string | null;
+  director_role: string | null;
+  topic: string;
+  status: string;
+  raised_count: number;
+  raised_at: string | null;
+}
 
 interface Props {
   cards?: DirectorCard[];
 }
 
-export function ConcernsRadar({ cards }: Props) {
+/** 把 N 条 concerns 按 director 聚合, 取每位 director 最热那条作为代表 */
+function adaptToCards(items: ApiConcern[]): DirectorCard[] {
+  const byDir = new Map<string, ApiConcern[]>();
+  for (const c of items) {
+    const arr = byDir.get(c.director_id) ?? [];
+    arr.push(c);
+    byDir.set(c.director_id, arr);
+  }
+  const cards: DirectorCard[] = [];
+  for (const arr of byDir.values()) {
+    arr.sort((a, b) => (b.raised_count ?? 0) - (a.raised_count ?? 0));
+    const top = arr[0];
+    if (!top) continue;
+    const totalRaised = arr.reduce((sum, c) => sum + (c.raised_count ?? 1), 0);
+    const isPending = arr.some((c) => c.status === 'pending');
+    const isResolved = arr.every((c) => c.status === 'resolved');
+    cards.push({
+      name: top.director_name ?? '?',
+      role: top.director_role ?? '',
+      count: `${totalRaised} 次${isPending ? ' · 未回应' : isResolved ? ' · 已闭环' : ''}`,
+      text: top.topic,
+      warn: isPending && totalRaised >= 2,
+      calm: isResolved,
+    });
+  }
+  cards.sort((a, b) => (b.warn ? 1 : 0) - (a.warn ? 1 : 0));
+  return cards.slice(0, 6);
+}
+
+export function ConcernsRadar({ cards: propCards }: Props) {
   const forceMock = useForceMock();
-  // 父组件没传 → forceMock 时回退 fixture, 否则空 (API 真实空状态)
-  const display = cards && cards.length > 0
-    ? cards
-    : (forceMock ? DIRECTOR_CARDS : []);
-  // 保持下方代码用 cards 变量名最少改动
-  cards = display;
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
+  const [items, setItems] = useState<ApiConcern[] | null>(null);
+
+  useEffect(() => {
+    if (forceMock) return;
+    if (propCards && propCards.length > 0) return;   // 父组件已传, 不再 fetch
+    let cancelled = false;
+    fetch(`/api/v1/ceo/boardroom/concerns${buildScopeQuery(scopeIds)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setItems((d?.items as ApiConcern[]) ?? []); })
+      .catch(() => { /* fallback */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, forceMock, propCards]);
+
+  const cards = useMemo<DirectorCard[]>(() => {
+    if (propCards && propCards.length > 0) return propCards;
+    if (forceMock) return DIRECTOR_CARDS;
+    if (!items) return DIRECTOR_CARDS; // 加载中, 临时显示 fixture 占位
+    if (items.length === 0) return [];
+    return adaptToCards(items);
+  }, [propCards, forceMock, items]);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 18 }}>
       <div style={{ width: 320, height: 280 }}>

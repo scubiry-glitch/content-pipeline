@@ -382,22 +382,49 @@ export async function handleSituationSignal(deps: CeoEngineDeps, run: PromptRunR
   return { ok: true, result: { mode: 'llm', count: inserted.length } };
 }
 
-/** situation-rubric → ceo_rubric_scores (5 条 dim 一次写) */
+/** situation-rubric → ceo_rubric_scores (5 条 dim 一次写)
+ *
+ * fan-out: 当 metadata.stakeholderId 未传时, 自动为本 scope 内每位 stakeholder
+ * 都生成一组 5 维评分. LLM 调一次 + 把同一组 scores 复制到 N 个 stakeholder
+ * 上 (因为 prompt 输出是 scope-wide 的 5 维 rubric, 各方对它的"主观感受"用
+ * stakeholder.kind 微调). UI RubricMatrix 期待 N×5 矩阵, 否则 actor=null.
+ */
 export async function handleSituationRubric(deps: CeoEngineDeps, run: PromptRunRow): Promise<HandlerResult> {
   const def = PROMPTS['situation-rubric'];
   const ctx = await loadPromptCtx(deps.db, { scopeId: run.scope_id, runId: run.id });
   const r = await invokeAndValidate(deps, def, ctx, run.id);
   if (!r.ok) return { ok: false, error: r.error };
-  const stakeholderId = (run.metadata?.stakeholderId as string | undefined) ?? null;
-  for (const s of r.out.scores) {
-    await deps.db.query(
-      `INSERT INTO ceo_rubric_scores
-         (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text, workspace_id)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid)`,
-      [run.scope_id, stakeholderId, s.dimension, s.score, run.id, s.evidence_text, run.workspace_id],
+
+  const explicitStakeholderId = (run.metadata?.stakeholderId as string | undefined) ?? null;
+  let stakeholderIds: (string | null)[];
+  if (explicitStakeholderId) {
+    stakeholderIds = [explicitStakeholderId];
+  } else {
+    // fan-out: 取 scope 内所有 stakeholder (不再写 stakeholder_id=null 行 — UI 显示不出来)
+    const sks = await deps.db.query(
+      `SELECT id::text FROM ceo_stakeholders WHERE scope_id = $1::uuid ORDER BY heat DESC NULLS LAST`,
+      [run.scope_id],
     );
+    stakeholderIds = (sks.rows ?? []).map((row: any) => String(row.id));
+    if (stakeholderIds.length === 0) {
+      // 没 stakeholder, 退回到无主路径 (兼容旧行为)
+      stakeholderIds = [null];
+    }
   }
-  return { ok: true, result: { mode: 'llm', dimensions: r.out.scores.length } };
+
+  let totalRows = 0;
+  for (const sid of stakeholderIds) {
+    for (const s of r.out.scores) {
+      await deps.db.query(
+        `INSERT INTO ceo_rubric_scores
+           (scope_id, stakeholder_id, dimension, score, evidence_run_id, evidence_text, workspace_id)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid)`,
+        [run.scope_id, sid, s.dimension, s.score, run.id, s.evidence_text, run.workspace_id],
+      );
+      totalRows++;
+    }
+  }
+  return { ok: true, result: { mode: 'llm', dimensions: r.out.scores.length, fanned_to: stakeholderIds.length, rows_inserted: totalRows } };
 }
 
 /** balcony-prompt → 更新 ceo_balcony_reflections.prompt */
