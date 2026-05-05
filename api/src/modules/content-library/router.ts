@@ -24,7 +24,8 @@ import {
   subscribeZepSyncJob,
   listZepSyncJobs,
 } from './zepSyncJob.js';
-import { resolveWikiRoot, DEFAULT_WIKI_ROOT_ABS } from '../../lib/wikiRoot.js';
+import { resolveWikiRoot, resolveWorkspaceSlug, DEFAULT_WIKI_ROOT_ABS } from '../../lib/wikiRoot.js';
+import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { dirname } from 'node:path';
 
 export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
@@ -998,7 +999,9 @@ export function createRouter(engine: ContentLibraryEngine): FastifyPluginAsync {
     // 生成 wiki · wikiRoot 用 lib/wikiRoot 统一解析 (env: MN_CLAUDE_WIKI_ROOT > CONTENT_LIBRARY_WIKI_ROOT > WIKI_ROOT)
     fastify.post('/wiki/generate', async (request, reply) => {
       const body = (request.body || {}) as any;
-      const wikiRoot = resolveWikiRoot(body.wikiRoot);
+      // body.wikiRoot 显式 override 优先 (兼容 admin 脚本); 否则按当前 ws 写到 data/content-wiki/<slug>
+      const wsSlug = await resolveWorkspaceSlug(currentWorkspaceId(request));
+      const wikiRoot = resolveWikiRoot({ override: body.wikiRoot, workspaceSlug: wsSlug });
       return engine.wikiGenerator.generate({
         wikiRoot,
         domainFilter: body.domainFilter,

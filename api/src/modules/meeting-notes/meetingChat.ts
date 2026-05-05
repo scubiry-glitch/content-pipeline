@@ -26,7 +26,8 @@ import { authenticate } from '../../middleware/auth.js';
 import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { readClaudeSessionMessages } from './runs/claudeSessionFiles.js';
 import { renderFrontmatter } from '../content-library/wiki/wikiFrontmatter.js';
-import { resolveWikiSubPath, resolveWikiRoot } from '../../lib/wikiRoot.js';
+import { resolveWikiSubPath, resolveWikiRoot, resolveWorkspaceSlug } from '../../lib/wikiRoot.js';
+import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { relative } from 'node:path';
 
 const CLAUDE_BIN = process.env.CLAUDE_CLI_BIN ?? 'claude';
@@ -357,7 +358,8 @@ export function createMeetingChatRoutes(engine: MeetingNotesEngine): FastifyPlug
       const unix = Math.floor(now.getTime() / 1000);
       const idShort = id.slice(0, 8);
       const fileName = `${idShort}-${unix}.md`;
-      const wikiDir = resolveWikiSubPath('sources/meeting/meeting-chats');
+      const wsSlug = await resolveWorkspaceSlug(currentWorkspaceId(request));
+      const wikiDir = resolveWikiSubPath({ workspaceSlug: wsSlug }, 'sources/meeting/meeting-chats');
       const filePath = join(wikiDir, fileName);
 
       // frontmatter
@@ -443,7 +445,8 @@ export function createMeetingChatRoutes(engine: MeetingNotesEngine): FastifyPlug
       }
 
       // 给前端返回 vault 内相对路径 (e.g. "sources/meeting/meeting-chats/<file>.md")
-      const wikiRoot = resolveWikiRoot();
+      // 复用上面已解析过的 wsSlug, 避免再 SELECT 一次 (resolveWorkspaceSlug 进程内有缓存, 但 wsSlug 已在作用域内)
+      const wikiRoot = resolveWikiRoot({ workspaceSlug: wsSlug });
       const relativePath = relative(wikiRoot, filePath);
       return { ok: true, path: relativePath, slug: `meeting-chat-${idShort}-${unix}` };
     });
