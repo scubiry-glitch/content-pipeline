@@ -2,7 +2,9 @@ const dotenv = require('dotenv');
 const path = require('path');
 
 // 加载 API 目录下的 .env 文件
-dotenv.config({ path: path.join(__dirname, 'api', '.env') });
+// override:true · 强制覆盖 pm2 daemon 已存在的旧 env 值。
+// 否则 `pm2 restart --update-env` 不会真的重新读 .env，旧值长期残留（参见 2026-05 修 V4-Flash 那次踩坑）。
+dotenv.config({ path: path.join(__dirname, 'api', '.env'), override: true });
 
 module.exports = {
   apps: [

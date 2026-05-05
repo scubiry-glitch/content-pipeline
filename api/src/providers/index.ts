@@ -33,7 +33,9 @@ export class LLMRouter {
     { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'writing', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'content_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
-    // expert_library: 用户指定 siliconflow + DeepSeek-V4-Flash（MN_ONESHOT_MODEL 控制具体 model）。
+    // expert_library 主走 siliconflow（DeepSeek-V3.2，由 MN_ONESHOT_MODEL 控制具体 model 名），
+    // fallback 走 volcano-engine（自带 deepseek-v3-2-251201）。
+    // 历史决定不用 kimi-for-coding：推理模型对长 prompt + 大 JSON 输出场景不收敛（5min 超时仍出不来 content）。
     { taskType: 'expert_library', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'volcano-engine' },
     { taskType: 'summarization', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'tagging', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
@@ -127,13 +129,16 @@ export class LLMRouter {
       return available.generate(prompt, params);
     }
 
-    const buildParams = (model?: string): GenerationParams => ({
+    // customParams.model 是调用方对"主 provider"的强制 model（比如 oneshot 的 MN_ONESHOT_MODEL），
+    // 跨 provider 不可移植。fallback 必须用 fallback provider 自己的默认 model，否则会出现
+    // "Volcano 收到 SiliconFlow 模型名 → 404" 这种 bug。
+    const buildParams = (model: string | undefined, useCustomModel: boolean): GenerationParams => ({
       ...customParams,
-      model: customParams?.model || model,
+      model: (useCustomModel ? customParams?.model : undefined) || model,
     });
 
     try {
-      return await primary.generate(prompt, buildParams(primaryModel));
+      return await primary.generate(prompt, buildParams(primaryModel, true));
     } catch (err) {
       if (
         triedPreferred &&
@@ -144,10 +149,10 @@ export class LLMRouter {
         const fbModel = this.modelConfigs[fallbackName]?.[rule.priority];
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(
-          `[LLM Router] ${rule.preferredProvider} failed, trying ${fallbackName}:`,
+          `[LLM Router] ${rule.preferredProvider} failed, trying ${fallbackName} (model=${fbModel ?? 'provider-default'}):`,
           msg
         );
-        return await fallbackProv.generate(prompt, buildParams(fbModel));
+        return await fallbackProv.generate(prompt, buildParams(fbModel, false));
       }
       throw err;
     }
