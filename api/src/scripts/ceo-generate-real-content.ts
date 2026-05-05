@@ -28,7 +28,11 @@ for (const p of [resolve(process.cwd(), '.env'), resolve(process.cwd(), 'api', '
   try { dotenv.config({ path: p }); } catch { /* ignore */ }
 }
 
-const TARGET_SCOPE_NAMES = ['业务支持', '美租', '养老', '集团分析'];
+// 缺省 scope 选取行为:
+//   - 不传 --scopes 时, 查 ws 下所有 active project scope (workspace_id=$ws AND kind='project' AND status='active')
+//   - 传了 --scopes=A,B 时, 在 ws 内按名字精确匹配
+// 历史上这里写死 ['业务支持', '美租', '养老', '集团分析'] (default ws 的种子数据), 已废弃
+//   — 多 ws 时强制硬名单会导致空集 / 串 ws 风险。
 
 // 全部 axis 的 DAG：deps 是同 scope 内的 axis 名，跨 scope 互不依赖（4 scope 完全并行）
 //
@@ -138,26 +142,44 @@ async function main() {
   console.log(`[ceo-generate-real] workspace: slug=${wsSlug} id=${wsId.slice(0, 8)}…`);
 
   // 1. 选目标 scope (限定在 wsId 内, 避免跨 workspace 串数据)
-  const targetNames = scopeFilter && scopeFilter.length > 0 ? scopeFilter : TARGET_SCOPE_NAMES;
-  const placeholders = targetNames.map((_, i) => `$${i + 1}`).join(',');
-  const scopeRes = await query(
-    `SELECT s.id::text AS id, s.name,
-            (SELECT COUNT(*)::int FROM mn_scope_members m WHERE m.scope_id = s.id) AS meeting_count
-       FROM mn_scopes s
-      WHERE s.status = 'active'
-        AND s.kind = 'project'
-        AND s.workspace_id = $${targetNames.length + 1}::uuid
-        AND s.name IN (${placeholders})
-      ORDER BY meeting_count DESC NULLS LAST`,
-    [...targetNames, wsId],
-  );
+  //    - 没传 --scopes: 取 ws 下全部 active project scope
+  //    - 传了 --scopes=A,B: 在 ws 内按名字过滤
+  let scopeRes: { rows: any[] };
+  if (scopeFilter && scopeFilter.length > 0) {
+    const placeholders = scopeFilter.map((_, i) => `$${i + 1}`).join(',');
+    scopeRes = await query(
+      `SELECT s.id::text AS id, s.name,
+              (SELECT COUNT(*)::int FROM mn_scope_members m WHERE m.scope_id = s.id) AS meeting_count
+         FROM mn_scopes s
+        WHERE s.status = 'active'
+          AND s.kind = 'project'
+          AND s.workspace_id = $${scopeFilter.length + 1}::uuid
+          AND s.name IN (${placeholders})
+        ORDER BY meeting_count DESC NULLS LAST`,
+      [...scopeFilter, wsId],
+    );
+  } else {
+    scopeRes = await query(
+      `SELECT s.id::text AS id, s.name,
+              (SELECT COUNT(*)::int FROM mn_scope_members m WHERE m.scope_id = s.id) AS meeting_count
+         FROM mn_scopes s
+        WHERE s.status = 'active'
+          AND s.kind = 'project'
+          AND s.workspace_id = $1::uuid
+        ORDER BY meeting_count DESC NULLS LAST, s.name`,
+      [wsId],
+    );
+  }
   const scopes: ScopeRow[] = (scopeRes.rows as any[]).map((r) => ({
     id: String(r.id),
     name: String(r.name),
     meetingCount: Number(r.meeting_count ?? 0),
   }));
   if (scopes.length === 0) {
-    console.error(`[ceo-generate-real] 没找到目标 scope (ws=${wsSlug}): ${targetNames.join(', ')}`);
+    const filterDesc = scopeFilter && scopeFilter.length > 0
+      ? `--scopes=${scopeFilter.join(',')}`
+      : '(缺省: ws 下全部 active project scope)';
+    console.error(`[ceo-generate-real] 没找到目标 scope (ws=${wsSlug}) ${filterDesc}`);
     process.exit(3);
   }
   console.log(`[ceo-generate-real] target scopes (${scopes.length}):`);
