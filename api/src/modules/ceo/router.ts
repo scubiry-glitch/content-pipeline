@@ -15,9 +15,15 @@ import { createPeopleAgentsRouter } from './rooms/people-agents/router.js';
 import { getRecommendedScopes, getDefaultScopes } from './recommendation/service.js';
 import { ceoWorkspaceGuard } from './workspaceGuard.js';
 import { currentWorkspaceId } from '../../db/repos/withWorkspace.js';
+import { authenticate } from '../../middleware/auth.js';
 
 export function createRouter(engine: CeoEngine): FastifyPluginAsync {
   return async function ceoRoutes(fastify: FastifyInstance) {
+    // 必须先 authenticate 才能让 currentWorkspaceId 拿到 request.auth.workspace.id;
+    // 没这条钩子时 request.auth=undefined → currentWorkspaceId 返回 null →
+    // wsFilterClause 走 IS NULL 分支 → 看全表(包含其他 ws 的数据). 必须放在
+    // ceoWorkspaceGuard 之前, 否则 guard 也读不到 wsId 退化为放行.
+    fastify.addHook('preHandler', authenticate);
     fastify.addHook('preHandler', ceoWorkspaceGuard);
 
     fastify.get('/health', async () => engine.health());
