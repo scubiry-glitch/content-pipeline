@@ -37,10 +37,24 @@ export const compassEchoPrompt: PromptDef<OutT> = {
 - fate: confirm（事实印证）/ refute（事实反驳）/ pending（数据不足）
 - 至少 1 条 confirm + 1 条 refute（不要全 pending）
 - source_meeting_id 必须从我提供的列表中取（无来源 → null）
+- **优先使用我提供的"待回看反事实"作为 hypothesis_text 的原料**：
+  当某条反事实的 rejected_path 与某战略线相关，把"当初拒绝走 X"作为 hypothesis，
+  用近 30 天 judgments / commitments 作为 fact 来判 fate（valid 走 confirm；invalid 走 refute；信号不足 pending）
+- 不要重复正在 fate=pending 的旧反事实（next_check 未到的就跳过，避免每次都生成同样的回声）
 仅输出 JSON：{"echos":[{line_id,line_name,hypothesis_text,fact_text,fate,source_meeting_id},...]}`,
 
-  userPrompt: (ctx) =>
-    `Scope: ${ctx.scopeName ?? '(未命名)'}
+  userPrompt: (ctx) => {
+    const cfBlock = ctx.counterfactuals.length > 0
+      ? `\n\n待回看反事实（${ctx.counterfactuals.length}，next_check 临近优先）：\n${
+          ctx.counterfactuals.slice(0, 10).map((c) => {
+            const due = c.nextCheckAt ? new Date(c.nextCheckAt).toISOString().slice(0, 10) : '未设回看日';
+            const note = c.trackingNote ? ` ｜ 跟踪: ${c.trackingNote.slice(0, 80)}` : '';
+            const mid = c.meetingId ? c.meetingId : '?';
+            return `- [${c.currentValidity} | due=${due} | meeting=${mid}] ${c.rejectedPath.slice(0, 140)}${note}`;
+          }).join('\n')
+        }\n（优先把这些作为 hypothesis 候选，匹配到对应战略线后写 echo；source_meeting_id 用 meeting= 那段）`
+      : '';
+    return `Scope: ${ctx.scopeName ?? '(未命名)'}
 战略线：
 ${ctx.strategicLines.map((l) => `- [${l.id}] ${l.name} (${l.kind}): ${l.description ?? ''}`).join('\n')}
 
@@ -48,9 +62,10 @@ ${ctx.strategicLines.map((l) => `- [${l.id}] ${l.name} (${l.kind}): ${l.descript
 ${ctx.meetings.slice(0, 12).map((m) => `- [${m.id}] ${m.title}`).join('\n')}
 
 近 90 天 judgments（${ctx.judgments.length}）：
-${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n')}
+${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n')}${cfBlock}
 
-请输出 4-6 条 echo。`,
+请输出 4-6 条 echo。`;
+  },
 
   qualityChecks: [
     (out, ctx) => {
@@ -70,6 +85,20 @@ ${ctx.judgments.slice(0, 30).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`)
     (out) => {
       for (const e of out.echos) {
         if (!/\d/.test(e.fact_text)) return `echo "${e.line_name}" fact_text 缺量化`;
+      }
+      return null;
+    },
+    // ctx 提供反事实时，至少 1 条 echo 的 hypothesis_text 必须命中某条 rejected_path 前 8 字
+    (out, ctx) => {
+      if (!ctx.counterfactuals || ctx.counterfactuals.length === 0) return null;
+      const fragments = ctx.counterfactuals
+        .slice(0, 10)
+        .map((c) => c.rejectedPath.trim().slice(0, 8))
+        .filter((f) => f.length >= 4);
+      if (fragments.length === 0) return null;
+      const hit = out.echos.some((e) => fragments.some((f) => e.hypothesis_text.includes(f)));
+      if (!hit) {
+        return `ctx 提供了 ${ctx.counterfactuals.length} 条待回看反事实，至少 1 条 echo 的 hypothesis_text 须命中其中一条（关键词：${fragments.slice(0, 3).join(' / ')}）`;
       }
       return null;
     },
