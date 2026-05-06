@@ -227,13 +227,21 @@ export async function getPostMeeting(
   }>;
 }> {
   let last: any = null;
+  // 真实会议数据存在 assets 表 (type='meeting_minutes'), mn_meetings 在当前 schema
+  // 不存在或为空. 直接 query assets, 通过 mn_scope_members 关联到 scope.
   try {
     const m = await deps.db.query(
-      `SELECT m.id::text, m.title, m.meeting_at::text AS date, m.duration_minutes
-         FROM mn_meetings m
-        WHERE ($1::uuid IS NULL OR m.scope_id = $1::uuid)
-          AND ${wsFilterClause(2, 'm.workspace_id')}
-        ORDER BY m.meeting_at DESC
+      `SELECT a.id::text, a.title,
+              a.created_at::text AS date,
+              CASE WHEN a.metadata->>'duration_min' ~ '^-?\\d+(\\.\\d+)?$'
+                   THEN (a.metadata->>'duration_min')::numeric
+                   ELSE NULL END AS duration_minutes
+         FROM assets a
+         LEFT JOIN mn_scope_members sm ON sm.meeting_id::text = a.id::text
+        WHERE a.type = 'meeting_minutes'
+          AND ($1::uuid IS NULL OR sm.scope_id = $1::uuid)
+          AND ${wsFilterClause(2, 'a.workspace_id')}
+        ORDER BY a.created_at DESC
         LIMIT 1`,
       [scopeId ?? null, workspaceId],
     );
@@ -250,14 +258,14 @@ export async function getPostMeeting(
   const unresolved: Array<any> = [];
   if (last) {
     try {
-      // 取该会议未解决的 mn_open_questions / mn_judgments 作 unresolved
+      // 取该会议的 mn_judgments 作 unresolved (列名: abstracted_from_meeting_id / author_person_id)
       const r = await deps.db.query(
-        `SELECT j.id::text, j.text AS what, j.kind,
+        `SELECT j.id::text, j.text AS what, j.domain AS kind,
                 p.canonical_name AS raised_by_name,
                 EXTRACT(DAY FROM (NOW() - j.created_at))::int AS days
            FROM mn_judgments j
-           LEFT JOIN mn_people p ON p.id = j.person_id
-          WHERE j.meeting_id = $1::uuid
+           LEFT JOIN mn_people p ON p.id = j.author_person_id
+          WHERE j.abstracted_from_meeting_id = $1::uuid
             AND ${wsFilterClause(2, 'j.workspace_id')}
           ORDER BY j.created_at DESC
           LIMIT 5`,

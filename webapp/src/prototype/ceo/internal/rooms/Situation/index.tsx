@@ -17,8 +17,11 @@ interface DashboardData {
   signalCount: number;
 }
 
-interface BlindspotApi { kind: string; text: string }
+// API /situation/blindspots 返回 {items: [{name, narrative, severity, suggested_action, ...}]}
+// fixture BLINDSPOTS 是 {kind, text}. 适配字段.
+interface BlindspotApi { name?: string; kind?: string; narrative?: string; text?: string; severity?: string; suggested_action?: string }
 interface HorizonEvent { date: string; kind: string; title: string }
+interface ObserverApi { id: string; observer: string; role: string; quote: string; tone?: string; captured_at?: string }
 
 const HORIZON_TAB_TO_RANGE: Record<string, 'near' | 'mid' | 'far'> = {
   now: 'near',
@@ -31,6 +34,7 @@ export function Situation() {
   const forceMock = useForceMock();
   const [dash, setDash] = useState<DashboardData | null>(null);
   const [blindspots, setBlindspots] = useState<BlindspotApi[] | null>(null);
+  const [observers, setObservers] = useState<ObserverApi[] | null>(null);
   const [horizonEvents, setHorizonEvents] = useState<HorizonEvent[] | null>(null);
   const [horizon, setHorizon] = useState<string>(HORIZON_TABS[0].id);
   const { scopeIds } = useGlobalScope();
@@ -43,10 +47,12 @@ export function Situation() {
     Promise.all([
       fetch(`/api/v1/ceo/situation/dashboard${q}`).then((r) => r.json()).catch(() => null),
       fetch(`/api/v1/ceo/situation/blindspots${q}`).then((r) => r.json()).catch(() => null),
-    ]).then(([d, b]) => {
+      fetch(`/api/v1/ceo/situation/observers${q}`).then((r) => r.json()).catch(() => null),
+    ]).then(([d, b, o]) => {
       if (cancelled) return;
       if (d) setDash(d);
       if (b?.items) setBlindspots(b.items as BlindspotApi[]);
+      if (o?.items) setObservers(o.items as ObserverApi[]);
     }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,43 +213,69 @@ export function Situation() {
           <RubricMatrix />
         </Block>
 
-        <Block num="④ blindspot alarms" title="盲点警报" meta="自动检测">
+        <Block num="④ blindspot alarms" title="盲点警报" meta={`自动检测 · ${forceMock ? BLINDSPOTS.length : (blindspots?.length ?? 0)} 条`}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(forceMock ? BLINDSPOTS : (blindspots ?? [])).map((b, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '10px 12px',
-                  background: 'rgba(196,106,80,0.08)',
-                  border: '1px solid rgba(196,106,80,0.3)',
-                  borderLeft: '3px solid #C46A50',
-                  borderRadius: '0 3px 3px 0',
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 10,
-                    color: '#FFB89A',
-                    marginBottom: 4,
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  {b.kind}
+            {(forceMock ? BLINDSPOTS : (blindspots ?? [])).map((b: any, i) => {
+              // API 字段 {name, narrative, severity, suggested_action}; fixture {kind, text}
+              const head = String(b.kind ?? b.name ?? '');
+              const body = String(b.text ?? b.narrative ?? '');
+              const action = String(b.suggested_action ?? '');
+              return (
+                <div key={i} style={{ padding: '10px 12px', background: 'rgba(196,106,80,0.08)', border: '1px solid rgba(196,106,80,0.3)', borderLeft: '3px solid #C46A50', borderRadius: '0 3px 3px 0' }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: '#FFB89A', marginBottom: 4, letterSpacing: 0.2 }}>
+                    ⚠️ {head}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'rgba(253,243,212,0.85)', lineHeight: 1.5 }}>
+                    {body}
+                  </div>
+                  {action && (
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,184,154,0.7)', marginTop: 6, fontStyle: 'italic' }}>
+                      → {action}
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: 12.5, color: 'rgba(253,243,212,0.85)', lineHeight: 1.5 }}>
-                  {b.text}
-                </div>
+              );
+            })}
+            {!forceMock && (!blindspots || blindspots.length === 0) && (
+              <div style={{ padding: '12px', fontSize: 12, color: 'rgba(253,243,212,0.45)', fontStyle: 'italic', fontFamily: 'var(--serif)' }}>
+                暂无触发盲点 — coverage 完整、单点依赖低、判断量充足。
               </div>
-            ))}
+            )}
           </div>
         </Block>
 
-        <Block num="⑤ outside observer" title="外脑视角 · 一句话" meta="LLM 三周轮换 (PR12)">
-          <Placeholder>
-            从外部观察者视角生成的一句话总结，每 3 周由 g4 跨会 LLM 任务自动产出。
-            示例："你正在从'好基金'变成'流程严谨的基金' — 可能是好事，但 LP 还没收到信号。"
-          </Placeholder>
+        <Block num="⑤ outside observer" title="外脑视角 · 一句话" meta={`${forceMock ? '示例' : `${observers?.length ?? 0} 条`}`}>
+          {forceMock ? (
+            <Placeholder>
+              从外部观察者视角生成的一句话总结，每 3 周由 g4 跨会 LLM 任务自动产出。
+              示例："你正在从'好基金'变成'流程严谨的基金' — 可能是好事，但 LP 还没收到信号。"
+            </Placeholder>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(observers ?? []).map((o) => (
+                <div key={o.id} style={{ padding: '10px 12px', background: 'rgba(102,121,181,0.05)', border: '1px solid rgba(102,121,181,0.25)', borderLeft: '3px solid rgba(102,121,181,0.6)', borderRadius: '0 3px 3px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: '#8B9BC8', fontWeight: 600 }}>
+                      {o.observer} · {o.role}
+                    </span>
+                    {o.captured_at && (
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(253,243,212,0.4)' }}>
+                        {String(o.captured_at).slice(0, 10)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 13, color: 'rgba(253,243,212,0.85)', lineHeight: 1.5 }}>
+                    "{o.quote}"
+                  </div>
+                </div>
+              ))}
+              {(!observers || observers.length === 0) && (
+                <div style={{ padding: '12px', fontSize: 12, color: 'rgba(253,243,212,0.45)', fontStyle: 'italic', fontFamily: 'var(--serif)' }}>
+                  暂无外脑视角 — 等待 raised_count ≥2 的董事关切积累。
+                </div>
+              )}
+            </div>
+          )}
         </Block>
 
         <Block num="⑥ horizon" title="视野时序" meta="本周 / Q3 / 长尾" spanFull>
