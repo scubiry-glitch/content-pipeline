@@ -37,6 +37,10 @@ function sanitizeFilename(input: string): string {
   return input.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+function isUuid(input: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input);
+}
+
 /** 从上传字节解析正文：.docx 用 mammoth，其余按 UTF-8 文本。 */
 async function textFromUploadBuffer(
   buf: Buffer,
@@ -63,6 +67,9 @@ export async function meetingNotesRoutes(
     const params = (request.params as Record<string, string> | undefined) ?? {};
     const id = params.id;
     if (!id) return;
+    if (!isUuid(id)) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'invalid source id' });
+    }
     if (!request.auth) {
       await authenticate(request, reply);
       if (reply.sent) return;
@@ -71,7 +78,7 @@ export async function meetingNotesRoutes(
     if (!wsId) return;
     const ok = await assertRowInWorkspace('meeting_note_sources', 'id', id, wsId);
     if (!ok) {
-      reply.code(404).send({ error: 'Not Found', message: `Source ${id} not found` });
+      return reply.code(404).send({ error: 'Not Found', message: `Source ${id} not found` });
     }
   });
 

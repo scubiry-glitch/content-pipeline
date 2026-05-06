@@ -8,11 +8,11 @@ slug: P_AUM
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.429Z"
+lastEditedAt: "2026-05-06T06:09:41.936Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.429Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.936Z\"}"
 entityType: metric
-updatedAt: "2026-05-04T15:44:57.429Z"
+updatedAt: "2026-05-06T06:09:41.936Z"
 ---
 
 # P/AUM

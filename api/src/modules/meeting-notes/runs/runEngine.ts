@@ -1332,6 +1332,22 @@ export class RunEngine {
                   );
                 } catch {/* swallow */}
               },
+              recordSessionId: async (sid) => {
+                try {
+                  await this.deps.db.query(
+                    `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                       'claudeSession', jsonb_build_object(
+                         'sessionId', $2::text,
+                         'lastResumedAt', NOW()::text,
+                         'runCount', COALESCE((metadata->'claudeSession'->>'runCount')::int, 0) + 1
+                       )
+                     ) WHERE id = $1`,
+                    [payload.meetingId, sid],
+                  );
+                } catch (e) {
+                  console.warn('[runEngine] recordSessionId(meeting) failed:', (e as Error).message);
+                }
+              },
             },
           );
 
@@ -1516,23 +1532,8 @@ export class RunEngine {
             console.warn('[runEngine] write cliWikiResult failed:', (e as Error).message);
           }
 
-          // 8) 写回 meeting session id (assets.metadata.claudeSession) + cliPersonMap
-          if (cliResult.sessionId) {
-            try {
-              await this.deps.db.query(
-                `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-                   'claudeSession', jsonb_build_object(
-                     'sessionId', $2::text,
-                     'lastResumedAt', NOW()::text,
-                     'runCount', COALESCE((metadata->'claudeSession'->>'runCount')::int, 0) + 1
-                   )
-                 ) WHERE id = $1`,
-                [payload.meetingId, cliResult.sessionId],
-              );
-            } catch (e) {
-              console.warn('[runEngine] write claudeSession to assets failed:', (e as Error).message);
-            }
-          }
+          // 8) 写 cliPersonMap + cliMeetingResult 快照（sessionId 已在 hooks.recordSessionId
+          //    早写阶段落到 assets.metadata.claudeSession，这里不重复）
           try {
             await this.deps.db.query(
               `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(

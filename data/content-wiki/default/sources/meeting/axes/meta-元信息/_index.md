@@ -3,7 +3,7 @@ type: index
 subtype: axes/meta
 app: meeting-notes
 generatedBy: meeting-axes-generator
-lastEditedAt: "2026-05-05T20:48:12.561Z"
+lastEditedAt: "2026-05-06T06:09:53.818Z"
 ---
 
 # 元信息轴 · meta

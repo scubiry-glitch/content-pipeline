@@ -6,7 +6,7 @@ slug: E02
 taxonomy_code: E02
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.452Z"
+lastEditedAt: "2026-05-06T06:09:41.960Z"
 factCount: 810
 entityCount: 30
 domain: 金融科技

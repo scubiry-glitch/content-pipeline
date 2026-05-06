@@ -8,11 +8,11 @@ slug: C端
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.251Z"
+lastEditedAt: "2026-05-06T06:09:41.788Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.251Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.788Z\"}"
 entityType: concept
-updatedAt: "2026-05-04T15:44:57.251Z"
+updatedAt: "2026-05-06T06:09:41.788Z"
 ---
 
 # C端

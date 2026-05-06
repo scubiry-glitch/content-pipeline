@@ -6,11 +6,11 @@ slug: 实物支持类ETF
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.362Z"
+lastEditedAt: "2026-05-06T06:09:41.875Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.362Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.875Z\"}"
 entityType: product
-updatedAt: "2026-05-04T15:44:57.362Z"
+updatedAt: "2026-05-06T06:09:41.875Z"
 ---
 
 # 实物支持类ETF

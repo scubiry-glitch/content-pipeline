@@ -6,7 +6,7 @@ slug: E08
 taxonomy_code: E08
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.451Z"
+lastEditedAt: "2026-05-06T06:09:41.960Z"
 factCount: 1887
 entityCount: 30
 domain: 房地产

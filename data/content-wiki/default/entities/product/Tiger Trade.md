@@ -6,11 +6,11 @@ slug: Tiger Trade
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.413Z"
+lastEditedAt: "2026-05-06T06:09:41.920Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.413Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.920Z\"}"
 entityType: product
-updatedAt: "2026-05-04T15:44:57.413Z"
+updatedAt: "2026-05-06T06:09:41.920Z"
 ---
 
 # Tiger Trade

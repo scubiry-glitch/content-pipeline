@@ -309,7 +309,18 @@ function FlowUpload({ onNext, onUploaded, onScopeSelected }: {
     setUploading(true);
     try {
       const sources = await meetingNotesApi.listSources();
-      const sourceId = sources.items?.[0]?.id ?? 'meetings';
+      let sourceId = sources.items?.[0]?.id as string | undefined;
+      if (!sourceId) {
+        // 首次上传自动兜底：当前 workspace 无 source 时，自动创建一个 upload source。
+        const created = await meetingNotesApi.createSource({
+          name: '默认上传来源',
+          kind: 'upload',
+          config: {},
+          isActive: true,
+        });
+        sourceId = created?.id;
+      }
+      if (!sourceId) throw new Error('自动创建上传来源失败，请到「会议来源」页手动创建 upload source');
       const r: {
         assetId?: string;
         assetIds?: string[];

@@ -61,6 +61,11 @@ export interface ClaudeCliRunnerHooks {
   bumpUsage: (input: number, output: number) => void;
   /** 把异常情况下的 raw stdout 记到 mn_runs.metadata.cliRaw（截断） */
   recordCliRaw: (raw: string) => Promise<void>;
+  /** 把 claude 返回的 session_id 立刻落库（assets/mn_scopes.metadata.claudeSession.sessionId）。
+   *  早写动机：outer JSON 解析成功 = sid 是真凭证（fresh 落盘 jsonl / resume 命中已有 jsonl）。
+   *  不能等 inner JSON.parse + validate 都过才写——claude 偶尔输出脏 JSON（多 `}` / 漏 `,`）
+   *  会让 runner throw，旧代码事后写就丢了 sid → 下次 run 又走 fresh，永远续接不上。 */
+  recordSessionId?: (sessionId: string) => Promise<void>;
 }
 
 export interface ClaudeCliRunnerResult {
@@ -172,6 +177,77 @@ function drainStream(stream: NodeJS.ReadableStream, label = 'stream', runId = ''
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
   return s.slice(0, n) + `\n…[truncated, total ${s.length}]`;
+}
+
+/**
+ * LLM 输出 JSON 容错修补 — 仅在 JSON.parse 失败时调用。
+ *
+ * 处理 claude / sonnet 偶发输出的脏 JSON 形态：
+ *   1) trailing commas（`,]` `,}`）
+ *   2) 错配的右括号（claude 偶尔把 `]` 写成 `}` 或反过来）—— 扫描栈，
+ *      看到 unmatched close 时按栈顶 open 类型把它"翻转"成对应 close。
+ *      经实测：单点翻转后栈状态恢复，后续 close 自动归位（连锁恢复）。
+ *   3) `}` 紧跟 `"key":` 之间漏逗号
+ *
+ * 每条规则各自独立 try-parse，命中即返回。全部失败 → null。
+ *
+ * 已验证 case：mn run 0a66d67d (2026-05-06) — claude 在 `evidenceLadder.examples`
+ * 数组关闭处把 `]` 写成 `}` 致 parse error at position 15676，
+ * 规则 2 翻转 1 字节后 39878-byte JSON 完整恢复（含 6 顶层 keys）。
+ */
+function tryRepairJson(text: string): any | null {
+  // 规则 1：trailing comma 前置 ] 或 }
+  {
+    const a = text.replace(/,(\s*[}\]])/g, '$1');
+    if (a !== text) {
+      try { return JSON.parse(a); } catch {/* 继续 */}
+    }
+  }
+  // 规则 2：扫描栈，把 unmatched 右括号翻转成栈顶 open 对应的 close
+  {
+    const chars = text.split('');
+    const stack: string[] = [];
+    let inString = false, escape = false;
+    let flipped = 0;
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i];
+      if (escape) { escape = false; continue; }
+      if (inString) {
+        if (ch === '\\') { escape = true; }
+        else if (ch === '"') { inString = false; }
+        continue;
+      }
+      if (ch === '"') { inString = true; continue; }
+      if (ch === '{' || ch === '[') {
+        stack.push(ch);
+      } else if (ch === '}' || ch === ']') {
+        const want = ch === '}' ? '{' : '[';
+        if (stack.length > 0 && stack[stack.length - 1] === want) {
+          stack.pop();
+        } else if (stack.length > 0) {
+          // unmatched: 翻转成栈顶对应的正确 close
+          const top = stack[stack.length - 1];
+          const correctClose = top === '{' ? '}' : ']';
+          if (correctClose !== ch) {
+            chars[i] = correctClose;
+            stack.pop();
+            flipped++;
+          }
+        }
+      }
+    }
+    if (flipped > 0) {
+      try { return JSON.parse(chars.join('')); } catch {/* 继续 */}
+    }
+  }
+  // 规则 3：`}"` / `]"` / `""` 之间漏逗号 — 仅插，不动其他字节
+  {
+    const c = text.replace(/([}\]"])(\s*)("(?=[^"]*"\s*:))/g, '$1,$2$3');
+    if (c !== text) {
+      try { return JSON.parse(c); } catch {/* 继续 */}
+    }
+  }
+  return null;
 }
 
 /**
@@ -491,6 +567,13 @@ export async function runClaudeCliMode(
     ? outerJson.session_id
     : null;
 
+  // 早写 sid：outer JSON 已成功解析 = sid 是真凭证（fresh 模式 claude 已把对话落盘到
+  // ~/.claude/projects/<cwd>/<sid>.jsonl）。立刻写库，确保即便后面 inner JSON.parse / validate
+  // / 任何 hook 失败 throw，下一次 run 仍能 --resume <sid> 续接上这次的对话上下文。
+  if (sessionId && hooks.recordSessionId) {
+    try { await hooks.recordSessionId(sessionId); } catch {/* swallow，不阻塞主流程 */}
+  }
+
   if (!resultText) {
     await hooks.recordCliRaw(truncate(stdout, 200_000));
     throw new Error('claude CLI: outer JSON has no .result text');
@@ -515,8 +598,17 @@ export async function runClaudeCliMode(
   try {
     inner = JSON.parse(innerText);
   } catch (e) {
-    await hooks.recordCliRaw(truncate(resultText, 200_000));
-    throw new Error(`claude CLI inner JSON.parse failed: ${(e as Error).message}`);
+    // 自救：claude 偶发输出脏 JSON（多 } / 漏 , / trailing ,），尝试小幅修补再 parse
+    const repaired = tryRepairJson(innerText);
+    if (repaired !== null) {
+      console.warn(
+        `[claudeCliRunner ${payload.runId.slice(0, 8)}] inner JSON repaired (was: ${(e as Error).message.slice(0, 100)})`,
+      );
+      inner = repaired;
+    } else {
+      await hooks.recordCliRaw(truncate(resultText, 200_000));
+      throw new Error(`claude CLI inner JSON.parse failed: ${(e as Error).message}`);
+    }
   }
 
   // ── 6. 校验输出形态 ───────────────────────────────────────────

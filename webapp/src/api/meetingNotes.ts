@@ -730,6 +730,7 @@ export const meetingNotesApi = {
     const r = await fetch(`${API_BASE}/sources/${sourceId}/upload`, {
       method: 'POST',
       headers: { 'X-API-Key': (import.meta as any).env?.VITE_API_KEY || 'dev-api-key' },
+      credentials: 'include',
       body: fd,
     });
     if (!r.ok) throw new Error(`upload → ${r.status}`);

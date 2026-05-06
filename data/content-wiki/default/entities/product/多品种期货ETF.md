@@ -11,16 +11,16 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-04T15:44:57.361Z"
+lastEditedAt: "2026-05-06T06:09:41.874Z"
 sources:
   - asset_84c75325
   - asset_5f15a6c0
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-04T15:44:57.361Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.874Z\"}"
 entityType: product
 domains:
   - 金融/资产管理
-updatedAt: "2026-05-04T15:44:57.361Z"
+updatedAt: "2026-05-06T06:09:41.874Z"
 ---
 
 # 多品种期货ETF

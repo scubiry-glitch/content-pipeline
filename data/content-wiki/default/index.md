@@ -1,22 +1,24 @@
 ---
 type: index
-updatedAt: "2026-05-04T15:44:57.454Z"
+updatedAt: "2026-05-06T06:09:41.963Z"
 ---
 
 # 内容库 Wiki 索引
 
 - **实体**: 500 个
-- **事实**: 4505 条
+- **事实**: 4515 条
 - **来源**: 0 个
-- **领域**: 24 个
+- **领域**: 26 个
 
 ## 领域 (concepts/)
 
+- [[concepts/E07.APP|E07.APP]]
+- [[concepts/E10.LOGISTICS|E10.LOGISTICS]]
+- [[concepts/E07.INFRA|E07.INFRA]]
+- [[concepts/E08.RESID|E08.RESID]]
 - [[concepts/E08.RENT|E08.RENT]]
 - [[concepts/E99.OTHER|E99.OTHER]]
 - [[concepts/E11.GOV|E11.GOV]]
-- [[concepts/E07.APP|E07.APP]]
-- [[concepts/E08.RESID|E08.RESID]]
 - [[concepts/E02.INFRA|E02.INFRA]]
 - [[concepts/E05.HOSPITALITY|E05.HOSPITALITY]]
 - [[concepts/E02.BANK|E02.BANK]]
