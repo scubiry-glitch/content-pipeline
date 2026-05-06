@@ -80,12 +80,12 @@ const SCOPE_AXES = Object.keys(AXIS_DEPS) as readonly string[];
 // 标记哪些 axis 是"派生计算" (走 fast pool, 不消耗 LLM 名额)
 const FAST_AXES = new Set(['tower-attention-alloc', 'balcony-time-roi', 'panorama-aggregate']);
 
-// brief × expert 配对（用于 boardroom-annotation）
+// brief × expert 配对（用于 boardroom-annotation）— S 级专家库
 const ANNOTATION_EXPERTS = [
-  { expertId: 'lp-coach-v1', expertName: 'LP 关系教练' },
-  { expertId: 'wei-rubric', expertName: 'Wei Zhao · 估值锚定 rubric' },
-  { expertId: 'omar-cycle', expertName: 'Omar K. · 周期判断教练' },
-  { expertId: 'sara-compliance', expertName: 'Sara M. · 合规备案教练' },
+  { expertId: 'lp-coach-v1',     expertName: '沈南鹏 · LP 关系教练' },         // S-11 风险投资/合伙人评审
+  { expertId: 'wei-rubric',      expertName: '马斯克 · 估值锚定 rubric' },     // S-03 第一性原理/反行业共识
+  { expertId: 'omar-cycle',      expertName: '张一鸣 · 周期判断教练' },        // S-01 延迟满足/产品增长
+  { expertId: 'sara-compliance', expertName: '任正非 · 合规备案教练' },        // S-06 战略定力/组织建设
 ];
 
 interface ScopeRow { id: string; name: string; meetingCount: number; }
