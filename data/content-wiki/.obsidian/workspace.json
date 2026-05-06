@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "default/sources/meeting/会议纪要-续约沟通-2fcd4400/_index.md",
+                "file": "default/sources/meeting/meeting-chats/6050f222-1777947618.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "_index"
+              "title": "6050f222-1777947618"
             }
           }
         ]
@@ -195,8 +195,23 @@
       "claudian:Open Claudian": false
     }
   },
-  "active": "5e7e97c03da9616a",
+  "active": "82dfd203cda984a9",
   "lastOpenFiles": [
+    "ws-1777959477843/sources/meeting/meeting-chats/2a30e464-1778030885.md",
+    "ws-1777959477843/sources/meeting/meeting-chats/2a30e464-1778030721.md",
+    "ws-1777959477843/sources/meeting/meeting-chats/2a30e464-1778030649.md",
+    "ws-1777959477843/sources/meeting/meeting-chats",
+    "ws-1777959477843/sources/meeting",
+    "ws-1777959477843/sources",
+    "ws-1777959477843",
+    "default/sources/meeting/meeting-chats/2a30e464-1778030456.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778030218.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778029013.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778028639.md",
+    "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
+    "default/sources/meeting/会议纪要-续约沟通-2fcd4400/_index.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778016727.md",
+    "default/sources/meeting/meeting-chats/2a30e464-1778016643.md",
     "default/sources/meeting/meeting-chats/2a30e464-1778016110.md",
     "default/sources/meeting/meeting-chats/2a30e464-1778016091.md",
     "default/sources/meeting/meeting-chats/2a30e464-1778015090.md",
@@ -208,7 +223,6 @@
     "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7/_index.md",
     "default/sources/meeting/scopes/project/AI 升级-cbb8c5c7",
     "default/sources/meeting/meeting-chats/ed0235de-1777648817.md",
-    "default/sources/meeting/meeting-chats/eff87d6c-1777385951.md",
     "default/entities/58同城.md",
     "default/sources/meeting/上海汇聚 AI 项目 · 两轮 · 管理模式 A→B 点规划-db866879/_index.md",
     "default/domains/E02-金融科技/_金融_长租公寓.md",
@@ -218,20 +232,6 @@
     "default/sources/meeting/scopes/client/左海-af17d047/_index.md",
     "default/sources/meeting/scopes/project/养老-3ea48b8b/_index.md",
     "default/sources/meeting/meeting-chats/6050f222-1777947618.md",
-    "default/domains/E08-房地产/E08.RESID-住宅.md",
-    "default/concepts/technology/Poptek软件.md",
-    "default/concepts/mental-model/熵增（应用于组织管理）.md",
-    "default/concepts/business-model/澳洲房产租赁管理市场.md",
-    "default/concepts/technology/智能验房（Ingoing_Outgoing Report）.md",
-    "default/entities/person/说话人5.md",
-    "default/entities/person/说话人4.md",
-    "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222",
-    "default/concepts/bias",
-    "default/concepts/judgment/中小企业分散市场的工具切入策略.md",
-    "default/concepts/judgment",
-    "default/meeting-chats/d4833343-1777385717.md",
-    "default/sources/meeting/meeting-chats",
-    "default/meeting-chats/eff87d6c-1777385719.md",
-    "default/meeting-chats"
+    "default/sources/meeting/澳洲房产管理软件应用讨论-6050f222"
   ]
 }
