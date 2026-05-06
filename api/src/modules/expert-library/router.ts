@@ -307,6 +307,22 @@ export function createRouter(engine: ExpertEngine) {
           const method = coerceJsonObject(row.method);
           const emm = coerceJsonObject(row.emm);
 
+          // dm.philosophy 在旧档案里可能只存了部分字段（只有 core 没有 quotes）
+          // 这里逐字段兜底，避免 UI 端 .length / .map 直接炸
+          const dmPhilosophy =
+            dm.philosophy && typeof dm.philosophy === 'object' ? (dm.philosophy as any) : {};
+          const philosophy = {
+            core: Array.isArray(dmPhilosophy.core)
+              ? dmPhilosophy.core
+              : Array.isArray(persona.bias)
+                ? persona.bias
+                : [],
+            quotes: Array.isArray(dmPhilosophy.quotes)
+              ? dmPhilosophy.quotes
+              : Array.isArray(row.signature_phrases)
+                ? row.signature_phrases
+                : [],
+          };
           return {
             id: row.expert_id,
             name: row.name,
@@ -319,12 +335,13 @@ export function createRouter(engine: ExpertEngine) {
               background: persona.tone || '',
               personality: persona.style || '',
             },
-            philosophy: dm.philosophy || {
-              core: persona.bias || [],
-              quotes: row.signature_phrases || [],
-            },
-            achievements: dm.achievements || [],
-            reviewDimensions: dm.reviewDimensions || emm?.critical_factors || [],
+            philosophy,
+            achievements: Array.isArray(dm.achievements) ? dm.achievements : [],
+            reviewDimensions: Array.isArray(dm.reviewDimensions)
+              ? dm.reviewDimensions
+              : Array.isArray(emm?.critical_factors)
+                ? emm.critical_factors
+                : [],
             status: dm.status || 'active',
             totalReviews: dm.totalReviews || 0,
             acceptanceRate: dm.acceptanceRate || 0,

@@ -20,11 +20,28 @@ const KEYS = {
   debate: (id: string) => `debates/${id}`,
 } as const;
 
+// 把后端可能"缺胳膊少腿"的 expert 规整成 UI 可以放心用的形状
+// 来源 dm.philosophy / dm.achievements 等是 JSONB，旧档案里可能只写了部分字段
+function normalizeExpert(raw: any): Expert {
+  const philosophy = raw?.philosophy ?? {};
+  return {
+    ...raw,
+    profile: raw?.profile ?? { title: '', background: '', personality: '' },
+    philosophy: {
+      core: Array.isArray(philosophy.core) ? philosophy.core : [],
+      quotes: Array.isArray(philosophy.quotes) ? philosophy.quotes : [],
+    },
+    achievements: Array.isArray(raw?.achievements) ? raw.achievements : [],
+    reviewDimensions: Array.isArray(raw?.reviewDimensions) ? raw.reviewDimensions : [],
+  } as Expert;
+}
+
 export function useExperts(domain?: string) {
   const result = useCachedData(KEYS.experts(domain), () =>
     expertLibraryApi.getExpertsFull(domain),
   );
-  const experts = (result.data?.experts ?? []) as Expert[];
+  const rawExperts = Array.isArray(result.data?.experts) ? result.data!.experts : [];
+  const experts = rawExperts.map(normalizeExpert);
   return {
     ...result,
     experts,
