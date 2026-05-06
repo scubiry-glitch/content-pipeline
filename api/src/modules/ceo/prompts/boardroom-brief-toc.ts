@@ -15,12 +15,13 @@ const TocItem = z.object({
   // .passthrough() 允许 LLM 多带 summary / description / key_points 等合理字段
 }).passthrough();
 
+// .passthrough() — LLM 偶尔会带 brief_id 等已知 ctx 字段, 不该被 .strict() 拒
 const Out = z.object({
   toc: z.array(TocItem).min(4).max(8),
   page_count: z.number().int().min(8).max(40).optional().default(16),
   forward_pct: z.number().min(0).max(1).optional().default(0.3),
   generated_summary: z.string().min(40).max(400).optional().default(''),
-}).strict();
+}).passthrough();
 
 type OutT = z.infer<typeof Out>;
 

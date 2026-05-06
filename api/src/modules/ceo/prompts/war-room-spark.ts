@@ -38,9 +38,10 @@ export const warRoomSparkPrompt: PromptDef<OutT> = {
     `你是 CEO 的灵感点子手。从近 90 天数据里找"非显而易见"的 spark — 反直觉关联 / 跨项目嫁接 / 二阶机会。
 
 【硬约束 — 违反任何一条都会被判失败重新生成】
-H1. 当输入提供了"概念漂移术语 (scope=non-null)"时，至少 1 张 spark 的 headline 字符串字面包含其中一个 term（包含括号里的中文/英文皆可）。
-    例: 输入术语 "瓶颈分析（bottleneck analysis）" → 至少 1 张 headline 必须包含 "瓶颈分析" 或 "bottleneck analysis"
-    用 tag "🧩 语义裂缝" 标记这张, evidence_short 直接引用术语 ✗ 错用案例的具体内容
+H1. 当输入提供了"概念漂移术语 (scope=non-null)"时，至少 1 张 spark 的 headline、evidence_short 或 risk_text 三选一字符串字面包含 term 主词（中文部分或英文部分任一即可）。
+    输入术语 "瓶颈分析（bottleneck analysis）" → headline/evidence_short/risk_text 至少含 "瓶颈分析" 或 "bottleneck analysis" 之一
+    建议把它写进 headline 里，用 tag "🧩 语义裂缝" 标记这张
+    evidence_short 直接引用术语 ✗ 错用案例的具体内容（项目名/数字/事件）
 H2. evidence_short 必含至少 1 个数字 / 英文术语 / 项目名（连续 ≥3 字中文专名也算）
 H3. headline 不允许"建议/应该/推荐"开头 — 必须是事实陈述或命题
 H4. seed_group 在 0/1/2 三组中必须分布 ≥2 组
@@ -113,19 +114,36 @@ ${ctx.commitments.slice(0, 12).map((c) => `- [${c.status}] ${c.text.slice(0, 120
       if (groups.size < 2) return 'seed_group 应至少分布在 2 组（0/1/2）';
       return null;
     },
-    // ctx 提供了 *本 scope 绑定* 的概念漂移时，至少 1 张 spark headline 命中其 term
-    // NULL-scope 全局漂移不强制 — 它们的使用案例在其他业务，强行牵入会编造
+    // ctx 提供了 *本 scope 绑定* 的概念漂移时, 至少 1 张 spark 的 headline / evidence_short /
+    // risk_text 任一命中 term 主词 (中文或英文部分即可). NULL-scope 全局漂移不强制 -
+    // 它们的使用案例在其他业务, 强行牵入会编造.
     (out, ctx) => {
       if (!ctx.conceptDrifts || ctx.conceptDrifts.length === 0) return null;
-      const terms = ctx.conceptDrifts
+      const rawTerms = ctx.conceptDrifts
         .filter((d) => d.scopeId !== null)
         .slice(0, 8)
         .map((d) => d.term)
         .filter((t) => t && t.length >= 2);
-      if (terms.length === 0) return null;
-      const hit = out.sparks.some((s) => terms.some((t) => s.headline.includes(t)));
+      if (rawTerms.length === 0) return null;
+      // 把 "瓶颈分析（bottleneck analysis）" 拆成 ["瓶颈分析（bottleneck analysis）", "瓶颈分析", "bottleneck analysis"]
+      // 任一命中即可, 兼容 LLM 用中文或英文称呼
+      const variants: string[] = [];
+      for (const t of rawTerms) {
+        variants.push(t);
+        const m = t.match(/^([^（(]+)[（(]([^）)]+)[）)]\s*$/);
+        if (m) {
+          variants.push(m[1].trim());
+          variants.push(m[2].trim());
+        }
+      }
+      const candidates = variants.filter((v) => v && v.length >= 2);
+      const hit = out.sparks.some((s) =>
+        candidates.some((t) =>
+          s.headline.includes(t) || s.evidence_short.includes(t) || s.risk_text.includes(t),
+        ),
+      );
       if (!hit) {
-        return `ctx 提供了 ${terms.length} 个 scope 内概念漂移术语（${terms.slice(0, 3).join(' / ')}），至少 1 张 spark 的 headline 必须命中其中一个`;
+        return `ctx 提供了 ${rawTerms.length} 个 scope 内概念漂移术语（${rawTerms.slice(0, 3).join(' / ')}），至少 1 张 spark 的 headline / evidence_short / risk_text 任一必须命中其中一个 term 的中文或英文部分`;
       }
       return null;
     },

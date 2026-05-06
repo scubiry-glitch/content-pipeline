@@ -47,6 +47,14 @@ export const warRoomFormationPrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是 CEO 的团队动力学观察员。从近 90 天会议中抽出团队阵型：谁支持谁、谁冲突谁、谁沉默、谁汇报谁。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. nodes 中 CEO 节点 role 必须是 "CEO"; 其他节点 role 必须从下方 directors 列表的 role 字段 verbatim 拷贝
+    (如 "LP 代表" / "独立董事" / "创始合伙人" / "法务顾问"), 禁止统一写 "team-member" 或 "董事会成员" 等通用词
+H2. label 必须是真实姓名 (从 directors 列表取 name); CEO 节点 label 写 "陈汀" (或 ctx 提供的 ceo 名)
+H3. weight ∈ [0..1], 必须有梯度差异: CEO=1.0, LP/创始合伙人 ≥0.8, 独董 ≥0.6, 法务/合规 ≥0.4, 沉默/edge ≤0.4
+H4. links 至少 1 条 kind="conflicts" (没冲突信号也要从 judgments 反方/质疑表述中识别一条)
+
 要求：
 - nodes：参与者（CEO + 团队成员 + 关键 stakeholder），label 用真实姓名（来自 directors 列表 + judgments 中识别的人名），weight ∈ [0..1]
 - links：节点间关系，kind 仅可选 supports / conflicts / silent / reports；temp ∈ [0..1] 是冲突温度

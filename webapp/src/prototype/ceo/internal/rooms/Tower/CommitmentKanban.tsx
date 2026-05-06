@@ -1,8 +1,33 @@
 // Tower · ① 承诺看板 (4 列 kanban)
-// 来源: 07-archive/会议纪要 (20260501)/tower.html .kanban-grid
+// 数据源: /api/v1/ceo/tower/commitments → 按 status 分组到 4 列
+// fallback: forceMock=true 或 API 空时, 用 _towerFixtures.KANBAN
 
-import { KANBAN } from './_towerFixtures';
+import { useEffect, useMemo, useState } from 'react';
+import { KANBAN, type KanbanCard } from './_towerFixtures';
 import { PersonChip } from '../../../shared/PersonChip';
+import { useGlobalScope } from '../../../shared/GlobalScopeFilter';
+import { buildScopeQuery } from '../../../_apiAdapters';
+import { useForceMock } from '../../../../meeting/_mockToggle';
+
+interface ApiCommitment {
+  id: string;
+  owner_name: string | null;
+  beneficiary_name: string | null;
+  what: string;
+  due_at: string | null;
+  days_overdue: number;
+  status: string; // on_track | at_risk | done | slipped
+  source_meeting_title: string | null;
+  created_at?: string;
+}
+
+type ColName = '○ 提出' | '◐ 进行中' | '⊗ 逾期' | '✓ 完成';
+const COLUMN_DEFS: { name: ColName; tone: string }[] = [
+  { name: '○ 提出', tone: '#7BA9C2' },
+  { name: '◐ 进行中', tone: '#C49B4D' },
+  { name: '⊗ 逾期', tone: '#C46A50' },
+  { name: '✓ 完成', tone: '#5FA39E' },
+];
 
 /** 把 "林雾 → 陈汀" / "陈汀 欠 董事会" 拆出两个名字 */
 function splitOwnerLine(text: string): { from: string; sep: string; to: string } | null {
@@ -15,7 +40,72 @@ function splitOwnerLine(text: string): { from: string; sep: string; to: string }
   return null;
 }
 
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return iso.slice(5, 10);
+}
+
+function fmtDueLabel(c: ApiCommitment): string {
+  if (c.status === 'done') return '已完成';
+  if (c.status === 'slipped' || c.days_overdue > 0) return `逾期 ${c.days_overdue} 天`;
+  if (!c.due_at) return '未排期';
+  return c.due_at.slice(0, 10);
+}
+
+function adaptToKanban(items: ApiCommitment[]): { name: ColName; tone: string; count: number; cards: KanbanCard[] }[] {
+  const groups: Record<ColName, KanbanCard[]> = { '○ 提出': [], '◐ 进行中': [], '⊗ 逾期': [], '✓ 完成': [] };
+  for (const c of items) {
+    const owner = c.owner_name ?? '?';
+    const beneficiary = c.beneficiary_name ?? '?';
+    const card: KanbanCard = {
+      from: `${owner} → ${beneficiary}`,
+      date: fmtDate(c.created_at ?? null),
+      text: c.what,
+      due: fmtDueLabel(c),
+      late: c.status === 'slipped' || c.days_overdue > 7,
+      warn: c.days_overdue > 0 && c.days_overdue <= 7,
+      done: c.status === 'done',
+    };
+    if (c.status === 'done') groups['✓ 完成'].push(card);
+    else if (c.status === 'slipped' || c.days_overdue > 7) groups['⊗ 逾期'].push(card);
+    else if (!c.due_at) groups['○ 提出'].push(card);
+    else groups['◐ 进行中'].push(card);
+  }
+  return COLUMN_DEFS.map((d) => ({
+    name: d.name,
+    tone: d.tone,
+    count: groups[d.name].length,
+    cards: groups[d.name].slice(0, 5),
+  }));
+}
+
 export function CommitmentKanban() {
+  const forceMock = useForceMock();
+  const { scopeIds } = useGlobalScope();
+  const scopeKey = scopeIds.join(',');
+  const [items, setItems] = useState<ApiCommitment[] | null>(null);
+
+  useEffect(() => {
+    if (forceMock) return;
+    let cancelled = false;
+    fetch(`/api/v1/ceo/tower/commitments${buildScopeQuery(scopeIds)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setItems((d?.items as ApiCommitment[]) ?? []); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, forceMock]);
+
+  const columns = useMemo(() => {
+    if (forceMock) return KANBAN;
+    if (!items) return KANBAN; // 加载中, 临时显示 fixture 占位
+    if (items.length === 0) {
+      // 真有 0 条承诺, 给 4 个空列
+      return COLUMN_DEFS.map((d) => ({ name: d.name, tone: d.tone, count: 0, cards: [] }));
+    }
+    return adaptToKanban(items);
+  }, [forceMock, items]);
+
   return (
     <div
       style={{
@@ -24,7 +114,7 @@ export function CommitmentKanban() {
         gap: 12,
       }}
     >
-      {KANBAN.map((col) => (
+      {columns.map((col) => (
         <div
           key={col.name}
           style={{
@@ -71,6 +161,9 @@ export function CommitmentKanban() {
               {col.count}
             </span>
           </div>
+          {col.cards.length === 0 && (
+            <div style={{ fontSize: 11, color: 'rgba(232,239,242,0.4)', fontStyle: 'italic', padding: '8px 4px' }}>—</div>
+          )}
           {col.cards.map((c, i) => (
             <div
               key={i}

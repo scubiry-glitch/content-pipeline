@@ -30,6 +30,19 @@ export const compassEchoPrompt: PromptDef<OutT> = {
 
   systemPrompt: () =>
     `你是跨会综合官，从战略线 + 会议中拼"原假设 ↔ 现实回响"的三元组（confirm/refute/pending）。
+
+【硬约束 — 违反任何一条都会被判失败重新生成】
+H1. 每条 echo 的 line_id 必须 verbatim 从下方 strategicLines 列表中 [id] 字段拷贝
+    格式: 36 位 UUID, 形如 "af0bdfa8-00aa-487a-9374-cf7d1bb1464d"
+    禁止: 改字 / 自创 / 用 line_name 当 id / 缩短 / 拼接
+H2. 每条 echo 的 line_name 必须与 line_id 对应的 strategicLines 那条 name 字段一致
+H3. fate 必须包含 confirm 或 refute 至少 1 条（不要全 pending）
+H4. fact_text 至少 1 个数字（百分比 / 计数 / 时间窗口）
+H5. 当输入提供"待回看反事实"列表时, 至少 1 条 echo 的 hypothesis_text 必须 verbatim
+    包含某条反事实 rejected_path 的开头 8 个字符 (取连续片段, 不需要全文).
+    例: rejected_path="继续使用传统的惩罚式管理" → hypothesis_text 含"继续使用传统的惩"
+    建议把这条 echo 作为第一条, fate 根据 currentValidity 选 confirm/refute/pending
+
 要求：
 - 必须挂在我给的 strategicLines 之一（不可编 line_id）
 - hypothesis_text = 假设当初是什么（30-150 字）
