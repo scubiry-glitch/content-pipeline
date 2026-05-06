@@ -62,6 +62,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
       const axes = Array.isArray(body.axes) && body.axes.length > 0
         ? body.axes.filter((a) => typeof a === 'string')
         : ['g2', 'g3', 'g4', 'g5']; // 默认: 跳过 g1 (它由 mn ingest 触发)
+      const wsId = currentWorkspaceId(request);
       const results: Array<{ scopeId: string; axis: string; ok: boolean; runId?: string; error?: string }> = [];
       for (const scopeId of ids) {
         for (const axis of axes) {
@@ -70,6 +71,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
               axis,
               scopeKind: 'project',
               scopeId,
+              workspaceId: wsId,
               metadata: { source: 'fill-all', triggeredAt: new Date().toISOString() },
             });
             results.push({ scopeId, axis, ok: r.ok, runId: r.runId });
@@ -107,6 +109,7 @@ export function createRouter(engine: CeoEngine): FastifyPluginAsync {
         axis,
         scopeKind: body.scopeKind,
         scopeId: body.scopeId,
+        workspaceId: currentWorkspaceId(request),
         metadata: body.metadata,
       });
     });

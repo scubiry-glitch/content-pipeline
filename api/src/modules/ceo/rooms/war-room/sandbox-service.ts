@@ -119,9 +119,18 @@ export async function startSandboxRun(
     return { sandboxId, runId: sandbox.generated_run_id };
   }
 
+  // mn_runs 必须落到和 sandbox 一致的 workspace_id, 否则 ceoWorkspaceGuard
+  // 在 SSE/详情查询时跨 ws 兜不住, 前端拿到 404
+  const wsRow = await deps.db.query(
+    `SELECT workspace_id::text AS workspace_id FROM ceo_sandbox_runs WHERE id = $1::uuid`,
+    [sandboxId],
+  );
+  const sandboxWsId = (wsRow.rows[0]?.workspace_id as string | undefined) ?? null;
+
   const enq = await enqueueCeoRun(deps, {
     axis: 'warroom-sandbox',
     scopeId: sandbox.scope_id,
+    workspaceId: sandboxWsId,
     metadata: {
       kind: 'g3-sandbox', // legacy kind 兼容 handleG3Sandbox 内部判断
       sandboxId,

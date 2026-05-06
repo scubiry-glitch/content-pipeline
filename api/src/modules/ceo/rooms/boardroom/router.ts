@@ -160,6 +160,7 @@ export function createBoardroomRouter(engine: CeoEngine): FastifyPluginAsync {
           expertId: body.expertId,
           expertName: body.expertName,
           contextHint: body.contextHint,
+          workspaceId: currentWorkspaceId(request),
         });
       } catch (e) {
         reply.code(500);

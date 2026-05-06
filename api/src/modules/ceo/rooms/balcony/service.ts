@@ -64,6 +64,7 @@ export async function listReflections(
       for (const row of seeded) {
         enqueueCeoRun(deps, {
           axis: 'balcony-prompt',
+          workspaceId: wsId,
           metadata: {
             kind: 'balcony-prompt',
             userId,

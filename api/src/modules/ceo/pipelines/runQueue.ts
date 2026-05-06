@@ -123,6 +123,8 @@ export async function enqueueCeoRun(
     axis: CeoAxis | string;
     scopeKind?: string;
     scopeId?: string | null;
+    /** 显式指定 mn_runs.workspace_id；不传则尝试从 scope_id → mn_scopes.workspace_id 推导 */
+    workspaceId?: string | null;
     metadata?: Record<string, unknown>;
   },
 ): Promise<{ ok: boolean; runId?: string }> {
@@ -137,19 +139,37 @@ export async function enqueueCeoRun(
       model: meta?.model ?? null,
       workerHint: meta?.workerHint ?? null,
     });
-    const r = await deps.db.query(
-      `INSERT INTO mn_runs
-        (module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata, target_worker)
-       VALUES ('ceo', $1, $2, $3, 'queued', 'manual', 'lite', '{}', $4::jsonb, $5)
-       RETURNING id::text`,
-      [
-        input.scopeKind ?? 'project',
-        input.scopeId ?? null,
-        input.axis,
-        JSON.stringify(input.metadata ?? {}),
-        targetWorker,
-      ],
-    );
+
+    // workspace 解析：显式 > scope 推导 > NULL（让列 DEFAULT 兜底到 default ws）
+    // 必须显式写入对的 workspace_id —— ceoWorkspaceGuard 用 mn_runs.workspace_id 做行级
+    // 守卫，落到 default ws 会被跨 ws 用户访问时 404（参见 router.ts:119 /runs/:id/stream）
+    let workspaceId: string | null = input.workspaceId ?? null;
+    if (!workspaceId && input.scopeId) {
+      const wsr = await deps.db.query(
+        `SELECT workspace_id::text AS workspace_id FROM mn_scopes WHERE id = $1::uuid`,
+        [input.scopeId],
+      );
+      workspaceId = wsr.rows[0]?.workspace_id ?? null;
+    }
+
+    const baseCols = '(module, scope_kind, scope_id, axis, state, triggered_by, preset, sub_dims, metadata, target_worker';
+    const baseVals = `('ceo', $1, $2, $3, 'queued', 'manual', 'lite', '{}', $4::jsonb, $5`;
+    const params: unknown[] = [
+      input.scopeKind ?? 'project',
+      input.scopeId ?? null,
+      input.axis,
+      JSON.stringify(input.metadata ?? {}),
+      targetWorker,
+    ];
+    let sql: string;
+    if (workspaceId) {
+      params.push(workspaceId);
+      sql = `INSERT INTO mn_runs ${baseCols}, workspace_id) VALUES ${baseVals}, $6) RETURNING id::text`;
+    } else {
+      // 没解析到 ws → 不显式写列，让 mn_runs.workspace_id DEFAULT (default ws) 兜底
+      sql = `INSERT INTO mn_runs ${baseCols}) VALUES ${baseVals}) RETURNING id::text`;
+    }
+    const r = await deps.db.query(sql, params);
     return { ok: true, runId: r.rows[0]?.id };
   } catch (e) {
     console.warn('[enqueueCeoRun] failed:', (e as Error).message);

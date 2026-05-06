@@ -112,6 +112,8 @@ export class CeoEngine {
     axis: string;
     scopeKind?: string;
     scopeId?: string | null;
+    /** mn_runs.workspace_id —— 决定 ceoWorkspaceGuard 是否放行 SSE/详情 */
+    workspaceId?: string | null;
     metadata?: Record<string, unknown>;
   }): Promise<{ ok: boolean; runId?: string }> {
     return enqueueCeoRun(this.deps, input);

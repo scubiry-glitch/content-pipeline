@@ -83,11 +83,13 @@ export async function generateAnnotation(
     expertId: string;
     expertName: string;
     contextHint?: string;
+    workspaceId?: string | null;
   },
 ): Promise<{ runId: string }> {
   const enq = await enqueueCeoRun(deps, {
     axis: 'boardroom-annotations',
     scopeId: payload.scopeId ?? null,
+    workspaceId: payload.workspaceId ?? null,
     metadata: {
       kind: 'annotations',
       briefId: payload.briefId ?? null,
