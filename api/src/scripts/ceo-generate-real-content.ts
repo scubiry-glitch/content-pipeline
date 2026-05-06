@@ -81,11 +81,14 @@ const SCOPE_AXES = Object.keys(AXIS_DEPS) as readonly string[];
 const FAST_AXES = new Set(['tower-attention-alloc', 'balcony-time-roi', 'panorama-aggregate']);
 
 // brief × expert 配对（用于 boardroom-annotation）— S 级专家库
+// expertProfileId 指向 expert_profiles.expert_id, handler 会查 persona/method/
+// signature_phrases 注入到 prompt ctx.extra.expertProfile, 让 LLM 真正"扮演"该专家
+// 而不是凭印象演.
 const ANNOTATION_EXPERTS = [
-  { expertId: 'lp-coach-v1',     expertName: '沈南鹏 · LP 关系教练' },         // S-11 风险投资/合伙人评审
-  { expertId: 'wei-rubric',      expertName: '马斯克 · 估值锚定 rubric' },     // S-03 第一性原理/反行业共识
-  { expertId: 'omar-cycle',      expertName: '张一鸣 · 周期判断教练' },        // S-01 延迟满足/产品增长
-  { expertId: 'sara-compliance', expertName: '任正非 · 合规备案教练' },        // S-06 战略定力/组织建设
+  { expertId: 'lp-coach-v1',     expertName: '沈南鹏 · LP 关系教练',     expertProfileId: 'S-11' },
+  { expertId: 'wei-rubric',      expertName: '马斯克 · 估值锚定 rubric', expertProfileId: 'S-03' },
+  { expertId: 'omar-cycle',      expertName: '张一鸣 · 周期判断教练',    expertProfileId: 'S-01' },
+  { expertId: 'sara-compliance', expertName: '任正非 · 合规备案教练',    expertProfileId: 'S-06' },
 ];
 
 interface ScopeRow { id: string; name: string; meetingCount: number; }
@@ -281,9 +284,16 @@ async function main() {
             key: `${scope.name}/${axis}/${exp.expertId}`,
             deps: baseDeps,
             group: 'llm',
-            run: () => runOneAxis(query, deps, scope, axis, results, {
-              expertId: exp.expertId, expertName: exp.expertName,
-            }),
+            run: async () => {
+              // 知识库注入: 查 expert_profiles 把专家真实 persona/method 喂给 LLM,
+              // 让 LLM "真正扮演"该专家而不是凭印象演
+              const profile = await loadExpertProfile(query, exp.expertProfileId);
+              return runOneAxis(query, deps, scope, axis, results, {
+                expertId: exp.expertId,
+                expertName: exp.expertName,
+                expertProfile: profile,
+              });
+            },
           });
         }
       } else if (axis === 'balcony-prompt') {
@@ -617,6 +627,36 @@ function nextSundayStart(): string {
   d.setDate(d.getDate() + diffToSunday);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 知识库查询: 从 expert_profiles 拿专家真实 persona/method/signature_phrases
+ * 用于 boardroom-annotation prompt 的"扮演锚点"注入.
+ *
+ * 不存在 / 字段空 时返回 null, prompt 走兜底"凭印象演" 路径.
+ */
+async function loadExpertProfile(query: any, expertProfileId: string | undefined) {
+  if (!expertProfileId) return null;
+  try {
+    const r = await query(
+      `SELECT name, persona, method, signature_phrases, anti_patterns
+         FROM expert_profiles
+        WHERE expert_id = $1 AND is_active = true LIMIT 1`,
+      [expertProfileId],
+    );
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    return {
+      profileId: expertProfileId,
+      name: row.name,
+      persona: row.persona,                     // {bias, tone, style, ...}
+      method: row.method,                       // {reasoning, frameworks, ...}
+      signaturePhrases: row.signature_phrases,  // string[] | null
+      antiPatterns: row.anti_patterns,          // string[] | null
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ─── 总结 + 导出 ────────────────────────────────────────────

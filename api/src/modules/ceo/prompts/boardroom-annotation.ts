@@ -48,12 +48,26 @@ mode 含义：
   userPrompt: (ctx) => {
     const expertName = (ctx.extra?.expertName as string | undefined) ?? '匿名外部专家';
     const expertId = (ctx.extra?.expertId as string | undefined) ?? 'unknown';
+    // 知识库注入: 如果脚本预查了 expert_profiles, 这里把真实 persona/method 喂给 LLM
+    const profile = ctx.extra?.expertProfile as any;
+    const profileBlock = profile
+      ? `\n【专家档案 — 严格按下方真实风格扮演,不要凭印象演】\n` +
+        `姓名: ${profile.name ?? expertName}\n` +
+        (profile.persona?.bias?.length ? `思维偏好 (bias): ${profile.persona.bias.slice(0, 4).join(' / ')}\n` : '') +
+        (profile.persona?.tone ? `说话风格 (tone): ${String(profile.persona.tone).slice(0, 200)}\n` : '') +
+        (profile.persona?.style ? `表达风格 (style): ${String(profile.persona.style).slice(0, 200)}\n` : '') +
+        (profile.method?.frameworks?.length ? `常用框架 (frameworks): ${profile.method.frameworks.slice(0, 5).join(' / ')}\n` : '') +
+        (profile.method?.reasoning ? `推理方式: ${String(profile.method.reasoning).slice(0, 80)}\n` : '') +
+        (profile.signaturePhrases?.length ? `口头禅 (signature): "${profile.signaturePhrases.slice(0, 3).join('" / "')}"\n` : '') +
+        (profile.antiPatterns?.length ? `不会说的话 (anti-pattern): ${profile.antiPatterns.slice(0, 3).join(' / ')}\n` : '') +
+        `\n你的批注必须体现这位专家的真实思维偏好和说话风格,不能写成通用 advisor 口吻。`
+      : '';
     const briefStr = ctx.brief
       ? `预读包: ${ctx.brief.boardSession ?? '?'} v${ctx.brief.version}, ${ctx.brief.pageCount ?? '?'} 页\nTOC: ${JSON.stringify(ctx.brief.toc)}`
       : '（无 brief 上下文）';
     const concernsLines = ctx.judgments.slice(0, 8).map((j) => `- [${j.kind}] ${j.text.slice(0, 120)}`).join('\n');
     return `Scope: ${ctx.scopeName ?? '?'}
-专家身份: ${expertName} (id: ${expertId})
+专家身份: ${expertName} (id: ${expertId})${profileBlock}
 ${briefStr}
 
 可引用的 meetings:
@@ -62,7 +76,7 @@ ${ctx.meetings.slice(0, 10).map((m) => `- meeting:${m.id} → ${m.title}`).join(
 近 90 天关切/判断:
 ${concernsLines}
 
-请基于专家身份给出一条批注（mode 自选，但要从 4 个里挑）。`;
+请基于专家身份 (按上方专家档案严格扮演,体现 bias + tone + 常用框架 + 口头禅) 给出一条批注（mode 自选，但要从 4 个里挑）。`;
   },
 
   qualityChecks: [

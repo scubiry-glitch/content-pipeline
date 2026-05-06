@@ -60,12 +60,22 @@ const ALL_AXES_LIST: Array<{ axisKey: string; baseAxis: string; suffix?: string;
   })),
 ];
 
-// boardroom-annotation expertId → expertName
-const ANNOTATION_EXPERTS: Record<string, string> = {
-  'lp-coach-v1':     '沈南鹏 · LP 关系教练',
-  'wei-rubric':      '马斯克 · 估值锚定 rubric',
-  'omar-cycle':      '张一鸣 · 周期判断教练',
-  'sara-compliance': '任正非 · 合规备案教练',
+// boardroom-annotation expertId → {expertName, profileId}
+// profileId 指向 expert_profiles 表 — 知识库注入: 让 LLM 真的扮演该专家而非凭印象演
+const ANNOTATION_EXPERTS: Record<string, { name: string; profileId: string }> = {
+  'lp-coach-v1':     { name: '沈南鹏 · LP 关系教练',     profileId: 'S-11' },
+  'wei-rubric':      { name: '马斯克 · 估值锚定 rubric', profileId: 'S-03' },
+  'omar-cycle':      { name: '张一鸣 · 周期判断教练',    profileId: 'S-01' },
+  'sara-compliance': { name: '任正非 · 合规备案教练',    profileId: 'S-06' },
+};
+
+// director name → expertProfileId mapping (上海惠居 AI 升级 5 位 director 全是 S 级专家)
+const DIRECTOR_PROFILE_MAP: Record<string, string> = {
+  '左晖':            'E08-08',  // 房地产/平台经济/服务品质/长期主义
+  '张磊':            'S-12',    // 价值投资/长期投资/产业投资
+  '王慧文':          'S-09',    // 竞争策略/互联网产品/执行力
+  'Andrej Karpathy': 'S-40',    // AI/深度学习/LLM 评估/软件工程
+  '林毅夫':          'S-15',    // 著名经济学家/产业政策/比较优势
 };
 
 const BALCONY_QUESTIONS: Record<string, string> = {
@@ -130,8 +140,18 @@ async function main() {
     `counterfactuals=${ctx.counterfactuals.length}`,
   );
 
+  // ─── 2.5 知识库注入: 预查所有 director + expert 的 expert_profiles ──
+  const profileIds = new Set<string>();
+  for (const d of ctx.directors) {
+    const pid = DIRECTOR_PROFILE_MAP[d.name];
+    if (pid) profileIds.add(pid);
+  }
+  for (const e of Object.values(ANNOTATION_EXPERTS)) profileIds.add(e.profileId);
+  const profilesById = await loadExpertProfiles(query, [...profileIds]);
+  console.log(`[all-in-one] 知识库注入: ${Object.keys(profilesById).length}/${profileIds.size} 位专家档案 (${[...profileIds].join(', ')})`);
+
   // ─── 3. 拼 mega-prompt ──────────────────────────────────────
-  const megaPrompt = buildMegaPrompt(ctx, ALL_AXES_LIST, PROMPTS);
+  const megaPrompt = buildMegaPrompt(ctx, ALL_AXES_LIST, PROMPTS, profilesById);
   console.log(`[all-in-one] mega-prompt 字符数 = ${megaPrompt.length}`);
 
   if (dryRun) {
@@ -142,19 +162,103 @@ async function main() {
   }
 
   // ─── 4. 调 claude CLI 一次 ─────────────────────────────────
-  const t0 = Date.now();
-  const megaResultStr = await callClaudeCliOnce(megaPrompt, { binPath: claudeBin, model: claudeModel, timeoutMs });
-  const callMs = Date.now() - t0;
-  console.log(`[all-in-one] claude CLI 返回 (${(callMs / 1000).toFixed(1)}s, ${megaResultStr.length} 字符)`);
+  // --from-file=<path> 跳过 LLM 调用,直接 parse 已 dump 的 raw 文件 (debug 模式)
+  const fromFile = args.find((a) => a.startsWith('--from-file='))?.slice('--from-file='.length);
+  let megaResultStr: string;
+  let callMs = 0;
+  if (fromFile) {
+    const fs = await import('node:fs');
+    megaResultStr = fs.readFileSync(fromFile, 'utf8');
+    console.log(`[all-in-one] 从文件读 mega JSON: ${fromFile} (${megaResultStr.length} 字符)`);
+  } else {
+    const t0 = Date.now();
+    megaResultStr = await callClaudeCliOnce(megaPrompt, { binPath: claudeBin, model: claudeModel, timeoutMs });
+    callMs = Date.now() - t0;
+    console.log(`[all-in-one] claude CLI 返回 (${(callMs / 1000).toFixed(1)}s, ${megaResultStr.length} 字符)`);
+    // 始终 dump 到 /tmp 供 debug (再跑就被覆盖, 但失败时 ok)
+    try {
+      const fs = await import('node:fs');
+      const dumpPath = `/tmp/ceo-runs/all-in-one-mega-${Date.now()}.json.raw`;
+      fs.writeFileSync(dumpPath, megaResultStr);
+      console.log(`[all-in-one] mega raw 已 dump: ${dumpPath}`);
+    } catch { /* ignore */ }
+  }
 
   let megaResult: Record<string, unknown>;
   try {
     megaResult = JSON.parse(megaResultStr);
   } catch (e) {
-    // 尝试从字符串中找 JSON 块
-    const m = megaResultStr.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error(`mega result 无法 parse 为 JSON: ${megaResultStr.slice(0, 300)}`);
-    megaResult = JSON.parse(m[0]);
+    // 多策略容错解析
+    const tries: Array<{ label: string; text: string }> = [];
+    let cleaned = megaResultStr.trim();
+    // 策略 1: 剥 markdown ```json ... ```
+    if (cleaned.startsWith('```')) {
+      const stripped = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      tries.push({ label: 'strip-markdown', text: stripped });
+    }
+    // 策略 2: 找最外层 {...}
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      tries.push({ label: 'first-last-brace', text: cleaned.slice(firstBrace, lastBrace + 1) });
+    }
+    // 策略 3: 转义 raw control chars (LLM 偶尔输出未转义换行/tab/cr)
+    const ctrlStripped = cleaned.replace(/[\u0000-\u001f]/g, (ch) => {
+      if (ch === '\n') return '\\n';
+      if (ch === '\r') return '\\r';
+      if (ch === '\t') return '\\t';
+      return ' ';
+    });
+    if (ctrlStripped !== cleaned) tries.push({ label: 'escape-ctrl', text: ctrlStripped });
+
+    // 策略 4: LLM 常见错误 — 在 string value 内用 ASCII " 嵌套引用术语 (e.g. "应该把"瓶颈分析"用...")
+    //   修法: 把中文字符 / 中文标点 前后的 ASCII " 替换为「」 (结构 quote 后接 letter/:/逗号 不被影响)
+    const fenceStripped = cleaned.startsWith('```')
+      ? cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim()
+      : cleaned;
+    const cnRange = '[一-鿿，。、；：！？]';                  // CJK + 中文标点
+    const ccRange = '[一-鿿，。、；：！？0-9a-zA-Z]';           // + ASCII 字母数字
+    const cnQuoted = fenceStripped
+      .replace(new RegExp(`(${ccRange})"(${cnRange})`, 'g'), '$1」$2')
+      .replace(new RegExp(`(${cnRange})"(${ccRange})`, 'g'), '$1「$2');
+    if (cnQuoted !== fenceStripped) tries.push({ label: 'cn-quote-fix', text: cnQuoted });
+    // 策略 5: cn-quote-fix + escape-ctrl 组合
+    const combined = cnQuoted.replace(/[ -]/g, (ch) => {
+      if (ch === '\n') return '\\n';
+      if (ch === '\r') return '\\r';
+      if (ch === '\t') return '\\t';
+      return ' ';
+    });
+    if (combined !== cnQuoted) tries.push({ label: 'cn-quote-fix+escape-ctrl', text: combined });
+
+    // 策略 6: stateful escape — 状态机扫一遍, 在 string 内的 ASCII " escape 为 \"
+    //   不依赖 char 类型, 兜底处理 "...嵌套"+...嵌套"..." 这种复杂情况
+    const stateful = statefulEscapeNestedQuotes(fenceStripped);
+    if (stateful !== fenceStripped) tries.push({ label: 'stateful-escape', text: stateful });
+    const stateful2 = stateful.replace(/[ -]/g, (ch) => {
+      if (ch === '\n') return '\\n';
+      if (ch === '\r') return '\\r';
+      if (ch === '\t') return '\\t';
+      return ' ';
+    });
+    if (stateful2 !== stateful) tries.push({ label: 'stateful+escape-ctrl', text: stateful2 });
+
+    let parsed: Record<string, unknown> | null = null;
+    let lastErr: string = (e as Error).message;
+    for (const t of tries) {
+      try {
+        parsed = JSON.parse(t.text);
+        console.log(`[all-in-one] mega JSON 容错恢复: ${t.label} 成功 (${t.text.length} 字符)`);
+        break;
+      } catch (e2) { lastErr = `${t.label}: ${(e2 as Error).message}`; }
+    }
+    if (!parsed) {
+      // 暴露错误位置上下文
+      const pos = Number(((e as Error).message.match(/position (\d+)/) ?? [])[1] ?? 0);
+      const ctx = megaResultStr.slice(Math.max(0, pos - 100), pos + 100);
+      throw new Error(`mega result JSON parse 失败. last err: ${lastErr}\n  错误位置 ±100 字符:\n  ${ctx}`);
+    }
+    megaResult = parsed;
   }
   const gotKeys = Object.keys(megaResult);
   const missingKeys = ALL_AXES_LIST.map((a) => a.axisKey).filter((k) => !(k in megaResult));
@@ -182,8 +286,11 @@ async function main() {
     const runId = (await query(`SELECT gen_random_uuid()::text AS id`)).rows[0].id as string;
     const metadata: Record<string, any> = {};
     if (item.baseAxis === 'boardroom-annotation') {
+      const exp = ANNOTATION_EXPERTS[item.suffix ?? ''];
       metadata.expertId = item.suffix;
-      metadata.expertName = ANNOTATION_EXPERTS[item.suffix ?? ''] ?? item.suffix;
+      metadata.expertName = exp?.name ?? item.suffix;
+      // 知识库注入: 把 expert_profile 也喂给 handler
+      if (exp?.profileId) metadata.expertProfile = profilesById[exp.profileId] ?? null;
     } else if (item.baseAxis === 'balcony-prompt') {
       metadata.userId = 'system';
       metadata.weekStart = nextSundayStart();
@@ -276,10 +383,52 @@ function nextSundayStart(): string {
  *   - 每个 axis 段只 emit systemPrompt (含 schema + quality + hard constraints)
  *   - 输出 schema 自描述 — 让 LLM 按顶层 axisKey 输出 JSON
  */
+/**
+ * 知识库查询: 一次拿多位专家的 persona/method/signature_phrases
+ */
+async function loadExpertProfiles(
+  query: any,
+  profileIds: string[],
+): Promise<Record<string, any>> {
+  if (profileIds.length === 0) return {};
+  try {
+    const r = await query(
+      `SELECT expert_id, name, persona, method, signature_phrases, anti_patterns
+         FROM expert_profiles WHERE expert_id = ANY($1::text[]) AND is_active = true`,
+      [profileIds],
+    );
+    const out: Record<string, any> = {};
+    for (const row of r.rows) {
+      out[row.expert_id] = {
+        profileId: row.expert_id,
+        name: row.name,
+        persona: row.persona,
+        method: row.method,
+        signaturePhrases: row.signature_phrases,
+        antiPatterns: row.anti_patterns,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function formatProfileBlock(p: any): string {
+  if (!p) return '';
+  const lines: string[] = [`  · ${p.name}`];
+  if (p.persona?.bias?.length) lines.push(`    bias: ${p.persona.bias.slice(0, 3).join(' / ')}`);
+  if (p.persona?.tone) lines.push(`    tone: ${String(p.persona.tone).slice(0, 100)}`);
+  if (p.method?.frameworks?.length) lines.push(`    frameworks: ${p.method.frameworks.slice(0, 4).join(' / ')}`);
+  if (p.signaturePhrases?.length) lines.push(`    signature: "${p.signaturePhrases.slice(0, 2).join('" / "')}"`);
+  return lines.join('\n');
+}
+
 function buildMegaPrompt(
   ctx: any, // PromptCtx
   axesList: typeof ALL_AXES_LIST,
   prompts: Record<string, any>,
+  profilesById: Record<string, any> = {},
 ): string {
   const parts: string[] = [];
   parts.push(`# CEO 决策套件总生成器 — ONE-SHOT MODE\n\n你是上海惠居 CEO 决策套件总生成器。一次性产出 ${axesList.length} 个独立 axis 的 JSON 内容,严格按下方"共享 CONTEXT" + 各 axis 要求。\n\n## 输出形态 (顶层 JSON, 严格按下面 axis key 列表)\n\n严格输出 1 个 JSON object,顶层 key 是 axis key (含 / 子路径), value 是该 axis 对应的 schema payload。**不要任何前后说明文字**,只输出 JSON。\n\n顶层 keys 列表:`);
@@ -289,6 +438,13 @@ function buildMegaPrompt(
   parts.push(`\n\n## 共享 CONTEXT (所有 axis 都基于这份数据)\n`);
   parts.push(`Scope: ${ctx.scopeName ?? '(未命名)'}`);
   parts.push(`\nDirectors (${ctx.directors.length}):\n${ctx.directors.map((d: any) => `- ${d.name} (${d.role ?? '?'}, weight=${d.weight})`).join('\n')}`);
+  // 知识库注入: 给 directors 附 expert_profiles 真实档案
+  const directorProfiles = ctx.directors
+    .map((d: any) => profilesById[DIRECTOR_PROFILE_MAP[d.name] ?? ''] ?? null)
+    .filter(Boolean);
+  if (directorProfiles.length > 0) {
+    parts.push(`\nDirector 真实档案 (来自专家库, 严格按下方风格扮演):\n${directorProfiles.map(formatProfileBlock).join('\n')}`);
+  }
   parts.push(`\nStakeholders (${ctx.stakeholders.length}):\n${ctx.stakeholders.map((s: any) => `- ${s.name} (kind=${s.kind}, heat=${s.heat})${s.description ? ' · ' + s.description : ''}`).join('\n')}`);
   parts.push(`\nStrategic Lines (${ctx.strategicLines.length}):\n${ctx.strategicLines.map((l: any) => `- [${l.id}] ${l.name} (${l.kind}, align=${l.alignmentScore ?? '?'}): ${(l.description ?? '').slice(0, 120)}`).join('\n')}`);
 
@@ -321,7 +477,10 @@ function buildMegaPrompt(
     }
     parts.push(def.systemPrompt());
     if (item.baseAxis === 'boardroom-annotation' && item.suffix) {
-      parts.push(`\n[当前 expert: expertId="${item.suffix}", expertName="${ANNOTATION_EXPERTS[item.suffix] ?? item.suffix}". 输出该 expert 视角的单条 annotation, 顶层 axis key 为 "${item.axisKey}".]`);
+      const exp = ANNOTATION_EXPERTS[item.suffix];
+      const profile = exp?.profileId ? profilesById[exp.profileId] : null;
+      const profileText = profile ? `\n${formatProfileBlock(profile)}\n` : '';
+      parts.push(`\n[当前 expert: expertId="${item.suffix}", expertName="${exp?.name ?? item.suffix}".${profileText}\n输出该 expert 视角的单条 annotation, 顶层 axis key 为 "${item.axisKey}". 必须按上方专家档案的 bias/tone/frameworks/signature 风格扮演。]`);
     }
     if (item.baseAxis === 'balcony-prompt' && item.suffix) {
       parts.push(`\n[当前 prism: prismId="${item.suffix}" (问题: "${BALCONY_QUESTIONS[item.suffix] ?? '?'}"). 顶层 axis key 为 "${item.axisKey}".]`);
@@ -409,6 +568,60 @@ class MegaResultAdapter {
       model: 'all-in-one-megacli',
     };
   }
+}
+
+/**
+ * 状态机扫一遍 JSON-like 字符串, 把 string value 内的 ASCII " escape 为 \"
+ *
+ * 启发式:
+ *   - 跟踪 inString (是否在 "..." 之间)
+ *   - 遇到未转义的 " 时, 看下一个非空白字符:
+ *       是 , : } ] (或 EOF) → 这个 " 是结构 quote (string close), inString=false
+ *       否则 → 这个 " 在 value 内, 替换为 \"
+ *   - 启动 string 时 inString=true (当不在 string 时遇到 ")
+ *
+ * 不完美但对 LLM 输出"应该把"瓶颈分析"用..."这种模式有效.
+ */
+function statefulEscapeNestedQuotes(s: string): string {
+  let out = '';
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escapeNext) {
+      out += c;
+      escapeNext = false;
+      continue;
+    }
+    if (c === '\\') {
+      out += c;
+      escapeNext = true;
+      continue;
+    }
+    if (c === '"') {
+      if (!inString) {
+        // 进入 string
+        out += c;
+        inString = true;
+      } else {
+        // 看下一个非空白字符判断是结构边界还是嵌套 quote
+        let j = i + 1;
+        while (j < s.length && (s[j] === ' ' || s[j] === '\t' || s[j] === '\n' || s[j] === '\r')) j++;
+        const nxt = s[j];
+        if (j >= s.length || nxt === ',' || nxt === ':' || nxt === '}' || nxt === ']') {
+          // 结构 quote - string 结束
+          out += c;
+          inString = false;
+        } else {
+          // 嵌套 quote, escape it
+          out += '\\"';
+        }
+      }
+    } else {
+      out += c;
+    }
+  }
+  return out;
 }
 
 main().catch((e) => {

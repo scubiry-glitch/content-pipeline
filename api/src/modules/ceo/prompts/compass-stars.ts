@@ -16,11 +16,11 @@ const Star = z.object({
     meeting_id: z.string(),
     title: z.string(),
   })).min(1).max(5),
-}).strict();
+}).passthrough();
 
 const Out = z.object({
   stars: z.array(Star).min(3).max(8),
-}).strict();
+}).passthrough();
 
 type OutT = z.infer<typeof Out>;
 
