@@ -60,6 +60,9 @@ export function PersonLLMProfileModal({
     existing: { expert_id: string; name: string; domain: string[] | null; updated_at: string } | null;
     preview: {
       expert_id: string; name: string; domain: string[];
+      persona: any; method: any;
+      emm: { critical_factors: string[]; factor_hierarchy: Record<string, number>; veto_rules: string[] };
+      output_schema: { format: string; sections: any[]; rubrics: { dimension: string; levels: any[] }[] };
       signature_phrases: string[]; anti_patterns: string[];
       display_metadata: any;
     };
@@ -359,6 +362,31 @@ export function PersonLLMProfileModal({
                       <div><b>title:</b> {exportPreview.preview.display_metadata?.profile?.title ?? '—'}</div>
                       <div><b>signature_phrases:</b> {(exportPreview.preview.signature_phrases || []).slice(0, 3).join(' / ') || '—'}{exportPreview.preview.signature_phrases.length > 3 ? ` +${exportPreview.preview.signature_phrases.length - 3}` : ''}</div>
                       <div><b>anti_patterns:</b> {(exportPreview.preview.anti_patterns || []).slice(0, 3).join(' / ') || '—'}</div>
+                      {/* MENTAL MODEL + EMM GATE LOGIC + OUTPUT SCHEMA — 同步生成 */}
+                      <div style={{
+                        marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line-2)',
+                        display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11.5, color: 'var(--ink-3)',
+                      }}>
+                        <span title="cognition.mentalModels">
+                          🧠 mental models: <b style={{ color: (exportPreview.preview.persona?.cognition?.mentalModels?.length ?? 0) > 0 ? 'var(--ink)' : '#b91c1c' }}>{exportPreview.preview.persona?.cognition?.mentalModels?.length ?? 0}</b>
+                        </span>
+                        <span title="cognition.heuristics">
+                          ⚡ heuristics: <b style={{ color: (exportPreview.preview.persona?.cognition?.heuristics?.length ?? 0) > 0 ? 'var(--ink)' : '#b91c1c' }}>{exportPreview.preview.persona?.cognition?.heuristics?.length ?? 0}</b>
+                        </span>
+                        <span title="emm.veto_rules / critical_factors">
+                          🚫 EMM veto/critical: <b style={{ color: (exportPreview.preview.emm?.veto_rules?.length ?? 0) > 0 ? 'var(--ink)' : '#b91c1c' }}>
+                            {exportPreview.preview.emm?.veto_rules?.length ?? 0} / {exportPreview.preview.emm?.critical_factors?.length ?? 0}
+                          </b>
+                        </span>
+                        <span title="output_schema.rubrics">
+                          📋 rubrics: <b style={{ color: (exportPreview.preview.output_schema?.rubrics?.length ?? 0) > 0 ? 'var(--ink)' : '#b91c1c' }}>{exportPreview.preview.output_schema?.rubrics?.length ?? 0}</b>
+                        </span>
+                      </div>
+                      {(exportPreview.preview.emm?.veto_rules?.length ?? 0) === 0 && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#b91c1c' }}>
+                          ⚠ EMM veto_rules 为空。LLM 没生成或原料不足 — 评审会缺一票否决门禁。点"重新生成"再试可能补回来。
+                        </div>
+                      )}
                     </div>
                     {exportErr && (
                       <div style={{

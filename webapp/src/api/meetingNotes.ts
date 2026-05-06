@@ -394,6 +394,8 @@ export const meetingNotesApi = {
             domain: string[];
             persona: any;
             method: any;
+            emm: { critical_factors: string[]; factor_hierarchy: Record<string, number>; veto_rules: string[] };
+            output_schema: { format: string; sections: any[]; rubrics: { dimension: string; levels: any[] }[] };
             signature_phrases: string[];
             anti_patterns: string[];
             display_metadata: any;

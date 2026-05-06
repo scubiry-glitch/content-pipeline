@@ -1995,7 +1995,23 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     "cognition": {
       "decisionStyle": "<例如 先框架后数据 / 先共识后落地>",
       "riskAttitude": "<例如 X 类决策偏稳，Y 类敢押大注>",
-      "timeHorizon": "<例如 季度→年度复合视角>"
+      "timeHorizon": "<例如 季度→年度复合视角>",
+      "mentalModels": [
+        {
+          "name": "<心智模型名，例如 第一性原理 / 边际成本递减 / 复利曲线>",
+          "summary": "<一句话该模型在他思考中的角色>",
+          "evidence": ["<至少 1 条从原料里能映射到该模型的承诺/发言摘要>"],
+          "applicationContext": "<他在什么类型的决策上会调用该模型>",
+          "failureCondition": "<该模型在什么情境下不再适用，需要切换>"
+        }
+      ],
+      "heuristics": [
+        {
+          "trigger": "<在什么场景下触发，例如 当数据样本 < 30 时>",
+          "rule": "<他遵循的判断规则一句话，例如 优先用质化访谈替代定量推断>",
+          "example": "<原料中的一个具体例子；没有就留空字符串>"
+        }
+      ]
     },
     "voice": {
       "disagreementStyle": "<例如 先承认对方逻辑再补另一面>",
@@ -2011,6 +2027,26 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     "reasoning": "<核心推理路径一句话>",
     "analysis_steps": ["<3-5 步典型推进路径>"]
   },
+  "emm": {
+    "critical_factors": ["<3-5 个他在评审/决策时一定会拷问的关键变量，例如 现金流可持续性 / 客户留存 / 团队执行力>"],
+    "factor_hierarchy": {
+      "<critical_factors 中的某项>": 0.0
+    },
+    "veto_rules": ["<2-4 条一票否决规则，例如 单点依赖且无替代供应链不通过 / 创始人讲不清失败成本不通过>"]
+  },
+  "output_schema": {
+    "format": "markdown",
+    "rubrics": [
+      {
+        "dimension": "<评估维度，例如 风险可控性 / 商业逻辑闭环>",
+        "levels": [
+          { "score": 1, "description": "<1 星典型表现>" },
+          { "score": 3, "description": "<3 星典型表现>" },
+          { "score": 5, "description": "<5 星典型表现>" }
+        ]
+      }
+    ]
+  },
   "signature_phrases": ["<2-4 句他在原料里实际说过的代表性短句，必须真实出现>"],
   "anti_patterns": ["<2-3 条他不会做的事；语气中性偏正面，例如 不会在缺数据时拍板>"],
   "display_metadata": {
@@ -2020,7 +2056,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       "personality": "<一行性格速写，例如 克制、深思、对承诺有强自我约束>"
     },
     "philosophy": {
-      "core": ["<2-3 条他奉行的原则，从 bias 升级而来>"]
+      "core": ["<2-3 条他奉行的原则，从 bias 升级而来>"],
+      "quotes": ["<2-3 句他在原料里说过的代表性短句，与 signature_phrases 可重叠>"]
     }
   }
 }
@@ -2030,6 +2067,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 - 每条断言必须能映射回原料中的某条承诺/发言/事件；引用用「会议名」+ 摘要的形式
 - JSON 部分**必须是合法 JSON**（双引号、无尾逗号、无 # 注释），所有"<...>"占位符替换为真实内容
 - signature_phrases 必须从原料里真实摘取，不许编造
+- mentalModels：至少 2 条，最多 4 条；每条 evidence 必须能在原料里指出来，原料不足就少给一条而非编造
+- heuristics：至少 1 条，最多 4 条；trigger 写他在什么场景下触发该规则，rule 写一句话规则
+- emm.factor_hierarchy 是权重映射，每个 key 必须出现在 critical_factors 里，value 是 0~1 的小数，所有权重之和≈1
+- emm.veto_rules：必须能映射回原料里"他实际拒绝过/警告过"的发言，找不到就给 1-2 条最保守的占位（不能为空数组）
+- output_schema.rubrics：至少 1 维度，levels 必须给 score=1/3/5 三档（不能只给 5）
 - 整体语气贯穿欣赏式：把这个人当作"值得为他建一个专家智能体"的对象来描摹`;
 
       const userPrompt = lines.join('\n');
@@ -2040,7 +2082,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         result = await getLLMRouter().generate(userPrompt, 'analysis', {
           systemPrompt,
           temperature: 0.5,
-          maxTokens: 2400,
+          maxTokens: 4000,
         });
       } catch (e: any) {
         request.log.error({ err: e, personId: id }, 'llm-profile generation failed');
@@ -2220,6 +2262,38 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         ? parsed.method
         : { frameworks: [], reasoning: '', analysis_steps: [] };
 
+      // EMM gate logic — LLM 现在会输出 emm{critical_factors,factor_hierarchy,veto_rules}
+      // 旧画像没这块就给空对象，避免后续读 emm.critical_factors 时炸
+      const parsedEmm = parsed.emm && typeof parsed.emm === 'object' ? parsed.emm : {};
+      const emm = {
+        critical_factors: Array.isArray(parsedEmm.critical_factors)
+          ? parsedEmm.critical_factors.filter((s: any) => typeof s === 'string')
+          : [],
+        factor_hierarchy: parsedEmm.factor_hierarchy && typeof parsedEmm.factor_hierarchy === 'object'
+          ? parsedEmm.factor_hierarchy
+          : {},
+        veto_rules: Array.isArray(parsedEmm.veto_rules)
+          ? parsedEmm.veto_rules.filter((s: any) => typeof s === 'string')
+          : [],
+      };
+
+      // Output schema — rubrics 数组 + format
+      const parsedOs = parsed.output_schema && typeof parsed.output_schema === 'object' ? parsed.output_schema : {};
+      const outputSchema = {
+        format: typeof parsedOs.format === 'string' ? parsedOs.format : 'markdown',
+        sections: Array.isArray(parsedOs.sections) ? parsedOs.sections : [],
+        rubrics: Array.isArray(parsedOs.rubrics)
+          ? parsedOs.rubrics
+              .filter((r: any) => r && typeof r === 'object' && typeof r.dimension === 'string')
+              .map((r: any) => ({
+                dimension: r.dimension,
+                levels: Array.isArray(r.levels)
+                  ? r.levels.filter((l: any) => l && typeof l === 'object' && typeof l.description === 'string')
+                  : [],
+              }))
+          : [],
+      };
+
       const finalName = (typeof parsed.name === 'string' && parsed.name.trim()) ? parsed.name.trim() : canonicalName;
       const finalAntiPatterns = Array.isArray(parsed.anti_patterns) ? parsed.anti_patterns.filter((s: any) => typeof s === 'string') : [];
       const finalSignaturePhrases = Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases.filter((s: any) => typeof s === 'string') : [];
@@ -2251,6 +2325,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
             domain,
             persona,
             method,
+            emm,
+            output_schema: outputSchema,
             signature_phrases: finalSignaturePhrases,
             anti_patterns: finalAntiPatterns,
             display_metadata: dm,
@@ -2286,9 +2362,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           domain,
           JSON.stringify(persona),
           JSON.stringify(method),
-          null,
+          JSON.stringify(emm),
           JSON.stringify({ must_conclude: false, allow_assumption: true }),
-          JSON.stringify({ format: 'markdown', sections: [] }),
+          JSON.stringify(outputSchema),
           finalAntiPatterns,
           finalSignaturePhrases,
           JSON.stringify(dm),
