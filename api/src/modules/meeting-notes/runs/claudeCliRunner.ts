@@ -281,16 +281,18 @@ export async function runClaudeCliMode(
   const modelFlag = CLAUDE_MODEL && CLAUDE_MODEL.trim() ? ` --model '${CLAUDE_MODEL.replace(/'/g, "'\\''")}'` : '';
   // session resume：sessionId 是 UUID，shell-safe
   const resumeFlag = ctx.resumeSessionId ? ` --resume '${ctx.resumeSessionId}'` : '';
-  // --no-session-persistence: 不写 session 到 ~/.claude/projects/，避免下一次 -p 自动续接被截断的会话。
   // --disallowed-tools '...': 禁用所有内置工具, 强制单 turn 直接输出 JSON。
   //   不禁工具时 sonnet 在严格 schema 下会选择调 Read/Bash 等, 命中 max-turns 1 切断
   //   (stop_reason=tool_use, num_turns=2, error_max_turns)。bare 模式可以禁但要 API_KEY env.
   // (注: --bare 会要求 ANTHROPIC_API_KEY 环境变量, 本机 OAuth 登录场景会 401, 故不用)
-  // 仅在 fresh run 时加（resumeSessionId 模式下需要 session 持久化才能续接）。
+  //
+  // 关于 session 持久化：fresh 与 resume 都让 session 文件落盘到 ~/.claude/projects/。
+  // 早期版本 fresh 模式加过 --no-session-persistence 防止"下次 -p 自动续接"，但
+  // claude -p 默认行为本来就不会自动续接（要 --continue/--resume 显式指定），那个 flag
+  // 其实是过度防御，反而造成 runEngine 把 fresh 返回的 session_id 写回 assets 后，下一次
+  // resume 必然命中 "No conversation found"（DB 有 sid，磁盘没文件）→ 死锁直至清 sid。
   const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,SlashCommand,TodoWrite,KillShell,BashOutput";
-  const isolationFlags = ctx.resumeSessionId
-    ? ` --disallowed-tools '${NO_TOOLS}'`
-    : ` --no-session-persistence --disallowed-tools '${NO_TOOLS}'`;
+  const isolationFlags = ` --disallowed-tools '${NO_TOOLS}'`;
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
   // ─ 决定 cwd ─
@@ -441,6 +443,19 @@ export async function runClaudeCliMode(
   }
 
   if (exitCode !== 0) {
+    // 自愈：resume 模式下 sessionId 失效（DB 记的 sid 在 worker 磁盘上没对应 jsonl
+    // — 历史脏数据 / claude 自己滚掉 / cwd 改了 / 跨 worker 漂移 等都可能）→ 去 --resume
+    // 重跑一次 fresh。递归只会发生一次：fallback ctx.resumeSessionId=null，下层不会再命中。
+    if (
+      ctx.resumeSessionId
+      && /No conversation found with session ID/i.test(stderr)
+    ) {
+      console.warn(
+        `[claudeCliRunner ${payload.runId.slice(0, 8)}] ghost session ${ctx.resumeSessionId}; retry as fresh`,
+      );
+      await hooks.writeStep('spawn', 0.1, '会话已失效 · 重新启动 claude');
+      return runClaudeCliMode(deps, payload, { ...ctx, resumeSessionId: null }, hooks);
+    }
     await hooks.recordCliRaw(truncate(stdout || stderr, 200_000));
     throw new Error(
       `claude CLI exit ${exitCode}${stderr ? `: ${truncate(stderr, 500)}` : ''}`,

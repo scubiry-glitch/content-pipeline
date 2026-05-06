@@ -359,7 +359,9 @@ export function ExpertAdmin() {
     </div>
   );
 
-  const maxWeight = expert.emm ? Math.max(...Object.values(expert.emm.factor_hierarchy)) : 1;
+  const maxWeight = expert.emm?.factor_hierarchy && Object.keys(expert.emm.factor_hierarchy).length > 0
+    ? Math.max(...Object.values(expert.emm.factor_hierarchy))
+    : 1;
 
   return (
     <div className="ea-root">
@@ -390,7 +392,7 @@ export function ExpertAdmin() {
             </div>
           </div>
           <div className="ea-ident-domains">
-            {expert.domain.slice(0, 3).map(d => <span key={d} className="ea-domain-chip">{d}</span>)}
+            {(Array.isArray(expert.domain) ? expert.domain : []).slice(0, 3).map(d => <span key={d} className="ea-domain-chip">{d}</span>)}
           </div>
 
           <nav className="ea-sidenav">
@@ -480,7 +482,7 @@ export function ExpertAdmin() {
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{mm.name}</div>
                       <p className="ea-field-val sm">{mm.summary}</p>
                       <div className="ea-tag-row" style={{ marginTop: 4 }}>
-                        {mm.evidence.map((ev, j) => (
+                        {(Array.isArray(mm.evidence) ? mm.evidence : []).map((ev, j) => (
                           <span key={j} className="ea-tag neutral" style={{ fontSize: 11 }}>{ev}</span>
                         ))}
                       </div>
@@ -558,11 +560,11 @@ export function ExpertAdmin() {
               <div className="ea-grid-4 ea-mb">
                 <div className="ea-val-card excites">
                   <div className="ea-val-header">EXCITES</div>
-                  {expert.persona.values.excites.map(v => <span key={v} className="ea-tag positive">{v}</span>)}
+                  {(Array.isArray(expert.persona.values.excites) ? expert.persona.values.excites : []).map(v => <span key={v} className="ea-tag positive">{v}</span>)}
                 </div>
                 <div className="ea-val-card irritates">
                   <div className="ea-val-header">IRRITATES</div>
-                  {expert.persona.values.irritates.map(v => <span key={v} className="ea-tag negative">{v}</span>)}
+                  {(Array.isArray(expert.persona.values.irritates) ? expert.persona.values.irritates : []).map(v => <span key={v} className="ea-tag negative">{v}</span>)}
                 </div>
                 <div className="ea-val-card quality">
                   <div className="ea-val-header">QUALITY BAR</div>
@@ -570,7 +572,7 @@ export function ExpertAdmin() {
                 </div>
                 <div className="ea-val-card deal">
                   <div className="ea-val-header">DEALBREAKERS</div>
-                  {expert.persona.values.dealbreakers.map(v => <span key={v} className="ea-tag deal">{v}</span>)}
+                  {(Array.isArray(expert.persona.values.dealbreakers) ? expert.persona.values.dealbreakers : []).map(v => <span key={v} className="ea-tag deal">{v}</span>)}
                 </div>
               </div>
             )}
@@ -587,16 +589,28 @@ export function ExpertAdmin() {
                 )}
                 {expert.persona.blindSpots && (
                   <div className="ea-card">
-                    <span className="ea-field-label">KNOWN BIASES</span>
-                    <div className="ea-tag-row ea-mb-sm">
-                      {expert.persona.blindSpots.knownBias.map(b => <span key={b} className="ea-tag warn">{b}</span>)}
-                    </div>
-                    <span className="ea-field-label">WEAK DOMAINS</span>
-                    <div className="ea-tag-row ea-mb-sm">
-                      {expert.persona.blindSpots.weakDomains.map(d => <span key={d} className="ea-tag neutral">{d}</span>)}
-                    </div>
-                    <span className="ea-field-label">SELF-AWARENESS</span>
-                    <p className="ea-field-val sm italic">{expert.persona.blindSpots.selfAwareness}</p>
+                    {Array.isArray(expert.persona.blindSpots.knownBias) && expert.persona.blindSpots.knownBias.length > 0 && (
+                      <>
+                        <span className="ea-field-label">KNOWN BIASES</span>
+                        <div className="ea-tag-row ea-mb-sm">
+                          {expert.persona.blindSpots.knownBias.map(b => <span key={b} className="ea-tag warn">{b}</span>)}
+                        </div>
+                      </>
+                    )}
+                    {Array.isArray(expert.persona.blindSpots.weakDomains) && expert.persona.blindSpots.weakDomains.length > 0 && (
+                      <>
+                        <span className="ea-field-label">WEAK DOMAINS</span>
+                        <div className="ea-tag-row ea-mb-sm">
+                          {expert.persona.blindSpots.weakDomains.map(d => <span key={d} className="ea-tag neutral">{d}</span>)}
+                        </div>
+                      </>
+                    )}
+                    {expert.persona.blindSpots.selfAwareness && (
+                      <>
+                        <span className="ea-field-label">SELF-AWARENESS</span>
+                        <p className="ea-field-val sm italic">{expert.persona.blindSpots.selfAwareness}</p>
+                      </>
+                    )}
                     {expert.persona.blindSpots.informationCutoff && (
                       <>
                         <span className="ea-field-label" style={{ marginTop: 8 }}>INFORMATION BOUNDARY</span>
@@ -627,11 +641,11 @@ export function ExpertAdmin() {
                 <div className="ea-grid-3">
                   <div>
                     <span className="ea-field-label">ADMIRES</span>
-                    {expert.persona.taste.admires.map(a => <p key={a} className="ea-taste-item admires">↑ {a}</p>)}
+                    {(Array.isArray(expert.persona.taste.admires) ? expert.persona.taste.admires : []).map(a => <p key={a} className="ea-taste-item admires">↑ {a}</p>)}
                   </div>
                   <div>
                     <span className="ea-field-label">DISDAINS</span>
-                    {expert.persona.taste.disdains.map(d => <p key={d} className="ea-taste-item disdains">↓ {d}</p>)}
+                    {(Array.isArray(expert.persona.taste.disdains) ? expert.persona.taste.disdains : []).map(d => <p key={d} className="ea-taste-item disdains">↓ {d}</p>)}
                   </div>
                   <div>
                     <span className="ea-field-label">BENCHMARK</span>
@@ -653,7 +667,7 @@ export function ExpertAdmin() {
               <div>
                 <span className="ea-field-label">ANALYTICAL FRAMEWORKS</span>
                 <div className="ea-frameworks ea-mb">
-                  {expert.method.frameworks.map((f, i) => (
+                  {(Array.isArray(expert.method.frameworks) ? expert.method.frameworks : []).map((f, i) => (
                     <div key={f} className="ea-framework-item">
                       <span className="ea-framework-num">{String(i + 1).padStart(2, '0')}</span>
                       <span className="ea-framework-name">{f}</span>
@@ -666,7 +680,7 @@ export function ExpertAdmin() {
               <div>
                 <span className="ea-field-label">ANALYSIS STEPS</span>
                 <ol className="ea-steps">
-                  {expert.method.analysis_steps.map((s, i) => (
+                  {(Array.isArray(expert.method.analysis_steps) ? expert.method.analysis_steps : []).map((s, i) => (
                     <li key={i} className="ea-step-item">{s}</li>
                   ))}
                 </ol>
@@ -750,7 +764,7 @@ export function ExpertAdmin() {
                     <div key={i} style={{ borderLeft: '3px solid #3b82f6', paddingLeft: 12 }}>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{rubric.dimension}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                        {rubric.levels.map(level => (
+                        {(Array.isArray(rubric.levels) ? rubric.levels : []).map(level => (
                           <span key={level.score} className="ea-tag neutral" style={{ fontSize: 11 }}>
                             {level.score}★ {level.description}
                           </span>
@@ -778,7 +792,7 @@ export function ExpertAdmin() {
                 <div>
                   <span className="ea-field-label light">CRITICAL FACTOR HIERARCHY</span>
                   <div className="ea-factors">
-                    {Object.entries(expert.emm.factor_hierarchy)
+                    {Object.entries(expert.emm.factor_hierarchy || {})
                       .sort(([, a], [, b]) => b - a)
                       .map(([factor, weight]) => (
                         <div key={factor} className="ea-factor-row">
@@ -797,7 +811,7 @@ export function ExpertAdmin() {
                 <div>
                   <span className="ea-field-label light">VETO RULES — ONE-STRIKE LOGIC</span>
                   <div className="ea-veto-list">
-                    {expert.emm.veto_rules.map((rule, i) => (
+                    {(Array.isArray(expert.emm.veto_rules) ? expert.emm.veto_rules : []).map((rule, i) => (
                       <div key={i} className="ea-veto-item">
                         <span className="ea-veto-icon">⊗</span>
                         <span>{rule}</span>
@@ -1405,7 +1419,7 @@ export function ExpertAdmin() {
               <div className="ea-output-schema">
                 <span className="ea-schema-format">{expert.output_schema.format}</span>
                 <div className="ea-schema-sections">
-                  {expert.output_schema.sections.map((s, i) => (
+                  {(Array.isArray(expert.output_schema.sections) ? expert.output_schema.sections : []).map((s, i) => (
                     <span key={i} className="ea-schema-section">{s}</span>
                   ))}
                 </div>

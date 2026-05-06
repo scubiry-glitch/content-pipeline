@@ -4,8 +4,8 @@
   "title": "# 项目协作启动\n\n你好！欢迎使用 Claude Code。我是你的软件工程助手，基于 Ant...",
   "titleGenerationStatus": "success",
   "createdAt": 1777960226785,
-  "updatedAt": 1777960758414,
-  "lastResponseAt": 1777960758414,
+  "updatedAt": 1778035580108,
+  "lastResponseAt": 1778035580108,
   "sessionId": "74028cff-a2c1-4137-9846-14c44bb114f3",
   "providerState": {
     "providerSessionId": "74028cff-a2c1-4137-9846-14c44bb114f3"
@@ -13,11 +13,11 @@
   "usage": {
     "model": "sonnet",
     "inputTokens": 3,
-    "cacheCreationInputTokens": 15428,
-    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 41,
+    "cacheReadInputTokens": 29402,
     "contextWindow": 200000,
-    "contextTokens": 15431,
-    "percentage": 8,
+    "contextTokens": 29446,
+    "percentage": 15,
     "contextWindowIsAuthoritative": true
   }
 }
