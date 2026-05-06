@@ -86,7 +86,7 @@ import {
   createCeoPipelineDeps,
   initCeoEngineSingleton,
 } from './modules/ceo/index.js';
-import { createServiceLLMCeoAdapter } from './modules/ceo/adapters/llm.js';
+import { createServiceLLMCeoAdapter, createClaudeCliCeoLLMAdapterV2 } from './modules/ceo/adapters/llm.js';
 import { resolveStrategyForMeeting, shouldSkipExpertAnalysis } from './services/expert-application/meetingKindStrategyMap.js';
 import { query } from './db/connection.js';
 import {
@@ -297,14 +297,28 @@ async function main() {
 
   // CEO 决策驾驶舱模块 — 双模主壳 + 6 房间 + Panorama + 外脑图书馆
   // 跨模块仅走 engine 接口，不直接 SQL 跨表
-  // g3/g4 加工任务通过 LLM Adapter (services/llm.ts) 调真 LLM；未配置 API Key 时 handler 走 stub 兜底
-  const ceoLlmAdapter = createServiceLLMCeoAdapter({
-    hasAvailable: hasAvailableLLM,
-    available: getAvailableLLMs,
-    generateWithClaude,
-    generateWithKimi,
-    generateWithOpenAI,
-  });
+  //
+  // LLM 适配器有两条路径，按 CEO_LLM_PROVIDER 切换：
+  //   - 'claude-cli' (默认在 worker，用本机已登录的 claude CLI，不需要 API key)
+  //   - 'service'    (services/llm.ts → Kimi/Claude/OpenAI HTTP，需要对应 API key)
+  // 若没显式设 CEO_LLM_PROVIDER，CLAUDE_CLI_BIN 存在 + 没任何 *_API_KEY 时也自动切到 claude-cli
+  const ceoProviderEnv = (process.env.CEO_LLM_PROVIDER || '').trim().toLowerCase();
+  const useCeoClaudeCli =
+    ceoProviderEnv === 'claude-cli' ||
+    (ceoProviderEnv === '' && !!process.env.CLAUDE_CLI_BIN && !hasAvailableLLM());
+  const ceoLlmAdapter = useCeoClaudeCli
+    ? createClaudeCliCeoLLMAdapterV2({
+        binPath: process.env.CLAUDE_CLI_BIN || undefined,
+        model: process.env.CEO_CLAUDE_CLI_MODEL || process.env.CLAUDE_CLI_MODEL || undefined,
+        timeoutMs: Number(process.env.CEO_CLAUDE_CLI_TIMEOUT_MS) || undefined,
+      })
+    : createServiceLLMCeoAdapter({
+        hasAvailable: hasAvailableLLM,
+        available: getAvailableLLMs,
+        generateWithClaude,
+        generateWithKimi,
+        generateWithOpenAI,
+      });
   const ceoEngine = createCeoEngine(
     createCeoPipelineDeps({
       dbQuery: query,
@@ -315,7 +329,7 @@ async function main() {
     }),
   );
   console.log(
-    `🪞 CEO LLM adapter: ${ceoLlmAdapter.isAvailable() ? 'enabled (real LLM)' : 'stub (no API key)'}`,
+    `🪞 CEO LLM adapter: ${useCeoClaudeCli ? `claude-cli (${process.env.CLAUDE_CLI_BIN || 'claude'})` : ceoLlmAdapter.isAvailable() ? 'service (Kimi/Claude/OpenAI)' : 'stub (no API key)'}`,
   );
   initCeoEngineSingleton(ceoEngine);
   await fastify.register(createCeoRouter(ceoEngine), { prefix: '/api/v1/ceo' });
