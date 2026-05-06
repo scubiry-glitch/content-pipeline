@@ -64,6 +64,8 @@ export function SparkCard({ spark, onAdopt, onReplace }: Props) {
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
+            opacity: flipped ? 0 : 1,
+            transition: 'opacity 0s linear 0.3s',
           }}
         >
           <div
@@ -129,6 +131,8 @@ export function SparkCard({ spark, onAdopt, onReplace }: Props) {
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
+            opacity: flipped ? 1 : 0,
+            transition: 'opacity 0s linear 0.3s',
           }}
         >
           <div
