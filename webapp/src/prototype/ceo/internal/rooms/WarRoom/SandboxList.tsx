@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SANDBOX } from './_warRoomFixtures';
+import { useForceMock } from '../../../../meeting/_mockToggle';
 
 interface SandboxRow {
   id: string;
@@ -27,6 +28,7 @@ const STATUS_TONE: Record<string, { label: string; ink: string }> = {
 
 export function SandboxList() {
   const nav = useNavigate();
+  const forceMock = useForceMock();
   const [rows, setRows] = useState<SandboxRow[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -79,26 +81,47 @@ export function SandboxList() {
     }
   }, [topicInput, nav]);
 
-  // 用真实数据；未连后端时退回 fixture
+  // 用真实数据；forceMock=true 时显示 fixture (设计演示路径), 真空状态显示空提示
+  // 之前 API 空 → fallback fixture, 但 fixture 都是 PE 基金假数据 (Halycon/Stellar),
+  // 在惠居上海 ws 下完全跑题 → 改为 forceMock 才走 fixture
+  const apiHasItems = rows !== null && rows.length > 0;
   const displayItems: Array<{
     id: string | null;
     topic: string;
     pct: number;
     branches: number;
     status?: string;
-  }> =
-    rows && rows.length > 0
-      ? rows.map((r) => ({
-          id: r.id,
-          topic: r.topic_text,
-          pct: pctOf(r),
-          branches: countBranches(r.branches),
-          status: r.status,
-        }))
-      : SANDBOX.map((s) => ({ id: null, topic: s.topic, pct: s.pct, branches: s.branches }));
+  }> = apiHasItems
+    ? rows.map((r) => ({
+        id: r.id,
+        topic: r.topic_text,
+        pct: pctOf(r),
+        branches: countBranches(r.branches),
+        status: r.status,
+      }))
+    : forceMock
+    ? SANDBOX.map((s) => ({ id: null, topic: s.topic, pct: s.pct, branches: s.branches }))
+    : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {displayItems.length === 0 && rows !== null && (
+        <div
+          style={{
+            padding: '16px 18px',
+            background: 'rgba(214,69,69,0.04)',
+            border: '1px dashed rgba(214,69,69,0.25)',
+            borderRadius: 4,
+            fontFamily: 'var(--serif)',
+            fontStyle: 'italic',
+            fontSize: 12.5,
+            color: 'rgba(245,217,217,0.55)',
+            lineHeight: 1.6,
+          }}
+        >
+          暂无兵棋推演 — 点击下方"启动新推演"，给个具体主题（4 字以上），后端会拆出 3-7 条分支并自动跑评估。
+        </div>
+      )}
       {displayItems.map((s, i) => {
         const tone = s.status ? STATUS_TONE[s.status] ?? STATUS_TONE.pending : null;
         const cardInner = (

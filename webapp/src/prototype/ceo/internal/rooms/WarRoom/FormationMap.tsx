@@ -113,10 +113,12 @@ function adaptToFixture(formation: FormationData): { nodes: FormationNode[]; lin
 
   const fnodes: FormationNode[] = variants.map(({ n, variant }) => {
     const lay = layout[n.id] ?? { cx: cx0, cy: cy0, r: 18 };
+    // label 保留真实姓名 (中文 2-3 字 / 英文 First Last 全名都直接展示),
+    // SVG text 自动溢出. 之前 split + slice(4) 把 "Wei Zhao" 截成 "Wei", 不合预期.
+    const fullName = String(n.label ?? n.id).trim();
     return {
       id: n.id,
-      // label 太长截短: 取最有意义的 1-3 字 (人名场景下中文名常 2-3 字)
-      name: (n.label ?? n.id).split(/[·\s]/)[0].slice(0, 4),
+      name: fullName,
       role: n.role ?? '',
       cx: lay.cx,
       cy: lay.cy,

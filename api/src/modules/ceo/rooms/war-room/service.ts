@@ -109,11 +109,48 @@ export async function getWarRoomDashboard(
   sparkSeedCount: number;
 }> {
   const formationHealth = await computeFormationHealth(deps, workspaceId, scopeId);
-  const conflictKinds = await classifyConflicts(deps, workspaceId, scopeId);
-  const conflictTemp =
+  let conflictKinds = await classifyConflicts(deps, workspaceId, scopeId);
+  let conflictTemp =
     conflictKinds.total > 0
       ? Number((conflictKinds.build / conflictKinds.total).toFixed(3))
       : 0;
+
+  // mn_judgments 没有 'build/disagreement/emotional/dismissive/off_topic' tag 时,
+  // classifyConflicts 返回 total=0. 此时回退到 LLM 已生成的 ceo_formation_snapshots
+  // (war-room-formation prompt 输出的 links + conflict_temp).
+  if (conflictKinds.total === 0) {
+    try {
+      const r = await deps.db.query(
+        `SELECT formation_data, conflict_temp
+           FROM ceo_formation_snapshots
+          WHERE ($1::uuid IS NULL OR scope_id = $1::uuid)
+            AND ${wsFilterClause(2)}
+          ORDER BY week_start DESC LIMIT 1`,
+        [scopeId ?? null, workspaceId],
+      );
+      const row = r.rows[0];
+      if (row?.formation_data) {
+        const fd = typeof row.formation_data === 'string'
+          ? JSON.parse(row.formation_data)
+          : row.formation_data;
+        const links = (fd?.links ?? []) as Array<{ kind: string }>;
+        if (links.length > 0) {
+          let build = 0, destructive = 0, silent = 0;
+          for (const l of links) {
+            if (l.kind === 'supports' || l.kind === 'reports') build++;
+            else if (l.kind === 'conflicts') destructive++;
+            else if (l.kind === 'silent') silent++;
+          }
+          conflictKinds = { build, destructive, silent, total: links.length };
+          conflictTemp = row.conflict_temp != null
+            ? Number(row.conflict_temp)
+            : Number((build / Math.max(1, links.length)).toFixed(3));
+        }
+      }
+    } catch {
+      /* ignore — keep zeros */
+    }
+  }
 
   let verdict = '尚无数据';
   if (conflictKinds.total > 0) {
