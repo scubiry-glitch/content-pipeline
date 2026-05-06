@@ -105,6 +105,30 @@ export class WikiGenerator {
     this.db = db;
   }
 
+  /**
+   * 稳定写入：
+   * - 若旧文件与新内容正文一致（frontmatter 差异如 updatedAt 不算版更），则跳过写入；
+   * - 仅正文发生变化时才落盘，避免无意义刷新属性字段与文件时间。
+   */
+  private async writeMarkdownStable(filePath: string, content: string): Promise<boolean> {
+    if (existsSync(filePath)) {
+      try {
+        const prev = await fs.readFile(filePath, 'utf8');
+        if (prev === content) return false;
+        const prevParsed = parseFrontmatter(prev);
+        const nextParsed = parseFrontmatter(content);
+        if (prevParsed.body.trimEnd() === nextParsed.body.trimEnd()) {
+          return false;
+        }
+      } catch {
+        // 读取失败时降级为直接覆盖写入
+      }
+    }
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, content, 'utf8');
+    return true;
+  }
+
   async generate(options: WikiGenerateOptions): Promise<WikiGenerateResult> {
     const started = Date.now();
     const wikiRoot = path.resolve(options.wikiRoot);
@@ -223,9 +247,8 @@ export class WikiGenerator {
       });
 
       try {
-        await fs.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.writeFile(filePath, content, 'utf8');
-        filesWritten++;
+        const written = await this.writeMarkdownStable(filePath, content);
+        if (written) filesWritten++;
         entityCount++;
       } catch (err) {
         errors.push(`entity ${entity.canonicalName}: ${(err as Error).message}`);
@@ -257,12 +280,11 @@ export class WikiGenerator {
           .sort((a, b) => b.factCount - a.factCount)
           .slice(0, 30);
         try {
-          await fs.writeFile(
+          const written = await this.writeMarkdownStable(
             path.join(wikiRoot, 'concepts', `${slugify(domain)}.md`),
             renderConceptPage({ domain, facts: domainFacts, topEntities }),
-            'utf8',
           );
-          filesWritten++;
+          if (written) filesWritten++;
           conceptCount++;
         } catch (err) {
           errors.push(`concept ${domain}: ${(err as Error).message}`);
@@ -328,13 +350,11 @@ export class WikiGenerator {
         }
 
         try {
-          await fs.mkdir(path.dirname(filePath), { recursive: true });
-          await fs.writeFile(
+          const written = await this.writeMarkdownStable(
             filePath,
             renderL2DomainPage({ node, facts: codeFacts, topEntities, preserveBlocks }),
-            'utf8',
           );
-          filesWritten++;
+          if (written) filesWritten++;
           domainCount++;
         } catch (err) {
           errors.push(`domain L2 ${node.code}: ${(err as Error).message}`);
@@ -360,8 +380,7 @@ export class WikiGenerator {
           .slice(0, 30);
 
         try {
-          await fs.mkdir(path.dirname(indexPath), { recursive: true });
-          await fs.writeFile(
+          const written = await this.writeMarkdownStable(
             indexPath,
             renderL1IndexPage({
               l1: stat.l1,
@@ -369,9 +388,8 @@ export class WikiGenerator {
               totalFactCount: stat.total,
               topEntities,
             }),
-            'utf8',
           );
-          filesWritten++;
+          if (written) filesWritten++;
           domainIndexCount++;
         } catch (err) {
           errors.push(`domain L1 ${stat.l1.code}: ${(err as Error).message}`);
@@ -436,8 +454,8 @@ export class WikiGenerator {
         });
 
         try {
-          await fs.writeFile(filePath, content, 'utf8');
-          filesWritten++;
+          const written = await this.writeMarkdownStable(filePath, content);
+          if (written) filesWritten++;
           sourceCount++;
           sourceKindCounts[kind] = (sourceKindCounts[kind] ?? 0) + 1;
         } catch (err) {
@@ -475,16 +493,14 @@ export class WikiGenerator {
       domains: domainsList,
       topEntities: topEntitiesGlobal,
     });
-    await fs.writeFile(path.join(wikiRoot, 'index.md'), indexContent, 'utf8');
-    filesWritten++;
+    if (await this.writeMarkdownStable(path.join(wikiRoot, 'index.md'), indexContent)) filesWritten++;
 
     const overviewContent = renderOverviewPlaceholder({
       entityCount,
       factCount: facts.length,
       domains: domainsList,
     });
-    await fs.writeFile(path.join(wikiRoot, 'overview.md'), overviewContent, 'utf8');
-    filesWritten++;
+    if (await this.writeMarkdownStable(path.join(wikiRoot, 'overview.md'), overviewContent)) filesWritten++;
 
     // 8. .obsidian 配置
     await fs.writeFile(

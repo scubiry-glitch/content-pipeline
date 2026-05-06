@@ -6,11 +6,11 @@ slug: operating margin
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.923Z"
+lastEditedAt: "2026-05-06T14:11:35.357Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.923Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.357Z\"}"
 entityType: metric
-updatedAt: "2026-05-06T06:09:41.923Z"
+updatedAt: "2026-05-06T14:11:35.357Z"
 ---
 
 # operating margin

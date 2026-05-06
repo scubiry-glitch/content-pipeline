@@ -12,15 +12,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.795Z"
+lastEditedAt: "2026-05-06T14:11:35.151Z"
 sources:
   - asset_8414c8f0
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.795Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.151Z\"}"
 entityType: metric
 domains:
   - 酒店旅游
-updatedAt: "2026-05-06T06:09:41.795Z"
+updatedAt: "2026-05-06T14:11:35.151Z"
 ---
 
 # 全球酒店OCC

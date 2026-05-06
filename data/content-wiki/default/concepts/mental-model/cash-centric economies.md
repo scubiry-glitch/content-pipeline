@@ -8,11 +8,11 @@ slug: cash-centric economies
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.790Z"
+lastEditedAt: "2026-05-06T14:11:35.146Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.790Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.146Z\"}"
 entityType: concept
-updatedAt: "2026-05-06T06:09:41.790Z"
+updatedAt: "2026-05-06T14:11:35.146Z"
 ---
 
 # cash-centric economies

@@ -6,11 +6,11 @@ slug: CRM系统
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.911Z"
+lastEditedAt: "2026-05-06T14:11:35.345Z"
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.911Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.345Z\"}"
 entityType: product
-updatedAt: "2026-05-06T06:09:41.911Z"
+updatedAt: "2026-05-06T14:11:35.345Z"
 ---
 
 # CRM系统

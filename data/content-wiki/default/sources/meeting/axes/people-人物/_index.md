@@ -3,7 +3,7 @@ type: index
 subtype: axes/people
 app: meeting-notes
 generatedBy: meeting-axes-generator
-lastEditedAt: "2026-05-06T06:09:43.511Z"
+lastEditedAt: "2026-05-06T14:11:36.830Z"
 ---
 
 # 人物轴 · people

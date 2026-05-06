@@ -11,15 +11,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.818Z"
+lastEditedAt: "2026-05-06T14:11:35.244Z"
 sources:
   - asset_695fc6b4
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.818Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.244Z\"}"
 entityType: concept
 domains:
   - 金融科技
-updatedAt: "2026-05-06T06:09:41.818Z"
+updatedAt: "2026-05-06T14:11:35.244Z"
 ---
 
 # POS收单

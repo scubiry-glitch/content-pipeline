@@ -12,15 +12,15 @@ domains_legacy:
 app: knowledge-library
 generatedBy: wiki-generator
 lastEditedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.830Z"
+lastEditedAt: "2026-05-06T14:11:35.255Z"
 sources:
   - asset_77bab96b
 blocks:
-  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T06:09:41.830Z\"}"
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-06T14:11:35.255Z\"}"
 entityType: concept
 domains:
   - 房地产/租赁运营
-updatedAt: "2026-05-06T06:09:41.830Z"
+updatedAt: "2026-05-06T14:11:35.255Z"
 ---
 
 # AI业务助理

@@ -6,7 +6,7 @@ slug: E11
 taxonomy_code: E11
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.960Z"
+lastEditedAt: "2026-05-06T14:11:35.405Z"
 factCount: 4
 entityCount: 4
 domain: ESG可持续

@@ -6,20 +6,20 @@ slug: E02
 taxonomy_code: E02
 app: knowledge-library
 generatedBy: wiki-generator
-lastEditedAt: "2026-05-06T06:09:41.960Z"
-factCount: 810
+lastEditedAt: "2026-05-06T14:11:35.404Z"
+factCount: 814
 entityCount: 30
 domain: 金融科技
 ---
 
 # E02 · 金融科技
 
-本父域聚合了 7 个子域、810 条事实、30 个高频实体。
+本父域聚合了 7 个子域、814 条事实、30 个高频实体。
 
 ## 子域
 
-- [[E02.ASSET-资产管理|资产管理]] (472 条事实)
-- [[E02.BANK-银行与支付|银行与支付]] (248 条事实)
+- [[E02.ASSET-资产管理|资产管理]] (474 条事实)
+- [[E02.BANK-银行与支付|银行与支付]] (250 条事实)
 - [[E02.INSUR-保险|保险]] (39 条事实)
 - [[E02.CRYPTO-加密与数字资产|加密与数字资产]] (32 条事实)
 - [[E02.CONSUM-消费金融|消费金融]] (7 条事实)
