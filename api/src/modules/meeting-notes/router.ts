@@ -2172,23 +2172,37 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const expertIdPrefix = body.level === 'senior' ? 'S' : body.domainCode;
       const expert_id = `${expertIdPrefix}-${rawSlug}`;
 
-      // 4) display_metadata
+      // 4) display_metadata —— LLM prompt 只要求 philosophy.core / profile 部分字段，
+      //    所以不能用 `??` 整个对象兜底（会导致 quotes/background 等永远 undefined，
+      //    /expert-library 读到时 .length 直接炸）。改成逐字段合并。
+      const llmDmProfile = parsed.display_metadata?.profile && typeof parsed.display_metadata.profile === 'object'
+        ? parsed.display_metadata.profile : {};
+      const llmDmPhilosophy = parsed.display_metadata?.philosophy && typeof parsed.display_metadata.philosophy === 'object'
+        ? parsed.display_metadata.philosophy : {};
       const dm = {
         code: expert_id,
         level: body.level,
         domainCode: body.domainCode,
         domainName,
-        profile: parsed.display_metadata?.profile ?? {
-          title: parsed.persona?.tone ?? '',
-          background: '',
-          personality: parsed.persona?.style ?? '',
+        profile: {
+          title: typeof llmDmProfile.title === 'string' ? llmDmProfile.title : (parsed.persona?.tone ?? ''),
+          background: typeof llmDmProfile.background === 'string' ? llmDmProfile.background : '',
+          personality: typeof llmDmProfile.personality === 'string' ? llmDmProfile.personality : (parsed.persona?.style ?? ''),
         },
-        philosophy: parsed.display_metadata?.philosophy ?? {
-          core: Array.isArray(parsed.persona?.bias) ? parsed.persona.bias : [],
-          quotes: Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases : [],
+        philosophy: {
+          core: Array.isArray(llmDmPhilosophy.core)
+            ? llmDmPhilosophy.core
+            : Array.isArray(parsed.persona?.bias) ? parsed.persona.bias : [],
+          quotes: Array.isArray(llmDmPhilosophy.quotes)
+            ? llmDmPhilosophy.quotes
+            : Array.isArray(parsed.signature_phrases) ? parsed.signature_phrases : [],
         },
-        achievements: [],
-        reviewDimensions: [],
+        achievements: Array.isArray(parsed.display_metadata?.achievements)
+          ? parsed.display_metadata.achievements
+          : Array.isArray(parsed.achievements) ? parsed.achievements : [],
+        reviewDimensions: Array.isArray(parsed.display_metadata?.reviewDimensions)
+          ? parsed.display_metadata.reviewDimensions
+          : Array.isArray(parsed.reviewDimensions) ? parsed.reviewDimensions : [],
         status: 'active',
         totalReviews: 0,
         acceptanceRate: 0,
