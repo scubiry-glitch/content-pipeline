@@ -621,10 +621,13 @@ async function cleanGeneratedContent(query: any, scope: ScopeRow): Promise<void>
 }
 
 function nextSundayStart(): string {
+  // 重要: balcony service 的 thisWeekStart() 用 Monday-based week (周一 0:00).
+  // 历史名字保留为 nextSundayStart, 实际返回 *本周一* 与 service 对齐, 否则
+  // 前端 GET /balcony/reflections 默认 weekStart=本周一, 但脚本写到 next Sunday,
+  // 0 行命中, 前端走模板回退 (空状态).
   const d = new Date();
-  // 周日 = 0；本周日 0:00（如果今天是周日则用今天）
-  const diffToSunday = (7 - d.getDay()) % 7;
-  d.setDate(d.getDate() + diffToSunday);
+  const dow = (d.getDay() + 6) % 7; // 0 = Mon
+  d.setDate(d.getDate() - dow);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
 }

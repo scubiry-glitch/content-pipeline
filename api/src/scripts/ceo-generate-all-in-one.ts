@@ -369,9 +369,13 @@ async function main() {
 // ─── helpers ────────────────────────────────────────────────────────
 
 function nextSundayStart(): string {
+  // 与 ceo-generate-real-content / balcony service.thisWeekStart 对齐: Monday-based.
+  // 历史名字保留 nextSundayStart, 实际返回本周一. 之前用 next Sunday 写入,
+  // service 默认 weekStart = 本周一查询, 不命中导致前端 Balcony 房间显示空.
   const d = new Date();
-  const dayOfWeek = d.getDay(); // 0=Sun
-  d.setDate(d.getDate() + (7 - dayOfWeek) % 7);
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
 }
 
