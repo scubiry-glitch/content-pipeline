@@ -100,7 +100,7 @@ function baseUrl(): string {
     process.env.PUBLIC_API_BASE_URL
     || process.env.API_BASE_URL
     || process.env.PUBLIC_BASE_URL
-    || 'http://localhost:5173'
+    || 'http://paper.morning.rocks'
   ).replace(/\/$/, '');
 }
 
