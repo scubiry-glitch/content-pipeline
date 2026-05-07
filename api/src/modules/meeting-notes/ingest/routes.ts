@@ -18,6 +18,7 @@ import {
 } from './meetingNoteChannelService.js';
 import { authenticate } from '../../../middleware/auth.js';
 import { assertRowInWorkspace, currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
+import { emitImportWebhook } from './importWebhook.js';
 
 export interface MeetingNotesRouteOptions extends FastifyPluginOptions {
   service?: Service;
@@ -39,6 +40,18 @@ function sanitizeFilename(input: string): string {
 
 function isUuid(input: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input);
+}
+
+function parseOptionalUuid(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const v = input.trim();
+  if (!v) return null;
+  return isUuid(v) ? v : '__invalid__';
+}
+
+function fieldValue(fields: Record<string, any> | undefined, key: string): string | undefined {
+  const v = fields?.[key]?.value;
+  return typeof v === 'string' ? v : undefined;
 }
 
 /** 从上传字节解析正文：.docx 用 mammoth，其余按 UTF-8 文本。 */
@@ -147,13 +160,42 @@ export async function meetingNotesRoutes(
 
   // Trigger import
   fastify.post(`${p}/import`, { preHandler: authenticate }, async (request, reply) => {
-    const body = request.body as { id?: string; triggeredBy?: string };
+    const body = request.body as {
+      id?: string;
+      triggeredBy?: string;
+      callbackUrl?: string;
+      callbackSecret?: string;
+      workspaceId?: string;
+      userId?: string;
+      scopeKind?: string;
+      scopeId?: string;
+    };
     if (!body?.id) {
       reply.status(400);
       return { error: 'Bad Request', message: 'id is required' };
     }
     try {
-      return await svc.runImport(body.id, body.triggeredBy ?? 'manual');
+      const result = await svc.runImport(body.id, body.triggeredBy ?? 'manual');
+      if (body.callbackUrl) {
+        const source = await svc.getSource(body.id).catch(() => null);
+        setImmediate(() => {
+          void emitImportWebhook({
+            sourceId: body.id as string,
+            sourceName: source?.name,
+            triggeredBy: body.triggeredBy ?? 'manual',
+            importResult: result as any,
+            callbackUrl: body.callbackUrl,
+            callbackSecret: body.callbackSecret ?? null,
+            context: {
+              workspaceId: body.workspaceId ?? null,
+              userId: body.userId ?? null,
+              scopeKind: body.scopeKind ?? null,
+              scopeId: body.scopeId ?? null,
+            },
+          });
+        });
+      }
+      return result;
     } catch (err) {
       if (notFound(err)) {
         reply.status(404);
@@ -300,7 +342,169 @@ export async function meetingNotesRoutes(
     const previous = ad?.[source.kind];
     if (ad) ad[source.kind] = oneShot;
     try {
-      return await svc.runImport(id, 'upload');
+      const result = await svc.runImport(id, 'upload');
+      const callbackUrl = fieldValue((mp as any).fields, 'callbackUrl') ?? fieldValue((mp as any).fields, 'callback_url');
+      const callbackSecret = fieldValue((mp as any).fields, 'callbackSecret') ?? fieldValue((mp as any).fields, 'callback_secret');
+      if (callbackUrl) {
+        setImmediate(() => {
+          void emitImportWebhook({
+            sourceId: id,
+            sourceName: source.name,
+            triggeredBy: 'upload',
+            importResult: result as any,
+            callbackUrl,
+            callbackSecret: callbackSecret ?? null,
+            context: {
+              workspaceId: currentWorkspaceId(request),
+              userId: request.auth?.user?.id ?? null,
+            },
+          });
+        });
+      }
+      return result;
+    } finally {
+      if (ad) {
+        if (previous) ad[source.kind] = previous;
+        else delete ad[source.kind];
+      }
+    }
+  });
+
+  // External API: single-call upload task (auto source + optional webhook callback)
+  fastify.post(`${p}/upload-task`, { preHandler: authenticate }, async (request, reply) => {
+    // @ts-ignore multipart plugin adds .file()
+    if (typeof (request as any).file !== 'function') {
+      reply.status(415);
+      return { error: 'Unsupported Media Type', message: 'multipart/form-data required' };
+    }
+    const mp = await (request as any).file();
+    if (!mp) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'no file' };
+    }
+
+    let sourceId = fieldValue((mp as any).fields, 'sourceId') ?? fieldValue((mp as any).fields, 'source_id');
+    if (sourceId && !isUuid(sourceId)) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'invalid sourceId' };
+    }
+    const workspaceIdRaw = parseOptionalUuid(
+      fieldValue((mp as any).fields, 'workspaceId') ?? fieldValue((mp as any).fields, 'workspace_id'),
+    );
+    if (workspaceIdRaw === '__invalid__') {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'invalid workspaceId' };
+    }
+    const scopeIdRaw = parseOptionalUuid(
+      fieldValue((mp as any).fields, 'scopeId') ?? fieldValue((mp as any).fields, 'scope_id'),
+    );
+    if (scopeIdRaw === '__invalid__') {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'invalid scopeId' };
+    }
+    const scopeKind = fieldValue((mp as any).fields, 'scopeKind') ?? fieldValue((mp as any).fields, 'scope_kind') ?? null;
+    const userId = fieldValue((mp as any).fields, 'userId') ?? fieldValue((mp as any).fields, 'user_id') ?? request.auth?.user?.id ?? null;
+    const effectiveWorkspaceId = workspaceIdRaw || currentWorkspaceId(request);
+    const callbackUrl = fieldValue((mp as any).fields, 'callbackUrl') ?? fieldValue((mp as any).fields, 'callback_url');
+    const callbackSecret = fieldValue((mp as any).fields, 'callbackSecret') ?? fieldValue((mp as any).fields, 'callback_secret');
+
+    if (!sourceId) {
+      const listed = await svc.listSources({ workspaceId: effectiveWorkspaceId ?? undefined });
+      sourceId = listed.find((s) => s.kind === 'upload' || s.kind === 'manual')?.id ?? listed[0]?.id;
+      if (!sourceId) {
+        const created = await svc.createSource({
+          name: '默认上传来源',
+          kind: 'upload',
+          config: callbackUrl ? { callbackUrl, callbackSecret: callbackSecret ?? null } : {},
+          isActive: true,
+          createdBy: userId,
+          workspaceId: effectiveWorkspaceId ?? undefined,
+        });
+        sourceId = created.id;
+      }
+    }
+    if (!sourceId) {
+      reply.status(500);
+      return { error: 'Internal Server Error', message: 'failed to resolve source' };
+    }
+
+    const source = await svc.getSource(sourceId);
+    if (!source) {
+      reply.status(404);
+      return { error: 'Not Found', message: `Source ${sourceId} not found` };
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const c of mp.file) chunks.push(c);
+    const buf = Buffer.concat(chunks);
+    const sha = createHash('sha256').update(buf).digest('hex');
+    const uploadRoot = process.env.UPLOAD_DIR || './uploads';
+    const meetingUploadDir = path.join(uploadRoot, 'meeting-notes');
+    const originalFilename = (mp.filename as string | undefined) ?? `upload-${sha.slice(0, 8)}`;
+    const safeFilename = sanitizeFilename(originalFilename);
+    const localFilePath = path.join(meetingUploadDir, `${sha.slice(0, 12)}-${safeFilename}`);
+
+    await fs.mkdir(meetingUploadDir, { recursive: true });
+    await fs.writeFile(localFilePath, buf);
+
+    const content = await textFromUploadBuffer(buf, mp.filename as string | undefined, mp.mimetype);
+    if (!content.trim()) {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'file is empty or unreadable as text' };
+    }
+
+    const oneShot = {
+      fetchDrafts: async () => [{
+        externalId: `sha256:${sha}`,
+        title: originalFilename,
+        content,
+        metadata: {
+          origin: 'upload',
+          filename: mp.filename,
+          mime: mp.mimetype,
+          sha256: sha,
+          sizeBytes: buf.byteLength,
+          localFilePath,
+        },
+      }],
+    };
+    const ad = (svc as any).adapters as Record<string, any>;
+    const previous = ad?.[source.kind];
+    if (ad) ad[source.kind] = oneShot;
+    try {
+      const result = await svc.runImport(source.id, 'upload');
+      const effectiveCallbackUrl = callbackUrl || (source.config as any)?.callbackUrl || null;
+      const effectiveCallbackSecret = callbackSecret || (source.config as any)?.callbackSecret || null;
+      if (effectiveCallbackUrl) {
+        setImmediate(() => {
+          void emitImportWebhook({
+            sourceId: source.id,
+            sourceName: source.name,
+            triggeredBy: 'upload',
+            importResult: result as any,
+            callbackUrl: effectiveCallbackUrl,
+            callbackSecret: effectiveCallbackSecret,
+            context: {
+              workspaceId: effectiveWorkspaceId,
+              userId,
+              scopeKind,
+              scopeId: scopeIdRaw === '__invalid__' ? null : scopeIdRaw,
+            },
+          });
+        });
+      }
+      reply.code(202);
+      return {
+        sourceId: source.id,
+        context: {
+          workspaceId: effectiveWorkspaceId,
+          userId,
+          scopeKind,
+          scopeId: scopeIdRaw === '__invalid__' ? null : scopeIdRaw,
+        },
+        import: result,
+        callback: effectiveCallbackUrl ? { sentAsync: true, callbackUrl: effectiveCallbackUrl } : null,
+      };
     } finally {
       if (ad) {
         if (previous) ad[source.kind] = previous;

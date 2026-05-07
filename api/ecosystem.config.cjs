@@ -1,8 +1,8 @@
 module.exports = {
   apps: [{
     name: 'content-pipeline-api',
-    script: 'npx',
-    args: 'tsx src/server.ts',
+    script: './node_modules/.bin/tsx',
+    args: 'src/server.ts',
     cwd: '/Users/scubiry/Documents/Scubiry/lab/pipeline/api',
     instances: 1,
     autorestart: true,
@@ -23,6 +23,6 @@ module.exports = {
     out_file: './logs/out.log',
     time: true,
     exec_mode: 'fork',
-    interpreter: 'none'
+    interpreter: '/Users/scubiry/.nvm/versions/node/v20.18.0/bin/node'
   }]
 };

@@ -404,12 +404,26 @@ export class MeetingNoteChannelService {
     const where = sourceId ? `WHERE source_id = $1` : '';
     const params = sourceId ? [sourceId, limit] : [limit];
     const limitIdx = sourceId ? 2 : 1;
-    const result = await this.query(
-      `SELECT * FROM meeting_note_imports ${where}
-       ORDER BY started_at DESC LIMIT $${limitIdx}`,
-      params,
-    );
-    return result.rows.map(mapImportRow);
+    try {
+      const result = await this.query(
+        `SELECT * FROM meeting_note_imports ${where}
+         ORDER BY started_at DESC LIMIT $${limitIdx}`,
+        params,
+      );
+      return result.rows.map(mapImportRow);
+    } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      if (
+        msg.includes('connection terminated') ||
+        msg.includes('connection timeout') ||
+        msg.includes('timeout exceeded') ||
+        msg.includes('connect econnrefused') ||
+        msg.includes('connect etimedout')
+      ) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   async getActiveJobs(): Promise<MeetingNoteImport[]> {

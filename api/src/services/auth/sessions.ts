@@ -32,6 +32,33 @@ function sha256(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 
+// In-memory session cache to avoid 4 serial DB queries on every authenticated request.
+// TTL is short (30s) so workspace changes and logouts still propagate quickly.
+const SESSION_CACHE_TTL_MS = 30_000;
+interface CacheEntry { session: ResolvedSession; expiresAt: number }
+const sessionCache = new Map<string, CacheEntry>();
+
+function getCachedSession(tokenHash: string): ResolvedSession | null {
+  const entry = sessionCache.get(tokenHash);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { sessionCache.delete(tokenHash); return null; }
+  return entry.session;
+}
+
+function setCachedSession(tokenHash: string, session: ResolvedSession): void {
+  sessionCache.set(tokenHash, { session, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+  // Prevent unbounded growth — evict oldest entries when cache is large
+  if (sessionCache.size > 1000) {
+    const oldest = sessionCache.keys().next().value;
+    if (oldest) sessionCache.delete(oldest);
+  }
+}
+
+export function invalidateSessionCache(tokenHash?: string): void {
+  if (tokenHash) sessionCache.delete(tokenHash);
+  else sessionCache.clear();
+}
+
 export function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('base64url');
 }
@@ -59,6 +86,9 @@ export async function createSession(opts: {
 
 export async function resolveSession(token: string): Promise<ResolvedSession | null> {
   const tokenHash = sha256(token);
+
+  const cached = getCachedSession(tokenHash);
+  if (cached) return cached;
   const sessRes = await query<{
     id: string;
     user_id: string;
@@ -118,7 +148,7 @@ export async function resolveSession(token: string): Promise<ResolvedSession | n
   // 异步更新 last_seen，不等待
   query(`UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1`, [sess.id]).catch(() => {});
 
-  return {
+  const resolved: ResolvedSession = {
     sessionId: sess.id,
     user: {
       id: user.id,
@@ -131,14 +161,21 @@ export async function resolveSession(token: string): Promise<ResolvedSession | n
     workspaces,
     expiresAt: new Date(sess.expires_at),
   };
+
+  setCachedSession(tokenHash, resolved);
+  return resolved;
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {
   await query(`UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, [sessionId]);
+  // Evict entire cache on revoke — we don't have tokenHash here, safest to clear all
+  invalidateSessionCache();
 }
 
 export async function setSessionWorkspace(sessionId: string, workspaceId: string): Promise<void> {
   await query(`UPDATE auth_sessions SET current_workspace_id = $1 WHERE id = $2`, [workspaceId, sessionId]);
+  // Workspace changed — invalidate all cache so next request picks up new workspace
+  invalidateSessionCache();
 }
 
 // 剩余 < SESSION_REFRESH_THRESHOLD_MS 时才真正写 DB; 否则视为"已经够新", 只更 last_seen

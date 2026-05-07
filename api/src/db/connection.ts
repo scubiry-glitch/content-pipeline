@@ -26,11 +26,11 @@ export function createPool(): Pool {
       process.env.DB_SSL === 'true' || /\bsslmode=(require|verify-full|verify-ca)\b/i.test(databaseUrl || '');
 
     const poolBase = {
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      max: parseInt(process.env.DB_POOL_MAX || '10'),
+      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '10000'),
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '5000'),
       keepAlive: true,
-      keepAliveInitialDelayMillis: 10000,
+      keepAliveInitialDelayMillis: 5000,
     };
 
     if (databaseUrl) {
@@ -129,11 +129,11 @@ export async function initDatabase(config?: DBConfig): Promise<void> {
       user: config.user,
       password: config.password,
       ssl: config.ssl ? { rejectUnauthorized: false } : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      max: parseInt(process.env.DB_POOL_MAX || '10'),
+      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '10000'),
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '5000'),
       keepAlive: true,
-      keepAliveInitialDelayMillis: 10000,
+      keepAliveInitialDelayMillis: 5000,
     });
   } else {
     createPool();
@@ -162,6 +162,9 @@ export async function ensureRuntimePerformanceIndexes(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_scopes_kind_created ON mn_scopes(kind, created_at DESC)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_assets_type_created ON assets(type, created_at DESC)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_runs_scope_axis_created ON mn_runs(scope_kind, axis, created_at DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_runs_workspace_time ON mn_runs(workspace_id, COALESCE(started_at, created_at) DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_scope_members_meeting ON mn_scope_members(meeting_id)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_risks_scope_heat ON mn_risks(scope_id, heat_score DESC)`).catch(() => {});
 }
 
 async function withConnectionRetry<T>(
@@ -216,6 +219,7 @@ export function isConnectionError(error: unknown): boolean {
   return (
     message.includes('connection terminated unexpectedly') ||
     message.includes('connection timeout') ||
+    message.includes('timeout exceeded when trying to connect') ||
     message.includes('connect econnrefused') ||
     message.includes('connect etimedout') ||
     message.includes('connection reset') ||

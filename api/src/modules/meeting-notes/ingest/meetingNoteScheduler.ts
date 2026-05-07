@@ -12,6 +12,7 @@
 import cron from 'node-cron';
 import type { MeetingNoteChannelService } from './meetingNoteChannelService.js';
 import type { MeetingNoteSource } from '../../../services/assetService.js';
+import { emitImportWebhook } from './importWebhook.js';
 
 type CronTask = ReturnType<typeof cron.schedule>;
 
@@ -83,7 +84,19 @@ export class MeetingNoteScheduler {
     }
     this.inFlight.add(source.id);
     try {
-      await this.svc.runImport(source.id, 'scheduled');
+      const result = await this.svc.runImport(source.id, 'scheduled');
+      const callbackUrl = (source.config as any)?.callbackUrl as string | undefined;
+      const callbackSecret = (source.config as any)?.callbackSecret as string | undefined;
+      if (callbackUrl) {
+        void emitImportWebhook({
+          sourceId: source.id,
+          sourceName: source.name,
+          triggeredBy: 'scheduled',
+          importResult: result as any,
+          callbackUrl,
+          callbackSecret: callbackSecret ?? null,
+        });
+      }
     } catch (err) {
       console.error(
         `[MeetingNoteScheduler] scheduled import failed for ${source.id}:`,
