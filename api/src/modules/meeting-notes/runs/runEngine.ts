@@ -566,35 +566,56 @@ export class RunEngine {
    * apiHost 过滤同 cleanupZombieRuns，避免误杀其他机器在跑的 run。
    * 30s 缓冲：兼容 startup race（execute() 先于 RunEngine 构造完成的极端情况）。
    */
-  async reapPriorOrphans(): Promise<{ failedRuns: number; ids: string[] }> {
+  async reapPriorOrphans(): Promise<{ failedRuns: number; ids: string[]; resumableIds: string[] }> {
     const myHost = osHostname();
     try {
+      // Step 3 · 区分两类孤儿：
+      //   (a) metadata.oneshotRaw 长度 ≥ 200 chars → 标 resumable=true，
+      //       error_message 提示可走 POST /runs/:id/resume 续跑（Step 4 端点）
+      //   (b) 其他常规孤儿 → 维持原行为
+      // 两类用同一条 UPDATE，差异通过 CASE 表达式注入 metadata 与 error_message
+      const RESUMABLE_MIN_CHARS = 200;
       const r = await this.deps.db.query(
         `UPDATE mn_runs
             SET state = 'failed', finished_at = NOW(),
-                error_message = COALESCE(error_message, 'startup-reap: previous process restarted while running'),
+                error_message = CASE
+                  WHEN COALESCE(length(metadata->>'oneshotRaw'), 0) >= $3::int
+                    THEN COALESCE(error_message,
+                      'startup-reap: previous process restarted while running (oneshotRaw preserved · POST /runs/' || id::text || '/resume to continue)')
+                  ELSE COALESCE(error_message, 'startup-reap: previous process restarted while running')
+                END,
                 metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
                   'currentStep', '失败 · 上一代进程重启',
                   'currentStepKey', 'startup-orphan',
                   'orphanDetectedAt', NOW()::text,
                   'processStartedAt', $2::text
-                )
+                ) || CASE
+                  WHEN COALESCE(length(metadata->>'oneshotRaw'), 0) >= $3::int
+                    THEN jsonb_build_object(
+                      'resumable', true,
+                      'resumableTokens', COALESCE((metadata->>'oneshotRawTokens')::int, 0),
+                      'resumableBytes',  COALESCE((metadata->>'oneshotRawBytes')::int, length(metadata->>'oneshotRaw'))
+                    )
+                  ELSE '{}'::jsonb
+                END
           WHERE state = 'running'
             AND module = 'mn'
             AND started_at IS NOT NULL
             AND started_at < ($2::timestamptz - INTERVAL '30 seconds')
             AND (metadata->>'apiHost' = $1::text OR NOT (metadata ? 'apiHost'))
-          RETURNING id`,
-        [myHost, this.processStartedAt.toISOString()],
+          RETURNING id, COALESCE(length(metadata->>'oneshotRaw'), 0) >= $3::int AS resumable`,
+        [myHost, this.processStartedAt.toISOString(), RESUMABLE_MIN_CHARS],
       );
-      const ids = (r.rows ?? []).map((row: any) => row.id as string);
+      const rows = (r.rows ?? []) as Array<{ id: string; resumable: boolean }>;
+      const ids = rows.map((row) => row.id);
+      const resumableIds = rows.filter((row) => row.resumable).map((row) => row.id);
       if (ids.length > 0) {
-        console.log(`[RunEngine] startup fast-reap: failed=${ids.length} ids=${ids.join(',')}`);
+        console.log(`[RunEngine] startup fast-reap: failed=${ids.length} resumable=${resumableIds.length} ids=${ids.join(',')}`);
       }
-      return { failedRuns: ids.length, ids };
+      return { failedRuns: ids.length, ids, resumableIds };
     } catch (e) {
       console.warn('[RunEngine] reapPriorOrphans failed:', (e as Error).message);
-      return { failedRuns: 0, ids: [] };
+      return { failedRuns: 0, ids: [], resumableIds: [] };
     }
   }
 
