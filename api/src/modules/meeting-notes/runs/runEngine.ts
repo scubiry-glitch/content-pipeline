@@ -472,7 +472,19 @@ export class RunEngine {
           RETURNING id`,
         [zombieMin, heartbeatStaleMin, myHost, crossHostStaleHours],
       );
-      failedRuns = (r1 as any).rowCount ?? r1.rows?.length ?? 0;
+      const failedIds = (r1.rows ?? []).map((row: any) => row.id as string);
+      failedRuns = failedIds.length;
+      // 让外部 webhook 订阅器（analysisWebhookSubscriber）能接到 reaper 标 failed 的 run
+      for (const id of failedIds) {
+        try {
+          await this.deps.eventBus.publish('mn.run.failed', {
+            runId: id,
+            error: 'heartbeat-timeout: process restart or crash',
+          });
+        } catch (e) {
+          console.warn('[RunEngine] publish mn.run.failed (zombie) failed:', (e as Error).message);
+        }
+      }
     } catch (e) {
       console.warn('[RunEngine] cleanup running zombies failed:', (e as Error).message);
     }
@@ -549,6 +561,16 @@ export class RunEngine {
       if (ids.length > 0) {
         console.log(`[RunEngine] orphan reap: failed=${ids.length} ids=${ids.join(',')}`);
       }
+      for (const id of ids) {
+        try {
+          await this.deps.eventBus.publish('mn.run.failed', {
+            runId: id,
+            error: 'orphan-reap: never-started run after process restart',
+          });
+        } catch (e) {
+          console.warn('[RunEngine] publish mn.run.failed (orphan) failed:', (e as Error).message);
+        }
+      }
       return { failedRuns: ids.length, ids };
     } catch (e) {
       console.warn('[RunEngine] reapOrphans failed:', (e as Error).message);
@@ -611,6 +633,16 @@ export class RunEngine {
       const resumableIds = rows.filter((row) => row.resumable).map((row) => row.id);
       if (ids.length > 0) {
         console.log(`[RunEngine] startup fast-reap: failed=${ids.length} resumable=${resumableIds.length} ids=${ids.join(',')}`);
+      }
+      for (const id of ids) {
+        try {
+          await this.deps.eventBus.publish('mn.run.failed', {
+            runId: id,
+            error: 'startup-reap: previous process restarted while running',
+          });
+        } catch (e) {
+          console.warn('[RunEngine] publish mn.run.failed (startup-reap) failed:', (e as Error).message);
+        }
       }
       return { failedRuns: ids.length, ids, resumableIds };
     } catch (e) {
