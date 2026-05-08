@@ -1,6 +1,8 @@
 // SiliconFlow Provider - 支持 DeepSeek 等模型
 // API 文档: https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions
 
+// @ts-ignore — 'undici' 是 Node 18+ 内置模块，类型可能未随 @types/node 安装；运行期保证存在
+import { Agent } from 'undici';
 import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
 
@@ -16,6 +18,16 @@ import { GenerationParams, GenerationResult } from '../types/index.js';
 // 长 prompt 仍可能超），idle 给得不够紧（断流后还要干等 5min）。现在分开。
 const FIRST_BYTE_TIMEOUT_MS = parseInt(process.env.LLM_FIRST_BYTE_TIMEOUT_MS ?? '', 10) || 600_000;
 const STREAM_IDLE_TIMEOUT_MS = parseInt(process.env.LLM_FETCH_TIMEOUT_MS ?? '', 10) || 60_000;
+
+// Node 18+ 的 global fetch 用 undici 实现，它有自己的 headersTimeout / bodyTimeout（默认都 300s），
+// 比我们 AbortController 的 600s 触发还快，长 prompt prefill 时会先抛 'fetch failed'。
+// 给两者都加 30s buffer，确保 AbortController 永远先触发（更准确的报错信息）。
+const FETCH_AGENT = new Agent({
+  headersTimeout: FIRST_BYTE_TIMEOUT_MS + 30_000,
+  bodyTimeout: FIRST_BYTE_TIMEOUT_MS + 30_000,
+  // keepalive 连接复用：对密集 axes 调用有意义；流式单次调用无害
+  keepAliveTimeout: 30_000,
+});
 
 /**
  * 用流式 SSE 读取 SiliconFlow chat/completions，并将全部 content delta 拼成字符串返回。
@@ -49,6 +61,8 @@ async function generateViaStream(
       },
       body: JSON.stringify({ ...body, stream: true }),
       signal: ctrl.signal,
+      // dispatcher 是 Node global fetch (undici 实现) 私有字段，TS 标准类型未声明但运行期支持
+      ...({ dispatcher: FETCH_AGENT } as Record<string, unknown>),
     });
 
     if (!response.ok || !response.body) {
