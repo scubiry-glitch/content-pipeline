@@ -152,6 +152,36 @@ async function loadTranscript(deps: MeetingNotesDeps, assetId: string): Promise<
   return typeof content === 'string' ? content : '';
 }
 
+/**
+ * Step 4 · 续跑提示读取
+ * 若该 run 之前被 startup-reap 标过 metadata.resumable=true 且 oneshotRaw 已落库，
+ * 取出来供后续拼到 prompt 末尾让 LLM 接着写。
+ * 不会清空 oneshotRaw —— 万一这次也失败，下次仍可继续 resume。
+ */
+async function loadResumeHint(
+  deps: MeetingNotesDeps,
+  runId: string,
+): Promise<{ raw: string; tokens: number } | null> {
+  try {
+    const r = await deps.db.query(
+      `SELECT
+         (metadata->>'oneshotRaw')        AS raw,
+         COALESCE((metadata->>'oneshotRawTokens')::int, 0) AS tokens,
+         COALESCE((metadata->>'resumable')::boolean, false) AS resumable
+       FROM mn_runs WHERE id = $1`,
+      [runId],
+    );
+    const row = r.rows[0] as { raw?: string | null; tokens?: number; resumable?: boolean } | undefined;
+    if (!row || !row.resumable) return null;
+    const raw = (row.raw ?? '').toString();
+    if (raw.length < 200) return null; // 太短没意义
+    return { raw, tokens: Number(row.tokens) || 0 };
+  } catch (e) {
+    console.warn(`[oneshotRunner ${runId.slice(0, 8)}] loadResumeHint failed: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 function buildLocalIdMapping(
   parseParticipants: Array<{ id: string; name: string }>,
 ): { promptList: Array<{ localId: string; name: string }>; cliPersonMap: Record<string, string> } {
@@ -324,6 +354,15 @@ export async function runOneshotMode(
       decoratorChain: ctx.decoratorChain,
       scopeConfig: ctx.scopeConfig,
     });
+  }
+
+  // Step 4 · 续跑提示：如本 run 是被 reap 后通过 /runs/:id/resume 重新入队的，
+  // 把上一代已生成的 raw 拼到 prompt 末尾，告诉 LLM 续写不要重复
+  const resumeHint = await loadResumeHint(deps, payload.runId);
+  if (resumeHint) {
+    prompt += `\n\n---\n\n# 续跑指引\n上一次本任务已经生成到如下内容（约 ${resumeHint.tokens} tokens）：\n\n\`\`\`\n${resumeHint.raw}\n\`\`\`\n\n请从中断处直接继续输出，**不要重复**已经生成的内容。最终结果必须是合法 JSON。`;
+    await hooks.writeStep('spawn', 0.08, `续跑模式：注入历史 raw ${resumeHint.tokens} tokens`);
+    console.log(`[oneshotRunner ${payload.runId.slice(0, 8)}] resume from prior raw (${resumeHint.tokens} tokens, ${resumeHint.raw.length} chars)`);
   }
 
   await hooks.writeStep('spawn', 0.1,
