@@ -1,7 +1,6 @@
 // SiliconFlow Provider - 支持 DeepSeek 等模型
 // API 文档: https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions
 
-// @ts-ignore — 'undici' 是 Node 18+ 内置模块，类型可能未随 @types/node 安装；运行期保证存在
 import { Agent } from 'undici';
 import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
