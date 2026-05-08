@@ -122,6 +122,23 @@ function getOneshotChunkChars(): number {
   return Number.isFinite(v) && v >= 2_000 ? v : 12_000;
 }
 
+// ── 流式落库（断点保护） ──────────────────────────────────────
+// 默认开启：oneshot 由于一次输出 16 轴 65k+ token，被 PM2 / SIGKILL 中断时
+// LLM provider 已生成的 token 在客户端如不持久化就彻底丢失。开启后每达到
+// PERSIST_INTERVAL_TOKENS 阈值就把 cumulative content 写到 mn_runs.metadata.oneshotRaw，
+// startup-reap 保留之，方便后续 resume / salvage。
+function isOneshotPersistRawEnabled(): boolean {
+  return (process.env.MN_ONESHOT_PERSIST_RAW ?? 'true').toLowerCase() !== 'false';
+}
+function getOneshotPersistIntervalTokens(): number {
+  const v = Number(process.env.MN_ONESHOT_PERSIST_RAW_INTERVAL_TOKENS ?? 1000);
+  return Number.isFinite(v) && v >= 100 ? v : 1000;
+}
+function getOneshotPersistMaxBytes(): number {
+  const v = Number(process.env.MN_ONESHOT_PERSIST_RAW_MAX_BYTES ?? 200_000);
+  return Number.isFinite(v) && v > 0 ? v : 200_000;
+}
+
 // ============================================================
 // 工具
 // ============================================================
@@ -322,12 +339,56 @@ export async function runOneshotMode(
     try {
       const oneshotModel = getOneshotModel();
       const maxTok = getOneshotMaxTokens();
+      // ── 流式落库节流状态（断点保护，被 SIGKILL 后 raw 仍在 DB） ──
+      const persistEnabled = isOneshotPersistRawEnabled();
+      const persistEveryTokens = getOneshotPersistIntervalTokens();
+      const persistMaxBytes = getOneshotPersistMaxBytes();
+      let lastPersistedAt = 0;
+      let persistInFlight = false;       // 防止落库 SQL 重叠
+      let persistTruncated = false;       // 一旦触顶不再尝试落库
+
+      const persistRaw = async (cumulative: string, tokensSoFar: number): Promise<void> => {
+        if (!persistEnabled || persistInFlight || persistTruncated) return;
+        // 触顶判定：超出 max bytes 后只截断写一次，之后的 chunk 全部跳过，
+        // 避免每个 chunk 都做巨大 jsonb update
+        let payloadStr = cumulative;
+        if (Buffer.byteLength(payloadStr, 'utf8') > persistMaxBytes) {
+          payloadStr = payloadStr.slice(0, persistMaxBytes) + '\n…[truncated to MN_ONESHOT_PERSIST_RAW_MAX_BYTES]';
+          persistTruncated = true;
+        }
+        persistInFlight = true;
+        try {
+          await deps.db.query(
+            `UPDATE mn_runs
+                SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                      'oneshotRaw',       $1::text,
+                      'oneshotRawTokens', $2::int,
+                      'oneshotRawBytes',  $3::int,
+                      'oneshotRawAt',     NOW()::text,
+                      'oneshotRawTruncated', $4::boolean
+                    )
+              WHERE id = $5`,
+            [payloadStr, tokensSoFar, Buffer.byteLength(payloadStr, 'utf8'), persistTruncated, payload.runId],
+          );
+        } catch (e) {
+          // 落库失败不致命：记日志，让主流程照常生成
+          console.warn(`[oneshotRunner ${payload.runId.slice(0, 8)}] persistRaw failed: ${(e as Error).message}`);
+        } finally {
+          persistInFlight = false;
+        }
+      };
+
       // 把已生成 token 数折算成 0.5→0.82 区间的进度，每 200 token 写一次 DB
-      const onProgress = async (tokensSoFar: number, snippet: string) => {
+      const onProgress = async (tokensSoFar: number, snippet: string, cumulative?: string) => {
         const ratio = 0.5 + Math.min(0.32, 0.32 * (tokensSoFar / maxTok));
         const message = `生成中… ${tokensSoFar} / ${maxTok} tokens`;
         emitProgress(payload.runId, { tokensSoFar, ratio, message, snippet });
         await hooks.writeStep('streaming', ratio, message);
+        // 流式落库（仅 streaming provider 会传 cumulative）
+        if (cumulative && tokensSoFar - lastPersistedAt >= persistEveryTokens) {
+          lastPersistedAt = tokensSoFar;
+          await persistRaw(cumulative, tokensSoFar);
+        }
       };
       raw = await deps.llm.completeWithSystem(prompt, '', {
         responseFormat: 'json',
@@ -336,6 +397,10 @@ export async function runOneshotMode(
         onProgress,
         ...(oneshotModel ? { model: oneshotModel } : {}),
       });
+      // 收尾：确保最终全量也落一次（弥补 stream 末尾不到 interval 阈值的尾巴）
+      if (persistEnabled && raw && raw.length > 0) {
+        await persistRaw(raw, Math.round(raw.length / 2));
+      }
     } catch (e) {
       throw new Error(`oneshot LLM call failed: ${(e as Error).message}`);
     }
