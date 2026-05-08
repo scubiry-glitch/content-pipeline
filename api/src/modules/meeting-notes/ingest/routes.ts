@@ -18,12 +18,15 @@ import {
 } from './meetingNoteChannelService.js';
 import { authenticate } from '../../../middleware/auth.js';
 import { assertRowInWorkspace, currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
-import { emitImportWebhook } from './importWebhook.js';
+import { emitImportWebhook, emitUploadedWebhook } from './importWebhook.js';
+import type { MeetingNotesEngine } from '../MeetingNotesEngine.js';
 
 export interface MeetingNotesRouteOptions extends FastifyPluginOptions {
   service?: Service;
   /** 路径前缀；默认 '/meeting-note-sources' 保留历史 alias，新挂载传 '/sources' */
   pathPrefix?: string;
+  /** MeetingNotesEngine 实例；如需 autoParse 自动触发分析则必传 */
+  engine?: MeetingNotesEngine;
 }
 
 function notFound(err: unknown): boolean {
@@ -54,6 +57,51 @@ function fieldValue(fields: Record<string, any> | undefined, key: string): strin
   return typeof v === 'string' ? v : undefined;
 }
 
+function parseBooleanField(fields: Record<string, any> | undefined, key: string): boolean {
+  const v = fieldValue(fields, key) ?? fieldValue(fields, key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase()));
+  if (v === undefined || v === null || v === '') return true; // 默认 true
+  const lowered = v.trim().toLowerCase();
+  return lowered === 'true' || lowered === '1' || lowered === 'yes' || lowered === 'on';
+}
+
+const VALID_RUN_MODES = ['multi-axis', 'claude-cli', 'api-oneshot'] as const;
+const VALID_PRESETS = ['lite', 'standard', 'max'] as const;
+type RunModeT = typeof VALID_RUN_MODES[number];
+type PresetT = typeof VALID_PRESETS[number];
+
+function pickRunMode(value: string | undefined, fallback: RunModeT): RunModeT | null {
+  if (value === undefined || value === '') return fallback;
+  return (VALID_RUN_MODES as readonly string[]).includes(value) ? (value as RunModeT) : null;
+}
+
+function pickPreset(value: string | undefined, fallback: PresetT): PresetT | null {
+  if (value === undefined || value === '') return fallback;
+  return (VALID_PRESETS as readonly string[]).includes(value) ? (value as PresetT) : null;
+}
+
+function parseExpertRolesField(value: string | undefined):
+  | { people?: string[]; projects?: string[]; knowledge?: string[] }
+  | null
+  | undefined
+{
+  if (value === undefined || value === '') return undefined;
+  try {
+    const obj = JSON.parse(value);
+    if (!obj || typeof obj !== 'object') return null;
+    const out: { people?: string[]; projects?: string[]; knowledge?: string[] } = {};
+    for (const k of ['people', 'projects', 'knowledge'] as const) {
+      const arr = (obj as any)[k];
+      if (Array.isArray(arr)) {
+        const cleaned = arr.filter((x: any) => typeof x === 'string' && x.trim().length > 0);
+        if (cleaned.length > 0) out[k] = cleaned;
+      }
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /** 从上传字节解析正文：.docx 用 mammoth，其余按 UTF-8 文本。 */
 async function textFromUploadBuffer(
   buf: Buffer,
@@ -73,6 +121,7 @@ export async function meetingNotesRoutes(
   opts: MeetingNotesRouteOptions = {},
 ) {
   const svc: Service = opts.service ?? new MeetingNoteChannelService();
+  const engine = opts.engine;
   const p = opts.pathPrefix ?? '/meeting-note-sources';
 
   // Workspace 守卫: :id 路径验证 source 属于当前 workspace, 跨 ws 一律 404
@@ -345,6 +394,16 @@ export async function meetingNotesRoutes(
       const result = await svc.runImport(id, 'upload');
       const callbackUrl = fieldValue((mp as any).fields, 'callbackUrl') ?? fieldValue((mp as any).fields, 'callback_url');
       const callbackSecret = fieldValue((mp as any).fields, 'callbackSecret') ?? fieldValue((mp as any).fields, 'callback_secret');
+      const autoParse = parseBooleanField((mp as any).fields, 'autoParse');
+      if (autoParse && engine && result.assetIds?.length > 0) {
+        setImmediate(() => {
+          for (const assetId of result.assetIds) {
+            engine.parseMeeting(assetId).catch((err) => {
+              console.warn('[autoParse] failed after upload:', err);
+            });
+          }
+        });
+      }
       if (callbackUrl) {
         setImmediate(() => {
           void emitImportWebhook({
@@ -453,6 +512,55 @@ export async function meetingNotesRoutes(
       return { error: 'Bad Request', message: 'file is empty or unreadable as text' };
     }
 
+    // 分析参数：请求级 > source.config.defaults > 系统默认
+    const sourceDefaults = ((source.config as any)?.defaults ?? {}) as Record<string, any>;
+    const fallbackMode: RunModeT =
+      typeof sourceDefaults.mode === 'string' && (VALID_RUN_MODES as readonly string[]).includes(sourceDefaults.mode)
+        ? (sourceDefaults.mode as RunModeT)
+        : 'api-oneshot';
+    const fallbackPreset: PresetT =
+      typeof sourceDefaults.preset === 'string' && (VALID_PRESETS as readonly string[]).includes(sourceDefaults.preset)
+        ? (sourceDefaults.preset as PresetT)
+        : 'standard';
+
+    const requestedMode = fieldValue((mp as any).fields, 'mode');
+    const requestedPreset = fieldValue((mp as any).fields, 'preset');
+    const requestedAxisRaw = fieldValue((mp as any).fields, 'axis') ?? '';
+    const requestedExpertRolesRaw = fieldValue((mp as any).fields, 'expertRoles');
+
+    const runMode = pickRunMode(requestedMode, fallbackMode);
+    if (runMode === null) {
+      reply.status(400);
+      return { error: 'Bad Request', message: `invalid mode (allowed: ${VALID_RUN_MODES.join('/')})` };
+    }
+    const runPreset = pickPreset(requestedPreset, fallbackPreset);
+    if (runPreset === null) {
+      reply.status(400);
+      return { error: 'Bad Request', message: `invalid preset (allowed: ${VALID_PRESETS.join('/')})` };
+    }
+    const runAxis = (requestedAxisRaw && requestedAxisRaw.trim().length > 0
+      ? requestedAxisRaw.trim()
+      : (typeof sourceDefaults.axis === 'string' && sourceDefaults.axis ? sourceDefaults.axis : 'all'));
+    const runExpertRoles = (() => {
+      if (requestedExpertRolesRaw !== undefined) {
+        const parsed = parseExpertRolesField(requestedExpertRolesRaw);
+        if (parsed === null) {
+          // 解析失败也返回 400
+          return '__invalid__' as const;
+        }
+        return parsed;
+      }
+      const fromDefaults = sourceDefaults.expertRoles;
+      if (fromDefaults && typeof fromDefaults === 'object') {
+        return fromDefaults as { people?: string[]; projects?: string[]; knowledge?: string[] };
+      }
+      return undefined;
+    })();
+    if (runExpertRoles === '__invalid__') {
+      reply.status(400);
+      return { error: 'Bad Request', message: 'invalid expertRoles (must be JSON object with optional people/projects/knowledge string arrays)' };
+    }
+
     const oneShot = {
       fetchDrafts: async () => [{
         externalId: `sha256:${sha}`,
@@ -473,36 +581,108 @@ export async function meetingNotesRoutes(
     if (ad) ad[source.kind] = oneShot;
     try {
       const result = await svc.runImport(source.id, 'upload');
+      const autoParse = parseBooleanField((mp as any).fields, 'autoParse');
       const effectiveCallbackUrl = callbackUrl || (source.config as any)?.callbackUrl || null;
       const effectiveCallbackSecret = callbackSecret || (source.config as any)?.callbackSecret || null;
+      const callbackContext = {
+        workspaceId: effectiveWorkspaceId,
+        userId,
+        scopeKind,
+        scopeId: scopeIdRaw === '__invalid__' ? null : scopeIdRaw,
+      };
+
+      // autoParse=true：parseMeeting + enqueue 分析 run；同时把回调配置写进 mn_runs.metadata.callback
+      // 让 stage 2 webhook 订阅器能读到。autoParse=false：assetId 列表里 runId 全部为 null。
+      const runEntries: Array<{ id: string | null; assetId: string; state: string; mode: string }> = [];
+      if (autoParse && engine && result.assetIds && result.assetIds.length > 0) {
+        for (const assetId of result.assetIds) {
+          // parseMeeting 异步启动；run 入队不等它（worker 取到 run 时会兜底抽取参与者）
+          setImmediate(() => {
+            engine.parseMeeting(assetId).catch((err) => {
+              console.warn('[autoParse] parseMeeting failed:', err);
+            });
+          });
+
+          try {
+            const enq = await engine.runEngine.enqueue({
+              scope: { kind: 'meeting', id: assetId },
+              axis: runAxis as any,
+              preset: runPreset,
+              triggeredBy: 'auto',
+              mode: runMode,
+              expertRoles: runExpertRoles && typeof runExpertRoles === 'object' ? runExpertRoles : undefined,
+              workspaceId: effectiveWorkspaceId ?? undefined,
+              triggerMeetingId: assetId,
+            });
+            if (enq.ok && enq.runId) {
+              runEntries.push({ id: enq.runId, assetId, state: 'queued', mode: runMode });
+              // 持久化 callback 配置到 mn_runs.metadata.callback；分析完成时订阅器会读
+              if (effectiveCallbackUrl) {
+                try {
+                  await engine.deps.db.query(
+                    `UPDATE mn_runs
+                        SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('callback', $2::jsonb)
+                      WHERE id = $1::uuid`,
+                    [
+                      enq.runId,
+                      JSON.stringify({
+                        callbackUrl: effectiveCallbackUrl,
+                        callbackSecret: effectiveCallbackSecret,
+                        context: callbackContext,
+                      }),
+                    ],
+                  );
+                } catch (e) {
+                  console.warn('[autoParse] persist run callback failed:', (e as Error).message);
+                }
+              }
+            } else {
+              runEntries.push({ id: null, assetId, state: 'enqueue-failed', mode: runMode });
+              console.warn('[autoParse] enqueue rejected:', enq.reason);
+            }
+          } catch (err) {
+            runEntries.push({ id: null, assetId, state: 'enqueue-error', mode: runMode });
+            console.warn('[autoParse] enqueue threw:', (err as Error).message);
+          }
+        }
+      } else if (result.assetIds && result.assetIds.length > 0) {
+        for (const assetId of result.assetIds) {
+          runEntries.push({ id: null, assetId, state: 'skipped', mode: runMode });
+        }
+      }
+
+      // Stage 1 webhook：会议纪要已上传
       if (effectiveCallbackUrl) {
+        const webhookAssets = runEntries.map((r) => ({
+          assetId: r.assetId,
+          runId: r.id,
+          mode: r.id ? r.mode : null,
+        }));
         setImmediate(() => {
-          void emitImportWebhook({
+          void emitUploadedWebhook({
             sourceId: source.id,
             sourceName: source.name,
             triggeredBy: 'upload',
             importResult: result as any,
+            assets: webhookAssets,
             callbackUrl: effectiveCallbackUrl,
             callbackSecret: effectiveCallbackSecret,
-            context: {
-              workspaceId: effectiveWorkspaceId,
-              userId,
-              scopeKind,
-              scopeId: scopeIdRaw === '__invalid__' ? null : scopeIdRaw,
-            },
+            context: callbackContext,
           });
         });
       }
+
       reply.code(202);
       return {
         sourceId: source.id,
-        context: {
-          workspaceId: effectiveWorkspaceId,
-          userId,
-          scopeKind,
-          scopeId: scopeIdRaw === '__invalid__' ? null : scopeIdRaw,
-        },
+        context: callbackContext,
         import: result,
+        runs: runEntries.filter((r) => r.id).map((r) => ({
+          id: r.id,
+          assetId: r.assetId,
+          state: r.state,
+          mode: r.mode,
+        })),
         callback: effectiveCallbackUrl ? { sentAsync: true, callbackUrl: effectiveCallbackUrl } : null,
       };
     } finally {
