@@ -75,6 +75,8 @@ async function sendWebhook(opts: SendOpts): Promise<void> {
 export interface UploadedWebhookInput {
   sourceId: string;
   sourceName?: string;
+  /** 上传文件原始名（如 "产品策略例会-2026-05-08.docx"），用于卡片标题 */
+  fileTitle?: string | null;
   triggeredBy: string;
   importResult: {
     id: string;
@@ -114,6 +116,7 @@ function buildUploadedFeishuCard(input: UploadedWebhookInput): object {
   })();
 
   const metaLines = [
+    input.fileTitle ? `**文件：** ${input.fileTitle}` : null,
     `**来源：** ${input.sourceName ?? input.sourceId}`,
     `**状态：** ${statusText}`,
     r.duplicates > 0
@@ -130,6 +133,20 @@ function buildUploadedFeishuCard(input: UploadedWebhookInput): object {
     .filter(Boolean)
     .join('\n');
 
+  // 资产/Run 追踪信息：每个 asset 一行，方便外部按 runId 做 stage 2 关联
+  const idLines = input.assets.map((a) => {
+    const runPart = a.runId ? `Run \`${a.runId}\`` : 'Run（未排队）';
+    return `**Asset \`${a.assetId}\`** · ${runPart}`;
+  }).join('\n');
+
+  const elements: object[] = [
+    { tag: 'div', text: { tag: 'lark_md', content: metaLines } },
+  ];
+  if (idLines) {
+    elements.push({ tag: 'hr' });
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: idLines } });
+  }
+
   return {
     msg_type: 'interactive',
     card: {
@@ -138,9 +155,7 @@ function buildUploadedFeishuCard(input: UploadedWebhookInput): object {
         title: { tag: 'plain_text', content: '📋 会议纪要已上传' },
         template: headerColor,
       },
-      elements: [
-        { tag: 'div', text: { tag: 'lark_md', content: metaLines } },
-      ],
+      elements,
     },
   };
 }
@@ -156,6 +171,7 @@ export async function emitUploadedWebhook(input: UploadedWebhookInput): Promise<
         event: 'meeting_notes.uploaded',
         at: new Date().toISOString(),
         source: { id: input.sourceId, name: input.sourceName ?? null },
+        fileTitle: input.fileTitle ?? null,
         triggeredBy: input.triggeredBy,
         context: {
           workspaceId: input.context?.workspaceId ?? null,
@@ -181,6 +197,8 @@ export async function emitUploadedWebhook(input: UploadedWebhookInput): Promise<
 // ============================================================
 
 export interface AnalysisCompletedWebhookInput {
+  /** 上传文件原始名（如 "产品策略例会-2026-05-08.docx"），用于卡片标题 */
+  fileTitle?: string | null;
   run: {
     id: string;
     state: 'succeeded' | 'failed';
@@ -239,7 +257,9 @@ function buildAnalysisCompletedFeishuCard(input: AnalysisCompletedWebhookInput):
   }
 
   const metaLines = [
-    `**Run ID：** ${input.run.id}`,
+    input.fileTitle ? `**文件：** ${input.fileTitle}` : null,
+    `**Asset ID：** \`${input.run.assetId}\``,
+    `**Run ID：** \`${input.run.id}\``,
     `**模式：** ${input.run.mode}`,
     duration ? `**耗时：** ${duration}` : null,
     input.run.costTokens > 0 ? `**Tokens：** ${input.run.costTokens}` : null,
@@ -294,6 +314,7 @@ export async function emitAnalysisCompletedWebhook(input: AnalysisCompletedWebho
     : JSON.stringify({
         event: 'meeting_notes.analysis.completed',
         at: new Date().toISOString(),
+        fileTitle: input.fileTitle ?? null,
         run: input.run,
         report: input.report,
         context: {

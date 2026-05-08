@@ -33,34 +33,47 @@ function readCallbackConfig(run: RunRecord): CallbackConfig | null {
   };
 }
 
-async function readAnalysisSummary(
+async function readAssetContext(
   deps: MeetingNotesDeps,
   assetId: string,
 ): Promise<{
-  tldr?: string | null;
-  decision?: string | null;
-  actionItems?: any[];
-  risks?: string[];
-} | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(assetId)) return null;
+  title: string | null;
+  summary: {
+    tldr?: string | null;
+    decision?: string | null;
+    actionItems?: any[];
+    risks?: string[];
+  } | null;
+}> {
+  if (!/^[0-9a-f-]{36}$/i.test(assetId)) return { title: null, summary: null };
   try {
     const r = await deps.db.query(
-      `SELECT metadata->'analysis'->'summary' AS summary FROM assets WHERE id = $1::uuid LIMIT 1`,
+      `SELECT title, metadata->'analysis'->'summary' AS summary
+         FROM assets WHERE id = $1::uuid LIMIT 1`,
       [assetId],
     );
-    const raw = r.rows[0]?.summary;
-    if (!raw) return null;
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (!parsed || typeof parsed !== 'object') return null;
-    return {
-      tldr: typeof parsed.tldr === 'string' ? parsed.tldr : null,
-      decision: typeof parsed.decision === 'string' ? parsed.decision : null,
-      actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : [],
-      risks: Array.isArray(parsed.risks) ? parsed.risks : [],
-    };
+    const row = r.rows[0];
+    if (!row) return { title: null, summary: null };
+    const title = typeof row.title === 'string' && row.title.length > 0 ? row.title : null;
+    const raw = row.summary;
+    let summary: any = null;
+    if (raw) {
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed && typeof parsed === 'object') {
+          summary = {
+            tldr: typeof parsed.tldr === 'string' ? parsed.tldr : null,
+            decision: typeof parsed.decision === 'string' ? parsed.decision : null,
+            actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : [],
+            risks: Array.isArray(parsed.risks) ? parsed.risks : [],
+          };
+        }
+      } catch { /* fall through with summary=null */ }
+    }
+    return { title, summary };
   } catch (e) {
-    console.warn('[analysisWebhook] readAnalysisSummary failed:', (e as Error).message);
-    return null;
+    console.warn('[analysisWebhook] readAssetContext failed:', (e as Error).message);
+    return { title: null, summary: null };
   }
 }
 
@@ -84,9 +97,10 @@ async function dispatch(
   if (!cb || !cb.callbackUrl) return;
 
   const assetId = run.scope.kind === 'meeting' ? run.scope.id ?? '' : '';
-  const summary = state === 'succeeded' && assetId
-    ? await readAnalysisSummary(deps, assetId)
-    : null;
+  const assetCtx = assetId
+    ? await readAssetContext(deps, assetId)
+    : { title: null, summary: null };
+  const summary = state === 'succeeded' ? assetCtx.summary : null;
   const sharedUrl = state === 'succeeded' && assetId ? await makeSharedUrl(assetId) : null;
 
   const mode =
@@ -99,6 +113,7 @@ async function dispatch(
     run.costTokens && run.costTokens > 0 ? run.costTokens : inputTokens + outputTokens;
 
   await emitAnalysisCompletedWebhook({
+    fileTitle: assetCtx.title,
     run: {
       id: run.id,
       state,

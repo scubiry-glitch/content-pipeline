@@ -662,6 +662,7 @@ export async function meetingNotesRoutes(
           void emitUploadedWebhook({
             sourceId: source.id,
             sourceName: source.name,
+            fileTitle: originalFilename,
             triggeredBy: 'upload',
             importResult: result as any,
             assets: webhookAssets,
