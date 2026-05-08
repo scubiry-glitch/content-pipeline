@@ -24,6 +24,7 @@ import { VersionStore } from './runs/versionStore.js';
 import { ScopeService } from './scope/scopeService.js';
 import { CrossAxisLinkResolver } from './crosslinks/crossAxisLinkResolver.js';
 import { LongitudinalService } from './longitudinal/index.js';
+import { registerAnalysisWebhookSubscriber } from './ingest/analysisWebhookSubscriber.js';
 
 export interface ComputeAxisRequest {
   meetingId?: string;
@@ -76,6 +77,9 @@ export class MeetingNotesEngine {
         console.error('[MeetingNotes] post-run recompute failed:', (e as Error).message);
       }
     });
+
+    // Stage 2 webhook：upload-task 触发的 run 完成/失败时，回调外部 callbackUrl
+    registerAnalysisWebhookSubscriber(deps, (runId) => this.runEngine.get(runId));
   }
 
   // ============================================================
