@@ -288,6 +288,83 @@ function parseInnerJson(raw: string): { ok: true; value: any } | { ok: false; re
   }
 }
 
+/**
+ * Step 5 · 截断 JSON 兜底解析
+ *
+ * 用于 oneshot 被 SIGKILL 后 metadata.oneshotRaw 是不完整 JSON 的场景。
+ * 策略：从首个 '{' 开始遍历，跟踪 stack 与 string 状态，记录"安全回滚点"
+ *      （顶层属性值刚结束的位置）；正常解析失败后从最新回滚点向后逐个尝试。
+ *
+ * 返回 salvaged=true 表明结果是部分内容，调用方应当向用户/日志明确标注。
+ *
+ * 不接到 parseInnerJson 的正常路径：避免把 LLM 偶尔的小毛病结果静默"修好"，
+ * 导致 schema 校验过了但内容残缺。仅供 /runs/:id/salvage-oneshot-raw 显式调用。
+ */
+export function salvageTruncatedJson(
+  raw: string,
+): { ok: true; value: any; salvaged: boolean; safePoints: number; usedAt: number }
+ | { ok: false; reason: string } {
+  if (!raw || typeof raw !== 'string') return { ok: false, reason: 'empty raw' };
+  let text = raw.trim();
+
+  // 去 markdown 围栏
+  if (text.startsWith('```')) {
+    const m = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (m) text = m[1].trim();
+  }
+
+  // 找首个 '{'
+  const start = text.indexOf('{');
+  if (start < 0) return { ok: false, reason: 'no opening brace' };
+  text = text.slice(start);
+
+  // 先尝试整段 parse —— 万一本来就完整
+  try {
+    return { ok: true, value: JSON.parse(text), salvaged: false, safePoints: 0, usedAt: text.length };
+  } catch {/* fall through */}
+
+  // 遍历记录安全回滚点（顶层属性边界）
+  const stack: string[] = ['{']; // 已经把首个 '{' 入栈
+  let inStr = false, escape = false;
+  const safePositions: number[] = []; // 长度 = 截断到此处后可以加 '}' 闭合的字节数
+
+  for (let i = 1; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (inStr) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') {
+      stack.pop();
+      // 整段在此自然闭合 —— parseInnerJson 已经试过了应该走不到，但保险
+      if (stack.length === 0) {
+        try { return { ok: true, value: JSON.parse(text.slice(0, i + 1)), salvaged: false, safePoints: safePositions.length, usedAt: i + 1 }; }
+        catch (e) { return { ok: false, reason: `top-close parse: ${(e as Error).message}` }; }
+      }
+      // 刚收回到 depth=1，意味着上一个顶层 value 正好结束 → 此处 + '}' 可成完整对象
+      if (stack.length === 1) safePositions.push(i + 1);
+    } else if (ch === ',' && stack.length === 1) {
+      // depth=1 的逗号，意味着上一个 key:value 完整结束 → 截到逗号前 + '}' 也可
+      safePositions.push(i);
+    }
+  }
+
+  // 从最新安全点逆向尝试，第一个能 parse 的就返回
+  for (let p = safePositions.length - 1; p >= 0; p--) {
+    const trimmed = text.slice(0, safePositions[p]).replace(/,\s*$/, '') + '}';
+    try {
+      const value = JSON.parse(trimmed);
+      return { ok: true, value, salvaged: true, safePoints: safePositions.length, usedAt: safePositions[p] };
+    } catch { /* try next */ }
+  }
+
+  return { ok: false, reason: `salvage failed (tried ${safePositions.length} safe points)` };
+}
+
 /** 校验 LLM 输出形态（与 claudeCliRunner.validateInner 等价但独立写一份） */
 function validateOneshotSchema(
   parsed: any,

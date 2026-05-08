@@ -13,6 +13,7 @@ import { isConnectionError } from '../../db/connection.js';
 import { AXIS_SUBDIMS } from './axes/registry.js';
 import { assertRowInWorkspace, currentWorkspaceId, requireWorkspaceId } from '../../db/repos/withWorkspace.js';
 import { subscribe, unsubscribe } from './runs/runStreamRegistry.js';
+import { salvageTruncatedJson } from './runs/oneshotRunner.js';
 import { getLLMRouter } from '../../providers/index.js';
 import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
 import { writeAuditEvent, type AuditEvent } from '../../services/auth/audit.js';
@@ -3525,6 +3526,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     // Opt-9 (O9): 续传 failed/cancelled run。从 metadata.checkpoint.axisIdx 续跑，
     // 已完成的 axis 不会重做（避免 23 分钟的 run 全重）。
+    // Step 4 后：oneshot 模式也走这条路 — runOneshotMode 启动时若发现
+    //   metadata.resumable=true && metadata.oneshotRaw 存在，会把 raw 拼成"续跑指引"
+    //   塞到 prompt 末尾让 LLM 接着写。
     fastify.post('/runs/:id/resume', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       const r = await engine.resumeRun(id);
@@ -3537,6 +3541,73 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         };
       }
       return { success: true };
+    });
+
+    // Step 5 · 兜底：从 failed run 的 metadata.oneshotRaw best-effort 截断解析
+    //   适用场景：LLM provider 已停服/欠费、resume 也跑不动时，至少把上一代生成
+    //   到一半的 16 轴里完成的几轴 salvage 出来给前端展示。
+    //   不做副作用 —— 只返回 partial JSON，不写业务表，不改 mn_runs.state。
+    fastify.get('/runs/:id/salvage-oneshot-raw', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const r = await engine.deps.db.query(
+          `SELECT
+             state,
+             (metadata->>'oneshotRaw')                   AS raw,
+             COALESCE((metadata->>'oneshotRawTokens')::int, 0) AS tokens,
+             COALESCE((metadata->>'oneshotRawBytes')::int,  0) AS bytes,
+             (metadata->>'oneshotRawAt')                 AS raw_at,
+             COALESCE((metadata->>'oneshotRawTruncated')::boolean, false) AS truncated
+           FROM mn_runs WHERE id = $1`,
+          [id],
+        );
+        const row = r.rows[0] as {
+          state?: string; raw?: string | null; tokens?: number; bytes?: number;
+          raw_at?: string | null; truncated?: boolean;
+        } | undefined;
+        if (!row) { reply.status(404); return { error: 'Not Found' }; }
+        if (!row.raw) {
+          reply.status(409);
+          return { error: 'Conflict', message: 'no oneshotRaw on this run', state: row.state };
+        }
+        const result = salvageTruncatedJson(row.raw);
+        if (!result.ok) {
+          reply.status(422);
+          return {
+            error: 'Unprocessable',
+            message: result.reason,
+            meta: { rawTokens: row.tokens, rawBytes: row.bytes, rawAt: row.raw_at, rawTruncated: row.truncated },
+          };
+        }
+        const topKeys = result.value && typeof result.value === 'object'
+          ? Object.keys(result.value)
+          : [];
+        const axisKeys = result.value?.axes && typeof result.value.axes === 'object'
+          ? Object.keys(result.value.axes)
+          : [];
+        return {
+          ok: true,
+          salvaged: result.salvaged,
+          partial: result.value,
+          stats: {
+            topKeys,
+            axisKeys,
+            safePoints: result.safePoints,
+            usedBytes: result.usedAt,
+            rawBytes: row.bytes,
+            rawTokens: row.tokens,
+            rawAt: row.raw_at,
+            rawTruncated: row.truncated,
+            runState: row.state,
+          },
+        };
+      } catch (e) {
+        if (isConnectionError(e)) {
+          reply.status(503);
+          return { error: 'Service Unavailable', message: 'database temporarily unavailable, please retry' };
+        }
+        throw e;
+      }
     });
 
     // --------------------------------------------------------
