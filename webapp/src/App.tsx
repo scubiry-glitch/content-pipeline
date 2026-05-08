@@ -136,6 +136,15 @@ function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              {/* 分享链接公开视图 —— 无需登录，凭 share_token 访问会议摘要 */}
+              <Route path="/meeting/shared/:token" element={<SharedMeetingPage />} />
+              {/* 分享链接详情视图 —— 与内部 A/B/C 相同内容，隐藏返回库/分享/Mock 开关 */}
+              <Route path="/meeting/shared/:token/detail" element={<SharedMeetingDetailShell />}>
+                <Route index element={<Navigate to="a" replace />} />
+                <Route path="a" element={<VariantEditorial />} />
+                <Route path="b" element={<VariantWorkbench />} />
+                <Route path="c" element={<VariantThreads />} />
+              </Route>
               <Route element={<RequireAuth />}>
               <Route path="/" element={<Layout />}>
               <Route path="settings/workspaces" element={<WorkspaceList />} />
@@ -266,16 +275,6 @@ function App() {
             </Route>
             {/* 会议详情 A/B/C —— 独立 shell，顶栏 + tab，不显示主导航侧栏 */}
             <Route path="/meeting/:id" element={<MeetingDetailShell />}>
-              <Route index element={<Navigate to="a" replace />} />
-              <Route path="a" element={<VariantEditorial />} />
-              <Route path="b" element={<VariantWorkbench />} />
-              <Route path="c" element={<VariantThreads />} />
-            </Route>
-
-            {/* 分享链接公开视图 —— 无需登录，凭 share_token 访问会议摘要 */}
-            <Route path="/meeting/shared/:token" element={<SharedMeetingPage />} />
-            {/* 分享链接详情视图 —— 与内部 A/B/C 相同内容，隐藏返回库/分享/Mock 开关 */}
-            <Route path="/meeting/shared/:token/detail" element={<SharedMeetingDetailShell />}>
               <Route index element={<Navigate to="a" replace />} />
               <Route path="a" element={<VariantEditorial />} />
               <Route path="b" element={<VariantWorkbench />} />

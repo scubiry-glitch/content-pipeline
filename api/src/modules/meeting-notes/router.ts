@@ -258,7 +258,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     // --------------------------------------------------------
     // Ingest routes (PR2)
     // --------------------------------------------------------
-    await fastify.register(ingestRoutes, { pathPrefix: '/sources' });
+    await fastify.register(ingestRoutes, { pathPrefix: '/sources', engine });
 
     // --------------------------------------------------------
     // Meeting Chat (resume Claude CLI session for /b 抽屉)
@@ -838,7 +838,24 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         };
       } catch {/* 失败不阻塞 share 主体 */}
 
-      return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: detail, health };
+      // Attach runSource so shared viewers can see whether analysis has succeeded
+      let sharedRunSource: { runId: string; state: string; mode: string } | null = null;
+      try {
+        const rsr = await engine.deps.db.query(
+          `SELECT id::text AS id, state, COALESCE(metadata->>'mode', 'multi-axis') AS mode
+             FROM mn_runs
+            WHERE scope_kind = 'meeting' AND scope_id::text = $1
+            ORDER BY COALESCE(started_at, created_at) DESC LIMIT 1`,
+          [mid],
+        );
+        if (rsr.rows[0]) {
+          const rr = rsr.rows[0];
+          sharedRunSource = { runId: rr.id, state: rr.state, mode: rr.mode };
+        }
+      } catch {/* non-blocking */}
+
+      const meetingPayload = detail ? { ...(detail as object), runSource: sharedRunSource } : null;
+      return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: meetingPayload, health };
     });
 
     /**
@@ -2820,7 +2837,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         return { quality: null, necessity: null, affect: null, tension: null, deprecated: false };
       }
       const db = engine.deps.db;
-      const [qR, nR, aR, tR] = await Promise.all([
+      let qR: any, nR: any, aR: any, tR: any;
+      try {
+      [qR, nR, aR, tR] = await Promise.all([
         db.query(
           `SELECT meeting_id, overall, clarity, actionable, traceable, falsifiable, aligned, notes, computed_at
              FROM mn_decision_quality WHERE meeting_id = $1`,
@@ -2842,6 +2861,10 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           [id],
         ),
       ]);
+      } catch (e) {
+        request.log.warn({ id, err: e }, 'getMeetingHealth db queries failed → fallback nulls');
+        return { quality: null, necessity: null, affect: null, tension: null, deprecated: false };
+      }
 
       // 决策质量：转成前端期望的 { overall, dims[] } 形态（与 /decision-quality 对齐）
       let quality: unknown = null;
@@ -3412,16 +3435,21 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       // engine.list 又把 scopeId=null 解释成"只看 library scope (scope_id IS NULL)"，
       // 导致 GenerationCenter 不传 scopeId 时看不到 project/meeting scope 的 running/queued。
       // 现改成不传就 undefined，engine 不加 scope_id 过滤。
-      const items = await engine.listRuns({
-        scopeKind: q.scopeKind,
-        scopeId: q.scopeId,
-        axis: q.axis,
-        module: q.module,
-        state: q.state,
-        limit: q.limit ? parseInt(q.limit, 10) : undefined,
-        workspaceId: currentWorkspaceId(request) ?? undefined,
-      });
-      return { items };
+      try {
+        const items = await engine.listRuns({
+          scopeKind: q.scopeKind,
+          scopeId: q.scopeId,
+          axis: q.axis,
+          module: q.module,
+          state: q.state,
+          limit: q.limit ? parseInt(q.limit, 10) : undefined,
+          workspaceId: currentWorkspaceId(request) ?? undefined,
+        });
+        return { items };
+      } catch (e) {
+        request.log.warn({ err: e }, 'listRuns degraded: database unavailable');
+        return { items: [] };
+      }
     });
 
     /**
@@ -3504,6 +3532,11 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     fastify.get('/runs/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
+      // Reject non-UUID IDs immediately (e.g. truncated display strings like "c429fe8f")
+      if (!UUID_RE.test(id)) {
+        reply.status(404);
+        return { error: 'Not Found', message: 'Invalid run id format' };
+      }
       try {
         const r = await engine.getRun(id);
         if (!r) { reply.status(404); return { error: 'Not Found' }; }
@@ -3526,7 +3559,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
 
     // Opt-9 (O9): 续传 failed/cancelled run。从 metadata.checkpoint.axisIdx 续跑，
     // 已完成的 axis 不会重做（避免 23 分钟的 run 全重）。
-    // Step 4 后：oneshot 模式也走这条路 — runOneshotMode 启动时若发现
+    // Step 4 后：oneshot 模式也可走这条路 — runOneshotMode 启动时若发现
     //   metadata.resumable=true && metadata.oneshotRaw 存在，会把 raw 拼成"续跑指引"
     //   塞到 prompt 末尾让 LLM 接着写。
     fastify.post('/runs/:id/resume', { preHandler: authenticate }, async (request, reply) => {
@@ -3582,6 +3615,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         const topKeys = result.value && typeof result.value === 'object'
           ? Object.keys(result.value)
           : [];
+        // axes 子键：让前端立刻知道哪些轴已经成形
         const axisKeys = result.value?.axes && typeof result.value.axes === 'object'
           ? Object.keys(result.value.axes)
           : [];

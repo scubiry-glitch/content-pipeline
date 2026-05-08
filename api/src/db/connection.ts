@@ -165,6 +165,7 @@ export async function ensureRuntimePerformanceIndexes(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_runs_workspace_time ON mn_runs(workspace_id, COALESCE(started_at, created_at) DESC)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_scope_members_meeting ON mn_scope_members(meeting_id)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_mn_risks_scope_heat ON mn_risks(scope_id, heat_score DESC)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_mn_open_questions_meetings ON mn_open_questions(first_raised_meeting_id, last_raised_meeting_id)`).catch(() => {});
 }
 
 async function withConnectionRetry<T>(

@@ -84,6 +84,7 @@ export function MeetingDetailShell() {
     mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
     modelName?: string;
   } | null>(null);
+  const [triggering, setTriggering] = useState(false);
 
   useEffect(() => {
     if (forceMock || !id || !UUID_RE.test(id)) {
@@ -160,6 +161,24 @@ export function MeetingDetailShell() {
       setTitleDraft('');
     } finally {
       setSavingTitle(false);
+    }
+  };
+
+  const handleStartAnalysis = async () => {
+    if (!UUID_RE.test(id) || triggering) return;
+    setTriggering(true);
+    try {
+      const res = await meetingNotesApi.enqueueRun({
+        scope: { kind: 'meeting', id },
+        axis: 'all',
+        preset: 'standard',
+        triggeredBy: 'manual',
+      });
+      if (res.ok) {
+        setRunSource((prev) => ({ ...prev, runId: res.runId ?? '', state: 'queued', mode: 'multi-axis' }));
+      }
+    } finally {
+      setTriggering(false);
     }
   };
 
@@ -389,6 +408,15 @@ export function MeetingDetailShell() {
 
       {/* R3-A · 改动一：4 徽章 status bar — 决策质量 / 必要性 / 情绪峰 / 张力峰 */}
       <MeetingHealthBadges health={health} />
+
+      {/* 尚未成功运行时的分析启动横幅 */}
+      {!forceMock && UUID_RE.test(id) && apiState === 'ok' && runSource?.state !== 'succeeded' && (
+        <StartAnalysisBanner
+          runState={runSource?.state ?? null}
+          triggering={triggering}
+          onStart={() => { void handleStartAnalysis(); }}
+        />
+      )}
 
       <main style={{ flex: 1, minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'auto' }}>
         <Outlet context={{
@@ -814,6 +842,66 @@ function SharePanel({ meetingId, onClose: _onClose }: { meetingId: string; onClo
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function StartAnalysisBanner({
+  runState,
+  triggering,
+  onStart,
+}: {
+  runState: string | null;
+  triggering: boolean;
+  onStart: () => void;
+}) {
+  const inProgress = runState === 'running' || runState === 'queued';
+  const label =
+    runState === 'running'   ? '分析进行中，请稍候…'
+    : runState === 'queued'  ? '分析已排队，等待执行…'
+    : runState === 'failed'  ? '上次分析失败，可重新生成'
+    : runState === 'cancelled' ? '上次分析已取消，可重新生成'
+    : '此素材尚未完成分析';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '7px 28px',
+      background: inProgress ? 'oklch(0.96 0.04 75)' : 'oklch(0.96 0.03 250)',
+      borderBottom: '1px solid var(--line-2)',
+      gap: 12,
+    }}>
+      <span style={{
+        fontFamily: 'var(--sans)', fontSize: 12,
+        color: inProgress ? 'oklch(0.38 0.09 75)' : 'oklch(0.38 0.08 250)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        {inProgress && (
+          <span style={{
+            display: 'inline-block', width: 7, height: 7, borderRadius: 99,
+            background: 'oklch(0.60 0.14 75)',
+            animation: 'pulse 1.4s ease-in-out infinite',
+          }} />
+        )}
+        {label}
+      </span>
+      {!inProgress && (
+        <button
+          onClick={onStart}
+          disabled={triggering}
+          style={{
+            padding: '5px 14px', borderRadius: 6, fontSize: 12.5,
+            fontFamily: 'var(--sans)', fontWeight: 600, cursor: triggering ? 'wait' : 'pointer',
+            border: 0,
+            background: triggering ? 'var(--ink-3)' : 'var(--ink)',
+            color: 'var(--paper)',
+            opacity: triggering ? 0.7 : 1,
+            flexShrink: 0,
+          }}
+        >
+          {triggering ? '启动中…' : '开始分析生成'}
+        </button>
       )}
     </div>
   );

@@ -17,6 +17,8 @@ export function SharedMeetingPage() {
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [triggeredRunState, setTriggeredRunState] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setState('error'); return; }
@@ -27,6 +29,23 @@ export function SharedMeetingPage() {
         else setState('error');
       });
   }, [token]);
+
+  const handleStartAnalysis = async () => {
+    const meetingId = data?.meeting?.meetingId;
+    if (!meetingId || triggering) return;
+    setTriggering(true);
+    try {
+      const res = await meetingNotesApi.enqueueRun({
+        scope: { kind: 'meeting', id: meetingId },
+        axis: 'all',
+        preset: 'standard',
+        triggeredBy: 'manual',
+      });
+      if (res.ok) setTriggeredRunState('queued');
+    } finally {
+      setTriggering(false);
+    }
+  };
 
   const onImport = async () => {
     if (importing) return;
@@ -133,6 +152,57 @@ export function SharedMeetingPage() {
           </button>
         </div>
       </header>
+
+      {/* 尚未成功运行时的分析启动横幅 */}
+      {(() => {
+        const apiRunState = triggeredRunState ?? (data?.meeting?.runSource?.state ?? null);
+        if (apiRunState === 'succeeded') return null;
+        const inProgress = apiRunState === 'running' || apiRunState === 'queued';
+        const label =
+          apiRunState === 'running'     ? '分析进行中，请稍候…'
+          : apiRunState === 'queued'    ? '分析已排队，等待执行…'
+          : apiRunState === 'failed'    ? '上次分析失败，可重新生成'
+          : apiRunState === 'cancelled' ? '上次分析已取消，可重新生成'
+          : '此素材尚未完成分析';
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '7px 32px',
+            background: inProgress ? 'oklch(0.96 0.04 75)' : 'oklch(0.96 0.03 250)',
+            borderBottom: '1px solid var(--line-2)',
+            gap: 12,
+          }}>
+            <span style={{
+              fontFamily: 'var(--sans)', fontSize: 12,
+              color: inProgress ? 'oklch(0.38 0.09 75)' : 'oklch(0.38 0.08 250)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              {inProgress && (
+                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 99, background: 'oklch(0.60 0.14 75)' }} />
+              )}
+              {label}
+            </span>
+            {!inProgress && (
+              <button
+                onClick={() => { void handleStartAnalysis(); }}
+                disabled={triggering}
+                style={{
+                  padding: '5px 14px', borderRadius: 6, fontSize: 12.5,
+                  fontFamily: 'var(--sans)', fontWeight: 600,
+                  cursor: triggering ? 'wait' : 'pointer',
+                  border: 0,
+                  background: triggering ? 'var(--ink-3)' : 'var(--ink)',
+                  color: 'var(--paper)',
+                  opacity: triggering ? 0.7 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                {triggering ? '启动中…' : '开始分析生成'}
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {showImport && (
         <ImportConfirm

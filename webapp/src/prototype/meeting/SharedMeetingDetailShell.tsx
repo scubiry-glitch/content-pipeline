@@ -48,6 +48,8 @@ export function SharedMeetingDetailShell() {
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [sharedRunSource, setSharedRunSource] = useState<{ runId?: string; state?: string } | null>(null);
+  const [triggering, setTriggering] = useState(false);
 
   // 当前 url 末段对应的 view (a/b/c → A/B/C); 默认 A
   const location = useLocation();
@@ -69,6 +71,24 @@ export function SharedMeetingDetailShell() {
     }
   };
 
+  const handleStartAnalysis = async () => {
+    if (!meetingId || triggering) return;
+    setTriggering(true);
+    try {
+      const res = await meetingNotesApi.enqueueRun({
+        scope: { kind: 'meeting', id: meetingId },
+        axis: 'all',
+        preset: 'standard',
+        triggeredBy: 'manual',
+      });
+      if (res.ok) {
+        setSharedRunSource({ runId: res.runId ?? '', state: 'queued' });
+      }
+    } finally {
+      setTriggering(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) { setApiState('error'); return; }
     setApiState('loading');
@@ -78,6 +98,7 @@ export function SharedMeetingDetailShell() {
         setMeetingId(m.meetingId ?? '');
         if (m.title) setApiTitle(String(m.title));
         if (m.date) setApiDate(String(m.date).slice(0, 10));
+        setSharedRunSource(m.runSource ?? null);
         // Variants 读 data.analysis 才是真正内容; 内部 /meetings/:id/detail 返回
         // { analysis: {...} }, 而 /shared/:token 把 meeting body 摊平为 res.meeting.
         // 这里包一层对齐, 让 SharedMeetingDetail 的 C 视图复用同一个 Variants.
@@ -175,6 +196,15 @@ export function SharedMeetingDetailShell() {
         </div>
       </header>
 
+      {/* 尚未成功运行时的分析启动横幅 */}
+      {meetingId && apiState === 'ok' && sharedRunSource?.state !== 'succeeded' && (
+        <SharedStartAnalysisBanner
+          runState={sharedRunSource?.state ?? null}
+          triggering={triggering}
+          onStart={() => { void handleStartAnalysis(); }}
+        />
+      )}
+
       <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         <Outlet context={{
           shellTitle: effectiveTitle,
@@ -195,6 +225,65 @@ export function SharedMeetingDetailShell() {
         />
       )}
       {/* MockToggleBar 不渲染 — 分享视图不需要 */}
+    </div>
+  );
+}
+
+function SharedStartAnalysisBanner({
+  runState,
+  triggering,
+  onStart,
+}: {
+  runState: string | null;
+  triggering: boolean;
+  onStart: () => void;
+}) {
+  const inProgress = runState === 'running' || runState === 'queued';
+  const label =
+    runState === 'running'     ? '分析进行中，请稍候…'
+    : runState === 'queued'    ? '分析已排队，等待执行…'
+    : runState === 'failed'    ? '上次分析失败，可重新生成'
+    : runState === 'cancelled' ? '上次分析已取消，可重新生成'
+    : '此素材尚未完成分析';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '7px 28px',
+      background: inProgress ? 'oklch(0.96 0.04 75)' : 'oklch(0.96 0.03 250)',
+      borderBottom: '1px solid var(--line-2)',
+      gap: 12,
+    }}>
+      <span style={{
+        fontFamily: 'var(--sans)', fontSize: 12,
+        color: inProgress ? 'oklch(0.38 0.09 75)' : 'oklch(0.38 0.08 250)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        {inProgress && (
+          <span style={{
+            display: 'inline-block', width: 7, height: 7, borderRadius: 99,
+            background: 'oklch(0.60 0.14 75)',
+          }} />
+        )}
+        {label}
+      </span>
+      {!inProgress && (
+        <button
+          onClick={onStart}
+          disabled={triggering}
+          style={{
+            padding: '5px 14px', borderRadius: 6, fontSize: 12.5,
+            fontFamily: 'var(--sans)', fontWeight: 600, cursor: triggering ? 'wait' : 'pointer',
+            border: 0,
+            background: triggering ? 'var(--ink-3)' : 'var(--ink)',
+            color: 'var(--paper)',
+            opacity: triggering ? 0.7 : 1,
+            flexShrink: 0,
+          }}
+        >
+          {triggering ? '启动中…' : '开始分析生成'}
+        </button>
+      )}
     </div>
   );
 }
