@@ -50,6 +50,47 @@ export function requireWorkspaceId(
 }
 
 /**
+ * 写路径解析 workspaceId, 区分三类身份:
+ *   - session 用户已加入 ws  → 返回真 UUID, 调用方直接落 INSERT.workspace_id
+ *   - api-key admin          → 返回 null, 调用方应传 undefined 让 service 走表 DEFAULT
+ *   - session 用户没加入 ws  → reply 403 NO_WORKSPACE 并返回 undefined
+ *
+ * 用法:
+ *   const wsId = resolveWriteWorkspaceId(request, reply);
+ *   if (reply.sent) return;
+ *   await svc.createX({ ..., workspaceId: wsId ?? undefined });
+ *
+ * Why: currentWorkspaceId() 对没加入 ws 的 session 返回 NO_WORKSPACE_SENTINEL,
+ * 路由层若直接 `?? undefined` 把 sentinel 传到 INSERT, 会撞 FK 23503 → 500.
+ * 这里把它在路由边界拦下来, 给前端一个 NO_WORKSPACE code 而不是 500.
+ */
+export function resolveWriteWorkspaceId(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): string | null | undefined {
+  const auth = request.auth;
+  if (!auth) {
+    reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Authentication required',
+      code: 'NO_AUTH',
+    });
+    return undefined;
+  }
+  if (auth.via === 'api-key') return null;
+  const wsId = auth.workspace?.id;
+  if (!wsId) {
+    reply.status(403).send({
+      error: 'Forbidden',
+      message: '当前账号未加入任何 workspace, 请联系管理员邀请你加入工作区后再操作',
+      code: 'NO_WORKSPACE',
+    });
+    return undefined;
+  }
+  return wsId;
+}
+
+/**
  * 校验某行实体属于当前 workspace。
  * 跨 workspace 访问 / 不存在时返回 false（调用方应回 404；不暴露存在性）。
  *
