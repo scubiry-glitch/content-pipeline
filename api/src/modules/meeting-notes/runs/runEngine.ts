@@ -952,10 +952,26 @@ export class RunEngine {
     if (filter.state)  { params.push(filter.state);  where.push(`state = $${params.length}`); }
     params.push(Math.min(100, Math.max(1, filter.limit ?? 20)));
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    // 列表把 metadata 里只在详情页用的大字段剔掉（jsonb 减号操作 = 服务端读一次即可，
+    // 比 jsonb_build_object 快 4×）。50 行 payload 从 ~480 KB 压到 ~50 KB。
+    // 详情仍走 SELECT * FROM mn_runs WHERE id=$1（runEngine 内 getRun 路径）。
+    // 保留：inputTokens/outputTokens/currentStep*/llmCalls/axisStats/prism/meetingKind/mode 等小键。
     const r = await this.deps.db.query(
-      `SELECT * FROM mn_runs ${clause}
-       ORDER BY COALESCE(started_at, created_at) DESC
-       LIMIT $${params.length}`,
+      `SELECT id, scope_kind, scope_id, axis, sub_dims, preset, strategy_spec, state,
+              triggered_by, parent_run_id, started_at, finished_at, cost_tokens, cost_ms,
+              progress_pct, error_message, created_at, module, stage, depends_on,
+              trigger_meeting_id,
+              (metadata - ARRAY[
+                'cliRaw','axisIssues','synthesis','render','scopeMatch',
+                'dispatchPlan','decorators',
+                'oneshotRaw','rawClaudeOutput',
+                'oneshotWikiResult','cliWikiResult',
+                'oneshotPersonMap','cliPersonMap',
+                'cliMeetingResult','ceoResult','topicText'
+              ]) AS metadata
+         FROM mn_runs ${clause}
+        ORDER BY COALESCE(started_at, created_at) DESC
+        LIMIT $${params.length}`,
       params,
     );
     return r.rows.map(mapRun);

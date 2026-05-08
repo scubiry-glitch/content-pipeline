@@ -479,10 +479,14 @@ async function main() {
     if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
 
     // v6.2: 启动 Assets AI 批量处理定时任务
-    const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
-    assetsAIScheduler.start();
-    console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
-    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
+    if (process.env.ASSETS_AI_SCHEDULER_ENABLED === 'true') {
+      const { assetsAIScheduler } = await import('./services/assets-ai/scheduler.js');
+      assetsAIScheduler.start();
+      console.log('📄 Assets AI 批量处理定时任务已启动（每30分钟）');
+      if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
+    } else {
+      console.log('📄 Assets AI 批量处理定时任务 disabled (set ASSETS_AI_SCHEDULER_ENABLED=true to enable)');
+    }
 
     // v7.6: 启动会议纪要采集定时任务（按每个 source.scheduleCron 独立调度）
     try {

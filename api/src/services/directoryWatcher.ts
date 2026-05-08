@@ -36,6 +36,7 @@ export class DirectoryWatcherService {
   private loadingBindings = false;
   private importChains: Map<string, Promise<void>> = new Map();
   private readonly maxFilesPerScan: number;
+  private readonly autoScanEnabled: boolean;
 
   constructor() {
     this.assetService = new AssetService();
@@ -43,18 +44,26 @@ export class DirectoryWatcherService {
       1,
       parseInt(process.env.DIRECTORY_WATCHER_MAX_FILES_PER_SCAN || '200', 10)
     );
+    this.autoScanEnabled = process.env.DIRECTORY_WATCHER_AUTOSCAN === 'true';
   }
 
   // Initialize service - load all active bindings and start watching
   async initialize(): Promise<void> {
     console.log('[DirectoryWatcher] Initializing...');
 
-    // Start periodic scan for new bindings
-    this.scanInterval = setInterval(() => {
-      this.loadAndWatchBindings();
-    }, 60000); // Scan every minute
+    if (this.autoScanEnabled) {
+      // Periodic re-scan to pick up new bindings and re-walk existing dirs
+      this.scanInterval = setInterval(() => {
+        this.loadAndWatchBindings();
+      }, 60000);
+    } else {
+      console.log(
+        '[DirectoryWatcher] Auto-scan disabled (set DIRECTORY_WATCHER_AUTOSCAN=true to enable initial + periodic full scans)'
+      );
+    }
 
-    // Initial load
+    // One-time bindings load so fs.watch handlers are registered for live events.
+    // scanDirectory itself is gated by autoScanEnabled.
     await this.loadAndWatchBindings();
 
     console.log('[DirectoryWatcher] Initialized');
@@ -115,8 +124,9 @@ export class DirectoryWatcherService {
   // Start watching a directory
   private async startWatching(binding: DirectoryBinding): Promise<void> {
     try {
-      // Initial scan
-      await this.scanDirectory(binding);
+      if (this.autoScanEnabled) {
+        await this.scanDirectory(binding);
+      }
 
       // Set up watcher
       const watcher = watch(
