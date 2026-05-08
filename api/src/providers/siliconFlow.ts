@@ -4,14 +4,22 @@
 import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
 
-// 流式模式下，每次收到新数据块后重置的静默超时（ms）。
-// 只要模型在持续输出，计时器就会不断重置，不受总生成时长限制。
-// 通过 LLM_FETCH_TIMEOUT_MS 覆盖（长文档生成建议 300000+）。
-const STREAM_IDLE_TIMEOUT_MS = parseInt(process.env.LLM_FETCH_TIMEOUT_MS ?? '', 10) || 300_000;
+// 流式 SSE 双阶段超时：
+//   1) 首字节窗口（first-byte）：从 fetch 发出 → 收到第一个 SSE chunk。
+//      reasoning 模型 + 长 prompt 在 prefill 阶段不会发任何字节，可达数分钟。
+//      通过 LLM_FIRST_BYTE_TIMEOUT_MS 覆盖（默认 600s = 10min）。
+//   2) 静默窗口（idle）：上一个 chunk → 下一个 chunk。
+//      正常生成时 chunk 间隔 < 1s；连续 60s 没动静基本可以判死。
+//      通过 LLM_FETCH_TIMEOUT_MS 覆盖（默认 60s）。保留旧变量名以兼容历史 .env。
+//
+// 历史问题：原来两窗口共用 LLM_FETCH_TIMEOUT_MS=300s —— 首字节给得不够松（reasoning
+// 长 prompt 仍可能超），idle 给得不够紧（断流后还要干等 5min）。现在分开。
+const FIRST_BYTE_TIMEOUT_MS = parseInt(process.env.LLM_FIRST_BYTE_TIMEOUT_MS ?? '', 10) || 600_000;
+const STREAM_IDLE_TIMEOUT_MS = parseInt(process.env.LLM_FETCH_TIMEOUT_MS ?? '', 10) || 60_000;
 
 /**
  * 用流式 SSE 读取 SiliconFlow chat/completions，并将全部 content delta 拼成字符串返回。
- * 采用"滚动静默超时"：每收到一个 chunk 就重置计时器，避免因总生成时间过长而超时。
+ * 双阶段超时：首字节窗口 → 收到首 chunk 后切到 idle 窗口。
  */
 async function generateViaStream(
   baseUrl: string,
@@ -20,17 +28,15 @@ async function generateViaStream(
   onProgress?: (tokensSoFar: number, snippet: string, cumulative?: string) => void,
 ): Promise<{ content: string; model: string; promptTokens: number; completionTokens: number }> {
   const ctrl = new AbortController();
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const resetIdle = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(
-      () => ctrl.abort(new Error(`SiliconFlow stream idle timeout after ${STREAM_IDLE_TIMEOUT_MS}ms`)),
-      STREAM_IDLE_TIMEOUT_MS,
-    );
+  const armTimeout = (ms: number, reason: string) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(new Error(reason)), ms);
   };
 
-  resetIdle(); // 启动首次计时，防止连接本身就挂住
+  // 首字节窗口；收到第一个 chunk 时（line 73 附近）切到更紧的 idle 窗口
+  armTimeout(FIRST_BYTE_TIMEOUT_MS, `SiliconFlow first-byte timeout after ${FIRST_BYTE_TIMEOUT_MS}ms (prefill stuck or model queueing)`);
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -64,7 +70,9 @@ async function generateViaStream(
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      resetIdle(); // 收到数据块，重置静默计时器
+      // 收到 chunk：从 first-byte 窗口切到更紧的 idle 窗口；
+      // 之后每个 chunk 都 re-arm，正常生成期不会触发（idempotent，无需 firstByteSeen 标志）
+      armTimeout(STREAM_IDLE_TIMEOUT_MS, `SiliconFlow stream idle timeout after ${STREAM_IDLE_TIMEOUT_MS}ms (model stalled mid-stream)`);
 
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
@@ -102,7 +110,7 @@ async function generateViaStream(
 
     return { content, model: modelName, promptTokens, completionTokens };
   } finally {
-    if (idleTimer) clearTimeout(idleTimer);
+    if (timer) clearTimeout(timer);
   }
 }
 
