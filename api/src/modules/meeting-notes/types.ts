@@ -20,8 +20,13 @@ export interface LLMOptions {
   maxTokens?: number;
   model?: string;
   responseFormat?: 'text' | 'json';
-  /** 流式生成进度回调，每收到 N 个 token 时触发；snippet 为最新输出的尾部片段（≤150字符） */
-  onProgress?: (tokensSoFar: number, snippet: string) => void;
+  /**
+   * 流式生成进度回调，每收到 N 个 token 时触发。
+   * @param tokensSoFar 估算累计 token 数
+   * @param snippet     最新输出的尾部片段（≤150字符），用于 UI 滚动展示
+   * @param cumulative  完整累计 content（仅 streaming provider 提供）。供"实时落库 / 断点续跑"消费。
+   */
+  onProgress?: (tokensSoFar: number, snippet: string, cumulative?: string) => void;
 }
 
 export interface EmbeddingAdapter {

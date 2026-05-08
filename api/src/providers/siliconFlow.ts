@@ -17,7 +17,7 @@ async function generateViaStream(
   baseUrl: string,
   apiKey: string,
   body: Record<string, any>,
-  onProgress?: (tokensSoFar: number, snippet: string) => void,
+  onProgress?: (tokensSoFar: number, snippet: string, cumulative?: string) => void,
 ): Promise<{ content: string; model: string; promptTokens: number; completionTokens: number }> {
   const ctrl = new AbortController();
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,7 +91,9 @@ async function generateViaStream(
             if (onProgress && tokensSoFar - lastProgressAt >= PROGRESS_INTERVAL) {
               lastProgressAt = tokensSoFar;
               const snippet = content.slice(-150);
-              onProgress(tokensSoFar, snippet);
+              // 第三个参数 cumulative：完整累计 content。
+              // 让 oneshot 等调用方做"实时落库"时不必再自己累加 snippet。
+              onProgress(tokensSoFar, snippet, content);
             }
           }
         } catch { /* 跳过格式异常的 chunk */ }
