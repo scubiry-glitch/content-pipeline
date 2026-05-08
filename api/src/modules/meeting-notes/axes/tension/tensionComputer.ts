@@ -47,7 +47,11 @@ export async function computeTensions(
   if (!bundle) return out;
 
   if (args.replaceExisting) {
-    await deps.db.query(`DELETE FROM mn_tensions WHERE meeting_id = $1`, [bundle.meetingId]);
+    // P0 数据源契约：只删 LLM 行，保留 claude_cli / API Oneshot / manual_import / human_edit / restored
+    await deps.db.query(
+      `DELETE FROM mn_tensions WHERE meeting_id = $1 AND source = 'llm_extracted'`,
+      [bundle.meetingId],
+    );
   }
 
   const items = await extractListOverChunks<ExtractedTension>(
