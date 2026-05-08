@@ -2,10 +2,11 @@
 // 仅 super_admin 可调用：创建账号、列表、禁用/启用、重置密码
 
 import type { FastifyInstance } from 'fastify';
-import { query } from '../../db/connection.js';
+import { getClient, query } from '../../db/connection.js';
 import { hashPassword } from '../../services/auth/passwords.js';
 import { requireSuperAdmin } from '../../middleware/auth.js';
 import { writeAuditEvent } from '../../services/auth/audit.js';
+import { createPersonalWorkspace } from '../../services/auth/personalWorkspace.js';
 
 export async function adminUserRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', requireSuperAdmin);
@@ -49,18 +50,32 @@ export async function adminUserRoutes(fastify: FastifyInstance) {
       return { error: 'Bad Request', message: 'password must be at least 8 chars', code: 'INVALID_INPUT' };
     }
     const passwordHash = await hashPassword(password);
+    const client = await getClient();
+    let userId: string;
+    let createdAt: Date;
     try {
-      const ins = await query<{ id: string; created_at: Date }>(
-        `INSERT INTO users (email, name, password_hash, is_super_admin, must_change_password)
-         VALUES ($1, $2, $3, $4, TRUE) RETURNING id, created_at`,
-        [email, name, passwordHash, !!body.isSuperAdmin]
-      );
-      const userId = ins.rows[0].id;
-      await query(
-        `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider)
-           VALUES ($1, 'password', $1::text, $2)`,
-        [userId, email]
-      );
+      try {
+        await client.query('BEGIN');
+        const ins = await client.query<{ id: string; created_at: Date }>(
+          `INSERT INTO users (email, name, password_hash, is_super_admin, must_change_password)
+           VALUES ($1, $2, $3, $4, TRUE) RETURNING id, created_at`,
+          [email, name, passwordHash, !!body.isSuperAdmin]
+        );
+        userId = ins.rows[0].id;
+        createdAt = ins.rows[0].created_at;
+        await client.query(
+          `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider)
+             VALUES ($1, 'password', $1::text, $2)`,
+          [userId, email]
+        );
+        await createPersonalWorkspace(userId, email, client, { name });
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw e;
+      } finally {
+        client.release();
+      }
       await writeAuditEvent({
         event: 'user.create',
         userId: request.auth?.user?.id ?? null,
@@ -76,7 +91,7 @@ export async function adminUserRoutes(fastify: FastifyInstance) {
         status: 'active',
         isSuperAdmin: !!body.isSuperAdmin,
         mustChangePassword: true,
-        createdAt: ins.rows[0].created_at,
+        createdAt,
       };
     } catch (e: any) {
       if (e?.code === '23505') {

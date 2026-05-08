@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query } from '../db/connection.js';
 import { authenticate } from '../middleware/auth.js';
 import { writeAuditEvent } from '../services/auth/audit.js';
+import { invalidateSessionCache } from '../services/auth/sessions.js';
 import { initWorkspaceVault, archiveWorkspaceVault } from '../lib/wikiVault.js';
 
 type Role = 'owner' | 'admin' | 'member';
@@ -116,6 +117,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
         `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
         [ws.id, userId]
       );
+      invalidateSessionCache();
       // 初始化 per-ws wiki vault 骨架 — best-effort, 失败不阻塞 ws 创建
       const vaultRes = await initWorkspaceVault(ws.slug, ws.name);
       if (!vaultRes.ok) {
@@ -321,6 +323,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
       }
       throw e;
     }
+    invalidateSessionCache();
     reply.status(201);
     return {
       userId: targetUser.id, email: targetUser.email, name: targetUser.name,
@@ -362,6 +365,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
       } finally {
         client.release();
       }
+      invalidateSessionCache();
       return { ok: true };
     }
     const upd = await query(
@@ -372,6 +376,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
       reply.status(404);
       return { error: 'Not Found', message: 'member not found', code: 'NOT_FOUND' };
     }
+    invalidateSessionCache();
     return { ok: true };
   });
 
@@ -403,6 +408,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
       `DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
       [id, targetUserId]
     );
+    invalidateSessionCache();
     return { ok: true };
   });
 }

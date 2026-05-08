@@ -17,7 +17,11 @@ import {
   type MeetingNoteChannelService as Service,
 } from './meetingNoteChannelService.js';
 import { authenticate } from '../../../middleware/auth.js';
-import { assertRowInWorkspace, currentWorkspaceId } from '../../../db/repos/withWorkspace.js';
+import {
+  assertRowInWorkspace,
+  currentWorkspaceId,
+  resolveWriteWorkspaceId,
+} from '../../../db/repos/withWorkspace.js';
 import { emitImportWebhook, emitUploadedWebhook } from './importWebhook.js';
 import type { MeetingNotesEngine } from '../MeetingNotesEngine.js';
 
@@ -157,6 +161,8 @@ export async function meetingNotesRoutes(
 
   // Create source
   fastify.post(p, { preHandler: authenticate }, async (request, reply) => {
+    const wsId = resolveWriteWorkspaceId(request, reply);
+    if (reply.sent) return;
     const body = request.body as any;
     try {
       const created = await svc.createSource({
@@ -166,7 +172,7 @@ export async function meetingNotesRoutes(
         isActive: body.isActive,
         scheduleCron: body.scheduleCron,
         createdBy: body.createdBy,
-        workspaceId: currentWorkspaceId(request) ?? undefined,
+        workspaceId: wsId ?? undefined,
       });
       reply.status(201);
       return created;

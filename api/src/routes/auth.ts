@@ -2,7 +2,7 @@
 // OAuth2 路由占位（第 3 期接入）
 
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { query } from '../db/connection.js';
+import { getClient, query } from '../db/connection.js';
 import { verifyPassword, hashPassword } from '../services/auth/passwords.js';
 import {
   createSession,
@@ -27,6 +27,7 @@ import {
   exchangeCodeForToken,
   fetchUserInfo,
 } from '../services/auth/oauthGoogle.js';
+import { createPersonalWorkspace } from '../services/auth/personalWorkspace.js';
 
 interface LoginBody {
   email?: string;
@@ -398,28 +399,52 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: 'Forbidden', message: 'Account is disabled', code: 'USER_DISABLED' };
         }
         userId = userRes.rows[0].id;
-      } else {
-        // 3. 全新用户 — 创建 (无密码 hash, 不需要 must_change_password)
-        const ins = await query<{ id: string }>(
-          `INSERT INTO users (email, name, password_hash, must_change_password, avatar_url)
-           VALUES ($1, $2, NULL, FALSE, $3)
-           RETURNING id`,
-          [info.email, info.name || info.email, info.picture ?? null],
+        // 仅绑 identity (用户 + ws 已经存在)
+        await query(
+          `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider, metadata)
+           VALUES ($1, 'google', $2, $3, $4::jsonb)
+           ON CONFLICT (provider, provider_user_id) DO NOTHING`,
+          [
+            userId,
+            info.sub,
+            info.email,
+            JSON.stringify({ name: info.name, picture: info.picture ?? null }),
+          ],
         );
-        userId = ins.rows[0].id;
+      } else {
+        // 3. 全新用户 — INSERT users + identity + personal workspace 同事务
+        const client = await getClient();
+        try {
+          await client.query('BEGIN');
+          const ins = await client.query<{ id: string }>(
+            `INSERT INTO users (email, name, password_hash, must_change_password, avatar_url)
+             VALUES ($1, $2, NULL, FALSE, $3)
+             RETURNING id`,
+            [info.email, info.name || info.email, info.picture ?? null],
+          );
+          userId = ins.rows[0].id;
+          await client.query(
+            `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider, metadata)
+             VALUES ($1, 'google', $2, $3, $4::jsonb)
+             ON CONFLICT (provider, provider_user_id) DO NOTHING`,
+            [
+              userId,
+              info.sub,
+              info.email,
+              JSON.stringify({ name: info.name, picture: info.picture ?? null }),
+            ],
+          );
+          await createPersonalWorkspace(userId, info.email, client, {
+            name: info.name || undefined,
+          });
+          await client.query('COMMIT');
+        } catch (e) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw e;
+        } finally {
+          client.release();
+        }
       }
-      // 绑定 identity
-      await query(
-        `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider, metadata)
-         VALUES ($1, 'google', $2, $3, $4::jsonb)
-         ON CONFLICT (provider, provider_user_id) DO NOTHING`,
-        [
-          userId,
-          info.sub,
-          info.email,
-          JSON.stringify({ name: info.name, picture: info.picture ?? null }),
-        ],
-      );
     }
 
     if (!userId) {
