@@ -188,12 +188,18 @@ function truncate(s: string, n: number): string {
  *      看到 unmatched close 时按栈顶 open 类型把它"翻转"成对应 close。
  *      经实测：单点翻转后栈状态恢复，后续 close 自动归位（连锁恢复）。
  *   3) `}` 紧跟 `"key":` 之间漏逗号
+ *   4) 字符串值内未转义的 ASCII `"`（中文叙述里嵌"短语"忘记 \\"）
+ *      —— 扫描时若 `"` 后非 `,:}]/EOF` 就把它转成 `\"`。
+ *   5) 多余的右括号导致 root 提前闭合 —— parse 报 'Unexpected non-whitespace
+ *      character after JSON at position N'，删 N-1 处的 close 重试。
  *
  * 每条规则各自独立 try-parse，命中即返回。全部失败 → null。
  *
- * 已验证 case：mn run 0a66d67d (2026-05-06) — claude 在 `evidenceLadder.examples`
- * 数组关闭处把 `]` 写成 `}` 致 parse error at position 15676，
- * 规则 2 翻转 1 字节后 39878-byte JSON 完整恢复（含 6 顶层 keys）。
+ * 已验证 case：
+ *   - mn run 0a66d67d (2026-05-06) — `evidenceLadder.examples` 数组关闭处把 `]` 写成 `}`
+ *     致 parse error at position 15676，规则 2 翻转 1 字节后 39878-byte JSON 完整恢复。
+ *   - mn run 988147ac (2026-05-08) — 中文叙述里嵌 `"特征值输出+应用包装"` 4 处 ASCII 双引号未转义
+ *     + 1 处 surplus `}`，致 parse @ pos 25628 崩；规则 4+5 组合恢复（含 7 顶层 keys, 38KB）。
  */
 function tryRepairJson(text: string): any | null {
   // 规则 1：trailing comma 前置 ] 或 }
@@ -247,7 +253,56 @@ function tryRepairJson(text: string): any | null {
       try { return JSON.parse(c); } catch {/* 继续 */}
     }
   }
+  // 规则 4 + 5 组合（先 escape 内嵌 quote，再迭代删 surplus close）。
+  // 单独跑规则 5 不行：内嵌 quote 会把字符串过早关闭，让规则 5 误删合法 close。
+  // 单独跑规则 4 不行：被 escape 之后还有结构性多余 `}`。
+  {
+    let cur = escapeUnescapedInnerQuotes(text);
+    for (let it = 0; it < 8; it++) {
+      try { return JSON.parse(cur); } catch (e) {
+        const msg = (e as Error).message;
+        const m = msg.match(/Unexpected non-whitespace character after JSON at position (\d+)/);
+        if (!m) break;
+        const pos = +m[1];
+        let j = pos - 1;
+        if (cur[j] !== '}' && cur[j] !== ']') {
+          while (j >= 0 && cur[j] !== '}' && cur[j] !== ']') j--;
+        }
+        if (j < 0) break;
+        cur = cur.slice(0, j) + cur.slice(j + 1);
+      }
+    }
+  }
   return null;
+}
+
+/**
+ * 规则 4 辅助：把字符串值内未转义的 ASCII `"` 转成 `\"`。
+ * 启发式：进 string 后遇 `"`，若其后下一个非空白字符不是 `,` `:` `}` `]` 或 EOF，
+ * 视为字符串内嵌的 unescape quote。仅扫一遍，不递归。
+ */
+function escapeUnescapedInnerQuotes(text: string): string {
+  const out: string[] = [];
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === '\\') { out.push(ch); if (i + 1 < text.length) out.push(text[i + 1]); i++; continue; }
+      if (ch === '"') {
+        let j = i + 1;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        const nx = text[j];
+        if (nx === ',' || nx === ':' || nx === '}' || nx === ']' || j >= text.length) {
+          inStr = false; out.push(ch); continue;
+        }
+        out.push('\\"'); continue;  // 未转义内嵌 quote
+      }
+      out.push(ch); continue;
+    }
+    if (ch === '"') { inStr = true; out.push(ch); continue; }
+    out.push(ch);
+  }
+  return out.join('');
 }
 
 /**
