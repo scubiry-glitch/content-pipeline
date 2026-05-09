@@ -4,6 +4,49 @@
 
 import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
+import { getProviderBucket } from './rateLimiter.js';
+
+/**
+ * 429-aware fetch：命中限流时按 Retry-After / 指数退避重试。
+ * 共享 token-bucket（per-provider）控制 RPS 软上限；429 兜底硬上限。
+ *
+ * 失败模式：max 3 次后仍 429 → 抛 Error，让 _shared.ts 的 chunk-level
+ * retry 走它自己的"温度+0.2 重试"路径（也会再走这里一次）。
+ */
+async function rateLimitedFetch(
+  url: string,
+  init: RequestInit,
+  errorPrefix: string,
+): Promise<Response> {
+  const bucket = getProviderBucket('volcano-engine');
+  const maxAttempts = 3;
+  let lastErrText = '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (bucket) await bucket.acquire();
+    const resp = await fetchWithTimeout(url, init);
+    if (resp.status !== 429) return resp;
+
+    // 429：读 Retry-After header；没给就用指数退避 (10s, 30s, 60s)
+    const retryAfterRaw = resp.headers.get('retry-after');
+    let waitMs = 0;
+    if (retryAfterRaw) {
+      const sec = Number(retryAfterRaw);
+      if (Number.isFinite(sec) && sec > 0) waitMs = sec * 1000;
+    }
+    if (!waitMs) waitMs = Math.min(60_000, 10_000 * 2 ** (attempt - 1));
+
+    // 读 body（用于最后一次失败时给上层错误信息）
+    try { lastErrText = await resp.text(); } catch { /* ignore */ }
+
+    if (attempt >= maxAttempts) {
+      throw new Error(`${errorPrefix}: 429 (after ${maxAttempts} attempts) - ${lastErrText}`);
+    }
+    console.warn(`[VolcanoEngine] 429 hit, backing off ${waitMs}ms before retry ${attempt + 1}/${maxAttempts}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+  }
+  // 不会到这；类型守护
+  throw new Error(`${errorPrefix}: exhausted retries`);
+}
 
 export class VolcanoEngineProvider extends LLMProvider {
   constructor(apiKey?: string) {
@@ -35,7 +78,7 @@ export class VolcanoEngineProvider extends LLMProvider {
     model: string,
     params?: GenerationParams
   ): Promise<GenerationResult> {
-    const response = await fetchWithTimeout(`${this.baseUrl}/api/v3/chat/completions`, {
+    const response = await rateLimitedFetch(`${this.baseUrl}/api/v3/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,7 +98,7 @@ export class VolcanoEngineProvider extends LLMProvider {
           ? { response_format: { type: 'json_object' } }
           : {}),
       }),
-    });
+    }, 'Volcano Engine Chat API error');
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -112,14 +155,14 @@ export class VolcanoEngineProvider extends LLMProvider {
       });
     }
 
-    const response = await fetchWithTimeout(`${this.baseUrl}/api/v3/responses`, {
+    const response = await rateLimitedFetch(`${this.baseUrl}/api/v3/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(requestBody),
-    });
+    }, 'Volcano Engine Responses API error');
 
     if (!response.ok) {
       const errorText = await response.text();

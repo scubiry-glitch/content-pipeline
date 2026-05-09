@@ -1357,6 +1357,41 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.post('/compute/axis', { preHandler: authenticate }, async (request, reply) => {
       const body = request.body as any;
       if (!body?.axis) { reply.status(400); return { error: 'Bad Request', message: 'axis is required' }; }
+
+      // mode：默认 'multi-axis'（同步小调用，撞 RPM 限流）；
+      // 'claude-cli' / 'api-oneshot' 走 enqueueRun 异步路径，单次大调用产出全 16 轴 JSON。
+      // 注：claude-cli/api-oneshot 模式不接受 axis 子集请求 —— 它们的 prompt template
+      // 输出整套 schema，调用方 axis/subDims 入参在 mn_runs 上记录但实际产出包含其他轴。
+      const rawMode = typeof body.mode === 'string' ? body.mode : null;
+      const mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' =
+        rawMode === 'claude-cli' ? 'claude-cli'
+        : rawMode === 'api-oneshot' ? 'api-oneshot'
+        : 'multi-axis';
+
+      if (mode !== 'multi-axis') {
+        // 异步入队：必须有 scope（claude-cli 跑全 meeting 上下文，scope=meeting 时拿单场，
+        // scope=project/client/topic/library 走 collectMeetingsInScope 的展开路径但
+        // claude-cli mode 在 runEngine.execute 里只用第一场 meeting 跑——目前不支持
+        // 项目级 claude-cli 一锅端）
+        const scope = body.scope ?? (body.meetingId ? { kind: 'meeting', id: body.meetingId } : null);
+        if (!scope) {
+          reply.status(400);
+          return { error: 'Bad Request', message: 'scope or meetingId required for mode=' + mode };
+        }
+        const r = await engine.enqueueRun({
+          scope,
+          axis: body.axis,
+          subDims: body.subDims,
+          mode,
+          triggeredBy: 'manual',
+        });
+        if (!r.ok) {
+          reply.status(409);
+          return { error: 'Conflict', message: r.reason ?? 'enqueue failed' };
+        }
+        return { ok: true, async: true, runId: r.runId, mode };
+      }
+
       return engine.computeAxis({
         meetingId: body.meetingId,
         scope: body.scope,
@@ -1364,6 +1399,32 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         subDims: body.subDims,
         replaceExisting: body.replaceExisting,
       });
+    });
+
+    // 暴露 axis_recompute 配置给前端——AxisRegeneratePanel 读它来渲染 mode 选择项
+    fastify.get('/config/axis-recompute', async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { readFileSync } = require('node:fs') as typeof import('node:fs');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { resolve } = require('node:path') as typeof import('node:path');
+        const path = resolve(process.cwd(), 'config/run-routing.json');
+        const j = JSON.parse(readFileSync(path, 'utf8')) as { axis_recompute?: unknown };
+        const cfg = (j.axis_recompute && typeof j.axis_recompute === 'object')
+          ? j.axis_recompute as Record<string, unknown>
+          : {};
+        return {
+          default_mode: typeof cfg.default_mode === 'string' ? cfg.default_mode : 'multi-axis',
+          modes: Array.isArray(cfg.modes) ? cfg.modes : ['multi-axis', 'claude-cli', 'api-oneshot'],
+          presets: (cfg.presets && typeof cfg.presets === 'object') ? cfg.presets : {},
+        };
+      } catch {
+        return {
+          default_mode: 'multi-axis',
+          modes: ['multi-axis', 'claude-cli', 'api-oneshot'],
+          presets: {},
+        };
+      }
     });
 
     // --------------------------------------------------------

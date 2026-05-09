@@ -285,10 +285,18 @@ export async function extractListOverChunks<T = any>(
     return { error: 'parse', message: 'non-array JSON', raw };
   }
 
-  // Opt-5 (O6) chunks 并行：默认 chunks 数 ≤ 3 时全部并发，>3 时按 chunkConcurrency
+  // Opt-5 (O6) chunks 并行：默认 chunks 数 ≤ 2 时全部并发，>2 时按 chunkConcurrency
   // 滚动窗口跑。1 chunk 单独走（无并发开销）。
   // 调用方可显式 concurrency=1 退化为串行（用于 rate-limit 严格的 provider）。
-  const chunkConcurrency = options.concurrency ?? Math.min(chunks.length, 4);
+  //
+  // 默认值历史：
+  //   - 4：旧默认；项目作用域 8 场会议 × 6 axis × ~10 chunks 起飞，瞬时 RPM 打爆
+  //         火山引擎 deepseek-v3-2 → 大量 429 ModelAccountRpmRateLimitExceeded
+  //         (run 9aa1a963 实测 134 errors)。
+  //   - 2：当前默认；配合 providers/rateLimiter.ts 的全局 token-bucket 双保险，
+  //         单 axis 进程内最多 2 路并发，跨 axis 由 bucket 控速到 RPS 配置。
+  //         调用方仍可显式 `concurrency: 4` 还原旧行为（用于无限流 provider）。
+  const chunkConcurrency = options.concurrency ?? Math.min(chunks.length, 2);
 
   async function processChunk(i: number): Promise<void> {
     let attempt = await tryChunk(i, chunks.length, baseTemp);

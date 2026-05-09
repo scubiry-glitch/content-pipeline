@@ -100,8 +100,28 @@ export const meetingNotesApi = {
     jget<any>(`/meetings/${id}/detail?view=${view}`),
 
   // Compute / Runs
-  computeAxis: (body: { meetingId?: string; scope?: any; axis: string; subDims?: string[]; replaceExisting?: boolean }) =>
-    jpost<any>('/compute/axis', body),
+  // mode 缺省 / 'multi-axis' → 同步多次小 LLM 调用（受火山 RPM 限流影响）
+  // mode 'claude-cli' / 'api-oneshot' → 异步入 mn_runs，单次大调用产 16 轴 JSON，返回 { runId, async: true }
+  computeAxis: (body: {
+    meetingId?: string;
+    scope?: any;
+    axis: string;
+    subDims?: string[];
+    replaceExisting?: boolean;
+    mode?: 'multi-axis' | 'claude-cli' | 'api-oneshot';
+  }) =>
+    jpost<{ ok: boolean; async?: boolean; runId?: string; mode?: string; results?: any }>(
+      '/compute/axis',
+      body,
+    ),
+
+  /** GET /config/axis-recompute — 读 run-routing.json 里 axis_recompute 段，渲染 mode 选择项 */
+  getAxisRecomputeConfig: () =>
+    jget<{
+      default_mode: 'multi-axis' | 'claude-cli' | 'api-oneshot' | string;
+      modes: Array<'multi-axis' | 'claude-cli' | 'api-oneshot' | string>;
+      presets: Record<string, { default_mode?: string }>;
+    }>('/config/axis-recompute'),
 
   /**
    * 跨轴线索：当前 axis 上的问题在其他 axis 的真实映射（基于 mn_*.row 实算）。

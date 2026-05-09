@@ -63,6 +63,29 @@
     }
   ],
 
+  "providers": {
+    "$comment": "LLM provider 的全局 token-bucket 速率限额（每秒补 N 个 slot 上限 = 同时 burst 上限）。同一进程里所有 axis 共享同一只桶。0 / 缺省 = 不限速（旧行为）。providers/rateLimiter.ts 在第一次调用时 lazy 加载本配置。线上账号 deepseek-v3-2 RPM 限额 60-120 RPM ≈ 1-2 RPS。",
+    "volcano-engine": { "rps": 2 },
+    "kimi": { "rps": 2 },
+    "siliconflow": { "rps": 2 },
+    "openai": { "rps": 0 },
+    "claude": { "rps": 0 },
+    "dashboard-llm": { "rps": 0 }
+  },
+
+  "axis_recompute": {
+    "$comment": "AxisRegeneratePanel 触发轴重算时的可选模式。multi-axis = 旧路径 (POST /compute/axis 同步多次小 LLM 调用，按 axis × sub_dim × chunk 展开)；claude-cli = POST /runs 异步走 Claude CLI 一次大调用（不撞火山 RPM 但占 Claude 配额）；api-oneshot = POST /runs 异步走 LLM HTTP API 一次大调用。default_mode = UI 默认勾选项；presets = 按 axis 名覆盖默认。",
+    "default_mode": "multi-axis",
+    "modes": ["multi-axis", "claude-cli", "api-oneshot"],
+    "presets": {
+      "people":    { "default_mode": "multi-axis" },
+      "projects":  { "default_mode": "multi-axis" },
+      "knowledge": { "default_mode": "multi-axis" },
+      "meta":      { "default_mode": "multi-axis" },
+      "tension":   { "default_mode": "multi-axis" }
+    }
+  },
+
   "workers": {
     "local-mac": {
       "enabled": true,

@@ -1,11 +1,27 @@
 // AxisRegeneratePanel — 轴内快捷重算浮层
 // 原型来源：/tmp/mn-proto/axis-regenerate.jsx AxisRegeneratePanel
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon, Chip, MonoMeta, SectionLabel } from './_atoms';
 import { meetingNotesApi } from '../../api/meetingNotes';
 import { useMeetingScope } from './_scopeContext';
 import { AXIS_REGISTRY, ALL_AXES } from './_axisRegistry';
+
+// 三种生成模式的展示元信息（label / 简介），按 axis_recompute.modes 顺序渲染
+const MODE_META: Record<'multi-axis' | 'claude-cli' | 'api-oneshot', { label: string; desc: string }> = {
+  'multi-axis': {
+    label: '多轴循环（默认）',
+    desc: '按 16 轴循环 LLM · 多次小调用 · 走火山 deepseek-v3-2 · 受 RPM 限流影响（已加全局 token-bucket）',
+  },
+  'claude-cli': {
+    label: 'Claude CLI 一次性',
+    desc: 'spawn claude -p 单次大调用产 16 轴 JSON · 不撞火山 RPM · 占 Claude 配额 · 异步入 mn_runs',
+  },
+  'api-oneshot': {
+    label: 'API Oneshot',
+    desc: '一次 HTTP 调用产 16 轴 JSON · 走 services/llm.ts 多 provider · 异步入 mn_runs',
+  },
+};
 
 // P1：把后端 4xx 的 code 翻成给用户看的中文文案
 function mapEnqueueError(raw: string): string {
@@ -271,6 +287,45 @@ export function AxisRegeneratePanel({
   const [scope, setScope] = useState<'project' | 'library'>('project');
   const axisMeta = AXIS_SUB[axis];
 
+  // mode 选择：从 /config/axis-recompute 拉默认值与可选项；按 axis 走 presets[axis].default_mode 覆盖
+  type RecomputeMode = 'multi-axis' | 'claude-cli' | 'api-oneshot';
+  const [modeConfig, setModeConfig] = useState<{
+    default_mode: RecomputeMode;
+    modes: RecomputeMode[];
+    presets: Record<string, { default_mode?: RecomputeMode }>;
+  }>({ default_mode: 'multi-axis', modes: ['multi-axis', 'claude-cli', 'api-oneshot'], presets: {} });
+  const [mode, setMode] = useState<RecomputeMode>('multi-axis');
+  useEffect(() => {
+    let cancel = false;
+    meetingNotesApi.getAxisRecomputeConfig()
+      .then((cfg) => {
+        if (cancel) return;
+        const safeModes: RecomputeMode[] = (cfg.modes ?? ['multi-axis', 'claude-cli', 'api-oneshot'])
+          .filter((m): m is RecomputeMode =>
+            m === 'multi-axis' || m === 'claude-cli' || m === 'api-oneshot');
+        const safeDefault: RecomputeMode = (
+          cfg.default_mode === 'claude-cli' ? 'claude-cli'
+          : cfg.default_mode === 'api-oneshot' ? 'api-oneshot'
+          : 'multi-axis'
+        );
+        const safePresets: Record<string, { default_mode?: RecomputeMode }> = {};
+        for (const [k, v] of Object.entries(cfg.presets ?? {})) {
+          const dm = v?.default_mode;
+          if (dm === 'multi-axis' || dm === 'claude-cli' || dm === 'api-oneshot') {
+            safePresets[k] = { default_mode: dm };
+          }
+        }
+        setModeConfig({ default_mode: safeDefault, modes: safeModes, presets: safePresets });
+      })
+      .catch(() => { /* fallback to local default */ });
+    return () => { cancel = true; };
+  }, []);
+  // 切轴时按 presets[axis].default_mode 重置 mode
+  useEffect(() => {
+    const preferred = modeConfig.presets[axis]?.default_mode ?? modeConfig.default_mode;
+    if (modeConfig.modes.includes(preferred)) setMode(preferred);
+  }, [axis, modeConfig]);
+
   const total = selected.reduce((acc, id) => {
     const sub = axisMeta.subs.find(s => s.id === id);
     if (!sub) return acc;
@@ -337,6 +392,7 @@ export function AxisRegeneratePanel({
         axis,
         subDims: selected,
         preset,
+        mode,
         triggeredBy: 'axis-regenerate-panel',
       });
       setSubmitting(false);
@@ -564,6 +620,41 @@ export function AxisRegeneratePanel({
               {preset === 'lite'     && '只跑核心装饰器 · 快速刷新'}
               {preset === 'standard' && '默认 · 案例锚定 + 校准 + 知识接地'}
               {preset === 'max'      && '全装饰器堆叠 · 成本 ×2.5'}
+            </div>
+          </div>
+
+          <div style={cardBase}>
+            <SectionLabel>⑤ 生成模式</SectionLabel>
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {modeConfig.modes.map((m) => {
+                const active = m === mode;
+                const meta = MODE_META[m];
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    style={{
+                      border: 0, textAlign: 'left', cursor: 'pointer', padding: '10px 12px', borderRadius: 5,
+                      background: active ? 'var(--paper-2)' : 'transparent',
+                      boxShadow: active ? 'inset 0 0 0 1px var(--accent)' : 'inset 0 0 0 1px var(--line-2)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: active ? 600 : 500 }}>
+                        {meta.label}
+                      </span>
+                      <code style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)' }}>{m}</code>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.5 }}>
+                      {meta.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--ink-4)', marginTop: 6, lineHeight: 1.5 }}>
+              默认按 <code style={{ fontFamily: 'var(--mono)' }}>config/run-routing.json</code> 的{' '}
+              <code style={{ fontFamily: 'var(--mono)' }}>axis_recompute.presets.{axis}</code> 取值；可手动覆盖
             </div>
           </div>
 
