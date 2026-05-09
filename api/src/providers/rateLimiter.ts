@@ -123,3 +123,21 @@ export function _resetBucketsForTest(): void {
   buckets.clear();
   _routingConfig = undefined;
 }
+
+/**
+ * 热重载：清掉 bucket cache + routing config cache，下次 acquire 重新读
+ * config/run-routing.json。运维改 RPS 后调一次本函数即可立即生效，
+ * 不必重启 worker。
+ *
+ * 注意：正在 in-flight 的 acquire() 不受影响（拿到 token 就走）；
+ * 只影响"下一波"请求的桶。
+ */
+export function reloadRateLimiterConfig(): { providers: string[]; configLoaded: boolean } {
+  buckets.clear();
+  _routingConfig = undefined;
+  const cfg = loadRoutingConfig();
+  return {
+    providers: Object.keys(cfg.providers ?? {}),
+    configLoaded: cfg.providers != null,
+  };
+}

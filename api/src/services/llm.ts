@@ -48,6 +48,13 @@ function getKimiConfig(): { apiKey: string; baseURL: string } | null {
 
 // 使用原生 https 模块调用 Kimi API（解决 Node.js fetch IPv6 超时问题）
 async function kimiRequest(path: string, body: any, apiKey: string, baseURL: string): Promise<any> {
+  // 全局 token-bucket（providers/rateLimiter.ts）控速；config/run-routing.json
+  // providers.kimi.rps 配置；缺省 = 不限速
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getProviderBucket } = require('../providers/rateLimiter.js') as typeof import('../providers/rateLimiter.js');
+  const bucket = getProviderBucket('kimi');
+  if (bucket) await bucket.acquire();
+
   // 确保 baseURL 没有尾部斜杠，path 有前导斜杠
   const base = baseURL.replace(/\/$/, '');
   const fullPath = path.startsWith('/') ? path : '/' + path;

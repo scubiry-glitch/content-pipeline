@@ -4,6 +4,7 @@
 import { Agent } from 'undici';
 import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
+import { getProviderBucket } from './rateLimiter.js';
 
 // 流式 SSE 双阶段超时：
 //   1) 首字节窗口（first-byte）：从 fetch 发出 → 收到第一个 SSE chunk。
@@ -38,6 +39,10 @@ async function generateViaStream(
   body: Record<string, any>,
   onProgress?: (tokensSoFar: number, snippet: string, cumulative?: string) => void,
 ): Promise<{ content: string; model: string; promptTokens: number; completionTokens: number }> {
+  // 全局 token-bucket 控速；config/run-routing.json providers.siliconflow.rps 配置
+  const bucket = getProviderBucket('siliconflow');
+  if (bucket) await bucket.acquire();
+
   const ctrl = new AbortController();
   let timer: ReturnType<typeof setTimeout> | null = null;
 

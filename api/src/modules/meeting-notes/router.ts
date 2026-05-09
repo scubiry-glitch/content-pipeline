@@ -3591,6 +3591,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { success: true, staleMin, ...result };
     });
 
+    /**
+     * Hot reload of api/config/run-routing.json — clears the rateLimiter bucket
+     * cache + cached config so the next provider call reads fresh values from disk.
+     *
+     * 用途：运维改 providers.<name>.rps（火山账号涨配额、新增 provider）或
+     * axis_recompute.* 配置后免重启 worker 即生效。
+     *
+     * 当前 in-flight 的 LLM 调用不受影响；下一波 acquire() 走新 bucket。
+     */
+    fastify.post('/runs/_admin/reload-routing-config', { preHandler: requireSuperAdmin }, async () => {
+      // 动态 import 避开顶层环依赖
+      const { reloadRateLimiterConfig } = await import('../../providers/rateLimiter.js');
+      const r = reloadRateLimiterConfig();
+      return { success: true, ...r, reloadedAt: new Date().toISOString() };
+    });
+
     fastify.get('/runs/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       // Reject non-UUID IDs immediately (e.g. truncated display strings like "c429fe8f")
