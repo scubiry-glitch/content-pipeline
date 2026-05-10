@@ -568,7 +568,7 @@ async function handleG4(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
  *   CEO 任务通常没有 audio 文件，需要绑定一个 mn meeting → 触发 mn 的 axis 重算
  *   metadata.targetMeetingId 必填；否则 noop 返回 (避免 silently 失败)
  */
-async function handleG1(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any }> {
+async function handleG1(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: boolean; result: any; error?: string }> {
   const meta = run.metadata ?? {};
   const targetMeetingId = (meta.targetMeetingId as string | undefined) ?? null;
   const targetAxis = (meta.targetAxis as string | undefined) ?? 'all';
@@ -583,14 +583,18 @@ async function handleG1(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
     };
   }
 
-  // 复用 mn 的 enqueue API
-  const mn = deps.meetingNotes as { enqueue?: (req: unknown) => Promise<{ ok: boolean; runId?: string }> } | undefined;
-  if (!mn?.enqueue) {
-    return { ok: false, result: null };
+  // 复用 mn 的 enqueueRun API（方法名必须与 MeetingNotesEngine.enqueueRun 严格对齐）
+  const mn = deps.meetingNotes;
+  if (!mn?.enqueueRun) {
+    return {
+      ok: false,
+      result: null,
+      error: '[g1] mn engine 未注入或未暴露 enqueueRun — 检查 createCeoEngine deps.meetingNotes',
+    };
   }
 
   try {
-    const enq = await mn.enqueue({
+    const enq = await mn.enqueueRun({
       scope: { kind: 'meeting', id: targetMeetingId },
       axis: targetAxis,
       preset: meta.preset ?? 'standard',
@@ -607,7 +611,7 @@ async function handleG1(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
       },
     };
   } catch (e) {
-    return { ok: false, result: { mode: 'failed', error: (e as Error).message } };
+    return { ok: false, result: null, error: `[g1] mn.enqueueRun threw: ${(e as Error).message}` };
   }
 }
 
@@ -693,7 +697,7 @@ async function handleG2(deps: CeoEngineDeps, run: CeoRunRow): Promise<{ ok: bool
   return { ok: true, result: { mode, dimensions: RUBRIC_DIMENSIONS.length, scores } };
 }
 
-type Handler = (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any }>;
+type Handler = (deps: CeoEngineDeps, run: CeoRunRow) => Promise<{ ok: boolean; result: any; error?: string }>;
 
 const HANDLERS: Record<string, Handler> = {
   // ─── 新 prompt-based 路径 (N3, 2026-05-03+) — 严格 schema + 质量校验 ──

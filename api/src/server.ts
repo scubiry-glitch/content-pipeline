@@ -322,7 +322,7 @@ async function main() {
   const ceoEngine = createCeoEngine(
     createCeoPipelineDeps({
       dbQuery: query,
-      meetingNotesEngine: meetingNotesEngine as any,
+      meetingNotesEngine,
       expertEngine: expertEngine as any,
       contentLibraryEngine: contentLibraryEngine as any,
       llm: ceoLlmAdapter,

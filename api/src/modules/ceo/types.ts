@@ -19,8 +19,8 @@ export interface MeetingNotesEngineHandle {
   listScopeOpenQuestions?(scopeId: string): Promise<unknown>;
   listScopeCommitments?(scopeId: string): Promise<unknown>;
   listScopeJudgments?(scopeId: string): Promise<unknown>;
-  /** 入队 LLM 任务（PR12 用）*/
-  enqueue?(req: unknown): Promise<{ ok: boolean; runId?: string }>;
+  /** 入队 LLM 任务（PR12 用）— 与 MeetingNotesEngine.enqueueRun 同名同形 */
+  enqueueRun?(req: unknown): Promise<{ ok: boolean; runId?: string; reason?: string }>;
 }
 
 export interface ExpertEngineHandle {
