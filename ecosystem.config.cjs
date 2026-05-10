@@ -15,8 +15,11 @@ module.exports = {
   apps: [
     {
       name: 'content-pipeline-api',
-      script: './api/src/server.ts',
-      interpreter: './api/node_modules/.bin/tsx',
+      // tsx 的 .bin/tsx 是 sh wrapper, PM2 默认会用 node 当解释器跑它 → SyntaxError.
+      // interpreter: 'none' 让 PM2 直接 exec 这个 sh 脚本(它自己的 shebang 处理 node 子进程).
+      script: './api/node_modules/.bin/tsx',
+      args: './api/src/server.ts',
+      interpreter: 'none',
       instances: 1,
       exec_mode: 'fork',
       cwd: __dirname,
