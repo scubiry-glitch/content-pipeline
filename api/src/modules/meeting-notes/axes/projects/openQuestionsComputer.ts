@@ -82,8 +82,8 @@ export async function computeOpenQuestions(
           `INSERT INTO mn_open_questions
              (scope_id, text, category, status, times_raised,
               first_raised_meeting_id, last_raised_meeting_id, owner_person_id, workspace_id)
-           VALUES ($1, $2, $3, $4, 1, $5, $5, $6,
-                   (SELECT workspace_id FROM assets WHERE id::text = $5::text))`,
+           VALUES ($1, $2, $3, $4, 1, $5::uuid, $5::uuid, $6,
+                   (SELECT workspace_id FROM assets WHERE id = $5::text))`,
           [
             persistScopeId,
             text,
