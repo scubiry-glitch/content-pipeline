@@ -484,6 +484,58 @@ function buildLocalIdMapping(
 // 输出形态校验（手写, 不引入 zod 避免新依赖；只校 critical 字段）
 // ============================================================
 
+/**
+ * 防御性 schema 修复：claude (尤其 opus) 偶发把分析输出的顶层字段错嵌进子对象。
+ * 已观测到三层错位（任意子集都可能命中）：
+ *   L1: 顶层 axes/facts/wikiMarkdown 被嵌进 analysis  (mn run 8517cd55, 2026-05-10)
+ *   L2: analysis 的 tension/newCognition/focusMap/consensus/crossView 被嵌进 analysis.summary
+ *   L3: summary 的 actionItems/decision/risks 被嵌进 analysis.summary.scqa
+ * 三层都在 8517cd55 那条 run 里同时出现，致 validateInner 'missing axes object' 失败，
+ * 但实际数据齐全，只需把字段 hoist 回应在的层。
+ *
+ * 安全性：仅当目标层缺失时才提升；scqa 本身合法（包含 situation/complication/etc.），不删除。
+ */
+function hoistMisplacedTopLevelKeys(inner: any): { hoisted: string[] } {
+  const hoisted: string[] = [];
+  if (!inner || typeof inner !== 'object') return { hoisted };
+  const a = inner.analysis;
+  if (!a || typeof a !== 'object') return { hoisted };
+
+  // L1: analysis.{axes,facts,wikiMarkdown} → 顶层
+  for (const key of ['axes', 'facts', 'wikiMarkdown']) {
+    if (inner[key] === undefined && a[key] !== undefined) {
+      inner[key] = a[key];
+      delete a[key];
+      hoisted.push(`analysis.${key}→${key}`);
+    }
+  }
+
+  // L2: summary.{tension/newCognition/focusMap/consensus/crossView} → analysis
+  const s = a.summary;
+  if (s && typeof s === 'object') {
+    for (const key of ['tension', 'newCognition', 'focusMap', 'consensus', 'crossView']) {
+      if (a[key] === undefined && s[key] !== undefined) {
+        a[key] = s[key];
+        delete s[key];
+        hoisted.push(`summary.${key}→analysis.${key}`);
+      }
+    }
+
+    // L3: summary.scqa.{actionItems/decision/risks} → summary
+    const scqa = s.scqa;
+    if (scqa && typeof scqa === 'object') {
+      for (const key of ['actionItems', 'decision', 'risks']) {
+        if (s[key] === undefined && scqa[key] !== undefined) {
+          s[key] = scqa[key];
+          delete scqa[key];
+          hoisted.push(`scqa.${key}→summary.${key}`);
+        }
+      }
+    }
+  }
+  return { hoisted };
+}
+
 function validateInner(parsed: any, kind: 'meeting' | 'scope'): { ok: true } | { ok: false; reason: string } {
   if (!parsed || typeof parsed !== 'object') {
     return { ok: false, reason: 'inner JSON is not an object' };
@@ -849,6 +901,15 @@ export async function runClaudeCliMode(
 
   // ── 6. 校验输出形态 ───────────────────────────────────────────
   const promptKind = ctx.promptKind ?? 'meeting';
+  // 先做 schema 防御性修复：opus 偶发把 axes/facts/wikiMarkdown 误嵌进 analysis 子对象
+  if (promptKind === 'meeting') {
+    const { hoisted } = hoistMisplacedTopLevelKeys(inner);
+    if (hoisted.length > 0) {
+      console.warn(
+        `[claudeCliRunner ${payload.runId.slice(0, 8)}] hoisted misplaced keys [${hoisted.join(',')}] from analysis to top level`,
+      );
+    }
+  }
   const v = validateInner(inner, promptKind);
   if (!v.ok) {
     await hooks.recordCliRaw(truncate(JSON.stringify(inner).slice(0, 200_000), 200_000));
