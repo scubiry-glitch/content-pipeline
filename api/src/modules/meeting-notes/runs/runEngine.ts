@@ -1417,6 +1417,16 @@ export class RunEngine {
                   console.warn('[runEngine] recordSessionId(meeting) failed:', (e as Error).message);
                 }
               },
+              recordPartialInner: async (partial) => {
+                try {
+                  await this.deps.db.query(
+                    `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('partialInner', $2::jsonb) WHERE id = $1`,
+                    [payload.runId, JSON.stringify(partial)],
+                  );
+                } catch (e) {
+                  console.warn('[runEngine] recordPartialInner(meeting) failed:', (e as Error).message);
+                }
+              },
             },
           );
 
@@ -1681,6 +1691,14 @@ export class RunEngine {
                       await this.deps.db.query(
                         `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('cliScopeRaw', $2::text) WHERE id = $1`,
                         [payload.runId, raw],
+                      );
+                    } catch {/* swallow */}
+                  },
+                  recordPartialInner: async (partial) => {
+                    try {
+                      await this.deps.db.query(
+                        `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('partialInnerScope', $2::jsonb) WHERE id = $1`,
+                        [payload.runId, JSON.stringify(partial)],
                       );
                     } catch {/* swallow */}
                   },
@@ -2780,6 +2798,70 @@ export class RunEngine {
           WHERE id = $1`,
         [payload.runId, Date.now() - startedAt, msg, counter.input + counter.output, counter.input, counter.output, counter.calls],
       );
+      // P2: claude-cli 因 inner JSON 屡次解析失败时，自动以 api-oneshot 重新入队同 scope 任务。
+      // 触发条件：① 当前 run mode='claude-cli'；② 失败原因是 JSON parse / output malformed；
+      //          ③ 同 scope 24h 内（含本次）累计 ≥ 2 次同样失败 — 避免单次偶发就降级。
+      // 不影响原 run state（保持 failed）；新 run 通过 metadata.fallback 关联。
+      if (
+        payload.mode === 'claude-cli' &&
+        /inner JSON\.parse failed|output malformed/i.test(msg)
+      ) {
+        try {
+          const r = await this.deps.db.query(
+            `SELECT COUNT(*)::int AS n
+               FROM mn_runs
+              WHERE COALESCE(scope_id::text, '') = COALESCE($1::text, '')
+                AND scope_kind = $2
+                AND metadata->>'mode' = 'claude-cli'
+                AND state = 'failed'
+                AND error_message ~* 'inner JSON\.parse failed|output malformed'
+                AND finished_at > NOW() - INTERVAL '24 hours'`,
+            [payload.scope.id ?? null, payload.scope.kind],
+          );
+          const n: number = r.rows[0]?.n ?? 0;
+          if (n >= 2) {
+            const already = await this.deps.db.query(
+              `SELECT 1 FROM mn_runs
+                WHERE COALESCE(scope_id::text, '') = COALESCE($1::text, '')
+                  AND scope_kind = $2
+                  AND metadata->>'mode' = 'api-oneshot'
+                  AND state IN ('queued', 'running')
+                LIMIT 1`,
+              [payload.scope.id ?? null, payload.scope.kind],
+            );
+            if ((already.rows?.length ?? 0) === 0) {
+              const fb = await this.enqueue({
+                scope: payload.scope,
+                axis: payload.axis,
+                preset: payload.preset,
+                triggeredBy: 'cascade',
+                parentRunId: payload.runId,
+                expertRoles: payload.expertRoles ?? undefined,
+                mode: 'api-oneshot',
+              });
+              if (fb.ok && fb.runId) {
+                console.warn(
+                  `[runEngine] P2 fallback: claude-cli ${payload.runId.slice(0, 8)} failed ${n}x in 24h → enqueued api-oneshot ${fb.runId.slice(0, 8)}`,
+                );
+                await this.deps.db.query(
+                  `UPDATE mn_runs SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                     'fallback', jsonb_build_object('mode', 'api-oneshot', 'runId', $2::text, 'at', NOW()::text, 'reason', 'claude-cli inner JSON failed ' || $3::int || 'x in 24h')
+                   ) WHERE id = $1`,
+                  [payload.runId, fb.runId, n],
+                );
+              } else {
+                console.warn(`[runEngine] P2 fallback enqueue rejected: ${fb.reason ?? 'unknown'}`);
+              }
+            } else {
+              console.warn(
+                `[runEngine] P2 fallback skipped: api-oneshot run already queued/running for scope ${payload.scope.kind}/${payload.scope.id}`,
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('[runEngine] P2 fallback path failed:', (e as Error).message);
+        }
+      }
       emitTerminal(payload.runId, 'failed');
       await this.deps.eventBus.publish('mn.run.failed', { runId: payload.runId, error: msg });
     } finally {

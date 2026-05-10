@@ -19,6 +19,7 @@ import { spawn } from 'node:child_process';
 import { writeFile, unlink, mkdir } from 'node:fs/promises';
 import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
+import { jsonrepair } from 'jsonrepair';
 import type { MeetingNotesDeps } from '../types.js';
 import type { ExpertSnapshot, ExpertRoleAssignment } from './expertProfileLoader.js';
 import { buildFullPrompt } from './promptTemplates/claudeCliFullPipeline.js';
@@ -66,6 +67,10 @@ export interface ClaudeCliRunnerHooks {
    *  不能等 inner JSON.parse + validate 都过才写——claude 偶尔输出脏 JSON（多 `}` / 漏 `,`）
    *  会让 runner throw，旧代码事后写就丢了 sid → 下次 run 又走 fresh，永远续接不上。 */
   recordSessionId?: (sessionId: string) => Promise<void>;
+  /** P1b: 所有自救（tryRepairJson + --resume 重发）都失败时，把能从坏 JSON 提取的顶层 key
+   *  原样落到 mn_runs.metadata.partialInner，让会议元数据 / 参会人这类前段字段不至于全丢，
+   *  也方便人工恢复。caller 失败时 swallow，不阻塞 throw 流程。 */
+  recordPartialInner?: (partial: Record<string, any>) => Promise<void>;
 }
 
 export interface ClaudeCliRunnerResult {
@@ -273,7 +278,160 @@ function tryRepairJson(text: string): any | null {
       }
     }
   }
+  // 规则 6（末端兜底）：以上手写规则全部失败时，交给 jsonrepair 库做结构性修复。
+  // jsonrepair 覆盖更广：surplus/missing close、错配 close（rule 2 贪心选错位置时它能选对）、
+  // unquoted keys、smart quotes、Python-style True/False/None 等。
+  // 已验证 case：mn run 01eaa5f2 (2026-05-09) — axes.tension 嵌套层多 `}` 致 pos 28033 报错，
+  //   rule 2 贪心翻 28033 后又在 pos 40741 失败；jsonrepair 8ms 内 1 字节修复完整 40K JSON。
+  try { return JSON.parse(jsonrepair(text)); } catch {/* 真的修不好就 null */}
   return null;
+}
+
+/** P1b 包装：抽取 + 落 metadata.partialInner，throw 前调用，失败 swallow。 */
+async function tryRecordPartial(runId: string, innerText: string, hooks: ClaudeCliRunnerHooks): Promise<void> {
+  if (!hooks.recordPartialInner) return;
+  try {
+    const partial = extractTopLevelKeysShallow(innerText);
+    if (partial && Object.keys(partial).length > 0) {
+      console.warn(
+        `[claudeCliRunner ${runId.slice(0, 8)}] partial extract saved keys=[${Object.keys(partial).join(',')}]`,
+      );
+      await hooks.recordPartialInner(partial);
+    }
+  } catch (e) {
+    console.warn(`[claudeCliRunner ${runId.slice(0, 8)}] partial extract failed: ${(e as Error).message.slice(0, 100)}`);
+  }
+}
+
+/**
+ * P1b: 坏 JSON 的顶层字段 shallow extract — 给 partial persist / 人工恢复用。
+ * 算法：扫描 root `{` 内 depth=1 处的 `,` 位置（顶层 key 分隔符），从最末位置倒序截断 + 闭合 `}`，
+ * 对每个候选用 jsonrepair 试解析，第一个成功即返回——保留尽可能多的顶层字段。
+ * inString 追踪可能因未转义引号失准（同 rule 2 已知局限），但 jsonrepair 二次纠错通常能补上。
+ *
+ * 失败时返回 null；不抛。仅在静态修复 + --resume 重发都失败的尾部兜底路径调用。
+ */
+function extractTopLevelKeysShallow(text: string): Record<string, any> | null {
+  const fb = text.indexOf('{');
+  if (fb < 0) return null;
+  const body = text.slice(fb);
+  const commas: number[] = [];
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (esc) { esc = false; continue; }
+    if (inStr) {
+      if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    else if (ch === ',' && depth === 1) commas.push(i);
+  }
+  for (let k = commas.length - 1; k >= 0; k--) {
+    const truncated = body.slice(0, commas[k]) + '}';
+    try { return JSON.parse(truncated); } catch {/* try repair */}
+    try { return JSON.parse(jsonrepair(truncated)); } catch {/* keep trying earlier truncation */}
+  }
+  return null;
+}
+
+/**
+ * P1a: 静态修复（tryRepairJson）也搞不定时，--resume 现有 claude session 让模型自己重发修复后的 JSON。
+ * 依赖 outer JSON 已成功解析、sessionId 已持久化。短 prompt（不回灌原始脏 JSON），靠 session 上下文。
+ * 失败/超时返回 null；不抛（让上层 throw 原始错误，避免双重失败信息）。
+ *
+ * 时间预算：默认 180s（CLAUDE_CLI_REPAIR_TIMEOUT_MS 可调）。重发只让 claude 改语法，不重做分析，
+ * 通常 30-90s 即可完成；放在 45min 主超时窗口的尾部约 2-3min 一般不会触碰 heartbeat-stale 阈值。
+ */
+async function attemptResumeRepair(opts: {
+  cliBin: string;
+  model: string;
+  sessionId: string;
+  cwd: string | undefined;
+  runId: string;
+  originalError: string;
+}): Promise<any | null> {
+  const { cliBin, model, sessionId, cwd, runId, originalError } = opts;
+  const tag = `[claudeCliRunner ${runId.slice(0, 8)}] resume-repair`;
+
+  const fixPrompt = [
+    `你上一条 JSON 输出在 JSON.parse 时报错: ${originalError.slice(0, 200)}`,
+    '',
+    '请只输出修正后的完整 JSON 对象。要求：',
+    '1. 不要任何前后说明、不要 markdown 代码栅栏。',
+    '2. 完整保留上一条所有顶层字段（meeting/participants/analysis/axes/facts/wikiMarkdown），不要省略数据。',
+    '3. 严格 JSON 语法：括号配对、字符串内 ASCII 双引号必须 \\" 转义、不要 trailing comma。',
+  ].join('\n');
+
+  const promptFile = join(tmpdir(), `mn-claude-fix-${runId}.txt`);
+  await writeFile(promptFile, fixPrompt, 'utf8');
+  const cliBinShell = cliBin.includes(' ') ? `"${cliBin}"` : cliBin;
+  const modelFlag = model && model.trim() ? ` --model '${model.replace(/'/g, "'\\''")}'` : '';
+  const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,SlashCommand,TodoWrite,KillShell,BashOutput';
+  const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --output-format json --max-turns 1 < '${promptFile}'`;
+  console.warn(`${tag} spawn (sid=${sessionId.slice(0, 8)})`);
+
+  const proc = spawn('sh', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, cwd });
+  const TIMEOUT = Number(process.env.CLAUDE_CLI_REPAIR_TIMEOUT_MS ?? 180_000);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    if (proc.pid) { try { process.kill(-proc.pid, 'SIGKILL' as any); } catch {/* swallow */} }
+  }, TIMEOUT);
+
+  let stdout = '', stderr = '', exitCode: number = -1;
+  try {
+    const [so, se, code] = await Promise.all([
+      drainStream(proc.stdout!, 'fix-stdout', runId),
+      drainStream(proc.stderr!, 'fix-stderr', runId),
+      new Promise<number>((resolve) => proc.on('exit', (c) => resolve(c ?? -1))),
+    ]);
+    stdout = so; stderr = se; exitCode = code;
+  } catch (e) {
+    console.warn(`${tag} drain error: ${(e as Error).message.slice(0, 120)}`);
+  } finally {
+    clearTimeout(timer);
+    await unlink(promptFile).catch(() => {/* swallow */});
+  }
+
+  if (timedOut) { console.warn(`${tag} timed out after ${TIMEOUT}ms`); return null; }
+  if (exitCode !== 0) {
+    console.warn(`${tag} exit ${exitCode}; stderr=${stderr.slice(0, 200)}`);
+    return null;
+  }
+
+  let outer: any;
+  try { outer = JSON.parse(stdout); }
+  catch (e) { console.warn(`${tag} outer JSON parse failed: ${(e as Error).message.slice(0, 120)}`); return null; }
+
+  let result: string = (typeof outer.result === 'string' ? outer.result : '') ||
+    (typeof outer.message?.content === 'string' ? outer.message.content : '');
+  if (!result.trim()) { console.warn(`${tag} empty result text`); return null; }
+  result = result.trim();
+  if (result.startsWith('```')) {
+    const m = result.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (m) result = m[1].trim();
+  }
+  const fb = result.indexOf('{'), lb = result.lastIndexOf('}');
+  if (fb >= 0 && lb > fb) result = result.slice(fb, lb + 1);
+
+  try {
+    const parsed = JSON.parse(result);
+    console.warn(`${tag} ✓ parsed cleanly (${result.length}B)`);
+    return parsed;
+  } catch (e) {
+    // 二轮也可能有小瑕疵；继续走 tryRepairJson（含 jsonrepair 兜底）
+    const repaired = tryRepairJson(result);
+    if (repaired !== null) {
+      console.warn(`${tag} ✓ parsed via tryRepairJson (${result.length}B, was: ${(e as Error).message.slice(0, 80)})`);
+      return repaired;
+    }
+    console.warn(`${tag} still un-parseable: ${(e as Error).message.slice(0, 120)}`);
+    return null;
+  }
 }
 
 /**
@@ -653,14 +811,37 @@ export async function runClaudeCliMode(
   try {
     inner = JSON.parse(innerText);
   } catch (e) {
-    // 自救：claude 偶发输出脏 JSON（多 } / 漏 , / trailing ,），尝试小幅修补再 parse
+    // 自救一：静态规则修补（含 jsonrepair 兜底）
     const repaired = tryRepairJson(innerText);
     if (repaired !== null) {
       console.warn(
         `[claudeCliRunner ${payload.runId.slice(0, 8)}] inner JSON repaired (was: ${(e as Error).message.slice(0, 100)})`,
       );
       inner = repaired;
+    } else if (sessionId) {
+      // 自救二（P1a）：sessionId 已落库 → --resume 让 claude 自己重发修复后的 JSON
+      await hooks.writeStep('parsing', 0.92, '静态修复失败，--resume 让 claude 自修复');
+      const fixed = await attemptResumeRepair({
+        cliBin: CLAUDE_BIN,
+        model: CLAUDE_MODEL,
+        sessionId,
+        cwd,
+        runId: payload.runId,
+        originalError: (e as Error).message,
+      });
+      if (fixed !== null) {
+        console.warn(
+          `[claudeCliRunner ${payload.runId.slice(0, 8)}] inner JSON repaired via --resume self-retry`,
+        );
+        inner = fixed;
+      } else {
+        // P1b: 自救三 — 抽取能 parse 的顶层 key 落到 metadata.partialInner（不参与正常成功路径）
+        await tryRecordPartial(payload.runId, innerText, hooks);
+        await hooks.recordCliRaw(truncate(resultText, 200_000));
+        throw new Error(`claude CLI inner JSON.parse failed (resume-repair also failed): ${(e as Error).message}`);
+      }
     } else {
+      await tryRecordPartial(payload.runId, innerText, hooks);
       await hooks.recordCliRaw(truncate(resultText, 200_000));
       throw new Error(`claude CLI inner JSON.parse failed: ${(e as Error).message}`);
     }
