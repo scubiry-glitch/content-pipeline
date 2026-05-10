@@ -36,7 +36,11 @@ export function adaptApiAnalysis(data: any): typeof ANALYSIS {
     sections.find((s: any) => s?.id === id) ?? (alt ? sections.find((s: any) => s?.id === alt) : undefined);
 
   const minutesBody = secAny('minutes')?.body ?? {};
-  const tensionBody: any[] = Array.isArray(secAny('tension')?.body) ? secAny('tension').body : [];
+  // sections 形态(view A) 优先;view B/C 没 sections,共享场景下 server 把真张力塞在 data.tensions
+  // (来源:mn_tensions 表),不再退回到 cognitive_biases 错配
+  const tensionBody: any[] = Array.isArray(secAny('tension')?.body)
+    ? secAny('tension').body
+    : Array.isArray(data?.tensions) ? data.tensions : [];
   const newCogBody: any[] = Array.isArray(secAny('new-cognition', 'new_cognition')?.body)
     ? secAny('new-cognition', 'new_cognition').body : [];
   const focusBody: any[] = Array.isArray(secAny('focus-map', 'focus_map')?.body)

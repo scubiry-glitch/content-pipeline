@@ -732,12 +732,19 @@ export function VariantWorkbench() {
 
   // 独立 endpoint —— axes (cognitive_biases / mental_models / affect_curve · 用于张力解读)
   // 与 Shell 抓的 detail 互不重叠，保持单独 fetch
+  // 共享场景下没有 :id 路由参数,从 shellDetail.analysis.axes 兜底(server 已嵌入)
   useEffect(() => {
-    if (forceMock || !id) { setApiAxes(null); return; }
-    meetingNotesApi.getMeetingAxes(id).then((axes) => setApiAxes(axes)).catch(() => {});
-  }, [id, forceMock]);
+    if (forceMock) { setApiAxes(null); return; }
+    if (id) {
+      meetingNotesApi.getMeetingAxes(id).then((axes) => setApiAxes(axes)).catch(() => {});
+      return;
+    }
+    const embedded = shellDetail?.analysis?.axes;
+    if (embedded && typeof embedded === 'object') setApiAxes(embedded);
+  }, [id, forceMock, shellDetail]);
 
   // Phase 15.15 · C.1 · tension probe（独立 endpoint）
+  // 共享场景下没有 :id;adapter 已通过 data.tensions fallback 把真张力填进 a.tension,无需重抓
   useEffect(() => {
     if (forceMock || !id) return;
     meetingNotesApi.getMeetingTensions(id)

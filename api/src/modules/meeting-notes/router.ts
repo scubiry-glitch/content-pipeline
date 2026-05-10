@@ -854,7 +854,25 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         }
       } catch {/* non-blocking */}
 
-      const meetingPayload = detail ? { ...(detail as object), runSource: sharedRunSource } : null;
+      // 共享场景下前端 VariantWorkbench 没有 :id 路由参数,无法调 /meetings/:id/tensions
+      // 与 /meetings/:id/axes;这里直接把这两份数据塞回 meetingPayload,让无认证读端直接拿到。
+      let sharedTensions: Array<Record<string, unknown>> = [];
+      let sharedAxes: Record<string, unknown> | null = null;
+      try {
+        const tListR = await db.query(
+          `SELECT id::text, tension_key, between_ids::text[], topic, intensity::float, summary, moments, computed_at
+             FROM mn_tensions WHERE meeting_id = $1 ORDER BY intensity DESC`,
+          [mid],
+        );
+        sharedTensions = tListR.rows;
+      } catch {/* 不阻塞 */}
+      try {
+        sharedAxes = (await engine.getMeetingAxes(mid)) as Record<string, unknown>;
+      } catch {/* 不阻塞 */}
+
+      const meetingPayload = detail
+        ? { ...(detail as object), runSource: sharedRunSource, tensions: sharedTensions, axes: sharedAxes }
+        : null;
       return { share: { id: share.id, mode: share.mode, targets: share.targets }, meeting: meetingPayload, health };
     });
 
