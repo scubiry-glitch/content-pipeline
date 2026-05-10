@@ -51,19 +51,21 @@ export async function computeAssumptions(
 
   const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
+    const text = String(item.text ?? '').trim();
+    if (!text) continue;
     try {
       const grade = ['A', 'B', 'C', 'D'].includes(item.evidence_grade) ? item.evidence_grade : 'C';
       await deps.db.query(
         `INSERT INTO mn_assumptions
            (scope_id, meeting_id, text, evidence_grade, confidence)
          VALUES ($1, $2, $3, $4, $5)`,
-        [persistScopeId, bundle.meetingId, item.text, grade, item.confidence ?? 0.5],
+        [persistScopeId, bundle.meetingId, text, grade, item.confidence ?? 0.5],
       );
       out.created += 1;
     } catch (e) {
       out.errors += 1;
       pushErrorSample(out, 'db', (e as Error).message,
-        `grade=${item.evidence_grade} text=${(item.text ?? '').slice(0, 50)}`);
+        `grade=${item.evidence_grade} text=${text.slice(0, 50)}`);
     }
   }
   return out;

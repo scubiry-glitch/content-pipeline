@@ -46,9 +46,11 @@ export async function computeOpenQuestions(
 
   const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
+    const text = String(item.text ?? '').trim();
+    if (!text) continue;
     try {
       const ownerId = item.owner ? await ensurePersonByName(deps, item.owner, undefined, undefined, args.meetingId) : null;
-      const normalized = normalizeText(item.text);
+      const normalized = normalizeText(text);
       // 同 scope 下相似问题累加；P0 数据源契约：只跟 LLM 自己产出的合并，不动 manual_import
       const existing = await deps.db.query(
         `SELECT id, times_raised FROM mn_open_questions
@@ -73,14 +75,18 @@ export async function computeOpenQuestions(
         );
         out.updated += 1;
       } else {
+        // mn_open_questions 没有 meeting_id 列(只有 first/last_raised_meeting_id), trigger 037
+        // 只看 scope_id; meeting 形态下 persistScopeId=null → workspace_id NOT NULL 违规.
+        // 显式从 assets.workspace_id 注入, 与 persistClaudeAxes 同样思路.
         await deps.db.query(
           `INSERT INTO mn_open_questions
              (scope_id, text, category, status, times_raised,
-              first_raised_meeting_id, last_raised_meeting_id, owner_person_id)
-           VALUES ($1, $2, $3, $4, 1, $5, $5, $6)`,
+              first_raised_meeting_id, last_raised_meeting_id, owner_person_id, workspace_id)
+           VALUES ($1, $2, $3, $4, 1, $5, $5, $6,
+                   (SELECT workspace_id FROM assets WHERE id::text = $5::text))`,
           [
             persistScopeId,
-            item.text,
+            text,
             item.category ?? 'operational',
             ownerId ? 'assigned' : 'open',
             bundle.meetingId,
@@ -92,7 +98,7 @@ export async function computeOpenQuestions(
     } catch (e) {
       out.errors += 1;
       pushErrorSample(out, 'db', (e as Error).message,
-        `text=${(item.text ?? '').slice(0, 50)}`);
+        `text=${text.slice(0, 50)}`);
     }
   }
   return out;

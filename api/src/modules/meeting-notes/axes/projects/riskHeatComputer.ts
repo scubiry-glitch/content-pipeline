@@ -61,6 +61,8 @@ export async function computeRiskHeat(
 
   const persistScopeId = normalizeScopeIdForPersist(args);
   for (const item of items) {
+    const text = String(item.text ?? '').trim();
+    if (!text) continue;
     try {
       const sev = normalizeSeverity(item.severity);
       const taken = item.action_taken ?? false;
@@ -71,7 +73,7 @@ export async function computeRiskHeat(
             AND lower(text) = lower($2)
             AND source = 'llm_extracted'
           LIMIT 1`,
-        [persistScopeId, item.text],
+        [persistScopeId, text],
       );
       if (existing.rows.length > 0) {
         const mentions = Number(existing.rows[0].mention_count ?? 1) + 1;
@@ -90,18 +92,22 @@ export async function computeRiskHeat(
         out.updated += 1;
       } else {
         const heat = 1 * (SEVERITY_FACTOR[sev] || 2) * (taken ? 0.4 : 1);
+        // mn_risks 没有 meeting_id 列, trigger 037 只能从 scope_id 反查 workspace_id;
+        // meeting 形态下 persistScopeId=null → trigger 反查不到 → workspace_id NOT NULL 违规.
+        // 显式用 subquery 从 assets.workspace_id 注入, 与 persistClaudeAxes 同样思路.
         await deps.db.query(
           `INSERT INTO mn_risks
-             (scope_id, text, severity, mention_count, heat_score, trend, action_taken)
-           VALUES ($1, $2, $3, 1, $4, $5, $6)`,
-          [persistScopeId, item.text, sev, heat, item.trend ?? 'flat', taken],
+             (scope_id, text, severity, mention_count, heat_score, trend, action_taken, workspace_id)
+           VALUES ($1, $2, $3, 1, $4, $5, $6,
+                   (SELECT workspace_id FROM assets WHERE id::text = $7::text))`,
+          [persistScopeId, text, sev, heat, item.trend ?? 'flat', taken, bundle.meetingId],
         );
         out.created += 1;
       }
     } catch (e) {
       out.errors += 1;
       pushErrorSample(out, 'db', (e as Error).message,
-        `text=${(item.text ?? '').slice(0, 50)} severity=${item.severity}`);
+        `text=${text.slice(0, 50)} severity=${item.severity}`);
     }
   }
   return out;
