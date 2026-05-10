@@ -54,6 +54,7 @@ export function MeetingNoteSources() {
   const [editing, setEditing] = useState<MeetingNoteSource | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [analysisMode, setAnalysisMode] = useState<'claude-cli' | 'api-oneshot'>('claude-cli');
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pasteTarget, setPasteTarget] = useState<MeetingNoteSource | null>(null);
@@ -165,7 +166,7 @@ export function MeetingNoteSources() {
   const uploadFile = async (src: MeetingNoteSource, file: File) => {
     setUploadingId(src.id);
     try {
-      const result = await meetingNoteSourcesApi.upload(src.id, file);
+      const result = await meetingNoteSourcesApi.upload(src.id, file, { mode: analysisMode });
       setMessage(`上传完成：新增 ${result.itemsImported}，重复 ${result.duplicates}`);
       await loadData();
     } catch (err: any) {
@@ -259,6 +260,18 @@ export function MeetingNoteSources() {
         ) : sources.length === 0 ? (
           <p className="mns-empty">暂无采集源。</p>
         ) : (
+          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, fontSize: 13, color: '#555' }}>
+            <span>分析模式（影响下面"上传文件"按钮）：</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input type="radio" name="analysisMode" value="claude-cli" checked={analysisMode === 'claude-cli'} onChange={() => setAnalysisMode('claude-cli')} />
+              Claude CLI<span style={{ color: '#888', marginLeft: 2 }}>（深度，5-20 分钟）</span>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input type="radio" name="analysisMode" value="api-oneshot" checked={analysisMode === 'api-oneshot'} onChange={() => setAnalysisMode('api-oneshot')} />
+              API Oneshot<span style={{ color: '#888', marginLeft: 2 }}>（快，1-3 分钟）</span>
+            </label>
+          </div>
           <table className="mns-table">
             <thead>
               <tr>
@@ -305,6 +318,7 @@ export function MeetingNoteSources() {
               ))}
             </tbody>
           </table>
+          </>
         )}
       </section>
 

@@ -153,6 +153,8 @@ function FlowUpload({ onNext, onUploaded, onScopeSelected }: {
     p.trim().replace(/\\/g, '/').replace(/\/+$/, '');
   const forceMock = useForceMock();
   const [mode, setMode] = useState<'files' | 'folder' | 'recent' | 'json'>('files');
+  // 分析模式（透传到 upload-task 的 mode 字段）：默认 claude-cli（深度），用户可切 api-oneshot（快）
+  const [analysisMode, setAnalysisMode] = useState<'claude-cli' | 'api-oneshot'>('claude-cli');
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -328,7 +330,7 @@ function FlowUpload({ onNext, onUploaded, onScopeSelected }: {
         status?: string;
         errorMessage?: string | null;
         itemsImported?: number;
-      } = await meetingNotesApi.uploadToSource(sourceId, file);
+      } = await meetingNotesApi.uploadToSource(sourceId, file, { mode: analysisMode });
       // /sources/:id/upload 返回的是 import 记录，id 通常是 importId，不是 assets.id。
       // 这里必须优先使用 assetIds[0]（或显式 assetId），否则 parse 会拿错 id 返回 404。
       let resolvedAssetId = r.assetId ?? (Array.isArray(r.assetIds) ? (r.assetIds[0] ?? null) : null);
@@ -530,6 +532,35 @@ function FlowUpload({ onNext, onUploaded, onScopeSelected }: {
           }}>{x.label}</button>
         ))}
       </div>
+
+      {mode === 'files' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, fontSize: 12.5, color: 'var(--ink-3)' }}>
+          <span>分析模式</span>
+          <div style={{ display: 'flex', gap: 3, border: '1px solid var(--line-2)', borderRadius: 6, padding: 2, background: 'var(--paper)' }}>
+            {[
+              { id: 'claude-cli' as const, label: 'Claude CLI', hint: '深度，5-20 分钟' },
+              { id: 'api-oneshot' as const, label: 'API Oneshot', hint: '快，1-3 分钟' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                title={opt.hint}
+                onClick={() => setAnalysisMode(opt.id)}
+                style={{
+                  padding: '4px 12px', border: 0, borderRadius: 4, fontSize: 12,
+                  background: analysisMode === opt.id ? 'var(--ink-2)' : 'transparent',
+                  color: analysisMode === opt.id ? 'var(--paper)' : 'var(--ink-2)', cursor: 'pointer',
+                  fontWeight: analysisMode === opt.id ? 600 : 450,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span style={{ color: 'var(--ink-4)', fontSize: 11 }}>
+            {analysisMode === 'claude-cli' ? '· 走 claude code cli' : '· 走 SDK 直连 API'}
+          </span>
+        </div>
+      )}
 
       {mode === 'files' && (
         <div

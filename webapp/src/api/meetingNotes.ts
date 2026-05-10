@@ -744,9 +744,18 @@ export const meetingNotesApi = {
   },
   triggerSourceImport: (id: string, triggeredBy?: string) =>
     jpost<any>('/sources/import', { id, triggeredBy }),
-  uploadToSource: async (sourceId: string, file: File) => {
+  uploadToSource: async (
+    sourceId: string,
+    file: File,
+    opts?: {
+      mode?: 'claude-cli' | 'multi-axis' | 'api-oneshot';
+      preset?: 'lite' | 'standard' | 'max';
+    },
+  ) => {
     const fd = new FormData();
     fd.append('file', file);
+    if (opts?.mode) fd.append('mode', opts.mode);
+    if (opts?.preset) fd.append('preset', opts.preset);
     const r = await fetch(`${API_BASE}/sources/${sourceId}/upload`, {
       method: 'POST',
       headers: { 'X-API-Key': (import.meta as any).env?.VITE_API_KEY || 'dev-api-key' },

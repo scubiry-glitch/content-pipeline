@@ -755,9 +755,18 @@ export const meetingNoteSourcesApi = {
     client.get('/quality/meeting-note-sources/history', { params }) as Promise<{ items: MeetingNoteImport[] }>,
 
   /** 使用 fetch：axios 实例默认带 application/json，与 FormData 组合时易被错误序列化，导致后端收不到 multipart。 */
-  upload: async (id: string, file: File): Promise<MeetingNoteImport> => {
+  upload: async (
+    id: string,
+    file: File,
+    opts?: {
+      mode?: 'claude-cli' | 'multi-axis' | 'api-oneshot';
+      preset?: 'lite' | 'standard' | 'max';
+    },
+  ): Promise<MeetingNoteImport> => {
     const form = new FormData();
     form.append('file', file);
+    if (opts?.mode) form.append('mode', opts.mode);
+    if (opts?.preset) form.append('preset', opts.preset);
     const path = `/quality/meeting-note-sources/${id}/upload`;
     const url = BASE_URL.startsWith('http')
       ? `${BASE_URL.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
