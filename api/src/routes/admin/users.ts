@@ -65,7 +65,7 @@ export async function adminUserRoutes(fastify: FastifyInstance) {
         createdAt = ins.rows[0].created_at;
         await client.query(
           `INSERT INTO user_identities (user_id, provider, provider_user_id, email_at_provider)
-             VALUES ($1, 'password', $1::text, $2)`,
+             VALUES ($1::uuid, 'password', $1::text, $2)`,
           [userId, email]
         );
         await createPersonalWorkspace(userId, email, client, { name });
