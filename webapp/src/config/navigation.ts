@@ -103,28 +103,11 @@ export const mainNavItems: NavItem[] = [
       { to: ROUTES.contentLibrary.beliefs, label: '⑭ 观点演化', icon: '🔀' },
       { to: ROUTES.contentLibrary.crossDomain, label: '⑮ 跨域关联', icon: '🌐' },
       { to: ROUTES.contentLibrary.wiki, label: 'Wiki 物化', icon: '📖' },
+      { to: '/meeting/today', label: '会议纪要 v2', icon: '🗂️' },
       { to: ROUTES.contentLibrary.batchOps, label: '批量操作', icon: '⚡' },
       { to: ROUTES.contentLibrary.pipeline, label: '生产流水线', icon: '🔀' },
     ],
-  },
-  {
-    to: '/meeting/today',
-    label: '会议纪要 v2',
-    icon: '🗂️',
     matchPrefixes: ['/meeting'],
-    children: [
-      { to: '/meeting/today',             label: '今天',          icon: '✨' },
-      { to: '/meeting/library',           label: '库',            icon: '📁' },
-      { to: '/meeting/axes/people',       label: '人物轴',        icon: '👥' },
-      { to: '/meeting/axes/projects',     label: '项目轴',        icon: '🕸️' },
-      { to: '/meeting/axes/knowledge',    label: '知识轴',        icon: '📘' },
-      { to: '/meeting/axes/meta',         label: '会议本身',      icon: '🎯' },
-      { to: '/meeting/longitudinal',      label: '纵向视图',      icon: '📈' },
-      { to: '/meeting/scopes',            label: '调用配置',      icon: '⚖️' },
-      { to: '/meeting/strategies',        label: '策略 / 装饰器', icon: '🔀' },
-      { to: '/meeting/generation-center', label: '生成中心',      icon: '▶️' },
-      { to: '/meeting/new',               label: '新建',          icon: '➕' },
-    ],
   },
   {
     to: ROUTES.hotTopics.list,
@@ -134,11 +117,6 @@ export const mainNavItems: NavItem[] = [
       { to: ROUTES.hotTopics.list, label: '热点列表', icon: '📋' },
       { to: ROUTES.hotTopics.insights, label: '洞察分析', icon: '💡' },
     ],
-  },
-  {
-    to: ROUTES.aiRecommendations,
-    label: 'AI推荐',
-    icon: '🤖',
   },
 ];
 
@@ -153,11 +131,7 @@ export const systemNavItems: NavItem[] = [
 // 检查当前路径是否匹配导航项
 export function isActivePath(pathname: string, item: NavItem): boolean {
   if (pathname === item.to) return true;
-  if (item.children) {
-    return item.children.some((child) => pathname.startsWith(child.to));
-  }
-  if (item.matchPrefixes) {
-    return item.matchPrefixes.some((prefix) => pathname.startsWith(prefix));
-  }
+  if (item.children?.some((child) => pathname.startsWith(child.to))) return true;
+  if (item.matchPrefixes?.some((prefix) => pathname.startsWith(prefix))) return true;
   return false;
 }
