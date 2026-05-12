@@ -150,7 +150,11 @@ export function createRouter(engine: ExpertEngine) {
             ],
             max_tokens: 4000,
             temperature: 0.6,
-          }
+          },
+          undefined,
+          // providerName: 接入 providers/rateLimiter.ts 全局桶 + 429 退避重试
+          // （run-routing.json:providers.volcano-engine.rps=2；R1 endpoint 配额低，靠桶+重试兜底）
+          'volcano-engine',
         );
 
         const aborted = { v: false };

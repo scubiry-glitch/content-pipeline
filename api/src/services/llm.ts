@@ -293,26 +293,62 @@ export type StreamChunk =
 /**
  * OpenAI 兼容端点的 SSE 流式生成（volcano-engine / kimi / siliconflow 通用）
  * 自动区分 delta.reasoning_content 和 delta.content，分别推送
+ *
+ * providerName: 传入时走 providers/rateLimiter.ts 的全局 token-bucket + 429 退避重试
+ *   （与 providers/volcanoEngine.ts:rateLimitedFetch 行为一致）。
+ *   不传 = 旧行为：裸 fetch，无限速无重试。
  */
 export async function* streamOpenAICompatible(
   endpoint: string,
   apiKey: string,
   body: Record<string, any>,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  providerName?: string,
 ): AsyncGenerator<StreamChunk> {
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'Accept': 'text/event-stream',
-      ...(headers || {}),
-    },
-    body: JSON.stringify({ ...body, stream: true }),
-  });
-  if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Stream API error ${res.status}: ${text.slice(0, 500)}`);
+  // 限速桶（按 provider 名取）；未配置 / 未传名字 → null 跳过
+  let bucket: { acquire(): Promise<void> } | null = null;
+  if (providerName) {
+    const { getProviderBucket } = await import('../providers/rateLimiter.js');
+    bucket = getProviderBucket(providerName);
+  }
+
+  const maxAttempts = providerName ? 3 : 1;
+  let res: Response | null = null;
+  let lastErrText = '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (bucket) await bucket.acquire();
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'text/event-stream',
+        ...(headers || {}),
+      },
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+    if (res.status !== 429) break;
+
+    // 429: 读 Retry-After header；没给就用指数退避 (10s, 30s, 60s)
+    const retryAfterRaw = res.headers.get('retry-after');
+    let waitMs = 0;
+    if (retryAfterRaw) {
+      const sec = Number(retryAfterRaw);
+      if (Number.isFinite(sec) && sec > 0) waitMs = sec * 1000;
+    }
+    if (!waitMs) waitMs = Math.min(60_000, 10_000 * 2 ** (attempt - 1));
+
+    try { lastErrText = await res.text(); } catch { /* ignore */ }
+
+    if (attempt >= maxAttempts) {
+      throw new Error(`Stream API error 429 (after ${maxAttempts} attempts): ${lastErrText.slice(0, 500)}`);
+    }
+    console.warn(`[streamOpenAICompatible] ${providerName} 429, backing off ${waitMs}ms before retry ${attempt + 1}/${maxAttempts}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+  }
+  if (!res || !res.ok || !res.body) {
+    const text = res ? await res.text().catch(() => '') : '';
+    throw new Error(`Stream API error ${res?.status ?? 'no-response'}: ${text.slice(0, 500)}`);
   }
 
   const reader = res.body.getReader();
