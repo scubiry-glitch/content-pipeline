@@ -1,0 +1,10 @@
+{
+  "id": "moma",
+  "name": "Moma",
+  "version": "0.0.10",
+  "minAppVersion": "1.4.5",
+  "description": "Moma：将 Claude Code 作为AI 协作助手嵌入你的知识库仓库。你的知识库仓库会成为 Claude 的工作目录，使其具备完整的智能自主执行能力：文件读写、全局检索、终端命令执行以及复杂多步骤任务流程处理。",
+  "author": "moma.ke.com",
+  "authorUrl": "moma.ke.com",
+  "isDesktopOnly": true
+}

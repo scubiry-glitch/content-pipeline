@@ -1,0 +1,9 @@
+{
+  "id": "feishu-minutes-sync",
+  "name": "飞书妙记同步",
+  "version": "0.2.0",
+  "minAppVersion": "1.5.0",
+  "description": "将飞书/Lark 妙记智能纪要同步到当前 Obsidian 仓库，支持插件内配置飞书应用和 OAuth 授权。",
+  "author": "Goblin（顾小北）",
+  "isDesktopOnly": true
+}

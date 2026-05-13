@@ -1,7 +1,13 @@
-// Claude Provider实现
+// Claude Provider实现（官方 api.anthropic.com + 兼容 ANTHROPIC_BASE_URL 的企业网关）
 
-import { LLMProvider } from './base';
+import { LLMProvider, fetchWithTimeout } from './base';
 import { GenerationParams, GenerationResult } from '../types/index.js';
+
+const DEFAULT_ANTHROPIC_ORIGIN = 'https://api.anthropic.com';
+
+function normalizeOrigin(url: string): string {
+  return url.replace(/\/+$/, '');
+}
 
 export class ClaudeProvider extends LLMProvider {
   private modelCosts: Record<string, number> = {
@@ -10,8 +16,31 @@ export class ClaudeProvider extends LLMProvider {
     'claude-3-haiku-20240307': 0.00025,
   };
 
-  constructor(apiKey: string) {
-    super('claude', apiKey, 'https://api.anthropic.com');
+  constructor(apiKey: string, explicitBaseUrl?: string) {
+    const base =
+      (explicitBaseUrl?.trim() ||
+        process.env.ANTHROPIC_BASE_URL?.trim() ||
+        DEFAULT_ANTHROPIC_ORIGIN);
+    super('claude', apiKey, normalizeOrigin(base));
+  }
+
+  /** 企业网关常要求 Authorization: Bearer；官方 Anthropic 使用 x-api-key */
+  private buildMessageHeaders(): Record<string, string> {
+    const h: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+    const authToken = process.env.ANTHROPIC_AUTH_TOKEN?.trim();
+    if (authToken) {
+      h.Authorization = `Bearer ${authToken}`;
+      return h;
+    }
+    if (this.baseUrl && this.baseUrl !== DEFAULT_ANTHROPIC_ORIGIN) {
+      h.Authorization = `Bearer ${this.apiKey}`;
+      return h;
+    }
+    h['x-api-key'] = this.apiKey;
+    return h;
   }
 
   async generate(
@@ -19,27 +48,37 @@ export class ClaudeProvider extends LLMProvider {
     params?: GenerationParams
   ): Promise<GenerationResult> {
     const model = params?.model || 'claude-3-sonnet-20240229';
-    const startTime = Date.now();
+
+    const systemText = params?.systemPrompt?.trim();
+    const userText = prompt?.trim();
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: params?.maxTokens || 4000,
+      temperature: params?.temperature ?? 0.7,
+      top_p: params?.topP ?? 1,
+      messages: [
+        {
+          role: 'user',
+          content:
+            userText ||
+            (systemText
+              ? 'Follow the system instructions and produce the required output exactly as specified.'
+              : ''),
+        },
+      ],
+    };
+    if (systemText) body.system = systemText;
 
     try {
-      const response = await fetch(`${this.baseUrl}/v1/messages`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/v1/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: params?.maxTokens || 4000,
-          temperature: params?.temperature ?? 0.7,
-          top_p: params?.topP ?? 1,
-          messages: [{ role: 'user', content: prompt }],
-        }),
+        headers: this.buildMessageHeaders(),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
-        throw new Error(`Claude API error: ${response.status}`);
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Claude API error: ${response.status} ${errText.slice(0, 500)}`);
       }
 
       const data: any = await response.json();
@@ -58,19 +97,33 @@ export class ClaudeProvider extends LLMProvider {
   }
 
   async embed(text: string): Promise<number[]> {
-    // Claude doesn't have embedding API, fallback to OpenAI
     throw new Error('Claude does not support embeddings');
   }
 
   async checkHealth(): Promise<boolean> {
+    const headersBase = this.buildMessageHeaders();
     try {
-      const response = await fetch(`${this.baseUrl}/v1/models`, {
+      const list = await fetchWithTimeout(`${this.baseUrl}/v1/models`, {
         headers: {
-          'x-api-key': this.apiKey,
-          'anthropic-version': '2023-06-01',
+          ...headersBase,
+          'Content-Type': 'application/json',
         },
       });
-      return response.ok;
+      if (list.ok) return true;
+    } catch {
+      /* 网关可能未实现 GET /v1/models */
+    }
+    try {
+      const ping = await fetchWithTimeout(`${this.baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: this.buildMessageHeaders(),
+        body: JSON.stringify({
+          model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-3-haiku-20240307',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+      return ping.ok;
     } catch {
       return false;
     }

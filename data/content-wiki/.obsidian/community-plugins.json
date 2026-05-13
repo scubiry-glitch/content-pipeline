@@ -1,4 +1,6 @@
 [
   "templater-obsidian",
-  "claudian"
+  "claudian",
+  "moma",
+  "feishu-minutes-sync"
 ]

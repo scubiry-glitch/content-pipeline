@@ -1,0 +1,5 @@
+.feishu-minutes-sync-output {
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}

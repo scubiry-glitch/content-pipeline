@@ -1,0 +1,32 @@
+{
+  "appId": "cli_a977e3903cb8dbc6",
+  "appSecret": "tzizDmqxm0f9kYqh44lyKgVT1vvvg0YJ",
+  "openApiBaseUrl": "https://open.feishu.cn",
+  "accountsBaseUrl": "https://accounts.feishu.cn",
+  "feishuBaseUrl": "https://feishu.cn",
+  "redirectUri": "http://127.0.0.1:8765/callback",
+  "oauthHost": "127.0.0.1",
+  "oauthPort": 8765,
+  "oauthScope": "drive:drive:readonly docs:document.content:read",
+  "outputFolder": "FeishuMinutes",
+  "category": "",
+  "lookbackHours": 24,
+  "pageSize": 20,
+  "maxFiles": 80,
+  "maxDepth": 1,
+  "query": "妙记 智能纪要 会议总结",
+  "folderToken": "",
+  "tokenStore": {
+    "access_token": "u-5gOcd8hjB5WXLWC.6FlBP0g00UDAllihMM0G7wo004T5",
+    "refresh_token": "ur-5ov5_O4jN5uUYE4CbEDAI8g02gB4llWVig0GnNs000Pl",
+    "token_type": "Bearer",
+    "expires_at": 1778220285,
+    "refresh_expires_at": 1780805085,
+    "open_id": "ou_47bba123358f8ca224421fa64d134e72",
+    "union_id": "on_e208f940b364b58995a75022e080e3f8",
+    "user_id": "20106223",
+    "tenant_key": "2d213101980f575d",
+    "name": "邵丹(天行)",
+    "updated_at": "2026-05-08T04:09:45.628Z"
+  }
+}

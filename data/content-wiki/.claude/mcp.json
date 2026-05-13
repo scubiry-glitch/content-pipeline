@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "web-search": {
+      "type": "http",
+      "url": "https://prd-assistant-backend.ke.com/api/v1/mcp/zhipu-web-search/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-xdBwpmnHycy8sibj9JGtsQ"
+      }
+    }
+  },
+  "_moma": {
+    "servers": {
+      "web-search": {
+        "contextSaving": false,
+        "description": "网页搜索透传"
+      }
+    }
+  }
+}

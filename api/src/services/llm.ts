@@ -501,9 +501,13 @@ export function hasAvailableLLM(): boolean {
 
 // 获取可用的 LLM 信息
 export function getAvailableLLMs(): { kimi: boolean; claude: boolean; openai: boolean } {
+  const gatewayClaude =
+    !!process.env.ANTHROPIC_AUTH_TOKEN?.trim() &&
+    !!process.env.ANTHROPIC_BASE_URL?.trim() &&
+    !process.env.ANTHROPIC_AUTH_TOKEN.includes('your_');
   return {
     kimi: !!getKimiClient(),
-    claude: !!getAnthropicClient(),
+    claude: !!getAnthropicClient() || gatewayClaude,
     openai: !!getOpenAIClient(),
   };
 }

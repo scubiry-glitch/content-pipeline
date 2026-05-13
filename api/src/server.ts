@@ -124,7 +124,10 @@ async function main() {
   validateRequiredConfig();
 
   // Initialize LLM Router
-  const claudeApiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const claudeApiKey =
+    process.env.CLAUDE_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.ANTHROPIC_AUTH_TOKEN?.trim();
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const inClaudeCode = isClaudeCodeEnvironment();
 

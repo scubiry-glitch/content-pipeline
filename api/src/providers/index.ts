@@ -288,32 +288,26 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
     router.registerProvider(new KimiProvider(cfg.kimiApiKey));
   }
 
-  // Claude Code 环境
-  if (cfg.useClaudeCode || (!cfg.claudeApiKey && isClaudeCodeEnvironment())) {
+  const resolvedClaudeKey =
+    (cfg.claudeApiKey && String(cfg.claudeApiKey).trim()) ||
+    process.env.CLAUDE_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.ANTHROPIC_AUTH_TOKEN?.trim();
+
+  // Claude Code 环境（仅当没有任何显式 Claude 凭证时，避免脚本场景 AUTH_TOKEN 被误判）
+  if (cfg.useClaudeCode || (!resolvedClaudeKey && isClaudeCodeEnvironment())) {
     console.log('[LLM Router] 使用 Claude Code 环境提供的模型');
     router.registerProvider(new ClaudeCodeProvider());
   }
-  // Claude (显式 API Key)
-  else if (cfg.claudeApiKey) {
-    if (cfg.claudeApiKey.startsWith('sk-kimi')) {
-      // 避免重复注册 Kimi
+  // Claude / Kimi（显式 Key）
+  else if (resolvedClaudeKey) {
+    if (resolvedClaudeKey.startsWith('sk-kimi')) {
       if (!router.getProvider('kimi')) {
         console.log('[LLM Router] 检测到 Kimi API Key，注册 Kimi Provider');
-        router.registerProvider(new KimiProvider(cfg.claudeApiKey));
+        router.registerProvider(new KimiProvider(resolvedClaudeKey));
       }
     } else {
-      router.registerProvider(new ClaudeProvider(cfg.claudeApiKey));
-    }
-  }
-  // Claude (环境变量)
-  else if (process.env.ANTHROPIC_API_KEY) {
-    if (process.env.ANTHROPIC_API_KEY.startsWith('sk-kimi')) {
-      if (!router.getProvider('kimi')) {
-        console.log('[LLM Router] 检测到 Kimi API Key，注册 Kimi Provider');
-        router.registerProvider(new KimiProvider(process.env.ANTHROPIC_API_KEY));
-      }
-    } else {
-      router.registerProvider(new ClaudeProvider(process.env.ANTHROPIC_API_KEY));
+      router.registerProvider(new ClaudeProvider(resolvedClaudeKey));
     }
   }
 
@@ -330,13 +324,33 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
       '  - SILICONFLOW_API_KEY (SiliconFlow - DeepSeek/Qwen)\n' +
       '  - VOLCANO_API_KEY (火山引擎 - 豆包 DeepSeek)\n' +
       '  - KIMI_API_KEY (Kimi)\n' +
-      '  - ANTHROPIC_API_KEY (Claude)\n' +
+      '  - ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN (Claude 或兼容网关)\n' +
       '  - OPENAI_API_KEY\n' +
       '或在 Claude Code 环境中运行'
     );
   }
 
   console.log('[LLM Router] 可用 Providers:', router.getAvailableProviders().join(', '));
+
+  // 会议纪要 api-oneshot：配置了兼容 Anthropic 的企业网关时，expert_library 优先 Claude（Bearer + 自定义 base）
+  const expertLibOverride = process.env.MN_EXPERT_LIBRARY_PROVIDER?.trim().toLowerCase();
+  const preferClaudeExpert =
+    expertLibOverride !== 'siliconflow' &&
+    expertLibOverride !== 'volcano-engine' &&
+    (expertLibOverride === 'claude' || !!process.env.ANTHROPIC_BASE_URL?.trim());
+  if (preferClaudeExpert && router.getProvider('claude')) {
+    const fb = router.getProvider('siliconflow')
+      ? 'siliconflow'
+      : router.getProvider('volcano-engine')
+        ? 'volcano-engine'
+        : undefined;
+    const patch: Partial<Omit<ModelRoutingRule, 'taskType'>> = { preferredProvider: 'claude' };
+    if (fb) patch.fallbackProvider = fb;
+    router.updateRoutingRule('expert_library', patch);
+    console.log(
+      '[LLM Router] expert_library → claude 优先（ANTHROPIC_BASE_URL 或 MN_EXPERT_LIBRARY_PROVIDER=claude；设 MN_EXPERT_LIBRARY_PROVIDER=siliconflow 可保持原路由）',
+    );
+  }
 
   // 打印路由决策表
   router.printRoutingTable();
