@@ -1,7 +1,7 @@
 {
   "userName": "",
   "permissionMode": "normal",
-  "model": "sonnet",
+  "model": "claude-opus-4.7",
   "thinkingBudget": "low",
   "effortLevel": "high",
   "serviceTier": "default",
@@ -11,7 +11,7 @@
   "mediaFolder": "",
   "systemPrompt": "",
   "persistentExternalContextPaths": [],
-  "sharedEnvironmentVariables": "",
+  "sharedEnvironmentVariables": "export  CLAUDE_CODE_EXTRA_BODY='{\"thinking\":{\"type\":\"adaptive\"}}'",
   "envSnippets": [],
   "customContextLimits": {},
   "keyboardNavigation": {
@@ -34,8 +34,8 @@
       "enableSonnet1M": false,
       "customModels": "",
       "lastModel": "sonnet",
-      "environmentVariables": "",
-      "environmentHash": ""
+      "environmentVariables": "ANTHROPIC_BASE_URL=https://gateway.meizu.life/api\nANTHROPIC_AUTH_TOKEN=cr_5d0796da820a5e9ed3ecbd442d07f3c599899a7ed867d1fd6938883b06d4a22f\nANTHROPIC_MODEL=claude-opus-4.7",
+      "environmentHash": "ANTHROPIC_BASE_URL=https://gateway.meizu.life/api|ANTHROPIC_MODEL=claude-opus-4.7"
     },
     "codex": {
       "enabled": false,
@@ -46,9 +46,9 @@
       "reasoningSummary": "detailed",
       "environmentVariables": "",
       "environmentHash": "",
-      "installationMethod": "native-windows",
-      "installationMethodsByHost": {},
-      "wslDistroOverride": "",
+      "installationMethodsByHost": {
+        "YimengdeMacBook-Pro.local": "native-windows"
+      },
       "wslDistroOverridesByHost": {}
     },
     "opencode": {
@@ -65,7 +65,7 @@
   },
   "settingsProvider": "claude",
   "savedProviderModel": {
-    "claude": "sonnet"
+    "claude": "claude-opus-4.7"
   },
   "savedProviderEffort": {
     "claude": "high"
@@ -77,7 +77,7 @@
   "savedProviderPermissionMode": {
     "claude": "normal"
   },
-  "lastCustomModel": "",
+  "lastCustomModel": "claude-opus-4.7",
   "maxTabs": 3,
   "tabBarPosition": "input",
   "enableAutoScroll": true,

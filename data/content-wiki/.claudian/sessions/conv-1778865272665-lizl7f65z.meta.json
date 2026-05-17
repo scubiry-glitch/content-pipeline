@@ -1,0 +1,23 @@
+{
+  "id": "conv-1778865272665-lizl7f65z",
+  "providerId": "claude",
+  "title": "default/sources/meeting 下，分析 因果关系链",
+  "titleGenerationStatus": "failed",
+  "createdAt": 1778865272665,
+  "updatedAt": 1779024708385,
+  "lastResponseAt": 1778898464793,
+  "sessionId": "f66b9706-e753-4348-bc94-7f32cebd0fb1",
+  "providerState": {
+    "providerSessionId": "f66b9706-e753-4348-bc94-7f32cebd0fb1"
+  },
+  "usage": {
+    "model": "claude-opus-4.7",
+    "inputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "contextWindow": 200000,
+    "contextTokens": 0,
+    "percentage": 0,
+    "contextWindowIsAuthoritative": true
+  }
+}

@@ -1,0 +1,595 @@
+{
+  "id": "conv-1779031100581-1bt0r1gh2",
+  "providerId": "claude",
+  "title": "审查 CEO 会议提示和数据模型",
+  "titleGenerationStatus": "success",
+  "createdAt": 1779031100581,
+  "updatedAt": 1779031691585,
+  "lastResponseAt": 1779031691584,
+  "sessionId": "ec8efc0e-d998-450e-9669-7192daddf7a2",
+  "providerState": {
+    "providerSessionId": "ec8efc0e-d998-450e-9669-7192daddf7a2",
+    "subagentData": {
+      "call_d051f47f7a72481e8742ff43": {
+        "id": "call_d051f47f7a72481e8742ff43",
+        "description": "Read all meeting frontmatter",
+        "prompt": "Read the YAML frontmatter (first ~30 lines) of every .md file in /Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/ (NOT in subdirectories like axes/ or feishu-minutes-sync/). Extract and tabulate: filename, title, date (if present), participants (if present), scope/tags (if present), and any summary/tldr. Return a structured table. Do NOT edit any files.",
+        "status": "completed",
+        "toolCalls": [
+          {
+            "id": "call_b9112d5ca0c3486f91ca008d",
+            "name": "Glob",
+            "input": {
+              "pattern": "*.md",
+              "path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes"
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "feishu-minutes/feishu-minutes-sync/README.md\nfeishu-minutes/阿帕斯AI转型发展复盘-obcn7w74x2ihu37z963gcp1o.md\nfeishu-minutes/贝壳与新雅欣中高端租赁业务交流-obcns49w9k33wuo15167p4t7.md\nfeishu-minutes/规则引擎构建及迭代使用讨论-obcno399kikmm7j8z412ic95.md\nfeishu-minutes/美租业务方案及定价讨论-obcnpqgmj539388fk443r8pk.md\nfeishu-minutes/美租与锦江合作业务讨论-obcn2zt7t88v9osr6m1z1otd.md\nfeishu-minutes/第二批业务发包流程复盘-obcnclk4532mv11jov76724b.md\nfeishu-minutes/短周期资金方案及责任规划-obcngyqd5578g9ptpvamwu82.md\nfeishu-minutes/澳洲房产管理软件应用讨论-obcnts76wb4c73ec9ow1d8dj.md\nfeishu-minutes/星图计划业务结构调整讨论-obcnu82io96rnvztntmq7j1h.md\nfeishu-minutes/新录音_2-obcnk37965s2e9om7jug7fe4.md\nfeishu-minutes/新录音_2-obcniul1xx4y364wfx794jt7.md\nfeishu-minutes/新录音_2-obcngq8h4n1m5a657x45n2oq.md\nfeishu-minutes/新录音_1127-obcnzm5qjv9a4342e1zd26ol.md\nfeishu-minutes/新录音-obcnltyve64e1838cg1ndwh8.md\nfeishu-minutes/新录音-obcnk3ul616ubk418y3p5678.md\nfeishu-minutes/新录音-obcniql91t6f57wiei8k875n.md\nfeishu-minutes/新录音-obcnibt9kwpds688o476496l.md\nfeishu-minutes/新录音-obcngonq7x434em42t36576q.md\nfeishu-minutes/新录音-obcnbttv9rmg8428m4q54fs9.md\nfeishu-minutes/新录音-obcn2zw43nh6u9278tlk67xs.md\nfeishu-minutes/整装业务资金方案讨论-obcn5r71s81162s28m5oa94j.md\nfeishu-minutes/整装业务流程及供应商管理讨论-obcn25nedc2h413431724952.md\nfeishu-minutes/投资收益分配及权责问题讨论-obcn484y85v7ippxpt9q6258.md\nfeishu-minutes/房屋装修资金方案及风险讨论-obcn5vp56m827gd3a3s62299.md\nfeishu-minutes/房屋装修托管业务模式讨论-obcnj88yah99bx7ot5342q9e.md\nfeishu-minutes/房屋装修及租赁方案讨论-obcndxl6i862g95om61723u4.md\nfeishu-minutes/房屋托管业务合作规划-obcn5x1jk2b4z473i575tj28.md\nfeishu-minutes/家装业务资金方案及报价讨论-obcnkbgo1k29hs43wmeidgxf.md\nfeishu-minutes/宁波银行与贝壳战略合作讨论-obcndyw97c6kbkijhm11b231.md\nfeishu-minutes/北京被窝家装业务经营分析-obcn8m469rn8z9y5z33424jx.md\nfeishu-minutes/北上链家业务经营分析与预算规划-obcn8k661p2ls57385t27q6o.md\nfeishu-minutes/办公区退租方案讨论-obcnkev1tpplzug2t4993g85.md\nfeishu-minutes/内容运营流程及爬虫工具规划-obcnjl5v5v5zh63c4vx776f7.md\nfeishu-minutes/信托资金运用及后端模式讨论-obcntxv5jb8797r7hf4aq41r.md\nfeishu-minutes/信托发包时间及资金问题讨论-obcncrdujwoud16nogat2izi.md\nfeishu-minutes/仓储管理及装修业务规划-obcnf3l9f9jyzi71lof92t89.md\nfeishu-minutes/中高端分散式公寓业务合作讨论-obcns316c64av7246uop7953.md\nfeishu-minutes/两分钟上手飞书妙记-obcnbm67uy55ew87yp878udz.md\nfeishu-minutes/业务风控措施规划与讨论-obcnobn79jm847eu6qrab555.md\nfeishu-minutes/业务运营与资金结构规划讨论-obcnq82gkyjp3kd12628b61l.md\nfeishu-minutes/业务资金预算与人员安排规划-obcnf6pieix9oi39xb56858h.md\nfeishu-minutes/业务资金成本及合作方案讨论-obcniq18khqoxtsv758724cw.md\nfeishu-minutes/业务盈利及融资规划讨论-obcn4lwyl7zv48s5h554d58r.md\nfeishu-minutes/业务工作进展及规划讨论-obcnbdj8ee28t4r8cab4g788.md\nfeishu-minutes/业主装修资金方案规划-obcnhhi1pa1817z9xme42bba.md\nfeishu-minutes/万华零甲醛板材及金融服务讨论-obcnqhk212z4n7a15672f2y2.md\nfeishu-minutes/AI办公创业公司发展规划-obcn7y71due9wp7tr95b666y.md\nfeishu-minutes/07月09日_1-obcnbm6kpg3i7b19axop447q.md\nfeishu-minutes/03月29日_2-obcnbmn1ua7xf9724bo6hrw6.md\nfeishu-minutes/03月29日_1-obcnbmzs78i2p1ix999x4174.md\nfeishu-minutes/axes/_index.md"
+          },
+          {
+            "id": "call_099f6d5141d242a494fe7c83",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/阿帕斯AI转型发展复盘-obcn7w74x2ihu37z963gcp1o.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"阿帕斯AI转型发展复盘\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn7w74x2ihu37z963gcp1o\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn7w74x2ihu37z963gcp1o\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 阿帕斯AI转型发展复盘\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn7w74x2ihu37z963gcp1o)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-11 14:44:49 CST|24分钟 14秒\n19\t\n20\t关键词:\n21\t企业、全球、互联网、机会、时代、非洲、产品、世界、算法、中国、文化、人工智能、移动互联网、资本市场、等待机会、技术浪潮、智能手机、一家公司\n22\t\n23\t说话人 1 00:00:00.400 \n24\tEMBA 7 期，他今天分享的主题是 AI 进化从此刻开始。\n25\t\n26\t说话人 2 00:00:15.080 \n27\t他以阿帕斯为界，为全球 200 余国家超过 24 亿用户接入数字世界。这位深谙出海的掌舵人，正以 AI 大模型为全新引擎，为世界绘制通往智能时代的航海新航道。他是中国人工智能企业出海的领航者。\n28\t\n29\t说话人 3 00:00:57.090 \n30\t很开心，因为这是我第二次登上新年私享会的舞台，非常感谢。学校感谢学院，包括老师同学给我这样一个机会，让我在这儿跟大家一起来分享阿法从 10 年前那么出海到今天，作为一个人工智能企业，依旧在全球化的道路上一路狂奔的这样一个经历。我是 16 年入的学，是 EMBA 7 期，那么 16 年对阿法斯来说是一个非常好的一个大年，因为阿法斯在 14 年创办， 16 年开始实现商业化。那么我呢？最早的应该说是一个从 99 年进入到互联网行业的一个老兵，那么在整个这个行业里面打拼了 20 多年，但在 2014 年一个非常偶然的机会，其实是 2013 年下半年到 2014 年的上半年，一个非常偶然的机会。"
+          },
+          {
+            "id": "call_607e4efc986f4eb7a7a27d9e",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/贝壳与新雅欣中高端租赁业务交流-obcns49w9k33wuo15167p4t7.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"贝壳与新雅欣中高端租赁业务交流\"\n3\tsource: feishu-minutes\n4\tminute_token: obcns49w9k33wuo15167p4t7\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcns49w9k33wuo15167p4t7\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 贝壳与新雅欣中高端租赁业务交流\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcns49w9k33wuo15167p4t7)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-22 11:44:50 CST|31分钟 16秒\n19\t\n20\t关键词:\n21\t业主、客户、房子、公寓、酒店、北京、中介费、服务费、上海、中介公司、中国市场、酒店式公寓、水电燃气、人工成本、住宅市场、合作模式、托管模式、托管房屋\n22\t\n23\t说话人 1 00:00:00.470 \n24\t因，因为我们主要做客端，我们主要是做客端。\n25\t\n26\t说话人 2 00:00:04.510 \n27\t对，因为我们那个，对，我先简单介绍一下，就是那个我们等于 22 年那个贝壳不是有那个一体三翼的这个战略之后，因为贝壳原来包括北京链家，嗯，它核心还是以买卖为主，就是二手房买卖和新房买卖。但是 22 年我们就成立了汇居那个内部组织结构叫汇居，其实就是以租赁的这种业务为主，就是在全国做这种托管业务，它就是有别于像我们原来那个兄弟公司自如做的那么重，它可能就以轻托管为主，就是收买卖双方的这种服务代理费，这种就以托管房屋管理为主。现在全国差不多也管了这四年的时间，那个在全国进驻了 13 个城市，管了将近，那个现在截止到现在 75 万套房左右，就因为他还是有一定的这个线下门店的，这个资源禀赋就发展还是比较快。再结合着这几年市场租赁市场它也出现了一些波动，就还是这个轻模式做的还是比较顺利。\n28\t\n29\t说话人 2 00:01:14.530 \n30\t嗯，在北京差不多也有 18 万套房的这种分散式的托管，因为我们就是坦白讲，也就是想那个学习一下那个咱们一些同行做的比较好的地方。嗯，看我们其实现在重点我们还是以轻托管为主，像那个一些品质改造，那个像有些房子他不是中国的房子，像北京越来越老龄化，是吧？是像一些做一些这种二房东升级吗？对，就做一些房子的装修改造，这块我们今年也开始在探索，包括其实客户有很多的衍生服务，什么搬家、保洁、维修，就这种也在探索。"
+          },
+          {
+            "id": "call_f9388654058e497c91837d38",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/规则引擎构建及迭代使用讨论-obcno399kikmm7j8z412ic95.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"规则引擎构建及迭代使用讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcno399kikmm7j8z412ic95\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcno399kikmm7j8z412ic95\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 规则引擎构建及迭代使用讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcno399kikmm7j8z412ic95)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-02-05 15:05:57 CST|6分钟 47秒\n19\t\n20\t关键词:\n21\t规则、服务器、迭代、运营、压测、引擎、回滚、压力测试\n22\t\n23\t说话人 1 00:00:00.210 \n24\t对的，或者只取那两条，对的。\n25\t\n26\t说话人 2 00:00:03.250 \n27\t我觉得挺好，所以你看哈，就是这个事就变成了他就是说你是用逻辑的已经把它表达出来了。对。是吧？过往也能发现这类问题，比如说你，我们规则明明知道很清楚是那个，你管他叫，如果有按比例和按金额的，要把按金额的算成按比例的。对。但是这种规则就反正是没有去检核掉，就漏到了下。一个环节，这个问题是一样的。好，今天定了规则a，规则b。什么那个规则a，这规则b，我们要确保它在系统里被正确之后抛出来。抛出来就变成一条任务。那这个任务就被可管理的抛给了运营，这是一个只是把你规则的固化而已。行。然后。\n28\t\n29\t说话人 1 00:00:52.560 \n30\t就这有好多这种，我可能要系统性的去盘一下。"
+          },
+          {
+            "id": "call_62d60d4d75c742a286eb013c",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/美租业务方案及定价讨论-obcnpqgmj539388fk443r8pk.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"美租业务方案及定价讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnpqgmj539388fk443r8pk\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnpqgmj539388fk443r8pk\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 美租业务方案及定价讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnpqgmj539388fk443r8pk)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-02-06 14:23:25 CST|1小时 5分钟 43秒\n19\t\n20\t关键词:\n21\t资管、报价、业主、产品、运营、数据库、房子、小区、收益、支付方式、付款方式、业务逻辑、在线文档、营销系统、风控评估、结算系统、设计方案、账号时间\n22\t\n23\t说话人 1 00:00:00.210 \n24\t其实你收不了，你发现这个事的话， 3 年是兜不了本的。他真正的回本时间是在 4.3 个月，但比如说这个房租，我们说这个他这个租金的话，我们溢价可以再涨一点，他的缺口就会越多，但其实这里边根本原因的话，还是就这两个事的协调。然后这整体的这个整装的成本，对吧？我们大概算的整装成本是按 1, 360 一平算的，就你要不然把这个数给，把这个值给降了。降。要不然的话把这个就是，反正就是相对把这个值中能降低是最好的，这是第一种，然后第二种我们说极难租了，这种极难租怎么办呢？我租金没有变，但是它的空置时间是在 5 个月，它其实这样的话是能够就相当于是在两年半的时间就可以把这成本收回来了。\n25\t\n26\t说话人 1 00:00:45.890 \n27\t然后控制的成本包括这个回本线，我们去设了一个回本线，然后这样的话就是它的装，它其实这个装修成本没有变，因为房子是一样的，无非就什么，就是你的本不一样，然后这个僵尸房就是最快实现的 1.4 个月。因为我对僵尸房定义什么？就这房子真实的，它的整体的这个叫收益就很低，它可能全年下来的话只有两三个月是自己的纯收益，因为它本来房子就便宜，然后溢价的话，经济型的溢价给它设置到了就 1, 500， 1, 600 左右，然后就发现它的整体回收成本会非常快。空置，首先第一个它每年空置的话时间就会比原料更高，然后大概的话就是相当于一年三个月。收回来剩下全是净利润，但是我就这么算了一个这个东西，我是觉得把这东西给到设计师也好，给到美作也好。他们是可以跟业主去讲清楚这个事。我觉得大概，反正就是这么这么一个。\n28\t\n29\t说话人 2 00:01:45.480 \n30\t我觉得挺好的，那个就是这个如果加上这个我觉得就更好了，就是你现在不是一个通用的逻辑吗？对。如果我们给业主看的话，可以把小区的。数据拉出来。实际的数据。一个小区数据。一个是说现在不是有个通用的概念往下，就刚才那个给的不是经济型的那个整装那个什么吗？我们其实可以换成更具体的。就比如说那个飓风。"
+          },
+          {
+            "id": "call_309f28e5d2114b6fbe8c78b9",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/美租与锦江合作业务讨论-obcn2zt7t88v9osr6m1z1otd.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"美租与锦江合作业务讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn2zt7t88v9osr6m1z1otd\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn2zt7t88v9osr6m1z1otd\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 美租与锦江合作业务讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn2zt7t88v9osr6m1z1otd)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-14 09:38:33 CST|1小时 49分钟 13秒\n19\t\n20\t关键词:\n21\t产品、品牌、锦江、供应商、定制、品质、客户、价格、核心、产品经理、商业模式、生命周期、设计公司、设计团队、组织架构、工程标准、管理模式、个性化需求\n22\t\n23\t说话人 1 00:00:00.120 \n24\t确实，这一年半就做了一套样板间，锦江确实也没有着急到说就问你们要量。嗯，因为我们是觉得你们正好也是在转的过程当中，嗯，也深度了解你们业务。那今天如果我去想美租核心能力是啥？嗯，我就拆四个块，嗯，第一块是渠道贝壳最强的，但我觉得渠道要转成什么？就是我觉得酒店的类那个 OTA 的那种形式是贝壳，未来这个可以去考虑的点，因为。\n25\t\n26\t说话人 2 00:00:26.880 \n27\t贝壳，你们，你别说行话，我就刚进来，OTA。\n28\t\n29\t说话人 1 00:00:29.640 \n30\t是什么意思？携程、携程美团，携程美团这个东西就是他们原来就是一个交易平台，他现在转成流量平台，我觉得贝壳这个方向也可以转，但这个为什么是灰色？我没法碰。嗯，你们最，你们想的最清楚，你知道，但是两个，这两块，第二块、第三块是标量，我觉得可以去碰一下，一个叫产品，就渠道、产品交付、供应链这四个把握住了，我觉得四个核心能力能支撑起美足未来的事。产品我是觉得关键点是一个产品体系怎么样把标准化跟模块化做出来。我这里特地写的是产品，不是品牌。嗯，因为很早之前跟我们聊说品牌应该怎么做，贝壳想往这转型。我说你们这个市场，我真是实话实说，品牌先不重要，产品品牌。嗯，因为你们的市场是低品消费市场，嗯，不会有人有这个品牌粘性的，但你产品足够好，它会有贝壳这个品牌的粘性，所以我觉得品牌的这个品牌产品体系很重要，因为你未来这么大市场，这么多城市，对吧？嗯，你怎么样把你的产品的背后的很多的这个我们叫标准化的东西，能够串联的共用起来。"
+          },
+          {
+            "id": "call_b060f5d9873e40f1bc5970ef",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/第二批业务发包流程复盘-obcnclk4532mv11jov76724b.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"第二批业务发包流程复盘\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnclk4532mv11jov76724b\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnclk4532mv11jov76724b\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 第二批业务发包流程复盘\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnclk4532mv11jov76724b)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-28 09:34:42 CST|3小时 5分钟 51秒\n19\t\n20\t关键词:\n21\t供应商、信托、单子、合同、发票、业主、房子、额度、金额、额度不够、资产清单、转让合同、发行成本、审批流程、评级机构、应收账款、时间节点、材料资料\n22\t\n23\t说话人 1 00:00:00.080 \n24\t我们的目标是如果这个月回款，请问你们需要我们做什么？你们需要做什么？这中间我们共同有啥困难、压力、难点、bug，我们都把它捋一捋。就是就是，大概因为我们和这个供应就这个钱不能准时的、如期的到位，我们还不说快速就准时的到位，这有几个问题，我也不是太第一，单子我不敢放量，嗯，供应商也不敢放量，是，这是第一个比较大的bug，第二个就是老的这一批已经做过单子的，他今天心理压力、资金压力会比较大，会赶上过年了。\n25\t\n26\t说话人 1 00:00:43.870 \n27\t第三个我找到了新材料，我马上准备替换新材料，我都不知道怎么和这个材料商去谈我们的账期的事，我新材料我都进不来，我们现在相当于是用的过去已经忽悠进来的所有供应商。嗯，慢慢再让他们做一些这个替换材料，各种方方面面的事，但我今天一定会面临新供应商，不管是新的装修供应商，还是材料供应商，还是什么供应商，只要涉及到这条线，拿钱的我咋跟人谈？我跑到巩义去，人家就可以给我供材料，量随便，样式随便，反正无权，对吧？我也确定那款材料是我们目前来上看到最合适的，我咋跟人家谈呢？尹老板，我们这个账期我们跟你聊聊，我不知道什么时候，一般情况下。\n28\t\n29\t说话人 2 00:01:30.520 \n30\t3 ~ 6 个月现款现结。"
+          },
+          {
+            "id": "call_e9afbc28c7c948dabe1072f3",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/短周期资金方案及责任规划-obcngyqd5578g9ptpvamwu82.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"短周期资金方案及责任规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcngyqd5578g9ptpvamwu82\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcngyqd5578g9ptpvamwu82\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 短周期资金方案及责任规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcngyqd5578g9ptpvamwu82)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-04 18:48:36 CST|24分钟 28秒\n19\t\n20\t关键词:\n21\t保理、业主、信托、供应商、贝壳、坏账、责任、储备金、一年期、租金、账户、结算、资金、机构、资金模式、资金成本、风险储备金、结算系统\n22\t\n23\t说话人 1 00:00:00.340 \n24\t就是说短周期到底用哪个方案？比如说是业主交一半，还是因为道理上没别的方案，他原来想的方案不存在，我觉得不冲突，他原来说一人半年那是假的，那是因为对于后面还的人不还是两年，对，那个肯定行不通。\n25\t\n26\t说话人 2 00:00:17.620 \n27\t点是说不管是业主付一半还是什么样的，我们就只需要让他对我们来说就是我只需要保证这个钱能在一年内收回来就可以了，然后你要考虑到空置它可能都不是一年，它可能是十个月，对，就十个月我要收回来就好了。那至于比如说局改，它天然就可以用这个嘛？因为它 10 个月能收回来。对，资金不应该跟直接跟产品他可以挂钩，但不应该是说有强绑定的关系。\n28\t\n29\t说话人 1 00:00:46.830 \n30\t你的意思是我们不管他了，爱咋地咋。"
+          },
+          {
+            "id": "call_d135bc82af2c48e2af3d112d",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/澳洲房产管理软件应用讨论-obcnts76wb4c73ec9ow1d8dj.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"澳洲房产管理软件应用讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnts76wb4c73ec9ow1d8dj\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnts76wb4c73ec9ow1d8dj\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 澳洲房产管理软件应用讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnts76wb4c73ec9ow1d8dj)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-02-12 12:56:26 CST|1小时 9分钟 5秒\n19\t\n20\t关键词:\n21\t软件、澳大利亚、照片、合同、营销、房子、金额、设备、点位、人工成本、租赁市场、中介公司、营销预算、广告平台、工作时间、租赁公司、管理公司、识别市场\n22\t\n23\t说话人 1 00:00:02.210 \n24\t诶，等一下，我看一下。\n25\t\n26\t说话人 2 00:00:04.250 \n27\t入入相当于是入驻那个入驻前、入驻中和入驻后嘛。\n28\t\n29\t说话人 1 00:00:09.770 \n30\t对，还有个常规检查。"
+          },
+          {
+            "id": "call_ffc8c18d86d4457995a233d3",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/星图计划业务结构调整讨论-obcnu82io96rnvztntmq7j1h.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"星图计划业务结构调整讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnu82io96rnvztntmq7j1h\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnu82io96rnvztntmq7j1h\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 星图计划业务结构调整讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnu82io96rnvztntmq7j1h)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-25 13:57:35 CST|38分钟 55秒\n19\t\n20\t关键词:\n21\t信托、资产、计划、期限、租金、现金、保证金、资金、回购、头寸、过渡期、银行、机构、担保公司、非现金资产、资金规模、评级公司、评级流程\n22\t\n23\t说话人 1 00:00:01.520 \n24\t这可咋办呢？\n25\t\n26\t说话人 2 00:00:03.720 \n27\t关键他没有那个两档的概念。\n28\t\n29\t说话人 3 00:00:06.160 \n30\t了，没有两档三线了，就是传的都不一样，就是。"
+          },
+          {
+            "id": "call_2e8473b8103c4b0aa181764b",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音_2-obcnk37965s2e9om7jug7fe4.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音_2\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnk37965s2e9om7jug7fe4\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnk37965s2e9om7jug7fe4\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音_2\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnk37965s2e9om7jug7fe4)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-12 21:24:45 CST|17分钟 37秒\n19\t\n20\t关键词:\n21\t风险、国企、产品、贷款、高息、租金、准备金、企业主、风控、核心风险、贷款利率、监管账户\n22\t\n23\t说话人 1 00:00:01.600 \n24\t租金贷相关的产品，说是租金贷过他也不能直接给用户放贷款，肯定要结合某种场景，这是一个原则。我们今天的讨论主要用于界定有哪些核心的决策点跟产品设计的原则。之前已经做了一个产品，这个产品是这样子的，对方是个。国企他想快速回款，他如果想快速回款，他想租客一次性的租金年付，并且给租客一个折扣。原来来讲，比如说是租客现付是 100 块钱。现在如果是他原来不对，说错了，如果他原来是现付，月付是 100 块钱，年付可能比如说原来是 95 折，加上新的产品，如果银行给他放个贷款就是 97 折了，这样贷款定价介于年付跟月付之间的一个水平。这是一个方案，为什么这个方案之前没有人做呢？主要是有两个核心风险，第一个核心风险是说第一核心风险是什么呢？第一核心风险是第一个核心风险是。他的。\n25\t\n26\t说话人 2 00:02:26.310 \n27\t提到的第一个核心风险具体是指哪方面的呢？比如生活、学习还是其他事情呀？\n28\t\n29\t说话人 1 00:02:34.390 \n30\t他主要是说监管对于这种贷款的敏感程度，如果是高息贷款的话会有风险，而且要明确展示贷款利率，这是第一个风险，第二个风险主要是说历史上发生过贷款跑路的事件，但是贷款的跑路，它的核心是高收低出、长收短付，那基于这种情况呢。所以整个的监针对这种情况，我们对业主本身就要加一些限制。比如说他是国企，他不是民企，国企的话有个特点，他就算是他长空林出了问题，他不会跑路，也不会赶租户走，这是核心风控和手段。但是这个产品有个特点。"
+          },
+          {
+            "id": "call_b45fc69832dd4eee81c15449",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音_2-obcniul1xx4y364wfx794jt7.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音_2\"\n3\tsource: feishu-minutes\n4\tminute_token: obcniul1xx4y364wfx794jt7\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcniul1xx4y364wfx794jt7\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音_2\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcniul1xx4y364wfx794jt7)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-09 15:01:38 CST|1小时 34分钟 38秒\n19\t\n20\t关键词:\n21\t江苏、领导、公租房、统计局、贝壳、国务院、人口、广东、土地\n22\t\n23\t说话人 1 00:00:00.280 \n24\t好，就喜欢你这些。\n25\t\n26\t说话人 2 00:00:01.400 \n27\t他们领导们都去开会去了，今天下午是全厅的廉政建设大会，就是不能请假的。\n28\t\n29\t说话人 1 00:00:09.520 \n30\t对对对，然后我听说还他还要去司法厅啊。"
+          },
+          {
+            "id": "call_263a3fc238f24cd5847d4f6c",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音_2-obcngq8h4n1m5a657x45n2oq.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音_2\"\n3\tsource: feishu-minutes\n4\tminute_token: obcngq8h4n1m5a657x45n2oq\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcngq8h4n1m5a657x45n2oq\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音_2\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcngq8h4n1m5a657x45n2oq)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-06 13:51:17 CST|59分钟\n19\t\n20\t关键词:\n21\t业主、房子、中介、房东、视角、押金、营销、成本、客户、租户、违约金、品质、软件、报告、核心价值、用户需求、霸王条款、产品价值\n22\t\n23\t说话人 1 00:00:00.200 \n24\t可以，嗯，打开了，因为这样的话它就更有质量。\n25\t\n26\t说话人 2 00:00:03.880 \n27\t是啊。那就先把那个打开嘛，刚才那几句话，我发给你的微信里面。对。你看能不能再关一遍，免得影响他。推一下。\n28\t\n29\t说话人 1 00:00:16.240 \n30\t把这个放到，可以先放到这里面聊聊，比如。"
+          },
+          {
+            "id": "call_71863921ce334cf18daa5018",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音_1127-obcnzm5qjv9a4342e1zd26ol.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音_1127\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnzm5qjv9a4342e1zd26ol\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnzm5qjv9a4342e1zd26ol\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音_1127\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnzm5qjv9a4342e1zd26ol)\n15\t\n16\t## 逐字稿\n17\t\n18\t2023-11-27 08:37:02 CST|3分钟 14秒\n19\t\n20\t关键词:\n21\t住宅、楼盘、日本、大楼、建筑、房间、商业\n22\t\n23\t说话人 1 00:00:00.440 \n24\t地震，因为日本也有很多地震的法律，他们就重新进行了这个维修，各方面的重新加强了。 6 年前，那我基本上就是这个情况，就是这样，大家有什么还想问的一些问题吗？针对这个住有大楼的有问题吗？没有，那也叫不定。日本这种办公。的话，你再说一遍，就是住宅楼，您是说是住宅用还是商业用？就是这种搜索，两个都问一下，是这意思，住宅的只是住宅的，会进行分析，环境辅助。\n25\t\n26\t说话人 1 00:00:52.970 \n27\t次年以上の建物ですね。やはりメンテナンスとしては、やはり焦がして建て替えするのか、また、そうですね、今みたいにちょっメンテナンスして、そのまま使用するかという、日本はどっちの方がよくですかね。今、日本では建て替えはほとんどなくて、メンテナンス、壊すのはまだないですね。そうですね。なので。\n28\t\n29\t说话人 1 00:01:19.440 \n30\t熨dinners，嗯，基本它主要就是最多的，它就是就像我们把这个楼盘就是重新推翻，然后重新建这种少比较多的，就像这个楼盘一样，就是它很旧，但是还是进行给它，再就是在这个建筑上面再加强一下，继续使用这种是最多的，嗯。"
+          },
+          {
+            "id": "call_ceca7384b4ef4e02ae163e7f",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcnltyve64e1838cg1ndwh8.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnltyve64e1838cg1ndwh8\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnltyve64e1838cg1ndwh8\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnltyve64e1838cg1ndwh8)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-13 23:29:54 CST|4秒\n19\t\n20\t关键词:\n21\t"
+          },
+          {
+            "id": "call_98be72b1df73471e8e65d19f",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcnk3ul616ubk418y3p5678.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnk3ul616ubk418y3p5678\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnk3ul616ubk418y3p5678\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnk3ul616ubk418y3p5678)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-12 21:22:35 CST|29秒\n19\t\n20\t关键词:\n21\t\n22\t\n23\t说话人 1 00:00:02.000 \n24\t我们现在准备设计一款装修贷的产品，不是租金贷，主要解决什么问题呢？是说有几种可能性，一种可能性是说本身如果装修公司它是。\n25\t"
+          },
+          {
+            "id": "call_dd4a8dbac1954210ab44d488",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcniql91t6f57wiei8k875n.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcniql91t6f57wiei8k875n\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcniql91t6f57wiei8k875n\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcniql91t6f57wiei8k875n)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-09 11:01:09 CST|1小时 13分钟 20秒\n19\t\n20\t关键词:\n21\t业主、公寓、甲方、客户、成本、定金、装修、租金、区划、合同、租赁、房子、二房东、经济适用房、补充协议、资管经理、集团法务、国资合作\n22\t\n23\t说话人 1 00:00:00.270 \n24\t想跟当前的出口的一些长租公寓，还有跟家庭拉开差距，投入还可以，投入多一点没问题。这个项目 1400 套，现在只卖了 200 套，它远期估计也只能卖个 100 套。\n25\t\n26\t说话人 2 00:00:19.110 \n27\t因为我之前没怎么接触过这种项目，咱这边是什么样的想法？\n28\t\n29\t说话人 3 00:00:26.030 \n30\t是说那个，我就几个角度，第一个角度是站在集团这个本身，其实你看从单位的管这 C 叫什么？ GR 之后。就很在乎的是我们对外。的发声的方式，我们去解释说我们是好人也没有用，是吧？没人听就是说你不要去回应别人的质疑，你就做一些新的事情，就实打实的觉得这个事是值得做的就行。这里面就包含就是说我们是不是应该做一些配合当地的国企政府，做一些以旧换新、城市更新跟这种困难房的叫什么呢？困难资产、困境资产的处置。"
+          },
+          {
+            "id": "call_7d88f22db313411ab4ade0f4",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcnibt9kwpds688o476496l.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnibt9kwpds688o476496l\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnibt9kwpds688o476496l\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnibt9kwpds688o476496l)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-08 20:00:50 CST|1小时 31分钟 53秒\n19\t\n20\t关键词:\n21\t房子、业主、生意、产品、租赁、上海、房东、北京、品质、商业模式、资产管理、业务指标、资本市场、天猫超市、规模效应、行业标准、服务成本、核心价值\n22\t\n23\t说话人 1 00:00:00.550 \n24\t可以，本来说白天聊一下，结果白天你有会排满了。我也有事，今天晚上吃完饭简单聊一下。我觉得今天上次博士就给我沟通，哎，不回了。就博士的沟通大概的意思就上次述职嘛，大概意思就是北京切出去了。整个汇聚就不包含北京了。但是财报会包含北京博士管的汇聚是包含北京的。不发北京意义是什么呢？意思是什么呢？就是赚钱的只有一个人了。就上海。就上海、成都和天津都恼火。所以说我能感受到博士对我的期许和期望，但是以今天的这种商业模式的情况下，我觉得很难。而且链家天天还是给我很大的压力，就是觉得这个膨胀，这个我们实际上给链家结算是0.72，链家给经纪人结算是 1.2 个月的渠道费，所以链家去年亏损 4 到 5 个亿。\n25\t\n26\t说话人 2 00:01:09.890 \n27\t他现在倒贴嘛。\n28\t\n29\t说话人 1 00:01:11.010 \n30\t他倒贴去年是，去年汇聚是赚了 1.7 个亿。如果把倒贴的扣除的话，汇聚大概赚 3000 到 5000 万。 1.2 亿退给链家，大概就是不是他亏 4 个多亿。他就亏 3 个亿左右。他亏 3 个亿左右就好交代了，因为北京亏 2 个亿左右。"
+          },
+          {
+            "id": "call_9ec7beb196ff4b75b02bdd76",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcngonq7x434em42t36576q.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcngonq7x434em42t36576q\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcngonq7x434em42t36576q\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcngonq7x434em42t36576q)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-05-06 11:48:00 CST|53分钟 21秒\n19\t\n20\t关键词:\n21\t飞书、电脑、服务器、知识库、上下文、决策、观点、认知、核心、微信、数据库、话题、权限、企业微信、管理公司、分析场景、管理模式、数据权限\n22\t\n23\t说话人 1 00:00:00.120 \n24\t来做，他没有固定答案。\n25\t\n26\t说话人 2 00:00:02.200 \n27\t对，所以说第二个角色叫助理，就是帮你去解决一些你要的一些结果，比如说今天，特别是电脑上的结，因为他只能解决电脑上的东西。对。就你今天的 AI 只能解决电脑，如果这件事脱离电脑，他做不了的。比如我去买包烟电脑，是他买，他做不了。对。除非你在电脑上下个买包烟的外卖，对不对？他给你送过来，这是电脑，可以，只要电脑，所有电脑可以操作的。只要电脑能操作的， AI 都能做。头脑上能做到的， AI 也能做。\n28\t\n29\t说话人 2 00:00:41.290 \n30\t头脑是顾问，电脑是助理，所以顾问加助理，你通过脑袋瓜子去创造创新的，它是顾问的。你通过电脑来解决问题的，那是助理。比如说我要用计算一一加一等于几，那是电脑在算嘛？就 1 + 12，它都给你帮出来，我在企微上下个图片，保证在第一行，那也是电脑可以做的。"
+          },
+          {
+            "id": "call_081e9802b21f4489989acecd",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcnbttv9rmg8428m4q54fs9.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbttv9rmg8428m4q54fs9\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbttv9rmg8428m4q54fs9\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbttv9rmg8428m4q54fs9)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-04-29 09:31:00 CST|1小时 30分钟 32秒\n19\t\n20\t关键词:\n21\t贝壳、装修、房子、信托、房东、租金、业主、资产、优先级、金融机构、自有资金、财富管理、应收账款、行业标准、市场环境、托管业务、平台模式、管理业务\n22\t\n23\t说话人 1 00:00:00.490 \n24\t10%，其中宁波开发投资集团有限公司和宁兴资产管理有限公司是一致行动人，合计持股是20.03%。对宁波银行的主要股东都是近 20 年的老股东，一直以来也是十分支持银行的可持续高质量发展，目前这个表格也是我们前四大股东的持股情况。现在宁波银行的盈利是 12 个利润中心组成的，其中银行单体有 8 个利润中心，还有 4 家子公司。像单体的 8 个利润中心分别是公司银行、零售银行。财富管理、消费信贷就是我们这个部门个人信贷，这个部门投资银行、资产托管、票据业务，金融市场盈利合计是占比83%。\n25\t\n26\t说话人 1 00:00:45.770 \n27\t永盈基金、永盈金租、宁银理财、宁银消金 4 家子公司盈利合计占比17%，像永盈基金是也是总部现在在上海，金租在我们宁波，宁银理财也是在上海，应该对上海，宁银消金也是在我们宁波。那现在是永盈基金管理公司，浙江省首家银行系的基金公司，固收业务优势明显， 2025 年末管理规模是 6343 亿，其中非货规模是 4340 亿，在全国 165 家的基金公司中排名第 17 位。在银行系基金公司中排名第三， 25 年实现净利润有 6.02 亿，永银金租是浙江省首家银行系的金融租赁公司，小微租赁业务具备差异化的优势， 25 年末租赁资产余额是 1516 亿，在全国 66 家金租公司中排名第九， 25 年实现的利润有30.1亿。宁银理财是全国首家开业的城商行系的理财子公司， 25 年管理规模是 6963 亿，在全国 32 家的理财子公司中排名 17 位。实现净利润也是有 9.7 亿，宁银消金是业务起步是比较顺利，发展势头良好， 25 年末贷款余额有 683 亿，在全国 31 家的消费金融公司中排名第六，实现净利润有 4.1 亿。\n28\t\n29\t说话人 2 00:02:06.030 \n30\t这个赵总做个广告，这个去年我们永盈基金应该是现象级的产品很多，我们有一个叫永盈七姐妹。 7 姐妹。对。这个 7 只，这个基金市场表现最好的一只，当年实现了收益是233233，实际上是创历史记录的，当年最高的时候是华夏的那个王亚伟。对。王亚伟当年的收益是227。我们去年的永盈那支是实现了233。"
+          },
+          {
+            "id": "call_0cd777a5d2cd4c6892c6660b",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/新录音-obcn2zw43nh6u9278tlk67xs.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"新录音\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn2zw43nh6u9278tlk67xs\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn2zw43nh6u9278tlk67xs\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 新录音\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn2zw43nh6u9278tlk67xs)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-14 09:37:24 CST|47秒\n19\t\n20\t关键词:\n21\t深度合作、前提条件\n22\t\n23\t说话人 1 00:00:00.700 \n24\tPPT 不复杂，但我觉得有这个东西，咱到底聊到哪？就比上一次，我发现是大家其实都有想法，但是没有一个书面的东西去引导、去思考，就有点空。嗯，就很简单地做了一个东西，把我们的想法给做出来，如果没有问题我们就直接开始吧。嗯，开始我会讲的严谨一点，应该一点啊。\n25\t\n26\t说话人 1 00:00:17.660 \n27\t这份文件是什么呢？就是上次如果你跟我们聊完，到底深度合作上面怎么样的体现真正的价值点？嗯，找这个价值点同时可落地的。嗯，能快速干起来的。我去给了一个方案，那这个方案是有个前提条件，简单说就是我们也希望说因为这个品牌及目前的合作方式先暂时往下推。但是我们补充额外的一些东西进来，帮大家把美租业务越做越好。嗯，只是说我们现在给的这个可以有的和。\n28\t"
+          },
+          {
+            "id": "call_96d0c812c0c848f3ad7cb3f5",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/整装业务资金方案讨论-obcn5r71s81162s28m5oa94j.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"整装业务资金方案讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn5r71s81162s28m5oa94j\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn5r71s81162s28m5oa94j\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 整装业务资金方案讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn5r71s81162s28m5oa94j)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-08 11:16:59 CST|48分钟 30秒\n19\t\n20\t关键词:\n21\t业主、供应商、装修、风险、资金、租金、信托、房子、承担、装修公司、托管模式、付款方式、管理规则、业务规则、托管条件、系统产品化、业务模式、业务条件\n22\t\n23\t说话人 1 00:00:00.180 \n24\t当然包括万华等等这样的一些 Ka 的引入，然后第二个就是说针对前面说的要满足不同业主的这个支付需求，那可能会有一些这个银行贷款，包括等等这样的一些支付模式的引入。然后第三个其实是说，那今天我们既然留了这个风险储备金，我们就应该在前端对业主去做承诺嘛？那是不是未来所有的这个走了这种代扣模式的，我们都去设立这样的一个风险储备金，然后我们在前端所有的这些产品我们都百分百的去覆盖到。那像我们这样一方面就是说通过多种的支付方式，然后包括我们在前端有更好的业主承诺，那肯定是能够促进业务规模有一些增长的，避免品牌价值，就是说一方面是引入了头部机构，第二方面是我们在前端把模式迭代掉，充分的去披露风险，来去维护我们自己的这个品牌的声誉。\n25\t\n26\t说话人 1 00:00:51.020 \n27\t那。整个的这个策略上，第一块就是说要把前端的这个销售逻辑去迭代掉，第一方面就是认知时候过程。我觉得这个是比较重要的，就是今天我们整个的业务方都应该要拉齐，说我们要把价格和品牌都独立出来，明确我们自己的责任。第二个就是说方案层，就是我不再是说我，今天我就给你一个固定的报价，然后你再去选说什么样的支付方式，但对这个对业主来说其实没有意义，因为我感受不到这个价格的差异性，那这一块就是我有了差异化的报价之后，我再让你业主去基于这个差异化的报价去选我到底是全款还是。\n28\t\n29\t说话人 1 00:01:30.000 \n30\t还是代扣还是贷款？然后第三个就是这个保障层，就是说针对这一块我们要有相应的这个租金保障，那通过这个风险储备金来去兜底这个部分，兜底这个去化的风险。然后整个的这个模式上就是说现有的这个报价其实是这样的，就是我们四块会含在一个价格给业主的是一个一口价的逻辑。那新模式下就是我们会先给一个这个基础的现金价，然后在这个基础之上基于你选择的这个方案，我们再去额外的把这个资金成本给你加上。上，然后再同步的告诉你说今天这个产品，比如说我们跟万华合作，那我们就告诉你说这个产品是经过外部的 Ka 认证，就是比如万华认证的供应商去施工的，我们就能够保证说那这个产品首先是绿色的，那其次如果说工程质量有了一些问题，那我们也会有这种外部大的机构一块去承担这个施工交付的风险。"
+          },
+          {
+            "id": "call_88127ce5069a479a91c4b009",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/整装业务流程及供应商管理讨论-obcn25nedc2h413431724952.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"整装业务流程及供应商管理讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn25nedc2h413431724952\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn25nedc2h413431724952\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 整装业务流程及供应商管理讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn25nedc2h413431724952)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-14 14:10:27 CST|1小时 31分钟 53秒\n19\t\n20\t关键词:\n21\t供应商、资管、商机、设计师、运营、产品、业主、四环、房源、资管经理、业务流程、激励考核、管理工商、指标考核、业务经理、大区维度、预算维度、考核主管\n22\t\n23\t说话人 1 00:00:00.800 \n24\t也就说这套房子可能是局装的需求，但是下了个整装单，是他下错单。\n25\t\n26\t说话人 2 00:00:07.240 \n27\t了，或者是他定义不了，他就随便下一个设计师来了，说你这适合整装，最后签整装了，你让设计师下单嘛？为啥要你？设计师怎么能下单呢？他看不着路径，业务场景里面很多。\n28\t\n29\t说话人 3 00:00:20.360 \n30\t人是我都要到签约的一步，有可能才下量房单，他有时候连单子都不下，就会直接告诉设计师你来量一下，然后咱们俩跟业主能签约的时候他才下，就没有那么规范，现在都。"
+          },
+          {
+            "id": "call_29c518b3cdd3442b9e960205",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/投资收益分配及权责问题讨论-obcn484y85v7ippxpt9q6258.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"投资收益分配及权责问题讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn484y85v7ippxpt9q6258\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn484y85v7ippxpt9q6258\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 投资收益分配及权责问题讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn484y85v7ippxpt9q6258)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-07 16:00:12 CST|1小时 13分钟 35秒\n19\t\n20\t关键词:\n21\t信托、投资人、分配、动作、权利、协议、约定、管理费、资产、补充协议、服务机构、法律效力、合作协议、项目管理、业务逻辑、投资周期、时间统一、结构变更\n22\t\n23\t说话人 1 00:00:00.290 \n24\t分配给大家，但是至少能到让大家去区分什么是本金，什么是收益，其实是这么一个。\n25\t\n26\t说话人 2 00:00:06.690 \n27\t目的。\n28\t\n29\t说话人 1 00:00:07.730 \n30\t对，所以我才跟大家提到说要不要给大家这么一个预期，然后有一个收益预期，有个本金预期，还是我全部就不算，就我但凡的所有的回收的我都平均分，我也不管是收益还是本金，然后他们怎么上传我也不管，因为我们自己一般会有一个毛，主要是为了方便跟税务去沟通，要不我们确实遇到过我所有的。的回款都给我，记成我。"
+          },
+          {
+            "id": "call_cf74a2a027e44d29bf198fe8",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/房屋装修资金方案及风险讨论-obcn5vp56m827gd3a3s62299.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"房屋装修资金方案及风险讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn5vp56m827gd3a3s62299\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn5vp56m827gd3a3s62299\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 房屋装修资金方案及风险讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn5vp56m827gd3a3s62299)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-08 15:33:42 CST|1小时 4分钟 54秒\n19\t\n20\t关键词:\n21\t业主、装修、租金、资金、风险、承担、房子、产品、溢价、价格、客户、供应商、成本、利息、北京、目标市场、资管运营、托管协议\n22\t\n23\t说话人 1 00:00:00.320 \n24\t有会很少，有 10% 20 的比例就不错了，对吧？第二个就是走这个装修贷，反正就是麻烦一点，但这种的比例我不知道有多少，你像那个自如什么的有多少。15.\n25\t\n26\t说话人 2 00:00:16.560 \n27\t15%.\n28\t\n29\t说话人 1 00:00:16.720 \n30\t对。就是比方说全款15%，然后这个装修贷15%，也就 30% 的这个比例，是吧？剩下的肯定就是业主就希望租金代扣，第一个他就肯定想绑着咱们给他长期出租，对吧？第二就是说他资金压力比较小，是吧？但这种的就是我们之前的那种方式，它就比较有风险，主要是这个租金的波动和租期不确定就有风险。这种就是说这第三种，这个有没有更好的方式？我们讨论。"
+          },
+          {
+            "id": "call_5355bdb6fd4f44c98b5c6de7",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/房屋装修托管业务模式讨论-obcnj88yah99bx7ot5342q9e.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"房屋装修托管业务模式讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnj88yah99bx7ot5342q9e\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnj88yah99bx7ot5342q9e\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 房屋装修托管业务模式讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnj88yah99bx7ot5342q9e)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-29 13:34:35 CST|1小时 3分钟 6秒\n19\t\n20\t关键词:\n21\t装修、租金、业主、房子、收入、风险、信托、管理费、合同、信托公司、应收账款、托管公司、市场空间、还款业务、公司收益、新房市场、租赁条件、稳定收益\n22\t\n23\t说话人 1 00:00:00.180 \n24\t签完合同的时候说两年半，这里面大概是各分一半。\n25\t\n26\t说话人 2 00:00:07.140 \n27\t咱平均租金是 3, 000，是吧？ 3, 000 就是 1, 500。对。 1, 500 要乘以 2030 个月，就是 45, 000 的话做一些那个。\n28\t\n29\t说话人 1 00:00:18.100 \n30\t45, 000 应该是，这么大的面积是做不到全屋装修的。"
+          },
+          {
+            "id": "call_11d8b40ab73347d3b21b24f2",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/房屋装修及租赁方案讨论-obcndxl6i862g95om61723u4.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"房屋装修及租赁方案讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcndxl6i862g95om61723u4\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcndxl6i862g95om61723u4\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 房屋装修及租赁方案讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcndxl6i862g95om61723u4)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-03-12 10:41:43 CST|34分钟 42秒\n19\t\n20\t关键词:\n21\t贝壳、报价、卫生间、热水器、家具、橱柜、房子、性价比、业主、产品、客户、工期、预算、价格、灶具、租户、毛坯、开发应用\n22\t\n23\t说话人 1 00:00:01.900 \n24\t好，好，你们可以。我我我就是那个出租用的，所以带的节奏什么的都不变。\n25\t\n26\t说话人 2 00:00:10.500 \n27\t我先选房。没问题。拿个，你先给他看看。\n28\t\n29\t说话人 1 00:00:14.420 \n30\t好的。拿个销售证。好的好的，就到时候出行，你第一印象感觉你在这，是吧啊？"
+          },
+          {
+            "id": "call_07054428de654f58b206b95d",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/房屋托管业务合作规划-obcn5x1jk2b4z473i575tj28.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"房屋托管业务合作规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn5x1jk2b4z473i575tj28\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn5x1jk2b4z473i575tj28\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 房屋托管业务合作规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn5x1jk2b4z473i575tj28)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-18 16:54:23 CST|11分钟 56秒\n19\t\n20\t关键词:\n21\t信托、福州、市场化、故事、采购、成本、利润、资管、客户、机会、运营成本、国有资产、客户反馈\n22\t\n23\t说话人 1 00:00:00.120 \n24\t采购，买你系统这件事情是。\n25\t\n26\t说话人 2 00:00:02.680 \n27\t最差的，我们现在不是采购，我现在刚刚我们说的模式是跟信托直接。\n28\t\n29\t说话人 1 00:00:07.400 \n30\t说的，对，就是你要因为就这个话这个。"
+          },
+          {
+            "id": "call_b49bc87625f94a9595c59346",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/家装业务资金方案及报价讨论-obcnkbgo1k29hs43wmeidgxf.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"家装业务资金方案及报价讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnkbgo1k29hs43wmeidgxf\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnkbgo1k29hs43wmeidgxf\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 家装业务资金方案及报价讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnkbgo1k29hs43wmeidgxf)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-09 15:10:33 CST|1小时 46分钟 17秒\n19\t\n20\t关键词:\n21\t业主、供应商、贝壳、信托、租金、协议、保理、保证金、违约、风险、银行、结算、价格、资金方案、中信银行、贷款逻辑、报价逻辑、结算逻辑\n22\t\n23\t说话人 1 00:00:00.080 \n24\t喝水吗？你们喝什么？我喝。\n25\t\n26\t说话人 2 00:00:03.160 \n27\t无糖可乐。你来一块，帮我拿点，我去。\n28\t\n29\t说话人 3 00:00:05.280 \n30\t卫生间。你喝什么？"
+          },
+          {
+            "id": "call_d390a188059c4c09a5f8b99c",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/宁波银行与贝壳战略合作讨论-obcndyw97c6kbkijhm11b231.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"宁波银行与贝壳战略合作讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcndyw97c6kbkijhm11b231\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcndyw97c6kbkijhm11b231\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 宁波银行与贝壳战略合作讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcndyw97c6kbkijhm11b231)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-20 10:08:23 CST|1小时 10分钟 4秒\n19\t\n20\t关键词:\n21\t贝壳、按揭、银行、装修、北京、零售、价格、产品、宁波、战略合作、资产规模、互联网公司、理财业务、江苏银行、应收账款、托管业务、上海银行、额度需求\n22\t\n23\t说话人 1 00:00:00.090 \n24\t我团队就都撒到各地去了。到别的地方啊。一个小伙伴在上海，这会在上海银行，还有一个在那个，我们那个 YY 门那个办公场所。\n25\t\n26\t说话人 2 00:00:09.530 \n27\t办公不一样的地方，本来赵总来说我们在哪里，那电话人会更多一些。\n28\t\n29\t说话人 1 00:00:15.090 \n30\t对，你们喝啥？"
+          },
+          {
+            "id": "call_9c4c3cf8926f47b385e605d3",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/北京被窝家装业务经营分析-obcn8m469rn8z9y5z33424jx.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"北京被窝家装业务经营分析\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn8m469rn8z9y5z33424jx\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn8m469rn8z9y5z33424jx\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 北京被窝家装业务经营分析\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn8m469rn8z9y5z33424jx)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-03-04 16:02:26 CST|32分钟 38秒\n19\t\n20\t关键词:\n21\t客户、毛利、北京、成本、转化率、渠道、利润、产品、当期、固定成本、人工成本、变动成本、盈亏平衡、经营分析、交付工期、财务报表、业务规模、毛利率模型\n22\t\n23\t说话人 1 00:00:00.110 \n24\t这个讲完了之后，如果针对北京被窝，还有什么大家要了解的，可以向他们俩 QA 一下啊。然后也是说一下这个框架，我们也是，哎。\n25\t\n26\t说话人 1 00:00:16.550 \n27\t对，首先也是分成，就是再来一下经营的表现，然后也是分成规模和优异两个专题。然后前面就大家了解一下，可能大家也不太知道我们整张业务的那个最后的经营结果怎么样？首先我们是从规模、效益和品质三个方向上，在规模上就是大家可以看那个数据的那个红绿就是红的，就是下降比较多的，绿的就是提升比较好的。然后在今年我们整个家装的证券合同额是 165 亿，跟去年基本持平。然后但是我们面临量和价的双重的，就是两个增长都有点承压我们经纪渠道的二手交易单其实是增长的，但我们的转化率从年初到年年末有所下滑。然后我们自取业务，就除了经纪业务之外，我们还有线上渠道，然后全民营销和微回单和市场渠道，就是非二手单来的这些自有渠道之外，自有渠道的那个业务是在收缩的，然后开渠有少小幅的增长，所以我们其实整个规模增长在今年虽然实现了一个跟去年的基本同比。但特别是在四季度，跟去年相比有一个比较明显的下滑，这也是家装整个业务。\n28\t\n29\t说话人 1 00:01:26.820 \n30\t如果大家之前那个有一次预算启动，会听过阿甘分享的话，就是我们的，就他把现在 2526 年比作我们那个市场的那个二三年，就有一个比较明显的下降压力，然后但是看效益这块，就是那个基本都是绿的，就是因为我们通过那个毛利的那个上涨，经过那个就是毛利的这个上涨的一些动作，包括。"
+          },
+          {
+            "id": "call_7a2bfebf30fd47e2bcde387c",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/北上链家业务经营分析与预算规划-obcn8k661p2ls57385t27q6o.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"北上链家业务经营分析与预算规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn8k661p2ls57385t27q6o\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn8k661p2ls57385t27q6o\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 北上链家业务经营分析与预算规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn8k661p2ls57385t27q6o)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-03-04 14:05:24 CST|54分钟 22秒\n19\t\n20\t关键词:\n21\t新房、上海、北京、成本、成交、绝对值、租赁、均价、收入、经营分析、中介市场、金融产品、分摊城市、结构影响、城市管理、市场数据、结构拆解、财务数据\n22\t\n23\t说话人 1 00:00:08.640 \n24\t雪挺大。\n25\t\n26\t说话人 1 00:00:17.520 \n27\t瑞雪。\n28\t\n29\t说话人 2 00:00:23.240 \n30\t没说，后悔。"
+          },
+          {
+            "id": "call_2fbec4e0aace4a268e916d18",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/办公区退租方案讨论-obcnkev1tpplzug2t4993g85.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"办公区退租方案讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnkev1tpplzug2t4993g85\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnkev1tpplzug2t4993g85\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 办公区退租方案讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnkev1tpplzug2t4993g85)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-09 18:40:00 CST|32分钟 30秒\n19\t\n20\t关键词:\n21\t公寓、转租、房租、违约、押金、抵押、合同、理由、招商、租金、房子、律师、二房东、员工、质押、案例、价格、不可抗力\n22\t\n23\t说话人 1 00:00:00.160 \n24\t你们刚才开的会议纪要是吗？还是我们现在。\n25\t\n26\t说话人 2 00:00:03.000 \n27\t这个会的？现在这个会就是。\n28\t\n29\t说话人 1 00:00:05.280 \n30\t因为。"
+          },
+          {
+            "id": "call_c093ec8dbb434a9ea74cc3b5",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/内容运营流程及爬虫工具规划-obcnjl5v5v5zh63c4vx776f7.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"内容运营流程及爬虫工具规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnjl5v5v5zh63c4vx776f7\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnjl5v5v5zh63c4vx776f7\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 内容运营流程及爬虫工具规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnjl5v5v5zh63c4vx776f7)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-08 14:33:01 CST|1小时 1分钟 34秒\n19\t\n20\t关键词:\n21\t运营、品牌、批量、选题、素材、算法、核心、案例、账号、供应商、模板、迭代、思路、瓶颈、假设验证、品牌属性、桌面应用、优化公式\n22\t\n23\t说话人 1 00:00:01.560 \n24\t不是，就是把。\n25\t\n26\t说话人 2 00:00:04.440 \n27\t上线，你看给我打分，给我打最后一名。\n28\t\n29\t说话人 1 00:00:09.040 \n30\t你说的不对，就把一会咱们讨论的内容让。"
+          },
+          {
+            "id": "call_08b938700e4f4c97b630ed61",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/信托资金运用及后端模式讨论-obcntxv5jb8797r7hf4aq41r.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"信托资金运用及后端模式讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcntxv5jb8797r7hf4aq41r\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcntxv5jb8797r7hf4aq41r\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 信托资金运用及后端模式讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcntxv5jb8797r7hf4aq41r)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-23 16:21:24 CST|2小时 7分钟 25秒\n19\t\n20\t关键词:\n21\t信托、担保品、资产、保证金、贝壳、租金、供应商、收益、投资人、合伙企业、应收账款、担保公司、金融机构、足额缴纳、服务系统、影响放款、核心逻辑、分配周期\n22\t\n23\t说话人 1 00:00:00.360 \n24\t就是你收这笔钱只能通过他收。对，嗯，他收到你这，放到你这，然后你不是就等于是 2, 000 万投了一个信托，做了你的LP，你这个 LP 现在火起来， 3, 000 万， 3, 000 万投到下面的这个单一信托，那他。\n25\t\n26\t说话人 2 00:00:17.160 \n27\t也做不了我的承接，就他他也做不了我的保证金，就不是一个保证金的概念了，他就是一个投资款。\n28\t\n29\t说话人 3 00:00:24.960 \n30\t对，投资款做保证金啊。投资。"
+          },
+          {
+            "id": "call_34ccad6997e640e78fa76121",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/信托发包时间及资金问题讨论-obcncrdujwoud16nogat2izi.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"信托发包时间及资金问题讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcncrdujwoud16nogat2izi\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcncrdujwoud16nogat2izi\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 信托发包时间及资金问题讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcncrdujwoud16nogat2izi)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-11-28 15:19:10 CST|1小时 18分钟 55秒\n19\t\n20\t关键词:\n21\t信托、供应商、工人、单子、房子、结算、额度、北京、账户、核心、合同、分包、装修公司、时间节点、信息物资、框架影响、关键节点、节点同步\n22\t\n23\t说话人 1 00:00:00.530 \n24\t对，所以我们极大的程度上是指今年的，今年出的房子能扫尾，明年出的房子明年再说，让大家理解。对，嗯嗯。能解释吗？这个供应商可以，我觉得还可以今年出，而且这批今年出的房子，他还有跟今天欠钱无关的事，都是 12 月才出，甚至有的是现在还没签，嗯，或者刚签，对吧？你肯定这些单你不要催我呀。嗯，是的，而且我还能赶上一月底给你发出去，别闹啥了。嗯，是这道理不对，至于换句话说，今天 11 月底了，换句话说，现在新签的房子肯定拿不到钱了，年前是可以这么理解了吗？是，但是现在新签的房子拿不到钱。 12 月可以。\n25\t\n26\t说话人 2 00:00:46.190 \n27\t12 月新签的房子年前都拿不到钱。\n28\t\n29\t说话人 1 00:00:48.630 \n30\t我说现在说明肯定是过不了 12 月拿不到了。嗯，现在新签的有可能拿不到了。"
+          },
+          {
+            "id": "call_19635c0f1bfa434388b3f1cf",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/仓储管理及装修业务规划-obcnf3l9f9jyzi71lof92t89.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"仓储管理及装修业务规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnf3l9f9jyzi71lof92t89\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnf3l9f9jyzi71lof92t89\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 仓储管理及装修业务规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnf3l9f9jyzi71lof92t89)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-03 11:03:59 CST|25分钟 41秒\n19\t\n20\t关键词:\n21\t供应商、成本、价格、标准化、加工、结算、风险、质量、工人、仓储、迭代、利润、库存、银行、仓储费用、业主买单、质检标准、配送费用\n22\t\n23\t说话人 1 00:00:01.850 \n24\t你让供商去拉，没人保证说中间的损耗，特别是未来，如果我们真的跟装配式绝对不一样，嗯，装配式的损耗要比正常的这种主辅材的损耗要更高。嗯，就这个仓未来还得管好了说运输过程中的保护，嗯，现在所有材料都没有运输过程中的保护。嗯，所以其实仓还挺重要的。房态变化，那我们。\n25\t\n26\t说话人 2 00:00:28.410 \n27\t怎么去？对，所以就是刚才说的几个事，然后那个我们可以有几个点，那个也就是做那个 WM SM 也是有一组一二三期不同的目标。然后那个刚才那几个我们要不要分个范围？一期做啥？二期做啥，三期做啥。\n28\t\n29\t说话人 1 00:00:44.820 \n30\t一期的话就是第一个就是仓库管理，就最。"
+          },
+          {
+            "id": "call_a819a4c6b1904fc89816bbb9",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/中高端分散式公寓业务合作讨论-obcns316c64av7246uop7953.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"中高端分散式公寓业务合作讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcns316c64av7246uop7953\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcns316c64av7246uop7953\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 中高端分散式公寓业务合作讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcns316c64av7246uop7953)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-22 10:12:41 CST|31分钟 38秒\n19\t\n20\t关键词:\n21\t业主、客户、装修、中介费、酒店、租金、房子、套房、服务费、维修基金、人工成本、托管服务费、成本费用、品质住宅、品牌品质、合作托管、公司合作、伙伴合作\n22\t\n23\t说话人 1 00:00:01.390 \n24\t其实我觉得这个包括上次看的那个有一个项目也是分散式，它其实这种大面积的这种房子，它不一定非得全拆全改，是吧？就是把那个可能做重度美化，是吧？\n25\t\n26\t说话人 2 00:00:20.390 \n27\t因为像这边的房这种中高端类的项目的话，其实它之前开发商用的一些这个本身精装修开发商用的材料什么的相对也还可以，其实对，所以它在这个使用方面的话，确实咱们就是它更耐久一些。是，然后咱们如果重新配置，说实话没有办法，嗯，不一定能够配到跟它那个同等级的。嗯嗯，在控预算控制的情况下。是，那要不然就是投入很多，要不然就是品质很差。是。\n28\t\n29\t说话人 1 00:00:51.700 \n30\t我们现在美感特别多的做中高端，也是，我们现在的那个业务模式跟它也不是很匹配，就主要你像我们不都那个包含维修什么的吗？对，你像很多中高端的那个房子，那个维修那个费用都很高。是，嗯嗯。"
+          },
+          {
+            "id": "call_98052ecdea32464f9ccf2af4",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/两分钟上手飞书妙记-obcnbm67uy55ew87yp878udz.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"两分钟上手飞书妙记\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbm67uy55ew87yp878udz\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbm67uy55ew87yp878udz\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 两分钟上手飞书妙记\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbm67uy55ew87yp878udz)\n15\t\n16\t## 逐字稿\n17\t\n18\t2021-07-28 16:46:59 CST|2分钟 34秒\n19\t\n20\t关键词:\n21\t会议纪要、效率工具、飞书妙记、翻译、分享、搜索\n22\t\n23\t大飞 00:00:03.540 \n24\t飞书妙记是一款语音转文字的效率神器，那作为见证它诞生的产品经理，我 ...\n25\t\n26\t小妍 00:00:10.690 \n27\t嗨！大飞！\n28\t\n29\t大飞 00:00:12.040 \n30\t你好，小妍！"
+          },
+          {
+            "id": "call_abc7f8fa2cbc4f678032442a",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务风控措施规划与讨论-obcnobn79jm847eu6qrab555.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务风控措施规划与讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnobn79jm847eu6qrab555\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnobn79jm847eu6qrab555\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务风控措施规划与讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnobn79jm847eu6qrab555)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-15 11:24:15 CST|31分钟 6秒\n19\t\n20\t关键词:\n21\t业主、风控、资方、供应商、房子、风险、合同、租金、违约、产品、财务、核心、账户、上限、保险公司、管理体系、服务体系、人力管理\n22\t\n23\t说话人 1 00:00:00.240 \n24\t然后列几条，然后因为明天，后天讲的主要内容就是这个，就是正常正面讲的主要内容就是这个，就是说我们风控多严密，我们的业务多。\n25\t\n26\t说话人 2 00:00:10.480 \n27\t靠谱，对吧？今天我整个，我待会看一下控了多少套二出，而且还都在正常招租期里面。\n28\t\n29\t说话人 1 00:00:17.480 \n30\t找。"
+          },
+          {
+            "id": "call_bb4ee36a53e54b9b8c9f42e0",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务运营与资金结构规划讨论-obcnq82gkyjp3kd12628b61l.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务运营与资金结构规划讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnq82gkyjp3kd12628b61l\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnq82gkyjp3kd12628b61l\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务运营与资金结构规划讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnq82gkyjp3kd12628b61l)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-19 17:39:57 CST|1小时 51分钟 18秒\n19\t\n20\t关键词:\n21\t信托、贝壳、供应商、万华、现金流、风控、合同、财务、核心、保险公司、装修公司、超额收益、金融机构、发行费用、发行条件、资金成本、业务公司、流程标准\n22\t\n23\t说话人 1 00:00:00.310 \n24\t就类似你那个。\n25\t\n26\t说话人 2 00:00:01.150 \n27\t租房，那核心奖励要给到他们这个，为什么？因为你选三个方案，那业主他租房子他无所谓，你觉得。\n28\t\n29\t说话人 3 00:00:07.510 \n30\t哪好租这个事我们是标准的，这没事，这都是标准的。而且就是说咱本身举个例子，不就装修小程序嘛，你拿那东西做，跟他做兑换，你不用给他钱，你说你给我出一套，我再还你一个商机。所以运营方法本身不得不矛盾，就是其实就刚刚文栋说的，算这个账的时候，我们就抽象成说到底需要几个人对和多少费用，对，我抽象完了就是说你，反正你得有人持续的做产品，一个城市一个销售，再加上那个你的售后，起码。"
+          },
+          {
+            "id": "call_d947ce910c6b4f03b02bf837",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务资金预算与人员安排规划-obcnf6pieix9oi39xb56858h.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务资金预算与人员安排规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnf6pieix9oi39xb56858h\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnf6pieix9oi39xb56858h\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务资金预算与人员安排规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnf6pieix9oi39xb56858h)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-03 14:24:14 CST|2小时 37分钟 48秒\n19\t\n20\t关键词:\n21\t房子、工资、酒店、预算、广州、北京、领导、朋友、生意、协议、副总、现金流、房价、核心、一家公司、股权转让、时间节奏、公司项目\n22\t\n23\t说话人 1 00:00:00.040 \n24\t中间那哥们。\n25\t\n26\t说话人 2 00:00:01.320 \n27\t不交接那个人，剩最后留 1 + 2 的人，就是两个财务，再加那个。\n28\t\n29\t说话人 3 00:00:07.400 \n30\t就一个财务其实就够了， 1 + 1 也行。那个人你要，如果需要我留，我就留那个，如果不需要我留，那你就到时候我们再商量留谁。"
+          },
+          {
+            "id": "call_ef86748e36c141fcb44c37df",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务资金成本及合作方案讨论-obcniq18khqoxtsv758724cw.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务资金成本及合作方案讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcniq18khqoxtsv758724cw\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcniq18khqoxtsv758724cw\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务资金成本及合作方案讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcniq18khqoxtsv758724cw)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-27 09:14:23 CST|1小时 3分钟 42秒\n19\t\n20\t关键词:\n21\t银行、担保、成本、信托、保理、资金、余额、风险、牌照、自有资金、评级报告、资产信用、发行成本、评估报告、评估公司、保理业务、资产评级、反担保团队\n22\t\n23\t说话人 1 00:00:00.450 \n24\t那个相对而言，上海跑的规模大一些，那些在上海跑的规模大一些。所以就那个。\n25\t\n26\t说话人 2 00:00:11.050 \n27\t你给我下个充电宝，我昨天晚上 ipad 没有充电。我给你们泡茶。\n28\t\n29\t说话人 1 00:00:15.970 \n30\t吧。谢谢。"
+          },
+          {
+            "id": "call_6065dd64401e4f4f8c80e7d0",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务盈利及融资规划讨论-obcn4lwyl7zv48s5h554d58r.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务盈利及融资规划讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn4lwyl7zv48s5h554d58r\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn4lwyl7zv48s5h554d58r\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务盈利及融资规划讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn4lwyl7zv48s5h554d58r)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-02-26 19:24:00 CST|19分钟 46秒\n19\t\n20\t关键词:\n21\t产值、贝壳、毛利、销售、利润、成本、租金、核心、报价、财务、预算、分红、盈利、融资、资金、盈亏、价格、市场化\n22\t\n23\t说话人 1 00:00:00.100 \n24\t算清楚，然后和市场上的其他的方案做对比。\n25\t\n26\t说话人 2 00:00:06.260 \n27\t那其实就是那个第一本账是成本账，第二本账是财务收入账嘛。对对对。所以成本账就还是那个有点像这个，你可以基于这个，大家对齐页面，就对齐思想，就简单来说，就是说，比如说就基于这个页面你要怎么改。\n28\t\n29\t说话人 1 00:00:25.980 \n30\t我其实特别想给你出一个PRD，但是我感觉出个 PRD 你并不好往上表达，反而不好往上表达。"
+          },
+          {
+            "id": "call_e3947042d61a433db33c48eb",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业务工作进展及规划讨论-obcnbdj8ee28t4r8cab4g788.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业务工作进展及规划讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbdj8ee28t4r8cab4g788\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbdj8ee28t4r8cab4g788\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业务工作进展及规划讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbdj8ee28t4r8cab4g788)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-16 15:37:57 CST|49分钟 22秒\n19\t\n20\t关键词:\n21\t供应商、运营、结算、核心、产品、批量、资金、承接、闭环、系统核心、账号统一、统一绑定、业务流程、结算系统、履约系统、供应链管理、系统测试、工作目标\n22\t\n23\t说话人 1 00:00:00.080 \n24\t帮大家走流程就可以了，就是我需要去确认那个信息，因为你沟通到对应的一些人之后，有人让他去找那个采购那边去沟通规则，我觉得他可能沟通不了规则，这个可能是需要去确认的。然后第二个就是跟业绩结算相关的，因为我看立梦也在做业绩结算，包括之前也在跟立梦和秀媛去做线下的分账，然后业绩结算这部分主要是配置类的，就有一部分是线下需要去，对的，可能现在马姐这边后面是不是要去做收口？然后这个可能是需要跟关联部门去做沟通的。然后剩下就是我的部分资金方案的话，目前我在跟进的是贷款单一跟保理的，其中单一跟保理的是我主要去做的，其他的都是配合。王洋还有亚东他们在做的，然后流程的这部分的话，主要是横向的，对外部的有一些沟通，投资人跟服务商的，对内部的可能主要是跟我们专业线的老师再去沟通。然后第三部分就是授信资产，就是哪些资产可以用什么。让的资金方式去放款，目前是放在我这里去做的。\n25\t\n26\t说话人 1 00:01:03.400 \n27\t然后第四个部分就是刚才讲的垂直到各个品类，然后用什么资金模式以及这个流程怎么走，目前是我这边在做的，这是我这边资金部分相关的工作范围。然后项目的，因为昨天那个王洋已经沟通了，我就不在这里讲了。然后讲一下单一的进度，就是说结算，就是竣工结算这部分目前已经到了这个预放，就清单已经审核完了，目前在走相关的这个流程，大概是。是新增的这样一个进度，其他的这个资本，那个资金相关的事项，就是这周跟蒙哥一起沟通了苏银这边的，然后下周可能还有几家那个银行贷款的相关信息需要去跟进。\n28\t\n29\t说话人 1 00:01:45.960 \n30\t然后第二部分就是资金模式的，最近在参与质保金跟重点储备金的相关方案的设计，然后另就是下这个是常规去推的，然后现在还是继续去推，然后历史结算的就是保底的这部分已经把相关。嗯，盘点完了，目前咱们走保底的金额差不多是 280 万，那后期要看一下这 280 万的资金处理是不是要按照单一去做一层那个资金方式的调整，然后另外的话就是可能还有 1, 200 万的这样一个待结算的资金的缺口，可能要盘一下，要不要去走三期集合，然后下周要去推进的就是三期集合的，三期集合的结算就是启动整装跟局改的相关的信息，因为之前负责的同学可能已经不在了，所以需要亚东这边牵头。然后对应的数据供应链运营和我们培训相关同学，大家一起看一下，就是关于。"
+          },
+          {
+            "id": "call_d89ab2fe052441f1af8a52ff",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/业主装修资金方案规划-obcnhhi1pa1817z9xme42bba.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"业主装修资金方案规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnhhi1pa1817z9xme42bba\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnhhi1pa1817z9xme42bba\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 业主装修资金方案规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnhhi1pa1817z9xme42bba)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-05 12:04:25 CST|11分钟 58秒\n19\t\n20\t关键词:\n21\t业主、装修、资金、风险、信托、利息、银行、保理、租金、手续费、银行贷款、资管经理\n22\t\n23\t说话人 1 00:00:00.150 \n24\t现在真的是好多业主是没钱的，就你别觉得现在真的是我有房，但我没有钱，那没钱怎么办？那我们是不是给你提供一个银行贷款？因为银行贷款，我也是，因为咱们是基于 c 方案，就是说我装修是装修的钱我不给你垫，那你要不全款给，要不然你没有。我给你提供银行贷款，但我能给你提供银行贷款是有优势的，就是说手续更简洁、利息更低，这块那个一萌，那个你因为你负责资金，你整体可以对一下那个那天那个在 s 那开会，梁磊他们那个是豪哥他们给他找了那个北京银行还是中信银行？能做到两年免息？装修款两年免息。\n25\t\n26\t说话人 2 00:00:44.240 \n27\t杨芳，对，我知道这个事啊。\n28\t\n29\t说话人 1 00:00:46.160 \n30\t嗯，他就是说两年免息。诶，这不就挺好吗？这能实现吗？"
+          },
+          {
+            "id": "call_d25a13b62b4f4f36b582b8a6",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/万华零甲醛板材及金融服务讨论-obcnqhk212z4n7a15672f2y2.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"万华零甲醛板材及金融服务讨论\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnqhk212z4n7a15672f2y2\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnqhk212z4n7a15672f2y2\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 万华零甲醛板材及金融服务讨论\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnqhk212z4n7a15672f2y2)\n15\t\n16\t## 逐字稿\n17\t\n18\t2025-12-18 15:12:39 CST|3小时 8分钟 39秒\n19\t\n20\t关键词:\n21\t材料、供应商、资方、万华、信托、房子、确定性、装修、业主、装修公司、不确定性、商业模式、战略合作、保理公司、应付账款、运营成本、操作方式、劳务公司\n22\t\n23\t未知 00:00:00.190 \n24\t办公，这是一个独栋。嗯，在这才搬过来，到了找到一个小时的周边喝个咖啡。这是个新区，这就这一片确实很独特。对呀，这片很独特。对呀，感觉是不是有点成都的感觉，是吧？对，然后一到周六周日他全部把这个街道封起来，车不能进来，然后全部改成夜市那种，就比白天晚上都有很多小商铺就摆在街上，然后搞一些活动，找一些明星这些，经常在这唱歌，搞搞活动啊。嗯，很热闹，就这一片很热闹。这叫前滩公园巷。嗯，它相当于做成一个商业公园一样。嗯，那以后你这是长驻上海了？刚来嘛，不知道干多久。这也是我估计得多少年也说不清楚。嗯，干的差可能就明年回去了，所以必须把美一般四川的官员都不愿意出川，四川比较安逸，这个由不得我们，在企业里由不得我们。所以说必须要干好，就不要，必须要把美驻做好，所以其实这个产品对我们来说很重要。嗯，这也是整个商业模式的一次革新和迭代。对，然后整个公司也希望让整个企业的使命就是让租住更美好。\n25\t\n26\t未知 00:01:17.760 \n27\t对，租住怎么美好呢？一个是服务，你要服务好，但是硬件设施才最关键的，就租进去，你天天嘘寒问暖，对不对？你其实不打扰他，他更舒服一些，但一进去乱七八糟的东西，什么经常我们还说灭灭四害，现在还要灭四害，就灭虫害，叫灭四害。灭虫就是有老鼠、有蟑螂、有蚊虫，对吧？有白蚁这些，我们现在来解决这些问题。\n28\t\n29\t未知 00:01:46.690 \n30\t那我说这个肯定租住不美好，所以我们现在就希望把这个旧房子拿过来的房子，我们还是希望准备和业主，包括我们，包括资方一起，我们把这个房子能不能改善，我们也不追求一个房子花三五十万，我们是不是几万块钱？嗯，让这个房子租住体验更好，但有些新房子几年十年。"
+          },
+          {
+            "id": "call_5e06f9e13f2d41e7bc8be9a8",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/AI办公创业公司发展规划-obcn7y71due9wp7tr95b666y.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"AI办公创业公司发展规划\"\n3\tsource: feishu-minutes\n4\tminute_token: obcn7y71due9wp7tr95b666y\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcn7y71due9wp7tr95b666y\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# AI办公创业公司发展规划\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcn7y71due9wp7tr95b666y)\n15\t\n16\t## 逐字稿\n17\t\n18\t2026-01-11 16:09:43 CST|20分钟 47秒\n19\t\n20\t关键词:\n21\t微软、产品、美金、赛道、单品、全球、中国、人群、打法、收入、创业公司、用户体验、竞争策略、营销方案、合作伙伴、商业模式、目标市场、用户场景\n22\t\n23\t说话人 1 00:00:00.510 \n24\t就是序幕刚刚拉开，大戏即将上演，为什么？如果我们把一个重要的时代的背景信息加上，大家就知道答案了，就是中美大国博弈，在接下来的 5 ~ 10 年，谁是全球的老大这个问题，美国那边他们不能输，对吧？咱中国这边也得必须赢，所以就拭目以待。当然我们在道口大家听了很多关于宏观的事情。所以我今天给大家带来一些不一样的故事，这个故事是从一个中国起步的，面向全球的 AI 应用公司的视角，跟大家讲一下这个故事。我这个故事是从一开始不到十个人开始，产品经理在成都，我们 CPO 是常驻北美，我这个打杂的是在北京，我当时就忽悠大家说做 AIP 这个事情，我跟他叫一起跟大家这样讲，我说那个我出 200 万。就人民币不是美金，我出 200 万，咱干 12 个月，干成了咱就接着，干不成原地解散，谁也别怨谁。\n25\t\n26\t说话人 1 00:01:27.520 \n27\t就大概这样一个开头，但没想到就是过去的 20 个月时间，很快就有 2, 000 万的用户被吸引过来使用我们产品有，现在已经有超过 3, 000 万用户使用过我们的产品，然后后来我们的团队的目标做了调整，就这个赛道，我们是中国的断层第一，就断档第一，现在是全球第二，我们正在跟硅谷的第一在PK，全球第一的位置，所以我目标变了。就是我们的目标变成了说从不要解散，变成了能否成为全世界的第一这样一个目标。\n28\t\n29\t说话人 1 00:02:04.510 \n30\t所以我就简单介绍一下我们公司的这个产品，就是这边这张图呢，是全球做 AI 写作，是帮大家写 PT 的这个赛道的排名第一名是我们的主要阵地，叫Dema，第二名是我们的中文站，第五名是我们的英文站，加在一起我们是全球第二。另外一张图是中国所有 AI 产品，包括DeepSeek、豆包字节、阿里已经在一起的 Web 端，我们是第十名，我们应该是所有的应用里头预算最少拱到这个位置，然后做一个互动，大家可以拿出手机， AI 刚才可能扫过了，拿出手机可以扫一下这个二维码，看一下你的 AI 浓度，就是看一下你的好友中有或者你的员工里有多少人已经使用我们的产品，在写作上用这个数字除以你的好友。"
+          },
+          {
+            "id": "call_a3b036c170f14ac5b07211e7",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/07月09日_1-obcnbm6kpg3i7b19axop447q.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"07月09日_1\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbm6kpg3i7b19axop447q\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbm6kpg3i7b19axop447q\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 07月09日_1\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbm6kpg3i7b19axop447q)\n15\t\n16\t## 逐字稿\n17\t\n18\t2021-07-29 09:47:48 CST|3小时 9分钟 58秒\n19\t\n20\t关键词:\n21\t租赁、供给、支付能力、房源、产品、规模效应、房子、租赁市场、网络效应、生命周期、核心、前提条件、流量、运营、开发商、人工成本、合作模式、经营能力\n22\t\n23\t说话人 1 00:00:14.880 \n24\t没。\n25\t\n26\t说话人 2 00:00:19.180 \n27\t打疫苗了吗？你打我打的针了，你行不行？\n28\t\n29\t说话人 3 00:00:25.120 \n30\t我要打我要的整容。"
+          },
+          {
+            "id": "call_865d304c23754b32916668aa",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/03月29日_2-obcnbmn1ua7xf9724bo6hrw6.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"03月29日_2\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbmn1ua7xf9724bo6hrw6\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbmn1ua7xf9724bo6hrw6\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 03月29日_2\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbmn1ua7xf9724bo6hrw6)\n15\t\n16\t## 逐字稿\n17\t\n18\t2021-07-29 09:47:48 CST|1小时 40分钟 9秒\n19\t\n20\t关键词:\n21\t组织、业务管理、价值观、合作共赢、知识分享、分享体系、业务流程、核心、经营、业务模式、转化效率、成本、定价、收入、订单、市场定价、租赁、分配机制\n22\t\n23\t说话人 1 00:00:00.840 \n24\t有些人其实每天来讲是比较大的挑战的。第二个就是说我重新再回顾，就是我们整体的组织希望能够成为一个什么样的一个组织对吧？我就要一些系统性的方法可以来帮我们提升和学习的。就是这个点。然后第二个点就是刚好上次跟学院就在想就可以引进一些什么样的一个机制。那去我自己看待很多，因为也看了很多这样的形象和方法，那不去我老去的那些东西跟我们都是不太那个配套的，总觉得我们自己有这种特殊性。然后现在我旁边也是我近期的这种观念的转变，我发现其实不需要去那个去考虑这种还行核心还是能够因为他特别多，出发点不一样，可惜而能找到我们自己比较匹配的方法，我们马上落下去就蛮重要的，它体现在就是我刚才提到的该奖的第一个层面，人和组织，政府方面也包括我们日常里面，包括像战略管理落地，包括我们日常的各种会走开，都可以找出一些那种成熟不敢去套，反正过去一直在想这件事情。\n25\t\n26\t说话人 2 00:01:14.870 \n27\t然后刚好就上了这个课吗？\n28\t\n29\t说话人 1 00:01:16.700 \n30\t然后我觉得这个课他这个方法挺好的，包括它的一些理论，就比如说在整个这种就是新上的一个，如果想了就说我们怎么样能够把它引进来，就是把它上有东西能够混进来。"
+          },
+          {
+            "id": "call_2e1370bbb348468db11b06e7",
+            "name": "Read",
+            "input": {
+              "file_path": "/Users/scubiry/Documents/Scubiry/lab/pipeline/data/content-wiki/feishu-minutes/03月29日_1-obcnbmzs78i2p1ix999x4174.md",
+              "limit": 30
+            },
+            "status": "completed",
+            "isExpanded": false,
+            "result": "1\t---\n2\ttitle: \"03月29日_1\"\n3\tsource: feishu-minutes\n4\tminute_token: obcnbmzs78i2p1ix999x4174\n5\tfeishu_link: https://eero16rmtx.feishu.cn/minutes/obcnbmzs78i2p1ix999x4174\n6\ttags:\n7\t  - 会议纪要\n8\t  - 飞书妙记\n9\t---\n10\t\n11\t# 03月29日_1\n12\t\n13\t> [!info] 飞书妙记\n14\t> 🔗 [查看原文](https://eero16rmtx.feishu.cn/minutes/obcnbmzs78i2p1ix999x4174)\n15\t\n16\t## 逐字稿\n17\t\n18\t2021-07-29 09:47:48 CST|21分钟 27秒\n19\t\n20\t关键词:\n21\t战略方向、核心、事实、业务调整、业务影响、牵引作用、评估、第三方、协作机制、协作、跟踪监控、报表、报表数据、量化、发生变化、自下而上、自上而下、理想\n22\t\n23\t说话人 1 00:00:16.490 \n24\t找张艺谋我，我我给你简单介绍下，我之前也在咱们的一待过。\n25\t\n26\t说话人 2 00:00:21.170 \n27\t然后再过吗？\n28\t\n29\t说话人 1 00:00:21.950 \n30\t在哪个部门，当时是在那个组织线，是在咱们金融事业部经理汇报线时，小雨面对汇报线实现是在远征。"
+          }
+        ],
+        "isExpanded": false,
+        "result": "Here is the structured table extracted from all 47 `.md` files directly in `feishu-minutes/` (excluding subdirectories).\n\n**Observations about the YAML frontmatter:** Every file has an identical schema -- `title`, `source`, `minute_token`, `feishu_link`, and `tags` (always `[\"会议纪要\", \"飞书妙记\"]`). There are no explicit `date`, `participants`, or `summary/tldr` fields in the frontmatter itself. However, the body immediately following the frontmatter contains a recording timestamp (date + duration) and a `关键词` (keywords) line. I include those body-derived fields (date, keywords) as supplementary data since the frontmatter lacks them.\n\n| # | Filename | Title | Date (from body) | Duration | Keywords (from body) | Frontmatter Tags |\n|---|----------|-------|-------------------|----------|----------------------|------------------|\n| 1 | 03月29日_1-obcnbmzs78i2p1ix999x4174.md | 03月29日_1 | 2021-07-29 | 21m 27s | 战略方向、核心、事实、业务调整、业务影响、牵引作用、评估、第三方、协作机制 | 会议纪要, 飞书妙记 |\n| 2 | 03月29日_2-obcnbmn1ua7xf9724bo6hrw6.md | 03月29日_2 | 2021-07-29 | 1h 40m 9s | 组织、业务管理、价值观、合作共赢、知识分享、分享体系、业务流程 | 会议纪要, 飞书妙记 |\n| 3 | 07月09日_1-obcnbm6kpg3i7b19axop447q.md | 07月09日_1 | 2021-07-29 | 3h 9m 58s | 租赁、供给、支付能力、房源、产品、规模效应、房子、租赁市场、网络效应 | 会议纪要, 飞书妙记 |\n| 4 | AI办公创业公司发展规划-obcn7y71due9wp7tr95b666y.md | AI办公创业公司发展规划 | 2026-01-11 | 20m 47s | 微软、产品、美金、赛道、单品、全球、中国、人群、打法、收入、创业公司 | 会议纪要, 飞书妙记 |\n| 5 | 万华零甲醛板材及金融服务讨论-obcnqhk212z4n7a15672f2y2.md | 万华零甲醛板材及金融服务讨论 | 2025-12-18 | 3h 8m 39s | 材料、供应商、资方、万华、信托、房子、确定性、装修、业主、装修公司 | 会议纪要, 飞书妙记 |\n| 6 | 两分钟上手飞书妙记-obcnbm67uy55ew87yp878udz.md | 两分钟上手飞书妙记 | 2021-07-28 | 2m 34s | 会议纪要、效率工具、飞书妙记、翻译、分享、搜索 | 会议纪要, 飞书妙记 |\n| 7 | 中高端分散式公寓业务合作讨论-obcns316c64av7246uop7953.md | 中高端分散式公寓业务合作讨论 | 2025-12-22 | 31m 38s | 业主、客户、装修、中介费、酒店、租金、房子、套房、服务费、维修基金 | 会议纪要, 飞书妙记 |\n| 8 | 业主装修资金方案规划-obcnhhi1pa1817z9xme42bba.md | 业主装修资金方案规划 | 2025-12-05 | 11m 58s | 业主、装修、资金、风险、信托、利息、银行、保理、租金、手续费 | 会议纪要, 飞书妙记 |\n| 9 | 二批业务发包流程复盘-obcnclk4532mv11jov76724b.md | 第二批业务发包流程复盘 | 2025-11-28 | 3h 5m 51s | 供应商、信托、单子、合同、发票、业主、房子、额度、金额、额度不够 | 会议纪要, 飞书妙记 |\n| 10 | 仓储管理及装修业务规划-obcnf3l9f9jyzi71lof92t89.md | 仓储管理及装修业务规划 | 2025-12-03 | 25m 41s | 供应商、成本、价格、标准化、加工、结算、风险、质量、工人、仓储 | 会议纪要, 飞书妙记 |\n| 11 | 内容运营流程及爬虫工具规划-obcnjl5v5v5zh63c4vx776f7.md | 内容运营流程及爬虫工具规划 | 2025-12-08 | 1h 1m 34s | 运营、品牌、批量、选题、素材、算法、核心、案例、账号、供应商 | 会议纪要, 飞书妙记 |\n| 12 | 办公区退租方案讨论-obcnkev1tpplzug2t4993g85.md | 办公区退租方案讨论 | 2025-12-09 | 32m 30s | 公寓、转租、房租、违约、押金、抵押、合同、理由、招商、租金 | 会议纪要, 飞书妙记 |\n| 13 | 北京被窝家装业务经营分析-obcn8m469rn8z9y5z33424jx.md | 北京被窝家装业务经营分析 | 2026-03-04 | 32m 38s | 客户、毛利、北京、成本、转化率、渠道、利润、产品、当期、固定成本 | 会议纪要, 飞书妙记 |\n| 14 | 北上链家业务经营分析与预算规划-obcn8k661p2ls57385t27q6o.md | 北上链家业务经营分析与预算规划 | 2026-03-04 | 54m 22s | 新房、上海、北京、成本、成交、绝对值、租赁、均价、收入、经营分析 | 会议纪要, 飞书妙记 |\n| 15 | 宁波银行与贝壳战略合作讨论-obcndyw97c6kbkijhm11b231.md | 宁波银行与贝壳战略合作讨论 | 2026-01-20 | 1h 10m 4s | 贝壳、按揭、银行、装修、北京、零售、价格、产品、宁波、战略合作 | 会议纪要, 飞书妙记 |\n| 16 | 房屋装修及租赁方案讨论-obcndxl6i862g95om61723u4.md | 房屋装修及租赁方案讨论 | 2026-03-12 | 34m 42s | 贝壳、报价、卫生间、热水器、家具、橱柜、房子、性价比、业主、产品 | 会议纪要, 飞书妙记 |\n| 17 | 房屋装修资金方案及风险讨论-obcn5vp56m827gd3a3s62299.md | 房屋装修资金方案及风险讨论 | 2026-01-08 | 1h 4m 54s | 业主、装修、租金、资金、风险、承担、房子、产品、溢价、价格 | 会议纪要, 飞书妙记 |\n| 18 | 房屋装修托管业务模式讨论-obcnj88yah99bx7ot5342q9e.md | 房屋装修托管业务模式讨论 | 2026-01-29 | 1h 3m 6s | 装修、租金、业主、房子、收入、风险、信托、管理费、合同、信托公司 | 会议纪要, 飞书妙记 |\n| 19 | 房屋托管业务合作规划-obcn5x1jk2b4z473i575tj28.md | 房屋托管业务合作规划 | 2025-11-18 | 11m 56s | 信托、福州、市场化、故事、采购、成本、利润、资管、客户、机会 | 会议纪要, 飞书妙记 |\n| 20 | 投资收益分配及权责问题讨论-obcn484y85v7ippxpt9q6258.md | 投资收益分配及权责问题讨论 | 2026-01-07 | 1h 13m 35s | 信托、投资人、分配、动作、权利、协议、约定、管理费、资产、补充协议 | 会议纪要, 飞书妙记 |\n| 21 | 星图计划业务结构调整讨论-obcnu82io96rnvztntmq7j1h.md | 星图计划业务结构调整讨论 | 2025-12-25 | 38m 55s | 信托、资产、计划、期限、租金、现金、保证金、资金、回购、头寸 | 会议纪要, 飞书妙记 |\n| 22 | 澳洲房产管理软件应用讨论-obcnts76wb4c73ec9ow1d8dj.md | 澳洲房产管理软件应用讨论 | 2026-02-12 | 1h 9m 5s | 软件、澳大利亚、照片、合同、营销、房子、金额、设备、点位、人工成本 | 会议纪要, 飞书妙记 |\n| 23 | 短周期资金方案及责任规划-obcngyqd5578g9ptpvamwu82.md | 短周期资金方案及责任规划 | 2025-12-04 | 24m 28s | 保理、业主、信托、供应商、贝壳、坏账、责任、储备金、一年期、租金 | 会议纪要, 飞书妙记 |\n| 24 | 第二批业务发包流程复盘-obcnclk4532mv11jov76724b.md | 第二批业务发包流程复盘 | 2025-11-28 | 3h 5m 51s | 供应商、信托、单子、合同、发票、业主、房子、额度、金额 | 会议纪要, 飞书妙记 |\n| 25 | 美租业务方案及定价讨论-obcnpqgmj539388fk443r8pk.md | 美租业务方案及定价讨论 | 2026-02-06 | 1h 5m 43s | 资管、报价、业主、产品、运营、数据库、房子、小区、收益、支付方式 | 会议纪要, 飞书妙记 |\n| 26 | 美租与锦江合作业务讨论-obcn2zt7t88v9osr6m1z1otd.md | 美租与锦江合作业务讨论 | 2025-11-14 | 1h 49m 13s | 产品、品牌、锦江、供应商、定制、品质、客户、价格、核心、产品经理 | 会议纪要, 飞书妙记 |\n| 27 | 规则引擎构建及迭代使用讨论-obcno399kikmm7j8z412ic95.md | 规则引擎构建及迭代使用讨论 | 2026-02-05 | 6m 47s | 规则、服务器、迭代、运营、压测、引擎、回滚、压力测试 | 会议纪要, 飞书妙记 |\n| 28 | 贝壳与新雅欣中高端租赁业务交流-obcns49w9k33wuo15167p4t7.md | 贝壳与新雅欣中高端租赁业务交流 | 2025-12-22 | 31m 16s | 业主、客户、房子、公寓、酒店、北京、中介费、服务费、上海、中介公司 | 会议纪要, 飞书妙记 |\n| 29 | 业务工作进展及规划讨论-obcnbdj8ee28t4r8cab4g788.md | 业务工作进展及规划讨论 | 2026-01-16 | 49m 22s | 供应商、运营、结算、核心、产品、批量、资金、承接、闭环、系统核心 | 会议纪要, 飞书妙记 |\n| 30 | 业务盈利及融资规划讨论-obcn4lwyl7zv48s5h554d58r.md | 业务盈利及融资规划讨论 | 2026-02-26 | 19m 46s | 产值、贝壳、毛利、销售、利润、成本、租金、核心、报价、财务 | 会议纪要, 飞书妙记 |\n| 31 | 业务运营与资金结构规划讨论-obcnq82gkyjp3kd12628b61l.md | 业务运营与资金结构规划讨论 | 2025-12-19 | 1h 51m 18s | 信托、贝壳、供应商、万华、现金流、风控、合同、财务、核心、保险公司 | 会议纪要, 飞书妙记 |\n| 32 | 业务资金成本及合作方案讨论-obcniq18khqoxtsv758724cw.md | 业务资金成本及合作方案讨论 | 2026-01-27 | 1h 3m 42s | 银行、担保、成本、信托、保理、资金、余额、风险、牌照、自有资金 | 会议纪要, 飞书妙记 |\n| 33 | 业务资金预算与人员安排规划-obcnf6pieix9oi39xb56858h.md | 业务资金预算与人员安排规划 | 2025-12-03 | 2h 37m 48s | 房子、工资、酒店、预算、广州、北京、领导、朋友、生意、协议 | 会议纪要, 飞书妙记 |\n| 34 | 业务风控措施规划与讨论-obcnobn79jm847eu6qrab555.md | 业务风控措施规划与讨论 | 2025-12-15 | 31m 6s | 业主、风控、资方、供应商、房子、风险、合同、租金、违约、产品 | 会议纪要, 飞书妙记 |\n| 35 | 家装业务资金方案及报价讨论-obcnkbgo1k29hs43wmeidgxf.md | 家装业务资金方案及报价讨论 | 2025-12-09 | 1h 46m 17s | 业主、供应商、贝壳、信托、租金、协议、保理、保证金、违约、风险 | 会议纪要, 飞书妙记 |\n| 36 | 整装业务流程及供应商管理讨论-obcn25nedc2h413431724952.md | 整装业务流程及供应商管理讨论 | 2025-11-14 | 1h 31m 53s | 供应商、资管、商机、设计师、运营、产品、业主、四环、房源、资管经理 | 会议纪要, 飞书妙记 |\n| 37 | 整装业务资金方案讨论-obcn5r71s81162s28m5oa94j.md | 整装业务资金方案讨论 | 2026-01-08 | 48m 30s | 业主、供应商、装修、风险、资金、租金、信托、房子、承担、装修公司 | 会议纪要, 飞书妙记 |\n| 38 | 信托发包时间及资金问题讨论-obcncrdujwoud16nogat2izi.md | 信托发包时间及资金问题讨论 | 2025-11-28 | 1h 18m 55s | 信托、供应商、工人、单子、房子、结算、额度、北京、账户、核心 | 会议纪要, 飞书妙记 |\n| 39 | 信托资金运用及后端模式讨论-obcntxv5jb8797r7hf4aq41r.md | 信托资金运用及后端模式讨论 | 2025-12-23 | 2h 7m 25s | 信托、担保品、资产、保证金、贝壳、租金、供应商、收益、投资人、合伙企业 | 会议纪要, 飞书妙记 |\n| 40 | 阿帕斯AI转型发展复盘-obcn7w74x2ihu37z963gcp1o.md | 阿帕斯AI转型发展复盘 | 2026-01-11 | 24m 14s | 企业、全球、互联网、机会、时代、非洲、产品、世界、算法、中国 | 会议纪要, 飞书妙记 |\n| 41 | 新录音_1127-obcnzm5qjv9a4342e1zd26ol.md | 新录音_1127 | 2023-11-27 | 3m 14s | 住宅、楼盘、日本、大楼、建筑、房间、商业 | 会议纪要, 飞书妙记 |\n| 42 | 新录音_2-obcnk37965s2e9om7jug7fe4.md | 新录音_2 | 2026-05-12 | 17m 37s | 风险、国企、产品、贷款、高息、租金、准备金、企业主、风控 | 会议纪要, 飞书妙记 |\n| 43 | 新录音_2-obcniul1xx4y364wfx794jt7.md | 新录音_2 | 2026-05-09 | 1h 34m 38s | 江苏、领导、公租房、统计局、贝壳、国务院、人口、广东、土地 | 会议纪要, 飞书妙记 |\n| 44 | 新录音_2-obcngq8h4n1m5a657x45n2oq.md | 新录音_2 | 2026-05-06 | 59m | 业主、房子、中介、房东、视角、押金、营销、成本、客户、租户 | 会议纪要, 飞书妙记 |\n| 45 | 新录音-obcnltyve64e1838cg1ndwh8.md | 新录音 | 2026-05-13 | 4s | (empty) | 会议纪要, 飞书妙记 |\n| 46 | 新录音-obcnk3ul616ubk418y3p5678.md | 新录音 | 2026-05-12 | 29s | (empty) | 会议纪要, 飞书妙记 |\n| 47 | 新录音-obcniql91t6f57wiei8k875n.md | 新录音 | 2026-05-09 | 1h 13m 20s | 业主、公寓、甲方、客户、成本、定金、装修、租金、区划、合同 | 会议纪要, 飞书妙记 |\n| 48 | 新录音-obcnibt9kwpds688o476496l.md | 新录音 | 2026-05-08 | 1h 31m 53s | 房子、业主、生意、产品、租赁、上海、房东、北京、品质、商业模式 | 会议纪要, 飞书妙记 |\n| 49 | 新录音-obcngonq7x434em42t36576q.md | 新录音 | 2026-05-06 | 53m 21s | 飞书、电脑、服务器、知识库、上下文、决策、观点、认知、核心、微信 | 会议纪要, 飞书妙记 |\n| 50 | 新录音-obcnbttv9rmg8428m4q54fs9.md | 新录音 | 2026-04-29 | 1h 30m 32s | 贝壳、装修、房子、信托、房东、租金、业主、资产、优先级、金融机构 | 会议纪要, 飞书妙记 |\n| 51 | 新录音-obcn2zw43nh6u9278tlk67xs.md | 新录音 | 2025-11-14 | 47s | 深度合作、前提条件 | 会议纪要, 飞书妙记 |\n\n**Key structural observations:**\n\n- **YAML frontmatter is uniform across all 47 files**: every file contains exactly `title`, `source` (always \"feishu-minutes\"), `minute_token`, `feishu_link`, and `tags` (always `[\"会议纪要\", \"飞书妙记\"]`).\n- **No `date` field** exists in the frontmatter; the recording date is embedded in the body as a timestamp line (e.g., `2026-01-11 14:44:49 CST|24分钟 14秒`).\n- **No `participants` field** exists in the frontmatter; speakers in the transcript are anonymized as generic labels (\"说话人 1\", \"说话人 2\", etc.), with one exception (\"两分钟上手飞书妙记\" uses \"大飞\" and \"小妍\", and \"新录音_1127\" and \"万华...\" use \"未知\").\n- **No `summary` or `tldr` field** exists in the frontmatter or body; the closest proxy is the `关键词` line in the body.\n- **10 files** have generic titles (\"新录音\" or \"新录音_2\" / \"新录音_1127\"), making them hard to distinguish by title alone.\n- **Date range**: recordings span from 2021-07-28 to 2026-05-13."
+      }
+    }
+  },
+  "usage": {
+    "model": "haiku",
+    "inputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "contextWindow": 200000,
+    "contextTokens": 0,
+    "percentage": 0
+  }
+}

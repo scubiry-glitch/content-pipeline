@@ -1,0 +1,23 @@
+{
+  "id": "conv-1778859043009-sb7t7q9av",
+  "providerId": "claude",
+  "title": "如果完善 因果关系链和",
+  "titleGenerationStatus": "failed",
+  "createdAt": 1778859043010,
+  "updatedAt": 1778865185596,
+  "lastResponseAt": 1778865185596,
+  "sessionId": "77ba29d4-6f2e-42ad-ba9d-32b9bfd53171",
+  "providerState": {
+    "providerSessionId": "77ba29d4-6f2e-42ad-ba9d-32b9bfd53171"
+  },
+  "usage": {
+    "model": "claude-opus-4.7",
+    "inputTokens": 1,
+    "cacheCreationInputTokens": 2348,
+    "cacheReadInputTokens": 48918,
+    "contextWindow": 200000,
+    "contextTokens": 51267,
+    "percentage": 26,
+    "contextWindowIsAuthoritative": true
+  }
+}

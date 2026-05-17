@@ -17,16 +17,16 @@
   "query": "妙记 智能纪要 会议总结",
   "folderToken": "",
   "tokenStore": {
-    "access_token": "u-4BBeaSqLR1U8fc0gXrGx4sg00U54llMpUg0G7Nc000D5",
-    "refresh_token": "ur-7B5MDTHaV2RUHHnkQmZAQig02M74llOVhw0GmRs000C4",
+    "access_token": "u-4xzevZm.hd_UnFwWcRZso6g4lhSBg0AjiOwGYNi00EmG",
+    "refresh_token": "ur-7PvcM.ElV8AblLTwfs8JBhg4njm5g04PjywGUw200FiL",
     "token_type": "Bearer",
-    "expires_at": 1778609608,
-    "refresh_expires_at": 1781194408,
-    "open_id": "ou_47bba123358f8ca224421fa64d134e72",
-    "union_id": "on_e208f940b364b58995a75022e080e3f8",
-    "user_id": "20106223",
-    "tenant_key": "2d213101980f575d",
-    "name": "邵丹(天行)",
-    "updated_at": "2026-05-12T16:18:28.564Z"
+    "expires_at": 1779037761,
+    "refresh_expires_at": 1781622561,
+    "open_id": "ou_d5f010eae3aedddaa40176f85f8b23b9",
+    "union_id": "on_37fecef60711293d6b783384581288ff",
+    "user_id": "bg5f66b9",
+    "tenant_key": "138bd8a8538fd75f",
+    "name": "Damon",
+    "updated_at": "2026-05-17T15:14:21.579Z"
   }
 }

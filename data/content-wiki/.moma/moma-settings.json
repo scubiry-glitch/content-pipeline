@@ -51,6 +51,19 @@
       "wslDistroOverridesByHost": {}
     }
   },
+  "integrationConfigs": {
+    "lark": {
+      "enabled": true,
+      "cliPath": "",
+      "cliPathsByHost": {},
+      "installMode": "system",
+      "managedVersion": "",
+      "lastKnownVersion": "1.0.32",
+      "preferredIdentity": "user",
+      "grantedScopes": [],
+      "lastStatus": "ready"
+    }
+  },
   "settingsProvider": "claude",
   "savedProviderModel": {
     "claude": "haiku"
@@ -67,10 +80,29 @@
   "maxTabs": 3,
   "tabBarPosition": "input",
   "enableAutoScroll": true,
-  "openInMainTab": false,
+  "chatViewPlacement": "right-sidebar",
   "hiddenProviderCommands": {},
+  "sync": {
+    "wecom": {
+      "enabled": false,
+      "cliPath": "",
+      "defaultConversationId": "",
+      "defaultParentFolderId": "",
+      "identity": "user",
+      "autoInstallAttemptedAt": "2026-05-15T06:53:43.034Z"
+    },
+    "lark": {
+      "enabled": false,
+      "cliPath": "",
+      "defaultConversationId": "",
+      "defaultParentFolderId": "",
+      "identity": "user"
+    },
+    "strictMarkdown": false
+  },
   "appliedMigrations": [
-    "effort-default-medium"
+    "effort-default-medium",
+    "chat-view-placement-v1"
   ],
-  "lastUpdateCheck": 1778600485998
+  "lastUpdateCheck": 1779030946126
 }
