@@ -1,0 +1,23 @@
+{
+  "id": "conv-1779092824291-5t3fvio1a",
+  "providerId": "claude",
+  "title": "查询上海高端租赁研讨会次数",
+  "titleGenerationStatus": "success",
+  "createdAt": 1779092824291,
+  "updatedAt": 1779093075308,
+  "lastResponseAt": 1779093075308,
+  "sessionId": "a14bad8c-e7e6-4ffc-a006-2724da092fd7",
+  "providerState": {
+    "providerSessionId": "a14bad8c-e7e6-4ffc-a006-2724da092fd7"
+  },
+  "usage": {
+    "model": "haiku",
+    "inputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "contextWindow": 200000,
+    "contextTokens": 0,
+    "percentage": 0,
+    "contextWindowIsAuthoritative": true
+  }
+}
