@@ -3,6 +3,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '../../middleware/auth.js';
+import type { StreamChunk } from '../../services/llm.js';
+import type { ClaudeProvider } from '../../providers/index.js';
 import type { ExpertEngine } from './ExpertEngine.js';
 import type { ExpertRequest, OutlineReviewRequest } from './types.js';
 import { submitFeedback, applyCalibration } from './feedbackLoop.js';
@@ -129,48 +131,77 @@ export function createRouter(engine: ExpertEngine) {
         write('meta', { expert_name: expert.name, conversation_id: convId });
 
         const { streamOpenAICompatible } = await import('../../services/llm.js');
-        // 使用 Volcano Engine DeepSeek R1：推理模型，原生返回 reasoning_content delta
-        // 供前端折叠展示思考过程；content delta 是最终答案（干净不含 CoT）
-        const volcanoKey = process.env.VOLCANO_API_KEY;
-        const model = process.env.VOLCANO_REASONING_MODEL || 'deepseek-r1-250528';
-        const endpoint = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-        if (!volcanoKey) throw new Error('VOLCANO_API_KEY not configured');
-        const apiKey = volcanoKey;
-
-        let reasoningFull = '';
-        let contentFull = '';
-        const stream = streamOpenAICompatible(
-          endpoint,
-          apiKey,
-          {
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            max_tokens: 4000,
-            temperature: 0.6,
-          },
-          undefined,
-          // providerName: 接入 providers/rateLimiter.ts 全局桶 + 429 退避重试
-          // （run-routing.json:providers.volcano-engine.rps=2；R1 endpoint 配额低，靠桶+重试兜底）
-          'volcano-engine',
-        );
 
         const aborted = { v: false };
         request.raw.on('close', () => { aborted.v = true; });
 
-        for await (const chunk of stream) {
-          if (aborted.v) break;
-          if (chunk.type === 'reasoning') {
-            reasoningFull += chunk.delta;
-            write('reasoning', { delta: chunk.delta });
-          } else if (chunk.type === 'content') {
-            contentFull += chunk.delta;
-            write('content', { delta: chunk.delta });
-          } else if (chunk.type === 'done') {
-            break;
+        let reasoningFull = '';
+        let contentFull = '';
+        let started = false; // 是否已向客户端推过增量（决定能否干净切兜底）
+        const consume = async (s: AsyncGenerator<StreamChunk>) => {
+          for await (const chunk of s) {
+            if (aborted.v) break;
+            if (chunk.type === 'reasoning') {
+              reasoningFull += chunk.delta;
+              write('reasoning', { delta: chunk.delta });
+              started = true;
+            } else if (chunk.type === 'content') {
+              contentFull += chunk.delta;
+              write('content', { delta: chunk.delta });
+              started = true;
+            } else if (chunk.type === 'done') {
+              break;
+            }
           }
+        };
+
+        // 火山 R1（OpenAI 兼容流 + reasoning_content）：未配网关时的主路径，
+        // 也是网关失败时的兜底——消除「网关单点故障→追问专家直接报错」
+        const volcanoStream = (): AsyncGenerator<StreamChunk> => {
+          const volcanoKey = process.env.VOLCANO_API_KEY;
+          if (!volcanoKey) throw new Error('VOLCANO_API_KEY not configured');
+          return streamOpenAICompatible(
+            'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+            volcanoKey,
+            {
+              model: process.env.VOLCANO_REASONING_MODEL || 'deepseek-r1-250528',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+              ],
+              max_tokens: 4000,
+              temperature: 0.6,
+            },
+            undefined,
+            // 全局桶 + 429 退避（run-routing.json:providers.volcano-engine.rps=2）
+            'volcano-engine',
+          );
+        };
+
+        // 配置了 Anthropic 兼容网关（ANTHROPIC_BASE_URL）时，追问专家优先走
+        // a887f90b 增强的 ClaudeProvider 流式（Bearer + 自定义 base + claude-opus-4.7），
+        // 绕开火山 R1 EndpointRPMExceeded 429；失败且未推流则回退火山。
+        const useGateway = !!process.env.ANTHROPIC_BASE_URL?.trim();
+        if (useGateway) {
+          try {
+            const { getLLMRouter } = await import('../../providers/index.js');
+            const claude = getLLMRouter().getProvider('claude') as ClaudeProvider | undefined;
+            if (!claude || typeof claude.streamGenerate !== 'function') {
+              throw new Error('claude provider 未注册（检查 ANTHROPIC_AUTH_TOKEN）');
+            }
+            await consume(claude.streamGenerate(userPrompt, {
+              systemPrompt,
+              maxTokens: 4000,
+              temperature: 0.6,
+            }));
+          } catch (gwErr: any) {
+            if (started || aborted.v) throw gwErr;
+            console.warn('[chat/stream] Claude 网关失败，回退火山 R1：', gwErr?.message || gwErr);
+            write('meta', { fallback: 'volcano-engine', reason: String(gwErr?.message || gwErr).slice(0, 200) });
+            await consume(volcanoStream());
+          }
+        } else {
+          await consume(volcanoStream());
         }
 
         write('done', {
