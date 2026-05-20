@@ -265,6 +265,33 @@ async function runClaudeCli(prompt) {
   }
 }
 
+function smartTruncateParse(text) {
+  // Try truncating from the end, closing open brackets/braces properly
+  for (let pos = text.length - 1; pos > text.length * 0.5; pos--) {
+    const prefix = text.slice(0, pos);
+    let openBraces = 0, openBrackets = 0, inStr = false, esc = false;
+    for (let i = 0; i < prefix.length; i++) {
+      const c = prefix[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') inStr = !inStr;
+      if (!inStr) {
+        if (c === '{') openBraces++;
+        if (c === '}') openBraces--;
+        if (c === '[') openBrackets++;
+        if (c === ']') openBrackets--;
+      }
+    }
+    if (openBraces >= 0 && openBrackets >= 0) {
+      const closed = prefix + ']'.repeat(openBrackets) + '}'.repeat(openBraces);
+      try {
+        return JSON.parse(closed);
+      } catch {}
+    }
+  }
+  return null;
+}
+
 function parseInnerJson(text) {
   let parsed = null;
 
@@ -308,8 +335,14 @@ function parseInnerJson(text) {
         try {
           parsed = JSON.parse(fixUnescapedQuotes(s));
         } catch (e) {
-          console.log(`  JSON repair failed: ${e.message?.slice(0, 100)}`);
-          throw e;
+          // Smart truncation: find the longest valid JSON prefix by closing open brackets
+          console.log(`  JSON repair failed: ${e.message?.slice(0, 100)}, trying smart truncation...`);
+          parsed = smartTruncateParse(s);
+          if (parsed) {
+            console.log(`  ⚠ Smart truncation recovered partial data (keys: ${Object.keys(parsed).join(', ')})`);
+          } else {
+            throw e;
+          }
         }
       }
     }
