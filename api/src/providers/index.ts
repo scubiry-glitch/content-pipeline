@@ -66,9 +66,9 @@ export class LLMRouter {
       cost: 'kimi-for-coding',
     },
     claude: {
-      quality: 'claude-3-opus-20240229',
-      speed: 'claude-3-sonnet-20240229',
-      cost: 'claude-3-haiku-20240307',
+      quality: process.env.ANTHROPIC_MODEL?.trim() || 'claude-3-opus-20240229',
+      speed: process.env.ANTHROPIC_MODEL?.trim() || 'claude-3-sonnet-20240229',
+      cost: process.env.ANTHROPIC_MODEL?.trim() || 'claude-3-haiku-20240307',
     },
     'claude-code': {
       quality: getClaudeCodeModel(),

@@ -186,7 +186,7 @@ export async function generateWithOpenAI(
     throw new Error('OpenAI API key not configured');
   }
 
-  const model = options.model || 'gpt-4o';
+  const model = options.model || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o';
 
   try {
     const response = await client.chat.completions.create({
