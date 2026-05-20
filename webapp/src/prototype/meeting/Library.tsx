@@ -430,6 +430,66 @@ function InlineCreateScope({
   );
 }
 
+// 分页器 · 上 / 下一页 + 页码跳转
+function Pager({ page, totalPages, total, pageSize, onChange }: {
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
+  onChange: (p: number) => void;
+}) {
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  // 紧凑页码：始终显示首/末，当前 ±1，省略号填充
+  const pages: Array<number | 'ellipsis'> = [];
+  const push = (v: number | 'ellipsis') => {
+    if (v === 'ellipsis') {
+      if (pages[pages.length - 1] !== 'ellipsis') pages.push(v);
+    } else {
+      if (!pages.includes(v)) pages.push(v);
+    }
+  };
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+      push(i);
+    } else if (i < page - 1 || i > page + 1) {
+      push('ellipsis');
+    }
+  }
+
+  const btn = (disabled: boolean, active = false): CSSProperties => ({
+    padding: '4px 10px', minWidth: 28, height: 28,
+    border: active ? '1px solid var(--ink)' : '1px solid var(--line-2)',
+    background: active ? 'var(--ink)' : 'var(--paper)',
+    color: active ? 'var(--paper)' : disabled ? 'var(--ink-4)' : 'var(--ink-2)',
+    borderRadius: 5, fontSize: 12, cursor: disabled ? 'not-allowed' : 'pointer',
+    fontFamily: 'var(--sans)', fontWeight: active ? 600 : 450,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  });
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: 12, marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line-2)',
+      flexWrap: 'wrap',
+    }}>
+      <MonoMeta>{from}–{to} / {total}</MonoMeta>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button disabled={page <= 1} onClick={() => onChange(page - 1)} style={btn(page <= 1)}>‹</button>
+        {pages.map((p, i) =>
+          p === 'ellipsis' ? (
+            <span key={`e${i}`} style={{ padding: '0 4px', color: 'var(--ink-4)', fontSize: 12 }}>…</span>
+          ) : (
+            <button key={p} onClick={() => onChange(p)} style={btn(false, p === page)}>{p}</button>
+          ),
+        )}
+        <button disabled={page >= totalPages} onClick={() => onChange(page + 1)} style={btn(page >= totalPages)}>›</button>
+      </div>
+    </div>
+  );
+}
+
 function MiniStat({ icon, color, v, label }: { icon: IconName; color: string; v: number; label: string }) {
   return (
     <div style={{
@@ -908,7 +968,7 @@ export function Library() {
     if (forceMock) { setApiMeetings(null); setApiState('ok'); setScopesOk(false); setApiScopes(null); return; }
     let cancelled = false;
     setApiState('loading');
-    meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' })
+    meetingNotesApi.listMeetings({ limit: 100, status: showArchived ? 'archived' : 'active' })
       .then((r) => {
         if (cancelled) return;
         setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
@@ -1035,6 +1095,16 @@ export function Library() {
   const selected = selectedId ? (meetingsDisplay.find(m => m.id === selectedId) ?? null) : null;
   const closePreview = useCallback(() => setSelectedId(null), []);
 
+  // 分页：客户端切片 visible · 过滤变化时回到第 1 页
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [activeGroup, groupBy, searchQuery, showArchived, forceMock]);
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedVisible = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   // 跨可见会议全文 grep（每个会议串行调；可见 ≤ 12 时 ok，多了截断防雪崩）
   async function runFulltextGrep() {
     const q = searchQuery.trim();
@@ -1119,7 +1189,7 @@ export function Library() {
     }
     try {
       await meetingNotesApi.bindMeeting(scopeId, meetingId, '由 library 拖拽');
-      const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
+      const r = await meetingNotesApi.listMeetings({ limit: 100, status: showArchived ? 'archived' : 'active' });
       setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
     } catch (e: any) {
       alert(`绑定失败：${e?.message ?? e}`);
@@ -1209,7 +1279,7 @@ export function Library() {
 
   // MoveToScopeModal 回调：bind / unbind / 关闭 + 重拉 meetings
   const reloadMeetings = async () => {
-    const r = await meetingNotesApi.listMeetings({ limit: 50, status: showArchived ? 'archived' : 'active' });
+    const r = await meetingNotesApi.listMeetings({ limit: 100, status: showArchived ? 'archived' : 'active' });
     setApiMeetings((r?.items ?? []).map(adaptApiMeeting));
   };
   const handleModalBind = async (scopeId: string) => {
@@ -1589,7 +1659,7 @@ export function Library() {
           })()}
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
-            {visible.map(m => (
+            {pagedVisible.map(m => (
               <MeetingCard key={m.id} m={m}
                 active={m.id === selectedId}
                 onClick={() => setSelectedId(m.id)}
@@ -1612,6 +1682,10 @@ export function Library() {
               </div>
             )}
           </div>
+
+          {visible.length > PAGE_SIZE && (
+            <Pager page={safePage} totalPages={totalPages} total={visible.length} pageSize={PAGE_SIZE} onChange={setPage} />
+          )}
         </main>
 
         {/* Right: preview panel — desktop only; mobile uses bottom sheet below */}
