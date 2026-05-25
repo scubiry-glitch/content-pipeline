@@ -19,10 +19,6 @@ export interface SchedulerConfig {
   enableVectorization: boolean;
   // 质量阈值（高于此值才生成任务推荐）
   qualityThreshold: number;
-  // 最大重试次数
-  maxRetries: number;
-  // 重试间隔（分钟）
-  retryIntervalMinutes: number;
 }
 
 const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
@@ -30,8 +26,6 @@ const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
   batchSize: 10,
   enableVectorization: true,
   qualityThreshold: 70,
-  maxRetries: 3,
-  retryIntervalMinutes: 60, // 失败后1小时重试
 };
 
 // ============================================
@@ -42,7 +36,6 @@ export class AssetsAIProcessingScheduler {
   private processor: AssetsAIBatchProcessor;
   private isRunning: boolean = false;
   private timer: NodeJS.Timeout | null = null;
-  private retryTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<SchedulerConfig> = {}) {
     this.config = { ...DEFAULT_SCHEDULER_CONFIG, ...config };
@@ -75,12 +68,6 @@ export class AssetsAIProcessingScheduler {
     this.timer = setInterval(() => {
       this.processPendingAssets();
     }, intervalMs);
-
-    // 设置重试任务
-    const retryIntervalMs = this.config.retryIntervalMinutes * 60 * 1000;
-    this.retryTimer = setInterval(() => {
-      this.retryFailedAssets();
-    }, retryIntervalMs);
   }
 
   /**
@@ -92,11 +79,6 @@ export class AssetsAIProcessingScheduler {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-    }
-    
-    if (this.retryTimer) {
-      clearInterval(this.retryTimer);
-      this.retryTimer = null;
     }
 
     console.log('[AssetsAIScheduler] Stopped');
@@ -126,70 +108,13 @@ export class AssetsAIProcessingScheduler {
 
       console.log(`[AssetsAIScheduler] Processing completed: ${result.success} success, ${result.failed} failed`);
 
-      // 如果有失败的，记录日志
+      // 失败的素材停留在 ai_processing_status='failed'，不会被自动 tick 再捞。
+      // 需要重跑请走 POST /api/assets-ai-processing/trigger 手动触发。
       if (result.failed > 0) {
-        console.warn(`[AssetsAIScheduler] ${result.failed} assets failed to process, will retry later`);
+        console.warn(`[AssetsAIScheduler] ${result.failed} assets failed; manual retry required`);
       }
     } catch (error) {
       console.error('[AssetsAIScheduler] Failed to process pending assets:', error);
-    }
-  }
-
-  /**
-   * 重试失败的 Assets
-   */
-  private async retryFailedAssets(): Promise<void> {
-    try {
-      console.log('[AssetsAIScheduler] Checking for failed assets to retry...');
-
-      // 获取处理失败的 assets
-      const result = await query(
-        `SELECT 
-          id, title, file_url as "fileUrl", file_type as "fileType", file_size as "fileSize",
-          source, author, published_at as "publishedAt", created_at as "createdAt",
-          metadata
-        FROM assets
-        WHERE ai_processing_status = 'failed'
-          AND (is_deleted = false OR is_deleted IS NULL)
-          AND created_at > NOW() - INTERVAL '7 days'
-        LIMIT $1`,
-        [this.config.batchSize]
-      );
-
-      if (result.rows.length === 0) {
-        console.log('[AssetsAIScheduler] No failed assets to retry');
-        return;
-      }
-
-      const assets = result.rows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        fileUrl: row.fileUrl,
-        fileType: row.fileType,
-        fileSize: row.fileSize,
-        source: row.source,
-        author: row.author,
-        publishedAt: row.publishedAt,
-        createdAt: row.createdAt,
-        metadata: row.metadata || {},
-      }));
-
-      console.log(`[AssetsAIScheduler] Retrying ${assets.length} failed assets...`);
-
-      // 重置状态为 pending
-      for (const asset of assets) {
-        await query(
-          `UPDATE assets SET ai_processing_status = 'pending' WHERE id = $1`,
-          [asset.id]
-        );
-      }
-
-      // 执行批量处理
-      const processResult = await this.processor.processBatch(assets);
-
-      console.log(`[AssetsAIScheduler] Retry completed: ${processResult.success} success, ${processResult.failed} failed`);
-    } catch (error) {
-      console.error('[AssetsAIScheduler] Failed to retry failed assets:', error);
     }
   }
 

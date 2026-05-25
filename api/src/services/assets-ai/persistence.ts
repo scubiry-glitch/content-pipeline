@@ -246,6 +246,10 @@ export class PersistenceService {
       }
     }
 
+    // 自动 tick 只取「真正没跑过」的素材：pending 或从未处理过的。
+    // failed / completed-but-错误摘要 的素材不再自动回炉——避免上游 4xx/限流
+    // 触发无限重跑（详见 retryFailed 块：传 retryFailed=true 时会先把它们 UPDATE
+    // 回 'pending' 再进入这条 SELECT，所以手动重试链路不受影响）。
     const result = await query(
       `SELECT
         id, title, file_url as "fileUrl", file_type as "fileType", file_size as "fileSize",
@@ -255,12 +259,6 @@ export class PersistenceService {
       WHERE (
         ai_processing_status = 'pending'
         OR ai_processing_status IS NULL
-        OR ai_processing_status = 'failed'
-        OR (ai_processing_status = 'completed' AND id IN (
-          SELECT asset_id FROM asset_ai_analysis
-          WHERE quality_summary IS NULL OR quality_summary = ''
-            OR quality_summary LIKE '处理失败%' OR quality_summary LIKE '分析失败%'
-        ))
       )
         ${maxAgeHours > 0 ? `AND created_at > NOW() - INTERVAL '${maxAgeHours} hours'` : ''}
         AND (is_deleted = false OR is_deleted IS NULL)
