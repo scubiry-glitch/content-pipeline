@@ -475,11 +475,17 @@ async function main() {
     console.log('⏰ 热度分数定时更新已启动（每30分钟）');
     if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
 
-    // v6.1: 启动 RSS AI 批量处理定时任务
-    const { aiScheduler } = await import('./services/ai/scheduler.js');
-    aiScheduler.start();
-    console.log('🤖 RSS AI 批量处理定时任务已启动（每15分钟）');
-    if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
+    // v6.1: RSS AI 批量处理定时任务
+    // 默认关闭：rss_item_ai_analysis 表已废弃，老 scheduler 会无限撞 Kimi 429。
+    // 真要恢复 RSS AI 链路，先把表建回来再设 RSS_AI_SCHEDULER_ENABLED=true。
+    if (process.env.RSS_AI_SCHEDULER_ENABLED === 'true') {
+      const { aiScheduler } = await import('./services/ai/scheduler.js');
+      aiScheduler.start();
+      console.log('🤖 RSS AI 批量处理定时任务已启动（每15分钟）');
+      if (schedulerStaggerMs > 0) await sleep(schedulerStaggerMs);
+    } else {
+      console.log('🤖 RSS AI 批量处理定时任务 disabled (set RSS_AI_SCHEDULER_ENABLED=true to enable)');
+    }
 
     // v6.2: 启动 Assets AI 批量处理定时任务
     if (process.env.ASSETS_AI_SCHEDULER_ENABLED === 'true') {
