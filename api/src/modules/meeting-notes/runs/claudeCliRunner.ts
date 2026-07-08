@@ -186,6 +186,18 @@ function truncate(s: string, n: number): string {
   return s.slice(0, n) + `\n…[truncated, total ${s.length}]`;
 }
 
+/** meeting 的 claude CLI 一律走 OAuth 直连（api.anthropic.com）。
+ *  从 spawn 子进程环境里剥掉企业网关三件套，让 CLI 回退到 ~/.claude/.credentials.json 的 OAuth。
+ *  —— 主进程 process.env 保留这些变量给 HTTP provider（专家库/oneshot 走 gateway），只在 CLI 子进程删除。
+ *  背景：api/.env 把 ANTHROPIC_BASE_URL 钉到 gateway.meizu.life，该网关间歇 500/524/空结果；OAuth 直连实测健康。 */
+export function claudeCliOAuthEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_API_KEY;
+  return env;
+}
+
 /**
  * LLM 输出 JSON 容错修补 — 仅在 JSON.parse 失败时调用。
  *
@@ -382,7 +394,7 @@ async function attemptResumeRepair(opts: {
   const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --setting-sources project --output-format json --max-turns 1 < '${promptFile}'`;
   console.warn(`${tag} spawn (sid=${sessionId.slice(0, 8)})`);
 
-  const proc = spawn('sh', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, cwd });
+  const proc = spawn('sh', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, cwd, env: claudeCliOAuthEnv() });
   const TIMEOUT = Number(process.env.CLAUDE_CLI_REPAIR_TIMEOUT_MS ?? 180_000);
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -731,10 +743,7 @@ export async function runClaudeCliMode(
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
     cwd,
-    env: {
-      ...process.env,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    },
+    env: claudeCliOAuthEnv(),
   });
 
   // 持久化 cliPid/cliPgid/apiPid 到 mn_runs.metadata，让后续 API 进程在 recoverOrphanCliRuns

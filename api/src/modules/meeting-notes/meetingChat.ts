@@ -25,6 +25,7 @@ import { join, resolve } from 'node:path';
 import { authenticate } from '../../middleware/auth.js';
 import type { MeetingNotesEngine } from './MeetingNotesEngine.js';
 import { readClaudeSessionMessages } from './runs/claudeSessionFiles.js';
+import { claudeCliOAuthEnv } from './runs/claudeCliRunner.js';
 import { renderFrontmatter } from '../content-library/wiki/wikiFrontmatter.js';
 import { resolveWikiSubPath, resolveWikiRoot, resolveWorkspaceSlug } from '../../lib/wikiRoot.js';
 import { relative } from 'node:path';
@@ -248,7 +249,7 @@ export function createMeetingChatRoutes(engine: MeetingNotesEngine): FastifyPlug
 
         const proc = spawn('sh', ['-c', cmd], {
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY },
+          env: claudeCliOAuthEnv(),
         });
 
         const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, CHAT_TIMEOUT_MS);
