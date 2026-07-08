@@ -40,6 +40,8 @@ export interface ClaudeCliRunnerCtx {
   participantsFromParse: Array<{ id: string; name: string }>;
   /** 续接已有 claude session（meeting / scope 各自维护）；首次跑为 null */
   resumeSessionId?: string | null;
+  /** 瞬时网关错误（5xx/524/429/空结果）自动重试剩余次数；缺省 = TRANSIENT_MAX_RETRIES */
+  transientRetriesLeft?: number;
   /** 'meeting' 用 claudeCliFullPipeline.buildFullPrompt；'scope' 用 claudeCliScope.buildScopePrompt */
   promptKind?: 'meeting' | 'scope';
   /** scope-level run 用：上层注入的预拼好的 prompt（this runner 不参与构造） */
@@ -582,6 +584,60 @@ function validateInner(parsed: any, kind: 'meeting' | 'scope'): { ok: true } | {
 // 主入口
 // ============================================================
 
+// 瞬时网关错误自动重试：推理网关 (gateway.meizu.life) 间歇性抖动会以多种形态出现——
+//   1. exit 1 + result "API Error: 500/502/503/504/524/429 ..."（含 "No available accounts"）
+//   2. exit 0 + subtype=success 但 result="" / stop_reason=null（源站慢 TTFT 后吐空结果）
+// 这些都标 retryable。遇到时 fresh 重跑一次（不 --resume，避免续接坏 session），最多 N 次。
+const TRANSIENT_MAX_RETRIES = 2;
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504, 520, 522, 524, 529]);
+const RETRYABLE_TEXT = /\b(5\d\d|429|408|524|overloaded|rate.?limit(?:ed)?|timeout|timed out|retry|retryable|no available .*account|origin_response_timeout|temporarily)\b/i;
+
+/** 判断一次 CLI 结果是否属于"瞬时网关错误"（值得重试）。
+ *  outer 可能为 null（stdout 非法 JSON）。exitCode!=0 或空结果都会进来判定。 */
+function isTransientGatewayFailure(opts: {
+  exitCode: number;
+  outer: any | null;
+  stdout: string;
+  stderr: string;
+  resultText: string;
+}): boolean {
+  const { exitCode, outer, stdout, stderr, resultText } = opts;
+  // A. 结构化：CLI 明确报 API 错误（is_error + 可重试 status）
+  const status = Number(outer?.api_error_status ?? 0) || 0;
+  if (status && RETRYABLE_STATUS.has(status)) return true;
+  // B. 文本兜底：result / stderr / stdout 里出现可重试关键字（网关错误文案）
+  const blob = `${resultText}\n${stderr}\n${status ? '' : truncate(stdout, 2000)}`;
+  if (outer?.is_error === true && RETRYABLE_TEXT.test(blob)) return true;
+  // C. 空结果：CLI 标 success 但没吐正文（源站慢 TTFT 后返回空 / stop_reason=null）
+  //    —— 只在 exit 0 且外层 JSON 合法、result 为空时命中，避免误吞真正的解析失败。
+  if (exitCode === 0 && outer && !resultText && (outer.stop_reason == null || outer.subtype === 'success')) {
+    return true;
+  }
+  return false;
+}
+
+/** 命中瞬时网关错误且还有重试额度 → 退避后 fresh 重跑，返回重跑结果；
+ *  否则返回 undefined（调用方据此走原有 throw 逻辑）。 */
+async function maybeRetryTransient(
+  deps: MeetingNotesDeps,
+  payload: { runId: string; meetingId: string; assetId: string },
+  ctx: ClaudeCliRunnerCtx,
+  hooks: ClaudeCliRunnerHooks,
+  info: { exitCode: number; outer: any | null; stdout: string; stderr: string; resultText: string; label: string },
+): Promise<ClaudeCliRunnerResult | undefined> {
+  if (!isTransientGatewayFailure(info)) return undefined;
+  const left = ctx.transientRetriesLeft ?? TRANSIENT_MAX_RETRIES;
+  if (left <= 0) return undefined;
+  const attempt = TRANSIENT_MAX_RETRIES - left + 1;
+  const backoffMs = 5_000 * attempt; // 5s, 10s
+  const tag = payload.runId.slice(0, 8);
+  console.warn(`[claudeCliRunner ${tag}] transient gateway failure (${info.label}); retry ${attempt}/${TRANSIENT_MAX_RETRIES} after ${backoffMs}ms`);
+  await hooks.writeStep('spawn', 0.1, `网关瞬时错误 · ${backoffMs / 1000}s 后重试 (${attempt}/${TRANSIENT_MAX_RETRIES})`);
+  await new Promise((r) => setTimeout(r, backoffMs));
+  // 不 --resume：fresh 重跑，避免续接坏 session；递减重试额度防止无限递归
+  return runClaudeCliMode(deps, payload, { ...ctx, resumeSessionId: null, transientRetriesLeft: left - 1 }, hooks);
+}
+
 export async function runClaudeCliMode(
   deps: MeetingNotesDeps,
   payload: { runId: string; meetingId: string; assetId: string },
@@ -808,6 +864,14 @@ export async function runClaudeCliMode(
       await hooks.writeStep('spawn', 0.1, '会话已失效 · 重新启动 claude');
       return runClaudeCliMode(deps, payload, { ...ctx, resumeSessionId: null }, hooks);
     }
+    // 瞬时网关错误（5xx/524/429/overloaded）→ fresh 重试
+    let outerForCheck: any = null;
+    try { outerForCheck = JSON.parse(stdout); } catch {/* stdout 非法 JSON，outerForCheck 保持 null */}
+    const retriedExit = await maybeRetryTransient(deps, payload, ctx, hooks, {
+      exitCode, outer: outerForCheck, stdout, stderr, resultText: String(outerForCheck?.result ?? ''),
+      label: `exit ${exitCode}`,
+    });
+    if (retriedExit !== undefined) return retriedExit;
     await hooks.recordCliRaw(truncate(stdout || stderr, 200_000));
     throw new Error(
       `claude CLI exit ${exitCode}${stderr ? `: ${truncate(stderr, 500)}` : ''}`,
@@ -851,6 +915,11 @@ export async function runClaudeCliMode(
   }
 
   if (!resultText) {
+    // 空结果（源站慢 TTFT 后吐空）视为瞬时网关错误 → fresh 重试
+    const retriedEmpty = await maybeRetryTransient(deps, payload, ctx, hooks, {
+      exitCode, outer: outerJson, stdout, stderr, resultText, label: 'empty .result',
+    });
+    if (retriedEmpty !== undefined) return retriedEmpty;
     await hooks.recordCliRaw(truncate(stdout, 200_000));
     throw new Error('claude CLI: outer JSON has no .result text');
   }
