@@ -370,7 +370,9 @@ async function attemptResumeRepair(opts: {
   await writeFile(promptFile, fixPrompt, 'utf8');
   const cliBinShell = cliBin.includes(' ') ? `"${cliBin}"` : cliBin;
   const modelFlag = model && model.trim() ? ` --model '${model.replace(/'/g, "'\\''")}'` : '';
-  const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,SlashCommand,TodoWrite,KillShell,BashOutput';
+  // 注: 不含 SlashCommand — claude CLI ≥2.1.x 已移除该工具名, 传入 --disallowed-tools
+  //     会触发 "Permission deny rule 'SlashCommand' matches no known tool" 校验错误 → exit 1。
+  const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput';
   const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --output-format json --max-turns 1 < '${promptFile}'`;
   console.warn(`${tag} spawn (sid=${sessionId.slice(0, 8)})`);
 
@@ -632,7 +634,9 @@ export async function runClaudeCliMode(
   // claude -p 默认行为本来就不会自动续接（要 --continue/--resume 显式指定），那个 flag
   // 其实是过度防御，反而造成 runEngine 把 fresh 返回的 session_id 写回 assets 后，下一次
   // resume 必然命中 "No conversation found"（DB 有 sid，磁盘没文件）→ 死锁直至清 sid。
-  const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,SlashCommand,TodoWrite,KillShell,BashOutput";
+  // 注: 不含 SlashCommand — claude CLI ≥2.1.x 已移除该工具名, 传入 --disallowed-tools
+  //     会触发 "Permission deny rule 'SlashCommand' matches no known tool" 校验错误 → exit 1。
+  const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput";
   const isolationFlags = ` --disallowed-tools '${NO_TOOLS}'`;
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
