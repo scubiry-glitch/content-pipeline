@@ -372,8 +372,12 @@ async function attemptResumeRepair(opts: {
   const modelFlag = model && model.trim() ? ` --model '${model.replace(/'/g, "'\\''")}'` : '';
   // 注: 不含 SlashCommand — claude CLI ≥2.1.x 已移除该工具名, 传入 --disallowed-tools
   //     会触发 "Permission deny rule 'SlashCommand' matches no known tool" 校验错误 → exit 1。
-  const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput';
-  const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --output-format json --max-turns 1 < '${promptFile}'`;
+  //     含 Skill/ExitPlanMode/Agent：隔离用户全局插件(如 superpowers)自动激活的 Skill 工具，
+  //     否则 sonnet 首个 turn 就调 Skill → 命中 --max-turns 1 → error_max_turns。
+  const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput,Skill,ExitPlanMode,Agent';
+  // --setting-sources project：无头分析进程不继承 ~/.claude 的全局插件/skill(根治：以后
+  //   全局装任何插件都不会再泄漏进来)；配合 NO_TOOLS 双重防御。
+  const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --setting-sources project --output-format json --max-turns 1 < '${promptFile}'`;
   console.warn(`${tag} spawn (sid=${sessionId.slice(0, 8)})`);
 
   const proc = spawn('sh', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, cwd });
@@ -636,8 +640,11 @@ export async function runClaudeCliMode(
   // resume 必然命中 "No conversation found"（DB 有 sid，磁盘没文件）→ 死锁直至清 sid。
   // 注: 不含 SlashCommand — claude CLI ≥2.1.x 已移除该工具名, 传入 --disallowed-tools
   //     会触发 "Permission deny rule 'SlashCommand' matches no known tool" 校验错误 → exit 1。
-  const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput";
-  const isolationFlags = ` --disallowed-tools '${NO_TOOLS}'`;
+  //     含 Skill/ExitPlanMode/Agent：隔离用户全局插件(如 superpowers)自动激活的 Skill 工具，
+  //     否则 sonnet 首个 turn 就调 Skill → 命中 --max-turns 1 → error_max_turns。
+  const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput,Skill,ExitPlanMode,Agent";
+  // --setting-sources project：无头分析进程不继承 ~/.claude 的全局插件/skill；配合 NO_TOOLS 双重防御。
+  const isolationFlags = ` --disallowed-tools '${NO_TOOLS}' --setting-sources project`;
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
   // ─ 决定 cwd ─
