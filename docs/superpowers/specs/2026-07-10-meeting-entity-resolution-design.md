@@ -137,3 +137,13 @@ meeting 应用的"实体层"当前是**散**的，根因是**两套并行的实�
 3. 源头硬约束**"命不中不造人、park 入队"** —— 牺牲一点召回换零散乱。
 4. 分四期、P2 用 flag 灰度。
 5. 已有 `mn_merge_people` 保留并降级为兜底；仅 P1 扩展 `content_entity_id` 一致性。
+
+---
+
+## 8. 遗留决策 / 风险（待 P2 前拍板）
+
+1. **跨 workspace 同名人塌缩（I1，已知、暂缓）**
+   - **风险**：`EntityResolver` 的匹配是**全局**的（`findByNameOrAlias` 只按 `canonical_name`/`aliases` 查，无 workspace 维度）。因此不同 workspace 里**两个真实不同的人**若同名，会解析到**同一个全局 `content_entities.id`**，被错误塌缩成一人。
+   - **影响面**：P1 阶段 `content_entity_id` 仅作"互链标记"、尚未 load-bearing，误塌缩影响有限；但 **P2 起 roster 以 `content_entity_id` 为归一主键**、该列开始 load-bearing 后，同名塌缩会污染跨 run/跨 workspace 的人物同一性。
+   - **决策状态**：**暂缓（deferred）**，不作为 P1 阻塞项。
+   - **硬性要求**：**必须在 P2 落地前明确决策**——是给 `content_entities`/解析路径引入 workspace（或 tenant）作用域，还是接受全局命名空间并在上层用其它维度消歧。P2 不得在该问题未拍板前将 `content_entity_id` 变为 load-bearing。
