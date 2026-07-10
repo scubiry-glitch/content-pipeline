@@ -42,6 +42,7 @@ export async function ensurePersonByName(
     canonicalName: canonical,
     aliases: [],
     entityType: 'person',
+    metadata: {},
   });
   const contentEntityId = entity.id;
 
