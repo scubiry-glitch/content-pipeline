@@ -40,6 +40,7 @@ const FILES = [
   '028-scope-dirty-marker.sql',
   '029-runs-axis-widen.sql',
   '030-people-content-entity-link.sql',
+  '031-merge-content-entity-link.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
