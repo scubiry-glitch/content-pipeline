@@ -99,7 +99,7 @@ export class EntityResolver {
         entity.entityType,
         entity.taxonomyDomainId || null,
         JSON.stringify(entity.metadata),
-        embeddingVector ? JSON.stringify(embeddingVector) : null,
+        Array.isArray(embeddingVector) && embeddingVector.length > 0 ? JSON.stringify(embeddingVector) : null,
       ]
     );
 
