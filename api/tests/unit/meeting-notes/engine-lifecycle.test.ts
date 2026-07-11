@@ -7,9 +7,10 @@
  *
  * 不触碰真 DB；模拟所有 adapters，用 EventEmitter 作 eventBus。
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { MeetingNotesEngine } from '../../../src/modules/meeting-notes/MeetingNotesEngine.js';
+import { PersonRoster } from '../../../src/modules/meeting-notes/runs/personRoster.js';
 
 function makeEventBus() {
   const em = new EventEmitter();
@@ -144,5 +145,92 @@ describe('computeAxis dispatch', () => {
     const r = await engine.computeAxis({ meetingId: 'm1', axis: 'bogus' as any });
     expect(r.ok).toBe(false);
     expect(r.reason).toContain('unknown-axis');
+  });
+});
+
+describe('runEngine execute · PersonRoster flag 门控', () => {
+  // 最小 payload 让 execute() 走进 multi-axis 分支
+  const minPayload = {
+    runId: 'run-r1',
+    scope: { kind: 'meeting' as const, id: 'meet-1' },
+    axis: 'people' as const,
+    subDims: [] as string[],
+    preset: 'standard' as const,
+    strategySpec: null,
+    triggeredBy: 'manual' as const,
+    parentRunId: null,
+    meetingId: 'meet-1',
+    mode: undefined as any,  // → multi-axis 默认分支
+  };
+
+  function makeDepsForExecute() {
+    // DB mock：
+    //   UPDATE mn_runs SET state='running'... RETURNING id  → rows=[{id:'run-r1'}]（通过 claim 检查）
+    //   PersonRoster.build 内部的 SELECT FROM mn_people... → rows=[]（空花名册，合法）
+    //   所有其它 SQL → rows=[]
+    const query = vi.fn(async (sql: string) => {
+      if (/UPDATE mn_runs/i.test(sql) && /RETURNING id/i.test(sql)) {
+        return { rows: [{ id: 'run-r1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const eventBus = makeEventBus();
+    const deps: any = {
+      db: { query },
+      llm: { complete: vi.fn(), completeWithSystem: vi.fn().mockResolvedValue('') },
+      embedding: { embed: vi.fn().mockResolvedValue([]), embedBatch: vi.fn() },
+      experts: { invoke: vi.fn() },
+      expertApplication: {
+        resolveForMeetingKind: vi.fn(() => null),
+        shouldSkipExpertAnalysis: vi.fn(() => false),
+      },
+      assetsAi: { parseMeeting: vi.fn().mockResolvedValue({ assetId: 'meet-1' }) },
+      eventBus,
+      textSearch: { search: vi.fn(), index: vi.fn() },
+    };
+    return { deps, query };
+  }
+
+  let buildSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    // spy PersonRoster.build so we can track calls and return a controlled instance
+    buildSpy = vi.spyOn(PersonRoster, 'build');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('MN_PERSON_ROSTER=1 时 execute 调用 PersonRoster.build 并把 personRoster 注入 runAxisAll args', async () => {
+    vi.stubEnv('MN_PERSON_ROSTER', '1');
+
+    const { deps, query } = makeDepsForExecute();
+    const engine = new MeetingNotesEngine(deps);
+
+    // 直接调用私有 execute()
+    await (engine.runEngine as any).execute(minPayload);
+
+    // PersonRoster.build 必须被调用（表明 roster 被 build）
+    expect(buildSpy).toHaveBeenCalledWith(deps, 'meet-1');
+
+    // DB 必须收到 PersonRoster.build 发出的 SELECT FROM mn_people 查询
+    const rosterBuildCalls = query.mock.calls.filter(
+      (c: any[]) => typeof c[0] === 'string' && /FROM mn_people/i.test(c[0]),
+    );
+    expect(rosterBuildCalls.length).toBeGreaterThan(0);
+  });
+
+  it('MN_PERSON_ROSTER 未设置时 execute 不调用 PersonRoster.build', async () => {
+    vi.stubEnv('MN_PERSON_ROSTER', '0');
+
+    const { deps } = makeDepsForExecute();
+    const engine = new MeetingNotesEngine(deps);
+
+    await (engine.runEngine as any).execute(minPayload);
+
+    // flag 关闭时不应构建花名册
+    expect(buildSpy).not.toHaveBeenCalled();
   });
 });

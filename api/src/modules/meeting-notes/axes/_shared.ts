@@ -8,6 +8,7 @@ import type { MeetingNotesDeps } from '../types.js';
 import { applyDecoratorStack, getCurrentStrategy, getCurrentExpertPersona } from './decoratorStack.js';
 import { chunkedContent } from '../parse/claimExtractor.js';
 import { emitProgress } from '../runs/runStreamRegistry.js';
+import type { PersonRoster } from '../runs/personRoster.js';
 
 export interface ScopeDecisionRef {
   label: string;   // D01, D02, ...（短标签，供 LLM 引用）
@@ -24,6 +25,8 @@ export interface ComputeArgs {
   replaceExisting?: boolean;
   /** 轴重算时由 registry 预加载，供 decision_provenance 解析 based_on_ids */
   scopeDecisionHistory?: ScopeDecisionRef[];
+  /** P2 源头治理：run 级花名册；flag MN_PERSON_ROSTER=1 时由 runEngine 注入，关闭时为 null */
+  personRoster?: PersonRoster | null;
 }
 
 export interface ComputeResult {
