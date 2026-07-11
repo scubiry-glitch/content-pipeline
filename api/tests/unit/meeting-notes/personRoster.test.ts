@@ -57,4 +57,17 @@ describe('PersonRoster', () => {
     expect(roster.resolve('（列席）')).toBeNull();
     expect(roster.unresolved).toEqual([]);
   });
+
+  it('flushUnresolved 把未解析名字 upsert 进 mn_unresolved_mentions', async () => {
+    const deps = depsWithMembers([{ id: 'mp-1', canonical_name: '张伟', aliases: [], content_entity_id: null, embedding: null }]);
+    const roster = await PersonRoster.build(deps, 'meeting-1');
+    roster.resolve('陌生甲');
+    roster.resolve('陌生甲'); // count=2
+    roster.resolve('陌生乙');
+    const n = await roster.flushUnresolved(deps, 'meeting-1');
+    expect(n).toBe(2);
+    const upserts = (deps.db.query as any).mock.calls.filter((c: any[]) => /INSERT INTO mn_unresolved_mentions/i.test(c[0]));
+    expect(upserts.length).toBe(2);
+    expect(upserts[0][0]).toMatch(/ON CONFLICT \(meeting_id, normalized_name\)/i);
+  });
 });

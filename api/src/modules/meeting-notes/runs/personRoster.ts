@@ -110,8 +110,17 @@ export class PersonRoster {
     return [...this.unresolvedMap.values()];
   }
 
-  // Task 2 落实现
-  async flushUnresolved(_deps: MeetingNotesDeps, _meetingId: string): Promise<number> {
-    return 0;
+  async flushUnresolved(deps: MeetingNotesDeps, meetingId: string): Promise<number> {
+    const items = this.unresolved;
+    for (const it of items) {
+      await deps.db.query(
+        `INSERT INTO mn_unresolved_mentions (meeting_id, raw_name, normalized_name, occurrences)
+         VALUES ($1::uuid, $2, $3, $4)
+         ON CONFLICT (meeting_id, normalized_name)
+         DO UPDATE SET occurrences = mn_unresolved_mentions.occurrences + EXCLUDED.occurrences`,
+        [meetingId, it.raw, it.normalized, it.count],
+      );
+    }
+    return items.length;
   }
 }

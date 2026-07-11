@@ -41,6 +41,7 @@ const FILES = [
   '029-runs-axis-widen.sql',
   '030-people-content-entity-link.sql',
   '031-merge-content-entity-link.sql',
+  '032-unresolved-mentions.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
