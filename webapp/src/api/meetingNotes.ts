@@ -70,6 +70,27 @@ async function jput<T>(path: string, body?: any): Promise<T> {
 
 // ========== Parse / Axes ==========
 
+export interface MergeCandidate {
+  id: string;
+  targetEntityId: string;
+  sourceEntityId: string;
+  entityType: string;
+  similarity: number;
+  status: string;
+  createdAt: string;
+  targetName: string | null;
+  sourceName: string | null;
+}
+export interface UnresolvedMention {
+  id: string;
+  meetingId: string | null;
+  rawName: string;
+  normalizedName: string;
+  occurrences: number;
+  status: string;
+  createdAt: string;
+}
+
 export const meetingNotesApi = {
   /**
    * /today 页面底部 3 张 mini-stat（待验证承诺 / 开放问题 / 新入库判断）的真实数据。
@@ -765,6 +786,32 @@ export const meetingNotesApi = {
     if (!r.ok) throw new Error(`upload → ${r.status}`);
     return r.json();
   },
+
+  // ===== P4b 复核 =====
+  listMergeCandidates: (q: { status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<{ items: MergeCandidate[] }>(`/entity-merge-candidates${qs ? '?' + qs : ''}`);
+  },
+  approveMergeCandidate: (id: string) =>
+    jpost<{ ok: boolean; entityType: string; affected: any[] }>(`/entity-merge-candidates/${id}/approve`),
+  rejectMergeCandidate: (id: string) =>
+    jpost<{ ok: boolean }>(`/entity-merge-candidates/${id}/reject`),
+  listUnresolvedMentions: (q: { status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<{ items: UnresolvedMention[] }>(`/unresolved-mentions${qs ? '?' + qs : ''}`);
+  },
+  resolveUnresolvedMention: (id: string) =>
+    jpost<{ ok: boolean }>(`/unresolved-mentions/${id}/resolve`),
 };
 
 export { API_BASE as MEETING_NOTES_API_BASE };
