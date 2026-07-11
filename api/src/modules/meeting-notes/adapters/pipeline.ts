@@ -93,11 +93,11 @@ export function createNoopEmbeddingAdapter(): EmbeddingAdapter {
   };
 }
 
-function coerceVec768(v: number[]): number[] {
-  if (v.length === 768) return v;
-  if (v.length > 768) return v.slice(0, 768);
+function coerceVec1024(v: number[]): number[] {
+  if (v.length === 1024) return v;
+  if (v.length > 1024) return v.slice(0, 1024);
   const out = v.slice();
-  while (out.length < 768) out.push(0);
+  while (out.length < 1024) out.push(0);
   return out;
 }
 
@@ -117,7 +117,7 @@ export function createSemanticEmbeddingAdapter(
       if (!semantic()) return [];
       try {
         // 走严格路径：真 provider fetch 失败会 throw（而非静默哈希兜底），此处 catch 降级 []
-        return coerceVec768(await service.embedSemanticStrict(text));
+        return coerceVec1024(await service.embedSemanticStrict(text));
       } catch (e) {
         console.warn('[semanticEmbed] 语义向量失败，降级 []:', (e as Error).message);
         return [];
@@ -127,7 +127,7 @@ export function createSemanticEmbeddingAdapter(
       if (!semantic()) return texts.map(() => []);
       try {
         const rows = await Promise.all(texts.map((t) => service.embedSemanticStrict(t)));
-        return rows.map(coerceVec768);
+        return rows.map(coerceVec1024);
       } catch (e) {
         console.warn('[semanticEmbedBatch] 语义向量失败，降级 []:', (e as Error).message);
         return texts.map(() => []);
