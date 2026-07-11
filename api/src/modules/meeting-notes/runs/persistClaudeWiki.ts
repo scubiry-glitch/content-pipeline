@@ -351,7 +351,7 @@ async function handleLegacyEntityUpdate(
   const appendMd = appendMarkdown.trim();
   if (!trimmedName || !appendMd) return false;
 
-  // a) content_entities 命中
+  // a) content_entities：未命中不再放弃，改 best-effort 注册后继续（P3b）
   let exists = false;
   try {
     const r = await deps.db.query(
@@ -361,9 +361,21 @@ async function handleLegacyEntityUpdate(
     exists = (r.rows?.length ?? 0) > 0;
   } catch (e: any) {
     console.warn('[persistClaudeWiki/legacy] content_entities check failed:', e?.message);
-    return false;
+    exists = false;
   }
-  if (!exists) return false;
+  if (!exists) {
+    try {
+      const resolver = new EntityResolver(deps.db, deps.embedding);
+      await resolver.resolveAndRegister({
+        canonicalName: trimmedName,
+        aliases: [],
+        entityType: 'concept', // 旧契约无 subtype，用中性 concept 兜底
+        metadata: {},
+      });
+    } catch (err) {
+      console.warn('[persistClaudeWiki/legacy] 注册失败(继续写页):', trimmedName, err);
+    }
+  }
 
   // b) 文件存在（旧路径：entities/<slug>.md 平铺，因为 wikiGenerator 还在写老路径）
   const entityPath = join(wikiRoot, 'entities', `${sanitizeFilename(slugify(trimmedName))}.md`);

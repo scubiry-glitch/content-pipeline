@@ -78,3 +78,15 @@ describe('persistClaudeWiki · 新契约实体注册', () => {
     expect(res.entityCreated + res.entityUpdated).toBeGreaterThan(0); // 抛错也写页
   });
 });
+
+describe('persistClaudeWiki · 旧契约未命中不再放弃', () => {
+  it('content_entities 未命中 → best-effort 注册（不因未命中直接 return false）', async () => {
+    const { deps, calls } = makeDeps(); // SELECT 返回 [] = 未命中；INSERT 成功
+    const root = await mkdtemp(join(tmpdir(), 'p3b-legacy-'));
+    await persistClaudeWiki(deps, 'm1', {
+      entityUpdates: [{ entityName: '未注册公司', appendMarkdown: '## 追加内容' }],
+    }, root);
+    // 关键断言：未命中时发生了注册（INSERT content_entities），而非直接跳过
+    expect(calls.some(c => /INSERT INTO content_entities/i.test(c.sql))).toBe(true);
+  });
+});
