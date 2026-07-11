@@ -1511,11 +1511,27 @@ async function setupContentLibrarySchema(): Promise<void> {
       entity_type VARCHAR(50) DEFAULT 'concept',
       taxonomy_domain_id VARCHAR(10),
       metadata JSONB DEFAULT '{}',
-      embedding vector(768),
+      embedding vector(1024),
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `).catch((e) => console.warn('[DB] content_entities table skipped:', getErrorMessage(e)));
+
+  // content_entities.embedding 768→1024：仅当现列是 vector(768) 时改（幂等，避免重启清空重嵌入）
+  await query(`
+    DO $$
+    DECLARE cur text;
+    BEGIN
+      SELECT format_type(atttypid, atttypmod) INTO cur
+        FROM pg_attribute
+       WHERE attrelid = 'content_entities'::regclass AND attname = 'embedding' AND NOT attisdropped;
+      IF cur = 'vector(768)' THEN
+        DROP INDEX IF EXISTS idx_content_entities_embedding;
+        ALTER TABLE content_entities DROP COLUMN embedding;
+        ALTER TABLE content_entities ADD COLUMN embedding vector(1024);
+      END IF;
+    END $$;
+  `).catch((e: any) => console.log('[DB] content_entities 1024 迁移跳过:', e?.message));
 
   await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_type ON content_entities(entity_type)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_content_entities_domain ON content_entities(taxonomy_domain_id)`).catch(() => {});
