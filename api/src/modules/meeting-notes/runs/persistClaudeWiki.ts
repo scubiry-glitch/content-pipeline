@@ -16,6 +16,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MeetingNotesDeps } from '../types.js';
+import type { EntityType } from '../../content-library/types.js';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -61,6 +62,21 @@ export interface ClaudeWikiOutput {
 }
 
 const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event', 'location'] as const;
+
+/**
+ * wiki subtype → 全局 content_entities.EntityType。
+ * 仅 person/org/product/event/location 是全局实体；project(=scope) 与概念类返回 null=不注册。
+ */
+export function entityTypeForSubtype(subtype: string): EntityType | null {
+  switch (subtype) {
+    case 'person': return 'person';
+    case 'org': return 'organization';
+    case 'product': return 'product';
+    case 'event': return 'event';
+    case 'location': return 'location';
+    default: return null;
+  }
+}
 const CONCEPT_SUBTYPES = [
   'mental-model', 'judgment', 'bias', 'counterfactual',
   'metric', 'technology', 'financial-instrument', 'business-model',
