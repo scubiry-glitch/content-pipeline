@@ -5,6 +5,7 @@
 // 若同名无 org：按 canonical_name 合并（参会人记录通常不带 org）
 
 import type { MeetingNotesDeps } from '../types.js';
+import { EntityResolver } from '../../content-library/consolidation/entityResolver.js';
 
 function normalizeName(raw: string): string {
   return raw
@@ -35,6 +36,27 @@ export async function ensurePersonByName(
   const canonical = normalizeName(rawName);
   if (!canonical) return null;
 
+  // 唯一实体 seam：先注册/解析到全局 content_entities，拿 canonical id。
+  // P1 桥接语义：content_entity_id 为「尽力而为」列，解析失败(embedding/DB 抖动)时
+  // 降级为 null 并照常建 mn_people，绝不因实体解析异常吞掉承诺/轴数据；
+  // 漏链的行由回填任务(backfillPeopleContentEntity)兜底。
+  let contentEntityId: string | null = null;
+  try {
+    const resolver = new EntityResolver(deps.db, deps.embedding);
+    const entity = await resolver.resolveAndRegister({
+      canonicalName: canonical,
+      aliases: [],
+      entityType: 'person',
+      metadata: {},
+    });
+    contentEntityId = entity.id;
+  } catch (err) {
+    console.warn(
+      `[ensurePersonByName] content_entities 解析失败，降级 content_entity_id=null: ${canonical}`,
+      err,
+    );
+  }
+
   // F11 · alias-aware lookup：除了 canonical_name 还查 aliases[]
   // 040 起: 若给了 meetingId, 通过 assets.workspace_id 把查重限定到当前 ws,
   // 避免 ws=A 的 "John" 错误合并到 ws=B 已有的 "John"
@@ -56,6 +78,10 @@ export async function ensurePersonByName(
       );
   if (existing.rows.length > 0) {
     const id = existing.rows[0].id as string;
+    await deps.db.query(
+      `UPDATE mn_people SET content_entity_id = $2 WHERE id = $1 AND content_entity_id IS DISTINCT FROM $2`,
+      [id, contentEntityId],
+    );
     // 若 role 变了可选 append 到 metadata
     if (role) {
       await deps.db.query(
@@ -70,16 +96,16 @@ export async function ensurePersonByName(
   // 自动从 assets.workspace_id 派生 workspace_id
   const inserted = meetingId
     ? await deps.db.query(
-        `INSERT INTO mn_people (canonical_name, role, org, first_seen_meeting_id)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO mn_people (canonical_name, role, org, first_seen_meeting_id, content_entity_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [canonical, role ?? null, org ?? null, meetingId],
+        [canonical, role ?? null, org ?? null, meetingId, contentEntityId],
       )
     : await deps.db.query(
-        `INSERT INTO mn_people (canonical_name, role, org)
-         VALUES ($1, $2, $3)
+        `INSERT INTO mn_people (canonical_name, role, org, content_entity_id)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [canonical, role ?? null, org ?? null],
+        [canonical, role ?? null, org ?? null, contentEntityId],
       );
   return inserted.rows[0]?.id ?? null;
 }

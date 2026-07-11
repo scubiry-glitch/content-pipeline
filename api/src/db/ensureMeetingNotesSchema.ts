@@ -39,6 +39,8 @@ const FILES = [
   '027-scope-one-per-kind.sql',
   '028-scope-dirty-marker.sql',
   '029-runs-axis-widen.sql',
+  '030-people-content-entity-link.sql',
+  '031-merge-content-entity-link.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
@@ -89,3 +91,6 @@ export async function ensureMeetingNotesModuleSchema(
   }
   console.log(`[DB] meeting-notes 模块表结构已就绪（共 ${FILES.length} 个 migration）`);
 }
+
+// 供测试与外部工具读取迁移清单（值等同内部 FILES）
+export const MEETING_NOTES_MIGRATION_FILES = FILES;
