@@ -42,6 +42,7 @@ import {
   type WikiFrontmatter,
   type WikiBlockMeta,
 } from '../../content-library/wiki/wikiFrontmatter.js';
+import { EntityResolver } from '../../content-library/consolidation/entityResolver.js';
 import { slugify } from '../../content-library/wiki/templates.js';
 
 export interface ClaudeWikiOutput {
@@ -195,6 +196,7 @@ export async function persistClaudeWiki(
     // 新契约: type + subtype + canonicalName + blockContent (initialContent 可选)
     if (u?.type && u?.subtype && u?.canonicalName && u?.blockContent) {
       const result = await handleNewEntityUpdate(
+        deps,
         root,
         u as Required<Pick<NonNullable<ClaudeWikiOutput['entityUpdates']>[number],
           'type' | 'subtype' | 'canonicalName' | 'blockContent'>> & { aliases?: string[]; initialContent?: string },
@@ -236,6 +238,7 @@ export async function persistClaudeWiki(
 // ============================================================
 
 async function handleNewEntityUpdate(
+  deps: MeetingNotesDeps,
   wikiRoot: string,
   upd: {
     type: 'entity' | 'concept';
@@ -252,6 +255,22 @@ async function handleNewEntityUpdate(
   if (!isValidEntitySubtype(upd.subtype, upd.type)) {
     console.warn(`[persistClaudeWiki] invalid subtype '${upd.subtype}' for type '${upd.type}', skip ${upd.canonicalName}`);
     return 'skipped';
+  }
+
+  // P3b: 实体类 subtype 顺带注册到全局 content_entities（best-effort，失败不影响写页）
+  const entityType = entityTypeForSubtype(upd.subtype);
+  if (entityType) {
+    try {
+      const resolver = new EntityResolver(deps.db, deps.embedding);
+      await resolver.resolveAndRegister({
+        canonicalName: upd.canonicalName,
+        aliases: upd.aliases ?? [],
+        entityType,
+        metadata: {},
+      });
+    } catch (err) {
+      console.warn(`[persistClaudeWiki] content_entities 注册失败(降级不影响写页): ${upd.canonicalName}`, err);
+    }
   }
 
   const filePath = resolveEntityPath(wikiRoot, upd.type, upd.subtype, upd.canonicalName);
