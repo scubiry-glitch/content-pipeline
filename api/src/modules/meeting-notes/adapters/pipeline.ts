@@ -116,7 +116,8 @@ export function createSemanticEmbeddingAdapter(
     async embed(text: string): Promise<number[]> {
       if (!semantic()) return [];
       try {
-        return coerceVec768(await service.embed(text));
+        // 走严格路径：真 provider fetch 失败会 throw（而非静默哈希兜底），此处 catch 降级 []
+        return coerceVec768(await service.embedSemanticStrict(text));
       } catch (e) {
         console.warn('[semanticEmbed] 语义向量失败，降级 []:', (e as Error).message);
         return [];
@@ -125,7 +126,7 @@ export function createSemanticEmbeddingAdapter(
     async embedBatch(texts: string[]): Promise<number[][]> {
       if (!semantic()) return texts.map(() => []);
       try {
-        const rows = await Promise.all(texts.map((t) => service.embed(t)));
+        const rows = await Promise.all(texts.map((t) => service.embedSemanticStrict(t)));
         return rows.map(coerceVec768);
       } catch (e) {
         console.warn('[semanticEmbedBatch] 语义向量失败，降级 []:', (e as Error).message);
