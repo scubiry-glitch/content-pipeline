@@ -77,6 +77,7 @@ import { SharedMeetingPage } from './prototype/meeting/SharedMeetingPage';
 import { SharedMeetingDetailShell } from './prototype/meeting/SharedMeetingDetailShell';
 import { VariantWorkbench } from './prototype/meeting/VariantWorkbench';
 import { VariantThreads } from './prototype/meeting/VariantThreads';
+import { EntityMergeReview } from './prototype/meeting/EntityMergeReview';
 import { WorldShell as CeoWorldShell } from './prototype/ceo/WorldShell';
 import { ExternalMeetingsPane as CeoExternalMeetingsPane } from './prototype/ceo/external/ExternalMeetingsPane';
 import { ExternalLibraryPane as CeoExternalLibraryPane } from './prototype/ceo/external/ExternalLibraryPane';
@@ -271,6 +272,7 @@ function App() {
                   单场体征通过 /meeting/:id/{a,b,c} 顶部 4 徽章访问。
                   老组件 AxisMeta 暂保留以便对照查看。 */}
               <Route path="axes/meta" element={<Navigate to="/meeting/longitudinal?tab=health" replace />} />
+              <Route path="review/merges" element={<EntityMergeReview />} />
               <Route path="axes/meta-legacy" element={<AxisMetaProto />} />
             </Route>
             {/* 会议详情 A/B/C —— 独立 shell，顶栏 + tab，不显示主导航侧栏 */}

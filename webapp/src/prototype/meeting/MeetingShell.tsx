@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
   { to: '/meeting/scopes',             label: '调用配置',      icon: 'scale',    group: '专家系统' },
   { to: '/meeting/strategies',         label: '策略 / 装饰器', icon: 'git',      group: '专家系统' },
   { to: '/meeting/generation-center',  label: '生成中心',      icon: 'play',     group: '专家系统' },
+  { to: '/meeting/review/merges',      label: '实体合并复核',  icon: 'git',      group: '复核' },
 ];
 
 // 每个导航项的 1-char 收起标签
