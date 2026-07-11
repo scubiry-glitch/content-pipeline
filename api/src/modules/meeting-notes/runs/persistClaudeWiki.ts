@@ -16,6 +16,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MeetingNotesDeps } from '../types.js';
+import type { EntityType } from '../../content-library/types.js';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -41,6 +42,7 @@ import {
   type WikiFrontmatter,
   type WikiBlockMeta,
 } from '../../content-library/wiki/wikiFrontmatter.js';
+import { EntityResolver } from '../../content-library/consolidation/entityResolver.js';
 import { slugify } from '../../content-library/wiki/templates.js';
 
 export interface ClaudeWikiOutput {
@@ -61,6 +63,21 @@ export interface ClaudeWikiOutput {
 }
 
 const ENTITY_SUBTYPES = ['person', 'org', 'product', 'project', 'event', 'location'] as const;
+
+/**
+ * wiki subtype → 全局 content_entities.EntityType。
+ * 仅 person/org/product/event/location 是全局实体；project(=scope) 与概念类返回 null=不注册。
+ */
+export function entityTypeForSubtype(subtype: string): EntityType | null {
+  switch (subtype) {
+    case 'person': return 'person';
+    case 'org': return 'organization';
+    case 'product': return 'product';
+    case 'event': return 'event';
+    case 'location': return 'location';
+    default: return null;
+  }
+}
 const CONCEPT_SUBTYPES = [
   'mental-model', 'judgment', 'bias', 'counterfactual',
   'metric', 'technology', 'financial-instrument', 'business-model',
@@ -179,6 +196,7 @@ export async function persistClaudeWiki(
     // 新契约: type + subtype + canonicalName + blockContent (initialContent 可选)
     if (u?.type && u?.subtype && u?.canonicalName && u?.blockContent) {
       const result = await handleNewEntityUpdate(
+        deps,
         root,
         u as Required<Pick<NonNullable<ClaudeWikiOutput['entityUpdates']>[number],
           'type' | 'subtype' | 'canonicalName' | 'blockContent'>> & { aliases?: string[]; initialContent?: string },
@@ -220,6 +238,7 @@ export async function persistClaudeWiki(
 // ============================================================
 
 async function handleNewEntityUpdate(
+  deps: MeetingNotesDeps,
   wikiRoot: string,
   upd: {
     type: 'entity' | 'concept';
@@ -236,6 +255,22 @@ async function handleNewEntityUpdate(
   if (!isValidEntitySubtype(upd.subtype, upd.type)) {
     console.warn(`[persistClaudeWiki] invalid subtype '${upd.subtype}' for type '${upd.type}', skip ${upd.canonicalName}`);
     return 'skipped';
+  }
+
+  // P3b: 实体类 subtype 顺带注册到全局 content_entities（best-effort，失败不影响写页）
+  const entityType = entityTypeForSubtype(upd.subtype);
+  if (entityType) {
+    try {
+      const resolver = new EntityResolver(deps.db, deps.embedding);
+      await resolver.resolveAndRegister({
+        canonicalName: upd.canonicalName,
+        aliases: upd.aliases ?? [],
+        entityType,
+        metadata: {},
+      });
+    } catch (err) {
+      console.warn(`[persistClaudeWiki] content_entities 注册失败(降级不影响写页): ${upd.canonicalName}`, err);
+    }
   }
 
   const filePath = resolveEntityPath(wikiRoot, upd.type, upd.subtype, upd.canonicalName);
@@ -316,7 +351,7 @@ async function handleLegacyEntityUpdate(
   const appendMd = appendMarkdown.trim();
   if (!trimmedName || !appendMd) return false;
 
-  // a) content_entities 命中
+  // a) content_entities：未命中不再放弃，改 best-effort 注册后继续（P3b）
   let exists = false;
   try {
     const r = await deps.db.query(
@@ -326,9 +361,21 @@ async function handleLegacyEntityUpdate(
     exists = (r.rows?.length ?? 0) > 0;
   } catch (e: any) {
     console.warn('[persistClaudeWiki/legacy] content_entities check failed:', e?.message);
-    return false;
+    exists = false;
   }
-  if (!exists) return false;
+  if (!exists) {
+    try {
+      const resolver = new EntityResolver(deps.db, deps.embedding);
+      await resolver.resolveAndRegister({
+        canonicalName: trimmedName,
+        aliases: [],
+        entityType: 'concept', // 旧契约无 subtype，用中性 concept 兜底
+        metadata: {},
+      });
+    } catch (err) {
+      console.warn('[persistClaudeWiki/legacy] 注册失败(继续写页):', trimmedName, err);
+    }
+  }
 
   // b) 文件存在（旧路径：entities/<slug>.md 平铺，因为 wikiGenerator 还在写老路径）
   const entityPath = join(wikiRoot, 'entities', `${sanitizeFilename(slugify(trimmedName))}.md`);
