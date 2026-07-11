@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getLLMRouter } from '../../../providers/index.js';
+import { getEmbeddingService, type EmbeddingService } from '../../../services/assets-ai/embedding.js';
 import type { GenerationParams } from '../../../types/index.js';
 import { LocalEventBus } from './local-event-bus.js';
 import { PostgresTextSearch } from './postgres-text-search.js';
@@ -88,6 +89,48 @@ export function createNoopEmbeddingAdapter(): EmbeddingAdapter {
     },
     async embedBatch(texts: string[]): Promise<number[][]> {
       return texts.map(() => []);
+    },
+  };
+}
+
+function coerceVec768(v: number[]): number[] {
+  if (v.length === 768) return v;
+  if (v.length > 768) return v.slice(0, 768);
+  const out = v.slice();
+  while (out.length < 768) out.push(0);
+  return out;
+}
+
+/**
+ * 语义门控的真嵌入适配器。
+ * provider!=='local' → coerceVec768(service.embed(text))；
+ * provider==='local'（哈希兜底,无语义）→ 返回 []，经 EntityResolver C1 guard 落 null，
+ * 保持 P2 的 exact+alias 行为，杜绝垃圾向量导致的误合并。
+ * 真嵌入调用抛错 → 降级 [] + warn，绝不 sink 上游解析。
+ */
+export function createSemanticEmbeddingAdapter(
+  service: EmbeddingService = getEmbeddingService(),
+): EmbeddingAdapter {
+  const semantic = () => service.provider !== 'local';
+  return {
+    async embed(text: string): Promise<number[]> {
+      if (!semantic()) return [];
+      try {
+        return coerceVec768(await service.embed(text));
+      } catch (e) {
+        console.warn('[semanticEmbed] 语义向量失败，降级 []:', (e as Error).message);
+        return [];
+      }
+    },
+    async embedBatch(texts: string[]): Promise<number[][]> {
+      if (!semantic()) return texts.map(() => []);
+      try {
+        const rows = await Promise.all(texts.map((t) => service.embed(t)));
+        return rows.map(coerceVec768);
+      } catch (e) {
+        console.warn('[semanticEmbedBatch] 语义向量失败，降级 []:', (e as Error).message);
+        return texts.map(() => []);
+      }
     },
   };
 }

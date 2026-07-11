@@ -112,6 +112,11 @@ export class EmbeddingService {
     }
   }
 
+  /** 当前活跃 provider（'siliconflow'|'openai'|'kimi'|'dashboard-llm'|'local'），供门控读取 */
+  get provider(): string {
+    return this.config.provider;
+  }
+
   /**
    * 生成文本的 Embedding
    */
