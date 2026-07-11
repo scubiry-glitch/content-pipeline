@@ -31,6 +31,7 @@ import { TieredLoader } from './retrieval/tieredLoader.js';
 import { HybridSearch } from './retrieval/hybridSearch.js';
 import { FactExtractor } from './consolidation/factExtractor.js';
 import { EntityResolver } from './consolidation/entityResolver.js';
+import { createEntityEmbeddingAdapter } from './adapters/entityEmbedding.js';
 import { DeltaCompressor } from './consolidation/deltaCompressor.js';
 import { WikiGenerator } from './wiki/wikiGenerator.js';
 import { CommunityDetector } from './reasoning/communityDetector.js';
@@ -87,7 +88,8 @@ export class ContentLibraryEngine {
 
     // Layer 1: 知识整合
     this.factExtractor = new FactExtractor(deps.llm, this.options);
-    this.entityResolver = new EntityResolver(deps.db, deps.embedding);
+    // content_entities.embedding 用专用 1024 适配器；deps.embedding（HybridSearch/资产 1536）保持不动
+    this.entityResolver = new EntityResolver(deps.db, createEntityEmbeddingAdapter());
     this.deltaCompressor = new DeltaCompressor(deps.db);
 
     // v7.1: Wiki 生成器
