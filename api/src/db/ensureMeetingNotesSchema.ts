@@ -42,6 +42,7 @@ const FILES = [
   '030-people-content-entity-link.sql',
   '031-merge-content-entity-link.sql',
   '032-unresolved-mentions.sql',
+  '033-merge-content-entities.sql',
 ] as const;
 
 function firstExistingDir(candidates: string[]): string | null {
