@@ -18,6 +18,12 @@ import { getLLMRouter } from '../../providers/index.js';
 import { importSharedMeeting, ImportSharedMeetingError } from './services/import.js';
 import { writeAuditEvent, type AuditEvent } from '../../services/auth/audit.js';
 import { createRateLimiter } from '../../utils/inMemoryRateLimit.js';
+import {
+  listMergeCandidates, approveMergeCandidate, rejectMergeCandidate,
+} from './review/entityReviewService.js';
+import {
+  listUnresolvedMentions, resolveUnresolvedMention,
+} from './review/unresolvedReviewService.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -2659,6 +2665,53 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           message: `合并失败：${e?.message ?? String(e)}`,
         };
       }
+    });
+
+    // ===== P4b 复核：实体合并候选 =====
+    fastify.get('/entity-merge-candidates', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { status?: string; limit?: string };
+      const items = await listMergeCandidates(engine.deps.db, {
+        status: q.status,
+        limit: q.limit ? parseInt(q.limit, 10) : undefined,
+      });
+      return { items };
+    });
+
+    fastify.post('/entity-merge-candidates/:id/approve', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const r = await approveMergeCandidate(engine.deps.db, id);
+        return { ok: true, entityType: r.entityType, affected: r.affected };
+      } catch (e: any) {
+        if (e?.code === 'NOT_FOUND') { reply.status(404); return { error: 'Not Found', code: 'NOT_FOUND' }; }
+        if (e?.code === 'PERSON_MERGE_MANUAL') { reply.status(422); return { error: 'Unprocessable', code: 'PERSON_MERGE_MANUAL', message: e.message }; }
+        request.log.error({ err: e, id }, 'approve merge candidate failed');
+        reply.status(500); return { error: 'Internal Server Error', message: e?.message };
+      }
+    });
+
+    fastify.post('/entity-merge-candidates/:id/reject', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const ok = await rejectMergeCandidate(engine.deps.db, id);
+      if (!ok) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
+    });
+
+    // ===== P4b 复核：未解析人名 =====
+    fastify.get('/unresolved-mentions', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { status?: string; limit?: string };
+      const items = await listUnresolvedMentions(engine.deps.db, {
+        status: q.status,
+        limit: q.limit ? parseInt(q.limit, 10) : undefined,
+      });
+      return { items };
+    });
+
+    fastify.post('/unresolved-mentions/:id/resolve', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const ok = await resolveUnresolvedMention(engine.deps.db, id);
+      if (!ok) { reply.status(404); return { error: 'Not Found' }; }
+      return { ok: true };
     });
 
     /**
