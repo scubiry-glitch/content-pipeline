@@ -78,6 +78,7 @@ import {
   createPipelineDBAdapter as createMeetingNotesDBAdapter,
   createPipelineExpertsAdapter,
   createPipelineExpertApplicationAdapter,
+  createSemanticEmbeddingAdapter,
 } from './modules/meeting-notes/adapters/pipeline.js';
 import { initMeetingNotesEngineSingleton } from './modules/meeting-notes/singleton.js';
 import {
@@ -275,6 +276,7 @@ async function main() {
     createMeetingNotesDeps({
       db: mnDbAdapter,
       eventBus: sharedEventBus,
+      embedding: createSemanticEmbeddingAdapter(),
       // Local ASR-like parser — reads assets.content, regex-splits speakers/timestamps,
       // persists segment stats into assets.metadata.parse. Replaces the noop adapter
       // that previously made step3 "ingest" stage observable but inert.
