@@ -27,6 +27,19 @@ describe('createSemanticEmbeddingAdapter', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const ad = createSemanticEmbeddingAdapter(svc);
     expect(await ad.embed('张伟')).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('embedBatch 抛错：降级全空数组不抛穿，并 console.warn', async () => {
+    const svc = fakeService('siliconflow', async () => { throw new Error('network error'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ad = createSemanticEmbeddingAdapter(svc);
+    const result = await ad.embedBatch(['a', 'b']);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual([]);
+    expect(result[1]).toEqual([]);
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
