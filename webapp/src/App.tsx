@@ -78,6 +78,7 @@ import { SharedMeetingDetailShell } from './prototype/meeting/SharedMeetingDetai
 import { VariantWorkbench } from './prototype/meeting/VariantWorkbench';
 import { VariantThreads } from './prototype/meeting/VariantThreads';
 import { EntityMergeReview } from './prototype/meeting/EntityMergeReview';
+import { UnresolvedReview } from './prototype/meeting/UnresolvedReview';
 import { WorldShell as CeoWorldShell } from './prototype/ceo/WorldShell';
 import { ExternalMeetingsPane as CeoExternalMeetingsPane } from './prototype/ceo/external/ExternalMeetingsPane';
 import { ExternalLibraryPane as CeoExternalLibraryPane } from './prototype/ceo/external/ExternalLibraryPane';
@@ -273,6 +274,7 @@ function App() {
                   老组件 AxisMeta 暂保留以便对照查看。 */}
               <Route path="axes/meta" element={<Navigate to="/meeting/longitudinal?tab=health" replace />} />
               <Route path="review/merges" element={<EntityMergeReview />} />
+              <Route path="review/unresolved" element={<UnresolvedReview />} />
               <Route path="axes/meta-legacy" element={<AxisMetaProto />} />
             </Route>
             {/* 会议详情 A/B/C —— 独立 shell，顶栏 + tab，不显示主导航侧栏 */}
