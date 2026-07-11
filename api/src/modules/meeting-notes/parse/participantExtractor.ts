@@ -7,7 +7,7 @@
 import type { MeetingNotesDeps } from '../types.js';
 import { EntityResolver } from '../../content-library/consolidation/entityResolver.js';
 
-function normalizeName(raw: string): string {
+export function normalizeName(raw: string): string {
   return raw
     .trim()
     .replace(/\s+/g, ' ')
