@@ -61,7 +61,9 @@ export async function computeCommitments(
 
   for (const item of items) {
     try {
-      const personId = await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
+      const personId = args.personRoster
+        ? await args.personRoster.resolveAsync(item.who)
+        : await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
       if (!personId) { out.skipped += 1; continue; }
       const ins = await deps.db.query(
         `INSERT INTO mn_commitments

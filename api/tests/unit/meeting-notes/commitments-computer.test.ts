@@ -137,4 +137,27 @@ describe('computeCommitments', () => {
     expect(result.created).toBe(0);
     expect(result.skipped).toBe(1);
   });
+
+  it('提供 personRoster 时经花名册解析，命中走 roster、不再逐调用造人', async () => {
+    const { deps, query } = makeDeps();
+    const roster = {
+      resolveAsync: vi.fn(async (n: string) => (n === '张三' ? 'mp-hit' : null)),
+    } as any;
+    const result = await computeCommitments(deps, { meetingId: 'm1', personRoster: roster });
+    expect(roster.resolveAsync).toHaveBeenCalledWith('张三');
+    expect(result.created).toBe(1);
+    const insert = query.mock.calls.find((c: any) => c[0].includes('INSERT INTO mn_commitments'));
+    expect(insert[1][1]).toBe('mp-hit'); // person_id 来自 roster
+    // 未走 ensurePersonByName 造人路径
+    const minted = query.mock.calls.some((c: any) => /INSERT INTO mn_people/i.test(c[0]));
+    expect(minted).toBe(false);
+  });
+
+  it('roster 命不中 → skipped，不插 commitment', async () => {
+    const { deps } = makeDeps();
+    const roster = { resolveAsync: vi.fn(async () => null) } as any;
+    const result = await computeCommitments(deps, { meetingId: 'm1', personRoster: roster });
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
 });
