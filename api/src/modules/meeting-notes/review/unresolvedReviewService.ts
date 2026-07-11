@@ -16,7 +16,8 @@ export async function listUnresolvedMentions(
   opts?: { status?: string; limit?: number },
 ): Promise<UnresolvedMentionRow[]> {
   const status = opts?.status ?? 'pending';
-  const limit = Math.min(500, Math.max(1, opts?.limit ?? 100));
+  const n = Number(opts?.limit);
+  const limit = Math.min(500, Math.max(1, Number.isFinite(n) ? n : 100));
   const res = await db.query(
     `SELECT id, meeting_id, raw_name, normalized_name, occurrences, status, created_at
        FROM mn_unresolved_mentions

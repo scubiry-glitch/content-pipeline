@@ -4,6 +4,17 @@ import {
 } from '../../../src/modules/meeting-notes/review/unresolvedReviewService.js';
 
 describe('listUnresolvedMentions', () => {
+  it('NaN limit 回退到默认值 100（有限数）', async () => {
+    const calls: { sql: string; params: any[] }[] = [];
+    const db = { query: vi.fn(async (sql: string, params: any[] = []) => {
+      calls.push({ sql, params });
+      return { rows: [] };
+    }) };
+    await listUnresolvedMentions(db as any, { limit: Number('abc') });
+    expect(Number.isFinite(calls[0].params[1])).toBe(true);
+    expect(calls[0].params[1]).toBe(100);
+  });
+
   it('按 status 过滤、按 occurrences 排序、映射行', async () => {
     const calls: { sql: string; params: any[] }[] = [];
     const db = { query: vi.fn(async (sql: string, params: any[] = []) => {

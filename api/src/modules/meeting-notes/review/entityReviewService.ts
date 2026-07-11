@@ -21,7 +21,8 @@ export async function listMergeCandidates(
   opts?: { status?: string; limit?: number },
 ): Promise<MergeCandidateRow[]> {
   const status = opts?.status ?? 'pending';
-  const limit = Math.min(200, Math.max(1, opts?.limit ?? 50));
+  const n = Number(opts?.limit);
+  const limit = Math.min(200, Math.max(1, Number.isFinite(n) ? n : 50));
   const res = await db.query(
     `SELECT c.id, c.target_entity_id, c.source_entity_id, c.entity_type,
             c.similarity, c.status, c.created_at,
