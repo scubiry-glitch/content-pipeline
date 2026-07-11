@@ -71,7 +71,9 @@ export async function computeSpeechQuality(
     let entropy = 0;
     let followups = 0;
     try {
-      const personId = await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
+      const personId = args.personRoster
+        ? await args.personRoster.resolveAsync(item.who)
+        : await ensurePersonByName(deps, item.who, undefined, undefined, args.meetingId);
       if (!personId) { out.skipped += 1; continue; }
       entropy = Math.max(0, Math.min(100, item.entropy_pct ?? 0));
       followups = Math.max(0, item.followed_up_count ?? 0);

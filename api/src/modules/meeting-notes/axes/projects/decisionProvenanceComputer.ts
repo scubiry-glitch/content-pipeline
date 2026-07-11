@@ -70,7 +70,7 @@ export async function computeDecisionProvenance(
   for (const item of items) {
     try {
       const proposerId = item.proposer
-        ? await ensurePersonByName(deps, item.proposer, undefined, undefined, args.meetingId)
+        ? (args.personRoster ? await args.personRoster.resolveAsync(item.proposer) : await ensurePersonByName(deps, item.proposer, undefined, undefined, args.meetingId))
         : null;
 
       const basedOnIds = (item.based_on ?? [])

@@ -49,7 +49,7 @@ export async function computeOpenQuestions(
     const text = String(item.text ?? '').trim();
     if (!text) continue;
     try {
-      const ownerId = item.owner ? await ensurePersonByName(deps, item.owner, undefined, undefined, args.meetingId) : null;
+      const ownerId = item.owner ? (args.personRoster ? await args.personRoster.resolveAsync(item.owner) : await ensurePersonByName(deps, item.owner, undefined, undefined, args.meetingId)) : null;
       const normalized = normalizeText(text);
       // 同 scope 下相似问题累加；P0 数据源契约：只跟 LLM 自己产出的合并，不动 manual_import
       const existing = await deps.db.query(

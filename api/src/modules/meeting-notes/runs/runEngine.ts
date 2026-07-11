@@ -36,6 +36,7 @@ import { autoMatchAndBindScopes } from './scopeMatcher.js';
 import { parseMeeting } from '../parse/meetingParser.js';
 import { emitProgress, emitTerminal } from './runStreamRegistry.js';
 import { resolveWorkspaceSlug } from '../../../lib/wikiRoot.js';
+import { PersonRoster } from './personRoster.js';
 
 interface QueuePayload {
   runId: string;
@@ -2294,6 +2295,18 @@ export class RunEngine {
           }
         }
 
+        // P2 源头治理：flag 门控，每 run 一份 workspace 花名册（种子 = parse 阶段已 mint 的参会人）
+        const usePersonRoster = process.env.MN_PERSON_ROSTER === '1';
+        let personRoster: PersonRoster | null = null;
+        if (usePersonRoster && payload.meetingId) {
+          try {
+            personRoster = await PersonRoster.build(this.deps, payload.meetingId);
+          } catch (e) {
+            console.warn('[runEngine] PersonRoster.build 失败，本 run 回退逐调用造人:', (e as Error).message);
+            personRoster = null;
+          }
+        }
+
         await writeStep('axes', 0, axesToRun.length > 0 ? `准备开始 · ${axesToRun.length} 个维度` : '准备开始');
 
         // 把每个 axis 反查它属于哪位专家，跑完后更新该专家的 completedSubDims
@@ -2360,6 +2373,7 @@ export class RunEngine {
                 scopeId: payload.scope.id ?? null,
                 scopeKind: payload.scope.kind,
                 replaceExisting: true,
+                personRoster,
               }, payload.axis === 'all' ? undefined : payload.subDims),
             );
             r.push(...partial);
@@ -2464,6 +2478,16 @@ export class RunEngine {
           );
         } catch (e) {
           console.warn('[runEngine] checkpoint clear failed:', (e as Error).message);
+        }
+
+        // P2 源头治理：axes 全部完成后，flush 本 run 中未解析的人名到 mn_unresolved_mentions
+        if (personRoster && payload.meetingId) {
+          try {
+            const parked = await personRoster.flushUnresolved(this.deps, payload.meetingId);
+            if (parked > 0) console.info(`[runEngine] ${parked} 个未解析人名已入队 mn_unresolved_mentions`);
+          } catch (e) {
+            console.warn('[runEngine] flushUnresolved 失败:', (e as Error).message);
+          }
         }
 
         // Step3 第 5 步「跨专家综合 · 7 条 deliverable 映射」
