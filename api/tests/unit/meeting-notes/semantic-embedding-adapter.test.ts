@@ -8,17 +8,17 @@ function fakeService(provider: string, strictImpl: (t: string) => Promise<number
 }
 
 describe('createSemanticEmbeddingAdapter', () => {
-  it('真 provider：返回 coerce 到 768 维的向量', async () => {
+  it('真 provider：返回 coerce 到 1024 维的向量', async () => {
     const svc = fakeService('siliconflow', async () => new Array(4).fill(0.5));
     const ad = createSemanticEmbeddingAdapter(svc);
     const v = await ad.embed('张伟');
-    expect(v).toHaveLength(768);
+    expect(v).toHaveLength(1024);
     expect(v[0]).toBe(0.5);
     expect(v[4]).toBe(0); // 补零
   });
 
   it('provider=local：返回 [] （不写垃圾向量）', async () => {
-    const svc = fakeService('local', async () => new Array(768).fill(0.1));
+    const svc = fakeService('local', async () => new Array(1024).fill(0.1));
     const ad = createSemanticEmbeddingAdapter(svc);
     expect(await ad.embed('张伟')).toEqual([]);
     expect(svc.embedSemanticStrict).not.toHaveBeenCalled(); // 门控在调用前短路
@@ -41,7 +41,7 @@ describe('createSemanticEmbeddingAdapter', () => {
     const ad = createSemanticEmbeddingAdapter(svc);
     const v = await ad.embed('张伟');
     expect(v).toEqual([]);
-    expect(v).toHaveLength(0); // 不是 768 维哈希向量
+    expect(v).toHaveLength(0); // 不是 1024 维哈希向量
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -59,9 +59,9 @@ describe('createSemanticEmbeddingAdapter', () => {
   });
 
   it('embedBatch：真 provider coerce 每条；local 全 []', async () => {
-    const real = createSemanticEmbeddingAdapter(fakeService('siliconflow', async () => new Array(768).fill(1)));
-    expect((await real.embedBatch(['a', 'b'])).map((r) => r.length)).toEqual([768, 768]);
-    const local = createSemanticEmbeddingAdapter(fakeService('local', async () => new Array(768).fill(1)));
+    const real = createSemanticEmbeddingAdapter(fakeService('siliconflow', async () => new Array(1024).fill(1)));
+    expect((await real.embedBatch(['a', 'b'])).map((r) => r.length)).toEqual([1024, 1024]);
+    const local = createSemanticEmbeddingAdapter(fakeService('local', async () => new Array(1024).fill(1)));
     expect(await local.embedBatch(['a', 'b'])).toEqual([[], []]);
   });
 });
