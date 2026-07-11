@@ -36,15 +36,26 @@ export async function ensurePersonByName(
   const canonical = normalizeName(rawName);
   if (!canonical) return null;
 
-  // 唯一实体 seam：先注册/解析到全局 content_entities，拿 canonical id
-  const resolver = new EntityResolver(deps.db, deps.embedding);
-  const entity = await resolver.resolveAndRegister({
-    canonicalName: canonical,
-    aliases: [],
-    entityType: 'person',
-    metadata: {},
-  });
-  const contentEntityId = entity.id;
+  // 唯一实体 seam：先注册/解析到全局 content_entities，拿 canonical id。
+  // P1 桥接语义：content_entity_id 为「尽力而为」列，解析失败(embedding/DB 抖动)时
+  // 降级为 null 并照常建 mn_people，绝不因实体解析异常吞掉承诺/轴数据；
+  // 漏链的行由回填任务(backfillPeopleContentEntity)兜底。
+  let contentEntityId: string | null = null;
+  try {
+    const resolver = new EntityResolver(deps.db, deps.embedding);
+    const entity = await resolver.resolveAndRegister({
+      canonicalName: canonical,
+      aliases: [],
+      entityType: 'person',
+      metadata: {},
+    });
+    contentEntityId = entity.id;
+  } catch (err) {
+    console.warn(
+      `[ensurePersonByName] content_entities 解析失败，降级 content_entity_id=null: ${canonical}`,
+      err,
+    );
+  }
 
   // F11 · alias-aware lookup：除了 canonical_name 还查 aliases[]
   // 040 起: 若给了 meetingId, 通过 assets.workspace_id 把查重限定到当前 ws,

@@ -32,6 +32,27 @@ describe('ensurePersonByName · content_entity 桥接', () => {
     expect(insertPerson!.params).toContain('ce-1');
   });
 
+  it('实体解析抛错时降级为 content_entity_id=null，仍照常建 mn_people', async () => {
+    const { deps, calls } = makeDeps();
+    // 模拟 content_entities INSERT 返回空行 → registerNew 读 undefined.id 抛错
+    (deps.db.query as any).mockImplementation(async (sql: string, params: any[] = []) => {
+      calls.push({ sql, params });
+      if (/FROM content_entities/i.test(sql)) return { rows: [] };
+      if (/INSERT INTO content_entities/i.test(sql)) return { rows: [] }; // 触发解析抛错
+      if (/SELECT id FROM mn_people/i.test(sql)) return { rows: [] };
+      if (/INSERT INTO mn_people/i.test(sql)) return { rows: [{ id: 'mp-fallback' }] };
+      return { rows: [] };
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const id = await ensurePersonByName(deps, '张伟', undefined, undefined, 'meeting-1');
+    warn.mockRestore();
+    expect(id).toBe('mp-fallback');
+    const insertPerson = calls.find(c => /INSERT INTO mn_people/i.test(c.sql));
+    expect(insertPerson).toBeTruthy();
+    // content_entity_id 参数应为 null（尽力而为降级），而非抛错吞掉整条 person
+    expect(insertPerson!.params).toContain(null);
+  });
+
   it('已存在 mn_people 时也回填 content_entity_id', async () => {
     const { deps, calls } = makeDeps();
     (deps.db.query as any).mockImplementation(async (sql: string, params: any[] = []) => {
