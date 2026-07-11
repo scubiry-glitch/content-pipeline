@@ -9,6 +9,17 @@ import { callKimiCodingText } from '../kimi-coding.js';
 import { DashboardLlmSdk } from '../../libs/dashboard-llm-sdk/src/index.js';
 
 // ============================================
+// Fetch 超时（每条 embedding 走一次真 provider fetch，挂起端点会拖垮 meeting run）
+// 默认 8000ms，可通过 EMBEDDING_TIMEOUT_MS 覆盖。
+// ============================================
+const DEFAULT_EMBEDDING_TIMEOUT_MS = 8000;
+function embeddingTimeoutMs(): number {
+  const raw = process.env.EMBEDDING_TIMEOUT_MS;
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_EMBEDDING_TIMEOUT_MS;
+}
+
+// ============================================
 // Embedding 配置
 // ============================================
 export interface EmbeddingConfig {
@@ -112,6 +123,11 @@ export class EmbeddingService {
     }
   }
 
+  /** 当前活跃 provider（'siliconflow'|'openai'|'kimi'|'dashboard-llm'|'local'），供门控读取 */
+  get provider(): string {
+    return this.config.provider;
+  }
+
   /**
    * 生成文本的 Embedding
    */
@@ -130,10 +146,32 @@ export class EmbeddingService {
   }
 
   /**
+   * 严格语义嵌入（供 meeting-notes 语义门控使用）：
+   * - provider==='local'（哈希兜底,无语义）→ 直接返回 []，不 fetch；
+   * - 真 provider → 走对应 provider 的真实 fetch 逻辑，但**不做**静默本地兜底：
+   *   任何失败（网络/超时/非 200/空返回）都会 THROW，交由上层适配器降级为 []。
+   * 与 embed()/embedBatch() 的静默本地兜底行为无关，asset 向量化消费者不受影响。
+   */
+  async embedSemanticStrict(text: string): Promise<number[]> {
+    switch (this.config.provider) {
+      case 'siliconflow':
+        return this.embedWithSiliconFlow(text, true);
+      case 'openai':
+        return this.embedWithOpenAI(text, true);
+      case 'dashboard-llm':
+        return this.embedWithDashboardLLM(text, true);
+      case 'local':
+      default:
+        // 本地哈希兜底不是语义向量：不产出，交由 C1 guard 落 null
+        return [];
+    }
+  }
+
+  /**
    * 使用 SiliconFlow API 生成 Embedding
    * API 文档: https://docs.siliconflow.cn/cn/api-reference/embeddings/create-embeddings
    */
-  private async embedWithSiliconFlow(text: string): Promise<number[]> {
+  private async embedWithSiliconFlow(text: string, strict = false): Promise<number[]> {
     try {
       const apiKey = this.config.apiKey || process.env.SILICONFLOW_API_KEY;
       const model = this.config.model || process.env.embedding_model || 'netease-youdao/bce-embedding-base_v1';
@@ -143,25 +181,33 @@ export class EmbeddingService {
         throw new Error('SILICONFLOW_API_KEY is not configured');
       }
 
-      const response = await fetch(`${baseUrl}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: model,
-          input: text.slice(0, 8000), // 限制输入长度
-          encoding_format: 'float',
-        }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), embeddingTimeoutMs());
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/embeddings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: model,
+            input: text.slice(0, 8000), // 限制输入长度
+            encoding_format: 'float',
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`SiliconFlow API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json() as { 
+      const data = await response.json() as {
         data: Array<{ embedding: number[]; index: number }>;
         model: string;
         usage: { prompt_tokens: number; total_tokens: number };
@@ -179,6 +225,8 @@ export class EmbeddingService {
 
       return embedding;
     } catch (error) {
+      // 严格路径：不做静默本地兜底，抛出交由上层降级为 []
+      if (strict) throw error;
       console.error('[EmbeddingService] SiliconFlow embedding failed:', error);
       // Fallback 到本地模式
       return this.embedWithLocalFallback(text);
@@ -188,19 +236,27 @@ export class EmbeddingService {
   /**
    * 使用 OpenAI API 生成 Embedding
    */
-  private async embedWithOpenAI(text: string): Promise<number[]> {
+  private async embedWithOpenAI(text: string, strict = false): Promise<number[]> {
     try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey || process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: this.config.model || 'text-embedding-3-small',
-          input: text.slice(0, 8000),
-        }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), embeddingTimeoutMs());
+      let response: Response;
+      try {
+        response = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.config.apiKey || process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: this.config.model || 'text-embedding-3-small',
+            input: text.slice(0, 8000),
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!response.ok) {
         const error = await response.text();
@@ -210,6 +266,8 @@ export class EmbeddingService {
       const data = await response.json() as { data: Array<{ embedding: number[] }> };
       return data.data[0].embedding;
     } catch (error) {
+      // 严格路径：不做静默本地兜底，抛出交由上层降级为 []
+      if (strict) throw error;
       console.error('[EmbeddingService] OpenAI embedding failed:', error);
       // Fallback 到本地模式
       return this.embedWithLocalFallback(text);
@@ -220,7 +278,7 @@ export class EmbeddingService {
    * 使用 Dashboard LLM 生成 Embedding
    * 通过 LLM 生成文本的语义摘要，然后转换为向量
    */
-  private async embedWithDashboardLLM(text: string): Promise<number[]> {
+  private async embedWithDashboardLLM(text: string, strict = false): Promise<number[]> {
     try {
       // 使用 LLM 生成文本的语义表示
       const prompt = `请将以下文本转换为用于语义检索的向量表示。
@@ -245,6 +303,8 @@ ${text.slice(0, 2000)}
       // 使用简单的哈希算法将文本转换为固定维度的向量
       return this.textToVector(result.reply, this.config.dimensions);
     } catch (error) {
+      // 严格路径：不做静默本地兜底，抛出交由上层降级为 []
+      if (strict) throw error;
       console.error('[EmbeddingService] Dashboard LLM embedding failed:', error);
       return this.embedWithLocalFallback(text);
     }
@@ -447,11 +507,19 @@ ${text.slice(0, 2000)}
         };
       }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), embeddingTimeoutMs());
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!response.ok) {
         const error = await response.text();
@@ -683,6 +751,7 @@ export const embeddingService: EmbeddingService = {
   get config() { return getEmbeddingService().config; },
   embed(text: string) { return getEmbeddingService().embed(text); },
   embedBatch(texts: string[]) { return getEmbeddingService().embedBatch(texts); },
+  embedSemanticStrict(text: string) { return getEmbeddingService().embedSemanticStrict(text); },
   // @ts-ignore - Extra parameter for compatibility
   vectorizeAsset(assetId: string, chunks: DocumentChunk[], metadata?: any) { return getEmbeddingService().vectorizeAsset(assetId, chunks, metadata); },
   // @ts-ignore - Accessing private method
