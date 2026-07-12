@@ -26,8 +26,9 @@ export function PeopleRoster() {
   const [target, setTarget] = useState<string>('');
   const [preview, setPreview] = useState<null | 'loading' | { aliases: string[]; totalRefs: number; sourceIds: string[] }>(null);
   const [merging, setMerging] = useState(false);
+  const [selNames, setSelNames] = useState<Record<string, string>>({}); // 跨页记住已选人名
 
-  const nameOf = (id: string) => items.find((i) => i.id === id)?.canonicalName ?? id.slice(0, 8);
+  const nameOf = (id: string) => selNames[id] ?? items.find((i) => i.id === id)?.canonicalName ?? id.slice(0, 8);
 
   const load = async () => {
     setLoading(true);
@@ -47,12 +48,26 @@ export function PeopleRoster() {
       setLoading(false);
     }
   };
-  useEffect(() => { setSelected([]); setPreview(null); load(); /* eslint-disable-next-line */ }, [page, kind, submittedQ]);
+  // 选择跨页/跨过滤保留（不在翻页时清空），支持把不同页的重复人合到一起
+  useEffect(() => { setPreview(null); load(); /* eslint-disable-next-line */ }, [page, kind, submittedQ]);
   useEffect(() => { if (!selected.includes(target)) setTarget(selected[0] || ''); /* eslint-disable-next-line */ }, [selected]);
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (p: PersonRosterRow) => {
     setPreview(null);
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    setSelNames((m) => ({ ...m, [p.id]: p.canonicalName }));
+    setSelected((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]));
+  };
+  const clearSelection = () => { setSelected([]); setSelNames({}); setPreview(null); };
+
+  const doRename = async (p: PersonRosterRow) => {
+    const name = window.prompt(`改名：「${p.canonicalName}」→`, p.canonicalName);
+    if (!name || !name.trim() || name.trim() === p.canonicalName) return;
+    try {
+      await meetingNotesApi.renamePerson(p.id, { canonical_name: name.trim() });
+      await load();
+    } catch (e: any) {
+      alert(e?.message || '改名失败：可能与已有同名冲突，若是同一人请改用合并');
+    }
   };
 
   const doPreview = async () => {
@@ -74,7 +89,7 @@ export function PeopleRoster() {
     setMerging(true);
     try {
       for (const s of sources) await meetingNotesApi.mergePeople(target, { fromId: s });
-      setSelected([]); setPreview(null); setExpandedId(null);
+      clearSelection(); setExpandedId(null);
       setMeetings((m) => { const c = { ...m }; delete c[target]; return c; });
       await load();
     } catch (e: any) { alert(e?.message || '合并失败'); }
@@ -147,7 +162,7 @@ export function PeopleRoster() {
           ) : (
             <span style={{ color: '#64748b' }}>再勾选至少一个才能合并</span>
           )}
-          <button style={btn} onClick={() => { setSelected([]); setPreview(null); }}>取消</button>
+          <button style={btn} onClick={clearSelection}>取消</button>
         </div>
       )}
 
@@ -179,7 +194,7 @@ export function PeopleRoster() {
                   <Fragment key={p.id}>
                     <tr onClick={() => toggle(p)}
                       style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer', background: selected.includes(p.id) ? '#eff6ff' : open ? '#f8fafc' : 'white' }}>
-                      <td style={{ ...td, width: 24 }} onClick={(e) => { e.stopPropagation(); toggleSelect(p.id); }}>
+                      <td style={{ ...td, width: 24 }} onClick={(e) => { e.stopPropagation(); toggleSelect(p); }}>
                         <input type="checkbox" checked={selected.includes(p.id)} readOnly style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ ...td, color: '#94a3b8', width: 24 }}>{open ? '▾' : '▸'}</td>
@@ -202,6 +217,8 @@ export function PeopleRoster() {
                         <td colSpan={6} style={{ padding: '4px 12px 16px' }}>
                           <div style={{ marginBottom: 10 }}>
                             <span style={sub}>本命</span> <b style={{ color: '#0f172a' }}>{p.canonicalName}</b>
+                            <button style={{ ...btn, padding: '1px 8px', marginLeft: 8, fontSize: 12 }}
+                              onClick={(e) => { e.stopPropagation(); doRename(p); }}>✎ 改名</button>
                             {p.aliases.length > 0 && (
                               <>
                                 <span style={{ ...sub, marginLeft: 16 }}>合并别名</span>{' '}
