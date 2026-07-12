@@ -2901,12 +2901,13 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.put('/people/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
-      const body = (request.body ?? {}) as { canonical_name?: string; role?: string; org?: string; description?: string };
+      const body = (request.body ?? {}) as { canonical_name?: string; role?: string; org?: string; description?: string; removeAlias?: string };
       const newName = (body.canonical_name ?? '').trim();
-      // 仅改描述时不强制 canonical_name
-      if (!newName && body.description === undefined && body.role === undefined) {
+      const removeAlias = (body.removeAlias ?? '').trim();
+      // 仅改描述 / 删别名时不强制 canonical_name
+      if (!newName && body.description === undefined && body.role === undefined && !removeAlias) {
         reply.status(400);
-        return { error: 'Bad Request', code: 'CANONICAL_NAME_REQUIRED', message: 'canonical_name / description / role 至少一项' };
+        return { error: 'Bad Request', code: 'CANONICAL_NAME_REQUIRED', message: 'canonical_name / description / role / removeAlias 至少一项' };
       }
       // 取旧记录
       const cur = await engine.deps.db.query(
@@ -2916,6 +2917,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       if (cur.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
       const oldName = cur.rows[0].canonical_name as string;
       const oldAliases: string[] = Array.isArray(cur.rows[0].aliases) ? cur.rows[0].aliases : [];
+
+      // 删单个别名(花名册 alias × 用)——独立操作,不动本命
+      if (removeAlias) {
+        const nextAliases = oldAliases.filter((a) => a !== removeAlias);
+        await engine.deps.db.query(
+          `UPDATE mn_people SET aliases = $2::text[], updated_at = NOW() WHERE id = $1`,
+          [id, nextAliases],
+        );
+        return { id, canonical_name: oldName, aliases: nextAliases, removedAlias: removeAlias };
+      }
 
       // 描述/角色可独立更新(不依赖改名)——描述 = 合并参考语言
       if (body.description !== undefined || (body.role !== undefined && !newName)) {
@@ -2976,6 +2987,64 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         changed: true,
         previousName: oldName,
       };
+    });
+
+    /**
+     * DELETE /people/:id · 花名册硬删整条人物。
+     * 12 张事实表:person 列可空→SET NULL(保留事实、去归属),非空(CASCADE 类)→DELETE 这些行。
+     * 顺带清掉各会议 participantOverrides 里指向该人的绑定;最后删本行。不可撤销。
+     */
+    fastify.delete('/people/:id', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      const cur = await engine.deps.db.query(`SELECT canonical_name FROM mn_people WHERE id = $1`, [id]);
+      if (cur.rows.length === 0) { reply.status(404); return { error: 'Not Found' }; }
+      const REFS: Array<[string, string]> = [
+        ['mn_commitments', 'person_id'],
+        ['mn_role_trajectory_points', 'person_id'],
+        ['mn_speech_quality', 'person_id'],
+        ['mn_silence_signals', 'person_id'],
+        ['mn_focus_map', 'person_id'],
+        ['mn_decisions', 'proposer_person_id'],
+        ['mn_assumptions', 'verifier_person_id'],
+        ['mn_open_questions', 'owner_person_id'],
+        ['mn_judgments', 'author_person_id'],
+        ['mn_mental_model_invocations', 'invoked_by_person_id'],
+        ['mn_cognitive_biases', 'by_person_id'],
+        ['mn_counterfactuals', 'rejected_by_person_id'],
+      ];
+      const affected: Record<string, { action: 'null' | 'delete'; n: number }> = {};
+      try {
+        for (const [tbl, col] of REFS) {
+          const nul = await engine.deps.db.query(
+            `SELECT is_nullable FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+            [tbl, col],
+          );
+          if (nul.rows.length === 0) continue; // 该表/列不存在则跳过
+          const canNull = nul.rows[0].is_nullable === 'YES';
+          const r = canNull
+            ? await engine.deps.db.query(`UPDATE ${tbl} SET ${col} = NULL WHERE ${col} = $1`, [id])
+            : await engine.deps.db.query(`DELETE FROM ${tbl} WHERE ${col} = $1`, [id]);
+          const n = (r as any).rowCount ?? 0;
+          if (n > 0) affected[tbl] = { action: canNull ? 'null' : 'delete', n };
+        }
+        // 清各会议 participantOverrides 里指向该人的绑定(避免悬挂引用)
+        await engine.deps.db.query(
+          `UPDATE assets a
+              SET metadata = jsonb_set(a.metadata, '{participantOverrides}',
+                    (SELECT COALESCE(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+                       FROM jsonb_each_text(a.metadata->'participantOverrides') e
+                      WHERE e.value <> $1))
+            WHERE a.metadata ? 'participantOverrides'
+              AND EXISTS (SELECT 1 FROM jsonb_each_text(a.metadata->'participantOverrides') e WHERE e.value = $1)`,
+          [id],
+        );
+        await engine.deps.db.query(`DELETE FROM mn_people WHERE id = $1`, [id]);
+      } catch (e: any) {
+        request.log.error({ err: e, id }, 'deletePerson failed');
+        reply.status(500); return { error: 'Internal Server Error', code: 'DELETE_FAILED', message: e?.message ?? String(e) };
+      }
+      return { ok: true, deleted: { id, canonical_name: cur.rows[0].canonical_name }, affected };
     });
 
     // --------------------------------------------------------

@@ -471,6 +471,16 @@ export const meetingNotesApi = {
       previousName?: string;
     }>(`/people/${id}`, body),
 
+  /** 删单个合并别名(不动本命)。 */
+  removePersonAlias: (id: string, alias: string) =>
+    jput<{ id: string; canonical_name: string; aliases: string[]; removedAlias: string }>(
+      `/people/${id}`, { removeAlias: alias }),
+
+  /** 硬删整条人物：事实表 SET NULL / DELETE，清 participantOverrides，删本行。不可撤销。 */
+  deletePerson: (id: string) =>
+    jdelete<{ ok: true; deleted: { id: string; canonical_name: string }; affected: Record<string, { action: string; n: number }> }>(
+      `/people/${id}`),
+
   /**
    * 把指定 mn_axis_version 反写回 mn_*。仅对 source 为 llm_extracted/restored 的行覆盖；
    * manual_import / human_edit 的行保留不动。dryRun=true 只返回 affected 计数不真改。

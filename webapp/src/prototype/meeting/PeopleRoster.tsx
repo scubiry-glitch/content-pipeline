@@ -128,6 +128,27 @@ export function PeopleRoster() {
     setDescEdit((d) => (p.id in d ? d : { ...d, [p.id]: p.description ?? '' }));
   };
 
+  const removeAlias = async (p: PersonRosterRow, alias: string) => {
+    if (!confirm(`从「${p.canonicalName}」删除别名「${alias}」？`)) return;
+    try {
+      await meetingNotesApi.removePersonAlias(p.id, alias);
+      await load();
+    } catch (e: any) { alert(e?.message || '删除别名失败'); }
+  };
+
+  const deletePerson = async (p: PersonRosterRow) => {
+    if (!confirm(`⚠ 硬删除人物「${p.canonicalName}」？\n其会议 / 承诺等引用会一并清除或置空，各会议中对 TA 的绑定也会解除。此操作不可撤销。`)) return;
+    try {
+      const r = await meetingNotesApi.deletePerson(p.id);
+      const n = Object.values(r.affected).reduce((a, x) => a + x.n, 0);
+      setExpandedId(null);
+      setSelected((s) => s.filter((x) => x !== p.id));
+      setSelNames((m) => { const c = { ...m }; delete c[p.id]; return c; });
+      await load();
+      alert(`已删除「${p.canonicalName}」${n > 0 ? `，清理 ${n} 条引用` : ''}。`);
+    } catch (e: any) { alert(e?.message || '删除失败'); }
+  };
+
   const saveDesc = async (p: PersonRosterRow) => {
     const text = (descEdit[p.id] ?? '').trim();
     if (text === (p.description ?? '')) return;
@@ -251,11 +272,17 @@ export function PeopleRoster() {
                             <span style={sub}>本命</span> <b style={{ color: '#0f172a' }}>{p.canonicalName}</b>
                             <button style={{ ...btn, padding: '1px 8px', marginLeft: 8, fontSize: 12 }}
                               onClick={(e) => { e.stopPropagation(); doRename(p); }}>✎ 改名</button>
+                            <button style={{ ...btn, padding: '1px 8px', marginLeft: 6, fontSize: 12, color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2' }}
+                              onClick={(e) => { e.stopPropagation(); deletePerson(p); }}>🗑 删除人物</button>
                             {p.aliases.length > 0 && (
                               <>
                                 <span style={{ ...sub, marginLeft: 16 }}>合并别名</span>{' '}
                                 {p.aliases.map((a) => (
-                                  <span key={a} style={{ ...badge, background: '#eef2ff', color: '#3730a3', marginRight: 4 }}>{a}</span>
+                                  <span key={a} style={{ ...badge, background: '#eef2ff', color: '#3730a3', marginRight: 4 }}>
+                                    {a}
+                                    <button title="删除该别名" onClick={(e) => { e.stopPropagation(); removeAlias(p, a); }}
+                                      style={{ marginLeft: 4, border: 'none', background: 'transparent', color: '#6366f1', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
+                                  </span>
                                 ))}
                               </>
                             )}
