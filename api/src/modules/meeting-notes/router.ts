@@ -1697,6 +1697,47 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { meetings: await getPersonMeetings(engine.deps.db, id) };
     });
 
+    /**
+     * GET /meetings/:id/participants-review · 把会议参会人(assets.metadata.participants 的 name)
+     * 解析到花名册 mn_people：命中真人(person_kind='person')=已审核，返回花名册规范名做备注；
+     * 命中占位/未命中 = 未审核。供"在场"列表标注识别。
+     */
+    fastify.get('/meetings/:id/participants-review', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      const meta = await engine.deps.db.query(
+        `SELECT jsonb_path_query_array(metadata, '$.participants[*].name') AS names FROM assets WHERE id::text = $1`,
+        [id],
+      );
+      const names = (meta.rows[0]?.names ?? []) as string[];
+      if (!Array.isArray(names) || names.length === 0) return { items: [] };
+      const r = await engine.deps.db.query(
+        `SELECT t.n AS name, m.id, m.canonical_name, m.kind
+           FROM unnest($1::text[]) WITH ORDINALITY AS t(n, ord)
+           LEFT JOIN LATERAL (
+             SELECT p.id, p.canonical_name, p.metadata->>'person_kind' AS kind
+               FROM mn_people p
+              WHERE p.canonical_name = t.n
+                 OR t.n = ANY(p.aliases)
+                 OR p.canonical_name = btrim(regexp_replace(t.n, '[（(][^）)]*[)）]', '', 'g'))
+                 OR btrim(regexp_replace(t.n, '[（(][^）)]*[)）]', '', 'g')) = ANY(p.aliases)
+              ORDER BY (p.metadata->>'person_kind' = 'person') DESC NULLS LAST,
+                       array_length(p.aliases, 1) DESC NULLS LAST
+              LIMIT 1
+           ) m ON true
+          ORDER BY t.ord`,
+        [names],
+      );
+      return {
+        items: r.rows.map((x: any) => ({
+          name: String(x.name),
+          personId: x.id ?? null,
+          canonicalName: x.canonical_name ?? null,
+          personKind: x.kind ?? null,
+          reviewed: x.kind === 'person',
+        })),
+      };
+    });
+
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }

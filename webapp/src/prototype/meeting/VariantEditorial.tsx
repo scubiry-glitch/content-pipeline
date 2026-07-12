@@ -516,6 +516,24 @@ export function VariantEditorial() {
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
+  // 参会人 → 花名册审核状态（key = participant.name）
+  const [partReview, setPartReview] = useState<Record<string, { reviewed: boolean; canonicalName: string | null }>>({});
+  const [reviewLoaded, setReviewLoaded] = useState(false);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setReviewLoaded(false);
+    meetingNotesApi.getParticipantsReview(id)
+      .then((r) => {
+        if (cancelled) return;
+        const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
+        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        setPartReview(m);
+        setReviewLoaded(true);
+      })
+      .catch(() => { if (!cancelled) setReviewLoaded(true); });
+    return () => { cancelled = true; };
+  }, [id]);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
   // Shell 已经统一拉了 detail —— 这里直接消费，避免重复 fetch（dev 下 StrictMode + 4 处 fetch 共 8 次）
@@ -719,6 +737,13 @@ export function VariantEditorial() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
                         {p.role && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2 }}>{p.role}</div>}
+                        {reviewLoaded && (
+                          partReview[p.name]?.reviewed
+                            ? <div style={{ fontSize: 10.5, color: '#059669', marginTop: 3, fontWeight: 500 }}>
+                                ✓ 花名册 · {partReview[p.name].canonicalName}
+                              </div>
+                            : <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 3 }}>未审核</div>
+                        )}
                       </div>
                       {pid && id && (
                         <button

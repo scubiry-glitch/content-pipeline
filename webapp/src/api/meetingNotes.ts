@@ -825,7 +825,17 @@ export const meetingNotesApi = {
   },
   getPersonMeetings: (id: string) =>
     jget<{ meetings: PersonMeeting[] }>(`/people/${encodeURIComponent(id)}/meetings`),
+  getParticipantsReview: (meetingId: string) =>
+    jget<{ items: ParticipantReview[] }>(`/meetings/${encodeURIComponent(meetingId)}/participants-review`),
 };
+
+export interface ParticipantReview {
+  name: string;
+  personId: string | null;
+  canonicalName: string | null;
+  personKind: string | null;
+  reviewed: boolean; // 命中花名册真人(person_kind='person')
+}
 
 export interface PersonRosterRow {
   id: string;
