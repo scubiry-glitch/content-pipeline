@@ -34,13 +34,14 @@ const NAV: NavItem[] = [
   { to: '/meeting/generation-center',  label: '生成中心',      icon: 'play',     group: '专家系统' },
   { to: '/meeting/review/merges',      label: '实体合并复核',  icon: 'git',      group: '复核' },
   { to: '/meeting/review/unresolved',  label: '待认领人名',    icon: 'users',    group: '复核' },
+  { to: '/meeting/people-roster',      label: '人物花名册',    icon: 'users',    group: '复核' },
 ];
 
 // 每个导航项的 1-char 收起标签
 const NAV_SHORT: Record<string, string> = {
   '今天': '今', '库': '库', '人物轴': '人', '项目轴': '项', '知识轴': '知',
   '纵向视图': '纵', '调用配置': '调', '策略 / 装饰器': '策', '生成中心': '生',
-  '实体合并复核': '合', '待认领人名': '认',
+  '实体合并复核': '合', '待认领人名': '认', '人物花名册': '花',
 };
 
 export function MeetingShell() {

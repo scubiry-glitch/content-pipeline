@@ -812,7 +812,30 @@ export const meetingNotesApi = {
   },
   resolveUnresolvedMention: (id: string) =>
     jpost<{ ok: boolean }>(`/unresolved-mentions/${id}/resolve`),
+
+  // ===== 人物花名册（全局 mn_people）=====
+  listPeopleRoster: (q: { q?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        return acc;
+      }, {}),
+    ).toString();
+    return jget<{ items: PersonRosterRow[] }>(`/people${qs ? '?' + qs : ''}`);
+  },
 };
+
+export interface PersonRosterRow {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  role: string | null;
+  org: string | null;
+  contentEntityId: string | null;
+  bridged: boolean;
+  workspaceId: string | null;
+  createdAt: string;
+}
 
 export { API_BASE as MEETING_NOTES_API_BASE };
 
