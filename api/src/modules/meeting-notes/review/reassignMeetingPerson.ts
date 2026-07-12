@@ -10,11 +10,11 @@ const UNIQUE_TABLES: Array<{ t: string; extra?: string }> = [
   { t: 'mn_focus_map' },
 ];
 // 无 per-meeting 唯一键：直接 UPDATE
+// 注:mn_judgments 无 meeting_id 列(用 linked_meeting_ids 数组),无法按会议重指,故不含在内
 const PLAIN: Array<{ t: string; c: string }> = [
   { t: 'mn_commitments', c: 'person_id' },
   { t: 'mn_decisions', c: 'proposer_person_id' },
   { t: 'mn_assumptions', c: 'verifier_person_id' },
-  { t: 'mn_judgments', c: 'author_person_id' },
   { t: 'mn_mental_model_invocations', c: 'invoked_by_person_id' },
   { t: 'mn_cognitive_biases', c: 'by_person_id' },
   { t: 'mn_counterfactuals', c: 'rejected_by_person_id' },
