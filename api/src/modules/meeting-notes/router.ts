@@ -27,6 +27,7 @@ import {
 import { listPeopleRoster, getPersonMeetings } from './review/peopleRosterService.js';
 import { mergeContentEntities } from '../content-library/consolidation/mergeEntities.js';
 import { ensurePersonByName } from './parse/participantExtractor.js';
+import { reassignMeetingPerson } from './review/reassignMeetingPerson.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -2691,7 +2692,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
      */
     fastify.post('/people/:id/merge', { preHandler: authenticate }, async (request, reply) => {
       const { id: targetId } = request.params as { id: string };
-      const body = (request.body ?? {}) as { fromId?: string; dryRun?: boolean };
+      const body = (request.body ?? {}) as { fromId?: string; dryRun?: boolean; scopeMeetingId?: string };
       const fromId = body.fromId;
       if (!UUID_RE.test(targetId) || !fromId || !UUID_RE.test(fromId)) {
         reply.status(400);
@@ -2711,6 +2712,20 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       }
       const target = both.rows.find((r: any) => r.id === targetId);
       const source = both.rows.find((r: any) => r.id === fromId);
+
+      // 本场重指(泛指参会人):只改这场会议的引用,不删源、不动其他场次
+      if (body.scopeMeetingId) {
+        if (!UUID_RE.test(body.scopeMeetingId)) { reply.status(400); return { error: 'Bad Request', code: 'INVALID_MEETING_ID' }; }
+        try {
+          const affected = await reassignMeetingPerson(engine.deps.db, body.scopeMeetingId, fromId, targetId);
+          return { ok: true, scoped: true, meetingId: body.scopeMeetingId,
+                   target: { id: target.id, canonical_name: target.canonical_name },
+                   source: { id: source.id, canonical_name: source.canonical_name, deleted: false }, affected };
+        } catch (e: any) {
+          request.log.error({ err: e, ...body }, 'reassignMeetingPerson failed');
+          reply.status(500); return { error: 'Internal Server Error', code: 'REASSIGN_FAILED', message: e?.message ?? String(e) };
+        }
+      }
 
       if (body.dryRun) {
         const refs = await engine.deps.db.query(

@@ -68,6 +68,7 @@ export function ParticipantMergeModal({
   const [loadingGlobal, setLoadingGlobal] = useState(false);
   const [srcPool, setSrcPool] = useState<CandidatePerson[]>([]); // 全局按名解析源参会人
   const [creating, setCreating] = useState(false);
+  const [mergeScope, setMergeScope] = useState<'meeting' | 'global'>('meeting'); // 默认只本场,避免泛指串场
 
   // 全局解析源参会人(scope people 可能漏掉无事实的人)
   useEffect(() => {
@@ -173,11 +174,15 @@ export function ParticipantMergeModal({
       setError(`「${participant.name}」已经是「${targetName}」（同一人 / 已是其别名），无需再合并。`);
       return;
     }
-    if (!confirm(`把「${participant.name}」(实为「${resolvedSource.canonical_name}」)合并到「${targetName}」？\n（会议中所有引用会改写到目标人物，原 ID 删除）`)) return;
+    const scoped = mergeScope === 'meeting';
+    const msg = scoped
+      ? `【只本场】把本场会议里「${participant.name}」的发言/承诺等归到「${targetName}」？\n不影响其他场次、不删除原记录（泛指如"说话人N"不会串场）。`
+      : `【所有场次·全局】把「${participant.name}」(实为「${resolvedSource.canonical_name}」)整体合并到「${targetName}」？\n全库所有场次的引用都改写、原 ID 删除。仅当确认是同一人时用。`;
+    if (!confirm(msg)) return;
     setPendingTargetId(targetId);
     setError(null);
     try {
-      await meetingNotesApi.mergePeople(targetId, { fromId: resolvedSource.id });
+      await meetingNotesApi.mergePeople(targetId, { fromId: resolvedSource.id, ...(scoped ? { scopeMeetingId: meetingId } : {}) });
       onMerged(targetId);
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -233,6 +238,17 @@ export function ParticipantMergeModal({
                 : '⚠ 未匹配到对应人物记录。可勾选「全局花名册」在全库合并，或用下方「新建」建为独立人物。'}
             </div>
           )}
+          <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 12, alignItems: 'center' }}>
+            <span style={{ color: 'var(--ink-3)' }}>合并范围</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input type="radio" checked={mergeScope === 'meeting'} onChange={() => setMergeScope('meeting')} />
+              只本场（推荐，泛指不串场）
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input type="radio" checked={mergeScope === 'global'} onChange={() => setMergeScope('global')} />
+              所有场次·全局（确认同一人）
+            </label>
+          </div>
         </div>
 
         <div style={{ padding: '4px 22px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>

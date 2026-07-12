@@ -333,7 +333,7 @@ export const meetingNotesApi = {
    * 最后 DELETE source 行。整个操作 atomic（plpgsql 函数体隐式 transactional）。
    * dryRun=true 只返回引用计数 + 预览合并后的 aliases。
    */
-  mergePeople: (targetId: string, body: { fromId: string; dryRun?: boolean }) =>
+  mergePeople: (targetId: string, body: { fromId: string; dryRun?: boolean; scopeMeetingId?: string }) =>
     jpost<
       | {
           dryRun: true;
