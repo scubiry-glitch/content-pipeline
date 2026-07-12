@@ -585,6 +585,27 @@ export function VariantWorkbench() {
   // 复用 Shell 已经抓的 detail 响应 — 避免重复 fetch
   const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
+  // 参会人 → 花名册审核状态（key = participant.name）；花名册制定后用规范名替换本场名(与 A 视图一致)
+  const [partReview, setPartReview] = useState<Record<string, { reviewed: boolean; canonicalName: string | null }>>({});
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    meetingNotesApi.getParticipantsReview(id)
+      .then((r) => {
+        if (cancelled) return;
+        const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
+        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        setPartReview(m);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id]);
+  const rosterName = (raw: string | undefined | null): string => {
+    if (!raw) return raw ?? '';
+    const rv = partReview[raw];
+    return rv?.reviewed && rv.canonicalName ? rv.canonicalName : raw;
+  };
+
   // 「追问此会」抽屉：drawerTension=null 时为会议级（顶栏入口）；非空为张力级（详情按钮入口）
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [chatDrawerTension, setChatDrawerTension] = useState<typeof ANALYSIS.tension[number] | null>(null);
@@ -601,7 +622,7 @@ export function VariantWorkbench() {
       if (typeof p.id !== 'string' || !p.id) return;
       map.set(p.id, {
         id: p.id,
-        name: p.name || p.id,
+        name: rosterName(p.name || p.id), // 花名册制定后显示规范名
         role: p.role ?? '',
         initials: p.initials ?? p.name.slice(0, 2),
         tone: (p.tone as 'warm' | 'cool' | 'neutral') ?? 'neutral',
@@ -609,7 +630,7 @@ export function VariantWorkbench() {
       });
     });
     return (id: string) => map.get(id) ?? defaultP(id);
-  }, [apiParticipants]);
+  }, [apiParticipants, partReview]);
 
   // 张力解读：用主题关键词（停用词过滤后 ≥2 char tokens）匹配 axes 的 where_excerpt / outcome；
   // tension_peaks 按 intensity 排名映射到 analysis.tension 同 rank 那条。

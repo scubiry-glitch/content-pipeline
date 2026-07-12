@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
+import { meetingNotesApi } from '../../api/meetingNotes';
 import { MEETING, PARTICIPANTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, MonoMeta, SectionLabel, MockBadge } from './_atoms';
@@ -749,9 +750,35 @@ export function VariantThreads() {
   // 复用 Shell 已经抓的 detail，避免重复 fetch
   const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
+  // 参会人 → 花名册审核状态（key = participant.name）；花名册制定后用规范名替换本场名(与 A 视图一致)
+  const [partReview, setPartReview] = useState<Record<string, { reviewed: boolean; canonicalName: string | null }>>({});
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    meetingNotesApi.getParticipantsReview(id)
+      .then((r) => {
+        if (cancelled) return;
+        const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
+        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        setPartReview(m);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id]);
+  const rosterName = (raw: string | undefined | null): string => {
+    if (!raw) return raw ?? '';
+    const rv = partReview[raw];
+    return rv?.reviewed && rv.canonicalName ? rv.canonicalName : raw;
+  };
+  // 把原始 participants 的本场名替换成花名册规范名(已审核真人),供 P()/lanePeople/ConsensusGraph 统一使用
+  const rosterParticipants = useMemo(
+    () => apiParticipants.map((p) => ({ ...p, name: rosterName(p.name) })),
+    [apiParticipants, partReview],
+  );
+
   const P = useMemo<PFn>(() => {
     const map = new Map<string, Participant>();
-    apiParticipants.forEach((p) => {
+    rosterParticipants.forEach((p) => {
       if (typeof p.id !== 'string' || !p.id) return;
       map.set(p.id, {
         id: p.id, name: p.name || p.id, role: p.role ?? '',
@@ -761,7 +788,7 @@ export function VariantThreads() {
       });
     });
     return (id: string) => map.get(id) ?? defaultP(id);
-  }, [apiParticipants]);
+  }, [rosterParticipants]);
 
   // 把 lanePeople 在 mock / API 间切换；API 但 participants 缺失则保留 fixture 占位
   const lanePeople: Participant[] = useMemo(() => {
@@ -936,7 +963,7 @@ export function VariantThreads() {
       </header>
 
       {view === 'threads'   && <ThreadView    a={a} isMock={usingMock} P={P} participants={lanePeople} events={derivedEvents} />}
-      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={apiParticipants} P={P} />}
+      {view === 'consensus' && <ConsensusGraph a={a} isMock={consensusMock} apiParticipants={rosterParticipants} P={P} />}
       {view === 'focus'     && <FocusNebula   a={a} isMock={focusMapMock} P={P} />}
       {view === 'affect'    && <AffectiveTrace isMock={usingMock} />}
     </div>
