@@ -64,7 +64,7 @@ async function jput<T>(path: string, body?: any): Promise<T> {
     headers: hasBody ? jsonHeaders() : authHeader(),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
-  if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
+  if (!r.ok) await throwHttpError('PUT', path, r);
   return r.json();
 }
 

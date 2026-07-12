@@ -62,11 +62,24 @@ export function PeopleRoster() {
   const doRename = async (p: PersonRosterRow) => {
     const name = window.prompt(`改名：「${p.canonicalName}」→`, p.canonicalName);
     if (!name || !name.trim() || name.trim() === p.canonicalName) return;
+    const newName = name.trim();
     try {
-      await meetingNotesApi.renamePerson(p.id, { canonical_name: name.trim() });
+      await meetingNotesApi.renamePerson(p.id, { canonical_name: newName });
       await load();
     } catch (e: any) {
-      alert(e?.message || '改名失败：可能与已有同名冲突，若是同一人请改用合并');
+      // 409：已有同名人物 → 多半是同一个人，直接问要不要合并过去
+      const conflictId = e?.status === 409 ? e?.body?.conflictPersonId : null;
+      if (conflictId) {
+        if (confirm(`已存在同名人物「${newName}」。若是同一个人，点“确定”把「${p.canonicalName}」合并到 TA（会议/承诺等归入对方，本记录删除，不可撤销）。`)) {
+          try {
+            await meetingNotesApi.mergePeople(conflictId, { fromId: p.id });
+            setExpandedId(null);
+            await load();
+          } catch (e2: any) { alert(e2?.message || '合并失败'); }
+        }
+        return;
+      }
+      alert(e?.message || '改名失败');
     }
   };
 
