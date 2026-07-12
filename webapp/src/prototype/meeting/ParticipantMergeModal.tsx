@@ -10,8 +10,13 @@
 // 命中后整个 mn_* 链上 fromId 的引用 reassign 到 targetId，aliases 自动并入。
 
 import { useEffect, useMemo, useState } from 'react';
-import { meetingNotesApi } from '../../api/meetingNotes';
+import { meetingNotesApi, type PersonRosterRow } from '../../api/meetingNotes';
 import { Icon } from './_atoms';
+
+const stripParen = (s: string) => s.replace(/[（(].*?[)）]/g, '').trim();
+const mapRosterRow = (x: PersonRosterRow): CandidatePerson => ({
+  id: x.id, canonical_name: x.canonicalName, aliases: x.aliases ?? [], role: x.role, org: x.org, commitment_count: 0,
+});
 
 type Binding = {
   scopeId: string;
@@ -58,6 +63,33 @@ export function ParticipantMergeModal({
   const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [globalMode, setGlobalMode] = useState(false);        // 候选来自全局花名册而非本 scope
+  const [globalPeople, setGlobalPeople] = useState<CandidatePerson[]>([]);
+  const [loadingGlobal, setLoadingGlobal] = useState(false);
+  const [srcPool, setSrcPool] = useState<CandidatePerson[]>([]); // 全局按名解析源参会人
+  const [creating, setCreating] = useState(false);
+
+  // 全局解析源参会人(scope people 可能漏掉无事实的人)
+  useEffect(() => {
+    const norm = stripParen(participant.name);
+    meetingNotesApi.listPeopleRoster({ q: norm || participant.name, kind: 'person', limit: 10 })
+      .then((r) => setSrcPool((r.items ?? []).map(mapRosterRow)))
+      .catch(() => {});
+  }, [participant.name]);
+
+  // 全局候选(target)：按 filter 服务端搜索
+  useEffect(() => {
+    if (!globalMode) return;
+    let cancelled = false;
+    setLoadingGlobal(true);
+    const t = setTimeout(() => {
+      meetingNotesApi.listPeopleRoster({ q: filter.trim() || undefined, kind: 'person', limit: 50 })
+        .then((r) => { if (!cancelled) setGlobalPeople((r.items ?? []).map(mapRosterRow)); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoadingGlobal(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [globalMode, filter]);
 
   // Bindings
   useEffect(() => {
@@ -89,32 +121,52 @@ export function ParticipantMergeModal({
   }, [scopeId]);
 
   // participant.id 是 parse 标签 id(如 "p4"),不是 mn_people uuid。
-  // 按名字/别名把参会人解析成真实 mn_people 记录，才能拿到可合并的 fromId。
-  const strip = (s: string) => s.replace(/[（(].*?[)）]/g, '').trim();
+  // 按名字/别名把参会人解析成真实 mn_people 记录(scope people ∪ 全局按名查到的)，拿到 fromId。
   const resolvedSource = useMemo(() => {
     const raw = participant.name;
-    const norm = strip(raw);
+    const norm = stripParen(raw);
+    const pool = [...people, ...srcPool];
     return (
-      people.find((p) => p.canonical_name === raw) ??
-      people.find((p) => p.canonical_name === norm) ??
-      people.find((p) => strip(p.canonical_name) === norm) ??
-      people.find((p) => (p.aliases ?? []).some((a) => a === raw || a === norm || strip(a) === norm)) ??
+      pool.find((p) => p.canonical_name === raw) ??
+      pool.find((p) => p.canonical_name === norm) ??
+      pool.find((p) => stripParen(p.canonical_name) === norm) ??
+      pool.find((p) => (p.aliases ?? []).some((a) => a === raw || a === norm || stripParen(a) === norm)) ??
       null
     );
-  }, [people, participant.name]);
+  }, [people, srcPool, participant.name]);
 
   const candidates = useMemo(() => {
+    if (globalMode) return globalPeople.filter((p) => p.id !== resolvedSource?.id);
     const q = filter.trim().toLowerCase();
     return people
       .filter((p) => p.id !== resolvedSource?.id)
       .filter((p) => !q
         || p.canonical_name.toLowerCase().includes(q)
         || (p.aliases ?? []).some((a) => a.toLowerCase().includes(q)));
-  }, [people, filter, resolvedSource]);
+  }, [globalMode, globalPeople, people, filter, resolvedSource]);
+
+  // 全局也没有这个名字 → 新建人物(用 filter 或参会人名)
+  const createName = (filter.trim() || stripParen(participant.name)).trim();
+  const exactExists = candidates.some((p) => p.canonical_name === createName)
+    || resolvedSource?.canonical_name === createName;
+  async function handleCreate() {
+    if (!createName) return;
+    if (!confirm(`全局花名册没有「${createName}」。新建为一个独立人物？`)) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const r = await meetingNotesApi.createPerson({ canonicalName: createName, meetingId });
+      onMerged(r.person.id); // 复用回调:刷新
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function handleMerge(targetId: string, targetName: string) {
     if (!resolvedSource) {
-      setError(`找不到「${participant.name}」对应的人物记录（本会议 scope 的人物里没匹配到）。可能该参会人尚未识别，或已并入他人。`);
+      setError(`找不到「${participant.name}」对应的人物记录。可用下方“新建”把它建为独立人物。`);
       return;
     }
     if (resolvedSource.id === targetId) {
@@ -178,7 +230,7 @@ export function ParticipantMergeModal({
             <div style={{ fontSize: 12, marginTop: 6, color: resolvedSource ? '#065f46' : '#92400e' }}>
               {resolvedSource
                 ? `已识别为人物「${resolvedSource.canonical_name}」${resolvedSource.canonical_name !== participant.name ? '（本会议标签为“' + participant.name + '”）' : ''}`
-                : '⚠ 未匹配到对应人物记录，暂无法合并'}
+                : '⚠ 未匹配到对应人物记录。可勾选「全局花名册」在全库合并，或用下方「新建」建为独立人物。'}
             </div>
           )}
         </div>
@@ -205,6 +257,10 @@ export function ParticipantMergeModal({
               ))}
             </select>
           )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={globalMode} onChange={(e) => setGlobalMode(e.target.checked)} />
+            全局花名册
+          </label>
         </div>
 
         <div style={{ padding: '4px 22px' }}>
@@ -220,17 +276,17 @@ export function ParticipantMergeModal({
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px 4px' }}>
-          {!scopeId && !loadingBindings && (
+          {!globalMode && !scopeId && !loadingBindings && (
             <div style={{ padding: '24px 12px', color: 'var(--ink-3)', fontSize: 12.5 }}>
-              先把会议绑定到 project/client/topic（在会议头部「关联到项目」），再来合并。
+              本会议未绑定 project/client/topic。勾选上方「全局花名册」可在全库人物里合并，或先「关联到项目」。
             </div>
           )}
-          {scopeId && loadingPeople && (
+          {(globalMode ? loadingGlobal : (scopeId && loadingPeople)) && (
             <div style={{ padding: '24px 12px', color: 'var(--ink-3)', fontSize: 12.5 }}>加载候选人物…</div>
           )}
-          {scopeId && !loadingPeople && candidates.length === 0 && (
+          {!(globalMode ? loadingGlobal : loadingPeople) && (globalMode || scopeId) && candidates.length === 0 && (
             <div style={{ padding: '24px 12px', color: 'var(--ink-3)', fontSize: 12.5 }}>
-              该 scope 下暂无可合并的人物（或都已是当前参会者）。
+              {globalMode ? '全局花名册没有匹配的人物。' : '该 scope 下暂无可合并的人物（或都已是当前参会者）。'}
             </div>
           )}
           {candidates.map((p) => {
@@ -263,6 +319,20 @@ export function ParticipantMergeModal({
               </button>
             );
           })}
+
+          {globalMode && !loadingGlobal && createName && !exactExists && (
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              style={{
+                width: '100%', textAlign: 'left', padding: '10px 12px', margin: '6px 0 2px',
+                border: '1px dashed var(--line-2)', borderRadius: 5, background: 'var(--paper)',
+                cursor: creating ? 'wait' : 'pointer', color: 'var(--ink-2)', fontSize: 12.5,
+              }}
+            >
+              ＋ 全局花名册没有 →「{createName}」<b>新建为独立人物</b>
+            </button>
+          )}
         </div>
 
         {error && (

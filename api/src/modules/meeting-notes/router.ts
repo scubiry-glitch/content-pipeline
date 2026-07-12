@@ -26,6 +26,7 @@ import {
 } from './review/unresolvedReviewService.js';
 import { listPeopleRoster, getPersonMeetings } from './review/peopleRosterService.js';
 import { mergeContentEntities } from '../content-library/consolidation/mergeEntities.js';
+import { ensurePersonByName } from './parse/participantExtractor.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -1688,6 +1689,25 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         kind: q.kind,
         includeJunk: q.includeJunk === 'true' || q.includeJunk === '1',
       });
+    });
+
+    /**
+     * POST /people · 新建人物(全局花名册里没有时)。复用 ensurePersonByName(幂等、按名去重、
+     * 桥接 content_entities);并标 person_kind='person'(视为已审核真人)。
+     * Body: { canonicalName, meetingId?, role?, org? }
+     */
+    fastify.post('/people', { preHandler: authenticate }, async (request, reply) => {
+      const body = (request.body ?? {}) as { canonicalName?: string; meetingId?: string; role?: string; org?: string };
+      const name = (body.canonicalName ?? '').trim();
+      if (!name) { reply.status(400); return { error: 'Bad Request', code: 'NAME_REQUIRED', message: 'canonicalName 必填' }; }
+      const id = await ensurePersonByName(engine.deps, name, body.role, body.org, body.meetingId);
+      if (!id) { reply.status(422); return { error: 'Unprocessable Entity', code: 'NOT_A_PERSON', message: '该名字被判为非人物(章节/元数据等)，未创建' }; }
+      await engine.deps.db.query(
+        `UPDATE mn_people SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"person_kind":"person"}'::jsonb, updated_at = NOW() WHERE id = $1`,
+        [id],
+      );
+      const r = await engine.deps.db.query(`SELECT id, canonical_name, aliases FROM mn_people WHERE id = $1`, [id]);
+      return { ok: true, person: r.rows[0] };
     });
 
     /** GET /people/:id/meetings · 该人物出现过的会议（场次名 + 链接用 id）*/

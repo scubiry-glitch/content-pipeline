@@ -827,6 +827,8 @@ export const meetingNotesApi = {
     jget<{ meetings: PersonMeeting[] }>(`/people/${encodeURIComponent(id)}/meetings`),
   getParticipantsReview: (meetingId: string) =>
     jget<{ items: ParticipantReview[] }>(`/meetings/${encodeURIComponent(meetingId)}/participants-review`),
+  createPerson: (body: { canonicalName: string; meetingId?: string; role?: string; org?: string }) =>
+    jpost<{ ok: boolean; person: { id: string; canonical_name: string; aliases: string[] } }>('/people', body),
 };
 
 export interface ParticipantReview {
