@@ -25,6 +25,7 @@ import {
   listUnresolvedMentions, resolveUnresolvedMention,
 } from './review/unresolvedReviewService.js';
 import { listPeopleRoster, getPersonMeetings } from './review/peopleRosterService.js';
+import { mergeContentEntities } from '../content-library/consolidation/mergeEntities.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -2621,7 +2622,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         return { error: 'Bad Request', code: 'SAME_ID', message: '不能合并到自己' };
       }
       const both = await engine.deps.db.query(
-        `SELECT id, canonical_name, aliases FROM mn_people WHERE id = ANY($1::uuid[])`,
+        `SELECT id, canonical_name, aliases, content_entity_id FROM mn_people WHERE id = ANY($1::uuid[])`,
         [[targetId, fromId]],
       );
       if (both.rows.length !== 2) {
@@ -2670,11 +2671,24 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           `SELECT id, canonical_name, aliases, updated_at FROM mn_people WHERE id = $1`,
           [targetId],
         );
+        // 顺带收干净桥接实体：把 source 的 content_entity 并入 target 的，避免孤儿。
+        // best-effort：失败不影响已完成的 people 合并（只 warn）。
+        let contentEntityMerge: Array<{ table: string; reassigned: number; dropped: number }> | null = null;
+        const targetCe = target.content_entity_id as string | null;
+        const sourceCe = source.content_entity_id as string | null;
+        if (targetCe && sourceCe && targetCe !== sourceCe) {
+          try {
+            contentEntityMerge = await mergeContentEntities({ db: engine.deps.db }, targetCe, sourceCe);
+          } catch (e: any) {
+            request.log.warn({ err: e, targetCe, sourceCe }, 'content_entities 收尾合并失败（非致命，people 合并已成功）');
+          }
+        }
         return {
           ok: true,
           target: after.rows[0],
           source: { id: source.id, canonical_name: source.canonical_name, deleted: true },
           affected: r.rows,
+          contentEntityMerge,
         };
       } catch (e: any) {
         request.log.error({ err: e, targetId, fromId }, 'mn_merge_people failed');
