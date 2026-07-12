@@ -60,9 +60,9 @@ export function PeopleRoster() {
     if (!target || sources.length === 0) return;
     setPreview('loading');
     try {
-      const rs = await Promise.all(sources.map((s) => meetingNotesApi.mergePeople(target, s, true)));
-      const aliases = Array.from(new Set(rs.flatMap((r) => r.previewMergedAliases ?? [])));
-      const totalRefs = rs.reduce((n, r) => n + (r.refs?.reduce((a, x) => a + x.n, 0) ?? 0), 0);
+      const rs = await Promise.all(sources.map((s) => meetingNotesApi.mergePeople(target, { fromId: s, dryRun: true })));
+      const aliases = Array.from(new Set(rs.flatMap((r) => ('previewMergedAliases' in r ? r.previewMergedAliases : []))));
+      const totalRefs = rs.reduce((n, r) => n + ('refs' in r ? r.refs.reduce((a, x) => a + x.n, 0) : 0), 0);
       setPreview({ aliases, totalRefs, sourceIds: sources });
     } catch (e: any) { alert(e?.message || '预览失败'); setPreview(null); }
   };
@@ -73,7 +73,7 @@ export function PeopleRoster() {
     if (!confirm(`确认把 ${sources.map(nameOf).join('、')} 合并进「${nameOf(target)}」？源记录将被删除、其会议/承诺等全部归到本命。此操作不可撤销。`)) return;
     setMerging(true);
     try {
-      for (const s of sources) await meetingNotesApi.mergePeople(target, s, false);
+      for (const s of sources) await meetingNotesApi.mergePeople(target, { fromId: s });
       setSelected([]); setPreview(null); setExpandedId(null);
       setMeetings((m) => { const c = { ...m }; delete c[target]; return c; });
       await load();
