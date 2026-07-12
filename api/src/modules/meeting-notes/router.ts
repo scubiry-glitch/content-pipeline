@@ -1806,8 +1806,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const tgt = await engine.deps.db.query(`SELECT id, canonical_name FROM mn_people WHERE id=$1`, [tid]);
       if (tgt.rows.length === 0) { reply.status(404); return { error: 'Not Found', code: 'PERSON_NOT_FOUND' }; }
       // 1) 写本场 override
+      //    ⚠ 不能用 jsonb_set(m, ['participantOverrides', name], …)：当 participantOverrides 父键
+      //    不存在时 jsonb_set 建不了两级路径,会静默 no-op(override 永远写不进,UI 表现为"绑定不生效")。
+      //    改为整体重建该对象:COALESCE 现有(或空对象) || {name: personId}。
       await engine.deps.db.query(
-        `UPDATE assets SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), ARRAY['participantOverrides', $2], to_jsonb($3::text), true) WHERE id::text = $1`,
+        `UPDATE assets SET metadata = jsonb_set(
+            COALESCE(metadata,'{}'::jsonb),
+            ARRAY['participantOverrides'],
+            COALESCE(metadata->'participantOverrides','{}'::jsonb) || jsonb_build_object($2::text, $3::text),
+            true
+          ) WHERE id::text = $1`,
         [id, pname, tid],
       );
       // 2) 若该标签当前解析到另一人物,本场事实重指(有 facts 才搬,泛指多半没)
