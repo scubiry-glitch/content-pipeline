@@ -827,6 +827,9 @@ export const meetingNotesApi = {
     jget<{ meetings: PersonMeeting[]; roleLabels: string[] }>(`/people/${encodeURIComponent(id)}/meetings`),
   getParticipantsReview: (meetingId: string) =>
     jget<{ items: ParticipantReview[] }>(`/meetings/${encodeURIComponent(meetingId)}/participants-review`),
+  bindParticipant: (meetingId: string, body: { participantName: string; targetPersonId: string }) =>
+    jpost<{ ok: boolean; target: { id: string; canonical_name: string }; reassigned: unknown }>(
+      `/meetings/${encodeURIComponent(meetingId)}/participants/bind`, body),
   createPerson: (body: { canonicalName: string; meetingId?: string; role?: string; org?: string }) =>
     jpost<{ ok: boolean; person: { id: string; canonical_name: string; aliases: string[] } }>('/people', body),
 };

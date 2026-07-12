@@ -157,6 +157,10 @@ export function ParticipantMergeModal({
     setError(null);
     try {
       const r = await meetingNotesApi.createPerson({ canonicalName: createName, meetingId });
+      // 本场模式:新建后把本场标签绑定到新人物(泛指本场识别)
+      if (mergeScope === 'meeting') {
+        await meetingNotesApi.bindParticipant(meetingId, { participantName: participant.name, targetPersonId: r.person.id });
+      }
       onMerged(r.person.id); // 复用回调:刷新
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -166,23 +170,38 @@ export function ParticipantMergeModal({
   }
 
   async function handleMerge(targetId: string, targetName: string) {
+    const scoped = mergeScope === 'meeting';
+
+    // 本场:绑定本场标签→目标(不需要源人物,泛指也能用;有事实会顺带本场重指)
+    if (scoped) {
+      if (!confirm(`【只本场】把本场会议里的「${participant.name}」识别为「${targetName}」？\n只本场生效(写入本场覆盖),不影响其他场次;若有发言/承诺会一并归到 TA。`)) return;
+      setPendingTargetId(targetId);
+      setError(null);
+      try {
+        await meetingNotesApi.bindParticipant(meetingId, { participantName: participant.name, targetPersonId: targetId });
+        onMerged(targetId);
+      } catch (e: any) {
+        setError(e?.message ?? String(e));
+      } finally {
+        setPendingTargetId(null);
+      }
+      return;
+    }
+
+    // 全局:整体合并(需要源人物)
     if (!resolvedSource) {
-      setError(`找不到「${participant.name}」对应的人物记录。可用下方“新建”把它建为独立人物。`);
+      setError(`找不到「${participant.name}」对应的人物记录，无法全局合并。可切「只本场」直接识别，或用下方“新建”。`);
       return;
     }
     if (resolvedSource.id === targetId) {
       setError(`「${participant.name}」已经是「${targetName}」（同一人 / 已是其别名），无需再合并。`);
       return;
     }
-    const scoped = mergeScope === 'meeting';
-    const msg = scoped
-      ? `【只本场】把本场会议里「${participant.name}」的发言/承诺等归到「${targetName}」？\n不影响其他场次、不删除原记录（泛指如"说话人N"不会串场）。`
-      : `【所有场次·全局】把「${participant.name}」(实为「${resolvedSource.canonical_name}」)整体合并到「${targetName}」？\n全库所有场次的引用都改写、原 ID 删除。仅当确认是同一人时用。`;
-    if (!confirm(msg)) return;
+    if (!confirm(`【所有场次·全局】把「${participant.name}」(实为「${resolvedSource.canonical_name}」)整体合并到「${targetName}」？\n全库所有场次的引用都改写、原 ID 删除。仅当确认是同一人时用。`)) return;
     setPendingTargetId(targetId);
     setError(null);
     try {
-      await meetingNotesApi.mergePeople(targetId, { fromId: resolvedSource.id, ...(scoped ? { scopeMeetingId: meetingId } : {}) });
+      await meetingNotesApi.mergePeople(targetId, { fromId: resolvedSource.id });
       onMerged(targetId);
     } catch (e: any) {
       setError(e?.message ?? String(e));

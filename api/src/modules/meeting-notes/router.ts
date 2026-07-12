@@ -1745,11 +1745,19 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.get('/meetings/:id/participants-review', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       const meta = await engine.deps.db.query(
-        `SELECT jsonb_path_query_array(metadata, '$.participants[*].name') AS names FROM assets WHERE id::text = $1`,
+        `SELECT jsonb_path_query_array(metadata, '$.participants[*].name') AS names,
+                COALESCE(metadata->'participantOverrides', '{}'::jsonb) AS overrides FROM assets WHERE id::text = $1`,
         [id],
       );
       const names = (meta.rows[0]?.names ?? []) as string[];
+      const overrides = (meta.rows[0]?.overrides ?? {}) as Record<string, string>; // name → personId(本场绑定)
       if (!Array.isArray(names) || names.length === 0) return { items: [] };
+      // 本场绑定的人物信息
+      const ovIds = Array.from(new Set(Object.values(overrides)));
+      const ovPersons = ovIds.length
+        ? (await engine.deps.db.query(`SELECT id, canonical_name, metadata->>'person_kind' kind FROM mn_people WHERE id = ANY($1::uuid[])`, [ovIds])).rows
+        : [];
+      const ovMap = new Map(ovPersons.map((p: any) => [String(p.id), p]));
       const r = await engine.deps.db.query(
         `SELECT t.n AS name, m.id, m.canonical_name, m.kind
            FROM unnest($1::text[]) WITH ORDINALITY AS t(n, ord)
@@ -1768,14 +1776,52 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         [names],
       );
       return {
-        items: r.rows.map((x: any) => ({
-          name: String(x.name),
-          personId: x.id ?? null,
-          canonicalName: x.canonical_name ?? null,
-          personKind: x.kind ?? null,
-          reviewed: x.kind === 'person',
-        })),
+        items: r.rows.map((x: any) => {
+          const ov = overrides[String(x.name)] ? ovMap.get(overrides[String(x.name)]) : null;
+          if (ov) return { name: String(x.name), personId: String(ov.id), canonicalName: ov.canonical_name, personKind: ov.kind ?? 'person', reviewed: true, bound: true };
+          return {
+            name: String(x.name),
+            personId: x.id ?? null,
+            canonicalName: x.canonical_name ?? null,
+            personKind: x.kind ?? null,
+            reviewed: x.kind === 'person',
+            bound: false,
+          };
+        }),
       };
+    });
+
+    /**
+     * POST /meetings/:id/participants/bind · 本场把参会人标签(泛指如"说话人N")绑定到某花名册人物。
+     * 写 assets.metadata.participantOverrides[name]=personId(只本场生效,显示层优先读它);
+     * 若该标签当前解析到另一个人物,顺带 reassignMeetingPerson 把本场事实重指到目标(不删源、不串场)。
+     * Body: { participantName, targetPersonId }
+     */
+    fastify.post('/meetings/:id/participants/bind', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as { participantName?: string; targetPersonId?: string };
+      const pname = (body.participantName ?? '').trim();
+      const tid = body.targetPersonId;
+      if (!pname || !tid || !UUID_RE.test(tid)) { reply.status(400); return { error: 'Bad Request', code: 'INVALID_INPUT', message: 'participantName + targetPersonId(UUID) 必填' }; }
+      const tgt = await engine.deps.db.query(`SELECT id, canonical_name FROM mn_people WHERE id=$1`, [tid]);
+      if (tgt.rows.length === 0) { reply.status(404); return { error: 'Not Found', code: 'PERSON_NOT_FOUND' }; }
+      // 1) 写本场 override
+      await engine.deps.db.query(
+        `UPDATE assets SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), ARRAY['participantOverrides', $2], to_jsonb($3::text), true) WHERE id::text = $1`,
+        [id, pname, tid],
+      );
+      // 2) 若该标签当前解析到另一人物,本场事实重指(有 facts 才搬,泛指多半没)
+      const norm = pname.replace(/[（(][^）)]*[)）]/g, '').trim();
+      const src = await engine.deps.db.query(
+        `SELECT id FROM mn_people WHERE (canonical_name=$1 OR $1=ANY(aliases) OR canonical_name=$2 OR $2=ANY(aliases)) AND id<>$3 LIMIT 1`,
+        [pname, norm, tid],
+      );
+      let reassigned: any = null;
+      if (src.rows.length > 0) {
+        try { reassigned = await reassignMeetingPerson(engine.deps.db, id, src.rows[0].id, tid); }
+        catch (e: any) { request.log.warn({ err: e }, 'bind: 本场重指失败(非致命)'); }
+      }
+      return { ok: true, meetingId: id, participantName: pname, target: tgt.rows[0], reassigned };
     });
 
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {
