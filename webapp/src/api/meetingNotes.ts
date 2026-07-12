@@ -821,7 +821,7 @@ export const meetingNotesApi = {
         return acc;
       }, {}),
     ).toString();
-    return jget<{ items: PersonRosterRow[] }>(`/people${qs ? '?' + qs : ''}`);
+    return jget<{ items: PersonRosterRow[]; total: number }>(`/people${qs ? '?' + qs : ''}`);
   },
 };
 

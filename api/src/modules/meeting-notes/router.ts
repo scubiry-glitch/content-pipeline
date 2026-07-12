@@ -1680,11 +1680,10 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     /** GET /people · 全局人物花名册（跨 workspace，读 mn_people）；?q= 名字/别名模糊，?limit= */
     fastify.get('/people', { preHandler: authenticate }, async (request) => {
       const q = request.query as { q?: string; limit?: string };
-      const items = await listPeopleRoster(engine.deps.db, {
+      return await listPeopleRoster(engine.deps.db, {
         q: q.q,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
       });
-      return { items };
     });
 
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {
