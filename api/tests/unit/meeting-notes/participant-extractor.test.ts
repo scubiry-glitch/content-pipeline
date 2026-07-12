@@ -12,7 +12,7 @@
  *   Mocks must cover those calls before mn_people calls.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { ensurePersonByName } from '../../../src/modules/meeting-notes/parse/participantExtractor.js';
+import { ensurePersonByName, isLikelyNonPerson } from '../../../src/modules/meeting-notes/parse/participantExtractor.js';
 
 /**
  * SQL-pattern-aware mock deps.
@@ -68,7 +68,31 @@ function makeDeps(overrides?: {
   return { deps, query, embedding };
 }
 
+describe('isLikelyNonPerson', () => {
+  it('拒绝文档章节标题', () => {
+    for (const n of ['第一部分', '第七部分', '第十二部分', '第3章', '第二节', '第一阶段'])
+      expect(isLikelyNonPerson(n)).toBe(true);
+  });
+  it('拒绝会议元数据字段', () => {
+    for (const n of ['地点', '会议地点', '参会人员', '录音时间', '议程', '纪要'])
+      expect(isLikelyNonPerson(n)).toBe(true);
+  });
+  it('放行真实人名（零误伤）', () => {
+    for (const n of ['王丽', '张伟', 'Kenny', '丁美云', 'Wei Tan', '第五伦', '章子怡'])
+      expect(isLikelyNonPerson(n)).toBe(false);
+  });
+});
+
 describe('ensurePersonByName', () => {
+  it('疑似非人物条目直接返回 null，不落库', async () => {
+    const { deps, query } = makeDeps();
+    for (const junk of ['第七部分', '地点', '参会人员']) {
+      expect(await ensurePersonByName(deps, junk, undefined, undefined, 'm1')).toBeNull();
+    }
+    // 没有任何 content_entities / mn_people 写入
+    expect(query.mock.calls.some((c: any[]) => /INSERT INTO (mn_people|content_entities)/i.test(c[0]))).toBe(false);
+  });
+
   it('returns null for empty name', async () => {
     const { deps, query } = makeDeps();
     const id = await ensurePersonByName(deps, '   ');

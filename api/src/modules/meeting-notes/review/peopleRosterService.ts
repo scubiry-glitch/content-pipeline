@@ -13,23 +13,35 @@ export interface PeopleRosterRow {
   createdAt: string;
 }
 
+export interface PeopleRosterResult {
+  items: PeopleRosterRow[];
+  total: number; // 满足过滤条件的真实总数（不受 limit 截断）
+}
+
+// 名字/别名模糊过滤条件；list 用 $2（$1=limit），count 用 $1
+const FILTER = (p: string) =>
+  `(${p}::text IS NULL
+    OR canonical_name ILIKE '%' || ${p} || '%'
+    OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE a ILIKE '%' || ${p} || '%'))`;
+
 export async function listPeopleRoster(
   db: Db,
   opts?: { limit?: number; q?: string },
-): Promise<PeopleRosterRow[]> {
-  const limit = Math.min(500, Math.max(1, opts?.limit ?? 200));
+): Promise<PeopleRosterResult> {
+  const limit = Math.min(2000, Math.max(1, opts?.limit ?? 1000));
   const q = opts?.q && opts.q.trim() ? opts.q.trim() : null;
-  const res = await db.query(
-    `SELECT id, canonical_name, aliases, role, org, content_entity_id, workspace_id, created_at
-       FROM mn_people
-      WHERE ($2::text IS NULL
-             OR canonical_name ILIKE '%' || $2 || '%'
-             OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE a ILIKE '%' || $2 || '%'))
-      ORDER BY canonical_name ASC
-      LIMIT $1`,
-    [limit, q],
-  );
-  return (res.rows ?? []).map((r: any) => ({
+  const [listRes, countRes] = await Promise.all([
+    db.query(
+      `SELECT id, canonical_name, aliases, role, org, content_entity_id, workspace_id, created_at
+         FROM mn_people
+        WHERE ${FILTER('$2')}
+        ORDER BY canonical_name ASC
+        LIMIT $1`,
+      [limit, q],
+    ),
+    db.query(`SELECT count(*)::int AS total FROM mn_people WHERE ${FILTER('$1')}`, [q]),
+  ]);
+  const items = (listRes.rows ?? []).map((r: any) => ({
     id: String(r.id),
     canonicalName: String(r.canonical_name),
     aliases: Array.isArray(r.aliases) ? r.aliases : [],
@@ -40,4 +52,5 @@ export async function listPeopleRoster(
     workspaceId: r.workspace_id ?? null,
     createdAt: String(r.created_at),
   }));
+  return { items, total: Number(countRes.rows?.[0]?.total ?? items.length) };
 }

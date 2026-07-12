@@ -697,6 +697,15 @@ wikiMarkdown: 给 data/content-wiki/default/ 直接写文件用的 markdown 内�
   ─── entityUpdates 约束 ───
     - 数量下限: participants.length + 5 (覆盖每个参与者 + 至少 5 个核心概念)
     - canonicalName 要稳定 (同一个人/概念在多场会议中名字一致, 别"王丽""王老师"乱混)
+    - 【subtype=person 严格判据】person 只用于**有真实姓名的自然人**(如"王丽""张伟""Kenny")。
+      canonicalName 必须是这个人的**名字**, 不是他的角色/职能。以下一律**禁止**标为 person:
+        ✗ 角色/职能/头衔: 负责人、项目经理、风控、收益分析师、装修顾问、协调员、合规法务、业主方、客户对接
+        ✗ 话题/模型/条目: 商业模式、财务模型、成本核算、服务承诺、跟进节奏分层、用案例降低信任门槛
+        ✗ 文档结构: 第一部分、第七部分、第N章/节
+        ✗ 会议元数据: 地点、时间、参会人员、议程、纪要
+        ✗ 匿名占位符: "客户A""客户B""客户 D · 农光南里"——无法定位到具体自然人, 不要当 person
+      角色/话题/模型这类**抽象事物**若值得记录, 用 type=concept + 合适 subtype(business-model/metric 等), 别塞进 person。
+      判据: 若 canonicalName 回答不了"这是哪个具体的人", 它就不是 person。
     - person 类必填 initialContent (用于首次创建的骨架); concept 类初次出现时也建议给
     - blockContent 内容形如:
       "在本场会议\\n(speaking_pct=33% · 主导话题: 招租定金)\\n\\n本次承诺\\n- ..."

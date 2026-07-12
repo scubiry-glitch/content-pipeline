@@ -3,14 +3,16 @@ import { meetingNotesApi, type PersonRosterRow } from '../../api/meetingNotes';
 
 export function PeopleRoster() {
   const [items, setItems] = useState<PersonRosterRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
 
   const load = async (query: string) => {
     setLoading(true);
     try {
-      const r = await meetingNotesApi.listPeopleRoster({ q: query || undefined, limit: 500 });
+      const r = await meetingNotesApi.listPeopleRoster({ q: query || undefined, limit: 2000 });
       setItems(r.items || []);
+      setTotal(r.total ?? (r.items || []).length);
     } catch (e: any) {
       alert(e?.message || '加载失败');
     } finally {
@@ -27,7 +29,7 @@ export function PeopleRoster() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#0f172a' }}>人物花名册</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
-            全局 mn_people（跨 workspace）· 共 {items.length} 人，已桥接 content_entities {bridgedCount} 人
+            全局 mn_people（跨 workspace）· 共 {total} 人{items.length < total ? `（显示前 ${items.length}）` : ''}，本页已桥接 content_entities {bridgedCount} 人
           </p>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); load(q); }} style={{ display: 'flex', gap: 8 }}>
