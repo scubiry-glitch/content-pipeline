@@ -1700,7 +1700,19 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const body = (request.body ?? {}) as { canonicalName?: string; meetingId?: string; role?: string; org?: string };
       const name = (body.canonicalName ?? '').trim();
       if (!name) { reply.status(400); return { error: 'Bad Request', code: 'NAME_REQUIRED', message: 'canonicalName 必填' }; }
-      const id = await ensurePersonByName(engine.deps, name, body.role, body.org, body.meetingId);
+      // 全局幂等：已存在同名(跨 workspace,ensurePersonByName 按 ws 查重会漏→INSERT 撞全局 UNIQUE)
+      // → 直接复用现有行并标已审核，绝不重复 INSERT。
+      const existing = await engine.deps.db.query(
+        `SELECT id FROM mn_people WHERE canonical_name = $1
+          ORDER BY (metadata->>'person_kind' = 'person') DESC NULLS LAST, created_at ASC LIMIT 1`,
+        [name],
+      );
+      let id: string | null;
+      if (existing.rows.length > 0) {
+        id = existing.rows[0].id as string;
+      } else {
+        id = await ensurePersonByName(engine.deps, name, body.role, body.org, body.meetingId);
+      }
       if (!id) { reply.status(422); return { error: 'Unprocessable Entity', code: 'NOT_A_PERSON', message: '该名字被判为非人物(章节/元数据等)，未创建' }; }
       await engine.deps.db.query(
         `UPDATE mn_people SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"person_kind":"person"}'::jsonb, updated_at = NOW() WHERE id = $1`,
@@ -1714,7 +1726,14 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.get('/people/:id/meetings', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
-      return { meetings: await getPersonMeetings(engine.deps.db, id) };
+      const meetings = await getPersonMeetings(engine.deps.db, id);
+      // 会议里给该人的角色参考语言(role_label 去重),供合并判同参考
+      const rl = await engine.deps.db.query(
+        `SELECT DISTINCT role_label FROM mn_role_trajectory_points
+          WHERE person_id = $1 AND role_label IS NOT NULL AND btrim(role_label) <> '' LIMIT 30`,
+        [id],
+      );
+      return { meetings, roleLabels: rl.rows.map((r: any) => String(r.role_label)) };
     });
 
     /**
@@ -2821,11 +2840,12 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.put('/people/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
-      const body = (request.body ?? {}) as { canonical_name?: string; role?: string; org?: string };
+      const body = (request.body ?? {}) as { canonical_name?: string; role?: string; org?: string; description?: string };
       const newName = (body.canonical_name ?? '').trim();
-      if (!newName) {
+      // 仅改描述时不强制 canonical_name
+      if (!newName && body.description === undefined && body.role === undefined) {
         reply.status(400);
-        return { error: 'Bad Request', code: 'CANONICAL_NAME_REQUIRED', message: 'canonical_name 必填且非空' };
+        return { error: 'Bad Request', code: 'CANONICAL_NAME_REQUIRED', message: 'canonical_name / description / role 至少一项' };
       }
       // 取旧记录
       const cur = await engine.deps.db.query(
@@ -2836,9 +2856,22 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const oldName = cur.rows[0].canonical_name as string;
       const oldAliases: string[] = Array.isArray(cur.rows[0].aliases) ? cur.rows[0].aliases : [];
 
-      // 没改名 → no-op
-      if (newName === oldName) {
-        return { id, canonical_name: oldName, aliases: oldAliases, changed: false };
+      // 描述/角色可独立更新(不依赖改名)——描述 = 合并参考语言
+      if (body.description !== undefined || (body.role !== undefined && !newName)) {
+        await engine.deps.db.query(
+          `UPDATE mn_people SET
+             metadata = CASE WHEN $2::text IS NULL THEN metadata
+                             ELSE COALESCE(metadata,'{}'::jsonb) || jsonb_build_object('description', $2::text) END,
+             role = COALESCE($3, role),
+             updated_at = NOW()
+           WHERE id = $1`,
+          [id, body.description ?? null, body.role ?? null],
+        );
+      }
+
+      // 没改名(或只改描述/角色) → 到此返回(描述已存)
+      if (!newName || newName === oldName) {
+        return { id, canonical_name: oldName, aliases: oldAliases, changed: body.description !== undefined || body.role !== undefined };
       }
 
       // 检查新 canonical 是否与"另一个人"冲突 (UNIQUE canonical_name + org)
