@@ -536,6 +536,12 @@ export function VariantEditorial() {
   }, [id]);
   const shellTitle = useMeetingShellTitle();
   const displayTitle = shellTitle || apiMeta?.title || MEETING.title;
+  // 花名册制定后：把展示的原始参会人标签替换成花名册规范名(已审核真人)
+  const rosterName = (raw: string | undefined | null): string => {
+    if (!raw) return raw ?? '';
+    const rv = partReview[raw];
+    return rv?.reviewed && rv.canonicalName ? rv.canonicalName : raw;
+  };
   // Shell 已经统一拉了 detail —— 这里直接消费，避免重复 fetch（dev 下 StrictMode + 4 处 fetch 共 8 次）
   const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
@@ -590,7 +596,7 @@ export function VariantEditorial() {
       if (!p.id) return;
       map.set(p.id, {
         id: p.id,
-        name: p.name || p.id,
+        name: rosterName(p.name || p.id), // 花名册制定后显示规范名
         role: p.role ?? '',
         initials: p.initials ?? (p.name ? p.name.slice(0, 1) : '?'),
         tone: (p.tone as Participant['tone']) ?? 'neutral',
@@ -598,7 +604,8 @@ export function VariantEditorial() {
       });
     });
     return (id: string) => map.get(id) ?? defaultP(id);
-  }, [apiMeta]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMeta, partReview]);
 
   const navItems = [
     { id: 'minutes',       label: '一、常规纪要',   num: '01' },
