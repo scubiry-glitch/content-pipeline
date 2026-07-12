@@ -15,6 +15,28 @@ export function normalizeName(raw: string): string {
     .trim();
 }
 
+// 会议元数据字段（被抽取误标成人物）：整名精确命中即拒
+const META_FIELD_NAMES = new Set([
+  '地点', '会议地点', '时间', '会议时间', '录音时间', '日期', '会议日期',
+  '议程', '会议议程', '主题', '会议主题', '纪要', '会议纪要',
+  '参会人员', '参会人', '与会人员', '与会人', '出席人员', '参与人',
+]);
+
+/**
+ * 高精度非人物判别（防误标进 mn_people 的兜底闸门，零误伤真人名为目标）。
+ * 只拦**结构性/元数据**类明确不是自然人的名字——语义层面的角色/话题判别交给抽取 prompt。
+ * 命中场景（实测存量脏数据）：文档章节「第一部分/第七部分」、元数据「地点/参会人员/录音时间」。
+ */
+export function isLikelyNonPerson(name: string): boolean {
+  const n = name.trim();
+  if (!n) return true;
+  // 文档结构标题：第N部分/章/节/条/讲/页/步/阶段
+  if (/^第[一二三四五六七八九十百千零〇两\d]+(部分|章|节|条|讲|页|步|阶段|点)/.test(n)) return true;
+  // 会议元数据字段
+  if (META_FIELD_NAMES.has(n)) return true;
+  return false;
+}
+
 /**
  * 幂等：若已存在（canonical_name, org [, workspace]）则返回；否则新建。
  * 返回 mn_people.id。
@@ -35,6 +57,11 @@ export async function ensurePersonByName(
 ): Promise<string | null> {
   const canonical = normalizeName(rawName);
   if (!canonical) return null;
+  // 兜底闸门：结构/元数据类明确非人物直接跳过，不进 mn_people / content_entities
+  if (isLikelyNonPerson(canonical)) {
+    console.warn(`[ensurePersonByName] 跳过疑似非人物条目: ${canonical}`);
+    return null;
+  }
 
   // 唯一实体 seam：先注册/解析到全局 content_entities，拿 canonical id。
   // P1 桥接语义：content_entity_id 为「尽力而为」列，解析失败(embedding/DB 抖动)时

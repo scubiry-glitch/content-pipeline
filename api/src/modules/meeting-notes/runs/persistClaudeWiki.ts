@@ -43,6 +43,7 @@ import {
   type WikiBlockMeta,
 } from '../../content-library/wiki/wikiFrontmatter.js';
 import { EntityResolver } from '../../content-library/consolidation/entityResolver.js';
+import { isLikelyNonPerson } from '../parse/participantExtractor.js';
 import { slugify } from '../../content-library/wiki/templates.js';
 
 export interface ClaudeWikiOutput {
@@ -254,6 +255,11 @@ async function handleNewEntityUpdate(
 ): Promise<'created' | 'updated' | 'skipped'> {
   if (!isValidEntitySubtype(upd.subtype, upd.type)) {
     console.warn(`[persistClaudeWiki] invalid subtype '${upd.subtype}' for type '${upd.type}', skip ${upd.canonicalName}`);
+    return 'skipped';
+  }
+  // 兜底闸门：LLM 把文档章节/会议元数据误标成 person → 既不建 person 页也不注册实体
+  if (upd.subtype === 'person' && isLikelyNonPerson(upd.canonicalName)) {
+    console.warn(`[persistClaudeWiki] 跳过疑似非人物 person 条目: ${upd.canonicalName}`);
     return 'skipped';
   }
 
