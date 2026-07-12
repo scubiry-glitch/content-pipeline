@@ -89,26 +89,26 @@ export async function listPeopleRoster(
 export async function getPersonMeetings(db: Db, personId: string): Promise<PersonMeeting[]> {
   const res = await db.query(
     `WITH mtgs AS (
-       SELECT meeting_id FROM mn_commitments            WHERE person_id            = $1
-       UNION SELECT meeting_id FROM mn_role_trajectory_points WHERE person_id       = $1
-       UNION SELECT meeting_id FROM mn_speech_quality    WHERE person_id            = $1
-       UNION SELECT meeting_id FROM mn_silence_signals   WHERE person_id            = $1
-       UNION SELECT meeting_id FROM mn_focus_map         WHERE person_id            = $1
-       UNION SELECT meeting_id FROM mn_decisions         WHERE proposer_person_id   = $1
-       UNION SELECT meeting_id FROM mn_assumptions       WHERE verifier_person_id   = $1
-       UNION SELECT meeting_id FROM mn_cognitive_biases  WHERE by_person_id         = $1
-       UNION SELECT meeting_id FROM mn_counterfactuals   WHERE rejected_by_person_id = $1
-       UNION SELECT meeting_id FROM mn_mental_model_invocations WHERE invoked_by_person_id = $1
-       UNION SELECT first_raised_meeting_id FROM mn_open_questions WHERE owner_person_id = $1
-       UNION SELECT last_raised_meeting_id  FROM mn_open_questions WHERE owner_person_id = $1
-       UNION SELECT first_seen_meeting_id   FROM mn_people         WHERE id = $1
+       SELECT meeting_id::text AS mid FROM mn_commitments            WHERE person_id            = $1
+       UNION SELECT meeting_id::text FROM mn_role_trajectory_points   WHERE person_id            = $1
+       UNION SELECT meeting_id::text FROM mn_speech_quality           WHERE person_id            = $1
+       UNION SELECT meeting_id::text FROM mn_silence_signals          WHERE person_id            = $1
+       UNION SELECT meeting_id::text FROM mn_focus_map                WHERE person_id            = $1
+       UNION SELECT meeting_id::text FROM mn_decisions                WHERE proposer_person_id   = $1
+       UNION SELECT meeting_id::text FROM mn_assumptions              WHERE verifier_person_id   = $1
+       UNION SELECT meeting_id::text FROM mn_cognitive_biases         WHERE by_person_id         = $1
+       UNION SELECT meeting_id::text FROM mn_counterfactuals          WHERE rejected_by_person_id = $1
+       UNION SELECT meeting_id::text FROM mn_mental_model_invocations WHERE invoked_by_person_id = $1
+       UNION SELECT first_raised_meeting_id::text FROM mn_open_questions WHERE owner_person_id = $1
+       UNION SELECT last_raised_meeting_id::text  FROM mn_open_questions WHERE owner_person_id = $1
+       UNION SELECT first_seen_meeting_id::text   FROM mn_people         WHERE id = $1
      )
-     SELECT m.meeting_id::text AS id,
+     SELECT m.mid AS id,
             COALESCE(NULLIF(trim(a.title), ''), NULLIF(trim(a.metadata->>'title'), ''), '未命名会议') AS title,
             a.created_at
        FROM mtgs m
-       LEFT JOIN assets a ON a.id::text = m.meeting_id::text
-      WHERE m.meeting_id IS NOT NULL
+       LEFT JOIN assets a ON a.id::text = m.mid
+      WHERE m.mid IS NOT NULL
       ORDER BY a.created_at DESC NULLS LAST`,
     [personId],
   );
