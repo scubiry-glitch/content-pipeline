@@ -24,6 +24,7 @@ import {
 import {
   listUnresolvedMentions, resolveUnresolvedMention,
 } from './review/unresolvedReviewService.js';
+import { listPeopleRoster } from './review/peopleRosterService.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -1676,6 +1677,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     });
 
     /** GET /people/:id · 单人详情（含 aliases） */
+    /** GET /people · 全局人物花名册（跨 workspace，读 mn_people）；?q= 名字/别名模糊，?limit= */
+    fastify.get('/people', { preHandler: authenticate }, async (request) => {
+      const q = request.query as { q?: string; limit?: string };
+      const items = await listPeopleRoster(engine.deps.db, {
+        q: q.q,
+        limit: q.limit ? parseInt(q.limit, 10) : undefined,
+      });
+      return { items };
+    });
+
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
