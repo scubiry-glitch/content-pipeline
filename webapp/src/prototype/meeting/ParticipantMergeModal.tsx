@@ -88,21 +88,44 @@ export function ParticipantMergeModal({
     return () => { cancelled = true; };
   }, [scopeId]);
 
+  // participant.id 是 parse 标签 id(如 "p4"),不是 mn_people uuid。
+  // 按名字/别名把参会人解析成真实 mn_people 记录，才能拿到可合并的 fromId。
+  const strip = (s: string) => s.replace(/[（(].*?[)）]/g, '').trim();
+  const resolvedSource = useMemo(() => {
+    const raw = participant.name;
+    const norm = strip(raw);
+    return (
+      people.find((p) => p.canonical_name === raw) ??
+      people.find((p) => p.canonical_name === norm) ??
+      people.find((p) => strip(p.canonical_name) === norm) ??
+      people.find((p) => (p.aliases ?? []).some((a) => a === raw || a === norm || strip(a) === norm)) ??
+      null
+    );
+  }, [people, participant.name]);
+
   const candidates = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return people
-      .filter((p) => p.id !== participant.id)
+      .filter((p) => p.id !== resolvedSource?.id)
       .filter((p) => !q
         || p.canonical_name.toLowerCase().includes(q)
         || (p.aliases ?? []).some((a) => a.toLowerCase().includes(q)));
-  }, [people, filter, participant.id]);
+  }, [people, filter, resolvedSource]);
 
   async function handleMerge(targetId: string, targetName: string) {
-    if (!confirm(`把「${participant.name}」合并到「${targetName}」？\n（会议中所有引用会改写到目标人物，原 ID 删除）`)) return;
+    if (!resolvedSource) {
+      setError(`找不到「${participant.name}」对应的人物记录（本会议 scope 的人物里没匹配到）。可能该参会人尚未识别，或已并入他人。`);
+      return;
+    }
+    if (resolvedSource.id === targetId) {
+      setError(`「${participant.name}」已经是「${targetName}」（同一人 / 已是其别名），无需再合并。`);
+      return;
+    }
+    if (!confirm(`把「${participant.name}」(实为「${resolvedSource.canonical_name}」)合并到「${targetName}」？\n（会议中所有引用会改写到目标人物，原 ID 删除）`)) return;
     setPendingTargetId(targetId);
     setError(null);
     try {
-      await meetingNotesApi.mergePeople(targetId, { fromId: participant.id });
+      await meetingNotesApi.mergePeople(targetId, { fromId: resolvedSource.id });
       onMerged(targetId);
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -151,6 +174,13 @@ export function ParticipantMergeModal({
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
             选择项目维度已有的人物作为合并目标，本会议中以及全库对该参会者的引用会全部改写到目标。
           </div>
+          {!loadingPeople && (
+            <div style={{ fontSize: 12, marginTop: 6, color: resolvedSource ? '#065f46' : '#92400e' }}>
+              {resolvedSource
+                ? `已识别为人物「${resolvedSource.canonical_name}」${resolvedSource.canonical_name !== participant.name ? '（本会议标签为“' + participant.name + '”）' : ''}`
+                : '⚠ 未匹配到对应人物记录，暂无法合并'}
+            </div>
+          )}
         </div>
 
         <div style={{ padding: '4px 22px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
