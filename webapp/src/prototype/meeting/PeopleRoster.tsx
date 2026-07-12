@@ -22,6 +22,9 @@ export function PeopleRoster() {
   const [page, setPage] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [meetings, setMeetings] = useState<Record<string, PersonMeeting[] | 'loading'>>({});
+  const [roleLabels, setRoleLabels] = useState<Record<string, string[]>>({});
+  const [descEdit, setDescEdit] = useState<Record<string, string>>({}); // 描述编辑缓冲
+  const [savingDesc, setSavingDesc] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [target, setTarget] = useState<string>('');
   const [preview, setPreview] = useState<null | 'loading' | { aliases: string[]; totalRefs: number; sourceIds: string[] }>(null);
@@ -117,9 +120,25 @@ export function PeopleRoster() {
       try {
         const r = await meetingNotesApi.getPersonMeetings(p.id);
         setMeetings((m) => ({ ...m, [p.id]: r.meetings || [] }));
+        setRoleLabels((m) => ({ ...m, [p.id]: r.roleLabels || [] }));
       } catch {
         setMeetings((m) => ({ ...m, [p.id]: [] }));
       }
+    }
+    setDescEdit((d) => (p.id in d ? d : { ...d, [p.id]: p.description ?? '' }));
+  };
+
+  const saveDesc = async (p: PersonRosterRow) => {
+    const text = (descEdit[p.id] ?? '').trim();
+    if (text === (p.description ?? '')) return;
+    setSavingDesc(p.id);
+    try {
+      await meetingNotesApi.renamePerson(p.id, { description: text });
+      await load();
+    } catch (e: any) {
+      alert(e?.message || '保存描述失败');
+    } finally {
+      setSavingDesc(null);
     }
   };
 
@@ -240,6 +259,30 @@ export function PeopleRoster() {
                                 ))}
                               </>
                             )}
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <span style={sub}>角色</span>
+                            <span style={{ fontSize: 13, marginLeft: 8, color: p.role ? '#0f172a' : '#94a3b8' }}>{p.role || '—'}</span>
+                            {(roleLabels[p.id]?.length ?? 0) > 0 && (
+                              <>
+                                <span style={{ ...sub, marginLeft: 16 }}>会议参考</span>{' '}
+                                {roleLabels[p.id].map((rl, k) => (
+                                  <span key={k} style={{ ...badge, background: '#f1f5f9', color: '#475569', marginRight: 4 }}>{rl}</span>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                          <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={sub}>描述</span>
+                            <input
+                              value={descEdit[p.id] ?? p.description ?? ''}
+                              onChange={(e) => setDescEdit((d) => ({ ...d, [p.id]: e.target.value }))}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="合并参考语言 / 备注（如：集团财务负责人）"
+                              style={{ flex: 1, maxWidth: 460, padding: '4px 8px', border: '1px solid #cbd5e1', borderRadius: 5, fontSize: 12.5 }}
+                            />
+                            <button style={{ ...btn, padding: '3px 10px', fontSize: 12 }} disabled={savingDesc === p.id}
+                              onClick={(e) => { e.stopPropagation(); saveDesc(p); }}>{savingDesc === p.id ? '保存中…' : '保存'}</button>
                           </div>
                           <div>
                             <span style={sub}>出现的会议</span>

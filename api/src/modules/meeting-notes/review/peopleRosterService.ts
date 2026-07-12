@@ -7,6 +7,7 @@ export interface PeopleRosterRow {
   aliases: string[];
   role: string | null;
   org: string | null;
+  description: string | null;  // 合并参考语言(metadata.description)
   contentEntityId: string | null;
   bridged: boolean;           // 是否已桥接到 content_entities
   personKind: string | null;  // 分类：person|role|topic|section|metadata|placeholder|unclear
@@ -56,6 +57,7 @@ export async function listPeopleRoster(
   const [listRes, countRes] = await Promise.all([
     db.query(
       `SELECT id, canonical_name, aliases, role, org, content_entity_id,
+              metadata->>'description' AS description,
               metadata->>'person_kind' AS person_kind, workspace_id, created_at
          FROM mn_people
         WHERE ${buildWhere('$3', listKindP, includeJunk)}
@@ -72,6 +74,7 @@ export async function listPeopleRoster(
     aliases: Array.isArray(r.aliases) ? r.aliases : [],
     role: r.role ?? null,
     org: r.org ?? null,
+    description: r.description ?? null,
     contentEntityId: r.content_entity_id ?? null,
     bridged: r.content_entity_id != null,
     personKind: r.person_kind ?? null,

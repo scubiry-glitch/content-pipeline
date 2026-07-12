@@ -460,7 +460,7 @@ export const meetingNotesApi = {
    * 改名：旧 canonical_name 自动入 aliases[]，让 LLM 抽取里出现旧名仍能 dedup 到同一行。
    * 冲突响应：409 CANONICAL_NAME_CONFLICT（同 (canonical_name, org) 已被另一人占用）。
    */
-  renamePerson: (id: string, body: { canonical_name: string; role?: string; org?: string }) =>
+  renamePerson: (id: string, body: { canonical_name?: string; role?: string; org?: string; description?: string }) =>
     jput<{
       id: string;
       canonical_name: string;
@@ -824,7 +824,7 @@ export const meetingNotesApi = {
     return jget<{ items: PersonRosterRow[]; total: number }>(`/people${qs ? '?' + qs : ''}`);
   },
   getPersonMeetings: (id: string) =>
-    jget<{ meetings: PersonMeeting[] }>(`/people/${encodeURIComponent(id)}/meetings`),
+    jget<{ meetings: PersonMeeting[]; roleLabels: string[] }>(`/people/${encodeURIComponent(id)}/meetings`),
   getParticipantsReview: (meetingId: string) =>
     jget<{ items: ParticipantReview[] }>(`/meetings/${encodeURIComponent(meetingId)}/participants-review`),
   createPerson: (body: { canonicalName: string; meetingId?: string; role?: string; org?: string }) =>
@@ -845,6 +845,7 @@ export interface PersonRosterRow {
   aliases: string[];
   role: string | null;
   org: string | null;
+  description: string | null;
   contentEntityId: string | null;
   bridged: boolean;
   personKind: string | null;
