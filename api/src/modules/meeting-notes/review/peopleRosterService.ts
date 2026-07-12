@@ -105,6 +105,10 @@ export async function getPersonMeetings(db: Db, personId: string): Promise<Perso
        UNION SELECT first_raised_meeting_id::text FROM mn_open_questions WHERE owner_person_id = $1
        UNION SELECT last_raised_meeting_id::text  FROM mn_open_questions WHERE owner_person_id = $1
        UNION SELECT first_seen_meeting_id::text   FROM mn_people         WHERE id = $1
+       -- 本场绑定(泛指参会人识别成该人):assets.metadata.participantOverrides 里 value 命中 personId
+       UNION SELECT a2.id::text FROM assets a2
+              WHERE a2.metadata ? 'participantOverrides'
+                AND EXISTS (SELECT 1 FROM jsonb_each_text(a2.metadata->'participantOverrides') e WHERE e.value = $1::text)
      )
      SELECT m.mid AS id,
             COALESCE(NULLIF(trim(a.title), ''), NULLIF(trim(a.metadata->>'title'), ''), '未命名会议') AS title,
