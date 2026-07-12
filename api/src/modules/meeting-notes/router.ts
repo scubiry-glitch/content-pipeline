@@ -24,7 +24,7 @@ import {
 import {
   listUnresolvedMentions, resolveUnresolvedMention,
 } from './review/unresolvedReviewService.js';
-import { listPeopleRoster } from './review/peopleRosterService.js';
+import { listPeopleRoster, getPersonMeetings } from './review/peopleRosterService.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -1679,11 +1679,21 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     /** GET /people/:id · 单人详情（含 aliases） */
     /** GET /people · 全局人物花名册（跨 workspace，读 mn_people）；?q= 名字/别名模糊，?limit= */
     fastify.get('/people', { preHandler: authenticate }, async (request) => {
-      const q = request.query as { q?: string; limit?: string };
+      const q = request.query as { q?: string; limit?: string; offset?: string; kind?: string; includeJunk?: string };
       return await listPeopleRoster(engine.deps.db, {
         q: q.q,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
+        offset: q.offset ? parseInt(q.offset, 10) : undefined,
+        kind: q.kind,
+        includeJunk: q.includeJunk === 'true' || q.includeJunk === '1',
       });
+    });
+
+    /** GET /people/:id/meetings · 该人物出现过的会议（场次名 + 链接用 id）*/
+    fastify.get('/people/:id/meetings', { preHandler: authenticate }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) { reply.status(404); return { error: 'Not Found' }; }
+      return { meetings: await getPersonMeetings(engine.deps.db, id) };
     });
 
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {

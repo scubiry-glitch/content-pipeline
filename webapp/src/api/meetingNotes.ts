@@ -814,15 +814,17 @@ export const meetingNotesApi = {
     jpost<{ ok: boolean }>(`/unresolved-mentions/${id}/resolve`),
 
   // ===== 人物花名册（全局 mn_people）=====
-  listPeopleRoster: (q: { q?: string; limit?: number } = {}) => {
+  listPeopleRoster: (q: { q?: string; limit?: number; offset?: number; kind?: string; includeJunk?: boolean } = {}) => {
     const qs = new URLSearchParams(
       Object.entries(q).reduce((acc: Record<string, string>, [k, v]) => {
-        if (v !== undefined && v !== null && String(v) !== '') acc[k] = String(v);
+        if (v !== undefined && v !== null && String(v) !== '' && v !== false) acc[k] = String(v);
         return acc;
       }, {}),
     ).toString();
     return jget<{ items: PersonRosterRow[]; total: number }>(`/people${qs ? '?' + qs : ''}`);
   },
+  getPersonMeetings: (id: string) =>
+    jget<{ meetings: PersonMeeting[] }>(`/people/${encodeURIComponent(id)}/meetings`),
 };
 
 export interface PersonRosterRow {
@@ -833,8 +835,15 @@ export interface PersonRosterRow {
   org: string | null;
   contentEntityId: string | null;
   bridged: boolean;
+  personKind: string | null;
   workspaceId: string | null;
   createdAt: string;
+}
+
+export interface PersonMeeting {
+  id: string;
+  title: string;
+  date: string | null;
 }
 
 export { API_BASE as MEETING_NOTES_API_BASE };
