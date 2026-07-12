@@ -4,7 +4,8 @@
 #   对含 ssh + deploy.repo 且 host≠localhost 的条目依次：
 #   ① 同步代码（每台 deploy.sync_mode：git | scp，见下）
 #   ② 下发本机 run-routing.json（可 --skip-config）
-#   ③ 远端 dist：deploy.rebuild_dist 所列 workspace（api / webapp）各执行 npm run build（可 --skip-build）
+#   ③ 远端依赖+构建：先 npm install（api 恒装 + rebuild_dist 所列 workspace，补依赖防 ERR_MODULE_NOT_FOUND），
+#      再对 deploy.rebuild_dist 所列 workspace（api / webapp）执行 npm run build（可 --skip-build，两者同跳）
 #   ④ pm2 restart + 可选日志 grep（deploy.pm2_app 未设则跳过）
 #
 # sync_mode（run-routing.json deploy.sync_mode，缺省 git）：
@@ -116,27 +117,39 @@ remote_deploy_rev() {
   ssh "${SSH_BASE[@]}" -p "$port" "$ssh_target" "bash -lc \"cat $repo/.pipeline-deploy-rev 2>/dev/null\"" 2>/dev/null | tr -d '\r\n' || true
 }
 
-# 远端 npm run build（仅 api / webapp）；rebuild_csv 形如 api 或 api,webapp
+# 远端 npm install（api 恒装 + rebuild workspaces）+ npm run build（仅 api / webapp）
+#   api 恒装：服务从源码(tsx)跑，package.json 变了但没装依赖会 ERR_MODULE_NOT_FOUND（如 jsonrepair）。
+#   install 与 build 同受 --skip-build 控制（跳过则两者都跳）。
 remote_rebuild_dist() {
   local port="$1" ssh_target="$2" repo="$3" rebuild_csv="$4"
   local parts p ws
+  # 安装列表 = api（恒装）∪ rebuild_csv 里的合法 workspace；构建列表 = rebuild_csv
+  local -a install_ws=("api")
+  local -a build_ws=()
+  if [[ -n "$rebuild_csv" && "$rebuild_csv" != "-" ]]; then
+    IFS=',' read -ra parts <<< "$rebuild_csv"
+    for p in "${parts[@]}"; do
+      ws="${p//[[:space:]]/}"
+      [[ -z "$ws" ]] && continue
+      if [[ "$ws" != "api" && "$ws" != "webapp" ]]; then
+        warn "忽略非法 rebuild_dist：$ws（仅 api、webapp）"
+        continue
+      fi
+      build_ws+=("$ws")
+      [[ "$ws" == "api" ]] || install_ws+=("$ws")
+    done
+  fi
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     if [[ "$SKIP_BUILD" -eq 1 ]]; then
-      dim "  ③ （--skip-build）跳过 npm run build"
-    elif [[ -z "$rebuild_csv" || "$rebuild_csv" == "-" ]]; then
-      dim "  ③ （未配置 deploy.rebuild_dist）跳过 dist 构建"
+      dim "  ③ （--skip-build）跳过 npm install + build"
     else
-      IFS=',' read -ra parts <<< "$rebuild_csv"
-      for p in "${parts[@]}"; do
-        ws="${p//[[:space:]]/}"
-        [[ -z "$ws" ]] && continue
-        if [[ "$ws" != "api" && "$ws" != "webapp" ]]; then
-          warn "忽略非法 rebuild_dist：$ws（仅 api、webapp）"
-          continue
-        fi
-        dim "  ③ ssh … cd $repo/$ws && npm run build"
-      done
+      for ws in "${install_ws[@]}"; do dim "  ③ ssh … cd $repo/$ws && npm install"; done
+      if [[ ${#build_ws[@]} -eq 0 ]]; then
+        dim "  ③ （未配置 deploy.rebuild_dist）跳过 npm run build"
+      else
+        for ws in "${build_ws[@]}"; do dim "  ③ ssh … cd $repo/$ws && npm run build"; done
+      fi
     fi
     return 0
   fi
@@ -144,19 +157,20 @@ remote_rebuild_dist() {
   if [[ "$SKIP_BUILD" -eq 1 ]]; then
     return 0
   fi
-  if [[ -z "$rebuild_csv" || "$rebuild_csv" == "-" ]]; then
-    return 0
-  fi
 
-  IFS=',' read -ra parts <<< "$rebuild_csv"
-  for p in "${parts[@]}"; do
-    ws="${p//[[:space:]]/}"
-    [[ -z "$ws" ]] && continue
-    if [[ "$ws" != "api" && "$ws" != "webapp" ]]; then
-      warn "忽略非法 rebuild_dist：$ws（仅 api、webapp）"
-      continue
+  # npm install（api 恒装 + rebuild workspaces；package.json 变更后补依赖）；无 package.json 的目录跳过
+  for ws in "${install_ws[@]}"; do
+    if ! ssh "${SSH_BASE[@]}" -p "$port" "$ssh_target" "bash -lc \"set -euo pipefail; if [ -f $repo/$ws/package.json ]; then cd $repo/$ws && npm install; else echo '($ws 无 package.json，跳过 install)'; fi\""; then
+      fail "远端 npm install ($ws) 失败"
+      return 1
     fi
+    ok "远端 npm install ($ws)"
+  done
+
+  # npm run build（仅 rebuild_csv 的 workspace）
+  for ws in "${build_ws[@]}"; do
     if ! ssh "${SSH_BASE[@]}" -p "$port" "$ssh_target" "bash -lc \"set -euo pipefail; cd $repo/$ws && npm run build\""; then
+      fail "远端 npm run build ($ws) 失败"
       return 1
     fi
     ok "远端 npm run build ($ws) → dist"
