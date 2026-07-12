@@ -825,7 +825,20 @@ export const meetingNotesApi = {
   },
   getPersonMeetings: (id: string) =>
     jget<{ meetings: PersonMeeting[] }>(`/people/${encodeURIComponent(id)}/meetings`),
+  /** 把 fromId 合并进 targetId（target 胜出）；dryRun 只返回引用数 + 合并后别名预览 */
+  mergePeople: (targetId: string, fromId: string, dryRun = false) =>
+    jpost<PersonMergeResult>(`/people/${encodeURIComponent(targetId)}/merge`, { fromId, dryRun }),
 };
+
+export interface PersonMergeResult {
+  ok?: boolean;
+  dryRun?: boolean;
+  target: { id: string; canonical_name: string; aliases?: string[] };
+  source: { id: string; canonical_name: string; deleted?: boolean };
+  refs?: Array<{ t: string; n: number }>;
+  previewMergedAliases?: string[];
+  affected?: any[];
+}
 
 export interface PersonRosterRow {
   id: string;
