@@ -48,14 +48,8 @@ export async function reassignMeetingPerson(
     out.push({ table: t, reassigned: (upd as any).rowCount ?? 0, dropped: 0 });
   }
 
-  // 把 fromId 的名字并入 toId 的 aliases(不删 fromId——它还属于别的场次)
-  await db.query(
-    `UPDATE mn_people tgt SET aliases = (
-        SELECT COALESCE(array_agg(DISTINCT a),'{}') FROM unnest(
-          tgt.aliases || ARRAY[(SELECT canonical_name FROM mn_people WHERE id=$1)]
-        ) a WHERE a IS NOT NULL AND a<>'' AND a<>tgt.canonical_name
-      ), updated_at=NOW() WHERE tgt.id=$2`,
-    [fromId, toId],
-  );
+  // 注:本场重指**不**把源名字并入目标 aliases。
+  // 源可能是泛指(说话人N),加成全局别名会让名字解析在所有场次都错映射到目标(串场污染)。
+  // 本场绑定由 metadata.participantOverrides 承载,不需要全局别名。
   return out;
 }
