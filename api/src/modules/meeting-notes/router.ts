@@ -3122,7 +3122,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                 p.canonical_name AS verifier_name
            FROM mn_assumptions a
            LEFT JOIN mn_people p ON p.id = a.verifier_person_id
+          -- scope_id 仅 50% 覆盖；缺失的靠 meeting_id ∈ scope 成员会议解析（与 decisions 一致）
           WHERE a.scope_id = $1
+             OR a.meeting_id IN (SELECT meeting_id FROM mn_scope_members WHERE scope_id = $1)
           ORDER BY a.created_at DESC`,
         [uuid],
       );
@@ -3134,7 +3136,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       const uuid = await resolveScopeUuid(engine.deps.db, id);
       if (!uuid) return { items: [] };
       const q = request.query as { status?: string; category?: string };
-      const conds: string[] = ['scope_id = $1'];
+      // scope_id 仅 46% 覆盖；缺失的靠 first_raised_meeting_id ∈ scope 成员会议解析
+      const conds: string[] = ['(scope_id = $1 OR first_raised_meeting_id IN (SELECT meeting_id FROM mn_scope_members WHERE scope_id = $1))'];
       const args: unknown[] = [uuid];
       if (q.status)   { conds.push(`status = $${args.length + 1}`);   args.push(q.status); }
       if (q.category) { conds.push(`category = $${args.length + 1}`); args.push(q.category); }
@@ -3160,6 +3163,8 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
         `SELECT id, text, severity, mention_count, heat_score, trend,
                 action_taken, metadata, created_at, updated_at
            FROM mn_risks
+          -- 注：mn_risks 无 meeting 列（risk 是跨会议聚合的），只能靠 scope_id 绑定，
+          -- 无法像 decisions/assumptions/open_questions 那样走成员会议解析。36% 覆盖是硬上限。
           WHERE scope_id = $1
           ORDER BY heat_score DESC, mention_count DESC`,
         [uuid],
