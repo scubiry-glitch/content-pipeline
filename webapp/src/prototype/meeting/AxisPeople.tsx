@@ -9,7 +9,7 @@ import { DimShell, CalloutCard, StatCell, BigStat, RegenerateOverlay, useStickyT
 import { MeetingPicker } from './_meetingPicker';
 import { AxisRegeneratePanel } from './AxisRegeneratePanel';
 import { PARTICIPANTS, P, MEETING, pickPerson } from './_fixtures';
-import { meetingNotesApi } from '../../api/meetingNotes';
+import { meetingNotesApi, type PersonMeeting } from '../../api/meetingNotes';
 import { useForceMock } from './_mockToggle';
 import { useMeetingScope } from './_scopeContext';
 import { useIsMobile } from '../_useIsMobile';
@@ -1387,6 +1387,25 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
   // T2 · AI 画像 modal（基于该人物全部历史会议轨迹喂 LLM 生成）
   const [aiProfileFor, setAiProfileFor] = useState<{ id: string; name: string } | null>(null);
 
+  // 展开某人物 → 拉「出现的会议」列表 + 链接（复用 /people/:id/meetings，与花名册页一致）
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [meetings, setMeetings] = useState<Record<string, PersonMeeting[] | 'loading'>>({});
+  const [roleLabels, setRoleLabels] = useState<Record<string, string[]>>({});
+  async function toggleMeetings(personId: string) {
+    if (expandedId === personId) { setExpandedId(null); return; }
+    setExpandedId(personId);
+    if (!meetings[personId]) {
+      setMeetings((m) => ({ ...m, [personId]: 'loading' }));
+      try {
+        const r = await meetingNotesApi.getPersonMeetings(personId);
+        setMeetings((m) => ({ ...m, [personId]: r.meetings || [] }));
+        setRoleLabels((m) => ({ ...m, [personId]: r.roleLabels || [] }));
+      } catch {
+        setMeetings((m) => ({ ...m, [personId]: [] }));
+      }
+    }
+  }
+
   async function reload() {
     if (!UUID_RE.test(scopeId)) return;
     setRows(null); setErr(null);
@@ -1532,8 +1551,11 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
         const isEditing = editingId === p.id;
         const isMergeSource = mergeSourceId === p.id;
         const isMergeTargetable = mergeSourceId && mergeSourceId !== p.id;
+        const isOpen = expandedId === p.id;
+        const mtgs = meetings[p.id];
         return (
-          <div key={p.id} style={{
+          <Fragment key={p.id}>
+          <div style={{
             display: 'grid',
             gridTemplateColumns: isMobile ? '1fr' : '1fr 100px 80px 140px',
             alignItems: isMobile ? 'start' : 'center',
@@ -1621,6 +1643,14 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
                       fontFamily: 'var(--mono)', letterSpacing: 0.3,
                     }}
                   >AI</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleMeetings(p.id); }}
+                    title="出现的会议 + 链接"
+                    style={{
+                      border: '1px solid var(--line)', background: isOpen ? 'var(--accent-soft)' : 'var(--paper)',
+                      borderRadius: 4, padding: '4px 8px', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)',
+                    }}
+                  >📅</button>
                 </>
               )}
               {isMergeSource && (
@@ -1631,6 +1661,40 @@ function PeopleManage({ scopeId }: { scopeId: string }) {
               )}
             </div>
           </div>
+          {isOpen && (
+            <div style={{
+              padding: '10px 16px 14px', borderBottom: '1px solid var(--line-2)',
+              background: 'var(--paper-2)',
+            }}>
+              {(roleLabels[p.id]?.length ?? 0) > 0 && (
+                <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: 0.3 }}>角色</span>
+                  {roleLabels[p.id].map((rl, k) => (
+                    <span key={k} style={{
+                      fontSize: 11, padding: '2px 8px', borderRadius: 4,
+                      background: 'var(--paper)', border: '1px solid var(--line-2)', color: 'var(--ink-2)',
+                    }}>{rl}</span>
+                  ))}
+                </div>
+              )}
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: 0.3 }}>出现的会议</span>
+              {mtgs === 'loading' ? (
+                <span style={{ color: 'var(--ink-3)', fontSize: 12, marginLeft: 8 }}>加载中…</span>
+              ) : !mtgs || mtgs.length === 0 ? (
+                <span style={{ color: 'var(--ink-3)', fontSize: 12, marginLeft: 8 }}>无关联会议</span>
+              ) : (
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                  {mtgs.map((m) => (
+                    <li key={m.id} style={{ fontSize: 13, marginBottom: 3 }}>
+                      <a href={`/meeting/${m.id}`} style={{ color: '#2563eb', textDecoration: 'none' }}>{m.title}</a>
+                      {m.date && <span style={{ color: 'var(--ink-3)', marginLeft: 8, fontSize: 11 }}>{m.date.slice(0, 10)}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          </Fragment>
         );
       })}
 
