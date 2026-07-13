@@ -3000,6 +3000,7 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     /**
      * DELETE /people/:id · 花名册硬删整条人物。
      * 12 张事实表:person 列可空→SET NULL(保留事实、去归属),非空(CASCADE 类)→DELETE 这些行。
+     * 3 张 UUID[] 数组列(张力 between_ids / 共识 supported_by / by_ids):array_remove 剔除该 id。
      * 顺带清掉各会议 participantOverrides 里指向该人的绑定;最后删本行。不可撤销。
      */
     fastify.delete('/people/:id', { preHandler: authenticate }, async (request, reply) => {
@@ -3035,6 +3036,26 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
             : await engine.deps.db.query(`DELETE FROM ${tbl} WHERE ${col} = $1`, [id]);
           const n = (r as any).rowCount ?? 0;
           if (n > 0) affected[tbl] = { action: canNull ? 'null' : 'delete', n };
+        }
+        // person UUID[] 数组列(张力/共识的 between_ids / supported_by / by_ids)：从数组里剔除该 id,
+        // 保留张力/共识本身(array_remove,与上面 SET NULL 同思路)。不清会留悬空引用→前端显示裸 UUID。
+        const ARRAY_REFS: Array<[string, string]> = [
+          ['mn_tensions', 'between_ids'],
+          ['mn_consensus_items', 'supported_by'],
+          ['mn_consensus_sides', 'by_ids'],
+        ];
+        for (const [tbl, col] of ARRAY_REFS) {
+          const exists = await engine.deps.db.query(
+            `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+            [tbl, col],
+          );
+          if (exists.rows.length === 0) continue;
+          const r = await engine.deps.db.query(
+            `UPDATE ${tbl} SET ${col} = array_remove(${col}, $1::uuid) WHERE $1::uuid = ANY(${col})`,
+            [id],
+          );
+          const n = (r as any).rowCount ?? 0;
+          if (n > 0) affected[tbl] = { action: 'null', n };
         }
         // 清各会议 participantOverrides 里指向该人的绑定(避免悬挂引用)
         await engine.deps.db.query(
