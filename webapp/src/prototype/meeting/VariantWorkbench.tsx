@@ -580,6 +580,8 @@ export function VariantWorkbench() {
   const [tensionMock, setTensionMock] = useState(forceMock);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
+  // 会议级 person-id(UUID) → 姓名，覆盖共识/分歧（tension 已在下方单独注入，此处补齐 consensus/sides）
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
   // Phase: 张力 → 解读（从 axes.knowledge + meta.affect_curve 抽取，按主题关键词与强度排名近似匹配）
   const [apiAxes, setApiAxes] = useState<any>(null);
   // 专家栈：detail API 透传的 expertRoles + JOIN expert_profiles 后的卡片数据
@@ -636,8 +638,12 @@ export function VariantWorkbench() {
         speakingPct: p.speakingPct ?? 0,
       });
     });
+    // 补种共识/分歧里的人物 UUID → 姓名（不在 apiParticipants 的 p1..pN 空间里）
+    for (const [pid, name] of Object.entries(personNames)) {
+      if (!map.has(pid)) map.set(pid, { id: pid, name: rosterName(name), role: '', initials: name.slice(0, 1), tone: 'neutral', speakingPct: 0 });
+    }
     return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
-  }, [apiParticipants, partReview]);
+  }, [apiParticipants, partReview, personNames]);
 
   // 张力解读：用主题关键词（停用词过滤后 ≥2 char tokens）匹配 axes 的 where_excerpt / outcome；
   // tension_peaks 按 intensity 排名映射到 analysis.tension 同 rank 那条。
@@ -806,6 +812,14 @@ export function VariantWorkbench() {
           setTensionMock(false);
         }
       })
+      .catch(() => {});
+  }, [id, forceMock]);
+
+  // 会议级 person-id → 姓名 解析 map（补齐共识/分歧的人物 UUID，tension 已在上方注入）
+  useEffect(() => {
+    if (forceMock || !id) return;
+    meetingNotesApi.getMeetingPersonNames(id)
+      .then((data) => { if (data?.map) setPersonNames(data.map); })
       .catch(() => {});
   }, [id, forceMock]);
 

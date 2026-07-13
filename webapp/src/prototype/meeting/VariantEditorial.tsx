@@ -15,6 +15,12 @@ import { useIsMobile } from '../_useIsMobile';
 
 type PFn = (id: string) => Participant;
 
+// 花名册重建后残留的悬空 person UUID 绝不当人名显示——兜底成中性占位（与 B/C 视图一致）。
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function nonUuidParticipant(p: Participant): Participant {
+  return UUID_RE.test(p.name) ? { ...p, name: '参会人', initials: '?' } : p;
+}
+
 // ── Section header helper ──
 function sectionHeader(num: string, title: string, sub: string) {
   return (
@@ -514,6 +520,8 @@ export function VariantEditorial() {
   const [usingMock, setUsingMock] = useState(forceMock);
   const [tensionMock, setTensionMock] = useState(forceMock);
   const [apiMeta, setApiMeta] = useState<ApiMeetingMeta | null>(null);
+  // 会议级 person-id(UUID) → 姓名，供 P() 补种（张力/共识里的人物 UUID 才解析得出「说话人N」）
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
   // 参会人 → 花名册审核状态（key = participant.name）
@@ -588,6 +596,14 @@ export function VariantEditorial() {
       .catch(() => {});
   }, [id, forceMock]);
 
+  // 会议级 person-id → 姓名 解析 map（张力/共识里的人物 UUID）
+  useEffect(() => {
+    if (forceMock || !id) return;
+    meetingNotesApi.getMeetingPersonNames(id)
+      .then((data) => { if (data?.map) setPersonNames(data.map); })
+      .catch(() => {});
+  }, [id, forceMock]);
+
   // Build a P() that prefers API-provided participants (with id/initials/tone)
   // over the mock _fixtures.PARTICIPANTS. Falls back to default P for unknown IDs.
   const P = useMemo<PFn>(() => {
@@ -603,9 +619,14 @@ export function VariantEditorial() {
         speakingPct: typeof p.speakingPct === 'number' ? p.speakingPct : 0,
       });
     });
-    return (id: string) => map.get(id) ?? defaultP(id);
+    // 补种张力/共识里的人物 UUID → 姓名（这些 id 不在 apiMeta.participants 的 p1..pN 空间里）
+    for (const [pid, name] of Object.entries(personNames)) {
+      if (!map.has(pid)) map.set(pid, { id: pid, name: rosterName(name), role: '', initials: name.slice(0, 1), tone: 'neutral', speakingPct: 0 });
+    }
+    // 悬空 UUID（既不在 participants 也解析不出姓名）→ defaultP 会回落成 name=UUID，nonUuidParticipant 兜底成「参会人」
+    return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMeta, partReview]);
+  }, [apiMeta, partReview, personNames]);
 
   const navItems = [
     { id: 'minutes',       label: '一、常规纪要',   num: '01' },

@@ -753,6 +753,8 @@ export function VariantThreads() {
   const [focusMapMock, setFocusMapMock] = useState(forceMock);
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
   const [apiParticipants, setApiParticipants] = useState<Array<{ id?: string; name: string; role?: string; initials?: string; tone?: string; speakingPct?: number }>>([]);
+  // 会议级 person-id(UUID) → 姓名，覆盖共识/分歧/张力里的人物 UUID（不在 p1..pN 空间里）
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
   // 复用 Shell 已经抓的 detail，避免重复 fetch
   const { detail: shellDetail, state: shellDetailState } = useMeetingDetail();
 
@@ -771,6 +773,13 @@ export function VariantThreads() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [id]);
+  // 会议级 person-id → 姓名 解析 map（共识/分歧/张力里的人物 UUID）
+  useEffect(() => {
+    if (forceMock || !id) return;
+    meetingNotesApi.getMeetingPersonNames(id)
+      .then((data) => { if (data?.map) setPersonNames(data.map); })
+      .catch(() => {});
+  }, [id, forceMock]);
   const rosterName = (raw: string | undefined | null): string => {
     if (!raw) return raw ?? '';
     const rv = partReview[raw];
@@ -793,8 +802,12 @@ export function VariantThreads() {
         speakingPct: p.speakingPct ?? 0,
       });
     });
+    // 补种共识/分歧/张力里的人物 UUID → 姓名（不在 rosterParticipants 的 p1..pN 空间里）
+    for (const [pid, name] of Object.entries(personNames)) {
+      if (!map.has(pid)) map.set(pid, { id: pid, name: rosterName(name), role: '', initials: name.slice(0, 1), tone: 'neutral', speakingPct: 0 });
+    }
     return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
-  }, [rosterParticipants]);
+  }, [rosterParticipants, personNames]);
 
   // 把 lanePeople 在 mock / API 间切换；API 但 participants 缺失则保留 fixture 占位
   const lanePeople: Participant[] = useMemo(() => {

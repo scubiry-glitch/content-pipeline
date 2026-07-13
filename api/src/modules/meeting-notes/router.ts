@@ -3413,6 +3413,37 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { items: r.rows };
     });
 
+    // 会议级 person-id → 姓名 解析器：把该会议所有轴行里出现的 person UUID
+    // （张力 between_ids ∪ 共识 supported_by ∪ 共识分歧 by_ids）汇总，JOIN mn_people
+    // 取 canonical_name。悬空 id（花名册重建后已不在 mn_people）自然落不进结果 → 前端兜底。
+    // 三视图统一消费此 map 给 P() 补种，UUID 才解析得出「说话人N」，不再退成裸 id / 泛「参会人」。
+    fastify.get('/meetings/:id/person-names', { preHandler: authenticate }, async (request) => {
+      const { id } = request.params as { id: string };
+      if (!UUID_RE.test(id)) return { map: {} };
+      const r = await engine.deps.db.query(
+        `WITH ids AS (
+           SELECT DISTINCT unnest(between_ids) AS pid FROM mn_tensions WHERE meeting_id = $1
+           UNION
+           SELECT DISTINCT unnest(supported_by) FROM mn_consensus_items WHERE meeting_id = $1
+           UNION
+           SELECT DISTINCT unnest(s.by_ids)
+             FROM mn_consensus_sides s
+             JOIN mn_consensus_items ci ON ci.id = s.item_id
+            WHERE ci.meeting_id = $1
+         )
+         SELECT p.id::text AS id, p.canonical_name AS name
+           FROM ids
+           JOIN mn_people p ON p.id = ids.pid
+          WHERE ids.pid IS NOT NULL`,
+        [id],
+      );
+      const map: Record<string, string> = {};
+      for (const row of r.rows as Array<{ id: string; name: string }>) {
+        if (row.name) map[row.id] = row.name;
+      }
+      return { map };
+    });
+
     // Phase 15.10 · AxisKnowledge · Judgments (mn_judgments) + Mental Model Hit Rate (mn_mental_model_hit_stats)
     fastify.get('/scopes/:id/judgments', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };

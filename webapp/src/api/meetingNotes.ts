@@ -754,6 +754,10 @@ export const meetingNotesApi = {
   getMeetingTensions: (id: string) =>
     jget<{ items: Array<{ id: string; tension_key: string; between_ids: string[]; between_names?: string[]; topic: string; intensity: number; summary: string; moments: Array<{ who: string; text: string }> }> }>(`/meetings/${id}/tensions`),
 
+  // 会议级 person-id(UUID) → 姓名 解析 map（张力/共识/分歧里出现的人物），供 P() 补种；悬空 id 不在 map 里
+  getMeetingPersonNames: (id: string) =>
+    jget<{ map: Record<string, string> }>(`/meetings/${id}/person-names`),
+
   // Sources (ingest)
   listSources: () => jget<{ items: any[] }>('/sources'),
   createSource: (body: {
