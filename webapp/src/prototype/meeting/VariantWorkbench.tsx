@@ -16,6 +16,13 @@ import { useIsMobile } from '../_useIsMobile';
 
 type PFn = (id: string) => Participant;
 
+// 张力/共识的 between_ids 可能引用已被花名册重建替换的旧 person UUID（跨会议约 12 个悬空 id、
+// 波及 41 场），LEFT JOIN 解析为 NULL。永不把裸 UUID 当人名显示，兜底成中性占位。
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function nonUuidParticipant(p: Participant): Participant {
+  return UUID_RE.test(p.name) ? { ...p, name: '参会人', initials: '?' } : p;
+}
+
 // ── Mock transcript (right pane) ──
 const TRANSCRIPT = [
   { who: 'p2', time: '00:38:12', text: '我坚持的是：推理层在特定 workload 下有价格歧视空间，毛利结构比训练层更耐得住周期。', highlight: true,  tag: ['V1', 'T1'] },
@@ -629,7 +636,7 @@ export function VariantWorkbench() {
         speakingPct: p.speakingPct ?? 0,
       });
     });
-    return (id: string) => map.get(id) ?? defaultP(id);
+    return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
   }, [apiParticipants, partReview]);
 
   // 张力解读：用主题关键词（停用词过滤后 ≥2 char tokens）匹配 axes 的 where_excerpt / outcome；

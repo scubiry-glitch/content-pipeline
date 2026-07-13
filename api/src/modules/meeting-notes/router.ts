@@ -3355,11 +3355,14 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       if (!UUID_RE.test(id)) return { items: [] };
       const r = await engine.deps.db.query(
         `SELECT t.id, t.tension_key, t.between_ids, t.topic, t.intensity, t.summary,
-                -- 把 between_ids（mn_people.id UUID）解析成真实姓名数组，顺序与 between_ids 一致
+                -- 把 between_ids（mn_people.id UUID）解析成真实姓名数组，顺序与 between_ids 严格一致
+                -- （WITH ORDINALITY + ORDER BY，LEFT JOIN 无匹配时占位空串——旧 person 被花名册重建替换后
+                --  会悬空，绝不把裸 UUID 当人名返回；前端再兜底成中性占位）
                 ARRAY(
-                  SELECT p.canonical_name
-                    FROM unnest(t.between_ids) AS bid
-                    LEFT JOIN mn_people p ON p.id = bid
+                  SELECT COALESCE(p.canonical_name, '')
+                    FROM unnest(t.between_ids) WITH ORDINALITY AS u(bid, ord)
+                    LEFT JOIN mn_people p ON p.id = u.bid
+                   ORDER BY u.ord
                 ) AS between_names,
                 COALESCE(
                   json_agg(

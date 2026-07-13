@@ -15,6 +15,12 @@ import { useIsMobile } from '../_useIsMobile';
 type PFn = (id: string) => Participant;
 type ThreadEvent = { t: number; kind: string; label?: string; ref?: string };
 
+// 张力/共识 between_ids 可能引用被花名册重建替换的旧 person UUID（悬空引用），永不显示裸 UUID。
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function nonUuidParticipant(p: Participant): Participant {
+  return UUID_RE.test(p.name) ? { ...p, name: '参会人', initials: '?' } : p;
+}
+
 // ── Belief thread events (hardcoded per prototype) ──
 const EVENTS: Record<string, Array<{ t: number; kind: string; label?: string; ref?: string }>> = {
   p1: [
@@ -382,7 +388,7 @@ function ConsensusGraph({ a, isMock, apiParticipants, P = defaultP }: {
   const participants = (apiParticipants && apiParticipants.length > 0)
     ? apiParticipants
         .filter((p): p is typeof p & { id: string } => typeof p.id === 'string' && p.id.length > 0)
-        .map((p) => ({
+        .map((p) => nonUuidParticipant({
           id: p.id,
           name: p.name,
           role: p.role ?? '',
@@ -787,7 +793,7 @@ export function VariantThreads() {
         speakingPct: p.speakingPct ?? 0,
       });
     });
-    return (id: string) => map.get(id) ?? defaultP(id);
+    return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
   }, [rosterParticipants]);
 
   // 把 lanePeople 在 mock / API 间切换；API 但 participants 缺失则保留 fixture 占位
