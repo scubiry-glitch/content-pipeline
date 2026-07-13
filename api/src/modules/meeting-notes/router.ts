@@ -3420,24 +3420,32 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
     fastify.get('/meetings/:id/person-names', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
       if (!UUID_RE.test(id)) return { map: {} };
-      const r = await engine.deps.db.query(
-        `WITH ids AS (
-           SELECT DISTINCT unnest(between_ids) AS pid FROM mn_tensions WHERE meeting_id = $1
-           UNION
-           SELECT DISTINCT unnest(supported_by) FROM mn_consensus_items WHERE meeting_id = $1
-           UNION
-           SELECT DISTINCT unnest(s.by_ids)
-             FROM mn_consensus_sides s
-             JOIN mn_consensus_items ci ON ci.id = s.item_id
-            WHERE ci.meeting_id = $1
-         )
-         SELECT p.id::text AS id, p.canonical_name AS name
-           FROM ids
-           JOIN mn_people p ON p.id = ids.pid
-          WHERE ids.pid IS NOT NULL`,
+      // 候选 person UUID 来自两处：
+      //  (1) 轴表数组列 between_ids / supported_by / by_ids；
+      //  (2) metadata.analysis JSON —— A 视图直接读它，focusMap/newCognition/crossView 等段里的
+      //      人物 UUID 不在轴表里，必须一并收集，否则前端解析不出而被兜底成泛「参会人」。
+      // 两处 union 后一次性 JOIN mn_people；非人物 UUID（会议 id / 条目 id）JOIN 不上，自然丢弃。
+      const candidates = new Set<string>();
+      const axis = await engine.deps.db.query(
+        `SELECT DISTINCT unnest(between_ids)::text AS pid FROM mn_tensions WHERE meeting_id = $1
+         UNION SELECT DISTINCT unnest(supported_by)::text FROM mn_consensus_items WHERE meeting_id = $1
+         UNION SELECT DISTINCT unnest(s.by_ids)::text
+           FROM mn_consensus_sides s JOIN mn_consensus_items ci ON ci.id = s.item_id
+          WHERE ci.meeting_id = $1`,
         [id],
       );
+      for (const row of axis.rows as Array<{ pid: string | null }>) if (row.pid) candidates.add(row.pid.toLowerCase());
+      const anRes = await engine.deps.db.query(`SELECT metadata->'analysis' AS an FROM assets WHERE id::text = $1`, [id]);
+      const anRaw = anRes.rows[0]?.an ? JSON.stringify(anRes.rows[0].an) : '';
+      const UUID_G = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+      for (const m of anRaw.matchAll(UUID_G)) candidates.add(m[0].toLowerCase());
+      const ids = [...candidates];
       const map: Record<string, string> = {};
+      if (ids.length === 0) return { map };
+      const r = await engine.deps.db.query(
+        `SELECT id::text AS id, canonical_name AS name FROM mn_people WHERE id::text = ANY($1::text[])`,
+        [ids],
+      );
       for (const row of r.rows as Array<{ id: string; name: string }>) {
         if (row.name) map[row.id] = row.name;
       }
