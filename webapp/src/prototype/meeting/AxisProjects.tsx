@@ -168,7 +168,10 @@ function ProjectBanner() {
   );
 }
 
-type DecisionRow = typeof DECISION_CHAIN[number];
+type DecisionRow = typeof DECISION_CHAIN[number] & {
+  // API 模式补充：真实会议标题/时间/id，供「来自 <会议> · 链接」显示（mock 下 undefined）
+  meetingTitle?: string; meetingAt?: string; meetingId?: string;
+};
 
 function ProvenanceChain({ scopeId }: { scopeId: string }) {
   const forceMock = useForceMock();
@@ -187,7 +190,8 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
         const items = r?.items ?? [];
         const mapped = items.map((d) => ({
           id: d.id.slice(0, 6),
-          at: d.meeting_id ? d.meeting_id.slice(0, 12) : '',
+          // at 由截断 UUID 改为会议日期（有意义、可读）；标题/链接单独走 meetingTitle/meetingId
+          at: d.meeting_at ? d.meeting_at.slice(0, 10) : (d.meeting_id ? d.meeting_id.slice(0, 8) : ''),
           title: d.title,
           who: pickPerson(d.proposer_person_id, d.proposer_name),
           basedOn: d.rationale ?? (d.based_on_ids?.length ? `${d.based_on_ids.length} 个前置决策` : '无显式前置'),
@@ -195,6 +199,9 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
           superseded: Boolean(d.superseded_by_id),
           supersededBy: d.superseded_by_id?.slice(0, 6),
           current: Boolean(d.is_current),
+          meetingTitle: d.meeting_title,
+          meetingAt: d.meeting_at,
+          meetingId: d.meeting_id,
         })) as DecisionRow[];
         setRows(mapped); setIsMock(false); setLoading(false);
       })
@@ -249,9 +256,18 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
                 }}>
                   {d.title}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                   <Avatar p={p} size={20} radius={4} />
                   <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{p.name} · 提出</span>
+                  {d.meetingId && (
+                    <>
+                      <span style={{ color: 'var(--ink-4)', fontSize: 11 }}>·</span>
+                      <a href={`/meeting/${d.meetingId}`} title="打开来源会议"
+                        style={{ fontSize: 11.5, color: '#2563eb', textDecoration: 'none' }}>
+                        来自「{d.meetingTitle || '会议'}」
+                      </a>
+                    </>
+                  )}
                 </div>
                 {/* On mobile: show BASED ON inline below the decision content */}
                 {isMobile && (
@@ -294,16 +310,37 @@ function ProvenanceChain({ scopeId }: { scopeId: string }) {
         })}
       </div>
 
-      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <CalloutCard title={'当前决议 D-07 的"脆弱点"'} tone="accent">
-          这条链上有 <b>3 处关键支点</b>：AS-01 (推理层毛利) · AS-04 (LP 容忍度) · D-04 (H-chip 配额)。
-          其中 <b>AS-04 置信度仅 0.55 且未验证</b> —— 推翻它会使整条链崩溃。
-        </CalloutCard>
-        <CalloutCard title="批判提醒">
-          溯源链会给人一种<i>"决策是理性累积的"</i>幻觉。事实上 D-02 曾被完全推翻。
-          下次重要决议前，回看这张图 2 分钟，比开半小时会更有价值。
-        </CalloutCard>
-      </div>
+      {/* callout：mock 保留原叙事；真实 scope 改为从 rows 派生（否则会把 D-07/AS-04 等 demo 文案挂到真数据上误导） */}
+      {isMock ? (
+        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <CalloutCard title={'当前决议 D-07 的"脆弱点"'} tone="accent">
+            这条链上有 <b>3 处关键支点</b>：AS-01 (推理层毛利) · AS-04 (LP 容忍度) · D-04 (H-chip 配额)。
+            其中 <b>AS-04 置信度仅 0.55 且未验证</b> —— 推翻它会使整条链崩溃。
+          </CalloutCard>
+          <CalloutCard title="批判提醒">
+            溯源链会给人一种<i>"决策是理性累积的"</i>幻觉。事实上 D-02 曾被完全推翻。
+            下次重要决议前，回看这张图 2 分钟，比开半小时会更有价值。
+          </CalloutCard>
+        </div>
+      ) : rows.length > 0 ? (() => {
+        const currentN = rows.filter((r) => r.current).length;
+        const supersededN = rows.filter((r) => r.superseded).length;
+        const weakest = rows
+          .filter((r) => !r.superseded)
+          .slice()
+          .sort((a, b) => a.confidence - b.confidence)[0];
+        return (
+          <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <CalloutCard title="链条概览" tone="accent">
+              共 <b>{rows.length}</b> 个决议 · 现行 <b>{currentN}</b> · 已被推翻 <b>{supersededN}</b>。
+              {weakest && <>　当前置信度最低：「{weakest.title}」（<b>{weakest.confidence.toFixed(2)}</b>）—— 最脆弱的一环，优先复核。</>}
+            </CalloutCard>
+            <CalloutCard title="批判提醒">
+              溯源链会给人<i>"决策是理性累积的"</i>幻觉。重要决议前回看 2 分钟：哪些前置假设还没验证、哪些结论曾被推翻，比再开半小时会更有价值。
+            </CalloutCard>
+          </div>
+        );
+      })() : null}
 
       {/* R4 · 改动二：决策溯源 tab 内追加决策树视图（mn_decision_tree_snapshots） */}
       <DecisionTreeSection scopeId={scopeId} />

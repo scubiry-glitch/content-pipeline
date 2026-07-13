@@ -712,7 +712,7 @@ export const meetingNotesApi = {
 
   // Phase 15.8 · AxisProjects 数据源（全新路由族 · 无破坏性）
   listScopeDecisions: (scopeId: string) =>
-    jget<{ items: Array<{ id: string; meeting_id: string; title: string; proposer_person_id?: string; proposer_name?: string; based_on_ids: string[]; superseded_by_id?: string; confidence: number; is_current: boolean; rationale?: string; created_at: string }> }>(
+    jget<{ items: Array<{ id: string; meeting_id: string; title: string; proposer_person_id?: string; proposer_name?: string; based_on_ids: string[]; superseded_by_id?: string; confidence: number; is_current: boolean; rationale?: string; created_at: string; meeting_title?: string; meeting_at?: string }> }>(
       `/scopes/${scopeId}/decisions`,
     ),
   listScopeAssumptions: (scopeId: string) =>

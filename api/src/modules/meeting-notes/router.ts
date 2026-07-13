@@ -3067,10 +3067,16 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
           `SELECT d.id, d.meeting_id, d.title, d.proposer_person_id,
                 d.based_on_ids, d.superseded_by_id, d.confidence, d.is_current, d.rationale,
                 d.created_at,
-                p.canonical_name AS proposer_name
+                p.canonical_name AS proposer_name,
+                COALESCE(NULLIF(trim(a.title), ''), NULLIF(trim(a.metadata->>'title'), ''), '未命名会议') AS meeting_title,
+                a.created_at AS meeting_at
            FROM mn_decisions d
            LEFT JOIN mn_people p ON p.id = d.proposer_person_id
+           LEFT JOIN assets a ON a.id = d.meeting_id::text
+          -- 决策绑定 scope 有两条路径：显式 scope_id（回填过的 ~101 条）或经会议成员归属
+          -- （多数决策 scope_id 为 NULL，只能靠 meeting_id ∈ scope 成员会议解析，与 judgments 一致）
           WHERE d.scope_id = $1
+             OR d.meeting_id IN (SELECT meeting_id FROM mn_scope_members WHERE scope_id = $1)
           ORDER BY d.created_at ASC`,
           [uuid],
         );
