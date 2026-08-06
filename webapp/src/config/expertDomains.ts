@@ -22,6 +22,7 @@ export const EXPERT_DOMAINS: ExpertDomain[] = [
   { code: 'E10', name: '先进制造', color: '#64748b', icon: '🏭' },
   { code: 'E11', name: 'ESG可持续', color: '#10b981', icon: '🌱' },
   { code: 'E12', name: '跨境出海', color: '#0ea5e9', icon: '🚢' },
+  { code: 'E13', name: '江苏银行高层', color: '#ca8a04', icon: '🏦' },
 ];
 
 export function findDomainByCode(code: string): ExpertDomain {
