@@ -389,9 +389,10 @@ async function attemptResumeRepair(opts: {
   //     含 Skill/ExitPlanMode/Agent：隔离用户全局插件(如 superpowers)自动激活的 Skill 工具，
   //     否则 sonnet 首个 turn 就调 Skill → 命中 --max-turns 1 → error_max_turns。
   const NO_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput,Skill,ExitPlanMode,Agent';
-  // --setting-sources project：无头分析进程不继承 ~/.claude 的全局插件/skill(根治：以后
-  //   全局装任何插件都不会再泄漏进来)；配合 NO_TOOLS 双重防御。
-  const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --setting-sources project --output-format json --max-turns 1 < '${promptFile}'`;
+  // --setting-sources project,user：保留项目级隔离，同时允许读取 user settings 中的
+  //   Claude 认证来源；否则会落回已吊销的 project/OAuth 凭据并稳定 401。配合 NO_TOOLS
+  //   仍可隔离全局插件/skill。
+  const cmd = `${cliBinShell} -p --resume '${sessionId}'${modelFlag} --disallowed-tools '${NO_TOOLS}' --setting-sources project,user --output-format json --max-turns 1 < '${promptFile}'`;
   console.warn(`${tag} spawn (sid=${sessionId.slice(0, 8)})`);
 
   const proc = spawn('sh', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, cwd, env: claudeCliOAuthEnv() });
@@ -711,8 +712,8 @@ export async function runClaudeCliMode(
   //     含 Skill/ExitPlanMode/Agent：隔离用户全局插件(如 superpowers)自动激活的 Skill 工具，
   //     否则 sonnet 首个 turn 就调 Skill → 命中 --max-turns 1 → error_max_turns。
   const NO_TOOLS = "Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,NotebookEdit,Task,TodoWrite,KillShell,BashOutput,Skill,ExitPlanMode,Agent";
-  // --setting-sources project：无头分析进程不继承 ~/.claude 的全局插件/skill；配合 NO_TOOLS 双重防御。
-  const isolationFlags = ` --disallowed-tools '${NO_TOOLS}' --setting-sources project`;
+  // --setting-sources project,user：保留项目级隔离，同时允许读取 user settings 中的认证。
+  const isolationFlags = ` --disallowed-tools '${NO_TOOLS}' --setting-sources project,user`;
   const cmd = `${cliBinShell} -p${resumeFlag}${modelFlag}${isolationFlags} --output-format json --max-turns 1 < '${promptFile}'`;
 
   // ─ 决定 cwd ─

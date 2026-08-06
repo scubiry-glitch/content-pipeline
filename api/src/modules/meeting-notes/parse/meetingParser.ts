@@ -10,7 +10,7 @@
 // 本模块不做 axis 计算，只做 "原子事实" 落盘。轴计算通过独立 enqueueRun 触发。
 
 import type { MeetingNotesDeps } from '../types.js';
-import { ensurePersonByName } from './participantExtractor.js';
+import { observeMeetingParticipants, resolveConfirmedMeetingParticipant } from '../review/meetingParticipantIdentity.js';
 
 export interface ParseMeetingResult {
   ok: boolean;
@@ -83,16 +83,24 @@ export async function parseMeeting(
   }
 
   const persistedPeople: Array<{ id: string; name: string; role?: string }> = [];
+  await observeMeetingParticipants(
+    deps,
+    assetId,
+    merged.map((p) => ({ rawLabel: p.name, role: p.role, source: 'parseMeeting' })),
+  );
   for (const p of merged) {
-    const id = await ensurePersonByName(deps, p.name, p.role, undefined, assetId);
+    const id = await resolveConfirmedMeetingParticipant(deps, assetId, p.name);
     if (id) persistedPeople.push({ id, name: p.name, role: p.role });
   }
-  const participantCount = persistedPeople.length;
+  const participantCount = merged.length;
 
   // 3.4) 把 participants 写回 assets.metadata.participants：
-  //   getMeetingDetail 从这里读取顶部参与者卡片。之前只写 mn_people 不写 metadata
-  //   导致 view A 顶部 participants=0（即使 mn_people 有数据）。
-  if (persistedPeople.length > 0) {
+  //   getMeetingDetail 从这里读取顶部参与者卡片；未确认的人保留本场 local id，避免自动造全局人物。
+  if (merged.length > 0) {
+    const participantPayload = merged.map((p, idx) => {
+      const confirmedId = persistedPeople.find((x) => x.name === p.name)?.id ?? null;
+      return { id: confirmedId ?? `local:${idx + 1}`, name: p.name, role: p.role, confirmedPersonId: confirmedId };
+    });
     try {
       await deps.db.query(
         `UPDATE assets
@@ -100,7 +108,7 @@ export async function parseMeeting(
               'participants', $2::jsonb
             )
           WHERE id = $1`,
-        [assetId, JSON.stringify(persistedPeople)],
+        [assetId, JSON.stringify(participantPayload)],
       );
     } catch (e) {
       console.warn('[meetingParser] persist participants failed:', (e as Error).message);
@@ -146,7 +154,11 @@ export async function parseMeeting(
     ok: true,
     assetId,
     participantCount,
-    participants: persistedPeople,
+    participants: merged.map((p, idx) => ({
+      id: persistedPeople.find((x) => x.name === p.name)?.id ?? `local:${idx + 1}`,
+      name: p.name,
+      role: p.role,
+    })),
     segmentCount: parsed.segments?.length ?? 0,
     durationSec,
   };

@@ -727,7 +727,7 @@ wikiMarkdown: 给 data/content-wiki/default/ 直接写文件用的 markdown 内�
   sections.push(taskLines.join('\n'));
 
   // ── 9. Final wrap + transcript ──────────────────────────────────────────
-  sections.push(`=== TRANSCRIPT (cleaned) ===
+  sections.push(`=== ORIGINAL TRANSCRIPT ===
 \`\`\`
 ${ctx.transcript}
 \`\`\`

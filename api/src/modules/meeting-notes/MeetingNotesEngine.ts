@@ -180,7 +180,9 @@ export class MeetingNotesEngine {
            FROM mn_meeting_necessity WHERE meeting_id = $1`),
       q(`SELECT samples, tension_peaks, insight_points
            FROM mn_affect_curve WHERE meeting_id = $1`),
-      q(`SELECT id, tension_key, between_ids, topic, intensity, summary, moments, computed_at
+      q(`SELECT id, tension_key, between_ids, topic, intensity, summary,
+                COALESCE(NULLIF(moments, '[]'::jsonb), NULLIF(meta->'moments', 'null'::jsonb), '[]'::jsonb) AS moments,
+                computed_at
            FROM mn_tensions WHERE meeting_id = $1 ORDER BY intensity DESC`)
         .catch(() => ({ rows: [] as any[] })),  // mn_tensions 表未迁移时降级
     ]);

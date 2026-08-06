@@ -767,7 +767,12 @@ export function VariantThreads() {
       .then((r) => {
         if (cancelled) return;
         const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
-        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        (r.items ?? []).forEach((it) => {
+          m[it.rawLabel] = {
+            reviewed: it.status === 'confirmed',
+            canonicalName: it.confirmedPerson?.canonicalName ?? null,
+          };
+        });
         setPartReview(m);
       })
       .catch(() => {});
@@ -806,8 +811,23 @@ export function VariantThreads() {
     for (const [pid, name] of Object.entries(personNames)) {
       if (!map.has(pid)) map.set(pid, { id: pid, name: rosterName(name), role: '', initials: name.slice(0, 1), tone: 'neutral', speakingPct: 0 });
     }
-    return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
-  }, [rosterParticipants, personNames]);
+    return (id: string) => {
+      const direct = map.get(id);
+      if (direct) return direct;
+      // Shared/API analysis may contain legacy p1/p2 keys. Resolve by the
+      // current meeting participant order; never use fixture names in API mode.
+      const legacy = /^p(\d+)$/.exec(String(id));
+      const ordered = legacy ? rosterParticipants[Number(legacy[1]) - 1] : undefined;
+      if (ordered) return {
+        id: ordered.id ?? id,
+        name: ordered.name || '参会人', role: ordered.role ?? '',
+        initials: ordered.initials ?? ordered.name.slice(0, 2),
+        tone: (ordered.tone as 'warm' | 'cool' | 'neutral') ?? 'neutral',
+        speakingPct: ordered.speakingPct ?? 0,
+      };
+      return usingMock ? nonUuidParticipant(defaultP(id)) : { id, name: '参会人', role: '', initials: '?', tone: 'neutral', speakingPct: 0 };
+    };
+  }, [rosterParticipants, personNames, usingMock]);
 
   // 把 lanePeople 在 mock / API 间切换；API 但 participants 缺失则保留 fixture 占位
   const lanePeople: Participant[] = useMemo(() => {

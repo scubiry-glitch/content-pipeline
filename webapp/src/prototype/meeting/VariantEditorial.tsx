@@ -3,12 +3,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { meetingNotesApi } from '../../api/meetingNotes';
+import { meetingNotesApi, type ParticipantReviewCandidate } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
 import { useForceMock } from './_mockToggle';
-import { adaptApiAnalysis, normalizeTensionMoments } from './_apiAdapters';
+import { adaptApiAnalysis, normalizeTensionMoments, presentationText } from './_apiAdapters';
 import { useMeetingShellTitle, useMeetingDetail, useMeetingHealth } from './MeetingDetailShell';
 import { ParticipantMergeModal } from './ParticipantMergeModal';
 import { useIsMobile } from '../_useIsMobile';
@@ -47,7 +47,7 @@ function sectionHeader(num: string, title: string, sub: string) {
 function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
   const isMobile = useIsMobile();
   const summary: any = a.summary ?? {};
-  const tldr: string | null = typeof summary.tldr === 'string' && summary.tldr.trim() ? summary.tldr : null;
+  const tldr = presentationText(summary.tldr) || null;
   const scqa = summary.scqa && typeof summary.scqa === 'object' ? summary.scqa : null;
   const metrics = summary.metrics && typeof summary.metrics === 'object' ? summary.metrics : null;
 
@@ -136,7 +136,7 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
               </div>
               <div style={{
                 fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)',
-              }}>{seg.body}</div>
+              }}>{presentationText(seg.body)}</div>
             </div>
           ))}
         </div>
@@ -152,7 +152,7 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
         <p style={{
           fontFamily: 'var(--serif)', fontSize: 18, lineHeight: 1.55, margin: '6px 0 0',
           color: 'var(--ink)',
-        }}>{summary.decision ?? ''}</p>
+        }}>{presentationText(summary.decision)}</p>
       </div>
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '0 0 14px' }}>Action Items</h3>
@@ -173,12 +173,12 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
               <Avatar p={P(it.who)} size={22} />
               <span style={{ fontSize: 13 }}>{P(it.who).name}</span>
             </div>
-            {isMobile && <MonoMeta style={{ textAlign: 'right' }}>{it.due}</MonoMeta>}
+            {isMobile && <MonoMeta style={{ textAlign: 'right' }}>{presentationText(it.due)}</MonoMeta>}
             <div style={{
               fontSize: 14, lineHeight: 1.5, color: 'var(--ink)',
               ...(isMobile ? { gridColumn: '1 / -1' } : {}),
-            }}>{it.what}</div>
-            {!isMobile && <MonoMeta style={{ textAlign: 'right' }}>{it.due}</MonoMeta>}
+            }}>{presentationText(it.what)}</div>
+            {!isMobile && <MonoMeta style={{ textAlign: 'right' }}>{presentationText(it.due)}</MonoMeta>}
           </div>
         ))}
         <div style={{ height: 1, background: 'var(--line-2)' }} />
@@ -186,7 +186,7 @@ function SecMinutes({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
 
       <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 16, margin: '32px 0 14px' }}>Open Risks</h3>
       <ul style={{ margin: 0, paddingLeft: 18, maxWidth: 760, color: 'var(--ink)', fontSize: 14, lineHeight: 1.75 }}>
-        {(summary.risks ?? []).map((r: string, i: number) => <li key={i}>{r}</li>)}
+        {(summary.risks ?? []).map((r: unknown, i: number) => <li key={i}>{presentationText(r)}</li>)}
       </ul>
     </section>
   );
@@ -236,9 +236,9 @@ function SecTension({ a, isMock, P = defaultP }: { a: typeof ANALYSIS; isMock?: 
                 <MonoMeta>强度 {(t.intensity * 100).toFixed(0)}</MonoMeta>
               </div>
               <div style={{ fontFamily: 'var(--serif)', fontWeight: 600, fontSize: 17, letterSpacing: '-0.005em' }}>
-                {t.topic}
+                {presentationText(t.topic)}
               </div>
-              <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.65, marginTop: 8 }}>{t.summary}</p>
+              <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.65, marginTop: 8 }}>{presentationText(t.summary)}</p>
               {(t.moments ?? []).length > 0 && (
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(t.moments ?? []).map((m, i) => (
@@ -295,7 +295,7 @@ function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                     padding: '12px 14px', borderRadius: 4,
                   }}>
                     <MonoMeta>BEFORE</MonoMeta>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: 15, marginTop: 4, lineHeight: 1.5, color: 'var(--ink-2)' }}>{n.before}</div>
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: 15, marginTop: 4, lineHeight: 1.5, color: 'var(--ink-2)' }}>{presentationText(n.before)}</div>
                   </div>
                   <div style={{
                     display: 'flex',
@@ -311,12 +311,12 @@ function SecNewCognition({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                     padding: '12px 14px', borderRadius: 4,
                   }}>
                     <MonoMeta style={{ color: 'oklch(0.4 0.1 40)' }}>AFTER</MonoMeta>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: 15, marginTop: 4, lineHeight: 1.5, color: 'oklch(0.28 0.08 40)' }}>{n.after}</div>
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: 15, marginTop: 4, lineHeight: 1.5, color: 'oklch(0.28 0.08 40)' }}>{presentationText(n.after)}</div>
                   </div>
                 </div>
                 <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 12, display: 'flex', gap: 6, alignItems: 'baseline' }}>
                   <span style={{ color: 'var(--ink-4)' }}>触发</span>
-                  <span>{n.trigger}</span>
+                  <span>{presentationText(n.trigger)}</span>
                 </div>
               </div>
             </div>
@@ -357,7 +357,7 @@ function SecFocusMap({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                 </div>
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(f.themes ?? []).map((t, i) => <Chip key={i} tone="amber">{t}</Chip>)}
+                {(f.themes ?? []).map((t, i) => <Chip key={i} tone="amber">{presentationText(t)}</Chip>)}
               </div>
             </div>
           );
@@ -392,7 +392,7 @@ function SecConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
               border: '1px solid oklch(0.87 0.06 40)', borderRadius: 4, marginBottom: 10,
             }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 14.5, lineHeight: 1.55, color: 'oklch(0.28 0.08 40)' }}>
-                {c.text}
+                {presentationText(c.text)}
               </div>
               <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
                 {c.supportedBy.map((id) => (
@@ -414,7 +414,7 @@ function SecConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
               border: '1px solid var(--line-2)', borderRadius: 4, marginBottom: 10,
             }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 14.5, lineHeight: 1.45, color: 'var(--ink)', marginBottom: 10 }}>
-                {d.text}
+                {presentationText(d.text)}
               </div>
               {(d.sides ?? []).map((s, i) => (
                 <div key={i} style={{
@@ -423,8 +423,8 @@ function SecConsensus({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                   background: i === 0 ? 'var(--teal-soft)' : 'oklch(0.95 0.02 200)',
                   borderRadius: 3, fontSize: 12.5,
                 }}>
-                  <span style={{ fontWeight: 600, color: 'oklch(0.3 0.08 200)' }}>{s.stance}</span>
-                  <span style={{ color: 'var(--ink-2)' }}>{s.reason}</span>
+                  <span style={{ fontWeight: 600, color: 'oklch(0.3 0.08 200)' }}>{presentationText(s.stance)}</span>
+                  <span style={{ color: 'var(--ink-2)' }}>{presentationText(s.reason)}</span>
                   <div style={{ display: 'flex', gap: 3 }}>
                     {s.by.map((id) => <Avatar key={id} p={P(id)} size={18} radius={3} />)}
                   </div>
@@ -463,7 +463,7 @@ function SecCrossView({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                   <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{claimer.name} 主张</span>
                 </div>
                 <div style={{ fontFamily: 'var(--serif)', fontSize: 19, lineHeight: 1.45, fontWeight: 500 }}>
-                  {v.claim}
+                  {presentationText(v.claim)}
                 </div>
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
@@ -479,7 +479,7 @@ function SecCrossView({ a, P = defaultP }: { a: typeof ANALYSIS; P?: PFn }) {
                         <span style={{ fontSize: 12.5 }}>{rp.name}</span>
                       </div>
                       <Chip tone={stanceTone[r.stance]}>{stanceLabel[r.stance]}</Chip>
-                      <div style={{ fontSize: 13.5, lineHeight: 1.55, fontFamily: 'var(--serif)', color: 'var(--ink-2)' }}>{r.text}</div>
+                      <div style={{ fontSize: 13.5, lineHeight: 1.55, fontFamily: 'var(--serif)', color: 'var(--ink-2)' }}>{presentationText(r.text)}</div>
                     </div>
                   );
                 })}
@@ -523,9 +523,14 @@ export function VariantEditorial() {
   // 会议级 person-id(UUID) → 姓名，供 P() 补种（张力/共识里的人物 UUID 才解析得出「说话人N」）
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
-  const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
+  const [mergeFor, setMergeFor] = useState<{
+    id: string;
+    name: string;
+    participantId?: string;
+    candidates?: ParticipantReviewCandidate[];
+  } | null>(null);
   // 参会人 → 花名册审核状态（key = participant.name）
-  const [partReview, setPartReview] = useState<Record<string, { reviewed: boolean; canonicalName: string | null }>>({});
+  const [partReview, setPartReview] = useState<Record<string, { participantId: string; reviewed: boolean; canonicalName: string | null; candidates: ParticipantReviewCandidate[] }>>({});
   const [reviewLoaded, setReviewLoaded] = useState(false);
   useEffect(() => {
     if (!id) return;
@@ -534,8 +539,15 @@ export function VariantEditorial() {
     meetingNotesApi.getParticipantsReview(id)
       .then((r) => {
         if (cancelled) return;
-        const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
-        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        const m: Record<string, { participantId: string; reviewed: boolean; canonicalName: string | null; candidates: ParticipantReviewCandidate[] }> = {};
+        (r.items ?? []).forEach((it) => {
+          m[it.rawLabel] = {
+            participantId: it.participantId,
+            reviewed: it.status === 'confirmed',
+            canonicalName: it.confirmedPerson?.canonicalName ?? null,
+            candidates: it.candidates ?? [],
+          };
+        });
         setPartReview(m);
         setReviewLoaded(true);
       })
@@ -624,9 +636,21 @@ export function VariantEditorial() {
       if (!map.has(pid)) map.set(pid, { id: pid, name: rosterName(name), role: '', initials: name.slice(0, 1), tone: 'neutral', speakingPct: 0 });
     }
     // 悬空 UUID（既不在 participants 也解析不出姓名）→ defaultP 会回落成 name=UUID，nonUuidParticipant 兜底成「参会人」
-    return (id: string) => nonUuidParticipant(map.get(id) ?? defaultP(id));
+    return (id: string) => {
+      const direct = map.get(id);
+      if (direct) return direct;
+      const legacy = /^p(\d+)$/.exec(String(id));
+      const ordered = legacy ? apiMeta?.participants[Number(legacy[1]) - 1] : undefined;
+      if (ordered) return {
+        id: ordered.id ?? id, name: rosterName(ordered.name || '参会人'), role: ordered.role ?? '',
+        initials: ordered.initials ?? ordered.name.slice(0, 2),
+        tone: (ordered.tone as Participant['tone']) ?? 'neutral',
+        speakingPct: ordered.speakingPct ?? 0,
+      };
+      return usingMock ? nonUuidParticipant(defaultP(id)) : { id, name: '参会人', role: '', initials: '?', tone: 'neutral', speakingPct: 0 };
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMeta, partReview, personNames]);
+  }, [apiMeta, partReview, personNames, usingMock]);
 
   const navItems = [
     { id: 'minutes',       label: '一、常规纪要',   num: '01' },
@@ -773,10 +797,15 @@ export function VariantEditorial() {
                             : <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 3 }}>未审核</div>
                         )}
                       </div>
-                      {pid && id && (
+                      {partReview[p.name]?.participantId && id && (
                         <button
-                          onClick={() => setMergeFor({ id: pid, name: p.name })}
-                          title="合并到项目人物"
+                          onClick={() => setMergeFor({
+                            id: pid ?? partReview[p.name].participantId,
+                            name: p.name,
+                            participantId: partReview[p.name].participantId,
+                            candidates: partReview[p.name].candidates,
+                          })}
+                          title="确认本场参会人"
                           style={{
                             flexShrink: 0, marginTop: 1,
                             padding: '2px 6px', border: '1px solid var(--line-2)',
@@ -784,7 +813,7 @@ export function VariantEditorial() {
                             fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.3,
                             color: 'var(--ink-3)', textTransform: 'uppercase',
                           }}
-                        >合并→</button>
+                        >确认→</button>
                       )}
                     </div>
                   );

@@ -61,6 +61,73 @@ interface AnthropicMessageResponse {
   stop_reason?: string;
 }
 
+function pushText(parts: string[], value: unknown): void {
+  if (typeof value !== 'string') return;
+  const text = value.trim();
+  if (text) parts.push(text);
+}
+
+function extractTextFromPayload(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const parts: string[] = [];
+  const obj = payload as Record<string, unknown>;
+
+  pushText(parts, obj.text);
+  pushText(parts, obj.reply);
+  pushText(parts, obj.output_text);
+
+  const content = obj.content;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (!item || typeof item !== 'object') continue;
+      const chunk = item as Record<string, unknown>;
+      pushText(parts, chunk.text);
+      if (Array.isArray(chunk.content)) {
+        for (const nested of chunk.content) {
+          if (!nested || typeof nested !== 'object') continue;
+          pushText(parts, (nested as Record<string, unknown>).text);
+        }
+      }
+    }
+  }
+
+  const output = obj.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (!item || typeof item !== 'object') continue;
+      const chunk = item as Record<string, unknown>;
+      pushText(parts, chunk.text);
+      if (Array.isArray(chunk.content)) {
+        for (const nested of chunk.content) {
+          if (!nested || typeof nested !== 'object') continue;
+          const node = nested as Record<string, unknown>;
+          pushText(parts, node.text);
+          pushText(parts, node.output_text);
+        }
+      }
+    }
+  }
+
+  const choices = obj.choices;
+  if (Array.isArray(choices)) {
+    for (const choice of choices) {
+      if (!choice || typeof choice !== 'object') continue;
+      const message = (choice as Record<string, unknown>).message;
+      if (!message || typeof message !== 'object') continue;
+      const msg = message as Record<string, unknown>;
+      pushText(parts, msg.content);
+      if (Array.isArray(msg.content)) {
+        for (const nested of msg.content) {
+          if (!nested || typeof nested !== 'object') continue;
+          pushText(parts, (nested as Record<string, unknown>).text);
+        }
+      }
+    }
+  }
+
+  return parts.join('\n').trim();
+}
+
 export interface KimiCodingCallResult {
   ok: boolean;
   status: number;
@@ -164,7 +231,7 @@ export async function callKimiCodingText(
         ?.filter((c) => c.type === 'text')
         .map((c) => c.text)
         .join('\n')
-        .trim() || '';
+        .trim() || extractTextFromPayload(raw);
 
     return {
       ok: true,

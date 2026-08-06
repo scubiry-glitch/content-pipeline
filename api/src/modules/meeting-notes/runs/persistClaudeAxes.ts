@@ -790,13 +790,14 @@ async function persistTensions(
     try {
       await deps.db.query(
         `INSERT INTO mn_tensions
-           (meeting_id, tension_key, between_ids, topic, intensity, summary, meta, source)
-         VALUES ($1, $2, $3::uuid[], $4, $5, $6, $7::jsonb, $8)
+           (meeting_id, tension_key, between_ids, topic, intensity, summary, moments, meta, source)
+         VALUES ($1, $2, $3::uuid[], $4, $5, $6, $7::jsonb, '{}'::jsonb, $8)
          ON CONFLICT (meeting_id, tension_key) DO UPDATE
            SET between_ids = EXCLUDED.between_ids,
                topic = EXCLUDED.topic,
                intensity = EXCLUDED.intensity,
                summary = EXCLUDED.summary,
+               moments = EXCLUDED.moments,
                meta = EXCLUDED.meta,
                source = EXCLUDED.source,
                computed_at = NOW()`,
@@ -807,7 +808,7 @@ async function persistTensions(
           String(it?.topic ?? '').trim() || '(empty topic)',
           clampNumber(it?.intensity, 0, 1, 0),
           String(it?.summary ?? '') || null,
-          JSON.stringify({ moments }),
+          JSON.stringify(moments),
           SOURCE(),
         ],
       );

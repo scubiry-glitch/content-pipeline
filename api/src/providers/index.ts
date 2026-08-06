@@ -33,10 +33,10 @@ export class LLMRouter {
     { taskType: 'blue_team_review', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'writing', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'content_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
-    // expert_library 主走 siliconflow（DeepSeek-V3.2，由 MN_ONESHOT_MODEL 控制具体 model 名），
-    // fallback 走 volcano-engine（自带 deepseek-v3-2-251201）。
+    // expert_library 主走 volcano-engine（deepseek-v3-2-251201）。
+    // siliconflow 余额不足 2026-07-22 起切回 volcano-engine 为主。
     // 历史决定不用 kimi-for-coding：推理模型对长 prompt + 大 JSON 输出场景不收敛（5min 超时仍出不来 content）。
-    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'siliconflow', fallbackProvider: 'volcano-engine' },
+    { taskType: 'expert_library', priority: 'quality', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'summarization', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'tagging', priority: 'speed', preferredProvider: 'volcano-engine', fallbackProvider: 'siliconflow' },
     { taskType: 'embedding', priority: 'cost', preferredProvider: 'siliconflow' },

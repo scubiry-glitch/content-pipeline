@@ -244,7 +244,7 @@ export function createLocalAssetsAiAdapter(
       return {
         assetId,
         title: row.title ?? undefined,
-        transcript: parsed.cleaned,
+        transcript: raw,
         segments: parsed.segments.map((s) => ({
           speaker: s.speaker,
           start: s.start,

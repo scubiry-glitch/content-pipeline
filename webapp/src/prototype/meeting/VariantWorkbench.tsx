@@ -603,7 +603,12 @@ export function VariantWorkbench() {
       .then((r) => {
         if (cancelled) return;
         const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
-        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        (r.items ?? []).forEach((it) => {
+          m[it.rawLabel] = {
+            reviewed: it.status === 'confirmed',
+            canonicalName: it.confirmedPerson?.canonicalName ?? null,
+          };
+        });
         setPartReview(m);
       })
       .catch(() => {});
