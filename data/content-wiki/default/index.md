@@ -1,36 +1,40 @@
 ---
 type: index
-updatedAt: "2026-05-06T14:11:35.408Z"
+updatedAt: "2026-05-10T02:59:30.945Z"
 ---
 
 # 内容库 Wiki 索引
 
 - **实体**: 500 个
-- **事实**: 4525 条
+- **事实**: 4656 条
 - **来源**: 0 个
-- **领域**: 28 个
+- **领域**: 32 个
 
 ## 领域 (concepts/)
 
-- [[concepts/E07.LLM|E07.LLM]]
-- [[concepts/E02.BANK|E02.BANK]]
-- [[concepts/E02.ASSET|E02.ASSET]]
 - [[concepts/E07.APP|E07.APP]]
-- [[concepts/E08.REIT|E08.REIT]]
-- [[concepts/E08.POLICY|E08.POLICY]]
 - [[concepts/E08.RESID|E08.RESID]]
-- [[concepts/E10.LOGISTICS|E10.LOGISTICS]]
-- [[concepts/E07.INFRA|E07.INFRA]]
-- [[concepts/E08.RENT|E08.RENT]]
 - [[concepts/E99.OTHER|E99.OTHER]]
-- [[concepts/E11.GOV|E11.GOV]]
-- [[concepts/E02.INFRA|E02.INFRA]]
-- [[concepts/E05.HOSPITALITY|E05.HOSPITALITY]]
+- [[concepts/E01.GROWTH|E01.GROWTH]]
+- [[concepts/E02.BANK|E02.BANK]]
+- [[concepts/E05.ECOM|E05.ECOM]]
+- [[concepts/E08.POLICY|E08.POLICY]]
 - [[concepts/E02.CONSUM|E02.CONSUM]]
+- [[concepts/E02.ASSET|E02.ASSET]]
+- [[concepts/E08.RENT|E08.RENT]]
 - [[concepts/E10.AUTO|E10.AUTO]]
+- [[concepts/E05.HOSPITALITY|E05.HOSPITALITY]]
+- [[concepts/E07.ML|E07.ML]]
+- [[concepts/E07.INFRA|E07.INFRA]]
 - [[concepts/E02.REG|E02.REG]]
-- [[concepts/E08.INDUS|E08.INDUS]]
+- [[concepts/E02.INFRA|E02.INFRA]]
+- [[concepts/E09.CONTENT|E09.CONTENT]]
+- [[concepts/E07.ROBOT|E07.ROBOT]]
+- [[concepts/E05.BRAND|E05.BRAND]]
 - [[concepts/E02.INSUR|E02.INSUR]]
+- [[concepts/E10.LOGISTICS|E10.LOGISTICS]]
+- [[concepts/E11.GOV|E11.GOV]]
+- [[concepts/E08.INDUS|E08.INDUS]]
 - [[concepts/E02.CRYPTO|E02.CRYPTO]]
 - [[concepts/E02|E02]]
 - [[concepts/E01.EMPLOY|E01.EMPLOY]]
@@ -47,7 +51,7 @@ updatedAt: "2026-05-06T14:11:35.408Z"
 - [[全国重点18城]] — 112 条事实
 - [[乐乎城市青年社区]] — 112 条事实
 - [[长租公寓行业]] — 89 条事实
-- [[自如]] — 82 条事实
+- [[自如]] — 83 条事实
 - [[是]] — 72 条事实
 - [[北京]] — 67 条事实
 - [[老虎证券]] — 64 条事实
@@ -67,12 +71,12 @@ updatedAt: "2026-05-06T14:11:35.408Z"
 - [[支付宝]] — 35 条事实
 - [[智能理财服务]] — 31 条事实
 - [[万科泊寓]] — 30 条事实
+- [[说话人1]] — 26 条事实
 - [[5%]] — 26 条事实
 - [[报告]] — 26 条事实
 - [[30%]] — 26 条事实
 - [[成都]] — 26 条事实
 - [[45%]] — 24 条事实
-- [[中信证券]] — 24 条事实
 
 ---
 

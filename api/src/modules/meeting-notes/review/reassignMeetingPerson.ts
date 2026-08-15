@@ -2,6 +2,30 @@
 // 用于泛指参会人(说话人N)——单场识别成某人,不代表其他场次也是同一人。
 type Db = { query(sql: string, params?: any[]): Promise<{ rows: any[] }> };
 
+async function replaceUuidArray(
+  db: Db,
+  table: string,
+  column: string,
+  meetingId: string,
+  fromId: string,
+  toId: string,
+): Promise<number> {
+  const r = await db.query(
+    `UPDATE ${table}
+        SET ${column} = (
+          SELECT COALESCE(array_agg(x ORDER BY first_position), ARRAY[]::uuid[])
+            FROM (
+              SELECT x, MIN(position) AS first_position
+                FROM unnest(array_replace(${column}, $1::uuid, $2::uuid)) WITH ORDINALITY AS values_with_position(x, position)
+               GROUP BY x
+            ) deduplicated
+        )
+      WHERE meeting_id = $3 AND $1::uuid = ANY(${column})`,
+    [fromId, toId, meetingId],
+  );
+  return (r as any).rowCount ?? 0;
+}
+
 // 有 (person, meeting[, key]) 复合 UNIQUE 的表：同一会议里 target 已有行会撞唯一键 → 先删源的对撞行
 const UNIQUE_TABLES: Array<{ t: string; extra?: string }> = [
   { t: 'mn_role_trajectory_points', extra: 'scope_id' },
@@ -18,6 +42,11 @@ const PLAIN: Array<{ t: string; c: string }> = [
   { t: 'mn_mental_model_invocations', c: 'invoked_by_person_id' },
   { t: 'mn_cognitive_biases', c: 'by_person_id' },
   { t: 'mn_counterfactuals', c: 'rejected_by_person_id' },
+];
+const ARRAY_REFS: Array<{ t: string; c: string }> = [
+  { t: 'mn_tensions', c: 'between_ids' },
+  { t: 'mn_consensus_items', c: 'supported_by' },
+  { t: 'mn_consensus_sides', c: 'by_ids' },
 ];
 
 export interface ReassignResult { table: string; reassigned: number; dropped: number }
@@ -46,6 +75,11 @@ export async function reassignMeetingPerson(
   for (const { t, c } of PLAIN) {
     const upd = await db.query(`UPDATE ${t} SET ${c}=$2 WHERE ${c}=$1 AND meeting_id=$3`, [fromId, toId, meetingId]);
     out.push({ table: t, reassigned: (upd as any).rowCount ?? 0, dropped: 0 });
+  }
+
+  for (const { t, c } of ARRAY_REFS) {
+    const n = await replaceUuidArray(db, t, c, meetingId, fromId, toId);
+    out.push({ table: t, reassigned: n, dropped: 0 });
   }
 
   // 注:本场重指**不**把源名字并入目标 aliases。

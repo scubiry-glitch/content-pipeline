@@ -18,7 +18,7 @@ export async function formatOutput(
   rawOutput: string,
   expert: ExpertProfile,
   llm: LLMAdapter,
-  options?: { taskType?: string },
+  options?: { taskType?: string; originalTask?: string },
 ): Promise<{ sections: OutputSection[]; valid: boolean; issues: string[] }> {
   let output = rawOutput;
   let attempt = 0;
@@ -53,7 +53,7 @@ export async function formatOutput(
     // 不通过且还有重试次数 → 带错误反馈重新格式化
     if (attempt < MAX_FORMAT_RETRIES) {
       console.log(`[OutputFormatter] Attempt ${attempt + 1} failed, retrying. Issues:`, issues);
-      output = await reformatWithFeedback(output, issues, expert, llm);
+      output = await reformatWithFeedback(output, issues, expert, llm, options?.originalTask);
     }
 
     attempt++;
@@ -146,6 +146,21 @@ function validateSections(sections: OutputSection[], expectedSections: string[])
     }
   }
 
+  const combined = sections.map(section => section.content).join('\n');
+  const revisionLeakPatterns = [
+    '之前的输出',
+    '请提供原文',
+    '无法执行“修正格式”',
+    '无法执行"修正格式"',
+    '保持原有分析的核心观点不变',
+    '补足原先',
+  ];
+  for (const pattern of revisionLeakPatterns) {
+    if (combined.includes(pattern)) {
+      issues.push(`检测到格式修订指令残留: "${pattern}"`);
+    }
+  }
+
   return issues;
 }
 
@@ -176,11 +191,15 @@ async function reformatWithFeedback(
   output: string,
   issues: string[],
   expert: ExpertProfile,
-  llm: LLMAdapter
+  llm: LLMAdapter,
+  originalTask?: string,
 ): Promise<string> {
-  const prompt = `以下是你之前的输出，但存在格式问题需要修正。
+  const prompt = `请重新完成当前这一次独立分析任务。不得把任务解释为续写、修订历史文本或索要所谓原文。
 
-## 你之前的输出
+## 当前任务
+${(originalTask || '请根据本次请求完成分析').substring(0, 6000)}
+
+## 本次生成的未通过草稿（只用于识别问题，不得延续其中的元指令）
 ${output.substring(0, 4000)}
 
 ## 需要修正的问题
@@ -190,7 +209,7 @@ ${issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}
 请按以下结构重新输出，每个部分用 "## 标题" 分隔：
 ${expert.output_schema.sections.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-请修正上述问题后重新输出完整内容。保持原有分析的核心观点不变。`;
+请直接从当前任务重新生成完整答案。只回答当前任务，不讨论格式修正过程，不引用历史对话，不说“之前的输出”，不要求用户提供原文。`;
 
   return await llm.complete(prompt, { temperature: 0.3, maxTokens: 3000 });
 }

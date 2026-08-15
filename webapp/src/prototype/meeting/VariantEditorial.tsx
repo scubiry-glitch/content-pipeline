@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { meetingNotesApi } from '../../api/meetingNotes';
+import { meetingNotesApi, type ParticipantReviewCandidate } from '../../api/meetingNotes';
 import { MEETING, EXPERTS, ANALYSIS, P as defaultP } from './_fixtures';
 import type { Participant } from './_fixtures';
 import { Icon, Avatar, Chip, Dot, MonoMeta, SectionLabel, StatTile, MockBadge, momentToText } from './_atoms';
@@ -523,9 +523,14 @@ export function VariantEditorial() {
   // 会议级 person-id(UUID) → 姓名，供 P() 补种（张力/共识里的人物 UUID 才解析得出「说话人N」）
   const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [apiState, setApiState] = useState<'loading' | 'ok' | 'error' | 'skipped'>('skipped');
-  const [mergeFor, setMergeFor] = useState<{ id: string; name: string } | null>(null);
+  const [mergeFor, setMergeFor] = useState<{
+    id: string;
+    name: string;
+    participantId?: string;
+    candidates?: ParticipantReviewCandidate[];
+  } | null>(null);
   // 参会人 → 花名册审核状态（key = participant.name）
-  const [partReview, setPartReview] = useState<Record<string, { reviewed: boolean; canonicalName: string | null }>>({});
+  const [partReview, setPartReview] = useState<Record<string, { participantId: string; reviewed: boolean; canonicalName: string | null; candidates: ParticipantReviewCandidate[] }>>({});
   const [reviewLoaded, setReviewLoaded] = useState(false);
   useEffect(() => {
     if (!id) return;
@@ -534,8 +539,15 @@ export function VariantEditorial() {
     meetingNotesApi.getParticipantsReview(id)
       .then((r) => {
         if (cancelled) return;
-        const m: Record<string, { reviewed: boolean; canonicalName: string | null }> = {};
-        (r.items ?? []).forEach((it) => { m[it.name] = { reviewed: it.reviewed, canonicalName: it.canonicalName }; });
+        const m: Record<string, { participantId: string; reviewed: boolean; canonicalName: string | null; candidates: ParticipantReviewCandidate[] }> = {};
+        (r.items ?? []).forEach((it) => {
+          m[it.rawLabel] = {
+            participantId: it.participantId,
+            reviewed: it.status === 'confirmed',
+            canonicalName: it.confirmedPerson?.canonicalName ?? null,
+            candidates: it.candidates ?? [],
+          };
+        });
         setPartReview(m);
         setReviewLoaded(true);
       })
@@ -773,10 +785,15 @@ export function VariantEditorial() {
                             : <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 3 }}>未审核</div>
                         )}
                       </div>
-                      {pid && id && (
+                      {partReview[p.name]?.participantId && id && (
                         <button
-                          onClick={() => setMergeFor({ id: pid, name: p.name })}
-                          title="合并到项目人物"
+                          onClick={() => setMergeFor({
+                            id: pid ?? partReview[p.name].participantId,
+                            name: p.name,
+                            participantId: partReview[p.name].participantId,
+                            candidates: partReview[p.name].candidates,
+                          })}
+                          title="确认本场参会人"
                           style={{
                             flexShrink: 0, marginTop: 1,
                             padding: '2px 6px', border: '1px solid var(--line-2)',
@@ -784,7 +801,7 @@ export function VariantEditorial() {
                             fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: 0.3,
                             color: 'var(--ink-3)', textTransform: 'uppercase',
                           }}
-                        >合并→</button>
+                        >确认→</button>
                       )}
                     </div>
                   );

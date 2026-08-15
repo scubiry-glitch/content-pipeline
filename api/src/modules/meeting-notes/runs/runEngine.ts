@@ -1299,9 +1299,12 @@ export class RunEngine {
         const { persistClaudeFacts } = await import('./persistClaudeFacts.js');
         const { persistClaudeWiki } = await import('./persistClaudeWiki.js');
         const { buildScopePrompt, buildMeetingDigest } = await import('./promptTemplates/claudeCliScope.js');
-        const { ensurePersonByName } = await import('../parse/participantExtractor.js');
+        const {
+          observeMeetingParticipants,
+          resolveConfirmedMeetingParticipant,
+        } = await import('../review/meetingParticipantIdentity.js');
 
-        // 1) parseMeeting：CLI 模式同样需要先把 transcript 切段、participants 入 mn_people
+        // 1) parseMeeting：CLI 模式同样需要先把 transcript 切段、记录本场参会人标签
         await writeStep('ingest', 0.1, '原始素材解析（CLI 模式）');
         const parseResult = await parseMeeting(this.deps, payload.meetingId);
         if (!parseResult.ok) {
@@ -1434,20 +1437,29 @@ export class RunEngine {
           // 7) 持久化：metadata.analysis + 17 张 mn_* 表 + content_facts + wiki .md
           await writeStep('render', 0.35, '写入 metadata.analysis + participants');
 
-          // 7a) 重建 cliPersonMap —— 用 Claude 输出的 participants 当权威，反查 / INSERT mn_people
+          // 7a) 记录 Claude 观察到的本场标签；只有已确认映射才能进入 cliPersonMap。
           //     之前依赖 parseMeeting.participants 在转写没有 speaker label 的会议上抽不到，
           //     导致 cliPersonMap 全空，所有 axis 行被 resolvePersonId 跳过。
           const claudeParticipants = Array.isArray(cliResult.participants) ? cliResult.participants : [];
+          await observeMeetingParticipants(
+            this.deps,
+            payload.meetingId!,
+            claudeParticipants.map((p: any) => ({
+              rawLabel: String(p?.name ?? ''),
+              role: typeof p?.role === 'string' ? p.role : null,
+              source: 'claude-cli',
+            })),
+          );
           const cliPersonMap: Record<string, string> = {};
           for (const p of claudeParticipants) {
             const localId = String(p?.id ?? '').trim();
             const rawName = String(p?.name ?? '').trim();
             if (!localId || !rawName) continue;
             try {
-              const uuid = await ensurePersonByName(this.deps, rawName, p?.role, undefined, payload.meetingId);
+              const uuid = await resolveConfirmedMeetingParticipant(this.deps, payload.meetingId!, rawName);
               if (uuid) cliPersonMap[localId] = uuid;
             } catch (e) {
-              console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
+              console.warn('[runEngine] resolveConfirmedMeetingParticipant failed for', rawName, ':', (e as Error).message);
             }
           }
           console.info(
@@ -1469,14 +1481,17 @@ export class RunEngine {
           };
           await persistAnalysisToAsset(this.deps.db, payload.meetingId!, stampedAnalysis);
 
-          // 7b) 写 assets.metadata.participants 让 detail endpoint (engine.getMeetingDetail) 能读到
-          //     形态需跟 VariantEditorial / Workbench 期待的 participants[] 对齐：
-          //     [{ id: 'p1', name, role, initials, tone, speakingPct }]
-          if (claudeParticipants.length > 0) {
+          // 7b) 写本场 participants：未确认标签不能把模型 p1/p2 当作全局人物 ID。
+          const storedParticipants = claudeParticipants.map((p: any, index: number) => {
+            const localId = String(p?.id ?? '').trim();
+            const confirmedId = cliPersonMap[localId] ?? null;
+            return { ...p, id: confirmedId ?? `local:${index + 1}`, confirmedPersonId: confirmedId };
+          });
+          if (storedParticipants.length > 0) {
             try {
               await this.deps.db.query(
                 `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('participants', $2::jsonb) WHERE id = $1`,
-                [payload.meetingId, JSON.stringify(claudeParticipants)],
+                [payload.meetingId, JSON.stringify(storedParticipants)],
               );
             } catch (e) {
               console.warn('[runEngine] write metadata.participants failed:', (e as Error).message);
@@ -1790,7 +1805,10 @@ export class RunEngine {
         const { persistClaudeFacts, withFactsSource } = await import('./persistClaudeFacts.js');
         const { persistClaudeWiki, withWikiGeneratedBy } = await import('./persistClaudeWiki.js');
         const { buildScopePrompt, buildMeetingDigest } = await import('./promptTemplates/claudeCliScope.js');
-        const { ensurePersonByName } = await import('../parse/participantExtractor.js');
+        const {
+          observeMeetingParticipants,
+          resolveConfirmedMeetingParticipant,
+        } = await import('../review/meetingParticipantIdentity.js');
 
         // 1) parseMeeting（与 CLI 同）
         await writeStep('ingest', 0.1, '原始素材解析（API Oneshot 模式）');
@@ -1868,18 +1886,27 @@ export class RunEngine {
           // 6) 持久化（与 CLI 同链路）
           await writeStep('render', 0.35, '写入 metadata.analysis + participants');
 
-          // 6a) 重建 cliPersonMap —— 用 LLM 输出的 participants 当权威，反查 / INSERT mn_people
+          // 6a) 记录 LLM 观察到的本场标签；只有已确认映射才能进入 cliPersonMap。
           const oneshotParticipants = Array.isArray(oneshotResult.participants) ? oneshotResult.participants : [];
+          await observeMeetingParticipants(
+            this.deps,
+            payload.meetingId!,
+            oneshotParticipants.map((p: any) => ({
+              rawLabel: String(p?.name ?? ''),
+              role: typeof p?.role === 'string' ? p.role : null,
+              source: 'api-oneshot',
+            })),
+          );
           const cliPersonMap: Record<string, string> = {};
           for (const p of oneshotParticipants) {
             const localId = String(p?.id ?? '').trim();
             const rawName = String(p?.name ?? '').trim();
             if (!localId || !rawName) continue;
             try {
-              const uuid = await ensurePersonByName(this.deps, rawName, p?.role, undefined, payload.meetingId);
+              const uuid = await resolveConfirmedMeetingParticipant(this.deps, payload.meetingId!, rawName);
               if (uuid) cliPersonMap[localId] = uuid;
             } catch (e) {
-              console.warn('[runEngine] ensurePersonByName failed for', rawName, ':', (e as Error).message);
+              console.warn('[runEngine] resolveConfirmedMeetingParticipant failed for', rawName, ':', (e as Error).message);
             }
           }
           console.info(
@@ -1901,12 +1928,17 @@ export class RunEngine {
           };
           await persistAnalysisToAsset(this.deps.db, payload.meetingId!, stampedAnalysis);
 
-          // 6b) 写 assets.metadata.participants
-          if (oneshotParticipants.length > 0) {
+          // 6b) 写本场 participants，未确认标签保留 local:* ID。
+          const storedParticipants = oneshotParticipants.map((p: any, index: number) => {
+            const localId = String(p?.id ?? '').trim();
+            const confirmedId = cliPersonMap[localId] ?? null;
+            return { ...p, id: confirmedId ?? `local:${index + 1}`, confirmedPersonId: confirmedId };
+          });
+          if (storedParticipants.length > 0) {
             try {
               await this.deps.db.query(
                 `UPDATE assets SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('participants', $2::jsonb) WHERE id = $1`,
-                [payload.meetingId, JSON.stringify(oneshotParticipants)],
+                [payload.meetingId, JSON.stringify(storedParticipants)],
               );
             } catch (e) {
               console.warn('[runEngine] write metadata.participants failed:', (e as Error).message);
@@ -2174,13 +2206,13 @@ export class RunEngine {
       await llmUsageStorage.run(counter, async () => {
         // Ingest + Segment + Participant-merge：通过 meetingParser 走完整链路
         //   step3 第 1 步「原始素材解析」：assetsAi.parseMeeting 做正则切分
-        //   step3 第 2 步「发言切分 + 参与者归并」：parseMeeting() 完成 ensurePersonByName
+        //   step3 第 2 步「发言切分 + 参与者归并」：parseMeeting() 记录本场参会人标签
         // 这两步一起跑（共用 LLM 之外的 IO），但 progress 分两次写以便前端能看到推进。
         if (payload.meetingId) {
           await writeStep('ingest', 0.1, '原始素材解析 · ASR + 文档清洗');
           try {
             // 直接用 deps.assetsAi 拿到 segments/participants（本地解析无 LLM 成本），
-            // 然后用 parseMeeting 完成 mn_people 入库 + segment 落库。
+            // 然后用 parseMeeting 完成本场标签与 segment 落库。
             const parseResult = await parseMeeting(this.deps, payload.meetingId);
             if (parseResult.ok) {
               await writeStep(
@@ -2192,7 +2224,7 @@ export class RunEngine {
               await writeStep(
                 'segment',
                 1.0,
-                `发言切分 + 参与者归并完成 · ${parseResult.participantCount} 位参与者已入库 mn_people`,
+                `发言切分 + 参与者归并完成 · ${parseResult.participantCount} 位参会人待本场确认`,
               );
             } else {
               await writeStep('ingest', 1.0, `素材解析跳过 · ${parseResult.reason ?? 'unknown'}`);

@@ -4,6 +4,21 @@
 
 import { ANALYSIS } from './_fixtures';
 
+export function presentationText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (!value || typeof value !== 'object') return '';
+
+  const assessment = value as {
+    assessment?: unknown;
+    evidence_excerpt?: unknown;
+    inferred?: unknown;
+  };
+  return presentationText(assessment.assessment)
+    || presentationText(assessment.evidence_excerpt)
+    || presentationText(assessment.inferred);
+}
+
 /** API 可能返回 string[] 或 { who, text }[]，统一成 ANALYSIS 的 string[] 形态 */
 export function normalizeTensionMoments(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -80,45 +95,58 @@ export function adaptApiAnalysis(data: any): typeof ANALYSIS {
 
   return {
     summary: {
-      tldr: typeof minutesBody?.tldr === 'string' && minutesBody.tldr.trim() ? minutesBody.tldr : null,
+      tldr: presentationText(minutesBody?.tldr) || null,
       scqa,
       metrics,
-      decision: minutesBody?.decision ?? '',
-      actionItems: Array.isArray(minutesBody?.actionItems) ? minutesBody.actionItems : [],
-      risks: Array.isArray(minutesBody?.risks) ? minutesBody.risks : [],
+      decision: presentationText(minutesBody?.decision),
+      actionItems: Array.isArray(minutesBody?.actionItems)
+        ? minutesBody.actionItems.map((item: any) => ({
+            ...item,
+            what: presentationText(item?.what),
+            due: presentationText(item?.due),
+          }))
+        : [],
+      risks: Array.isArray(minutesBody?.risks) ? minutesBody.risks.map(presentationText).filter(Boolean) : [],
     },
     tension: tensionBody.map((t: any) => ({
       id: t.id ?? String(Math.random()),
       between: Array.isArray(t.between_ids) ? t.between_ids : (Array.isArray(t.between) ? t.between : []),
-      topic: t.topic ?? t.bias_type ?? '',
+      topic: presentationText(t.topic ?? t.bias_type),
       intensity: typeof t.intensity === 'number' ? t.intensity : 0.5,
-      summary: t.summary ?? t.where_excerpt ?? '',
+      summary: presentationText(t.summary ?? t.where_excerpt),
       moments: normalizeTensionMoments(t.moments),
     })),
     newCognition: newCogBody.map((n: any) => ({
       id: n.id ?? String(Math.random()),
       who: n.who ?? n.by_person_id ?? '',
-      before: n.before ?? n.prior_belief ?? '',
-      after: n.after ?? n.updated_belief ?? '',
-      trigger: n.trigger ?? '',
+      before: presentationText(n.before ?? n.prior_belief),
+      after: presentationText(n.after ?? n.updated_belief),
+      trigger: presentationText(n.trigger),
     })),
     focusMap: focusBody.map((f: any) => ({
       who: f.who ?? f.person_id ?? '',
-      themes: Array.isArray(f.themes) ? f.themes : [],
+      themes: Array.isArray(f.themes) ? f.themes.map(presentationText).filter(Boolean) : [],
       returnsTo: typeof f.returnsTo === 'number' ? f.returnsTo : (typeof f.returns_to === 'number' ? f.returns_to : 0),
     })),
     consensus: consensusBody.map((c: any) => ({
       id: c.id ?? String(Math.random()),
       kind: c.kind === 'divergence' ? 'divergence' as const : 'consensus' as const,
-      text: c.text ?? '',
+      text: presentationText(c.text),
       supportedBy: Array.isArray(c.supportedBy) ? c.supportedBy : (Array.isArray(c.supported_by) ? c.supported_by : []),
-      sides: Array.isArray(c.sides) ? c.sides : [],
+      sides: Array.isArray(c.sides) ? c.sides.map((side: any) => ({
+        ...side,
+        stance: presentationText(side?.stance),
+        reason: presentationText(side?.reason),
+      })) : [],
     })),
     crossView: crossBody.map((v: any) => ({
       id: v.id ?? String(Math.random()),
       claimBy: v.claimBy ?? v.claim_by ?? v.by_person_id ?? '',
-      claim: v.claim ?? v.text ?? '',
-      responses: Array.isArray(v.responses) ? v.responses : [],
+      claim: presentationText(v.claim ?? v.text),
+      responses: Array.isArray(v.responses) ? v.responses.map((response: any) => ({
+        ...response,
+        text: presentationText(response?.text),
+      })) : [],
     })),
   } as typeof ANALYSIS;
 }

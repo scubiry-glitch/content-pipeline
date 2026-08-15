@@ -197,7 +197,8 @@ export interface ExpertMethod {
 // ----- EMM 门控 -----
 
 export interface ExpertEMM {
-  critical_factors: string[];
+  // Legacy string factors and structured factors are both accepted; runtime normalizes them.
+  critical_factors: Array<string | { factor: string; weight?: number; description?: string }>;
   factor_hierarchy: Record<string, number>;
   veto_rules: string[];
   aggregation_logic: 'weighted_score' | 'majority_vote' | 'strictest' | string;

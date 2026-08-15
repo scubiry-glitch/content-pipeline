@@ -1,0 +1,338 @@
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+Could not get FontBBox from font descriptor because None cannot be parsed as 4 floats
+--- Page 1 ---
+⽂字记录：项⽬数据⽅案及课题规划2026年5⽉
+12⽇
+录⾳主题：项⽬数据⽅案及课题规划
+录⾳时间：2026年5⽉12⽇（周⼆）09:11-09:28（GMT+08）
+智能纪要：项⽬数据⽅案及课题规划2026年5⽉12⽇
+说话⼈100:00:00
+我说⼀下呗？就是他们现在那边是有个等于是他们要开始做采购了，对吧？
+说话⼈200:00:07
+等你那个叫什么，你就开始准备吧。
+说话⼈100:00:10
+我觉得，我觉得我们还是要找个时间过去⼀趟，⾄少是要把⽅案先跟他们聊⼀聊，要不的话也挺奇怪
+的。
+说话⼈200:00:18
+不是，我知道你聊肯定是聊，所以他这不是先找个经办就开始聊嘛。
+说话⼈100:00:22
+对对对，那个现在就是星空现在是差什么？就是差那个克⽽瑞的数据终⽌和克⽽瑞的数据，对吧？
+说话⼈300:00:33
+对，主要是没有福州的数据，对，他买谁都⾏，但是我们这没有，嗯。
+说话⼈100:00:40
+我觉得这样，你现在不是先有⼀版，因为我们现在是应⽤的时间点，所以现在就是展⽰的时间点，现
+在倒也不⽤把底层数据拿给他看，所以说我们就拿现在已经有的⼀些数据稍微展⽰切⽚展⽰⼀下就可
+以了，截个图什么的，这种其实好办，我们同步的去问⼀下，中指跟克⽽瑞⼤概是⼀个什么样的价
+格？⽐如说如果说是福州，福，就福州的这种数据，如果说。
+--- Page 2 ---
+说话⼈100:01:10
+这种套内去扒的话，看看到底是哪个成本更低⼀点。如果说扒的成本低，就福州我们就⾃⼰找⼈扒，
+如果说是买的成本低⼀点，我们就买呗，就是同步的买呗，等项⽬拿了之后我就⾛采购流程就好了，
+那个我们这边还是挺快的，这样的话到给他们做应⽤部署的时候，我们有这个数据就可以了。
+说话⼈300:01:32
+他那个我之前科瑞我⼤概聊过，好像他是多少？5万块钱还是10万块钱？5万块钱可能是⼀个城市吧。
+10万块钱好像是。是⼀个。那也不贵啊。便宜⼀部分，对，不贵，但是他那个好像只能检索，好像你
+还没法，好像是没法直接下中植。我不太了解，就上次跟那个科瑞那⽼哥也没太聊明⽩，但反正⼤概
+就这个价，5到10万块钱吧。
+说话⼈100:02:05
+倒还好，这个价格倒是我觉得没什么太⼤的问题，反正就先。
+说话⼈300:02:07
+爬数据⽐较难，因为我们爬过那个科瑞数据，我们爬过，现在他们反爬能⼒⽐较强，估计这个很难
+搞。只能是说你要说拿⼀些切⽚做，就拿⼀些北京的数据做些切⽚给他看。
+说话⼈100:02:18
+就我们。我觉得先拿⼀些切⽚给他做展⽰，因为沟通的时候我不⽤直接展⽰福州的嘛。那我们。切⽚
+的时候我展⽰哪的不都⼀样吗？
+说话⼈300:02:26
+就他切⽚，就看他要啥，我们之前不是写过⼀个报告嘛？那报告其实⾥⾯有很多我们的⼀些。
+说话⼈100:02:33
+我觉得，我觉得我们。
+说话⼈200:02:35
+甲⽅不知道他要啥的。
+说话⼈100:02:37
+对，我们有个产品的概念推给他，他们其实⾃⼰不知道⾃⼰要啥。
+--- Page 3 ---
+说话⼈300:02:42
+对，所以我就说那我们给他个啥呢？
+说话⼈100:02:46
+不是，不是，就是他的核⼼，其实就是要这个房价的数据做⼀个锚定的点，我们得要把它包装成⼀个
+产品，我们不可能到了最后我给你的⼀个就是⼀个数，这也不太现实，肯定是说我们觉得我们的产品
+⾥⾯应该要包含什么内容。
+说话⼈300:03:05
+包含。
+说话⼈100:03:05
+对吧？我们就做⼀个界⾯出来给他看，其实就是他就是就这个东西，当然⼀萌你可以跟他们打听⼀
+下，看看他们就是⼼⾥⾯觉得哪些数据有价值，我们就包含在我们的那个。
+说话⼈200:03:19
+跟那个没关系，我觉得顺序不是个顺序，就是说其实不管是克瑞还是那个，其实都不是重点。就是你
+站在甲⽅的⻆度就是第⼀，这跟⻉壳什么关系？
+说话⼈100:03:30
+对。
+说话⼈200:03:32
+对吧？第⼆你给我⼀个理由，没必满，你的理由就没了。
+说话⼈100:03:37
+这不是跟⻉壳的，我能怎么说呢？现在不是⼜不能说跟⻉壳的关系吗？
+说话⼈200:03:42
+可以说不是，之前不是没动，就是包括那个课题什么该弄弄嘛？
+说话⼈100:03:50
+--- Page 4 ---
+我懂，就是明⾯上⾯说的时候，我们还是可以说是有⼀些⻉壳的数据在底层把这个模型串出来的，只
+不过在应⽤的时候不要⽤它的数据就可以，对吧？
+说话⼈200:04:01
+你应⽤的时候其实也没⼈关⼼你⽤的什么的数据，⼤家就是说他实际，你说他这东西，⽐如说你算了
+⼀个数，他说我觉得也不是这数，那你说你改不改嘛？
+说话⼈100:04:11
+哼，不过也是，没有⼈跟你去证否，也没有⼈可以给你证否。
+说话⼈200:04:15
+是啊，他这种场景下⼜不是那个消费者，怎么说？我这个感受好像跟我直觉不⼀样，他⼼⾥有答案
+了，他都。
+说话⼈100:04:24
+诶，那这样其实好办，那个星空。其实这样就好办了，这样的话那我们就⽤现在就是说那个不是⼀
+萌，他拿了⼀些就是说这种所谓⻉壳数据串出来的模型，我们就拿这些东西给他展⽰，然后我们在说
+的时候就可以说是⽤⻉壳的数据做的，只不过我们到了回头来做应⽤的时候，就跟他两层呗，上⾯这
+⼀层看看⽤⼀些科尔瑞和中指的数据做⼀个替代就好了。
+说话⼈300:04:46
+可以可以，就是看就现在你需要给他出个啥东西？就是说我现在⼿⾥有这个第⼀个⽅案，我有⼀些北
+京的数据，之前在闲⻥上买的，⼤概是应该也是从⻉壳这边，之前不知道他们怎么扒出来的。对对
+对，到225年，对，然后还有⼀个模型，我们train了⼀下，但是给他做什么样的展⽰？这个我不知
+道，你要⼀个什么样的展⽰。
+说话⼈100:05:11
+这样吧，我找⼀下，我拉⼀个我的合伙⼈，拉⼀个我下⾯的⼩合伙⼈，他对做这种东西会⽐较熟，我
+让他跟你⼀起来搞⼀下，你就给他提供⼀下底座，他帮你把这个东西做成⼀个可以展⽰的⼀个⽅案的
+⼀个PPT呗。
+说话⼈300:05:27
+可以，没问题，没问题，我这正好拉着我，那个，我拉着我们这边⼩朋友跟他⼀起呗，数据和模型都
+在这。
+--- Page 5 ---
+说话⼈100:05:34
+对对对。
+说话⼈300:05:36
+我OK，就看你要啥。
+说话⼈100:05:38
+对，然后⼀萌，看看啥时候，我们等把它做出来之后发到群⾥呗。哎，⼀萌他们核⼼其实就是那个房
+价的数字，对吧？他们最核⼼想要的东西。
+说话⼈200:05:50
+租⾦和房价吧。
+说话⼈100:05:51
+OK，⾏，那我们就按照这两个来准备呗。我就按照这个，哎，反正就准备⼀套fancy的⽅案diss⼀下
+各家说我最⽜，其实核⼼就是这个东西。
+说话⼈200:06:02
+然后再说⼀下跟⻉壳的关系，就这2点啊。
+说话⼈100:06:05
+对对对，我知道。
+说话⼈200:06:06
+它是个关系型采购，关系型采购⾄于其他问题，其实那根本不是他们的问题，是我们⾃⼰的问题。我
+知道。⽐如说你说那个，⽐如说你说问经纪⼈去，现在不⽤，因为他可能就是固定，⽐如10个⼩区，
+是吧？10个⼩区靠⼈爬都爬的过来哦。
+说话⼈100:06:22
+是，其实就找个⼈到那个经济⼩区去，拿着台电脑去爬，都可以抄的出来。是。没事，这个我觉得好
+办，这个这样我等会跟我主要合伙⼈打个电话。
+说话⼈200:06:35
+--- Page 6 ---
+我把这样，我就把这拆成那个，按照你这是说的第⼀个问题就是。对。商务上怎么处理？那以你为主
+嘛？⽽且这个是谁应标你有⼀堆你们内部流程什么的，这个肯定是谁应标是以谁为主，我昨天主要跟
+他就是说⼀开始他不想⽤融成，觉得逻辑那个，后来把这个反正说通了。第⼆其实是课题这个事包括
+那叫什么课题要实质性推和模型要实质性推动，那这是两件事哈。我知道。就是这个我不知道怎么，
+咱怎么弄合适？那就是坤哥，要不你们约那个⻩⽼师，你们⾃⼰聊聊去呢？
+说话⼈300:07:18
+⾏，可以，⼤概是啥就啥，我先做个⽅案呗？就⼤概需要什么。
+说话⼈100:07:25
+你约的时候把我叫上呗。我也想想看看这个逻辑怎么去。发呗。
+说话⼈300:07:29
+可以，我没问题。
+说话⼈200:07:31
+逻辑就是写课题，逻辑就是做课题，发个刊还是怎么样的？对。
+说话⼈100:07:36
+对对对，你总要有⼀个刊撑住它的底层。别⼈问你说你这个模型为什么好？我总要有些能说的东西。
+说话⼈200:07:44
+引⽤⼀下嘛。对对对。
+说话⼈300:07:46
+是的是的，我可以，我，那我约⻩⽼师⼀起聊呗，到时候我们，嗯拉个群。
+说话⼈200:07:55
+对，你之前不是⻅过他吗？
+说话⼈300:07:56
+我⻅过他，我来拉，是吧？我来拉这个群。
+说话⼈100:07:59
+--- Page 7 ---
+你来拉吧。⾏⾏⾏。
+说话⼈200:08:01
+发起嘛？发起，然后⼤家直接讨论就⾏，然后这是⼀个，然后。再就是数据本⾝其实⼜是第三个问题
+了。数，对吧？数据本⾝从，因为这个刚才课题解决的是合法性的问题，对外的合法性跟就是从⻉壳
+出来数据的合法性和你们那个将来⾯向客⼾应⽤的合法性嘛。⾄于数据本⾝其实⼀直是这个问题，就
+是说你那个，你训练靠⻉壳，这OK的，但是就是说反正那个就是没有⼈全职盯这个进展，要不还是肖
+帕你们的⼈，要不这个的话你们盯⼀下进展呢？
+说话⼈100:08:37
+⾏，好，我安排⼈来盯⼀下进展。
+说话⼈200:08:40
+这个就反正你说星空那边那⼈也做了那个模型。也在跑，但是他是⼀个很⼤家，也没有什么⽬标。
+说话⼈100:08:48
+散的结构，很松散的结构。
+说话⼈200:08:51
+我。对，⼤家没有⽬标，说我什么时候要把这个迭代到⼀个什么精度？没有这种东西。
+说话⼈100:08:59
+我找⼀下我的那个，我让我合伙⼈，他应该会⽐较会搞这个东西，我找他。
+说话⼈200:09:03
+实际上终⽌这个事前三步做完了之后，为什么终⽌之前我们没有聊才有意义？⼀开始训练你也是不靠
+终⽌的嘛。
+说话⼈100:09:12
+对，⼀开始靠⻉壳，后来只是换成终⽌嘛。
+说话⼈200:09:18
+你只是⽤那个线性外推的时候，⽤终⽌你线性那个模型本⾝它不是线性外推，它只是⼀个过去发⽣的
+事实。对。
+--- Page 8 ---
+说话⼈100:09:31
+⾏，那就⼀步⼀步来呗，我先安排⼀下，等会我拉个群给⼏位，我们在群⾥⾯安排⼀下。
+说话⼈300:09:38
+⾏，没问题，课题那边我就推呗，那个课题有个问题跟那个⻩⽼师聊的时候，内容上可以跟他聊⾦额
+上⼤概是多少，你有个数。
+说话⼈200:09:51
+10到20之间，按照你的意思。
+说话⼈300:09:53
+⾏，那就跟他提20吧，我觉得多了也没有⽤，按这个来吧。
+说话⼈100:10:01
+好的。
+说话⼈300:10:02
+⾏，那我⼀会我来跟⻩⽼师对⼀下。
+说话⼈200:10:06
+⾏。
+说话⼈100:10:08
+好的，我准备出⻔了。
+说话⼈300:10:10
+⾏，OK，拜拜。
+说话⼈100:10:11
+我今天要做那个赵⽼板的替⾝，⻤替应该叫做。
+说话⼈300:10:17
+--- Page 9 ---
+哈哈哈，你要去哪啊？
+说话⼈200:10:21
+我今天在。在宁波，然后杭州搞⼀项⽬。
+说话⼈300:10:26
+你俩现在都在哪呢？
+说话⼈200:10:27
+我在⻓三⻆搞项⽬。
+说话⼈300:10:30
+你俩现在都在哪呢？我在。
+说话⼈100:10:32
+他在上海，我在宁波。
+说话⼈300:10:34
+OKOK，⾏，你们俩离得也不远。
+说话⼈100:10:39
+我明天去，但是不知道明天赵⽼板有时间接⻅我吗？
+说话⼈300:10:42
+哈哈哈，我上次被赵⽼板接⻅那还是在，我俩在哪？在深圳，晚上10，恨不得11点了。都只有这种时
+间才能接⻅赵⽼板，才能被赵⽼板接⻅。
+说话⼈200:10:58
+我错了，不是，哎呦，这个我都快被榨⼲了。
+说话⼈300:11:03
+⼀滴都没有了，是吧？
+--- Page 10 ---
+说话⼈200:11:07
+是啊。
+说话⼈300:11:10
+等忙完这个，咱就好好休息休息吧，太累了我。
+说话⼈100:11:14
+要好好休息休息。对。明天我再跟你说，看看你明天咋安排吧？反正明天不⾏，就是找那个陈⽵跟我
+⼀起呗。
+说话⼈200:11:21
+⾏。陈⽵，可以的，这种场⾯因为你也不需要太。
+说话⼈100:11:25
+他今天都来不了，我跟你说也挺逗的，他今天本来是9点钟他能来，但是后来那个⼈推了⼀点时间，他
+说就可能时间不太够，我说也没关系，不⾏就我⾃⼰去，反正我就代表着⻉壳去呗，你只要承认就可
+以。
+说话⼈200:11:39
+是是是，他那个因为下午有会他得回去，他跟我说了，他这边跟你们聊⼀会，他的那个1点多的，他的
+⽕⻋票就得往回⾛。
+说话⼈100:11:47
+对对对，是的。⾏啊，好的，那我先下去了诶，到楼下了。
+说话⼈300:11:54
+OK，拜拜。拜。对。
+说话⼈300:14:53
+可以。

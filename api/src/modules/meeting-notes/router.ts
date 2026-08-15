@@ -28,6 +28,10 @@ import { listPeopleRoster, getPersonMeetings } from './review/peopleRosterServic
 import { mergeContentEntities } from '../content-library/consolidation/mergeEntities.js';
 import { ensurePersonByName } from './parse/participantExtractor.js';
 import { reassignMeetingPerson } from './review/reassignMeetingPerson.js';
+import {
+  confirmMeetingParticipantBinding,
+  listMeetingParticipantReview,
+} from './review/meetingParticipantIdentity.js';
 
 // 单进程内存限速:每个 user 1h 内最多 60 次 import (够正常使用,挡住脚本扫库)
 // 多实例部署时这只能起到 N×60 的效果,等需要再换 redis 计数器
@@ -1737,99 +1741,52 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       return { meetings, roleLabels: rl.rows.map((r: any) => String(r.role_label)) };
     });
 
-    /**
-     * GET /meetings/:id/participants-review · 把会议参会人(assets.metadata.participants 的 name)
-     * 解析到花名册 mn_people：命中真人(person_kind='person')=已审核，返回花名册规范名做备注；
-     * 命中占位/未命中 = 未审核。供"在场"列表标注识别。
-     */
+    /** 本场标签仅在人工确认后才绑定花名册；候选命中始终只是建议。 */
     fastify.get('/meetings/:id/participants-review', { preHandler: authenticate }, async (request) => {
       const { id } = request.params as { id: string };
-      const meta = await engine.deps.db.query(
-        `SELECT jsonb_path_query_array(metadata, '$.participants[*].name') AS names,
-                COALESCE(metadata->'participantOverrides', '{}'::jsonb) AS overrides FROM assets WHERE id::text = $1`,
-        [id],
-      );
-      const names = (meta.rows[0]?.names ?? []) as string[];
-      const overrides = (meta.rows[0]?.overrides ?? {}) as Record<string, string>; // name → personId(本场绑定)
-      if (!Array.isArray(names) || names.length === 0) return { items: [] };
-      // 本场绑定的人物信息
-      const ovIds = Array.from(new Set(Object.values(overrides)));
-      const ovPersons = ovIds.length
-        ? (await engine.deps.db.query(`SELECT id, canonical_name, metadata->>'person_kind' kind FROM mn_people WHERE id = ANY($1::uuid[])`, [ovIds])).rows
-        : [];
-      const ovMap = new Map(ovPersons.map((p: any) => [String(p.id), p]));
-      const r = await engine.deps.db.query(
-        `SELECT t.n AS name, m.id, m.canonical_name, m.kind
-           FROM unnest($1::text[]) WITH ORDINALITY AS t(n, ord)
-           LEFT JOIN LATERAL (
-             SELECT p.id, p.canonical_name, p.metadata->>'person_kind' AS kind
-               FROM mn_people p
-              WHERE p.canonical_name = t.n
-                 OR t.n = ANY(p.aliases)
-                 OR p.canonical_name = btrim(regexp_replace(t.n, '[（(][^）)]*[)）]', '', 'g'))
-                 OR btrim(regexp_replace(t.n, '[（(][^）)]*[)）]', '', 'g')) = ANY(p.aliases)
-              ORDER BY (p.metadata->>'person_kind' = 'person') DESC NULLS LAST,
-                       array_length(p.aliases, 1) DESC NULLS LAST
-              LIMIT 1
-           ) m ON true
-          ORDER BY t.ord`,
-        [names],
-      );
-      return {
-        items: r.rows.map((x: any) => {
-          const ov = overrides[String(x.name)] ? ovMap.get(overrides[String(x.name)]) : null;
-          if (ov) return { name: String(x.name), personId: String(ov.id), canonicalName: ov.canonical_name, personKind: ov.kind ?? 'person', reviewed: true, bound: true };
-          return {
-            name: String(x.name),
-            personId: x.id ?? null,
-            canonicalName: x.canonical_name ?? null,
-            personKind: x.kind ?? null,
-            reviewed: x.kind === 'person',
-            bound: false,
-          };
-        }),
-      };
+      return { items: await listMeetingParticipantReview(engine.deps, id) };
     });
 
     /**
-     * POST /meetings/:id/participants/bind · 本场把参会人标签(泛指如"说话人N")绑定到某花名册人物。
-     * 写 assets.metadata.participantOverrides[name]=personId(只本场生效,显示层优先读它);
-     * 若该标签当前解析到另一个人物,顺带 reassignMeetingPerson 把本场事实重指到目标(不删源、不串场)。
-     * Body: { participantName, targetPersonId }
+     * POST /meetings/:id/participants/bind
+     * Body: { participantId, targetPersonId }
+     * participantName 暂时兼容旧版客户端；服务端只会把它解析为本场 participantId。
      */
     fastify.post('/meetings/:id/participants/bind', { preHandler: authenticate }, async (request, reply) => {
       const { id } = request.params as { id: string };
-      const body = (request.body ?? {}) as { participantName?: string; targetPersonId?: string };
-      const pname = (body.participantName ?? '').trim();
-      const tid = body.targetPersonId;
-      if (!pname || !tid || !UUID_RE.test(tid)) { reply.status(400); return { error: 'Bad Request', code: 'INVALID_INPUT', message: 'participantName + targetPersonId(UUID) 必填' }; }
-      const tgt = await engine.deps.db.query(`SELECT id, canonical_name FROM mn_people WHERE id=$1`, [tid]);
-      if (tgt.rows.length === 0) { reply.status(404); return { error: 'Not Found', code: 'PERSON_NOT_FOUND' }; }
-      // 1) 写本场 override
-      //    ⚠ 不能用 jsonb_set(m, ['participantOverrides', name], …)：当 participantOverrides 父键
-      //    不存在时 jsonb_set 建不了两级路径,会静默 no-op(override 永远写不进,UI 表现为"绑定不生效")。
-      //    改为整体重建该对象:COALESCE 现有(或空对象) || {name: personId}。
-      await engine.deps.db.query(
-        `UPDATE assets SET metadata = jsonb_set(
-            COALESCE(metadata,'{}'::jsonb),
-            ARRAY['participantOverrides'],
-            COALESCE(metadata->'participantOverrides','{}'::jsonb) || jsonb_build_object($2::text, $3::text),
-            true
-          ) WHERE id::text = $1`,
-        [id, pname, tid],
-      );
-      // 2) 若该标签当前解析到另一人物,本场事实重指(有 facts 才搬,泛指多半没)
-      const norm = pname.replace(/[（(][^）)]*[)）]/g, '').trim();
-      const src = await engine.deps.db.query(
-        `SELECT id FROM mn_people WHERE (canonical_name=$1 OR $1=ANY(aliases) OR canonical_name=$2 OR $2=ANY(aliases)) AND id<>$3 LIMIT 1`,
-        [pname, norm, tid],
-      );
-      let reassigned: any = null;
-      if (src.rows.length > 0) {
-        try { reassigned = await reassignMeetingPerson(engine.deps.db, id, src.rows[0].id, tid); }
-        catch (e: any) { request.log.warn({ err: e }, 'bind: 本场重指失败(非致命)'); }
+      const body = (request.body ?? {}) as { participantId?: string; participantName?: string; targetPersonId?: string };
+      const targetPersonId = body.targetPersonId;
+      if (!targetPersonId || !UUID_RE.test(targetPersonId)) {
+        reply.status(400);
+        return { error: 'Bad Request', code: 'INVALID_INPUT', message: 'targetPersonId(UUID) 必填' };
       }
-      return { ok: true, meetingId: id, participantName: pname, target: tgt.rows[0], reassigned };
+
+      let participantId = body.participantId;
+      if (!participantId && body.participantName?.trim()) {
+        const lookup = await engine.deps.db.query(
+          `SELECT id::text AS id
+             FROM mn_meeting_participants
+            WHERE meeting_id = $1
+              AND normalized_label = btrim(regexp_replace(regexp_replace($2, '[（(][^）)]*[)）]', '', 'g'), '\\s+', ' ', 'g'))
+            LIMIT 1`,
+          [id, body.participantName.trim()],
+        );
+        participantId = lookup.rows[0]?.id;
+      }
+      if (!participantId || !UUID_RE.test(participantId)) {
+        reply.status(400);
+        return { error: 'Bad Request', code: 'PARTICIPANT_ID_REQUIRED', message: 'participantId 必填；旧客户端须传入可识别的 participantName' };
+      }
+
+      try {
+        const result = await confirmMeetingParticipantBinding(engine.deps, id, participantId, targetPersonId);
+        return { ok: true, ...result };
+      } catch (error: any) {
+        const code = error?.code ?? 'PARTICIPANT_BIND_FAILED';
+        const status = code === 'PARTICIPANT_OR_PERSON_NOT_FOUND' ? 404 : 400;
+        reply.status(status);
+        return { error: status === 404 ? 'Not Found' : 'Bad Request', code, message: error?.message ?? 'participant binding failed' };
+      }
     });
 
     fastify.get('/people/:id', { preHandler: authenticate }, async (request, reply) => {

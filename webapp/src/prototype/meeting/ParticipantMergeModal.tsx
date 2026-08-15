@@ -10,7 +10,7 @@
 // 命中后整个 mn_* 链上 fromId 的引用 reassign 到 targetId，aliases 自动并入。
 
 import { useEffect, useMemo, useState } from 'react';
-import { meetingNotesApi, type PersonRosterRow } from '../../api/meetingNotes';
+import { meetingNotesApi, type ParticipantReviewCandidate, type PersonRosterRow } from '../../api/meetingNotes';
 import { Icon } from './_atoms';
 
 const stripParen = (s: string) => s.replace(/[（(].*?[)）]/g, '').trim();
@@ -49,7 +49,7 @@ export function ParticipantMergeModal({
   onMerged,
 }: {
   meetingId: string;
-  participant: { id: string; name: string };
+  participant: { id: string; name: string; participantId?: string; candidates?: ParticipantReviewCandidate[] };
   onClose: () => void;
   onMerged: (targetId: string) => void;
 }) {
@@ -159,7 +159,7 @@ export function ParticipantMergeModal({
       const r = await meetingNotesApi.createPerson({ canonicalName: createName, meetingId });
       // 本场模式:新建后把本场标签绑定到新人物(泛指本场识别)
       if (mergeScope === 'meeting') {
-        await meetingNotesApi.bindParticipant(meetingId, { participantName: participant.name, targetPersonId: r.person.id });
+        await meetingNotesApi.bindParticipant(meetingId, { participantId: participant.participantId ?? participant.id, targetPersonId: r.person.id });
       }
       onMerged(r.person.id); // 复用回调:刷新
     } catch (e: any) {
@@ -178,7 +178,7 @@ export function ParticipantMergeModal({
       setPendingTargetId(targetId);
       setError(null);
       try {
-        await meetingNotesApi.bindParticipant(meetingId, { participantName: participant.name, targetPersonId: targetId });
+        await meetingNotesApi.bindParticipant(meetingId, { participantId: participant.participantId ?? participant.id, targetPersonId: targetId });
         onMerged(targetId);
       } catch (e: any) {
         setError(e?.message ?? String(e));
@@ -240,7 +240,7 @@ export function ParticipantMergeModal({
           <div style={{
             fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
             textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6,
-          }}>合并到项目人物 · Merge participant</div>
+          }}>确认本场参会人 · Participant review</div>
           <h2 style={{
             fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, margin: 0,
             letterSpacing: '-0.005em',
@@ -248,24 +248,55 @@ export function ParticipantMergeModal({
             {participant.name}
           </h2>
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            选择项目维度已有的人物作为合并目标，本会议中以及全库对该参会者的引用会全部改写到目标。
+            候选仅用于推荐；点击后才将此标签确认到花名册人物。默认只影响本场会议，并同步重指本场张力、共识和行动项。
           </div>
           {!loadingPeople && (
             <div style={{ fontSize: 12, marginTop: 6, color: resolvedSource ? '#065f46' : '#92400e' }}>
               {resolvedSource
-                ? `已识别为人物「${resolvedSource.canonical_name}」${resolvedSource.canonical_name !== participant.name ? '（本会议标签为“' + participant.name + '”）' : ''}`
-                : '⚠ 未匹配到对应人物记录。可勾选「全局花名册」在全库合并，或用下方「新建」建为独立人物。'}
+                ? `发现历史同名/别名记录「${resolvedSource.canonical_name}」；仍需确认后才绑定本场。`
+                : '未发现历史同名记录。可搜索花名册或新建独立人物后确认。'}
+            </div>
+          )}
+          {(participant.candidates?.length ?? 0) > 0 && (
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--line-2)', paddingTop: 10 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', letterSpacing: 0.3 }}>系统推荐 · 待人工确认</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 7 }}>
+                {participant.candidates!.map((candidate) => {
+                  const busy = pendingTargetId === candidate.person.id;
+                  return (
+                    <button
+                      key={candidate.person.id}
+                      onClick={() => handleMerge(candidate.person.id, candidate.person.canonicalName)}
+                      disabled={!!pendingTargetId}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 10,
+                        textAlign: 'left', padding: '8px 10px', border: '1px solid var(--line-2)', borderRadius: 4,
+                        background: busy ? 'var(--paper-3)' : 'var(--paper-2)', color: 'var(--ink)',
+                        cursor: pendingTargetId ? 'wait' : 'pointer', fontSize: 12,
+                      }}
+                    >
+                      <span>
+                        <b>{candidate.person.canonicalName}</b>
+                        <span style={{ color: 'var(--ink-3)' }}> · {candidate.reasons.join('、')}</span>
+                      </span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)' }}>
+                        {busy ? '确认中…' : '确认是此人'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
           <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 12, alignItems: 'center' }}>
-            <span style={{ color: 'var(--ink-3)' }}>合并范围</span>
+            <span style={{ color: 'var(--ink-3)' }}>操作范围</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
               <input type="radio" checked={mergeScope === 'meeting'} onChange={() => setMergeScope('meeting')} />
-              只本场（推荐，泛指不串场）
+              确认本场（推荐，不串场）
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
               <input type="radio" checked={mergeScope === 'global'} onChange={() => setMergeScope('global')} />
-              所有场次·全局（确认同一人）
+              全局人物合并（高风险）
             </label>
           </div>
         </div>
@@ -349,7 +380,7 @@ export function ParticipantMergeModal({
                   </div>
                 </div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)' }}>
-                  {busy ? '合并中…' : `${p.commitment_count} 承诺`}
+                  {busy ? (mergeScope === 'meeting' ? '确认中…' : '合并中…') : (mergeScope === 'meeting' ? '确认本场' : `${p.commitment_count} 承诺`)}
                 </div>
               </button>
             );
@@ -375,7 +406,7 @@ export function ParticipantMergeModal({
             padding: '10px 22px', borderTop: '1px solid var(--line-2)',
             color: 'var(--amber)', fontSize: 12, fontFamily: 'var(--mono)',
           }}>
-            合并失败：{error}
+操作失败：{error}
           </div>
         )}
 
@@ -383,8 +414,8 @@ export function ParticipantMergeModal({
           padding: '10px 22px 14px', borderTop: '1px solid var(--line-2)',
           fontSize: 11, color: 'var(--ink-3)',
         }}>
-          合并后所有引用 (mn_commitments / mn_speech_quality / mn_role_trajectory_points 等) reassign，
-          原行的 canonical/aliases 并入目标的 aliases。操作不可逆。
+          本场确认只重指当前会议的引用，不会把 ASR 标签写入全局别名；
+          仅“全局人物合并”才会改写全库引用并合并别名，且不可逆。
         </div>
       </div>
     </div>

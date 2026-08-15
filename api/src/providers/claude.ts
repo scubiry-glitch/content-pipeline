@@ -90,7 +90,11 @@ export class ClaudeProvider extends LLMProvider {
       const data: any = await response.json();
 
       return {
-        content: data.content?.[0]?.text || '',
+        content:
+          (Array.isArray(data.content) &&
+            (data.content.find((b: any) => b.type === 'text')?.text ||
+              data.content[0]?.text)) ||
+          '',
         model,
         usage: {
           inputTokens: data.usage?.input_tokens || 0,

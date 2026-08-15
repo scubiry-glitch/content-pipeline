@@ -841,19 +841,48 @@ export const meetingNotesApi = {
     jget<{ meetings: PersonMeeting[]; roleLabels: string[] }>(`/people/${encodeURIComponent(id)}/meetings`),
   getParticipantsReview: (meetingId: string) =>
     jget<{ items: ParticipantReview[] }>(`/meetings/${encodeURIComponent(meetingId)}/participants-review`),
-  bindParticipant: (meetingId: string, body: { participantName: string; targetPersonId: string }) =>
-    jpost<{ ok: boolean; target: { id: string; canonical_name: string }; reassigned: unknown }>(
-      `/meetings/${encodeURIComponent(meetingId)}/participants/bind`, body),
+  bindParticipant: (meetingId: string, body: { participantId: string; targetPersonId: string }) =>
+    jpost<{
+      ok: boolean;
+      participantId: string;
+      target: { id: string; canonicalName: string };
+      reassigned: Array<{ table: string; reassigned: number; dropped: number }>;
+      affectedTensionCount: number;
+    }>(`/meetings/${encodeURIComponent(meetingId)}/participants/bind`, body),
   createPerson: (body: { canonicalName: string; meetingId?: string; role?: string; org?: string }) =>
     jpost<{ ok: boolean; person: { id: string; canonical_name: string; aliases: string[] } }>('/people', body),
 };
 
+export interface ParticipantReviewCandidate {
+  person: {
+    id: string;
+    canonicalName: string;
+    aliases: string[];
+    role: string | null;
+    org: string | null;
+    personKind: string | null;
+  };
+  score: number;
+  reasons: string[];
+}
+
 export interface ParticipantReview {
-  name: string;
-  personId: string | null;
-  canonicalName: string | null;
-  personKind: string | null;
-  reviewed: boolean; // 命中花名册真人(person_kind='person')
+  participantId: string;
+  rawLabel: string;
+  normalizedLabel: string;
+  labelKind: 'generic_asr' | 'named' | 'unknown';
+  role: string | null;
+  occurrences: number;
+  status: 'pending' | 'confirmed' | 'rejected';
+  confirmedPerson: {
+    id: string;
+    canonicalName: string;
+    role: string | null;
+    org: string | null;
+    personKind: string | null;
+  } | null;
+  candidates: ParticipantReviewCandidate[];
+  needsReview: boolean;
 }
 
 export interface PersonRosterRow {

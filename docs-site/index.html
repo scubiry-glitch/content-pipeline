@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内容生产流水线 · PRD & API 文档</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#ffffff; --ink:#1a1d21; --muted:#5b6470; --line:#e3e7ec;
+  --brand:#1f5eff; --brand-dim:#e8efff; --code:#0e2a52; --code-bg:#f2f5fa;
+  --method-get:#0a7d3a; --method-post:#b26a00; --method-put:#1f5eff; --method-patch:#7a3ff2; --method-delete:#c62828;
+  --sidebar-w:264px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",-apple-system,sans-serif;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.7}
+.layout{display:flex;min-height:100vh}
+aside{width:var(--sidebar-w);flex-shrink:0;background:#10131a;color:#c9d1dc;position:sticky;top:0;height:100vh;overflow-y:auto;padding:18px 14px 40px}
+aside .logo{color:#fff;font-weight:700;font-size:15px;margin:2px 8px 4px}
+aside .logo small{display:block;color:#6b7688;font-weight:400;font-size:11px;margin-top:2px}
+aside nav{margin-top:10px}
+aside a{display:block;color:#aeb7c4;text-decoration:none;padding:5px 8px;border-radius:6px;font-size:12.8px}
+aside a:hover{color:#fff;background:#1c2029}
+aside a.lv1{margin-top:8px;font-weight:600;color:#e3e8ef;font-size:13.2px}
+main{flex:1;max-width:1060px;margin:0 auto;padding:34px 42px 90px}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:19px;margin:44px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+h3{font-size:16px;margin:28px 0 8px}
+h4{font-size:14.5px;margin:20px 0 6px}
+p{margin:8px 0;color:#2b3138}
+.muted{color:var(--muted)}
+.badge{display:inline-block;background:var(--brand-dim);color:var(--brand);border-radius:5px;padding:1px 8px;font-size:12px;font-weight:600;margin-right:6px}
+.tag{display:inline-block;background:#eef1f5;color:#3d4650;border-radius:5px;padding:1px 8px;font-size:12px;margin-right:6px;margin-bottom:4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0;background:#fff}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:#f2f5fa;font-weight:600;white-space:nowrap}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;background:var(--code-bg);color:var(--code);border-radius:4px;padding:1px 5px}
+pre{background:#10131a;color:#d5dce6;border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.6}
+pre code{background:none;color:inherit;padding:0}
+.method{display:inline-block;font-family:Menlo,monospace;font-size:11px;font-weight:700;border-radius:4px;padding:1px 7px;min-width:52px;text-align:center;color:#fff}
+.m-GET{background:var(--method-get)} .m-POST{background:var(--method-post)} .m-PUT{background:var(--method-put)} .m-PATCH{background:var(--method-patch)} .m-DELETE{background:var(--method-delete)}
+.m-OTHER{background:#5b6470}
+.ep{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:7px 10px;border-bottom:1px solid #eef1f5;align-items:baseline;font-size:13px}
+.ep:hover{background:#f7f9fd}
+.ep .path{font-family:Menlo,Consolas,monospace;font-size:12.3px;color:var(--code);word-break:break-all}
+.ep .desc{color:#3d4650}
+.ep-group{margin:20px 0}
+.ep-group h4{margin:0 0 6px;font-size:15px}
+.ep-group .gdesc{color:var(--muted);font-size:13px;margin:0 0 10px}
+.ep-wrap{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+.searchbar{position:sticky;top:0;background:linear-gradient(#f7f8fa 80%,rgba(247,248,250,0));padding:10px 0 12px;z-index:5}
+.searchbar input{width:100%;padding:9px 14px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;outline:none}
+.searchbar input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-dim)}
+.stats{color:var(--muted);font-size:12.5px;margin:6px 0}
+ul.tight{margin:6px 0;padding-left:22px}
+ul.tight li{margin:3px 0}
+.pill{display:inline-block;font-size:12px;border-radius:99px;padding:1px 10px;margin:0 4px 4px 0;background:#eef1f5;color:#3d4650}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.layout{flex-direction:column}aside{position:static;width:100%;height:auto;max-height:38vh}.grid2{grid-template-columns:1fr}main{padding:20px 16px 70px}}
+.hidden{display:none}
+a.anchor{color:inherit;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside>
+  <div class="logo">内容生产流水线<small>Content Pipeline · PRD &amp; API Docs</small></div>
+  <nav>
+    <a class="lv1" href="#doc-intro">文档说明</a>
+    <a class="lv1" href="#prd">一、产品需求文档（PRD）</a>
+    <a href="#prd-overview">1.1 产品概述</a>
+    <a href="#prd-users">1.2 目标用户与场景</a>
+    <a href="#prd-history">1.3 演进历史</a>
+    <a href="#prd-arch">1.4 系统架构</a>
+    <a href="#prd-modules">1.5 核心功能模块</a>
+    <a href="#prd-flows">1.6 核心业务流程</a>
+    <a href="#prd-data">1.7 数据与集成</a>
+    <a href="#prd-jobs">1.8 定时任务</a>
+    <a href="#prd-nfr">1.9 非功能需求</a>
+    <a href="#prd-ops">1.10 运维与部署</a>
+    <a class="lv1" href="#api">二、API 接口文档</a>
+    <a href="#api-overview">2.1 总览</a>
+    <a href="#api-health">2.2 健康检查</a>
+    <a href="#api-auth">2.3 认证与账号</a>
+    <a href="#api-mn">2.4 会议纪要外部接入</a>
+    <a href="#api-expert">2.5 专家库 invoke / chat</a>
+    <a href="#api-ref">2.6 端点参考（609 个）</a>
+    <a href="#api-appendix">2.7 附录</a>
+  </nav>
+</aside>
+<main>
+
+<h1>内容生产流水线 · 产品需求文档 &amp; API 接口文档</h1>
+<p class="muted">版本 v3.0.0 ｜ 文档生成日期 2026-08-13 ｜ 来源：源码 <code>api/src</code>（609 端点实盘提取）+ 01-product 产品文档 ｜ 站点 <a href="http://paper.morning.rocks">paper.morning.rocks</a></p>
+
+<!-- ================= 文档说明 ================= -->
+<h2 id="doc-intro">文档说明</h2>
+<div class="card">
+<p>本文档包含两部分：</p>
+<ul class="tight">
+<li><b>第一部分 · PRD</b>：内容生产流水线的产品需求文档，描述产品定位、用户、系统架构、13 个功能模块、核心业务流程、非功能需求与运维部署。基于仓库 <code>/newdata/pipeline/01-product</code> 系列产品规格（v1 MVP → v7.x）合并整理为当前线上版本（API v3.0.0）的一致视图。</li>
+<li><b>第二部分 · API 接口文档</b>：从运行中的服务源码（<code>api/src/server.ts</code> 路由注册表 + 各路由模块）提取的完整接口参考，覆盖 38 个路由组、609 个端点，含鉴权方式、关键接口的请求/响应示例与回调协议。</li>
+</ul>
+<p class="muted">说明：端点清单为源码实盘提取（2026-08-13），与线上运行版本一致；接口行为以 <code>/health</code> 返回的版本号与源码为准。</p>
+</div>
+
+<!-- ================= PRD ================= -->
+<h2 id="prd">一、产品需求文档（PRD）</h2>
+
+<h3 id="prd-overview">1.1 产品概述</h3>
+<div class="card">
+<p><b>产品名称</b>：内容生产流水线（Content Pipeline，内部称 paper）</p>
+<p><b>一句话定位</b>：面向行业研究与内容团队的一站式 AI 内容生产平台——从选题、研究、写作、评审到发布全流程自动化，并沉淀为可复用的知识底座（素材库、专家库、内容库、会议纪要库）。</p>
+<p><b>核心价值</b>：</p>
+<ul class="tight">
+<li><b>提效</b>：选题评估、深度研究、文稿生成、多轮评审全 AI 驱动，人工只做决策与修订；</li>
+<li><b>提质</b>：质量输入体系（事实核查、合规、蓝军评审、串行评审、数据交叉验证）保证输出可靠性；</li>
+<li><b>沉淀</b>：把每一次生产过程中的知识（事实、专家观点、会议决策）结构化入库，越用越聪明；</li>
+<li><b>决策</b>：CEO 驾驶舱与内容效果预测，让「写什么、怎么写、何时发」有数据依据。</li>
+</ul>
+<p><b>线上地址</b>：<code>http://paper.morning.rocks</code>（API 前缀 <code>/api</code>，前端 SPA + 同域 API 反代）</p>
+</div>
+
+<h3 id="prd-users">1.2 目标用户与场景</h3>
+<div class="card">
+<table>
+<tr><th>角色</th><th>典型场景</th><th>主要入口</th></tr>
+<tr><td>内容编辑/研究员</td><td>提交选题 → 获得评估、研究资料、初稿与评审意见 → 定稿发布</td><td>生产流水线（production）、深度研究（research）</td></tr>
+<tr><td>审核/合规人员</td><td>敏感词、广告法、版权、隐私合规检查与修复</td><td>智能审核（compliance）</td></tr>
+<tr><td>知识管理员</td><td>管理素材资产、领域分类、内容库事实与维基</td><td>素材库（assets）、内容库（content-library）、taxonomy</td></tr>
+<tr><td>管理者/决策者</td><td>会议纪要与项目全景、决策质量、跨会议趋势</td><td>会议纪要（meeting-notes）、CEO 驾驶舱（ceo）</td></tr>
+<tr><td>外部系统（第三方）</td><td>上传会议文件 → 自动解析 + 16 轴分析 → 回调拿报告</td><td>公开 API（/api/v3）、会议纪要外部接入（upload-task）</td></tr>
+</table>
+<p><b>多租户</b>：Workspace 为数据隔离第一边界，成员/资产/任务全部挂在工作区下；支持 Google OAuth 与账号密码两种登录。</p>
+</div>
+
+<h3 id="prd-history">1.3 演进历史</h3>
+<div class="card">
+<table>
+<tr><th>版本</th><th>主题</th><th>能力</th></tr>
+<tr><td>v1.x（MVP）</td><td>流水线骨架</td><td>选题 → 研究 → 写作 → BlueTeam 蓝军评审 → 发布，5 阶段任务状态机</td></tr>
+<tr><td>v2.x</td><td>生态扩展</td><td>专家库 v2.0（keyword matching）、情感分析</td></tr>
+<tr><td>v3.x</td><td>内容质量输入体系</td><td>RSS 聚合、事实核查、差异化分析、受众匹配、质量仪表盘、热点话题</td></tr>
+<tr><td>v4.x</td><td>智能化升级</td><td>v4.0 合规审核、v4.1 智能编排、v4.2 Stage3 交互修改、v4.3 效果预测、v4.4 Copilot、v4.5 i18n</td></tr>
+<tr><td>v5.x</td><td>生态与专家</td><td>社区话题抓取、流式大纲/评审（SSE）、专家库 v3.0（Cognitive Digital Twin 认知数字孪生）、收藏</td></tr>
+<tr><td>v6.x</td><td>AI 批处理</td><td>RSS 条目 AI 批量分析、素材资产 AI 分析（语义检索/相似/重复）</td></tr>
+<tr><td>v7.x</td><td>知识底座</td><td>内容库 v7.0（事实/实体/信念/共识/维基）、会议纪要一库多视图（16 轴/runs/纵向）、CEO 决策驾驶舱、统一 taxonomy</td></tr>
+</table>
+</div>
+
+<h3 id="prd-arch">1.4 系统架构</h3>
+<div class="card">
+<h4>部署拓扑（生产环境 124.156.192.230）</h4>
+<pre><code>浏览器
+  │  http://paper.morning.rocks
+  ▼
+nginx（:80）
+  ├── /            → /newdata/pipeline/webapp/dist（Vite 构建的 React SPA，try_files 回退 index.html）
+  ├── /api/        → proxy_pass http://127.0.0.1:3006（Fastify API，read_timeout 300s）
+  └── /api/v1/streaming/ → SSE 专用代理（buffering off，read_timeout 3600s）
+
+Fastify API（:3006，tsx 直跑 src/server.ts）
+  ├── PostgreSQL（author 库，多 schema：auth/workspaces/assets/production/quality/
+  │     expert_library/content_library/meeting_notes/ceo/taxonomy …）
+  ├── Redis（:6379，BullMQ 队列 + 缓存）
+  ├── LLM 提供商：Claude / Kimi / OpenAI / SiliconFlow / 火山引擎 / DashboardLLM
+  │     + claude-cli 适配器（本机 Claude Code CLI，无需 API Key）
+  └── LangGraph（checkpoint 持久化到 PG）
+
+Worker 进程（MN_WORKER_ONLY=true，RunEngine 执行器，与 API 进程分离，
+  避免 dev 重启杀掉运行中的会议分析 run）</code></pre>
+<h4>技术栈</h4>
+<p>
+<span class="pill">TypeScript / Node 20</span><span class="pill">Fastify 4</span><span class="pill">PostgreSQL</span><span class="pill">Redis + BullMQ</span><span class="pill">LangGraph</span><span class="pill">React 18 + Vite</span><span class="pill">echarts / recharts</span><span class="pill">react-markdown / pdf-lib</span><span class="pill">zod</span><span class="pill">winston</span>
+</p>
+<h4>模块地图（路由前缀 → 模块）</h4>
+<p>
+<span class="pill">/api/v1/production</span><span class="pill">/api/v1/assets</span><span class="pill">/api/v1/quality/*</span><span class="pill">/api/v1/research</span><span class="pill">/api/v1/reports</span><span class="pill">/api/v1/archive</span><span class="pill">/api/v1/compliance</span><span class="pill">/api/v1/orchestrator</span><span class="pill">/api/v1/stage3</span><span class="pill">/api/v1/prediction</span><span class="pill">/api/v1/copilot</span><span class="pill">/api/v1/i18n</span><span class="pill">/api/v1/expert-library</span><span class="pill">/api/v1/content-library</span><span class="pill">/api/v1/meeting-notes</span><span class="pill">/api/v1/ceo</span><span class="pill">/api/v1/sentiment</span><span class="pill">/api/v1/langgraph</span><span class="pill">/api/v1/ai</span><span class="pill">/api/v1/taxonomy</span><span class="pill">/api/v3（公开）</span><span class="pill">/api/llm（网关）</span>
+</p>
+</div>
+
+<h3 id="prd-modules">1.5 核心功能模块</h3>
+<div class="grid2">
+<div class="card">
+<h4>① 内容生产流水线（production）</h4>
+<p>产品主线。任务按 5 阶段推进：选题评估 → 深度研究 → 大纲（专家评审 + 对话修订）→ 文稿生成（版本树/差异/回滚）→ 蓝军评审（单轮/串行/多轮）→ 定稿。支持任一阶段重做、任务隐藏/归档、数据核查与交叉验证。文稿支持 SSE 流式生成。</p>
+</div>
+<div class="card">
+<h4>② 素材与资产（assets + quality）</h4>
+<p>素材库：上传、检索、主题分组、目录绑定、标签。质量输入体系：RSS 源管理、资讯抓取、条目打分、回收站；热点话题（RSS + 小红书/微博/知乎热榜，跨平台归并、核验、热度重算）；质量报告解析。</p>
+</div>
+<div class="card">
+<h4>③ 专家库（expert-library）</h4>
+<p>Cognitive Digital Twin：专家画像（Profile）+ 知识库 + 心智模型图谱 + 辩论 + 调度 + 热点观点。核心接口 invoke（单次专家任务）、chat/stream（对话）、match（匹配）、review-outline（大纲评审）。反馈与校准闭环持续迭代专家表现。</p>
+</div>
+<div class="card">
+<h4>④ 内容库（content-library，v7.0）</h4>
+<p>结构化记忆：从素材提取事实（Facts）→ 构建实体图谱（Entities）→ 信念演化（Beliefs）→ 共识与矛盾检测 → 跨域关联 → 自动生成维基。支持重新提取任务、信息增量报告（6h）、保鲜度检查（24h）、Zep 同步。</p>
+</div>
+<div class="card">
+<h4>⑤ 会议纪要（meeting-notes）</h4>
+<p>一库多视图：会议本体（16 轴分析、决策质量、情绪曲线、必要性审计、偏差检测）、人物（承诺/盲点/LLM 画像）、Scope（项目/客户/话题，决策/假设/风险清单）、Runs（分析任务，可取消/恢复/抢救）、跨会议纵向分析与跨轴线索。外部系统可上传文件自动触发解析+分析，两段式回调。</p>
+</div>
+<div class="card">
+<h4>⑥ CEO 决策驾驶舱（ceo）</h4>
+<p>双模主壳 + 6 房间 + Panorama + 外脑图书馆。跨模块聚合（会议纪要、专家库、内容库），按 Scope 预填，支持流式 run。会议解析后自动入队 g1 分析。</p>
+</div>
+<div class="card">
+<h4>⑦ 合规 / 编排 / Stage3 / 预测 / Copilot / i18n（v4.x）</h4>
+<p>敏感词/广告法/版权/隐私检测与 AI 修复；条件触发编排规则；可视化标注 + 对话式修改 + 版本对比；传播潜力预测与排期；自然语言配置的智能助手与技能体系；术语库 + 翻译记忆的多语言翻译。</p>
+</div>
+<div class="card">
+<h4>⑧ 支撑体系</h4>
+<p>多租户工作区、账号/OAuth、管理审计、收藏、情感分析（MSI 市场情绪指数）、统一领域 taxonomy、LLM 网关（OpenAI 兼容转发 + 模型配置）、LangGraph 流水线、AI 批量处理（RSS/素材）。</p>
+</div>
+</div>
+
+<h3 id="prd-flows">1.6 核心业务流程</h3>
+<div class="card">
+<h4>流程 A：内容生产（5 阶段状态机）</h4>
+<pre><code>创建任务（POST /production/，支持 topic + source_materials）
+  → Stage1 选题评估（evaluate-topic：热点/竞争/可行性）
+  → Stage2 深度研究（research：源配置 → 采集 → 资料库）
+  → Stage3 大纲（planning 流式生成 → outline/expert-review 专家评审
+        → outline-chat 对话修订 → outline/confirm）
+  → Stage4 文稿（draft/generate-stream SSE 生成 → 版本树/差异/回滚
+        → data-review 数据核查 → cross-validate 交叉验证）
+  → Stage5 评审（reviews 蓝军 → review-items/decide 决策 → 串行评审可选
+        → apply-revisions 应用修订 → finalize 定稿 → outputs 下载）
+任意阶段可 redo/* 重做；全程可 compliance/check 合规检查。</code></pre>
+<h4>流程 B：会议纪要外部接入（两段式）</h4>
+<pre><code>外部系统 ──POST upload-task（file + callbackUrl）──▶ 系统
+  1) 入库 + 自动解析 → 触发 16 轴分析 run（mode=api-oneshot）
+  2) webhook① meeting_notes.uploaded（飞书卡片「📋 会议纪要已上传」，含 assets[].runId）
+  3) 分析完成 → webhook② meeting_notes.analysis.completed
+     （飞书卡片「🧠 会议分析已完成」，含 sharedUrl + 摘要）
+  4) 分享链接 /shared/:token 可免登录查看</code></pre>
+<h4>流程 C：内容库知识沉淀</h4>
+<pre><code>素材入库 → extract（事实提取）→ facts/entities/beliefs 结构化
+  → 6h 增量报告 delta / 24h 保鲜度 freshness/stale
+  → consensus（共识）/ contradictions（矛盾）/ cross-domain（跨域）
+  → synthesize 多源融合成文 / wiki/generate 维基条目
+  → 供流水线 research 阶段检索引用（搜索/推荐/卡片）</code></pre>
+</div>
+
+<h3 id="prd-data">1.7 数据与集成</h3>
+<div class="card">
+<ul class="tight">
+<li><b>数据库</b>：PostgreSQL <code>author</code> 库，按模块分 schema；关键表：<code>assets</code>（素材）、<code>production_tasks</code>（生产任务）、<code>experts / expert_knowledge / mental_models</code>（专家库）、<code>content_facts / content_entities / content_beliefs</code>（内容库）、<code>meetings / mn_scopes / mn_runs</code>（会议纪要）、<code>workspaces / users / sessions</code>（多租户账号）。行级安全（RLS）与 workspace 断言双重隔离。</li>
+<li><b>队列</b>：Redis + BullMQ（会议分析 run、批量任务）。</li>
+<li><b>LLM 路由</b>：统一 Router 按 Key 可用性选择 Claude / Kimi / OpenAI / SiliconFlow / 火山引擎；CEO 模块支持 <code>CEO_LLM_PROVIDER=claude-cli</code> 走本机 Claude Code CLI（无需 Key）；Dashboard 场景走 <code>/api/llm/chat/completions</code> OpenAI 兼容网关。</li>
+<li><b>文件解析</b>：.md/.txt/.docx/pdf（mammoth、pdf-parse、tesseract OCR、本地说话人切分解析器），上传上限 50MB。</li>
+<li><b>回调集成</b>：飞书机器人卡片 webhook（默认 <code>callbackUrl</code>）与通用 HTTP 回调（HMAC-SHA256 签名，<code>callbackSecret</code>）。</li>
+<li><b>OAuth</b>：Google OAuth 登录。</li>
+</ul>
+</div>
+
+<h3 id="prd-jobs">1.8 定时任务</h3>
+<div class="card">
+<table>
+<tr><th>任务</th><th>频率</th><th>开关</th></tr>
+<tr><td>热度分数更新</td><td>每 30 分钟</td><td>常开</td></tr>
+<tr><td>内容库信息增量报告</td><td>每 6 小时</td><td>常开</td></tr>
+<tr><td>内容库保鲜度检查（90 天上限）</td><td>每 24 小时</td><td>常开</td></tr>
+<tr><td>会议纪要采集（按源独立 cron）</td><td>per-source scheduleCron</td><td>常开（源级）</td></tr>
+<tr><td>会议纪要项目 auto-run / 全库月度重算</td><td>事件驱动 / 每月 1 日 02:00</td><td>常开</td></tr>
+<tr><td>Assets AI 批量处理</td><td>每 30 分钟</td><td>ASSETS_AI_SCHEDULER_ENABLED</td></tr>
+<tr><td>RSS AI 批量处理</td><td>每 15 分钟</td><td>RSS_AI_SCHEDULER_ENABLED（默认关，链路已废弃）</td></tr>
+<tr><td>CEO 模块调度</td><td>占位（PR4+ 接规则流）</td><td>常开（no-op）</td></tr>
+</table>
+</div>
+
+<h3 id="prd-nfr">1.9 非功能需求</h3>
+<div class="card">
+<ul class="tight">
+<li><b>安全</b>：会话 Cookie（cp_session）+ X-API-Key 双凭证；密码 bcrypt 存储；登录失败锁定 + 审计日志（admin/audit）；RLS 行级隔离；共享链接 token 鉴权；CORS 白名单。</li>
+<li><b>可靠</b>：数据库初始化失败即退出（不静默降级）；迁移与种子幂等；孤儿 run 清理与管理接口；run 路由配置热重载。</li>
+<li><b>可观测</b>：winston 结构化日志；/health /readyz 健康探针；各模块 health 与 _diagnostics 端点；AI 监测指标/报告/告警。</li>
+<li><b>性能</b>：SSE 流式输出（长任务不阻塞）；上传 50MB 上限；读多写少接口均有列表分页；运行期性能索引保障。</li>
+<li><b>兼容</b>：/api/v1/experts 旧版兼容；meeting-note-sources 旧路径 alias；api-key 凭证兼容期保留。</li>
+</ul>
+</div>
+
+<h3 id="prd-ops">1.10 运维与部署</h3>
+<div class="card">
+<ul class="tight">
+<li><b>进程</b>：API 以 <code>tsx src/server.ts</code> 直跑（cwd=<code>/newdata/pipeline/api</code>），Worker 以 <code>MN_WORKER_ONLY=true</code> 独立进程；开发用 <code>MN_API_ONLY=true</code> 分离执行。</li>
+<li><b>nginx</b>：<code>paper.morning.rocks</code> vhost（80），静态 root=<code>webapp/dist</code>，/api 反代 3006，streaming 走 SSE 专用 location；CORS 头在 nginx 层统一注入。</li>
+<li><b>环境变量</b>（api/.env）：DATABASE_URL/DB_*、ADMIN_API_KEY、COOKIE_SECRET、CLAUDE_API_KEY/KIMI_API_KEY/OPENAI_API_KEY、PUBLIC_API_BASE_URL、PORT=3006、DB_AUTO_MIGRATE、TAXONOMY_BOOTSTRAP、CEO_LLM_PROVIDER 等。</li>
+<li><b>数据库</b>：自动迁移开关 DB_AUTO_MIGRATE；migrations 目录维护增量 SQL；deploy/ 目录含导入导出与一键部署脚本。</li>
+<li><b>发布</b>：前端 <code>tsc -b &amp;&amp; vite build</code> → dist；API 直接 tsx 热加载（生产以守护进程常驻）。</li>
+</ul>
+</div>
+
+<!-- ================= API ================= -->
+<h2 id="api">二、API 接口文档</h2>
+
+<h3 id="api-overview">2.1 总览</h3>
+<div class="card">
+<h4>Base URL</h4>
+<pre><code>http://paper.morning.rocks        （生产，HTTP）
+全部接口前缀：/api（如 /api/v1/production、/api/v3/health）
+健康检查：GET /health  →  { status, service: "content-pipeline-api", version: "3.0.0" }</code></pre>
+<h4>鉴权（二选一，共存）</h4>
+<table>
+<tr><th>方式</th><th>说明</th></tr>
+<tr><td>会话 Cookie</td><td>登录后下发 <code>cp_session</code> Cookie；权限按用户/角色/工作区判定</td></tr>
+<tr><td>X-API-Key</td><td>请求头 <code>X-API-Key: &lt;ADMIN_API_KEY&gt;</code>；视为超管（api-key@local）。未配置 ADMIN_API_KEY 时兜底值为 <code>dev-api-key-change-in-production</code>；可用 AUTH_DISABLE_API_KEY 关闭</td></tr>
+</table>
+<h4>通用约定</h4>
+<ul class="tight">
+<li><b>时间</b>：ISO8601（UTC）；<b>ID</b>：UUID 或雪花字符串</li>
+<li><b>上传</b>：multipart/form-data，单文件 ≤ 50MB</li>
+<li><b>流式</b>：SSE（text/event-stream），nginx 对 /api/v1/streaming/ 关闭缓冲，读超时 3600s</li>
+<li><b>错误格式</b>：<code>{ "error": "...", "message": "...", "code": "ROUTE_NOT_FOUND" }</code>；404 由全局 notFoundHandler 统一返回</li>
+<li><b>分页</b>：列表接口支持 limit/offset（或 cursor），返回结构以各模块文档为准</li>
+<li><b>工作区</b>：多租户接口按当前会话 workspace 过滤；跨租户访问返回 404（不泄露存在性）</li>
+</ul>
+</div>
+
+<h3 id="api-health">2.2 健康检查</h3>
+<div class="card">
+<div class="ep"><span class="method m-GET">GET</span><span><span class="path">/health</span><br><span class="desc">服务健康检查（公开，不等待 DB 就绪）</span></span></div>
+<div class="ep"><span class="method m-GET">GET</span><span><span class="path">/healthz</span><br><span class="desc">存活探针（meeting-notes standalone 定义）</span></span></div>
+<div class="ep"><span class="method m-GET">GET</span><span><span class="path">/readyz</span><br><span class="desc">就绪探针</span></span></div>
+</div>
+
+<h3 id="api-auth">2.3 认证与账号（详细）</h3>
+<div class="card">
+<h4>登录</h4>
+<pre><code>POST /api/auth/login
+{ "email": "user@example.com", "password": "***" }
+→ 200 { user, workspace, sessionId, ... }  + Set-Cookie: cp_session=...</code></pre>
+<h4>其他端点</h4>
+<table>
+<tr><th>方法</th><th>路径</th><th>说明</th></tr>
+<tr><td>POST</td><td>/api/auth/logout</td><td>注销当前会话</td></tr>
+<tr><td>GET</td><td>/api/auth/me</td><td>当前用户 + 默认工作区</td></tr>
+<tr><td>POST</td><td>/api/auth/refresh</td><td>刷新会话</td></tr>
+<tr><td>POST</td><td>/api/auth/switch-workspace</td><td>切换工作区</td></tr>
+<tr><td>POST</td><td>/api/auth/change-password</td><td>修改密码</td></tr>
+<tr><td>GET</td><td>/api/auth/oauth/status</td><td>OAuth 状态</td></tr>
+<tr><td>GET</td><td>/api/auth/oauth/:provider/start</td><td>发起 Google OAuth</td></tr>
+<tr><td>GET</td><td>/api/auth/oauth/:provider/callback</td><td>OAuth 回调</td></tr>
+</table>
+</div>
+
+<h3 id="api-mn">2.4 会议纪要外部接入（详细）</h3>
+<div class="card">
+<h4>一键上传任务（推荐）</h4>
+<pre><code>POST /api/v1/meeting-notes/sources/upload-task
+Header: X-API-Key: &lt;key&gt;
+multipart/form-data：
+
+curl -X POST "http://paper.morning.rocks/api/v1/meeting-notes/sources/upload-task" \
+  -H "X-API-Key: dev-api-key" \
+  -F "file=@meeting.docx" \
+  -F "scopeKind=project" -F "scopeId=&lt;uuid&gt;" \
+  -F "callbackUrl=https://partner.example.com/webhooks/meeting-report" \
+  -F "autoParse=true" -F "mode=api-oneshot" -F "preset=standard"</code></pre>
+<table>
+<tr><th>字段</th><th>必填</th><th>默认</th><th>说明</th></tr>
+<tr><td>file</td><td>是</td><td>—</td><td>.md/.txt/.docx（其他按 UTF-8 文本读）</td></tr>
+<tr><td>sourceId</td><td>否</td><td>自动选择</td><td>指定采集源；无则自动创建「默认上传来源」</td></tr>
+<tr><td>workspaceId</td><td>否</td><td>API Key 默认 ws</td><td>多租户目标工作区</td></tr>
+<tr><td>userId</td><td>否</td><td>—</td><td>业务侧用户 ID（审计/回调透传）</td></tr>
+<tr><td>scopeKind</td><td>否</td><td>—</td><td>project / client / topic / meeting</td></tr>
+<tr><td>scopeId</td><td>否</td><td>—</td><td>业务 scope UUID</td></tr>
+<tr><td>callbackUrl</td><td>否</td><td>—</td><td>回调地址（飞书机器人 URL 自动走卡片）</td></tr>
+<tr><td>callbackSecret</td><td>否</td><td>—</td><td>非飞书回调 HMAC-SHA256 签名密钥</td></tr>
+<tr><td>autoParse</td><td>否</td><td>true</td><td>上传后自动解析 + 分析 run</td></tr>
+<tr><td>mode</td><td>否</td><td>api-oneshot</td><td>api-oneshot / multi-axis / claude-cli</td></tr>
+<tr><td>preset</td><td>否</td><td>standard</td><td>lite / standard / max</td></tr>
+<tr><td>axis</td><td>否</td><td>all</td><td>16 轴全量或单轴</td></tr>
+<tr><td>expertRoles</td><td>否</td><td>—</td><td>JSON 字符串，如 {"people":["uuid"]}</td></tr>
+</table>
+<h4>成功响应（202）与两段式回调</h4>
+<pre><code>{ "sourceId": "...", "context": {...}, "import": { "id", "status": "succeeded",
+  "itemsDiscovered": 1, "itemsImported": 1, "duplicates": 0, "assetIds": [...] },
+  "runs": [ { "id", "assetId", "state": "queued", "mode": "api-oneshot" } ],
+  "callback": { "sentAsync": true, "callbackUrl": "..." } }
+
+webhook① 事件 meeting_notes.uploaded   （飞书卡片「📋 会议纪要已上传」+ assets[].runId）
+webhook② 事件 meeting_notes.analysis.completed（飞书卡片「🧠 会议分析已完成」+ sharedUrl + 摘要）
+分析 run 终态：succeeded / failed；老接口 /sources/:id/upload 仅发单条 meeting_notes.import.completed（兼容）</code></pre>
+<h4>采集源（source）</h4>
+<p>kind 枚举：<code>lark | zoom | teams | upload | folder | manual</code>（当前真实实现：upload/folder/manual，其余 stub 幂等返回空）。去重键：<code>(source_id, metadata-&gt;external_id)</code>，upload/manual 用文件 sha256。每源可配 <code>scheduleCron</code> 定时采集。</p>
+</div>
+
+<h3 id="api-expert">2.5 专家库 invoke / chat（详细）</h3>
+<div class="card">
+<pre><code>POST /api/v1/expert-library/invoke     （单次专家任务：分析/评估/生成）
+必填：expert_id, task_type, input_data
+{ "expert_id": "uuid", "task_type": "analysis", "input_type": "text",
+  "input_data": "……", "context": { ... }, "params": { ... } }
+
+POST /api/v1/expert-library/chat      （多轮对话）
+必填：expert_id, message
+{ "expert_id": "uuid", "message": "……", "history": [...], "conversation_id": "..." }
+
+POST /api/v1/expert-library/chat/stream  （流式 SSE 对话）
+
+POST /api/v1/expert-library/match     （按主题/任务匹配专家）
+POST /api/v1/expert-library/review-outline（专家大纲评审）
+POST /api/v1/expert-library/debate    （发起专家辩论）
+POST /api/v1/expert-library/feedback  （反馈闭环）</code></pre>
+</div>
+
+<h3 id="api-ref">2.6 端点参考（38 组 / 609 个端点）</h3>
+<div class="searchbar">
+  <input id="q" type="search" placeholder="搜索端点：路径、方法或说明（如 upload-task / meeting / invoke）…">
+  <div class="stats" id="stats"></div>
+</div>
+<div id="groups"></div>
+
+<h3 id="api-appendix">2.7 附录</h3>
+<div class="card">
+<ul class="tight">
+<li><b>SSE 流式组</b>：/api/v1/streaming/（蓝军/串行评审）、/api/v1/planning/stream、production 的 draft/generate-stream、revision/stream、content-library 各类 jobs/:jobId/stream、meeting-notes runs/:id/stream、ceo runs/:runId/stream、langgraph tasks/:threadId/stream、expert-library chat/stream。</li>
+<li><b>管理端点</b>：/api/admin/*（超管）、meeting-notes runs/_admin/*、expert-library admin/sync-builtins*、/api/v3/admin/*、/api/llm（模型配置）。</li>
+<li><b>兼容与废弃</b>：/api/v1/experts（旧专家库）、/api/v1/quality/meeting-note-sources*（旧采集路径 alias）、rss_item_ai_analysis 链路（表已废弃，调度默认关）。</li>
+<li><b>版本对照</b>：v1 核心 8 端点有 openapi.yaml（api/openapi.yaml，v1.0.0）；本文档以 2026-08-13 源码为准。</li>
+<li><b>源码位置</b>：<code>/newdata/pipeline/api/src/server.ts</code>（路由注册表）、<code>src/routes/</code>（v1-v6 各版本路由）、<code>src/modules/{expert-library,content-library,meeting-notes,ceo}/router.ts</code>（v7 模块路由）。</li>
+</ul>
+</div>
+
+<p class="muted" style="margin-top:40px">内容生产流水线（Content Pipeline）· PRD &amp; API Reference · 生成于 2026-08-13 · 从运行中源码提取</p>
+</main>
+</div>
+
+<script>var API_GROUPS = [];</script>
+<script src="./data1.js"></script>
+<script src="./data2.js"></script>
+<script src="./data3.js"></script>
+<script>
+function render(){
+  var box = document.getElementById('groups');
+  var html = '';
+  var total = 0;
+  API_GROUPS.forEach(function(g){
+    total += g.eps.length;
+    html += '<div class="ep-group" id="' + g.id + '">'
+      + '<h4>' + g.title + ' <code>' + g.prefix + '</code></h4>'
+      + '<p class="gdesc">' + g.desc + '（' + g.eps.length + ' 个端点）</p>'
+      + '<div class="ep-wrap">';
+    g.eps.forEach(function(e){
+      html += '<div class="ep"><span class="method m-' + e[0] + '">' + e[0] + '</span>'
+        + '<span><span class="path">' + e[1] + '</span><br><span class="desc">' + e[2] + '</span></span></div>';
+    });
+    html += '</div></div>';
+  });
+  box.innerHTML = html;
+  document.getElementById('stats').textContent = '共 ' + API_GROUPS.length + ' 组 / ' + total + ' 个端点';
+}
+function filter(){
+  var q = document.getElementById('q').value.trim().toLowerCase();
+  var shown = 0, total = 0;
+  document.querySelectorAll('.ep-group').forEach(function(g){
+    var title = (g.querySelector('h4').textContent + ' ' + g.querySelector('.gdesc').textContent).toLowerCase();
+    var groupHit = q && title.indexOf(q) >= 0;
+    var match = 0;
+    g.querySelectorAll('.ep').forEach(function(ep){
+      total++;
+      var hit = !q || groupHit || ep.textContent.toLowerCase().indexOf(q) >= 0;
+      ep.classList.toggle('hidden', !hit);
+      if (hit) { match++; shown++; }
+    });
+    g.classList.toggle('hidden', !!q && match === 0);
+  });
+  document.getElementById('stats').textContent = q
+    ? ('匹配 ' + shown + ' / ' + total + ' 个端点')
+    : ('共 ' + API_GROUPS.length + ' 组 / ' + total + ' 个端点');
+}
+document.getElementById('q').addEventListener('input', filter);
+render();
+</script>
+</body>
+</html>

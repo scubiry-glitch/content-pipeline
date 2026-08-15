@@ -82,7 +82,7 @@ export async function emmGateWithRetry(
 
 async function identifyFactors(
   output: string,
-  criticalFactors: string[],
+  criticalFactors: ExpertEMM["critical_factors"],
   llm: LLMAdapter
 ): Promise<Record<string, boolean>> {
   const coverage: Record<string, boolean> = {};
@@ -91,7 +91,9 @@ async function identifyFactors(
   // 后续可升级为 LLM 语义判断
   const outputLower = output.toLowerCase();
 
-  for (const factor of criticalFactors) {
+  for (const rawFactor of criticalFactors) {
+    const factor = typeof rawFactor === "string" ? rawFactor : rawFactor.factor;
+    if (!factor) continue;
     // 简单匹配：检查因子关键词是否在输出中出现
     const keywords = factor.toLowerCase().split(/[、，/\s]+/);
     coverage[factor] = keywords.some(kw => kw.length >= 2 && outputLower.includes(kw));
