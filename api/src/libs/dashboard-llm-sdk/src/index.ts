@@ -51,8 +51,39 @@ function buildError(message: string, status?: number, payload?: unknown): Dashbo
 
 function readReplyFromEnvelope(payload: unknown): string {
   if (!payload || typeof payload !== 'object') return '';
-  const data = (payload as { data?: { reply?: unknown } }).data;
-  return typeof data?.reply === 'string' ? data.reply.trim() : '';
+  const parts: string[] = [];
+  const root = payload as Record<string, unknown>;
+  const data = (payload as { data?: Record<string, unknown> }).data;
+  const push = (value: unknown): void => {
+    if (typeof value !== 'string') return;
+    const text = value.trim();
+    if (text) parts.push(text);
+  };
+
+  push(data?.reply);
+  push(data?.text);
+  push(root.reply);
+  push(root.text);
+  push(root.output_text);
+
+  const raw = data?.raw;
+  if (raw && typeof raw === 'object') {
+    const rawObj = raw as Record<string, unknown>;
+    push(rawObj.text);
+    push(rawObj.reply);
+    push(rawObj.output_text);
+    const choices = rawObj.choices;
+    if (Array.isArray(choices)) {
+      for (const choice of choices) {
+        if (!choice || typeof choice !== 'object') continue;
+        const message = (choice as Record<string, unknown>).message;
+        if (!message || typeof message !== 'object') continue;
+        push((message as Record<string, unknown>).content);
+      }
+    }
+  }
+
+  return parts.join('\n').trim();
 }
 
 export class DashboardLlmSdk {

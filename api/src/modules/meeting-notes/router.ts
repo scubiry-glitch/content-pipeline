@@ -874,7 +874,9 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
       let sharedAxes: Record<string, unknown> | null = null;
       try {
         const tListR = await db.query(
-          `SELECT id::text, tension_key, between_ids::text[], topic, intensity::float, summary, moments, computed_at
+          `SELECT id::text, tension_key, between_ids::text[], topic, intensity::float, summary,
+                  COALESCE(NULLIF(moments, '[]'::jsonb), NULLIF(meta->'moments', 'null'::jsonb), '[]'::jsonb) AS moments,
+                  computed_at
              FROM mn_tensions WHERE meeting_id = $1 ORDER BY intensity DESC`,
           [mid],
         );
@@ -3354,11 +3356,15 @@ export function createRouter(engine: MeetingNotesEngine): FastifyPluginAsync {
                    ORDER BY u.ord
                 ) AS between_names,
                 COALESCE(
-                  json_agg(
-                    json_build_object('who', m.person_id::text, 'text', m.quote)
-                    ORDER BY m.seq
-                  ) FILTER (WHERE m.id IS NOT NULL),
-                  '[]'::json
+                  NULLIF(t.moments, '[]'::jsonb),
+                  NULLIF(t.meta->'moments', 'null'::jsonb),
+                  COALESCE(
+                    json_agg(
+                      json_build_object('who', m.person_id::text, 'text', m.quote)
+                      ORDER BY m.seq
+                    ) FILTER (WHERE m.id IS NOT NULL),
+                    '[]'::json
+                  )::jsonb
                 ) AS moments
            FROM mn_tensions t
            LEFT JOIN mn_tension_moments m ON m.tension_id = t.id

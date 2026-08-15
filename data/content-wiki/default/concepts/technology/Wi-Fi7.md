@@ -1,0 +1,39 @@
+---
+type: concept
+subtype: technology
+canonical_name: Wi-Fi7
+slug: Wi-Fi7
+domains_legacy:
+  - 消费电子/笔记本电脑
+app: knowledge-library
+generatedBy: wiki-generator
+lastEditedBy: wiki-generator
+lastEditedAt: "2026-05-25T15:07:33.373Z"
+sources:
+  - rss_7a8f4161fcd2b5ba791e816c483d1070
+blocks:
+  - "{\"id\":\"global-profile\",\"app\":\"knowledge-library\",\"via\":\"wiki-generator\",\"addedAt\":\"2026-05-25T15:07:33.373Z\"}"
+entityType: technology
+domains:
+  - 消费电子/笔记本电脑
+updatedAt: "2026-05-25T15:07:33.373Z"
+---
+
+# Wi-Fi7
+
+<!-- block:global-profile -->
+**类型**: `technology`
+
+## 关键事实
+
+- **支持** ← [[ROG 枪神 10 Plus 超竞版]]: Wi-Fi7 (100%)
+
+## 相关实体
+
+- [[ROG 枪神 10 Plus 超竞版]] — *支持* (强度 1.0)
+
+## 来源
+
+- [[sources/rss_7a8f4161fcd2b5ba791e816c483d1070|rss_7a8f4161fcd2b5ba791e816c483d1070]]
+
+<!-- /block:global-profile -->

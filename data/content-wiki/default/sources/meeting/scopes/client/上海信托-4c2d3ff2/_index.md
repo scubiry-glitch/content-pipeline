@@ -5,7 +5,7 @@ canonical_name: 上海信托
 slug: s-v1pfw
 app: meeting-notes
 generatedBy: meeting-scope-generator
-lastEditedAt: "2026-07-01T15:19:05.353Z"
+lastEditedAt: "2026-07-01T15:19:44.628Z"
 factCount: 110
 entityCount: 2
 ---

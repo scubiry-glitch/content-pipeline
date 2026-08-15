@@ -17,6 +17,7 @@ build/
 **/.env.production
 .env.development
 **/.env.development
+**/.env.bak*
 
 # Logs
 logs/
@@ -64,3 +65,7 @@ test-*.mjs
 # VM-specific PM2 configs（各机器不同，不入库）
 mn-worker.config.cjs
 **/mn-worker.config.cjs
+/ecosystem.mn-worker.config.cjs
+
+# Local investigation scripts
+**/_tmp-*

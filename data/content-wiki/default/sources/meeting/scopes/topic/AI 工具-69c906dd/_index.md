@@ -5,7 +5,7 @@ canonical_name: AI 工具
 slug: -ue
 app: meeting-notes
 generatedBy: meeting-scope-generator
-lastEditedAt: "2026-08-01T00:51:30.855Z"
+lastEditedAt: "2026-07-01T15:19:44.682Z"
 factCount: 0
 entityCount: 0
 ---

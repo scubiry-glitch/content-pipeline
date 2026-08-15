@@ -1,82 +1,87 @@
 ---
 type: index
-updatedAt: "2026-05-10T02:59:30.945Z"
+updatedAt: "2026-08-04T03:59:59.342Z"
 ---
 
 # 内容库 Wiki 索引
 
-- **实体**: 500 个
-- **事实**: 4656 条
+- **实体**: 416 个
+- **事实**: 5000 条
 - **来源**: 0 个
-- **领域**: 32 个
+- **领域**: 37 个
 
 ## 领域 (concepts/)
 
-- [[concepts/E07.APP|E07.APP]]
+- [[concepts/E07.LLM|E07.LLM]]
 - [[concepts/E08.RESID|E08.RESID]]
-- [[concepts/E99.OTHER|E99.OTHER]]
-- [[concepts/E01.GROWTH|E01.GROWTH]]
-- [[concepts/E02.BANK|E02.BANK]]
-- [[concepts/E05.ECOM|E05.ECOM]]
+- [[concepts/E09.ADS|E09.ADS]]
 - [[concepts/E08.POLICY|E08.POLICY]]
-- [[concepts/E02.CONSUM|E02.CONSUM]]
-- [[concepts/E02.ASSET|E02.ASSET]]
-- [[concepts/E08.RENT|E08.RENT]]
-- [[concepts/E10.AUTO|E10.AUTO]]
+- [[concepts/E07.APP|E07.APP]]
 - [[concepts/E05.HOSPITALITY|E05.HOSPITALITY]]
-- [[concepts/E07.ML|E07.ML]]
+- [[concepts/E08.RENT|E08.RENT]]
+- [[concepts/E12.GEO|E12.GEO]]
+- [[concepts/E01.EMPLOY|E01.EMPLOY]]
+- [[concepts/E09.CONTENT|E09.CONTENT]]
+- [[concepts/E99.OTHER|E99.OTHER]]
+- [[concepts/E06.DESIGN|E06.DESIGN]]
+- [[concepts/E07.AGENT|E07.AGENT]]
+- [[concepts/E11.GOV|E11.GOV]]
 - [[concepts/E07.INFRA|E07.INFRA]]
 - [[concepts/E02.REG|E02.REG]]
 - [[concepts/E02.INFRA|E02.INFRA]]
-- [[concepts/E09.CONTENT|E09.CONTENT]]
-- [[concepts/E07.ROBOT|E07.ROBOT]]
-- [[concepts/E05.BRAND|E05.BRAND]]
+- [[concepts/E02.BANK|E02.BANK]]
+- [[concepts/E12.BRAND|E12.BRAND]]
+- [[concepts/E02.CONSUM|E02.CONSUM]]
 - [[concepts/E02.INSUR|E02.INSUR]]
+- [[concepts/E02.ASSET|E02.ASSET]]
+- [[concepts/E05.HOME|E05.HOME]]
+- [[concepts/E05.BRAND|E05.BRAND]]
+- [[concepts/E08.COMM|E08.COMM]]
+- [[concepts/E01.GROWTH|E01.GROWTH]]
+- [[concepts/E11.GREEN|E11.GREEN]]
+- [[concepts/E08.REIT|E08.REIT]]
 - [[concepts/E10.LOGISTICS|E10.LOGISTICS]]
-- [[concepts/E11.GOV|E11.GOV]]
-- [[concepts/E08.INDUS|E08.INDUS]]
-- [[concepts/E02.CRYPTO|E02.CRYPTO]]
-- [[concepts/E02|E02]]
-- [[concepts/E01.EMPLOY|E01.EMPLOY]]
-- [[concepts/E05|E05]]
-- [[concepts/E01|E01]]
-- [[concepts/E99.USER|E99.USER]]
-- [[concepts/E08|E08]]
-- [[concepts/E07|E07]]
-- [[concepts/E09.FILM|E09.FILM]]
+- [[concepts/E10.SW|E10.SW]]
+- [[concepts/E05.ECOM|E05.ECOM]]
+- [[concepts/E09.SOCIAL|E09.SOCIAL]]
+- [[concepts/E01.FISCAL|E01.FISCAL]]
+- [[concepts/E11.SOCIAL|E11.SOCIAL]]
+- [[concepts/E10.AUTO|E10.AUTO]]
+- [[concepts/E07.ML|E07.ML]]
+- [[concepts/E12.SAAS|E12.SAAS]]
 
 ## 高频实体 (entities/)
 
-- [[蚂蚁金服]] — 168 条事实
-- [[全国重点18城]] — 112 条事实
-- [[乐乎城市青年社区]] — 112 条事实
-- [[长租公寓行业]] — 89 条事实
-- [[自如]] — 83 条事实
-- [[是]] — 72 条事实
-- [[北京]] — 67 条事实
-- [[老虎证券]] — 64 条事实
-- [[蛋壳公寓]] — 61 条事实
-- [[长租公寓相关企业]] — 61 条事实
-- [[提升20-50%]] — 60 条事实
-- [[提升超1倍]] — 60 条事实
-- [[富途证券]] — 57 条事实
-- [[上海]] — 47 条事实
-- [[一居室]] — 42 条事实
-- [[UP Fintech]] — 39 条事实
-- [[小幅微升]] — 39 条事实
-- [[长租公寓]] — 39 条事实
-- [[深圳]] — 36 条事实
-- [[Futu Holdings]] — 36 条事实
-- [[京东金融]] — 36 条事实
-- [[支付宝]] — 35 条事实
-- [[智能理财服务]] — 31 条事实
-- [[万科泊寓]] — 30 条事实
+- [[贝壳]] — 94 条事实
+- [[GitHub]] — 37 条事实
+- [[英伟达]] — 28 条事实
+- [[Linus Torvalds]] — 27 条事实
 - [[说话人1]] — 26 条事实
-- [[5%]] — 26 条事实
-- [[报告]] — 26 条事实
-- [[30%]] — 26 条事实
-- [[成都]] — 26 条事实
-- [[45%]] — 24 条事实
+- [[是]] — 25 条事实
+- [[作者]] — 25 条事实
+- [[眸深智能]] — 23 条事实
+- [[深度机智]] — 22 条事实
+- [[不太行]] — 21 条事实
+- [[赔钱]] — 21 条事实
+- [[智界V9]] — 21 条事实
+- [[江苏银行]] — 20 条事实
+- [[南京项目]] — 20 条事实
+- [[说话人2]] — 20 条事实
+- [[SpaceX]] — 19 条事实
+- [[Google]] — 18 条事实
+- [[成都项目]] — 17 条事实
+- [[超聚变数字技术股份有限公司]] — 17 条事实
+- [[北京烟保项目]] — 16 条事实
+- [[Meta]] — 16 条事实
+- [[LG GX9 显示器 (45GX950B)]] — 16 条事实
+- [[原始内容]] — 16 条事实
+- [[Twelve South AirFly Pro 2]] — 16 条事实
+- [[DeepSeek]] — 15 条事实
+- [[美租]] — 15 条事实
+- [[受访者]] — 15 条事实
+- [[长安第四代 CS75 PLUS 蓝鲸超擎]] — 15 条事实
+- [[花知晓]] — 15 条事实
+- [[广州安居项目]] — 14 条事实
 
 ---
 
