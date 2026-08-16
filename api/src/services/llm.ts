@@ -11,9 +11,16 @@ let kimi: Anthropic | null = null;  // Kimi 使用 Anthropic 消息格式
 
 function getAnthropicClient(): Anthropic | null {
   if (!anthropic) {
-    const apiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+    const apiKey =
+      process.env.CLAUDE_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.ANTHROPIC_AUTH_TOKEN;
     if (!apiKey || apiKey.includes('your_')) return null;
-    anthropic = new Anthropic({ apiKey });
+    const baseURL = process.env.ANTHROPIC_BASE_URL?.trim();
+    anthropic = new Anthropic({
+      apiKey,
+      ...(baseURL ? { baseURL } : {}),
+    });
   }
   return anthropic;
 }
@@ -146,7 +153,11 @@ export async function generateWithClaude(
     throw new Error('Claude API key not configured');
   }
 
-  const model = options.model || 'claude-3-5-sonnet-20241022';
+  const model =
+    options.model ||
+    process.env.ANTHROPIC_MODEL?.trim() ||
+    process.env.DEFAULT_LLM_MODEL?.trim() ||
+    'claude-3-5-sonnet-20241022';
 
   try {
     const response = await client.messages.create({
@@ -560,7 +571,11 @@ export async function generate(
       console.log(`[LLM] Using Claude for ${taskType} task`);
       return await generateWithClaude(prompt, {
         ...options,
-        model: options.model || 'claude-3-5-sonnet-20241022',
+        model:
+          options.model ||
+          process.env.ANTHROPIC_MODEL?.trim() ||
+          process.env.DEFAULT_LLM_MODEL?.trim() ||
+          'claude-3-5-sonnet-20241022',
         temperature: options.temperature ?? config.temperature,
       });
     } catch (error: any) {

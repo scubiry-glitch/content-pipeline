@@ -332,23 +332,26 @@ export function initLLMRouter(config?: LLMRouterConfig): LLMRouter {
 
   console.log('[LLM Router] 可用 Providers:', router.getAvailableProviders().join(', '));
 
-  // 会议纪要 api-oneshot：配置了兼容 Anthropic 的企业网关时，expert_library 优先 Claude（Bearer + 自定义 base）
+  // 配置了 Anthropic 兼容网关（含 DeepSeek /anthropic）时：除 embedding 外全部任务优先 claude
   const expertLibOverride = process.env.MN_EXPERT_LIBRARY_PROVIDER?.trim().toLowerCase();
-  const preferClaudeExpert =
+  const preferClaudeGateway =
     expertLibOverride !== 'siliconflow' &&
     expertLibOverride !== 'volcano-engine' &&
     (expertLibOverride === 'claude' || !!process.env.ANTHROPIC_BASE_URL?.trim());
-  if (preferClaudeExpert && router.getProvider('claude')) {
-    const fb = router.getProvider('siliconflow')
-      ? 'siliconflow'
-      : router.getProvider('volcano-engine')
-        ? 'volcano-engine'
+  if (preferClaudeGateway && router.getProvider('claude')) {
+    const fb = router.getProvider('volcano-engine')
+      ? 'volcano-engine'
+      : router.getProvider('siliconflow')
+        ? 'siliconflow'
         : undefined;
     const patch: Partial<Omit<ModelRoutingRule, 'taskType'>> = { preferredProvider: 'claude' };
     if (fb) patch.fallbackProvider = fb;
-    router.updateRoutingRule('expert_library', patch);
+    for (const rule of router.getRoutingRules()) {
+      if (rule.taskType === 'embedding') continue;
+      router.updateRoutingRule(rule.taskType, patch);
+    }
     console.log(
-      '[LLM Router] expert_library → claude 优先（ANTHROPIC_BASE_URL 或 MN_EXPERT_LIBRARY_PROVIDER=claude；设 MN_EXPERT_LIBRARY_PROVIDER=siliconflow 可保持原路由）',
+      `[LLM Router] 全任务 → claude 优先（model=${process.env.ANTHROPIC_MODEL?.trim() || 'provider-default'}；ANTHROPIC_BASE_URL 或 MN_EXPERT_LIBRARY_PROVIDER=claude）`,
     );
   }
 

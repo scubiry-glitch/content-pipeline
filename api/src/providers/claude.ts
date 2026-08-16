@@ -74,6 +74,9 @@ export class ClaudeProvider extends LLMProvider {
       ],
     };
     if (systemText) body.system = systemText;
+    // deepseek 推理模型默认烧思考占 token 预算（实测 2000 全烧在 thinking、正文被饿空）；
+    // 显式关掉，正文更快更稳；真 Claude 模型不带 thinking 字段、不受影响。
+    if (/deepseek/i.test(model)) body.thinking = { type: 'disabled' };
 
     try {
       const response = await fetchWithTimeout(`${this.baseUrl}/v1/messages`, {
@@ -136,6 +139,7 @@ export class ClaudeProvider extends LLMProvider {
       stream: true,
     };
     if (systemText) body.system = systemText;
+    if (/deepseek/i.test(model)) body.thinking = { type: 'disabled' };
 
     // timeoutMs=0：流式响应可能很长，不能用整体超时把流掐断
     const res = await fetchWithTimeout(
